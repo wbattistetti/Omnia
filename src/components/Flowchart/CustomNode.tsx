@@ -27,7 +27,7 @@ export interface CustomNodeData {
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
   id, 
   data, 
-  isConnectable
+  isConnectable 
 }) => {
   const [isEditingNode, setIsEditingNode] = useState(false);
   const [nodeTitle, setNodeTitle] = useState(data.title || 'New Node');
@@ -342,7 +342,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 text={row.text}
                   nodeTitle={nodeTitle}
                   nodeCanvasPosition={undefined}
-                  categoryType={row.categoryType}
+                categoryType={row.categoryType}
                 onUpdate={(newText) => {
                   if (row.isNew) {
                     if (newText.trim() === '') {
@@ -393,7 +393,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                   onMouseEnter={undefined}
                   onMouseLeave={undefined}
                   onMouseMove={undefined}
-                />
+              />
               </React.Fragment>
             );
           })}

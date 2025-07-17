@@ -107,37 +107,34 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
             >
               {title}
             </h3>
-            {isHovered && (
-              <button
-                onClick={handleTitleEdit}
-                className="ml-2 p-1 text-slate-400 hover:text-purple-300 transition-colors"
-                title="Edit Title"
-              >
-                <Edit3 className="w-3 h-3" />
-              </button>
-            )}
+            {/* RIMOSSO: matita a destra del titolo */}
           </div>
         )}
       </div>
-      {/* Azioni a destra: Add act e Delete */}
-      {!isEditingTitle && isHovered && (
-        <div className="flex items-center space-x-2 ml-2">
-          <button 
-            onClick={onToggleEdit} 
-            className="p-1 text-slate-400 hover:text-green-400 transition-colors"
-            title="Add act"
-          >
-            <Edit3 className={`w-3 h-3 ${isEditing ? 'text-green-400' : ''}`} />
-          </button>
-          <button 
-            onClick={onDelete} 
-            className="p-1 text-red-400 hover:text-red-300 transition-colors"
-            title="Delete node"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
-        </div>
-      )}
+      {/* Azioni a destra: Add act e Delete, spazio fisso */}
+      <div
+        className="flex items-center ml-2"
+        style={{ minWidth: 40, height: 20, justifyContent: 'flex-end' }}
+      >
+        {!isEditingTitle && isHovered && (
+          <>
+            <button 
+              onClick={onToggleEdit} 
+              className="p-1 text-slate-400 hover:text-green-400 transition-colors"
+              title="Add act"
+            >
+              <Edit3 className={`w-3 h-3 ${isEditing ? 'text-green-400' : ''}`} />
+            </button>
+            <button 
+              onClick={onDelete} 
+              className="p-1 text-red-400 hover:text-red-300 transition-colors"
+              title="Delete node"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 };

@@ -64,7 +64,6 @@ const initialEdges: Edge<EdgeData>[] = [
     id: 'e1-2', 
     source: '1', 
     target: '2', 
-    style: { stroke: '#8b5cf6' }
   },
 ];
 
@@ -89,6 +88,7 @@ const FlowEditorContent: React.FC = () => {
   const reactFlowInstance = useReactFlow();
   const lastClickTime = useRef(0);
   // Rimuovo tempEdgeIdState
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   // Usa l'hook edge manager
   const { addEdge: addEdgeManaged, patchEdges, deleteEdge: deleteEdgeManaged } = useEdgeManager(setEdges);
@@ -207,7 +207,15 @@ const FlowEditorContent: React.FC = () => {
   // Ref per memorizzare la coppia (source, target) dell'edge appena creato tra due nodi esistenti
   const pendingEdgeSourceTargetRef = useRef<{ source: string, target: string } | null>(null);
 
+  // Rimuove TUTTI i nodi e edge temporanei
+  function cleanupAllTempNodesAndEdges() {
+    setNodes((nds) => nds.filter(n => !n.data?.isTemporary));
+    setEdges((eds) => removeAllTempEdges(eds, nodesRef.current));
+  }
+
   const onConnectEnd = useCallback((event: any) => {
+    // Prima di tutto, pulisci eventuali edge/nodi temporanei rimasti
+    cleanupAllTempNodesAndEdges();
     const targetIsPane = event.target.classList.contains('react-flow__pane');
     if (targetIsPane && connectionMenuRef.current.sourceNodeId) {
       // ... (logica nodo temporaneo come ora)
@@ -241,7 +249,6 @@ const FlowEditorContent: React.FC = () => {
       };
       setNodes((nds) => [...nds, tempNode]);
       setEdges((eds) => [...eds, tempEdge]);
-      console.log('ADD TEMP EDGE', tempEdgeId);
       tempEdgeIdGlobal.current = tempEdgeId;
       setTemp(tempNodeId, tempEdgeId);
       openMenu({ x: event.clientX, y: event.clientY }, connectionMenuRef.current.sourceNodeId, connectionMenuRef.current.sourceHandleId);
@@ -272,13 +279,27 @@ const FlowEditorContent: React.FC = () => {
   };
 
   const handleSelectCondition = useCallback((conditionName: string) => {
-    // Se c'è una coppia (source, target) pending tra due nodi esistenti, aggiorna la label dell'edge
+    // Se c'è una coppia (source, target) pending tra due nodi esistenti, crea una nuova edge definitiva con label
     if (pendingEdgeSourceTargetRef.current) {
       const { source, target } = pendingEdgeSourceTargetRef.current;
-      console.log('[handleSelectCondition] aggiorno label edge:', { source, target, conditionName });
-      setEdges((eds) => eds.map(e =>
-        e.source === source && e.target === target ? { ...e, label: conditionName } : e
-      ));
+      setEdges((eds) => {
+        const filtered = removeAllTempEdges(eds, nodesRef.current);
+        const newEdge = {
+          id: `e${source}-${target}`,
+          source,
+          target,
+          style: { stroke: '#8b5cf6' },
+          label: conditionName,
+          type: 'custom',
+          data: { onDeleteEdge },
+          markerEnd: 'arrowhead',
+        };
+        console.log('[DEBUG][setEdges][add new edge definitive]', newEdge);
+        const result = [...filtered, newEdge];
+        console.log('[DEBUG][setEdges][edges after add definitive]', result);
+        return result;
+      });
+      setSelectedEdgeId(`e${source}-${target}`);
       pendingEdgeSourceTargetRef.current = null;
       closeMenu();
       return;
@@ -298,13 +319,14 @@ const FlowEditorContent: React.FC = () => {
           data: { onDeleteEdge },
           markerEnd: 'arrowhead',
         } as Edge;
-        console.log('[setEdges][ADD DEFINITIVE EDGE]', newEdge);
-        return [
-          ...filtered,
-          newEdge
-        ];
+        console.log('[DEBUG][setEdges][add new edge]', newEdge);
+        const result = [...filtered, newEdge];
+        console.log('[DEBUG][setEdges][edges after add]', result);
+        return result;
       });
       closeMenu();
+      // Imposta la selezione sulla nuova edge
+      setSelectedEdgeId(`e${connectionMenuRef.current.sourceNodeId || ''}-${connectionMenuRef.current.targetNodeId || ''}`);
       return;
     }
     // Determina l'handle di destinazione corretto basato sull'handle sorgente
@@ -433,14 +455,12 @@ const FlowEditorContent: React.FC = () => {
     closeMenu();
   }, [nodeIdCounter, onDeleteEdge, updateNode, deleteNode, setNodes, setEdges, reactFlowInstance, connectionMenuRef, nodes]);
 
+  // Handler robusto per chiusura intellisense/condition menu
   const handleConnectionMenuClose = useCallback(() => {
     // Rimuovi nodo e collegamento temporanei se esistono
-    if (connectionMenuRef.current.tempNodeId && connectionMenuRef.current.tempEdgeId) {
-      setNodes((nds) => nds.filter(n => n.id !== connectionMenuRef.current.tempNodeId));
-      setEdges((eds) => removeAllTempEdges(eds, nodesRef.current));
-    }
+    cleanupAllTempNodesAndEdges();
     closeMenu();
-  }, [connectionMenuRef.current.tempNodeId, setNodes, setEdges, closeMenu, connectionMenuRef, nodes]);
+  }, [closeMenu]);
 
   const onNodeDragStart = useCallback((event: any, node: Node) => {
     // Controlla se l'evento è iniziato da un elemento con classe 'nodrag'
@@ -451,17 +471,23 @@ const FlowEditorContent: React.FC = () => {
     }
   }, []);
 
+  // Handler per selezione edge
+  const handleEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    setSelectedEdgeId(edge.id);
+  }, []);
+
   return (
     <div className="flex-1 h-full relative">
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onPaneClick={onPaneClick}
+        onEdgeClick={handleEdgeClick}
         onConnectStart={onConnectStart}
         onConnectEnd={onConnectEnd}
         onNodeDragStart={onNodeDragStart}
