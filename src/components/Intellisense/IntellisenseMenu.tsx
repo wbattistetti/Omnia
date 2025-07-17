@@ -1,0 +1,406 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { IntellisenseRenderer } from './IntellisenseRenderer';
+import {  
+  groupAndSortResults,
+  initializeFuzzySearch,
+  performFuzzySearch,
+  performSemanticSearch
+} from './IntellisenseSearch';
+import { IntellisenseItem, IntellisenseResult, IntellisenseLayoutConfig } from './IntellisenseTypes';
+import { useProjectData } from '../../context/ProjectDataContext';
+import { prepareIntellisenseData } from '../../services/ProjectDataService';
+import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
+
+// Category configuration matching the sidebar
+const categoryConfig = {
+  agentActs: { 
+    title: 'Agent Acts', 
+    icon: <Bot className="w-4 h-4 text-purple-400" />,
+    color: 'text-purple-600'
+  },
+  userActs: { 
+    title: 'User Acts', 
+    icon: <User className="w-4 h-4 text-green-400" />,
+    color: 'text-green-600'
+  },
+  backendActions: { 
+    title: 'Backend Actions', 
+    icon: <Database className="w-4 h-4 text-blue-400" />,
+    color: 'text-blue-600'
+  },
+  conditions: { 
+    title: 'Conditions', 
+    icon: <GitBranch className="w-4 h-4 text-yellow-400" />,
+    color: 'text-amber-700'
+  },
+  tasks: { 
+    title: 'Tasks', 
+    icon: <CheckSquare className="w-4 h-4 text-orange-400" />,
+    color: 'text-orange-600'
+  },
+  macrotasks: { 
+    title: 'Macrotasks', 
+    icon: <Layers className="w-4 h-4 text-red-400" />,
+    color: 'text-red-600'
+  }
+};
+
+const defaultLayoutConfig: IntellisenseLayoutConfig = {
+  maxVisibleItems: 12,
+  itemHeight: 60,
+  categoryHeaderHeight: 40,
+  maxMenuHeight: 400,
+  maxMenuWidth: 320
+};
+
+interface IntellisenseMenuProps {
+  isOpen: boolean;
+  query: string;
+  position: { x: number; y: number };
+  referenceElement: HTMLElement | null;
+  onSelect: (item: IntellisenseItem) => void;
+  onClose: () => void;
+  filterCategoryTypes?: string[];
+}
+
+export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
+  isOpen,
+  query,
+  position,
+  referenceElement,
+  onSelect,
+  onClose,
+  filterCategoryTypes
+}) => {
+  const { data } = useProjectData();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  const [fuzzyResults, setFuzzyResults] = useState<Map<string, IntellisenseResult[]>>(new Map());
+  const [semanticResults, setSemanticResults] = useState<IntellisenseResult[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [allIntellisenseItems, setAllIntellisenseItems] = useState<IntellisenseItem[]>([]);
+
+  // LOG DATI INTELLISENSE
+  useEffect(() => {
+    const agentActs = allIntellisenseItems.filter(i => i.categoryType === 'agentActs').length;
+    const userActs = allIntellisenseItems.filter(i => i.categoryType === 'userActs').length;
+    const backendActions = allIntellisenseItems.filter(i => i.categoryType === 'backendActions').length;
+    const fuzzyCount = Array.from(fuzzyResults.values()).reduce((sum, arr) => sum + arr.length, 0);
+    const semanticCount = semanticResults.length;
+    console.log('[INTELLISENSE MENU]', {
+      query,
+      totalItems: allIntellisenseItems.length,
+      agentActs,
+      userActs,
+      backendActions,
+      fuzzyCount,
+      semanticCount
+    });
+  }, [allIntellisenseItems, query, fuzzyResults, semanticResults]);
+
+  // Calculate total items for navigation
+  const totalItems = Array.from(fuzzyResults.values()).reduce((sum, items) => sum + items.length, 0) + semanticResults.length;
+
+  // Calculate menu position
+  useEffect(() => {
+    if (!isOpen || !referenceElement) return;
+
+    const updatePosition = () => {
+      const rect = referenceElement.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const menuWidth = 320;
+      
+      // Calcola l'altezza stimata del menu basata sui risultati
+      const estimatedMenuHeight = Math.min(
+        totalItems * 70 + 60, // 70px per item + 60px per header e padding
+        defaultLayoutConfig.maxMenuHeight
+      );
+
+      // Calcola spazio disponibile sopra e sotto
+      const spaceBelow = viewportHeight - rect.bottom - 10; // 10px di margine
+      const spaceAbove = rect.top - 10; // 10px di margine
+      
+      let top;
+      let maxHeight;
+      
+      if (spaceBelow >= estimatedMenuHeight || spaceBelow >= spaceAbove) {
+        // Posiziona sotto
+        top = rect.bottom + 5;
+        maxHeight = Math.min(estimatedMenuHeight, spaceBelow - 5);
+      } else {
+        // Posiziona sopra
+        maxHeight = Math.min(estimatedMenuHeight, spaceAbove - 5);
+        top = rect.top - maxHeight - 5;
+      }
+      
+      // Assicurati che il menu non vada mai fuori dalla viewport
+      top = Math.max(10, Math.min(top, viewportHeight - maxHeight - 10));
+      
+      let left = rect.left;
+
+      // Aggiusta se il menu esce dallo schermo orizzontalmente
+      if (left + menuWidth > viewportWidth) {
+        left = viewportWidth - menuWidth - 10;
+      }
+
+      setMenuStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: `${left}px`,
+        width: `${menuWidth}px`,
+        maxHeight: `${maxHeight}px`,
+        overflowY: 'auto',
+        zIndex: 9999
+      });
+    };
+
+    updatePosition();
+
+    // Update position on resize/scroll
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen, referenceElement, totalItems]);
+
+  // Handle click outside
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        menuRef.current && 
+        !menuRef.current.contains(target) &&
+        referenceElement &&
+        !referenceElement.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, onClose, referenceElement]);
+
+  // Initialize fuzzy search when data is available
+  useEffect(() => {
+    if (data && !isInitialized) {
+      let intellisenseData = prepareIntellisenseData(data, categoryConfig);
+      
+      // Filter by category types if specified
+      if (filterCategoryTypes && filterCategoryTypes.length > 0) {
+        intellisenseData = intellisenseData.filter(item => 
+          filterCategoryTypes.includes(item.categoryType)
+        );
+      }
+      
+      initializeFuzzySearch(intellisenseData);
+      setAllIntellisenseItems(intellisenseData);
+      setIsInitialized(true);
+    }
+  }, [data, isInitialized, filterCategoryTypes]);
+
+  // Perform search when query changes
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    // Se la query è vuota, mostra tutte le voci disponibili
+    if (!query.trim()) {
+      const allResults: IntellisenseResult[] = allIntellisenseItems.map(item => ({
+        item
+      }));
+      
+      const groupedResults = groupAndSortResults(allResults);
+      setFuzzyResults(groupedResults);
+      setSemanticResults([]);
+      return;
+    }
+
+    // Esegui solo la ricerca fuzzy quando la query cambia
+    console.log('🔍 IntellisenseMenu - Esecuzione ricerca fuzzy per:', query);
+    const fuzzyResults = performFuzzySearch(query);
+    const groupedFuzzy = groupAndSortResults(fuzzyResults);
+    
+    setFuzzyResults(groupedFuzzy);
+    setSemanticResults([]); // Reset semantic results
+    setSelectedIndex(0);
+    
+    console.log('📊 IntellisenseMenu - Risultati fuzzy:', fuzzyResults.length);
+  }, [query, isInitialized, allIntellisenseItems]);
+
+  // Get all results in order for navigation
+  const getAllResults = (): IntellisenseResult[] => {
+    const allResults: IntellisenseResult[] = [];
+    fuzzyResults.forEach(categoryResults => {
+      allResults.push(...categoryResults);
+    });
+    allResults.push(...semanticResults);
+    return allResults;
+  };
+
+  // Handle keyboard navigation
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      console.log('⌨️ IntellisenseMenu - handleKeyDown:', { 
+        key: e.key, 
+        selectedIndex, 
+        totalItems,
+        query: query.trim(),
+        hasResults: totalItems > 0
+      });
+      
+      let newSelectedIndex = selectedIndex;
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          newSelectedIndex = (selectedIndex + 1) % totalItems;
+          console.log('⬇️ IntellisenseMenu - Arrow Down:', { from: selectedIndex, to: newSelectedIndex });
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          newSelectedIndex = (selectedIndex - 1 + totalItems) % totalItems;
+          console.log('⬆️ IntellisenseMenu - Arrow Up:', { from: selectedIndex, to: newSelectedIndex });
+          break;
+        case 'Enter':
+          e.preventDefault();
+          // If no fuzzy results and we have a query, trigger semantic search
+          if (totalItems === 0 && query.trim() && allIntellisenseItems.length > 0) {
+            console.log('🤖 IntellisenseMenu - Avvio ricerca semantica per:', query);
+            const performSemanticOnly = async () => {
+              setIsLoading(true);
+              try {
+                const semanticResults = await performSemanticSearch(query, allIntellisenseItems);
+                console.log('🎯 IntellisenseMenu - Risultati semantici:', semanticResults.length);
+                setSemanticResults(semanticResults);
+                setSelectedIndex(0);
+              } catch (error) {
+                console.error('Semantic search error:', error);
+              } finally {
+                setIsLoading(false);
+              }
+            };
+            performSemanticOnly();
+            return;
+          }
+          
+          const allResults = getAllResults();
+          if (allResults[selectedIndex]) {
+            console.log('✅ IntellisenseMenu - Selezione confermata:', { 
+              selectedIndex, 
+              selectedItem: allResults[selectedIndex].item.name,
+              itemId: allResults[selectedIndex].item.id 
+            });
+            onSelect(allResults[selectedIndex].item);
+          } else {
+            console.log('❌ IntellisenseMenu - Nessun elemento selezionabile all\'indice:', selectedIndex);
+          }
+          return;
+        case 'Escape':
+          e.preventDefault();
+          console.log('🚫 IntellisenseMenu - Menu chiuso con Escape');
+          onClose();
+          return;
+      }
+
+      if (newSelectedIndex >= 0 && newSelectedIndex < totalItems) {
+        setSelectedIndex(newSelectedIndex);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, selectedIndex, totalItems, fuzzyResults, semanticResults, onSelect, onClose, query, allIntellisenseItems]);
+
+  // Auto-scroll to keep selected item visible
+  useEffect(() => {
+    if (!isOpen || !menuRef.current) return;
+
+    const selectedElement = menuRef.current.querySelector('.bg-purple-100');
+    if (!selectedElement) return;
+
+    const scrollContainer = menuRef.current.querySelector('.overflow-auto') || menuRef.current;
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const selectedRect = selectedElement.getBoundingClientRect();
+    
+    const isAboveView = selectedRect.top < containerRect.top;
+    const isBelowView = selectedRect.bottom > containerRect.bottom;
+
+    if (isAboveView || isBelowView) {
+      const selectedElementTop = (selectedElement as HTMLElement).offsetTop;
+      const containerHeight = scrollContainer.clientHeight;
+      const selectedElementHeight = selectedElement.clientHeight;
+
+      let newScrollTop;
+      
+      if (isAboveView) {
+        newScrollTop = selectedElementTop;
+      } else {
+        newScrollTop = selectedElementTop - containerHeight + selectedElementHeight;
+      }
+
+      scrollContainer.scrollTo({
+        top: newScrollTop,
+        behavior: 'smooth'
+      });
+    }
+  }, [selectedIndex, isOpen]);
+
+  if (!isOpen || !isInitialized) {
+    return null;
+  }
+
+  return (
+    <div
+      ref={menuRef}
+      style={{
+        ...menuStyle,
+        // Rimuovo overflowY: 'auto' dal menu esterno
+        overflowY: undefined,
+      }}
+      className="bg-slate-800 rounded-lg shadow-lg border border-slate-700 overflow-hidden"
+    >
+      {/* Search indicator */}
+      <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-white">
+            {isLoading ? (
+              <span className="flex items-center">
+                <div className="animate-spin w-3 h-3 border border-slate-400 border-t-transparent rounded-full mr-2"></div>
+                {totalItems === 0 ? 'Ricerca semantica in corso...' : 'Ricerca in corso...'}
+              </span>
+            ) : (
+              <span>
+                {totalItems} risultat{totalItems !== 1 ? 'i' : 'o'} per "{query}"
+                {semanticResults.length > 0 && <span className="ml-2 text-slate-300">(+ AI)</span>}
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-slate-400">
+            ↑↓ naviga • Enter {totalItems === 0 ? 'ricerca AI' : 'seleziona'} • Esc chiudi
+          </div>
+        </div>
+      </div>
+
+      {/* Results */}
+      <IntellisenseRenderer
+        fuzzyResults={fuzzyResults}
+        semanticResults={semanticResults}
+        selectedIndex={selectedIndex}
+        layoutConfig={defaultLayoutConfig}
+        categoryConfig={categoryConfig}
+        onItemSelect={(result) => onSelect(result.item)}
+        onItemHover={setSelectedIndex}
+      />
+    </div>
+  );
+};

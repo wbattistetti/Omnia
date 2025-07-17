@@ -1,0 +1,930 @@
+[
+  {
+    "id": "valid_tax_code",
+    "name": "valid_tax_code",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Tax code is valid"
+  },
+  {
+    "id": "invalid_tax_code",
+    "name": "invalid_tax_code",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Tax code has is NOT valid"
+  },
+  {
+    "id": "account_holder_verified",
+    "name": "account_holder_verified",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Account holder has been verified"
+  },
+  {
+    "id": "account_holder_not_verified",
+    "name": "account_holder_not_verified",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Account holder has NOT been verified"
+  },
+  {
+    "id": "existing_customer",
+    "name": "existing_customer",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Customer exists"
+  },
+  {
+    "id": "new_customer",
+    "name": "new_customer",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Customer is new"
+  },
+  {
+    "id": "resident_customer",
+    "name": "resident_customer",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Customer is resident"
+  },
+  {
+    "id": "non_resident_customer",
+    "name": "non_resident_customer",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Customer is NOT resident"
+  },
+  {
+    "id": "current_supplier_known",
+    "name": "current_supplier_known",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Current supplier is known"
+  },
+  {
+    "id": "current_supplier_unknown",
+    "name": "current_supplier_unknown",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Current supplier is unknown"
+  },
+  {
+    "id": "customer_in_arrears",
+    "name": "customer_in_arrears",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Customer is in arrears"
+  },
+  {
+    "id": "regular_customer",
+    "name": "regular_customer",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Customer is regular"
+  },
+  {
+    "id": "pod_validated",
+    "name": "pod_validated",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "POD validated"
+  },
+  {
+    "id": "pod_invalid",
+    "name": "pod_invalid",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "POD is NOT valid"
+  },
+  {
+    "id": "power_3kw",
+    "name": "power_3kw",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Power is 3kW"
+  },
+  {
+    "id": "power_above_3kw",
+    "name": "power_above_3kw",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Power is ABOVE 3kW"
+  },
+  {
+    "id": "solar_panels_present",
+    "name": "solar_panels_present",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Solar panels in place"
+  },
+  {
+    "id": "no_solar_panels",
+    "name": "no_solar_panels",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Solar panels NOT in place"
+  },
+  {
+    "id": "primary_residence",
+    "name": "primary_residence",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Residence is primary"
+  },
+  {
+    "id": "secondary_residence",
+    "name": "secondary_residence",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Residence is secondary"
+  },
+  {
+    "id": "electricity_supply",
+    "name": "electricity_supply",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Supply of electricity"
+  },
+  {
+    "id": "gas_supply",
+    "name": "gas_supply",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Supply of gas"
+  },
+  {
+    "id": "dual_supply",
+    "name": "dual_supply",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Supply is dual"
+  },
+  {
+    "id": "offer_accepted",
+    "name": "offer_accepted",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Offer accepted"
+  },
+  {
+    "id": "offer_rejected",
+    "name": "offer_rejected",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Offer rejected"
+  },
+  {
+    "id": "bonus_applicable",
+    "name": "bonus_applicable",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Bonus applicable"
+  },
+  {
+    "id": "bonus_not_applicable",
+    "name": "bonus_not_applicable",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Bonus NOT applicable"
+  },
+  {
+    "id": "payment_direct_debit",
+    "name": "payment_direct_debit",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Payment direct debit"
+  },
+  {
+    "id": "payment_slip",
+    "name": "payment_slip",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Payment slip"
+  },
+  {
+    "id": "fixed_offer",
+    "name": "fixed_offer",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Offer fixed"
+  },
+  {
+    "id": "variable_offer",
+    "name": "variable_offer",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Offer is variable"
+  },
+  {
+    "id": "contract_duration_12_months",
+    "name": "contract_duration_12_months",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Contract duration of 12 months"
+  },
+  {
+    "id": "contract_duration_less_12_months",
+    "name": "contract_duration_less_12_months",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Contract duration less than 12 months"
+  },
+  {
+    "id": "pdf_requested",
+    "name": "pdf_requested",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "PDF requested"
+  },
+  {
+    "id": "no_pdf_requested",
+    "name": "no_pdf_requested",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "PDF NOT requested"
+  },
+  {
+    "id": "high_consumption",
+    "name": "high_consumption",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "High Consumption"
+  },
+  {
+    "id": "low_consumption",
+    "name": "low_consumption",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Low Consumption"
+  },
+  {
+    "id": "savings_oriented",
+    "name": "savings_oriented",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Customer savings oriented"
+  },
+  {
+    "id": "not_savings_oriented",
+    "name": "not_savings_oriented",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Customer NOT savings oriented"
+  },
+  {
+    "id": "consumption_f1",
+    "name": "consumption_f1",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Consumption F1"
+  },
+  {
+    "id": "consumption_f23",
+    "name": "consumption_f23",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Consumption F23"
+  },
+  {
+    "id": "mixed_consumption",
+    "name": "mixed_consumption",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Consumption mixed"
+  },
+  {
+    "id": "self_reading_required",
+    "name": "self_reading_required",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "self reading required"
+  },
+  {
+    "id": "understanding_confirmed",
+    "name": "understanding_confirmed",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Understanding confirmed"
+  },
+  {
+    "id": "understanding_not_confirmed",
+    "name": "understanding_not_confirmed",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Understanding NOT confirmed"
+  },
+  {
+    "id": "privacy_consent_given",
+    "name": "privacy_consent_given",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Privacy consent given"
+  },
+  {
+    "id": "privacy_consent_denied",
+    "name": "privacy_consent_denied",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Privacy consent denied"
+  },
+  {
+    "id": "voice_consent_given",
+    "name": "voice_consent_given",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Voice given"
+  },
+  {
+    "id": "voice_consent_denied",
+    "name": "voice_consent_denied",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Voice consent denied"
+  },
+  {
+    "id": "extra_info_requested",
+    "name": "extra_info_requested",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "extra info requested has been present"
+  },
+  {
+    "id": "explicit_objection",
+    "name": "explicit_objection",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "explicit objection has been present"
+  },
+  {
+    "id": "explicit_refusal",
+    "name": "explicit_refusal",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "explicit refusal has been present"
+  },
+  {
+    "id": "previous_step_completed",
+    "name": "previous_step_completed",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Previous step has been completed"
+  },
+  {
+    "id": "previous_step_not_completed",
+    "name": "previous_step_not_completed",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Previous step has not been completed"
+  },
+  {
+    "id": "multiple_input_errors",
+    "name": "multiple_input_errors",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Multiple input errors are present"
+  },
+  {
+    "id": "voice_channel",
+    "name": "voice_channel",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "Channel has been voice"
+  },
+  {
+    "id": "chat_channel",
+    "name": "chat_channel",
+    "description": "",
+    "category": "Customer Interaction",
+    "examples": [],
+    "discursive": "Channel has been chat"
+  },
+  {
+    "id": "app_channel",
+    "name": "app_channel",
+    "description": "",
+    "category": "Customer Interaction",
+    "examples": [],
+    "discursive": "Channel has been app"
+  },
+  {
+    "id": "callback_attempts_exceeded",
+    "name": "callback_attempts_exceeded",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Callback attempts are exceeded"
+  },
+  {
+    "id": "escalation_required",
+    "name": "escalation_required",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Escalation has been required"
+  },
+  {
+    "id": "api_response_ok",
+    "name": "api_response_ok",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "API response has been OK"
+  },
+  {
+    "id": "api_response_error",
+    "name": "api_response_error",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "API response has error"
+  },
+  {
+    "id": "activation_flag_present",
+    "name": "activation_flag_present",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Activation flag has been present"
+  },
+  {
+    "id": "activation_flag_absent",
+    "name": "activation_flag_absent",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Activation flag has not been present"
+  },
+  {
+    "id": "bonus_calculated_positive",
+    "name": "bonus_calculated_positive",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Bonus calculation has been positive"
+  },
+  {
+    "id": "bonus_calculated_zero",
+    "name": "bonus_calculated_zero",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Bonus calculation has been zero"
+  },
+  {
+    "id": "operator_code_authorized",
+    "name": "operator_code_authorized",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Operator code has been authorized"
+  },
+  {
+    "id": "operator_code_not_authorized",
+    "name": "operator_code_not_authorized",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Operator code has not been authorized"
+  },
+  {
+    "id": "document_sent",
+    "name": "document_sent",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Document has been sent"
+  },
+  {
+    "id": "document_not_sent",
+    "name": "document_not_sent",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Document has not been sent"
+  },
+  {
+    "id": "foreign_customer",
+    "name": "foreign_customer",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Customer has been foreign"
+  },
+  {
+    "id": "identity_document_provided",
+    "name": "identity_document_provided",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Identity document has been provided"
+  },
+  {
+    "id": "identity_document_not_provided",
+    "name": "identity_document_not_provided",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Identity document has not been provided"
+  },
+  {
+    "id": "mobile_phone",
+    "name": "mobile_phone",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Phone has been mobile"
+  },
+  {
+    "id": "landline_phone",
+    "name": "landline_phone",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Phone has been landline"
+  },
+  {
+    "id": "valid_email",
+    "name": "valid_email",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Email has been valid"
+  },
+  {
+    "id": "invalid_email",
+    "name": "invalid_email",
+    "description": "",
+    "category": "Customer Identification",
+    "examples": [],
+    "discursive": "Email has not been valid"
+  },
+  {
+    "id": "domestic_customer",
+    "name": "domestic_customer",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "Customer has been domestic"
+  },
+  {
+    "id": "non_domestic_customer",
+    "name": "non_domestic_customer",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "Customer has not been domestic"
+  },
+  {
+    "id": "alternative_fuel_usage",
+    "name": "alternative_fuel_usage",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "alternative fuel usage has been present"
+  },
+  {
+    "id": "active_meter",
+    "name": "active_meter",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "Meter has been active"
+  },
+  {
+    "id": "deactivated_meter",
+    "name": "deactivated_meter",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "Meter has not been active"
+  },
+  {
+    "id": "customer_in_transfer",
+    "name": "customer_in_transfer",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "Customer has been in transfer"
+  },
+  {
+    "id": "customer_in_takeover",
+    "name": "customer_in_takeover",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "Customer has been in takeover"
+  },
+  {
+    "id": "shared_supply",
+    "name": "shared_supply",
+    "description": "",
+    "category": "Supply Details",
+    "examples": [],
+    "discursive": "Supply has been shared"
+  },
+  {
+    "id": "time_limited_offer",
+    "name": "time_limited_offer",
+    "description": "",
+    "category": "Commercial Offer",
+    "examples": [],
+    "discursive": "Offer has been time limited"
+  },
+  {
+    "id": "exclusive_online_offer",
+    "name": "exclusive_online_offer",
+    "description": "",
+    "category": "Commercial Offer",
+    "examples": [],
+    "discursive": "Offer has been exclusive online"
+  },
+  {
+    "id": "bonus_incompatible_offer",
+    "name": "bonus_incompatible_offer",
+    "description": "",
+    "category": "Commercial Offer",
+    "examples": [],
+    "discursive": "Offer has been bonus incompatible"
+  },
+  {
+    "id": "contract_already_active",
+    "name": "contract_already_active",
+    "description": "",
+    "category": "Commercial Offer",
+    "examples": [],
+    "discursive": "Contract has been already active"
+  },
+  {
+    "id": "contract_in_activation",
+    "name": "contract_in_activation",
+    "description": "",
+    "category": "Commercial Offer",
+    "examples": [],
+    "discursive": "Contract has been in activation"
+  },
+  {
+    "id": "previously_proposed_offer",
+    "name": "previously_proposed_offer",
+    "description": "",
+    "category": "Commercial Offer",
+    "examples": [],
+    "discursive": "Offer was previously proposed"
+  },
+  {
+    "id": "repeated_offer",
+    "name": "repeated_offer",
+    "description": "",
+    "category": "Commercial Offer",
+    "examples": [],
+    "discursive": "Offer has been repeated"
+  },
+  {
+    "id": "user_does_not_answer_question",
+    "name": "user_does_not_answer_question",
+    "description": "",
+    "category": "Customer Behavior",
+    "examples": [],
+    "discursive": "User does NOT answer question"
+  },
+  {
+    "id": "user_requests_summary",
+    "name": "user_requests_summary",
+    "description": "",
+    "category": "Customer Behavior",
+    "examples": [],
+    "discursive": "User requests summary"
+  },
+  {
+    "id": "user_compares_rates",
+    "name": "user_compares_rates",
+    "description": "",
+    "category": "Customer Behavior",
+    "examples": [],
+    "discursive": "User compares rates"
+  },
+  {
+    "id": "user_mentions_other_supplier",
+    "name": "user_mentions_other_supplier",
+    "description": "",
+    "category": "Customer Behavior",
+    "examples": [],
+    "discursive": "User mentions other supplier"
+  },
+  {
+    "id": "user_shows_aggressiveness",
+    "name": "user_shows_aggressiveness",
+    "description": "",
+    "category": "Customer Behavior",
+    "examples": [],
+    "discursive": "User shows aggressiveness"
+  },
+  {
+    "id": "user_does_not_understand_language",
+    "name": "user_does_not_understand_language",
+    "description": "",
+    "category": "Customer Behavior",
+    "examples": [],
+    "discursive": "User does NOT understand language"
+  },
+  {
+    "id": "user_speaks_english",
+    "name": "user_speaks_english",
+    "description": "",
+    "category": "Customer Behavior",
+    "examples": [],
+    "discursive": "User speaks Englhas beenh"
+  },
+  {
+    "id": "user_enables_self_connection",
+    "name": "user_enables_self_connection",
+    "description": "",
+    "category": "Customer Behavior",
+    "examples": [],
+    "discursive": "User enables self connection"
+  },
+  {
+    "id": "crm_accessible",
+    "name": "crm_accessible",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "CRM has been accessible"
+  },
+  {
+    "id": "crm_unavailable",
+    "name": "crm_unavailable",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "CRM has not been accessible"
+  },
+  {
+    "id": "contract_uploaded",
+    "name": "contract_uploaded",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "Contract has been uploaded"
+  },
+  {
+    "id": "contract_not_found",
+    "name": "contract_not_found",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "Contract has not been found"
+  },
+  {
+    "id": "bonus_inserted",
+    "name": "bonus_inserted",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "Bonus has been inserted"
+  },
+  {
+    "id": "bonus_not_available",
+    "name": "bonus_not_available",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "Bonus has not been available"
+  },
+  {
+    "id": "pdf_generated",
+    "name": "pdf_generated",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "PDF has been generated"
+  },
+  {
+    "id": "pdf_generation_error",
+    "name": "pdf_generation_error",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "PDF generation has error"
+  },
+  {
+    "id": "voice_recorded",
+    "name": "voice_recorded",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "Voice has been recorded"
+  },
+  {
+    "id": "voice_not_recorded",
+    "name": "voice_not_recorded",
+    "description": "",
+    "category": "System Status",
+    "examples": [],
+    "discursive": "Voice has not been recorded"
+  },
+  {
+    "id": "verification_attempts_exceeded",
+    "name": "verification_attempts_exceeded",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Verification attempts are exceeded"
+  },
+  {
+    "id": "session_timeout",
+    "name": "session_timeout",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Session has been timed out"
+  },
+  {
+    "id": "flow_cancelled_by_user",
+    "name": "flow_cancelled_by_user",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Flow has been cancelled by user"
+  },
+  {
+    "id": "request_new_operator",
+    "name": "request_new_operator",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "New operator has been requested"
+  },
+  {
+    "id": "escalation_completed",
+    "name": "escalation_completed",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Escalation has been completed"
+  },
+  {
+    "id": "escalation_not_completed",
+    "name": "escalation_not_completed",
+    "description": "",
+    "category": "Operational Flow",
+    "examples": [],
+    "discursive": "Escalation has not been completed"
+  }
+]

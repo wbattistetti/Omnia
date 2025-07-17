@@ -1,0 +1,542 @@
+[
+  {
+    "id": "UA001",
+    "name": "Provision of first and last name",
+    "description": "",
+    "category": "",
+    "examples": [
+      "My name is Giulia Bianchi."
+    ],
+    "discursive": "Provides first and last name"
+  },
+  {
+    "id": "UA002",
+    "name": "Provision of tax code",
+    "description": "",
+    "category": "",
+    "examples": [
+      "My tax code is BNCGLI80A41H501R."
+    ],
+    "discursive": "Provides tax code"
+  },
+  {
+    "id": "UA003",
+    "name": "Provision of phone number",
+    "description": "",
+    "category": "",
+    "examples": [
+      "You can call me at 329..."
+    ],
+    "discursive": "Provides phone number"
+  },
+  {
+    "id": "UA004",
+    "name": "Provision of email",
+    "description": "",
+    "category": "",
+    "examples": [
+      "My email is g.bianchi@email.it."
+    ],
+    "discursive": "Provides email"
+  },
+  {
+    "id": "UA005",
+    "name": "Account holder confirmation",
+    "description": "Technical Data / Supply",
+    "category": "",
+    "examples": [
+      "Yes, the contract is in my name."
+    ],
+    "discursive": "Technical Data / Supply"
+  },
+  {
+    "id": "UA006",
+    "name": "Provision of POD/PDR",
+    "description": "",
+    "category": "",
+    "examples": [
+      "My POD is IT001E..."
+    ],
+    "discursive": "Provides pod/pdr"
+  },
+  {
+    "id": "UA007",
+    "name": "Provision of supply address",
+    "description": "",
+    "category": "",
+    "examples": [
+      "The address is Via Verdi 10."
+    ],
+    "discursive": "Provides supply address"
+  },
+  {
+    "id": "UA008",
+    "name": "Indication of meter power",
+    "description": "",
+    "category": "",
+    "examples": [
+      "I have a 3 kW meter."
+    ],
+    "discursive": "Indication of meter power"
+  },
+  {
+    "id": "UA009",
+    "name": "Presence of solar panels",
+    "description": "",
+    "category": "",
+    "examples": [
+      "Yes, we have photovoltaic panels."
+    ],
+    "discursive": "Presence of solar panels"
+  },
+  {
+    "id": "UA010",
+    "name": "Number of household members",
+    "description": "Consumption / Habits",
+    "category": "",
+    "examples": [
+      "There are four of us at home."
+    ],
+    "discursive": "Consumption / Habits"
+  },
+  {
+    "id": "UA011",
+    "name": "Description of estimated annual consumption",
+    "description": "",
+    "category": "",
+    "examples": [
+      "I use about 2700 kWh per year."
+    ],
+    "discursive": "Description of estimated annual consumption"
+  },
+  {
+    "id": "UA012",
+    "name": "Consumption time slots",
+    "description": "",
+    "category": "",
+    "examples": [
+      "I use more electricity in the evening."
+    ],
+    "discursive": "Consumption time slots"
+  },
+  {
+    "id": "UA013",
+    "name": "Use of electricity for heating",
+    "description": "Decision / Offer Acceptance",
+    "category": "",
+    "examples": [
+      "I use electric heaters in winter."
+    ],
+    "discursive": "Decision / Offer Acceptance"
+  },
+  {
+    "id": "UA014",
+    "name": "Offer acceptance",
+    "description": "",
+    "category": "",
+    "examples": [
+      "All right, let's proceed."
+    ],
+    "discursive": "Offer acceptance"
+  },
+  {
+    "id": "UA015",
+    "name": "Offer refusal",
+    "description": "",
+    "category": "",
+    "examples": [
+      "No, I'm not interested."
+    ],
+    "discursive": "Offer refusal"
+  },
+  {
+    "id": "UA016",
+    "name": "Request for time to decide",
+    "description": "",
+    "category": "",
+    "examples": [
+      "I need to think about it."
+    ],
+    "discursive": "Request for time to decide"
+  },
+  {
+    "id": "UA017",
+    "name": "Request for alternative proposal",
+    "description": "Consent / Compliance",
+    "category": "",
+    "examples": [
+      "Do you have other offers?"
+    ],
+    "discursive": "Consent / Compliance"
+  },
+  {
+    "id": "UA018",
+    "name": "Privacy consent",
+    "description": "",
+    "category": "",
+    "examples": [
+      "Yes, I accept the data processing."
+    ],
+    "discursive": "Privacy consent"
+  },
+  {
+    "id": "UA019",
+    "name": "Voice recording consent",
+    "description": "Requests / Information",
+    "category": "",
+    "examples": [
+      "I consent to the recording."
+    ],
+    "discursive": "Requests / Information"
+  },
+  {
+    "id": "UA020",
+    "name": "Request for offer clarification",
+    "description": "",
+    "category": "",
+    "examples": [
+      "What does the offer include?"
+    ],
+    "discursive": "Request for offer clarification"
+  },
+  {
+    "id": "UA021",
+    "name": "Question about contract duration",
+    "description": "",
+    "category": "",
+    "examples": [
+      "How long does the offer last?"
+    ],
+    "discursive": "Question about contract duration"
+  },
+  {
+    "id": "UA022",
+    "name": "Question about hidden costs",
+    "description": "",
+    "category": "",
+    "examples": [
+      "Are there any extra charges?"
+    ],
+    "discursive": "Question about hidden costs"
+  },
+  {
+    "id": "UA023",
+    "name": "Request to send documentation",
+    "description": "Objections / Issues",
+    "category": "",
+    "examples": [
+      "Can you send me the contract by email?"
+    ],
+    "discursive": "Objections / Issues"
+  },
+  {
+    "id": "UA024",
+    "name": "Price objection",
+    "description": "",
+    "category": "",
+    "examples": [
+      "It seems too expensive to me."
+    ],
+    "discursive": "Price objection"
+  },
+  {
+    "id": "UA025",
+    "name": "Objection about payment",
+    "description": "",
+    "category": "",
+    "examples": [
+      "I don't want direct debit."
+    ],
+    "discursive": "Objection about payment"
+  },
+  {
+    "id": "UA026",
+    "name": "Report of arrears or previous issues",
+    "description": "Closing / Follow-Up",
+    "category": "",
+    "examples": [
+      "I've had problems with the bill."
+    ],
+    "discursive": "Closing / Follow-Up"
+  },
+  {
+    "id": "UA027",
+    "name": "Request for recontact",
+    "description": "",
+    "category": "",
+    "examples": [
+      "Can you call me back tomorrow?"
+    ],
+    "discursive": "Request for recontact"
+  },
+  {
+    "id": "UA028",
+    "name": "Refusal of callback",
+    "description": "",
+    "category": "",
+    "examples": [
+      "I'd rather not be contacted again."
+    ],
+    "discursive": "Refusal of callback"
+  },
+  {
+    "id": "UA029",
+    "name": "Thanks",
+    "description": "",
+    "category": "",
+    "examples": [
+      "Thank you for the information."
+    ],
+    "discursive": "Thanks"
+  },
+  {
+    "id": "UA030",
+    "name": "Final greeting",
+    "description": "Emotional / Attitudinal Reactions",
+    "category": "",
+    "examples": [
+      "Goodbye."
+    ],
+    "discursive": "Emotional / Attitudinal Reactions"
+  },
+  {
+    "id": "UA031",
+    "name": "Expression of dissatisfaction",
+    "description": "\"I'm already tired of these calls.\"",
+    "category": "",
+    "examples": [],
+    "discursive": "\"I'm already tired of these calls.\""
+  },
+  {
+    "id": "UA032",
+    "name": "Expression of surprise or uncertainty",
+    "description": "\"Really? I didn't think it was so easy to change supplier.\"",
+    "category": "",
+    "examples": [],
+    "discursive": "\"Really? I didn't think it was so easy to change supplier.\""
+  },
+  {
+    "id": "UA033",
+    "name": "Expression of enthusiasm",
+    "description": "\"Great, it really seems interesting!\"",
+    "category": "",
+    "examples": [],
+    "discursive": "\"Great, it really seems interesting!\""
+  },
+  {
+    "id": "UA034",
+    "name": "Ironic / provocative tone",
+    "description": "\"So you're giving me electricity for free, right?\"",
+    "category": "📂 Control / Disintermediation Behaviors",
+    "examples": [],
+    "discursive": "\"So you're giving me electricity for free, right?\""
+  },
+  {
+    "id": "UA035",
+    "name": "Request for self-activation link",
+    "description": "\"Can you send me a link and I'll do it myself?\"",
+    "category": "📂 Control / Disintermediation Behaviors",
+    "examples": [],
+    "discursive": "\"Can you send me a link and I'll do it myself?\""
+  },
+  {
+    "id": "UA036",
+    "name": "Preference for self-service / app",
+    "description": "\"If I can do everything from the app, that's better.\"",
+    "category": "📂 Proactive Checks",
+    "examples": [],
+    "discursive": "\"If I can do everything from the app, that's better.\""
+  },
+  {
+    "id": "UA037",
+    "name": "Check on offer validity",
+    "description": "\"Is it also written on the website, this offer?\"",
+    "category": "📂 Proactive Checks",
+    "examples": [],
+    "discursive": "\"Is it also written on the website, this offer?\""
+  },
+  {
+    "id": "UA038",
+    "name": "Check operator reliability",
+    "description": "\"Can you tell me your code and where you work?\"",
+    "category": "📂 Expression of latent or implicit needs",
+    "examples": [],
+    "discursive": "\"Can you tell me your code and where you work?\""
+  },
+  {
+    "id": "UA039",
+    "name": "Indirect question about savings",
+    "description": "\"But in the end, do I really save something or not?\"",
+    "category": "📂 Expression of latent or implicit needs",
+    "examples": [],
+    "discursive": "\"But in the end, do I really save something or not?\""
+  },
+  {
+    "id": "UA040",
+    "name": "Question about real duration of the procedure",
+    "description": "\"How long does it take to change supplier?\"",
+    "category": "📂 Logistical / situational information",
+    "examples": [],
+    "discursive": "\"How long does it take to change supplier?\""
+  },
+  {
+    "id": "UA041",
+    "name": "Reporting inconvenient moment",
+    "description": "\"I can't talk right now, call me back.\"",
+    "category": "📂 Logistical / situational information",
+    "examples": [],
+    "discursive": "\"I can't talk right now, call me back.\""
+  },
+  {
+    "id": "UA042",
+    "name": "Declaration of not being the account holder",
+    "description": "\"I'm not the account holder, it's my husband.\"",
+    "category": "📂 Logistical / situational information",
+    "examples": [],
+    "discursive": "\"I'm not the account holder, it's my husband.\""
+  },
+  {
+    "id": "UA043",
+    "name": "Communication of imminent house move",
+    "description": "\"I'm about to move, does it make sense to activate now?\"",
+    "category": "📂 Post-activation interactions",
+    "examples": [],
+    "discursive": "\"I'm about to move, does it make sense to activate now?\""
+  },
+  {
+    "id": "UA044",
+    "name": "Question about first bill",
+    "description": "\"When will I receive the first invoice?\"",
+    "category": "📂 Post-activation interactions",
+    "examples": [],
+    "discursive": "\"When will I receive the first invoice?\""
+  },
+  {
+    "id": "UA045",
+    "name": "Request for access to customer area",
+    "description": "Defensive / disengaged behaviors",
+    "category": "📂 Post-activation interactions",
+    "examples": [],
+    "discursive": "Defensive / disengaged behaviors"
+  },
+  {
+    "id": "UA046",
+    "name": "Refusal to provide data",
+    "description": "\"I don't want to give my tax code.\"",
+    "category": "📂 Post-activation interactions",
+    "examples": [],
+    "discursive": "\"I don't want to give my tax code.\""
+  },
+  {
+    "id": "UA047",
+    "name": "Refusal to listen to the offer",
+    "description": "\"I'm not interested, I'm in a hurry.\"",
+    "category": "📂 Post-activation interactions",
+    "examples": [],
+    "discursive": "\"I'm not interested, I'm in a hurry.\""
+  },
+  {
+    "id": "UA048",
+    "name": "Immediate closing",
+    "description": "\"No thanks, goodbye.\"",
+    "category": "📂 Ambiguous / interlocutory interactions",
+    "examples": [],
+    "discursive": "\"No thanks, goodbye.\""
+  },
+  {
+    "id": "UA049",
+    "name": "Vague / evasive answer",
+    "description": "\"Yes... well... I don't know...\"",
+    "category": "📂 Ambiguous / interlocutory interactions",
+    "examples": [],
+    "discursive": "\"Yes... well... I don't know...\""
+  },
+  {
+    "id": "UA050",
+    "name": "Request for repetition",
+    "description": "\"Can you repeat the amount?\"",
+    "category": "📂 Ambiguous / interlocutory interactions",
+    "examples": [],
+    "discursive": "\"Can you repeat the amount?\""
+  },
+  {
+    "id": "UA051",
+    "name": "Expression of doubt / suspicion",
+    "description": "\"Are you sure this is a real company?\"",
+    "category": "📂 Expert or informed customers",
+    "examples": [],
+    "discursive": "\"Are you sure this is a real company?\""
+  },
+  {
+    "id": "UA052",
+    "name": "Comparison with competitor offers",
+    "description": "\"Enel charges me less per kWh.\"",
+    "category": "📂 Expert or informed customers",
+    "examples": [],
+    "discursive": "\"Enel charges me less per kWh.\""
+  },
+  {
+    "id": "UA053",
+    "name": "Quoting regulations / conditions",
+    "description": "\"I have the right to withdraw within 14 days, right?\"",
+    "category": "📂 Expert or informed customers",
+    "examples": [],
+    "discursive": "\"I have the right to withdraw within 14 days, right?\""
+  },
+  {
+    "id": "UA054",
+    "name": "Question about specific contract clauses",
+    "description": "\"Is there a penalty if I close before 12 months?\"",
+    "category": "📂 Language / Understanding",
+    "examples": [],
+    "discursive": "\"Is there a penalty if I close before 12 months?\""
+  },
+  {
+    "id": "UA055",
+    "name": "Request to speak in another language",
+    "description": "\"Do you speak English?\"",
+    "category": "📂 Language / Understanding",
+    "examples": [],
+    "discursive": "\"Do you speak English?\""
+  },
+  {
+    "id": "UA056",
+    "name": "Expression of difficulty understanding",
+    "description": "\"You speak too fast, I don't understand.\"",
+    "category": "📂 Historical data or past relationship",
+    "examples": [],
+    "discursive": "\"You speak too fast, I don't understand.\""
+  },
+  {
+    "id": "UA057",
+    "name": "Reference to previous contact",
+    "description": "\"You already called me last week.\"",
+    "category": "📂 Historical data or past relationship",
+    "examples": [],
+    "discursive": "\"You already called me last week.\""
+  },
+  {
+    "id": "UA058",
+    "name": "Reporting recent supplier change",
+    "description": "\"I've already changed supplier recently.\"",
+    "category": "📂 Specific administrative / fiscal aspects",
+    "examples": [],
+    "discursive": "\"I've already changed supplier recently.\""
+  },
+  {
+    "id": "UA059",
+    "name": "Request for paper / electronic invoice",
+    "description": "\"Can I receive the bill only in paper form?\"",
+    "category": "📂 Specific administrative / fiscal aspects",
+    "examples": [],
+    "discursive": "\"Can I receive the bill only in paper form?\""
+  },
+  {
+    "id": "UA060",
+    "name": "Communication of IBAN / account change",
+    "description": "Associate modifiers or secondary signals (e.g. hesitation, sarcasm, urgency).",
+    "category": "📂 Specific administrative / fiscal aspects",
+    "examples": [],
+    "discursive": "Associate modifiers or secondary signals (e.g. hesitation, sarcasm, urgency)."
+  }
+]

@@ -1,0 +1,474 @@
+[
+  {
+    "id": "verify_account_holder",
+    "name": "verify_account_holder",
+    "description": "Confirms that the provided name matches the one associated with the POD/PDR.",
+    "category": "Data Verification and CRM",
+    "examples": [],
+    "discursive": "Checks account holder"
+  },
+  {
+    "id": "verify_tax_code",
+    "name": "verify_tax_code",
+    "description": "Checks the validity of the tax code (CF) against the database.",
+    "category": "Data Verification and CRM",
+    "examples": [],
+    "discursive": "Checks tax code"
+  },
+  {
+    "id": "verify_existing_email_phone",
+    "name": "verify_existing_email_phone",
+    "description": "Compares contact details with those already present in the CRM.",
+    "category": "Data Verification and CRM",
+    "examples": [],
+    "discursive": "Checks email and phone"
+  },
+  {
+    "id": "check_outstanding_debt",
+    "name": "check_outstanding_debt",
+    "description": "Checks if the customer has any outstanding debts.",
+    "category": "Data Verification and CRM",
+    "examples": [],
+    "discursive": "Checks if the customer has any outstanding debts."
+  },
+  {
+    "id": "authenticate_pod_pdr",
+    "name": "authenticate_pod_pdr",
+    "description": "Checks that the identification code is active and correct.",
+    "category": "POD/PDR Management and User Registry",
+    "examples": [],
+    "discursive": "Checks that the identification code is active and correct."
+  },
+  {
+    "id": "retrieve_user_data",
+    "name": "retrieve_user_data",
+    "description": "Obtains technical details from POD/PDR (power, usage, supplier).",
+    "category": "POD/PDR Management and User Registry",
+    "examples": [],
+    "discursive": "Obtains technical details from POD/PDR (power, usage, supplier)."
+  },
+  {
+    "id": "check_domestic_usage",
+    "name": "check_domestic_usage",
+    "description": "Determines if the supply is domestic or business.",
+    "category": "POD/PDR Management and User Registry",
+    "examples": [],
+    "discursive": "Determines if the supply is domestic or business."
+  },
+  {
+    "id": "retrieve_available_offers",
+    "name": "retrieve_available_offers",
+    "description": "Loads from the price list the offers compatible with the customer.",
+    "category": "Offers and Profiling",
+    "examples": [],
+    "discursive": "Loads from the price list the offers compatible with the customer."
+  },
+  {
+    "id": "calculate_applicable_bonus",
+    "name": "calculate_applicable_bonus",
+    "description": "Determines any discounts or incentives for the profile.",
+    "category": "Offers and Profiling",
+    "examples": [],
+    "discursive": "Determines any discounts or incentives for the profile."
+  },
+  {
+    "id": "check_bonus_compatibility",
+    "name": "check_bonus_compatibility",
+    "description": "Compares the selected offer with the bonus requirements.",
+    "category": "Offers and Profiling",
+    "examples": [],
+    "discursive": "Compares the selected offer with the bonus requirements."
+  },
+  {
+    "id": "simulate_expected_savings",
+    "name": "simulate_expected_savings",
+    "description": "Calculates the difference between the new offer and the current contract.",
+    "category": "Offers and Profiling",
+    "examples": [],
+    "discursive": "Calculates the difference between the new offer and the current contract."
+  },
+  {
+    "id": "create_activation_case",
+    "name": "create_activation_case",
+    "description": "Generates a new case in the management system.",
+    "category": "Contract Activation",
+    "examples": [],
+    "discursive": "Generates a new case in the management system."
+  },
+  {
+    "id": "send_contract_pdf",
+    "name": "send_contract_pdf",
+    "description": "Sends the official document to the customer via email/SMS.",
+    "category": "Contract Activation",
+    "examples": [],
+    "discursive": "Sends the official document to the customer via email/SMS."
+  },
+  {
+    "id": "flag_contract_active",
+    "name": "flag_contract_active",
+    "description": "Marks the activation as confirmed in the backend.",
+    "category": "Contract Activation",
+    "examples": [],
+    "discursive": "Marks the activation as confirmed in the backend."
+  },
+  {
+    "id": "register_voice_consent",
+    "name": "register_voice_consent",
+    "description": "Saves the audio file with formal consent.",
+    "category": "Contract Activation",
+    "examples": [],
+    "discursive": "Saves the audio file with formal consent."
+  },
+  {
+    "id": "set_payment_method",
+    "name": "set_payment_method",
+    "description": "Defines direct debit or payment slip for the supply.",
+    "category": "Payments and Billing",
+    "examples": [],
+    "discursive": "Defines direct debit or payment slip for the supply."
+  },
+  {
+    "id": "check_payment_method_compatibility",
+    "name": "check_payment_method_compatibility",
+    "description": "Checks if the IBAN is valid/registered to the account holder.",
+    "category": "Payments and Billing",
+    "examples": [],
+    "discursive": "Checks if the IBAN is valid/registered to the account holder."
+  },
+  {
+    "id": "check_digital_bill",
+    "name": "check_digital_bill",
+    "description": "Indicates if electronic billing is active.",
+    "category": "Payments and Billing",
+    "examples": [],
+    "discursive": "Indicates if electronic billing is active."
+  },
+  {
+    "id": "retrieve_activation_status",
+    "name": "retrieve_activation_status",
+    "description": "Shows the progress of the case.",
+    "category": "After-sales / Contract Status",
+    "examples": [],
+    "discursive": "Shows the progress of the case."
+  },
+  {
+    "id": "retrieve_first_expected_invoice",
+    "name": "retrieve_first_expected_invoice",
+    "description": "Estimates the timing of the first bill.",
+    "category": "After-sales / Contract Status",
+    "examples": [],
+    "discursive": "Estimates the timing of the first bill."
+  },
+  {
+    "id": "retrieve_client_area_access_data",
+    "name": "retrieve_client_area_access_data",
+    "description": "Returns link or initial credentials.",
+    "category": "After-sales / Contract Status",
+    "examples": [],
+    "discursive": "Returns link or initial credentials."
+  },
+  {
+    "id": "initialize_transfer",
+    "name": "initialize_transfer",
+    "description": "Opens a transfer procedure on the existing contract.",
+    "category": "Specific Contract Management",
+    "examples": [],
+    "discursive": "Opens a transfer procedure on the existing contract."
+  },
+  {
+    "id": "initialize_takeover",
+    "name": "initialize_takeover",
+    "description": "Starts a takeover on a deactivated meter.",
+    "category": "Specific Contract Management",
+    "examples": [],
+    "discursive": "Starts a takeover on a deactivated meter."
+  },
+  {
+    "id": "change_meter_power",
+    "name": "change_meter_power",
+    "description": "Requests a contractual power change.",
+    "category": "Specific Contract Management",
+    "examples": [],
+    "discursive": "Requests a contractual power change."
+  },
+  {
+    "id": "request_account_holder_change",
+    "name": "request_account_holder_change",
+    "description": "Manages a change of account holder on an active supply.",
+    "category": "Specific Contract Management",
+    "examples": [],
+    "discursive": "Manages a change of account holder on an active supply."
+  },
+  {
+    "id": "send_digital_signature_link",
+    "name": "send_digital_signature_link",
+    "description": "Sends a link for remote contract signing.",
+    "category": "Documentation and Signature Management",
+    "examples": [],
+    "discursive": "Sends a link for remote contract signing."
+  },
+  {
+    "id": "check_signature_completed",
+    "name": "check_signature_completed",
+    "description": "Checks if the digital signature has been completed.",
+    "category": "Documentation and Signature Management",
+    "examples": [],
+    "discursive": "Checks if the digital signature has been completed."
+  },
+  {
+    "id": "archive_signed_document",
+    "name": "archive_signed_document",
+    "description": "Saves the signed contract in the document repository.",
+    "category": "Documentation and Signature Management",
+    "examples": [],
+    "discursive": "Saves the signed contract in the document repository."
+  },
+  {
+    "id": "retrieve_client_historical_documents",
+    "name": "retrieve_client_historical_documents",
+    "description": "Makes previous contractual PDFs available.",
+    "category": "Documentation and Signature Management",
+    "examples": [],
+    "discursive": "Makes previous contractual PDFs available."
+  },
+  {
+    "id": "update_contact_preferences",
+    "name": "update_contact_preferences",
+    "description": "Modifies preferred channel (email, phone, SMS).",
+    "category": "Customer Management (Extended CRM)",
+    "examples": [],
+    "discursive": "Modifies preferred channel (email, phone, SMS)."
+  },
+  {
+    "id": "register_operator_note",
+    "name": "register_operator_note",
+    "description": "Inserts a contextual note in the customer record.",
+    "category": "Customer Management (Extended CRM)",
+    "examples": [],
+    "discursive": "Inserts a contextual note in the customer record."
+  },
+  {
+    "id": "update_customer_status",
+    "name": "update_customer_status",
+    "description": "E.g., from prospect to active customer.",
+    "category": "Customer Management (Extended CRM)",
+    "examples": [],
+    "discursive": "E.g., from prospect to active customer."
+  },
+  {
+    "id": "check_marketing_segmentation",
+    "name": "check_marketing_segmentation",
+    "description": "Retrieves CRM cluster or tag for profiling.",
+    "category": "Customer Management (Extended CRM)",
+    "examples": [],
+    "discursive": "Retrieves CRM cluster or tag for profiling."
+  },
+  {
+    "id": "send_activation_sms_notification",
+    "name": "send_activation_sms_notification",
+    "description": "Confirms activation via SMS.",
+    "category": "Notifications and Multichannel",
+    "examples": [],
+    "discursive": "Confirms activation via SMS."
+  },
+  {
+    "id": "send_welcome_email",
+    "name": "send_welcome_email",
+    "description": "Sends onboarding message after activation.",
+    "category": "Notifications and Multichannel",
+    "examples": [],
+    "discursive": "Sends onboarding message after activation."
+  },
+  {
+    "id": "schedule_automatic_callback",
+    "name": "schedule_automatic_callback",
+    "description": "Inserts an appointment in the management system.",
+    "category": "Notifications and Multichannel",
+    "examples": [],
+    "discursive": "Inserts an appointment in the management system."
+  },
+  {
+    "id": "send_client_area_link",
+    "name": "send_client_area_link",
+    "description": "Provides a personalized URL for portal access.",
+    "category": "Notifications and Multichannel",
+    "examples": [],
+    "discursive": "Provides a personalized URL for portal access."
+  },
+  {
+    "id": "check_outstanding_balance",
+    "name": "check_outstanding_balance",
+    "description": "Checks for overdue amounts or open installments.",
+    "category": "Billing and Economic Status",
+    "examples": [],
+    "discursive": "Checks for overdue amounts or open installments."
+  },
+  {
+    "id": "activate_payment_installment",
+    "name": "activate_payment_installment",
+    "description": "Starts a payment plan for settlement.",
+    "category": "Billing and Economic Status",
+    "examples": [],
+    "discursive": "Starts a payment plan for settlement."
+  },
+  {
+    "id": "deactivate_incompatible_offer",
+    "name": "deactivate_incompatible_offer",
+    "description": "Closes promotions not combinable with the new contract.",
+    "category": "Billing and Economic Status",
+    "examples": [],
+    "discursive": "Closes promotions not combinable with the new contract."
+  },
+  {
+    "id": "generate_monthly_bill_estimate",
+    "name": "generate_monthly_bill_estimate",
+    "description": "Creates a simulation based on annual consumption.",
+    "category": "Billing and Economic Status",
+    "examples": [],
+    "discursive": "Creates a simulation based on annual consumption."
+  },
+  {
+    "id": "check_open_fault_report",
+    "name": "check_open_fault_report",
+    "description": "Checks if there is a service request on the POD.",
+    "category": "Technical Support / Diagnostics",
+    "examples": [],
+    "discursive": "Checks if there is a service request on the POD."
+  },
+  {
+    "id": "open_technical_ticket",
+    "name": "open_technical_ticket",
+    "description": "Creates a technical report in the system.",
+    "category": "Technical Support / Diagnostics",
+    "examples": [],
+    "discursive": "Creates a technical report in the system."
+  },
+  {
+    "id": "send_self_reading_link",
+    "name": "send_self_reading_link",
+    "description": "Sends the link for customer meter reading via SMS/email.",
+    "category": "Technical Support / Diagnostics",
+    "examples": [],
+    "discursive": "Sends the link for customer meter reading via SMS/email."
+  },
+  {
+    "id": "retrieve_self_reading_history",
+    "name": "retrieve_self_reading_history",
+    "description": "Displays the latest readings provided by the customer.",
+    "category": "Technical Support / Diagnostics",
+    "examples": [],
+    "discursive": "Displays the latest readings provided by the customer."
+  },
+  {
+    "id": "open_customer_complaint",
+    "name": "open_customer_complaint",
+    "description": "Inserts an official complaint case.",
+    "category": "Complaints and Tracking",
+    "examples": [],
+    "discursive": "Inserts an official complaint case."
+  },
+  {
+    "id": "update_complaint_outcome",
+    "name": "update_complaint_outcome",
+    "description": "Records the resolution of the open complaint.",
+    "category": "Complaints and Tracking",
+    "examples": [],
+    "discursive": "Records the resolution of the open complaint."
+  },
+  {
+    "id": "retrieve_open_tickets",
+    "name": "retrieve_open_tickets",
+    "description": "Returns the list of ongoing requests.",
+    "category": "Complaints and Tracking",
+    "examples": [],
+    "discursive": "Returns the list of ongoing requests."
+  },
+  {
+    "id": "send_complaint_feedback",
+    "name": "send_complaint_feedback",
+    "description": "Notifies the customer of the complaint progress.",
+    "category": "Complaints and Tracking",
+    "examples": [],
+    "discursive": "Notifies the customer of the complaint progress."
+  },
+  {
+    "id": "register_marketing_communications_block",
+    "name": "register_marketing_communications_block",
+    "description": "The customer does not want to be contacted again.",
+    "category": "Regulations / GDPR Block / Preferences",
+    "examples": [],
+    "discursive": "The customer does not want to be contacted again."
+  },
+  {
+    "id": "update_marketing_consent",
+    "name": "update_marketing_consent",
+    "description": "Modifies extended or informed privacy consent.",
+    "category": "Regulations / GDPR Block / Preferences",
+    "examples": [],
+    "discursive": "Modifies extended or informed privacy consent."
+  },
+  {
+    "id": "delete_personal_data_on_request",
+    "name": "delete_personal_data_on_request",
+    "description": "Processes a data deletion request.",
+    "category": "Regulations / GDPR Block / Preferences",
+    "examples": [],
+    "discursive": "Processes a data deletion request."
+  },
+  {
+    "id": "check_gdpr_consent",
+    "name": "check_gdpr_consent",
+    "description": "Checks the status of each type of consent.",
+    "category": "Regulations / GDPR Block / Preferences",
+    "examples": [],
+    "discursive": "Checks the status of each type of consent."
+  },
+  {
+    "id": "check_joint_account_holder",
+    "name": "check_joint_account_holder",
+    "description": "Checks if the supply has multiple account holders.",
+    "category": "Multi-account Holder / Delegations",
+    "examples": [],
+    "discursive": "Checks if the supply has multiple account holders."
+  },
+  {
+    "id": "register_authenticated_delegation",
+    "name": "register_authenticated_delegation",
+    "description": "Marks a delegation as valid for operations.",
+    "category": "Multi-account Holder / Delegations",
+    "examples": [],
+    "discursive": "Marks a delegation as valid for operations."
+  },
+  {
+    "id": "request_delegation_documentation",
+    "name": "request_delegation_documentation",
+    "description": "Sends a formal request for delegation documents.",
+    "category": "Multi-account Holder / Delegations",
+    "examples": [],
+    "discursive": "Sends a formal request for delegation documents."
+  },
+  {
+    "id": "check_multi_service_packages",
+    "name": "check_multi_service_packages",
+    "description": "E.g., electricity + gas + boiler + internet.",
+    "category": "Advanced Contractual / Multi-service",
+    "examples": [],
+    "discursive": "E.g., electricity + gas + boiler + internet."
+  },
+  {
+    "id": "activate_additional_service",
+    "name": "activate_additional_service",
+    "description": "E.g., maintenance, boiler assistance, alarm system.",
+    "category": "Advanced Contractual / Multi-service",
+    "examples": [],
+    "discursive": "E.g., maintenance, boiler assistance, alarm system."
+  },
+  {
+    "id": "deactivate_unused_service",
+    "name": "deactivate_unused_service",
+    "description": "Closes an optional service no longer required.",
+    "category": "Advanced Contractual / Multi-service",
+    "examples": [],
+    "discursive": "Closes an optional service no longer required."
+  }
+]

@@ -1,0 +1,181 @@
+[
+  {
+    "id": "MT01",
+    "name": "Customer Welcome and Identification",
+    "discursive": "Welcome and identify the customer.",
+    "description": "Initial greeting and customer identity verification.",
+    "tasks": [
+      "T001",
+      "T002",
+      "T028"
+    ]
+  },
+  {
+    "id": "MT02",
+    "name": "Consumption Analysis and Profiling",
+    "discursive": "Analyze customer's consumption and profile.",
+    "description": "Gather information about consumption to tailor the offer.",
+    "tasks": [
+      "T003",
+      "T017"
+    ]
+  },
+  {
+    "id": "MT03",
+    "name": "Offer Proposal and Explanation",
+    "discursive": "Present and explains offers.",
+    "description": "Propose and illustrate offers, addressing potential doubts.",
+    "tasks": [
+      "T004",
+      "T021"
+    ]
+  },
+  {
+    "id": "MT04",
+    "name": "Offer Acceptance Verification and Confirmation",
+    "discursive": "Check the customer accepts the offer.",
+    "description": "Verify customer's consent to proceed with the offer.",
+    "tasks": [
+      "T005",
+      "T026"
+    ]
+  },
+  {
+    "id": "MT05",
+    "name": "Consent and Compliance",
+    "discursive": "Collect consents.",
+    "description": "Ensure compliance with legal requirements during interaction.",
+    "tasks": [
+      "T006",
+      "T023"
+    ]
+  },
+  {
+    "id": "MT06",
+    "name": "Objection and Alternative Management",
+    "discursive": "Handle objections and suggest alternatives.",
+    "description": "Manage customer's hesitation or refusal constructively.",
+    "tasks": [
+      "T007",
+      "T030"
+    ]
+  },
+  {
+    "id": "MT07",
+    "name": "Closing and Follow-Up",
+    "discursive": "Close the interaction.",
+    "description": "Wrap up the conversation with clear next steps.",
+    "tasks": [
+      "T008",
+      "T025"
+    ]
+  },
+  {
+    "id": "MT08",
+    "name": "After-Sales Assistance",
+    "discursive": "Provide after service Assistance.",
+    "description": "Support customer in post-activation phase.",
+    "tasks": [
+      "T013",
+      "T024"
+    ]
+  },
+  {
+    "id": "MT09",
+    "name": "Technical and Backoffice Management",
+    "discursive": "Manage technical issues.",
+    "description": "Handle technical verifications and administrative backend.",
+    "tasks": [
+      "T009",
+      "T010",
+      "T027"
+    ]
+  },
+  {
+    "id": "MT10",
+    "name": "Complaints and Reports Management",
+    "discursive": "Address customer complaints and incident.",
+    "description": "Register and manage formal complaints.",
+    "tasks": [
+      "T014"
+    ]
+  },
+  {
+    "id": "MT11",
+    "name": "Specific Contractual Operations",
+    "discursive": "Manage contract-related operations.",
+    "description": "Handle complex or non-standard contractual procedures.",
+    "tasks": [
+      "T018",
+      "T019",
+      "T029"
+    ]
+  },
+  {
+    "id": "MT12",
+    "name": "Customer Recovery and Retention",
+    "discursive": "Recover and retain customers.",
+    "description": "Reactivate or retain customers through targeted actions.",
+    "tasks": [
+      "T016",
+      "T020"
+    ]
+  },
+  {
+    "id": "MT13",
+    "name": "Digital Onboarding / Usage Education",
+    "discursive": "Guide the customer in self-service services.",
+    "description": "Promote digital tools and educate customers on their use.",
+    "tasks": [
+      "T013",
+      "T020"
+    ]
+  },
+  {
+    "id": "MT14",
+    "name": "Regulatory and Compliance",
+    "discursive": "Assure compliancy",
+    "description": "Verify that procedures meet the required legal standards.",
+    "tasks": [
+      "T006",
+      "T023",
+      "T019",
+      "T030"
+    ]
+  },
+  {
+    "id": "MT15",
+    "name": "Promotional Campaign Management",
+    "discursive": "Manage promotional campaigns.",
+    "description": "Cluster of tasks related to time-limited offers, marketing campaigns, up-sell or bonuses.",
+    "tasks": [
+      "T017",
+      "T021",
+      "T025",
+      "T026"
+    ]
+  },
+  {
+    "id": "MT16",
+    "name": "Retargeting and Recapture",
+    "discursive": "Recover customers interactions.",
+    "description": "Identify and re-engage unconverted leads.",
+    "tasks": [
+      "T016",
+      "T028",
+      "T029"
+    ]
+  },
+  {
+    "id": "MT17",
+    "name": "Channel Management and Conversational Routing",
+    "discursive": "",
+    "description": "Tasks dedicated to channel management, optimization of the conversational path, or automatic escalation.",
+    "tasks": [
+      "T010",
+      "T027",
+      "T011",
+      "T029"
+    ]
+  }
+]

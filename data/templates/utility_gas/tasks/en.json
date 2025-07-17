@@ -1,0 +1,273 @@
+[
+  {
+    "id": "T001",
+    "name": "Introduction and Interlocutor Verification",
+    "acts": [
+      "AA001",
+      "AA002",
+      "AA003",
+      "AA004",
+      "AA005"
+    ]
+  },
+  {
+    "id": "T002",
+    "name": "Customer Data Collection",
+    "acts": [
+      "AA006",
+      "AA007",
+      "AA008",
+      "AA009",
+      "AA010",
+      "AA011"
+    ]
+  },
+  {
+    "id": "T003",
+    "name": "Consumption Analysis and Profiling",
+    "acts": [
+      "AA012",
+      "AA013",
+      "AA014",
+      "AA015"
+    ]
+  },
+  {
+    "id": "T004",
+    "name": "Offer Explanation",
+    "acts": [
+      "AA016",
+      "AA017",
+      "AA018",
+      "AA019",
+      "AA020",
+      "AA021",
+      "AA022"
+    ]
+  },
+  {
+    "id": "T005",
+    "name": "Verification and Confirmation",
+    "acts": [
+      "AA023",
+      "AA024"
+    ]
+  },
+  {
+    "id": "T006",
+    "name": "Consent and Privacy",
+    "acts": [
+      "AA025",
+      "AA026"
+    ]
+  },
+  {
+    "id": "T007",
+    "name": "Objection and Alternative Management",
+    "acts": [
+      "AA027",
+      "AA028",
+      "AA029"
+    ]
+  },
+  {
+    "id": "T008",
+    "name": "Closing and Follow-Up",
+    "acts": [
+      "AA030",
+      "AA031",
+      "AA032",
+      "AA033"
+    ]
+  },
+  {
+    "id": "T009",
+    "name": "Technical Verification / Administrative Data",
+    "acts": []
+  },
+  {
+    "id": "T010",
+    "name": "Time Management / Waiting / System Errors",
+    "acts": []
+  },
+  {
+    "id": "T011",
+    "name": "Escalation / Transfer to another operator",
+    "acts": []
+  },
+  {
+    "id": "T012",
+    "name": "Additional Services Offer",
+    "acts": []
+  },
+  {
+    "id": "T013",
+    "name": "Post-activation and Customer Support",
+    "acts": []
+  },
+  {
+    "id": "T014",
+    "name": "Complaint or Problem Report",
+    "acts": []
+  },
+  {
+    "id": "T015",
+    "name": "Regulatory Contextualization / Withdrawal",
+    "acts": []
+  },
+  {
+    "id": "T016",
+    "name": "Customer Recovery / Contact Reactivation",
+    "acts": [
+      "AA056",
+      "AA057",
+      "AA028",
+      "AA030",
+      "AA059"
+    ]
+  },
+  {
+    "id": "T017",
+    "name": "Bonus or Campaign Requirements Verification",
+    "acts": [
+      "AA020",
+      "AA070",
+      "AA071",
+      "AA049",
+      "AA050"
+    ]
+  },
+  {
+    "id": "T018",
+    "name": "Transfer / Takeover Management",
+    "acts": [
+      "AA052",
+      "AA051",
+      "AA053",
+      "AA010",
+      "AA011"
+    ]
+  },
+  {
+    "id": "T019",
+    "name": "Documentation / Fiscal Verification",
+    "acts": [
+      "AA068",
+      "AA035",
+      "AA036",
+      "AA045",
+      "AA069"
+    ]
+  },
+  {
+    "id": "T020",
+    "name": "Post-sales Survey / Quality",
+    "acts": [
+      "AA046",
+      "AA033",
+      "AA030",
+      "AA059",
+      "AA062"
+    ]
+  },
+  {
+    "id": "T021",
+    "name": "Offer Change / Contract Renewal",
+    "acts": [
+      "AA016",
+      "AA017",
+      "AA019",
+      "AA024",
+      "AA057"
+    ]
+  },
+  {
+    "id": "T022",
+    "name": "Sending Documentation / Confirmations",
+    "acts": [
+      "AA045",
+      "AA060",
+      "AA038",
+      "AA032",
+      "AA033"
+    ]
+  },
+  {
+    "id": "T023",
+    "name": "Sending Information / Regulatory Documents",
+    "acts": [
+      "AA025",
+      "AA045",
+      "AA055",
+      "AA054"
+    ]
+  },
+  {
+    "id": "T024",
+    "name": "Activation Confirmation / Case Status",
+    "acts": [
+      "AA038",
+      "AA060",
+      "AA031",
+      "AA061"
+    ]
+  },
+  {
+    "id": "T025",
+    "name": "Reminders and Deadlines",
+    "acts": [
+      "AA057",
+      "AA070",
+      "AA030",
+      "AA033"
+    ]
+  },
+  {
+    "id": "T026",
+    "name": "Offer Acceptance Verification via Email/SMS",
+    "acts": [
+      "AA024",
+      "AA023",
+      "AA016",
+      "AA021"
+    ]
+  },
+  {
+    "id": "T027",
+    "name": "System Block / Technical Problem Notification",
+    "acts": [
+      "AA037",
+      "AA047",
+      "AA048",
+      "AA032"
+    ]
+  },
+  {
+    "id": "T028",
+    "name": "Authentication Request (Two-Factor)",
+    "acts": [
+      "AA007",
+      "AA011",
+      "AA035",
+      "AA036"
+    ]
+  },
+  {
+    "id": "T029",
+    "name": "Channel / Delegate Change Management",
+    "acts": [
+      "AA040",
+      "AA051",
+      "AA068",
+      "AA042"
+    ]
+  },
+  {
+    "id": "T030",
+    "name": "Ongoing Contract Renegotiation",
+    "acts": [
+      "AA019",
+      "AA017"
+    ]
+  }
+]
