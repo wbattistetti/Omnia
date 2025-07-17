@@ -199,6 +199,7 @@ const FlowEditorContent: React.FC = () => {
   const NODE_HEIGHT = 40; // px (min-h-[40px])
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
+    setSelectedEdgeId(null); // Reset edge selezionata quando si clicca sul canvas
     const currentTime = Date.now();
     const timeDiff = currentTime - lastClickTime.current;
     

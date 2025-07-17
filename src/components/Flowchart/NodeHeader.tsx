@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import { Trash2, Edit3, Check, X } from 'lucide-react';
 
 /**
@@ -30,11 +30,17 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
   const [isHovered, setIsHovered] = useState(false);
+  const titleSpanRef = useRef<HTMLSpanElement>(null);
+  const [inputWidth, setInputWidth] = useState<number>(0);
 
   // Inizia editing titolo
   const handleTitleEdit = () => {
     setIsEditingTitle(true);
     setTempTitle(title);
+    // Calcola larghezza del titolo statico
+    if (titleSpanRef.current) {
+      setInputWidth(titleSpanRef.current.offsetWidth);
+    }
   };
 
   // Salva titolo
@@ -64,77 +70,71 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Titolo + matita edit title */}
+      {/* Titolo + editing */}
       <div className="flex items-center min-w-0 flex-1">
         {isEditingTitle ? (
-          <div className="flex items-center flex-1">
+          <div className="flex items-center min-w-0 flex-1">
             <input
               type="text"
               value={tempTitle}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTempTitle(e.target.value)}
+              onChange={(e) => setTempTitle(e.target.value)}
               onKeyDown={handleKeyDown}
-             draggable={false}
-             onMouseDown={(e) => e.nativeEvent.stopImmediatePropagation()}
-             onMouseMove={(e) => e.nativeEvent.stopImmediatePropagation()}
-             onMouseUp={(e) => e.nativeEvent.stopImmediatePropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerMove={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-              className="flex-1 bg-slate-600 text-white text-[8px] px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 border-2 border-purple-400 nodrag"
               autoFocus
+              className="min-w-0 bg-slate-600 text-white text-[8px] px-1.5 py-1 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 border-2 border-purple-400 nodrag"
+              style={{ width: '70%', maxWidth: '70%' }}
             />
             <button
               onClick={handleTitleSave}
               className="ml-1 p-1 text-green-400 hover:text-green-300 transition-colors"
-              title="Save title"
+              title="Conferma"
             >
               <Check className="w-3 h-3" />
             </button>
             <button
               onClick={handleTitleCancel}
               className="ml-1 p-1 text-red-400 hover:text-red-300 transition-colors"
-              title="Cancel editing"
+              title="Annulla"
             >
               <X className="w-3 h-3" />
             </button>
           </div>
         ) : (
-          <div className="flex items-center min-w-0">
-            <h3 
-              className="text-white text-[8px] font-semibold cursor-pointer hover:text-purple-300 transition-colors truncate"
-              onClick={handleTitleEdit}
-              title="Edit Title"
-            >
-              {title}
-            </h3>
-            {/* RIMOSSO: matita a destra del titolo */}
-          </div>
+          <h3
+            className="text-white text-[8px] font-semibold cursor-pointer hover:text-purple-300 transition-colors truncate"
+            onClick={handleTitleEdit}
+            title="Modifica titolo"
+            style={{ display: 'inline-block' }}
+          >
+            {title}
+          </h3>
         )}
       </div>
-      {/* Azioni a destra: Add act e Delete, spazio fisso */}
-      <div
-        className="flex items-center ml-2"
-        style={{ minWidth: 40, height: 20, justifyContent: 'flex-end' }}
-      >
-        {!isEditingTitle && isHovered && (
-          <>
-            <button 
-              onClick={onToggleEdit} 
-              className="p-1 text-slate-400 hover:text-green-400 transition-colors"
-              title="Add act"
-            >
-              <Edit3 className={`w-3 h-3 ${isEditing ? 'text-green-400' : ''}`} />
-            </button>
-            <button 
-              onClick={onDelete} 
-              className="p-1 text-red-400 hover:text-red-300 transition-colors"
-              title="Delete node"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </>
-        )}
-      </div>
+      {/* Azioni a destra: SOLO se non in editing */}
+      {!isEditingTitle && (
+        <div
+          className="flex items-center ml-2"
+          style={{ minWidth: 40, height: 20, justifyContent: 'flex-end' }}
+        >
+          {isHovered && (
+            <>
+              <button 
+                onClick={handleTitleEdit} 
+                className="p-1 text-slate-400 hover:text-green-400 transition-colors"
+                title="Modifica titolo"
+              >
+                <Edit3 className={`w-3 h-3 ${isEditing ? 'text-green-400' : ''}`} />
+              </button>
+              <button 
+                onClick={onDelete} 
+                className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                title="Delete node"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };

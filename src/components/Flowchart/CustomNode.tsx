@@ -313,7 +313,15 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         <NodeHeader
           title={nodeTitle}
           onDelete={handleDeleteNode}
-          onToggleEdit={() => setIsEditingNode(!isEditingNode)}
+          onToggleEdit={() => {
+            // Attiva solo l'editing del titolo
+            // Non aggiunge più una row
+            // Puoi anche rinominare la prop in onEditTitle se vuoi chiarezza
+            // Qui lasciamo la compatibilità
+            // Se vuoi, puoi anche passare direttamente handleTitleEdit
+            // Ma lasciamo la logica qui per ora
+            // setIsEditingNode(!isEditingNode); // RIMOSSO: non serve più
+          }}
           onTitleUpdate={handleTitleUpdate}
           isEditing={isEditingNode}
         />

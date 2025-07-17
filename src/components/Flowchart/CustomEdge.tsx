@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { EdgeProps, getBezierPath } from 'reactflow';
-import { Pencil, Trash2, Link, Link2Off as LinkOff } from 'lucide-react';
+import { Pencil, Trash2, Link, Link2Off as LinkOff, Settings } from 'lucide-react';
 import { normalizeMarkerEnd } from '../../utils/markerUtils';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { EdgeConditionSelector } from './EdgeConditionSelector';
@@ -34,9 +34,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const [conditionSelectorPos, setConditionSelectorPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const labelSpanRef = useRef<HTMLSpanElement>(null);
+  const gearButtonRef = useRef<HTMLButtonElement>(null);
 
   // Handler per apertura intellisense
   const handleOpenIntellisense = (x: number, y: number) => {
+    console.log('[DEBUG] handleOpenIntellisense', { x, y });
     setIntellisensePosition({ x, y });
     setShowConditionIntellisense(true);
   };
@@ -119,10 +121,16 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   };
 
-  // LOG solo per debug label
+  // LOG solo per debug selezione/cestino
   useEffect(() => {
-    console.log('[DEBUG][CustomEdge][LABEL]', { id, label: props.label, dataLabel: props.data?.label });
-  }, [id, props.label, props.data?.label]);
+    console.log('[DEBUG][CustomEdge][SELECTED]', { id, selected: props.selected });
+  }, [id, props.selected]);
+
+  useEffect(() => {
+    console.log('[DEBUG] showConditionIntellisense changed', showConditionIntellisense);
+  }, [showConditionIntellisense]);
+
+  console.log('[DEBUG] CustomEdge render', { showConditionIntellisense, intellisensePosition });
 
   return (
     <g
@@ -226,25 +234,28 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           </foreignObject>
           {/* Intellisense sotto la label */}
           {showConditionIntellisense && (
-            <foreignObject
-              x={intellisensePosition.x - 80}
-              y={intellisensePosition.y}
-              width={160}
-              height={120}
-              style={{ overflow: 'visible', pointerEvents: 'none' }}
-            >
-              <div style={{ pointerEvents: 'auto', zIndex: 100 }}>
-                <IntellisenseMenu
-                  isOpen={showConditionIntellisense}
-                  query={typeof props.label === 'string' ? props.label : ''}
-                  position={{ x: 0, y: 0 }}
-                  referenceElement={null}
-                  onSelect={handleIntellisenseSelect}
-                  onClose={handleCloseIntellisense}
-                  filterCategoryTypes={['conditions']}
-                />
-              </div>
-            </foreignObject>
+            <>
+              {console.log('[DEBUG] RENDER IntellisenseMenu', { intellisensePosition })}
+              <foreignObject
+                x={intellisensePosition.x - 80}
+                y={intellisensePosition.y}
+                width={160}
+                height={120}
+                style={{ overflow: 'visible', pointerEvents: 'none' }}
+              >
+                <div style={{ pointerEvents: 'auto', zIndex: 100 }}>
+                  <IntellisenseMenu
+                    isOpen={showConditionIntellisense}
+                    query={typeof props.label === 'string' ? props.label : ''}
+                    position={{ x: 0, y: 0 }}
+                    referenceElement={null}
+                    onSelect={handleIntellisenseSelect}
+                    onClose={handleCloseIntellisense}
+                    filterCategoryTypes={['conditions']}
+                  />
+                </div>
+              </foreignObject>
+            </>
           )}
           {/* Overlay EdgeConditionSelector */}
           {showConditionSelector && createPortal(
@@ -258,28 +269,54 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           )}
         </g>
       )}
-      {/* Se il link NON è condizionato, mostra icona Link al centro SOLO se selezionato */}
-      {(!(props.data?.label || props.label) && props.selected) && (
-        <foreignObject
-          x={midX - 12}
-          y={midY - 12}
-          width={24}
-          height={24}
-          style={{ overflow: 'visible', pointerEvents: 'none' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}>
-            <button
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
-              onClick={e => {
-                e.stopPropagation();
-                handleOpenIntellisense(midX, midY + 20);
-              }}
-              title="Aggiungi condizione"
+      {/* Se la edge NON ha una label, mostra il bottone centrale per aggiungere condizione SOLO se selezionata */}
+      {!(props.data?.label || props.label) && props.selected && (
+        <g>
+          <foreignObject
+            x={midX - 20}
+            y={midY - 20}
+            width={40}
+            height={40}
+            style={{ overflow: 'visible', pointerEvents: 'none' }}
+          >
+            <div
+              style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}
             >
-              <Link size={16} color="#888" />
-            </button>
-          </div>
-        </foreignObject>
+              <button
+                ref={gearButtonRef}
+                onClick={e => {
+                  e.stopPropagation();
+                  if (gearButtonRef.current) {
+                    const rect = gearButtonRef.current.getBoundingClientRect();
+                    handleOpenIntellisense(rect.left + window.scrollX, rect.bottom + window.scrollY + 2);
+                  } else {
+                    // fallback: usa le coordinate SVG come ora
+                    const svg = document.querySelector('svg');
+                    if (svg) {
+                      const pt = svg.createSVGPoint();
+                      pt.x = midX;
+                      pt.y = midY + 24;
+                      const ctm = svg.getScreenCTM();
+                      if (ctm) {
+                        const transformed = pt.matrixTransform(ctm);
+                        handleOpenIntellisense(transformed.x, transformed.y);
+                      } else {
+                        handleOpenIntellisense(midX, midY + 24);
+                      }
+                    } else {
+                      handleOpenIntellisense(midX, midY + 24);
+                    }
+                  }
+                }}
+                className="group w-5 h-5 flex items-center justify-center rounded-full bg-violet-100 border border-violet-300 shadow transition-all hover:bg-violet-200 hover:scale-110 hover:shadow-lg focus:outline-none"
+                title="Aggiungi condizione"
+                style={{ transition: 'all 0.15s cubic-bezier(.4,2,.6,1)', boxShadow: '0 2px 8px rgba(139,92,246,0.10)' }}
+              >
+                <Settings className="w-3 h-3 text-violet-700 group-hover:text-violet-900 transition-colors" />
+              </button>
+            </div>
+          </foreignObject>
+        </g>
       )}
       {/* Cestino staccato dalla handle di partenza SOLO se edge selezionata */}
       {props.selected && (
