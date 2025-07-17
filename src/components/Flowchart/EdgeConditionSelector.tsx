@@ -12,7 +12,7 @@ import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
  */
 export interface EdgeConditionSelectorProps {
   position: { x: number; y: number };
-  onSelectCondition: (conditionName: string) => void;
+  onSelectCondition: (item: IntellisenseItem) => void;
   onSelectUnconditioned: () => void;
   onClose: () => void;
 }
@@ -74,7 +74,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
 
   // Selezione da intellisense
   const handleIntellisenseSelect = (item: IntellisenseItem) => {
-    onSelectCondition(item.name);
+    onSelectCondition(item);
     setShowIntellisense(false);
   };
 

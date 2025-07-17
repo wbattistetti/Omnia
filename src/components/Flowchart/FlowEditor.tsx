@@ -109,7 +109,6 @@ const FlowEditorContent: React.FC = () => {
   // Sostituisco onConnect
   const onConnect = useCallback(
     (params: Connection) => {
-      console.log('[onConnect] params:', params);
       const newEdgeId = uuidv4();
       addEdgeManaged({
         ...params,
@@ -169,12 +168,14 @@ const FlowEditorContent: React.FC = () => {
               ...e.data,
               onDeleteEdge,
               onUpdate: (updates: any) => {
-                console.log('[FlowEditor][onUpdate edge]', { id: e.id, updates });
+                let safeUpdates = { ...updates };
+                if (typeof updates.label === 'object' && updates.label !== null) {
+                  safeUpdates.label = updates.label.description || updates.label.name || '';
+                }
                 setEdges(prevEdges => {
                   const updated = prevEdges.map(edge =>
-                    edge.id === e.id ? { ...edge, ...updates } : edge
+                    edge.id === e.id ? { ...edge, ...safeUpdates } : edge
                   );
-                  console.log('[FlowEditor][setEdges after update]', updated);
                   return updated;
                 });
               }
@@ -291,26 +292,21 @@ const FlowEditorContent: React.FC = () => {
 
   // Una edge è temporanea se il suo target è un nodo temporaneo (usando lo stato più recente dei nodi)
   const removeAllTempEdges = (eds: Edge[], currentNodes: Node[]) => {
-    console.log('[removeAllTempEdges][BEFORE]', eds.map(e => ({ id: e.id, source: e.source, target: e.target })));
     const filtered = eds.filter(e => {
       const targetNode = currentNodes.find(n => n.id === e.target);
       const isTemp = !!(targetNode && targetNode.data && targetNode.data.isTemporary);
-      if (isTemp) {
-        console.log('[removeAllTempEdges][FILTERED]', { id: e.id, source: e.source, target: e.target, temp: true });
-      }
       return !isTemp;
     });
-    console.log('[removeAllTempEdges][AFTER]', filtered.map(e => ({ id: e.id, source: e.source, target: e.target })));
     return filtered;
   };
 
-  const handleSelectCondition = useCallback((conditionName: string) => {
+  const handleSelectCondition = useCallback((item: any) => {
     // Se c'è un edge ID pending, aggiorna solo quell'edge
     if (pendingEdgeIdRef.current) {
       setEdges((eds) =>
         eds.map(e =>
           e.id === pendingEdgeIdRef.current
-            ? { ...e, label: conditionName }
+            ? { ...e, label: item.description || item.name || '' }
             : e
         )
       );
@@ -330,7 +326,7 @@ const FlowEditorContent: React.FC = () => {
           target: connectionMenuRef.current.targetNodeId || '',
           targetHandle: connectionMenuRef.current.targetHandleId || undefined,
           style: { stroke: '#8b5cf6' },
-          label: conditionName,
+          label: item.description || item.name || '',
           type: 'custom',
           data: { onDeleteEdge },
           markerEnd: 'arrowhead',
@@ -381,7 +377,7 @@ const FlowEditorContent: React.FC = () => {
       target: newNodeId,
       targetHandle: targetHandle,
       style: { stroke: '#8b5cf6' }, // solido
-      label: conditionName, // <-- label/caption
+      label: item.description || item.name || '', // <-- label/caption
       type: 'custom',
       data: { onDeleteEdge },
       markerEnd: 'arrowhead',
@@ -462,7 +458,6 @@ const FlowEditorContent: React.FC = () => {
     });
     setEdges((eds) => {
       const filtered = removeAllTempEdges(eds, nodesRef.current);
-      console.log('[setEdges][ADD DEFINITIVE EDGE]', newEdge);
       return [...filtered, newEdge];
     });
     setNodeIdCounter(prev => prev + 1);

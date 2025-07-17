@@ -44,19 +44,13 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       
       {/* Content */}
       <div className="flex-1 min-w-0">
-        {/* Name with highlighting */}
+        {/* Description (o name se manca) con highlighting */}
         <div className="font-normal text-sm text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
-          {highlightMatches(item.name, nameMatches)}
+          {item.description
+            ? highlightMatches(item.description, descriptionMatches)
+            : highlightMatches(item.name, nameMatches)
+          }
         </div>
-        
-        {/* Description con highlighting - RIMOSSO */}
-        {/*
-        {item.description && (
-          <div className="text-xs text-slate-300 line-clamp-2">
-            {highlightMatches(item.description, descriptionMatches)}
-          </div>
-        )}
-        */}
         
         {/* AI Badge */}
         {isFromAI && (

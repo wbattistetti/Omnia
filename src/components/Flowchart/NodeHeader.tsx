@@ -1,5 +1,7 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import { Trash2, Edit3, Check, X } from 'lucide-react';
+import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
+import { createPortal } from 'react-dom';
 
 /**
  * Props per NodeHeader
@@ -30,29 +32,35 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
   const [isHovered, setIsHovered] = useState(false);
-  const titleSpanRef = useRef<HTMLSpanElement>(null);
-  const [inputWidth, setInputWidth] = useState<number>(0);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const [showIntellisense, setShowIntellisense] = useState(false);
+  const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
 
   // Inizia editing titolo
   const handleTitleEdit = () => {
     setIsEditingTitle(true);
     setTempTitle(title);
-    // Calcola larghezza del titolo statico
-    if (titleSpanRef.current) {
-      setInputWidth(titleSpanRef.current.offsetWidth);
-    }
+    setTimeout(() => {
+      if (titleInputRef.current) {
+        const rect = titleInputRef.current.getBoundingClientRect();
+        setIntellisensePosition({ x: rect.left, y: rect.bottom + 2 });
+        setShowIntellisense(true);
+      }
+    }, 0);
   };
 
   // Salva titolo
   const handleTitleSave = () => {
     onTitleUpdate(tempTitle.trim() || 'Untitled Node');
     setIsEditingTitle(false);
+    setShowIntellisense(false);
   };
 
   // Annulla editing titolo
   const handleTitleCancel = () => {
     setTempTitle(title);
     setIsEditingTitle(false);
+    setShowIntellisense(false);
   };
 
   // Gestione tasti Enter/Escape
@@ -64,6 +72,18 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
     }
   };
 
+  // Se perdi il focus, chiudi intellisense
+  useEffect(() => {
+    if (!isEditingTitle) setShowIntellisense(false);
+  }, [isEditingTitle]);
+
+  // Gestione selezione intellisense
+  const handleIntellisenseSelect = (item: any) => {
+    setTempTitle(item.name);
+    setShowIntellisense(false);
+    if (titleInputRef.current) titleInputRef.current.focus();
+  };
+
   return (
     <div 
       className="flex items-center justify-between bg-slate-700 p-2 rounded-t-lg border-b border-slate-600"
@@ -71,10 +91,11 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Titolo + editing */}
-      <div className="flex items-center min-w-0 flex-1">
+      <div className="flex items-center min-w-0 flex-1" style={{ position: 'relative' }}>
         {isEditingTitle ? (
           <div className="flex items-center min-w-0 flex-1">
             <input
+              ref={titleInputRef}
               type="text"
               value={tempTitle}
               onChange={(e) => setTempTitle(e.target.value)}
@@ -82,6 +103,13 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
               autoFocus
               className="min-w-0 bg-slate-600 text-white text-[8px] px-1.5 py-1 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 border-2 border-purple-400 nodrag"
               style={{ width: '70%', maxWidth: '70%' }}
+              onFocus={() => {
+                if (titleInputRef.current) {
+                  const rect = titleInputRef.current.getBoundingClientRect();
+                  setIntellisensePosition({ x: rect.left, y: rect.bottom + 2 });
+                  setShowIntellisense(true);
+                }
+              }}
             />
             <button
               onClick={handleTitleSave}
@@ -97,6 +125,28 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
             >
               <X className="w-3 h-3" />
             </button>
+            {/* IntellisenseMenu come portale */}
+            {showIntellisense &&
+              createPortal(
+                <div style={{
+                  position: 'absolute',
+                  left: intellisensePosition.x,
+                  top: intellisensePosition.y,
+                  zIndex: 9999,
+                }}>
+                  <IntellisenseMenu
+                    isOpen={showIntellisense}
+                    query={tempTitle}
+                    position={{ x: 0, y: 0 }}
+                    referenceElement={null}
+                    onSelect={handleIntellisenseSelect}
+                    onClose={() => setShowIntellisense(false)}
+                    filterCategoryTypes={['tasks', 'macroTasks']}
+                  />
+                </div>,
+                document.body
+              )
+            }
           </div>
         ) : (
           <h3

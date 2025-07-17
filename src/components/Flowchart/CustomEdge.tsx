@@ -32,13 +32,13 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const [labelHovered, setLabelHovered] = useState(false);
   const [showConditionSelector, setShowConditionSelector] = useState(false);
   const [conditionSelectorPos, setConditionSelectorPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [trashHovered, setTrashHovered] = useState(false);
 
   const labelSpanRef = useRef<HTMLSpanElement>(null);
   const gearButtonRef = useRef<HTMLButtonElement>(null);
 
   // Handler per apertura intellisense
   const handleOpenIntellisense = (x: number, y: number) => {
-    console.log('[DEBUG] handleOpenIntellisense', { x, y });
     setIntellisensePosition({ x, y });
     setShowConditionIntellisense(true);
   };
@@ -53,7 +53,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Handler per selezione condizione da intellisense
   const handleIntellisenseSelect = (item: any) => {
     if (props.data && typeof props.data.onUpdate === 'function') {
-      props.data.onUpdate({ label: item.name });
+      props.data.onUpdate({ label: item.description || item.name || '' });
     }
     setShowConditionIntellisense(false);
   };
@@ -65,9 +65,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   };
 
   // Callback per selezione condizione
-  const handleSelectCondition = (conditionName: string) => {
+  const handleSelectCondition = (item: any) => {
     if (props.data && typeof props.data.onUpdate === 'function') {
-      props.data.onUpdate({ label: conditionName });
+      props.data.onUpdate({ label: item.description || item.name || '' });
     }
     setShowConditionSelector(false);
   };
@@ -121,16 +121,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   };
 
-  // LOG solo per debug selezione/cestino
   useEffect(() => {
-    console.log('[DEBUG][CustomEdge][SELECTED]', { id, selected: props.selected });
   }, [id, props.selected]);
-
-  useEffect(() => {
-    console.log('[DEBUG] showConditionIntellisense changed', showConditionIntellisense);
-  }, [showConditionIntellisense]);
-
-  console.log('[DEBUG] CustomEdge render', { showConditionIntellisense, intellisensePosition });
 
   return (
     <g
@@ -141,16 +133,17 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       {/* Edge path */}
       <path
         id={id}
-        style={{ ...style, strokeDasharray: undefined }}
+        style={{
+          ...style,
+          strokeDasharray: undefined,
+          stroke: trashHovered ? '#dc2626' : (style.stroke || '#8b5cf6'),
+          transition: 'stroke 0.15s',
+        }}
         className="react-flow__edge-path"
         d={edgePath}
         markerEnd={markerEnd ? `url(#${getNormalizedMarkerEnd(markerEnd)})` : undefined}
         ref={el => {
           if (el) {
-            // Nuovo log: markerEnd e strokeDasharray su SVG
-            const dash = el.getAttribute('stroke-dasharray');
-            const marker = el.getAttribute('marker-end');
-            console.log('[CustomEdge][SVG]', { id, markerEnd: marker, strokeDasharray: dash });
           }
         }}
       />
@@ -160,10 +153,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         <g>
           {/* Label */}
           <foreignObject
-            x={midX - 48} // 40 + 8px di margine sinistra
-            y={midY - 24} // 16 + 8px di margine sopra
-            width={96}    // 80 + 16px (8px per lato)
-            height={48}   // 32 + 16px (8px per lato)
+            x={midX - 300} // centro rispetto a 600px
+            y={midY - 30} // centro rispetto a 60px
+            width={600}
+            height={60}
             style={{ overflow: 'visible', pointerEvents: 'none' }}
           >
             <div
@@ -180,8 +173,29 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             >
               <span
                 ref={labelSpanRef}
-                style={{ color: '#8b5cf6', fontSize: 11, background: 'white', borderRadius: 4, padding: '2px 6px', fontWeight: 400, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-                {props.data?.label || props.label}
+                style={{
+                  color: '#8b5cf6',
+                  fontSize: 8,
+                  background: 'white',
+                  borderRadius: 4,
+                  padding: '2px 8px',
+                  fontWeight: 400,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                  lineHeight: 1.18,
+                  maxWidth: 600,
+                  display: '-webkit-box',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'normal',
+                  WebkitLineClamp: 6,
+                  WebkitBoxOrient: 'vertical',
+                  wordBreak: 'break-word',
+                  verticalAlign: 'middle',
+                }}
+              >
+                {typeof (props.data?.label || props.label) === 'string'
+                  ? props.data?.label || props.label
+                  : ''}
               </span>
               <span style={{ display: 'inline-flex', width: 36, minWidth: 36, justifyContent: 'flex-start' }}>
                 {labelHovered && (
@@ -232,30 +246,25 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
               </span>
             </div>
           </foreignObject>
-          {/* Intellisense sotto la label */}
-          {showConditionIntellisense && (
-            <>
-              {console.log('[DEBUG] RENDER IntellisenseMenu', { intellisensePosition })}
-              <foreignObject
-                x={intellisensePosition.x - 80}
-                y={intellisensePosition.y}
-                width={160}
-                height={120}
-                style={{ overflow: 'visible', pointerEvents: 'none' }}
-              >
-                <div style={{ pointerEvents: 'auto', zIndex: 100 }}>
-                  <IntellisenseMenu
-                    isOpen={showConditionIntellisense}
-                    query={typeof props.label === 'string' ? props.label : ''}
-                    position={{ x: 0, y: 0 }}
-                    referenceElement={null}
-                    onSelect={handleIntellisenseSelect}
-                    onClose={handleCloseIntellisense}
-                    filterCategoryTypes={['conditions']}
-                  />
-                </div>
-              </foreignObject>
-            </>
+          {/* Intellisense sotto la label (ora sempre portale) */}
+          {showConditionIntellisense && createPortal(
+            <div style={{
+              position: 'absolute',
+              left: intellisensePosition.x,
+              top: intellisensePosition.y,
+              zIndex: 9999,
+            }}>
+              <IntellisenseMenu
+                isOpen={showConditionIntellisense}
+                query={typeof props.label === 'string' ? props.label : ''}
+                position={{ x: 0, y: 0 }}
+                referenceElement={null}
+                onSelect={handleIntellisenseSelect}
+                onClose={handleCloseIntellisense}
+                filterCategoryTypes={['conditions']}
+              />
+            </div>,
+            document.body
           )}
           {/* Overlay EdgeConditionSelector */}
           {showConditionSelector && createPortal(
@@ -286,11 +295,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
                 ref={gearButtonRef}
                 onClick={e => {
                   e.stopPropagation();
+                  // Posiziona l'intellisense subito sotto l'ingranaggio
                   if (gearButtonRef.current) {
                     const rect = gearButtonRef.current.getBoundingClientRect();
                     handleOpenIntellisense(rect.left + window.scrollX, rect.bottom + window.scrollY + 2);
                   } else {
-                    // fallback: usa le coordinate SVG come ora
+                    // fallback: centro SVG
                     const svg = document.querySelector('svg');
                     if (svg) {
                       const pt = svg.createSVGPoint();
@@ -300,19 +310,15 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
                       if (ctm) {
                         const transformed = pt.matrixTransform(ctm);
                         handleOpenIntellisense(transformed.x, transformed.y);
-                      } else {
-                        handleOpenIntellisense(midX, midY + 24);
                       }
-                    } else {
-                      handleOpenIntellisense(midX, midY + 24);
                     }
                   }
                 }}
-                className="group w-5 h-5 flex items-center justify-center rounded-full bg-violet-100 border border-violet-300 shadow transition-all hover:bg-violet-200 hover:scale-110 hover:shadow-lg focus:outline-none"
+                className="group w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 border border-gray-300 shadow transition-all hover:bg-gray-300 hover:scale-110 hover:shadow-lg focus:outline-none"
                 title="Aggiungi condizione"
                 style={{ transition: 'all 0.15s cubic-bezier(.4,2,.6,1)', boxShadow: '0 2px 8px rgba(139,92,246,0.10)' }}
               >
-                <Settings className="w-3 h-3 text-violet-700 group-hover:text-violet-900 transition-colors" />
+                <Settings className="w-3 h-3 text-gray-500 group-hover:text-gray-700 transition-colors" />
               </button>
             </div>
           </foreignObject>
@@ -339,20 +345,25 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             display: "flex",
             alignItems: "center",
             pointerEvents: "auto",
-            background: "#fff",
+            background: "transparent", // Sfondo trasparente
             borderRadius: 6,
-            padding: 2,
-            boxShadow: "0 1px 4px rgba(0,0,0,0.08)"
-          }}>
+            padding: 0, // Nessun padding
+            boxShadow: "none" // Nessuna ombra
+          }}
+            onMouseEnter={() => setTrashHovered(true)}
+            onMouseLeave={() => setTrashHovered(false)}
+          >
+            <span title="Elimina il link">
             <Trash2
               size={16}
-              color="#dc2626"
-              style={{ cursor: "pointer", opacity: 0.85 }}
+              color={trashHovered ? "#dc2626" : "#888"}
+              style={{ cursor: "pointer", opacity: 0.85, transition: 'color 0.15s', background: 'transparent', borderRadius: 0, padding: 0 }}
               onClick={e => { e.stopPropagation(); handleDelete(id); }}
               aria-label="Elimina collegamento"
               tabIndex={0}
               role="button"
             />
+            </span>
           </div>
         </foreignObject>
       )}

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
+import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, Square } from 'lucide-react';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { Accordion } from './Accordion';
 import { CategoryItem } from './CategoryItem';
@@ -137,7 +137,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
         </div>
-        
+        {/* Nuova riga icone grandi */}
+        <div className="flex gap-4 justify-center items-center py-3 border-b border-slate-700 bg-slate-800">
+          <div className="flex flex-col items-center">
+            <div className="rounded-full bg-violet-200 p-3">
+              <Layers className="w-7 h-7 text-violet-700" />
+            </div>
+            <span className="text-xs text-violet-700 mt-1">MacroTask</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <div className="rounded-full bg-blue-200 p-3">
+              <CheckSquare className="w-7 h-7 text-blue-700" />
+            </div>
+            <span className="text-xs text-blue-700 mt-1">Task</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <div className="rounded-full bg-gray-200 p-3">
+              <Square className="w-7 h-7 text-gray-700" />
+            </div>
+            <span className="text-xs text-gray-700 mt-1">Nodo</span>
+          </div>
+        </div>
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />

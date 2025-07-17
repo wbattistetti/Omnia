@@ -201,13 +201,13 @@ export function prepareIntellisenseData(
     const config = categoryConfig[entityType];
     if (!config) return;
     const typedEntityType = entityType as EntityType;
-    const typedCategories = getCategoriesByType(data, typedEntityType);
+    const typedCategories: Category[] = (data as Record<EntityType, Category[]>)[typedEntityType];
     typedCategories.forEach((category: Category) => {
-      category.items.forEach(item => {
+      category.items.forEach((item: any) => {
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
-          name: item.discursive || item.name, // Usa discursive se presente, altrimenti name
-          description: '', // Nessun payoff
+          name: item.name, // nome tecnico
+          description: item.discursive || item.description || item.name, // descrizione discorsiva
           category: category.name,
           categoryType: typedEntityType,
           icon: config.icon,
