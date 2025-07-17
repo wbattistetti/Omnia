@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EdgeProps, getBezierPath } from 'reactflow';
 import { Pencil, Trash2, Link, Link2Off as LinkOff } from 'lucide-react';
 import { normalizeMarkerEnd } from '../../utils/markerUtils';
+import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
+import { EdgeConditionSelector } from './EdgeConditionSelector';
+import { createPortal } from 'react-dom';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -27,6 +30,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
   // Stato per hover sulla label
   const [labelHovered, setLabelHovered] = useState(false);
+  const [showConditionSelector, setShowConditionSelector] = useState(false);
+  const [conditionSelectorPos, setConditionSelectorPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const labelSpanRef = useRef<HTMLSpanElement>(null);
 
   // Handler per apertura intellisense
   const handleOpenIntellisense = (x: number, y: number) => {
@@ -40,6 +47,40 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     if (props.data && typeof props.data.onUpdate === 'function') {
       props.data.onUpdate({ label: undefined });
     }
+  };
+  // Handler per selezione condizione da intellisense
+  const handleIntellisenseSelect = (item: any) => {
+    if (props.data && typeof props.data.onUpdate === 'function') {
+      props.data.onUpdate({ label: item.name });
+    }
+    setShowConditionIntellisense(false);
+  };
+
+  // Handler per apertura EdgeConditionSelector
+  const handleOpenConditionSelector = (x: number, y: number) => {
+    setConditionSelectorPos({ x, y });
+    setShowConditionSelector(true);
+  };
+
+  // Callback per selezione condizione
+  const handleSelectCondition = (conditionName: string) => {
+    if (props.data && typeof props.data.onUpdate === 'function') {
+      props.data.onUpdate({ label: conditionName });
+    }
+    setShowConditionSelector(false);
+  };
+
+  // Callback per link non condizionato
+  const handleSelectUnconditioned = () => {
+    if (props.data && typeof props.data.onUpdate === 'function') {
+      props.data.onUpdate({ label: undefined });
+    }
+    setShowConditionSelector(false);
+  };
+
+  // Callback per chiusura
+  const handleCloseSelector = () => {
+    setShowConditionSelector(false);
   };
 
   const edgePath = getBezierPath({
@@ -78,21 +119,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   };
 
-  // LOG: ogni render, props e stile
+  // LOG solo per debug label
   useEffect(() => {
-    // Nuovo log: markerEnd e strokeDasharray
-    console.log('[CustomEdge][RENDER]', {
-      id,
-      markerEnd,
-      strokeDasharray: style?.strokeDasharray,
-      style,
-      props
-    });
-  });
-
-  useEffect(() => {
-    console.log('[DEBUG][CustomEdge]', { id, label: props.label });
-  }, [props.label, id]);
+    console.log('[DEBUG][CustomEdge][LABEL]', { id, label: props.label, dataLabel: props.data?.label });
+  }, [id, props.label, props.data?.label]);
 
   return (
     <g
@@ -118,7 +148,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       />
       {/* Label/icone condizione al centro della linea */}
       {/* Mostra label e icone SEMPRE se la edge ha una label */}
-      {props.label && (
+      {(props.data?.label || props.label) && (
         <g>
           {/* Label */}
           <foreignObject
@@ -140,8 +170,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
               onMouseEnter={() => setLabelHovered(true)}
               onMouseLeave={() => setLabelHovered(false)}
             >
-              <span style={{ color: '#8b5cf6', fontSize: 12, background: 'white', borderRadius: 4, padding: '2px 6px', fontWeight: 500, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-                {props.label}
+              <span
+                ref={labelSpanRef}
+                style={{ color: '#8b5cf6', fontSize: 11, background: 'white', borderRadius: 4, padding: '2px 6px', fontWeight: 400, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+                {props.data?.label || props.label}
               </span>
               <span style={{ display: 'inline-flex', width: 36, minWidth: 36, justifyContent: 'flex-start' }}>
                 {labelHovered && (
@@ -150,7 +182,28 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
                       onClick={e => {
                         e.stopPropagation();
-                        handleOpenIntellisense(midX, midY + 20);
+                        // Calcola posizione precisa sotto la label
+                        if (labelSpanRef.current) {
+                          const rect = labelSpanRef.current.getBoundingClientRect();
+                          handleOpenConditionSelector(rect.left + window.scrollX, rect.bottom + window.scrollY + 1);
+                        } else {
+                          // fallback: centro SVG
+                          const svg = document.querySelector('svg');
+                          if (svg) {
+                            const pt = svg.createSVGPoint();
+                            pt.x = midX;
+                            pt.y = midY + 24;
+                            const ctm = svg.getScreenCTM();
+                            if (ctm) {
+                              const transformed = pt.matrixTransform(ctm);
+                              handleOpenConditionSelector(transformed.x, transformed.y);
+                            } else {
+                              handleOpenConditionSelector(midX, midY + 24);
+                            }
+                          } else {
+                            handleOpenConditionSelector(midX, midY + 24);
+                          }
+                        }
                       }}
                       title="Modifica condizione"
                     >
@@ -181,17 +234,32 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
               style={{ overflow: 'visible', pointerEvents: 'none' }}
             >
               <div style={{ pointerEvents: 'auto', zIndex: 100 }}>
-                {/* Qui va l'intellisense condizioni */}
-                <div style={{ background: 'white', border: '1px solid #ddd', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', padding: 8 }}>
-                  <span style={{ color: '#888', fontSize: 12 }}>Qui va l'intellisense condizioni</span>
-                </div>
+                <IntellisenseMenu
+                  isOpen={showConditionIntellisense}
+                  query={typeof props.label === 'string' ? props.label : ''}
+                  position={{ x: 0, y: 0 }}
+                  referenceElement={null}
+                  onSelect={handleIntellisenseSelect}
+                  onClose={handleCloseIntellisense}
+                  filterCategoryTypes={['conditions']}
+                />
               </div>
             </foreignObject>
+          )}
+          {/* Overlay EdgeConditionSelector */}
+          {showConditionSelector && createPortal(
+            <EdgeConditionSelector
+              position={conditionSelectorPos}
+              onSelectCondition={handleSelectCondition}
+              onSelectUnconditioned={handleSelectUnconditioned}
+              onClose={handleCloseSelector}
+            />,
+            document.body
           )}
         </g>
       )}
       {/* Se il link NON è condizionato, mostra icona Link al centro SOLO se selezionato */}
-      {(!props.label && props.selected) && (
+      {(!(props.data?.label || props.label) && props.selected) && (
         <foreignObject
           x={midX - 12}
           y={midY - 12}
