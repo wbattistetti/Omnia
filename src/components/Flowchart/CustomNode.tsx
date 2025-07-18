@@ -8,6 +8,8 @@ import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { NodeRowData, EntityType } from '../../types/project';
 import { PlusCircle } from 'lucide-react';
 import { RowInserter } from './RowInserter';
+import { useNodeRowDrag } from '../../hooks/useNodeRowDrag';
+import { NodeRowList } from './NodeRowList';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -38,15 +40,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
 
   // Stati per il drag-and-drop
-  const [draggedRowId, setDraggedRowId] = useState<string | null>(null);
-  const [draggedRowOriginalIndex, setDraggedRowOriginalIndex] = useState<number | null>(null);
-  const [draggedRowInitialClientX, setDraggedRowInitialClientX] = useState<number | null>(null);
-  const [draggedRowInitialClientY, setDraggedRowInitialClientY] = useState<number | null>(null);
-  const [draggedRowInitialRect, setDraggedRowInitialRect] = useState<DOMRect | null>(null);
-  const [draggedRowCurrentClientX, setDraggedRowCurrentClientX] = useState<number | null>(null);
-  const [draggedRowCurrentClientY, setDraggedRowCurrentClientY] = useState<number | null>(null);
-  const [hoveredRowIndex, setHoveredRowIndex] = useState<number | null>(null);
-  const [visualSnapOffset, setVisualSnapOffset] = useState({ x: 0, y: 0 });
+  const drag = useNodeRowDrag(nodeRows);
 
   // Stato per tracciare se la nuova row è stata aggiunta in questa sessione di editing
   const [hasAddedNewRow, setHasAddedNewRow] = useState(false);
@@ -163,15 +157,15 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Gestione del drag-and-drop
   const handleRowDragStart = (id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => {
-    setDraggedRowId(id);
-    setDraggedRowOriginalIndex(index);
-    setDraggedRowInitialClientX(clientX);
-    setDraggedRowInitialClientY(clientY);
-    setDraggedRowInitialRect(rect);
-    setDraggedRowCurrentClientX(clientX);
-    setDraggedRowCurrentClientY(clientY);
-    setHoveredRowIndex(index);
-    setVisualSnapOffset({ x: 0, y: 0 });
+    drag.setDraggedRowId(id);
+    drag.setDraggedRowOriginalIndex(index);
+    drag.setDraggedRowInitialClientX(clientX);
+    drag.setDraggedRowInitialClientY(clientY);
+    drag.setDraggedRowInitialRect(rect);
+    drag.setDraggedRowCurrentClientX(clientX);
+    drag.setDraggedRowCurrentClientY(clientY);
+    drag.setHoveredRowIndex(index);
+    drag.setVisualSnapOffset({ x: 0, y: 0 });
 
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
@@ -181,26 +175,26 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   };
 
   const handleGlobalMouseMove = (event: MouseEvent) => {
-    if (!draggedRowId || !draggedRowInitialRect || draggedRowInitialClientY === null) return;
+    if (!drag.draggedRowId || !drag.draggedRowInitialRect || drag.draggedRowInitialClientY === null) return;
 
-    setDraggedRowCurrentClientX(event.clientX);
-    setDraggedRowCurrentClientY(event.clientY);
+    drag.setDraggedRowCurrentClientX(event.clientX);
+    drag.setDraggedRowCurrentClientY(event.clientY);
 
-    setDraggedRowCurrentClientX(event.clientX);
-    setDraggedRowCurrentClientY(event.clientY);
+    drag.setDraggedRowCurrentClientX(event.clientX);
+    drag.setDraggedRowCurrentClientY(event.clientY);
 
     // Calcola la posizione attuale della riga trascinata (senza snap)
-    const currentDraggedY = draggedRowInitialRect.top + (event.clientY - draggedRowInitialClientY);
+    const currentDraggedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
 
     // Determina il nuovo indice di hover basandosi sulla posizione delle altre righe
-    let newHoveredIndex = draggedRowOriginalIndex || 0;
+    let newHoveredIndex = drag.draggedRowOriginalIndex || 0;
     const rowHeight = 40; // Altezza approssimativa di una riga + margini
 
     for (let i = 0; i < nodeRows.length; i++) {
-      if (i === draggedRowOriginalIndex) continue;
+      if (i === drag.draggedRowOriginalIndex) continue;
       
-      const adjustedIndex = i > (draggedRowOriginalIndex || 0) ? i - 1 : i;
-      const rowY = draggedRowInitialRect.top + (adjustedIndex * rowHeight);
+      const adjustedIndex = i > (drag.draggedRowOriginalIndex || 0) ? i - 1 : i;
+      const rowY = drag.draggedRowInitialRect.top + (adjustedIndex * rowHeight);
       
       if (currentDraggedY < rowY + rowHeight / 2) {
         newHoveredIndex = i;
@@ -209,24 +203,24 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       newHoveredIndex = i + 1;
     }
 
-    if (newHoveredIndex !== hoveredRowIndex) {
-      setHoveredRowIndex(newHoveredIndex);
+    if (newHoveredIndex !== drag.hoveredRowIndex) {
+      drag.setHoveredRowIndex(newHoveredIndex);
       
       // Calcola lo snap offset per far "seguire" il mouse allo scatto
-      const targetY = draggedRowInitialRect.top + (newHoveredIndex * rowHeight);
-      const currentMouseBasedY = draggedRowInitialRect.top + (event.clientY - draggedRowInitialClientY);
+      const targetY = drag.draggedRowInitialRect.top + (newHoveredIndex * rowHeight);
+      const currentMouseBasedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
       const snapOffsetY = targetY - currentMouseBasedY;
       
-      setVisualSnapOffset({ x: 0, y: snapOffsetY });
+      drag.setVisualSnapOffset({ x: 0, y: snapOffsetY });
     }
   };
 
   const handleGlobalMouseUp = () => {
-    if (draggedRowOriginalIndex !== null && hoveredRowIndex !== null && draggedRowOriginalIndex !== hoveredRowIndex) {
+    if (drag.draggedRowOriginalIndex !== null && drag.hoveredRowIndex !== null && drag.draggedRowOriginalIndex !== drag.hoveredRowIndex) {
       const updatedRows = [...nodeRows];
-      const draggedRow = updatedRows[draggedRowOriginalIndex];
-      updatedRows.splice(draggedRowOriginalIndex, 1);
-      updatedRows.splice(hoveredRowIndex, 0, draggedRow);
+      const draggedRow = updatedRows[drag.draggedRowOriginalIndex];
+      updatedRows.splice(drag.draggedRowOriginalIndex, 1);
+      updatedRows.splice(drag.hoveredRowIndex, 0, draggedRow);
       
       setNodeRows(updatedRows);
       if (data.onUpdate) {
@@ -235,15 +229,15 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
 
     // Reset stati
-    setDraggedRowId(null);
-    setDraggedRowOriginalIndex(null);
-    setDraggedRowInitialClientX(null);
-    setDraggedRowInitialClientY(null);
-    setDraggedRowInitialRect(null);
-    setDraggedRowCurrentClientX(null);
-    setDraggedRowCurrentClientY(null);
-    setHoveredRowIndex(null);
-    setVisualSnapOffset({ x: 0, y: 0 });
+    drag.setDraggedRowId(null);
+    drag.setDraggedRowOriginalIndex(null);
+    drag.setDraggedRowInitialClientX(null);
+    drag.setDraggedRowInitialClientY(null);
+    drag.setDraggedRowInitialRect(null);
+    drag.setDraggedRowCurrentClientX(null);
+    drag.setDraggedRowCurrentClientY(null);
+    drag.setHoveredRowIndex(null);
+    drag.setVisualSnapOffset({ x: 0, y: 0 });
 
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
@@ -282,36 +276,36 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Crea l'array di visualizzazione per il feedback visivo
   const displayRows = useMemo(() => {
-    if (!draggedRowId || draggedRowOriginalIndex === null || hoveredRowIndex === null) {
+    if (!drag.draggedRowId || drag.draggedRowOriginalIndex === null || drag.hoveredRowIndex === null) {
       return nodeRows;
     }
 
     const rows = [...nodeRows];
-    const draggedRow = rows[draggedRowOriginalIndex];
-    rows.splice(draggedRowOriginalIndex, 1);
-    rows.splice(hoveredRowIndex, 0, { id: 'placeholder', text: '', isPlaceholder: true } as NodeRowData);
+    const draggedRow = rows[drag.draggedRowOriginalIndex];
+    rows.splice(drag.draggedRowOriginalIndex, 1);
+    rows.splice(drag.hoveredRowIndex, 0, { id: 'placeholder', text: '', isPlaceholder: true } as NodeRowData);
     
     return rows;
-  }, [nodeRows, draggedRowId, draggedRowOriginalIndex, hoveredRowIndex]);
+  }, [nodeRows, drag.draggedRowId, drag.draggedRowOriginalIndex, drag.hoveredRowIndex]);
 
   // Trova la riga trascinata per il rendering separato
-  const draggedItem = draggedRowId ? nodeRows.find(row => row.id === draggedRowId) : null;
+  const draggedItem = drag.draggedRowId ? nodeRows.find(row => row.id === drag.draggedRowId) : null;
 
   // Calcola lo stile per la riga trascinata
   const draggedRowStyle = useMemo(() => {
-    if (!draggedItem || !draggedRowInitialRect || draggedRowInitialClientX === null || 
-        draggedRowInitialClientY === null || draggedRowCurrentClientX === null || 
-        draggedRowCurrentClientY === null) {
+    if (!draggedItem || !drag.draggedRowInitialRect || drag.draggedRowInitialClientX === null || 
+        drag.draggedRowInitialClientY === null || drag.draggedRowCurrentClientX === null || 
+        drag.draggedRowCurrentClientY === null) {
       return {};
     }
 
     return {
-      top: draggedRowInitialRect.top + (draggedRowCurrentClientY - draggedRowInitialClientY) + visualSnapOffset.y,
-      left: draggedRowInitialRect.left + (draggedRowCurrentClientX - draggedRowInitialClientX) + visualSnapOffset.x,
-      width: draggedRowInitialRect.width
+      top: drag.draggedRowInitialRect.top + (drag.draggedRowCurrentClientY - drag.draggedRowInitialClientY) + drag.visualSnapOffset.y,
+      left: drag.draggedRowInitialRect.left + (drag.draggedRowCurrentClientX - drag.draggedRowInitialClientX) + drag.visualSnapOffset.x,
+      width: drag.draggedRowInitialRect.width
     };
-  }, [draggedItem, draggedRowInitialRect, draggedRowInitialClientX, draggedRowInitialClientY, 
-      draggedRowCurrentClientX, draggedRowCurrentClientY, visualSnapOffset]);
+  }, [draggedItem, drag.draggedRowInitialRect, drag.draggedRowInitialClientX, drag.draggedRowInitialClientY, 
+      drag.draggedRowCurrentClientX, drag.draggedRowCurrentClientY, drag.visualSnapOffset]);
 
   // Se è un nodo temporaneo, renderizza solo gli handles
   if (data.isTemporary) {
@@ -342,91 +336,25 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         />
         
         <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }}>
-          {displayRows.map((row, idx) => {
-            const isPlaceholder = 'isPlaceholder' in row && row.isPlaceholder;
-            const isHoveredTarget = false; // Puoi aggiungere logica se serve
-            return (
-              <React.Fragment key={row.id}>
-                {/* Inserter tra le righe: sempre presente, + solo su hover e se nessuna label è in editing */}
-                <RowInserter
-                  visible={hoveredInserter === idx && editingRowId === null}
-                  onInsert={() => handleInsertRow(idx)}
-                  onMouseEnter={() => setHoveredInserter(idx)}
-                  onMouseLeave={() => setHoveredInserter(null)}
-                />
-              <NodeRow
-                key={row.id}
-                ref={(el) => {
-                  if (el && !isPlaceholder) {
-                    rowRefs.current.set(row.id, el);
-                  }
-                }}
-                row={row}
-                nodeTitle={nodeTitle}
-                nodeCanvasPosition={undefined}
-                onUpdate={(row, newText) => {
-                  if (row.isNew) {
-                    if (newText.trim() === '') {
-                      setNodeRows(prev => prev.filter(r => r.id !== row.id));
-                    } else {
-                      setNodeRows(prev => prev.map(r => r.id === row.id ? { ...r, text: newText, isNew: undefined } : r));
-                      handleUpdateRow(row.id, newText);
-                    }
-                  } else {
-                    handleUpdateRow(row.id, newText);
-                  }
-                  setEditingRowId(null);
-                  setHasAddedNewRow(false);
-                }}
-                onUpdateWithCategory={(row, newText, categoryType) => {
-                  if (row.isNew) {
-                    if (newText.trim() === '') {
-                      setNodeRows(prev => prev.filter(r => r.id !== row.id));
-                    } else {
-                      setNodeRows(prev => prev.map(r => r.id === row.id ? { ...r, text: newText, isNew: undefined } : r));
-                      handleUpdateRow(row.id, newText, categoryType as EntityType || undefined);
-                    }
-                  } else {
-                    handleUpdateRow(row.id, newText, categoryType as EntityType || undefined);
-                  }
-                  setEditingRowId(null);
-                  setHasAddedNewRow(false);
-                }}
-                onDelete={(row) => handleDeleteRow(row.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape' && editingRowId === row.id && row.isNew) {
-                    setNodeRows(prev => prev.filter(r => r.id !== row.id));
-                    setEditingRowId(null);
-                    setHasAddedNewRow(false);
-                  } else if (e.key === 'Escape' && editingRowId === row.id) {
-                    setEditingRowId(null);
-                    setHasAddedNewRow(false);
-                  }
-                }}
-                onDragStart={handleRowDragStart}
-                index={idx}
-                canDelete={nodeRows.length > 1}
-                totalRows={nodeRows.length}
-                isHoveredTarget={Boolean(isHoveredTarget)}
-                isBeingDragged={false}
-                isPlaceholder={Boolean(isPlaceholder)}
-                forceEditing={editingRowId === row.id}
-                onMouseEnter={undefined}
-                onMouseLeave={undefined}
-                onMouseMove={undefined}
-                userActs={row.userActs}
-                bgColor={row.bgColor}
-                textColor={row.textColor}
-              />
-              </React.Fragment>
-            );
-          })}
-          {/* Inserter dopo l'ultima riga: sempre presente, + solo su hover e se nessuna label è in editing */}
-          <RowInserter
-            visible={hoveredInserter === displayRows.length && editingRowId === null}
-            onInsert={() => handleInsertRow(displayRows.length)}
-            onMouseEnter={() => setHoveredInserter(displayRows.length)}
-            onMouseLeave={() => setHoveredInserter(null)}
+          <NodeRowList
+            rows={displayRows}
+            editingRowId={editingRowId}
+            hoveredInserter={hoveredInserter}
+            setHoveredInserter={setHoveredInserter}
+            handleInsertRow={handleInsertRow}
+            nodeTitle={nodeTitle}
+            onUpdate={handleUpdateRow}
+            onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType)}
+            onDelete={(row) => handleDeleteRow(row.id)}
+            onKeyDown={(e) => {/* logica keydown se serve */}}
+            onDragStart={handleRowDragStart}
+            canDelete={(row) => nodeRows.length > 1}
+            totalRows={nodeRows.length}
+            hoveredRowIndex={drag.hoveredRowIndex}
+            draggedRowId={drag.draggedRowId}
+            draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
+            draggedItem={draggedItem}
+            draggedRowStyle={draggedRowStyle}
           />
           
           {/* Renderizza la riga trascinata separatamente */}
@@ -439,7 +367,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               onUpdate={(row, newText) => {}} // Non permettere modifiche durante il trascinamento
               onUpdateWithCategory={(row, newText, categoryType) => {}} // Non permettere modifiche durante il trascinamento
               onDelete={(row) => {}} // Non permettere cancellazione durante il trascinamento
-              index={draggedRowOriginalIndex || 0}
+              index={drag.draggedRowOriginalIndex || 0}
               canDelete={nodeRows.length > 1}
               totalRows={nodeRows.length}
               isBeingDragged={true}

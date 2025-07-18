@@ -8,6 +8,7 @@ import { LABEL_COLORS } from './labelColors';
 import { getLabelColor } from '../../utils/labelColor';
 import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
 import { useOverlayBuffer } from '../../hooks/useOverlayBuffer';
+import { NodeRowEditor } from './NodeRowEditor';
 
 // Mappa delle icone per i tipi di categoria
 const categoryIcons: { [key: string]: JSX.Element } = {
@@ -307,14 +308,11 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
       {/* Drag handle rimossa dal lato sinistro, ora solo in overlay */}
       
       {isEditing ? (
-        <input
-          ref={inputRef}
-          type="text"
+        <NodeRowEditor
           value={currentText}
           onChange={handleTextChange}
           onKeyDown={handleKeyDownInternal}
-          className="flex-1 bg-white text-black text-[8px] px-2 py-1 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 border border-black nodrag"
-          autoFocus
+          inputRef={inputRef}
           placeholder="Type what you need here..."
         />
       ) : (
