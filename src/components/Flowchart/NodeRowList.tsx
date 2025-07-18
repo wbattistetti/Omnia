@@ -22,6 +22,7 @@ interface NodeRowListProps {
   draggedRowOriginalIndex: number | null;
   draggedItem: NodeRowData | null;
   draggedRowStyle: React.CSSProperties;
+  onEditingEnd?: () => void;
 }
 
 export const NodeRowList: React.FC<NodeRowListProps> = ({
@@ -42,19 +43,51 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   draggedRowId,
   draggedRowOriginalIndex,
   draggedItem,
-  draggedRowStyle
-}) => (
-  <>
-    {rows.map((row, idx) => (
-      <React.Fragment key={row.id}>
-        <RowInserter
-          visible={hoveredInserter === idx && editingRowId === null}
-          onInsert={() => handleInsertRow(idx)}
-          onMouseEnter={() => setHoveredInserter(idx)}
-          onMouseLeave={() => setHoveredInserter(null)}
-        />
+  draggedRowStyle,
+  onEditingEnd
+}) => {
+  return (
+    <>
+      {rows.map((row, idx) => (
+        <React.Fragment key={row.id}>
+          <RowInserter
+            visible={hoveredInserter === idx && editingRowId === null}
+            onInsert={() => handleInsertRow(idx)}
+            onMouseEnter={() => setHoveredInserter(idx)}
+            onMouseLeave={() => setHoveredInserter(null)}
+          />
+          <NodeRow
+            row={row}
+            nodeTitle={nodeTitle}
+            nodeCanvasPosition={undefined}
+            onUpdate={onUpdate}
+            onUpdateWithCategory={onUpdateWithCategory}
+            onDelete={onDelete}
+            onKeyDown={onKeyDown}
+            onDragStart={onDragStart}
+            index={idx}
+            canDelete={canDelete(row)}
+            totalRows={totalRows}
+            isHoveredTarget={Boolean(hoveredRowIndex === idx)}
+            isBeingDragged={false}
+            isPlaceholder={Boolean(row.isPlaceholder)}
+            forceEditing={editingRowId === row.id}
+            onEditingEnd={onEditingEnd}
+          />
+        </React.Fragment>
+      ))}
+      {/* Inserter dopo l'ultima riga */}
+      <RowInserter
+        visible={hoveredInserter === rows.length && editingRowId === null}
+        onInsert={() => handleInsertRow(rows.length)}
+        onMouseEnter={() => setHoveredInserter(rows.length)}
+        onMouseLeave={() => setHoveredInserter(null)}
+      />
+      {/* Renderizza la riga trascinata separatamente */}
+      {draggedItem && (
         <NodeRow
-          row={row}
+          key={`dragged-${draggedItem.id}`}
+          row={draggedItem}
           nodeTitle={nodeTitle}
           nodeCanvasPosition={undefined}
           onUpdate={onUpdate}
@@ -62,42 +95,14 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
           onDelete={onDelete}
           onKeyDown={onKeyDown}
           onDragStart={onDragStart}
-          index={idx}
-          canDelete={canDelete(row)}
-          totalRows={totalRows}
-          isHoveredTarget={Boolean(hoveredRowIndex === idx)}
-          isBeingDragged={false}
-          isPlaceholder={Boolean(row.isPlaceholder)}
-          forceEditing={editingRowId === row.id}
+          index={draggedRowOriginalIndex || 0}
+          canDelete={rows.length > 1}
+          totalRows={rows.length}
+          isBeingDragged={true}
+          style={draggedRowStyle}
+          forceEditing={false}
         />
-      </React.Fragment>
-    ))}
-    {/* Inserter dopo l'ultima riga */}
-    <RowInserter
-      visible={hoveredInserter === rows.length && editingRowId === null}
-      onInsert={() => handleInsertRow(rows.length)}
-      onMouseEnter={() => setHoveredInserter(rows.length)}
-      onMouseLeave={() => setHoveredInserter(null)}
-    />
-    {/* Renderizza la riga trascinata separatamente */}
-    {draggedItem && (
-      <NodeRow
-        key={`dragged-${draggedItem.id}`}
-        row={draggedItem}
-        nodeTitle={nodeTitle}
-        nodeCanvasPosition={undefined}
-        onUpdate={onUpdate}
-        onUpdateWithCategory={onUpdateWithCategory}
-        onDelete={onDelete}
-        onKeyDown={onKeyDown}
-        onDragStart={onDragStart}
-        index={draggedRowOriginalIndex || 0}
-        canDelete={rows.length > 1}
-        totalRows={rows.length}
-        isBeingDragged={true}
-        style={draggedRowStyle}
-        forceEditing={false}
-      />
-    )}
-  </>
-); 
+      )}
+    </>
+  );
+}; 

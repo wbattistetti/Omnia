@@ -45,6 +45,7 @@ export function useNodeManager(
    * Aggiungi un nodo a una posizione specifica
    */
   const addNodeAtPosition = useCallback((node: Node<NodeData>, x: number, y: number) => {
+    console.log('[addNodeAtPosition] Chiamata con node:', node, 'x:', x, 'y:', y);
     setNodes((nds) => [
       ...nds,
       { ...node, position: { x, y } }

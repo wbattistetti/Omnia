@@ -25,6 +25,7 @@ export interface CustomNodeData {
   isTemporary?: boolean;
   onDelete?: () => void;
   onUpdate?: (updates: any) => void;
+  onPlayNode?: (nodeId: string) => void; // nuova prop opzionale
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
@@ -37,7 +38,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [nodeRows, setNodeRows] = useState<NodeRowData[]>(data.rows || [{ id: '1', text: 'Default Row' }]);
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
-  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  // Imposta editingRowId sulla prima riga se il nodo è nuovo
+  const [editingRowId, setEditingRowId] = useState<string | null>(data.isTemporary ? (data.rows && data.rows[0]?.id) || '1' : null);
+  // Wrapper per setEditingRowId con log
+  const setEditingRowIdWithLog = (val: string | null) => {
+    setEditingRowId(val);
+  };
+  // Rimuovi tutti i console.log relativi a editingRowId, prima riga, ecc.
 
   // Stati per il drag-and-drop
   const drag = useNodeRowDrag(nodeRows);
@@ -84,7 +91,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     };
     const updatedRows = [...nodeRows, newRow];
     setNodeRows(updatedRows);
-    setEditingRowId(newRow.id); // Forza subito l'editing sulla nuova row
+    setEditingRowIdWithLog(newRow.id); // Forza subito l'editing sulla nuova row
     if (data.onUpdate) {
       data.onUpdate({ rows: updatedRows });
     }
@@ -97,7 +104,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         x: rect.left,
         y: rect.bottom + 5
       });
-      setEditingRowId(rowId);
+      setEditingRowIdWithLog(rowId);
       setShowIntellisense(true);
     }
   };
@@ -107,7 +114,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       handleUpdateRow(editingRowId, selectedText);
     }
     setShowIntellisense(false);
-    setEditingRowId(null);
+    setEditingRowIdWithLog(null);
   };
 
   const handleIntellisenseSelectItem = (item: IntellisenseItem) => {
@@ -129,7 +136,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       }
     }
     setShowIntellisense(false);
-    setEditingRowId(null);
+    setEditingRowIdWithLog(null);
   };
 
   const handleTitleUpdate = (newTitle: string) => {
@@ -149,7 +156,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const updatedRows = [...nodeRows];
     updatedRows.splice(index, 0, newRow);
     setNodeRows(updatedRows);
-    setEditingRowId(newRow.id);
+    setEditingRowIdWithLog(newRow.id);
     if (data.onUpdate) {
       data.onUpdate({ rows: updatedRows });
     }
@@ -260,7 +267,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const newRowId = (nodeRows.length + 1).toString();
       const newRow = { id: newRowId, text: '' };
       setNodeRows([...nodeRows, newRow]);
-      setEditingRowId(newRowId);
+      setEditingRowIdWithLog(newRowId);
       setHasAddedNewRow(true);
     } else if (!isEditingNode && hasAddedNewRow) {
       // Se si esce dall'editing e la nuova row è vuota, rimuovila
@@ -269,7 +276,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         setNodeRows(nodeRows.slice(0, -1));
       }
       setHasAddedNewRow(false);
-      setEditingRowId(null);
+      setEditingRowIdWithLog(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditingNode]);
@@ -322,17 +329,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         <NodeHeader
           title={nodeTitle}
           onDelete={handleDeleteNode}
-          onToggleEdit={() => {
-            // Attiva solo l'editing del titolo
-            // Non aggiunge più una row
-            // Puoi anche rinominare la prop in onEditTitle se vuoi chiarezza
-            // Qui lasciamo la compatibilità
-            // Se vuoi, puoi anche passare direttamente handleTitleEdit
-            // Ma lasciamo la logica qui per ora
-            // setIsEditingNode(!isEditingNode); // RIMOSSO: non serve più
-          }}
+          onToggleEdit={() => setIsEditingNode(!isEditingNode)}
           onTitleUpdate={handleTitleUpdate}
           isEditing={isEditingNode}
+          onPlay={data.onPlayNode ? () => data.onPlayNode(id) : undefined}
+          alwaysShowTrash
         />
         
         <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }}>
@@ -355,6 +356,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
             draggedItem={draggedItem}
             draggedRowStyle={draggedRowStyle}
+            onEditingEnd={() => setEditingRowIdWithLog(null)}
           />
           
           {/* Renderizza la riga trascinata separatamente */}
@@ -375,6 +377,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               userActs={draggedItem.userActs}
               bgColor={draggedItem.bgColor}
               textColor={draggedItem.textColor}
+              onEditingEnd={() => setEditingRowIdWithLog(null)}
             />
           )}
 

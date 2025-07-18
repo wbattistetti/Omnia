@@ -12,9 +12,16 @@ function AppInner() {
   const [currentProject, setCurrentProject] = useState<ProjectData | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [testPanelOpen, setTestPanelOpen] = useState(false);
+  const [testNodeId, setTestNodeId] = useState<string | null>(null);
   const { data: projectData } = useProjectData();
   // Prendi tutti gli agentActs come flat array
   const agentActs = projectData?.agentActs?.flatMap(cat => cat.items) || [];
+
+  // Callback da passare ai nodi
+  const handlePlayNode = (nodeId: string) => {
+    setTestNodeId(nodeId);
+    setTestPanelOpen(true);
+  };
 
   return (
     <>
@@ -25,6 +32,11 @@ function AppInner() {
         setCurrentProject={setCurrentProject}
         isSidebarCollapsed={isSidebarCollapsed}
         setIsSidebarCollapsed={setIsSidebarCollapsed}
+        testPanelOpen={testPanelOpen}
+        setTestPanelOpen={setTestPanelOpen}
+        testNodeId={testNodeId}
+        setTestNodeId={setTestNodeId}
+        onPlayNode={handlePlayNode}
       />
       {/* Bottone flottante per aprire il test engine */}
       <button
@@ -35,7 +47,9 @@ function AppInner() {
         🧪
       </button>
       <DockPanel open={testPanelOpen} onClose={() => setTestPanelOpen(false)}>
-        <ChatPanel agentActs={agentActs} />
+        {testPanelOpen && (
+          <ChatPanel agentActs={agentActs} testNodeId={testNodeId} />
+        )}
       </DockPanel>
     </>
   );

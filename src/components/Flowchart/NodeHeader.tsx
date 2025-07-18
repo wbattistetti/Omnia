@@ -18,6 +18,7 @@ export interface NodeHeaderProps {
   onTitleUpdate: (newTitle: string) => void;
   isEditing: boolean;
   onPlay?: () => void; // nuova prop opzionale
+  alwaysShowTrash?: boolean;
 }
 
 /**
@@ -29,7 +30,8 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
   onToggleEdit, 
   onTitleUpdate,
   isEditing,
-  onPlay // aggiunto qui
+  onPlay,
+  alwaysShowTrash // aggiunto qui
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
@@ -167,7 +169,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
           className="flex items-center ml-2"
           style={{ minWidth: 40, height: 20, justifyContent: 'flex-end' }}
         >
-          {isHovered && (
+          {(alwaysShowTrash || isHovered) && (
             <>
               <button 
                 onClick={handleTitleEdit} 

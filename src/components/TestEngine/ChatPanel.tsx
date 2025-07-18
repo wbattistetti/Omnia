@@ -4,41 +4,61 @@ import { getAgentActPrompt } from '../../utils/agentActUtils';
 
 interface ChatPanelProps {
   agentActs: AgentActItem[];
+  testNodeId?: string | null;
 }
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ agentActs }) => {
+function getNextBlock(agentActs: AgentActItem[], startIdx: number) {
+  // Restituisce gli indici degli agentActs da mostrare fino al prossimo che aspetta risposta (incluso)
+  const indices = [];
+  for (let i = startIdx; i < agentActs.length; i++) {
+    indices.push(i);
+    if (agentActs[i].userActs) break;
+  }
+  return indices;
+}
+
+export const ChatPanel: React.FC<ChatPanelProps> = ({ agentActs, testNodeId }) => {
   // Stato: lista delle risposte utente (string | undefined)
   const [userReplies, setUserReplies] = useState<(string | undefined)[]>([]);
   const [inputValue, setInputValue] = useState('');
 
-  // Trova il primo agentAct che aspetta risposta e non ha ancora risposta
-  const currentStep = userReplies.length;
-  const currentAct = agentActs[currentStep];
-  const waitingForReply = currentAct && currentAct.userActs;
+  // Calcola quali prompt mostrare: tutti fino al prossimo che aspetta risposta
+  let shownIndices: number[] = [];
+  let idx = 0;
+  while (idx < agentActs.length) {
+    const block = getNextBlock(agentActs, idx);
+    shownIndices.push(...block);
+    if (userReplies.length <= shownIndices.length - 1) break; // fermati al primo prompt che aspetta risposta non ancora risposto
+    idx = shownIndices.length;
+  }
+
+  // L'indice del prompt corrente che aspetta risposta
+  const currentPromptIdx = shownIndices.find(i => agentActs[i].userActs && userReplies[i] === undefined);
 
   function handleSend() {
-    if (!inputValue.trim()) return;
-    setUserReplies([...userReplies, inputValue]);
+    if (!inputValue.trim() || currentPromptIdx === undefined) return;
+    const newReplies = [...userReplies];
+    newReplies[currentPromptIdx] = inputValue;
+    setUserReplies(newReplies);
     setInputValue('');
   }
 
-  // Mostra tutti i prompt e le risposte fino all'ultimo step raggiunto
   return (
     <div className="flex flex-col gap-2 p-4 bg-white h-full overflow-y-auto">
-      {agentActs.slice(0, userReplies.length + 1).map((act, idx) => (
-        <div key={act.id} className="flex flex-col gap-1">
+      {shownIndices.map((i) => (
+        <div key={agentActs[i].id} className="flex flex-col gap-1">
           {/* Prompt agente */}
           <div className="self-start bg-blue-100 text-blue-900 rounded-lg px-4 py-2 max-w-xs shadow text-sm">
-            {getAgentActPrompt(act)}
+            {getAgentActPrompt(agentActs[i])}
           </div>
           {/* Risposta utente, se presente */}
-          {userReplies[idx] !== undefined && (
+          {userReplies[i] !== undefined && (
             <div className="self-end bg-yellow-100 text-yellow-900 rounded-lg px-4 py-2 max-w-xs shadow text-sm">
-              {userReplies[idx]}
+              {userReplies[i]}
             </div>
           )}
           {/* Se questo è il prompt corrente che aspetta risposta, mostra la textbox */}
-          {idx === userReplies.length && act.userActs && (
+          {i === currentPromptIdx && (
             <form
               className="flex gap-2 mt-1"
               onSubmit={e => {

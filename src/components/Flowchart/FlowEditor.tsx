@@ -67,7 +67,21 @@ const initialEdges: Edge<EdgeData>[] = [
   },
 ];
 
-const FlowEditorContent: React.FC = () => {
+interface FlowEditorProps {
+  testPanelOpen: boolean;
+  setTestPanelOpen: (open: boolean) => void;
+  testNodeId: string | null;
+  setTestNodeId: (id: string | null) => void;
+  onPlayNode: (nodeId: string) => void;
+}
+
+const FlowEditorContent: React.FC<FlowEditorProps> = ({
+  testPanelOpen,
+  setTestPanelOpen,
+  testNodeId,
+  setTestNodeId,
+  onPlayNode
+}) => {
   const [nodes, setNodes, onNodesChange] = useNodesState<NodeData>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<EdgeData>(initialEdges);
   // Ref sempre aggiornata con lo stato dei nodi
@@ -144,7 +158,7 @@ const FlowEditorContent: React.FC = () => {
     patchEdges();
   }, [patchEdges]);
 
-  // Update existing nodes with callbacks
+  // Update existing nodes with callbacks and onPlayNode
   React.useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => ({
@@ -153,10 +167,11 @@ const FlowEditorContent: React.FC = () => {
           ...node.data,
           onDelete: () => deleteNode(node.id),
           onUpdate: (updates: any) => updateNode(node.id, updates),
+          onPlayNode: onPlayNode,
         },
       }))
     );
-  }, [deleteNode, updateNode, setNodes]);
+  }, [deleteNode, updateNode, setNodes, onPlayNode]);
 
   // Aggiorna edges con onUpdate per ogni edge custom
   useEffect(() => {
@@ -236,7 +251,7 @@ const FlowEditorContent: React.FC = () => {
 
   // Rimuove TUTTI i nodi e edge temporanei
   function cleanupAllTempNodesAndEdges() {
-    setNodes((nds) => nds.filter(n => !n.data?.isTemporary));
+    // setNodes((nds) => nds.filter(n => !n.data?.isTemporary));
     setEdges((eds) => removeAllTempEdges(eds, nodesRef.current));
   }
 
@@ -579,10 +594,10 @@ const FlowEditorContent: React.FC = () => {
 // Ref globale per edge temporaneo
 const tempEdgeIdGlobal = { current: null as string | null };
 
-export const FlowEditor: React.FC = () => {
+export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   return (
     <ReactFlowProvider>
-      <FlowEditorContent />
+      <FlowEditorContent {...props} />
     </ReactFlowProvider>
   );
 };

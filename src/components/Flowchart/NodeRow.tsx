@@ -39,6 +39,7 @@ const categoryIcons: { [key: string]: JSX.Element } = {
  * @property forceEditing - forza editing (opzionale)
  * @property onMouseEnter, onMouseLeave, onMouseMove - eventi mouse (opzionali)
  * @property userActs - array di stringhe per le azioni dell'utente (opzionale)
+ * @property onEditingEnd - callback chiamato dopo il salvataggio o annullamento dell'editing
  */
 export interface NodeRowProps {
   row: NodeRowData;
@@ -62,6 +63,7 @@ export interface NodeRowProps {
   onMouseMove?: (e: React.MouseEvent) => void;
   bgColor?: string;
   textColor?: string;
+  onEditingEnd?: () => void;
 }
 
 export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({ 
@@ -85,7 +87,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   onMouseLeave,
   onMouseMove,
   bgColor: propBgColor,
-  textColor: propTextColor
+  textColor: propTextColor,
+  onEditingEnd
 }, ref) => {
   const [isEditing, setIsEditing] = useState(forceEditing);
   const [currentText, setCurrentText] = useState(row.text);
@@ -149,11 +152,25 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
     if (forceEditing) setIsEditing(true);
   }, [forceEditing]);
 
+  useEffect(() => {
+    if (isEditing) {
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (!isEditing && typeof onEditingEnd === 'function') {
+      onEditingEnd();
+    }
+  }, [isEditing]);
+
   const handleSave = () => {
     onUpdate(row, currentText.trim() || row.text);
     setIsEditing(false);
     setShowIntellisense(false);
     setIntellisenseQuery('');
+    if (typeof onEditingEnd === 'function') {
+      onEditingEnd();
+    }
   };
 
   const handleCancel = () => {
@@ -161,6 +178,9 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
     setIsEditing(false);
     setShowIntellisense(false);
     setIntellisenseQuery('');
+    if (typeof onEditingEnd === 'function') {
+      onEditingEnd();
+    }
   };
 
   const handleKeyDownInternal = (e: React.KeyboardEvent) => {

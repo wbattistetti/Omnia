@@ -16,6 +16,11 @@ interface AppContentProps {
   setCurrentProject: (project: ProjectData | null) => void;
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
+  testPanelOpen: boolean;
+  setTestPanelOpen: (open: boolean) => void;
+  testNodeId: string | null;
+  setTestNodeId: (id: string | null) => void;
+  onPlayNode: (nodeId: string) => void;
 }
 
 export const AppContent: React.FC<AppContentProps> = ({
@@ -24,7 +29,12 @@ export const AppContent: React.FC<AppContentProps> = ({
   currentProject,
   setCurrentProject,
   isSidebarCollapsed,
-  setIsSidebarCollapsed
+  setIsSidebarCollapsed,
+  testPanelOpen,
+  setTestPanelOpen,
+  testNodeId,
+  setTestNodeId,
+  onPlayNode
 }) => {
   const { refreshData } = useProjectDataUpdate();
 
@@ -77,7 +87,13 @@ export const AppContent: React.FC<AppContentProps> = ({
               onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             />
             <div className="flex-1">
-              <FlowEditor />
+              <FlowEditor 
+                testPanelOpen={testPanelOpen}
+                setTestPanelOpen={setTestPanelOpen}
+                testNodeId={testNodeId}
+                setTestNodeId={setTestNodeId}
+                onPlayNode={onPlayNode}
+              />
             </div>
           </div>
         </div>
