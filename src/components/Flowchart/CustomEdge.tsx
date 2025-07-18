@@ -34,7 +34,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const [conditionSelectorPos, setConditionSelectorPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [trashHovered, setTrashHovered] = useState(false);
 
-  const labelSpanRef = useRef<HTMLSpanElement>(null);
+  const labelSpanRef = useRef<HTMLDivElement>(null);
   const gearButtonRef = useRef<HTMLButtonElement>(null);
 
   // Handler per apertura intellisense
@@ -53,7 +53,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Handler per selezione condizione da intellisense
   const handleIntellisenseSelect = (item: any) => {
     if (props.data && typeof props.data.onUpdate === 'function') {
-      props.data.onUpdate({ label: item.description || item.name || '' });
+      props.data.onUpdate({ 
+        label: item.description || item.name || '',
+        actType: item.categoryType // Salva il tipo di act
+      });
     }
     setShowConditionIntellisense(false);
   };
@@ -151,51 +154,69 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       {/* Mostra label e icone SEMPRE se la edge ha una label */}
       {(props.data?.label || props.label) && (
         <g>
-          {/* Label */}
           <foreignObject
-            x={midX - 300} // centro rispetto a 600px
-            y={midY - 30} // centro rispetto a 60px
-            width={600}
-            height={60}
+            x={midX - 175}
+            y={midY - 24}
+            width={350}
+            height={48}
             style={{ overflow: 'visible', pointerEvents: 'none' }}
           >
             <div
               style={{
+                minWidth: 0,
+                maxWidth: 350,
+                width: 'fit-content',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 pointerEvents: 'auto',
-                padding: 8,
-                background: 'transparent'
+                background: 'rgba(255,255,255,0.92)',
+                borderRadius: 6,
+                boxShadow: '0 2px 8px rgba(139,92,246,0.10)',
+                padding: '2px 8px',
+                fontSize: 8,
+                fontWeight: 500,
+                lineHeight: 1.2,
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+                textAlign: 'center',
+                position: 'relative',
+                zIndex: 2,
+                border: labelHovered ? '1px solid #8b5cf6' : '1px solid transparent',
+                transition: 'border 0.15s',
+                cursor: 'pointer',
+                userSelect: 'text',
               }}
               onMouseEnter={() => setLabelHovered(true)}
               onMouseLeave={() => setLabelHovered(false)}
+              ref={labelSpanRef}
             >
-              <span
-                ref={labelSpanRef}
-                style={{
-                  color: '#8b5cf6',
-                  fontSize: 8,
-                  background: 'white',
-                  borderRadius: 4,
-                  padding: '2px 8px',
-                  fontWeight: 400,
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                  lineHeight: 1.18,
-                  maxWidth: 600,
-                  display: '-webkit-box',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'normal',
-                  WebkitLineClamp: 6,
-                  WebkitBoxOrient: 'vertical',
-                  wordBreak: 'break-word',
-                  verticalAlign: 'middle',
-                }}
-              >
-                {typeof (props.data?.label || props.label) === 'string'
-                  ? props.data?.label || props.label
-                  : ''}
+              {/* Icona actType */}
+              {props.data?.actType === 'agentActs' && (
+                <span style={{ marginRight: 4, display: 'flex', alignItems: 'center' }} title="Agent act">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"></path><path d="M6 22v-2c0-2.21 3.58-4 6-4s6 1.79 6 4v2"></path></svg>
+                </span>
+              )}
+              {props.data?.actType === 'backendActions' && (
+                <span style={{ marginRight: 4, display: 'flex', alignItems: 'center' }} title="Backend call">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h10"/></svg>
+                </span>
+              )}
+              {/* Label testo */}
+              <span style={{
+                display: 'inline-block',
+                maxWidth: 330,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                WebkitLineClamp: 6,
+                WebkitBoxOrient: 'vertical',
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+                lineHeight: 1.2,
+                padding: 0,
+                verticalAlign: 'middle',
+              }}>
+                {props.data?.label || props.label}
               </span>
               <span style={{ display: 'inline-flex', width: 36, minWidth: 36, justifyContent: 'flex-start' }}>
                 {labelHovered && (

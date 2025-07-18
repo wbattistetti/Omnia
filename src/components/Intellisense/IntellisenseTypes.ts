@@ -6,6 +6,8 @@ export interface IntellisenseItem {
   categoryType: 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'tasks' | 'macrotasks';
   icon?: React.ReactNode;
   color?: string;
+  userActs?: string[];
+  uiColor?: string;
 }
 
 export interface IntellisenseCategory {

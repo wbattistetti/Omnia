@@ -211,7 +211,20 @@ export function prepareIntellisenseData(
           category: category.name,
           categoryType: typedEntityType,
           icon: config.icon,
-          color: config.color
+          color: config.color,
+          userActs: item.userActs, // Passa la proprietà userActs se presente
+          uiColor: (() => {
+            // Regola 1: Backend Call
+            if ((item.categoryDry && item.categoryDry.toLowerCase() === 'backend call') || (item.name && item.name.toLowerCase().includes('backend call'))) {
+              return '#add8e6'; // azzurro
+            }
+            // Regola 2: Interattivo
+            if (Array.isArray(item.userActs) && item.userActs.length > 0) {
+              return '#ffd699'; // arancione
+            }
+            // Regola 3: Informativo
+            return '#7a9c59'; // verde oliva
+          })()
         });
       });
     });

@@ -6,7 +6,7 @@ import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 
 // Mappa delle icone per i tipi di categoria
-const categoryIcons = {
+const categoryIcons: { [key: string]: JSX.Element } = {
   agentActs: <Bot className="w-3 h-3 text-purple-400" />,
   userActs: <User className="w-3 h-3 text-green-400" />,
   backendActions: <Database className="w-3 h-3 text-blue-400" />,
@@ -33,6 +33,7 @@ const categoryIcons = {
  * @property style - stile custom (opzionale)
  * @property forceEditing - forza editing (opzionale)
  * @property onMouseEnter, onMouseLeave, onMouseMove - eventi mouse (opzionali)
+ * @property userActs - array di stringhe per le azioni dell'utente (opzionale)
  */
 export interface NodeRowProps {
   id: string;
@@ -53,6 +54,7 @@ export interface NodeRowProps {
   isPlaceholder?: boolean;
   style?: React.CSSProperties;
   forceEditing?: boolean;
+  userActs?: string[];
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onMouseMove?: (e: React.MouseEvent) => void;
@@ -77,6 +79,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   isPlaceholder = false,
   style,
   forceEditing = false,
+  userActs,
   onMouseEnter,
   onMouseLeave,
   onMouseMove
@@ -239,6 +242,16 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
     };
   }
 
+  // Calcolo il colore di sfondo per la label
+  let bgColor = '';
+  if ((categoryType && categoryType.toLowerCase() === 'backendactions') || (text && text.toLowerCase().includes('backend call'))) {
+    bgColor = '#add8e6'; // azzurro
+  } else if (Array.isArray(userActs) && userActs.length > 0) {
+    bgColor = '#ffd699'; // arancione
+  } else {
+    bgColor = '#b2fab4'; // verde chiaro
+  }
+
   return (
     <>
     <div 
@@ -273,10 +286,15 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
         />
       ) : (
         <span 
-          className="flex-1 text-white text-[8px] cursor-pointer hover:text-purple-300 transition-colors" 
+          className="flex-1 text-white text-[8px] cursor-pointer hover:text-purple-300 transition-colors flex items-center" 
+          style={{ background: bgColor, borderRadius: 4, padding: '2px 4px' }}
           onDoubleClick={handleDoubleClick}
           title="Double-click to edit, start typing for intellisense"
         >
+          {/* Icona actType se presente */}
+          {categoryType && categoryIcons[categoryType] && (
+            <span className="mr-1 flex items-center">{categoryIcons[categoryType]}</span>
+          )}
           {text}
         </span>
       )}

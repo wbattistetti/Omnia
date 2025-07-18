@@ -27,6 +27,7 @@ export interface ProjectInfo {
 export interface NodeRowData {
   id: string;
   text: string;
+  userActs?: string[];
   categoryType?: EntityType;
   isNew?: boolean;
 }

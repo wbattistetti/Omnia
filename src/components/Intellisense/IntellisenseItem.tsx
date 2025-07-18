@@ -34,6 +34,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       `}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
+      style={{ background: item.uiColor || undefined }}
     >
       {/* Icon */}
       <div className="mr-3 mt-0.5 flex-shrink-0">

@@ -35,10 +35,11 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
   // Usa tutti gli item se non passati (fallback per compatibilità)
   const allItems = items || (fuseInstance ? (fuseInstance as any)._docs : []);
 
-  const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length >= 2);
+  const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length >= 1);
+  console.log('[FuzzySearch] query:', query, '| keywords:', keywords, '| allItems:', allItems.length);
   if (keywords.length === 0) return [];
 
-  return allItems
+  const results = allItems
     .map((item: IntellisenseItem) => {
       const words = item.name.toLowerCase().split(/\s+/);
       // AND logico: ogni keyword deve matchare almeno una parola del titolo
@@ -58,6 +59,8 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
       };
     })
     .filter(Boolean) as IntellisenseResult[];
+  console.log('[FuzzySearch] risultati trovati:', results.length, results.map(r => r.item.name));
+  return results;
 }
 
 /**

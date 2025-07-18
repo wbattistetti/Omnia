@@ -117,7 +117,21 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   const handleIntellisenseSelectItem = (item: IntellisenseItem) => {
     if (editingRowId) {
-      handleUpdateRow(editingRowId, item.name, item.categoryType);
+      // Aggiorna la riga anche con userActs se presente
+      setNodeRows(prevRows => prevRows.map(row =>
+        row.id === editingRowId
+          ? { ...row, text: item.name, categoryType: item.categoryType, userActs: item.userActs }
+          : row
+      ));
+      if (data.onUpdate) {
+        data.onUpdate({
+          rows: nodeRows.map(row =>
+            row.id === editingRowId
+              ? { ...row, text: item.name, categoryType: item.categoryType, userActs: item.userActs }
+              : row
+          )
+        });
+      }
     }
     setShowIntellisense(false);
     setEditingRowId(null);
@@ -348,8 +362,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 }}
                 id={row.id}
                 text={row.text}
-                  nodeTitle={nodeTitle}
-                  nodeCanvasPosition={undefined}
+                nodeTitle={nodeTitle}
+                nodeCanvasPosition={undefined}
                 categoryType={row.categoryType}
                 onUpdate={(newText) => {
                   if (row.isNew) {
@@ -380,27 +394,28 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                   setHasAddedNewRow(false);
                 }}
                 onDelete={() => handleDeleteRow(row.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape' && editingRowId === row.id && row.isNew) {
-                      setNodeRows(prev => prev.filter(r => r.id !== row.id));
-                      setEditingRowId(null);
-                      setHasAddedNewRow(false);
-                    } else if (e.key === 'Escape' && editingRowId === row.id) {
-                      setEditingRowId(null);
-                      setHasAddedNewRow(false);
-                    }
-                  }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && editingRowId === row.id && row.isNew) {
+                    setNodeRows(prev => prev.filter(r => r.id !== row.id));
+                    setEditingRowId(null);
+                    setHasAddedNewRow(false);
+                  } else if (e.key === 'Escape' && editingRowId === row.id) {
+                    setEditingRowId(null);
+                    setHasAddedNewRow(false);
+                  }
+                }}
                 onDragStart={handleRowDragStart}
-                  index={idx}
+                index={idx}
                 canDelete={nodeRows.length > 1}
                 totalRows={nodeRows.length}
-                  isHoveredTarget={Boolean(isHoveredTarget)}
+                isHoveredTarget={Boolean(isHoveredTarget)}
                 isBeingDragged={false}
-                  isPlaceholder={Boolean(isPlaceholder)}
-                  forceEditing={editingRowId === row.id}
-                  onMouseEnter={undefined}
-                  onMouseLeave={undefined}
-                  onMouseMove={undefined}
+                isPlaceholder={Boolean(isPlaceholder)}
+                forceEditing={editingRowId === row.id}
+                onMouseEnter={undefined}
+                onMouseLeave={undefined}
+                onMouseMove={undefined}
+                userActs={row.userActs}
               />
               </React.Fragment>
             );
