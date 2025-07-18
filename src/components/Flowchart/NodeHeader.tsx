@@ -17,6 +17,7 @@ export interface NodeHeaderProps {
   onToggleEdit: () => void;
   onTitleUpdate: (newTitle: string) => void;
   isEditing: boolean;
+  onPlay?: () => void; // nuova prop opzionale
 }
 
 /**
@@ -27,7 +28,8 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
   onDelete, 
   onToggleEdit, 
   onTitleUpdate,
-  isEditing 
+  isEditing,
+  onPlay // aggiunto qui
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
@@ -180,6 +182,14 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
                 title="Delete node"
               >
                 <Trash2 className="w-3 h-3" />
+              </button>
+              <button
+                onClick={onPlay ? onPlay : () => {}}
+                className="p-1 text-green-500 hover:text-green-700 transition-colors"
+                title="Simula nodo"
+                style={{ fontSize: '14px', marginLeft: '2px' }}
+              >
+                ▶️
               </button>
             </>
           )}
