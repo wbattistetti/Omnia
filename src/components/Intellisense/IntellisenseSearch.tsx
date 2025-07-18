@@ -22,8 +22,6 @@ let fuseInstance: Fuse<IntellisenseItem> | null = null;
  */
 export function initializeFuzzySearch(items: IntellisenseItem[]): void {
   fuseInstance = new Fuse(items, DEFAULT_SEARCH_OPTIONS);
-  // Log per debug
-  console.log('[Fuse] Initialized with items:', items.map(i => i.name));
 }
 
 /**
@@ -36,7 +34,6 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
   const allItems = items || (fuseInstance ? (fuseInstance as any)._docs : []);
 
   const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length >= 1);
-  console.log('[FuzzySearch] query:', query, '| keywords:', keywords, '| allItems:', allItems.length);
   if (keywords.length === 0) return [];
 
   const results = allItems
@@ -59,7 +56,6 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
       };
     })
     .filter(Boolean) as IntellisenseResult[];
-  console.log('[FuzzySearch] risultati trovati:', results.length, results.map(r => r.item.name));
   return results;
 }
 
@@ -98,9 +94,6 @@ export function highlightMatches(text: string, matches?: Array<{ indices: [numbe
  * Group search results by category and sort them
  */
 export function groupAndSortResults(results: IntellisenseResult[]): Map<string, IntellisenseResult[]> {
-  console.log('🔄 groupAndSortResults called with', results.length, 'results');
-  const startTime = performance.now();
-  
   const grouped = new Map<string, IntellisenseResult[]>();
   
   // Define category priority order
@@ -127,9 +120,6 @@ export function groupAndSortResults(results: IntellisenseResult[]): Map<string, 
     }
   });
   
-  const endTime = performance.now();
-  console.log(`⏱️ groupAndSortResults took ${endTime - startTime} milliseconds`);
-  console.log('📊 Final grouped results:', sortedGrouped);
   return sortedGrouped;
 }
 
@@ -199,17 +189,12 @@ async function callGroqAPI(prompt: string): Promise<any> {
  * Semantic search using Groq/Llama
  */
 export async function performSemanticSearch(query: string, allItems: IntellisenseItem[]): Promise<IntellisenseResult[]> {
-  console.log('🤖 Starting semantic search for:', query);
-  console.time('Semantic Search');
-  
   try {
     // Build prompt for Groq
     const prompt = buildSemanticPrompt(allItems, query);
-    console.log('📝 Built prompt for Groq');
     
     // Call Groq API
     const response = await callGroqAPI(prompt);
-    console.log('✅ Received response from Groq');
     
     // Extract content from response
     const content = response.choices?.[0]?.message?.content;
@@ -247,13 +232,10 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
       }
     }
     
-    console.log(`🎯 Semantic search found ${results.length} matches`);
-    console.timeEnd('Semantic Search');
     return results;
     
   } catch (error) {
     console.error('❌ Semantic search error:', error);
-    console.timeEnd('Semantic Search');
     
     // Return empty results on error to not break the UI
     return [];
@@ -264,8 +246,6 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
  * Legacy semantic search function (kept for compatibility)
  */
 export async function performSemanticSearchLegacy(query: string): Promise<IntellisenseResult[]> {
-  console.log('Semantic search (legacy) for:', query);
-  
   // Return empty results for now
   return [];
 }

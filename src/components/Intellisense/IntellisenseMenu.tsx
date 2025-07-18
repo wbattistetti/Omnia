@@ -84,20 +84,9 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
 
   // LOG DATI INTELLISENSE
   useEffect(() => {
-    const agentActs = allIntellisenseItems.filter(i => i.categoryType === 'agentActs').length;
-    const userActs = allIntellisenseItems.filter(i => i.categoryType === 'userActs').length;
-    const backendActions = allIntellisenseItems.filter(i => i.categoryType === 'backendActions').length;
+    // Calcola il numero totale di risultati fuzzy
     const fuzzyCount = Array.from(fuzzyResults.values()).reduce((sum, arr) => sum + arr.length, 0);
-    const semanticCount = semanticResults.length;
-    console.log('[INTELLISENSE MENU]', {
-      query,
-      totalItems: allIntellisenseItems.length,
-      agentActs,
-      userActs,
-      backendActions,
-      fuzzyCount,
-      semanticCount
-    });
+    console.log(`[INTELLISENSE] Query: '${query}' | Risultati fuzzy: ${fuzzyCount}`);
   }, [allIntellisenseItems, query, fuzzyResults, semanticResults]);
 
   // Calculate total items for navigation
@@ -224,7 +213,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     }
 
     // Esegui solo la ricerca fuzzy quando la query cambia
-    console.log('🔍 IntellisenseMenu - Esecuzione ricerca fuzzy per:', query);
     const fuzzyResults = performFuzzySearch(query);
     const groupedFuzzy = groupAndSortResults(fuzzyResults);
     
@@ -232,7 +220,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     setSemanticResults([]); // Reset semantic results
     setSelectedIndex(0);
     
-    console.log('📊 IntellisenseMenu - Risultati fuzzy:', fuzzyResults.length);
+    // Dopo aver ottenuto fuzzyResults
+    console.log(`[INTELLISENSE] Query: '${query}' | Risultati fuzzy: ${fuzzyResults.length}`);
   }, [query, isInitialized, allIntellisenseItems]);
 
   // Get all results in order for navigation
@@ -250,13 +239,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      console.log('⌨️ IntellisenseMenu - handleKeyDown:', { 
-        key: e.key, 
-        selectedIndex, 
-        totalItems,
-        query: query.trim(),
-        hasResults: totalItems > 0
-      });
       
       let newSelectedIndex = selectedIndex;
 
@@ -264,27 +246,23 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         case 'ArrowDown':
           e.preventDefault();
           newSelectedIndex = (selectedIndex + 1) % totalItems;
-          console.log('⬇️ IntellisenseMenu - Arrow Down:', { from: selectedIndex, to: newSelectedIndex });
           break;
         case 'ArrowUp':
           e.preventDefault();
           newSelectedIndex = (selectedIndex - 1 + totalItems) % totalItems;
-          console.log('⬆️ IntellisenseMenu - Arrow Up:', { from: selectedIndex, to: newSelectedIndex });
           break;
         case 'Enter':
           e.preventDefault();
           // If no fuzzy results and we have a query, trigger semantic search
           if (totalItems === 0 && query.trim() && allIntellisenseItems.length > 0) {
-            console.log('🤖 IntellisenseMenu - Avvio ricerca semantica per:', query);
             const performSemanticOnly = async () => {
               setIsLoading(true);
               try {
                 const semanticResults = await performSemanticSearch(query, allIntellisenseItems);
-                console.log('🎯 IntellisenseMenu - Risultati semantici:', semanticResults.length);
                 setSemanticResults(semanticResults);
                 setSelectedIndex(0);
               } catch (error) {
-                console.error('Semantic search error:', error);
+                // console.error('Semantic search error:', error);
               } finally {
                 setIsLoading(false);
               }
@@ -295,19 +273,13 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
           
           const allResults = getAllResults();
           if (allResults[selectedIndex]) {
-            console.log('✅ IntellisenseMenu - Selezione confermata:', { 
-              selectedIndex, 
-              selectedItem: allResults[selectedIndex].item.name,
-              itemId: allResults[selectedIndex].item.id 
-            });
             onSelect(allResults[selectedIndex].item);
           } else {
-            console.log('❌ IntellisenseMenu - Nessun elemento selezionabile all\'indice:', selectedIndex);
+            // console.log('❌ IntellisenseMenu - Nessun elemento selezionabile all\'indice:', selectedIndex);
           }
           return;
         case 'Escape':
           e.preventDefault();
-          console.log('🚫 IntellisenseMenu - Menu chiuso con Escape');
           onClose();
           return;
       }

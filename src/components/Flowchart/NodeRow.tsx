@@ -4,6 +4,7 @@ import { useReactFlow } from 'reactflow';
 import { GripVertical, Trash2, Edit3, Bot, User, Database } from 'lucide-react';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
+import { LABEL_COLORS } from './labelColors';
 
 // Mappa delle icone per i tipi di categoria
 const categoryIcons: { [key: string]: JSX.Element } = {
@@ -58,6 +59,8 @@ export interface NodeRowProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onMouseMove?: (e: React.MouseEvent) => void;
+  bgColor?: string;
+  textColor?: string;
 }
 
 export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({ 
@@ -82,7 +85,9 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   userActs,
   onMouseEnter,
   onMouseLeave,
-  onMouseMove
+  onMouseMove,
+  bgColor: propBgColor,
+  textColor: propTextColor
 }, ref) => {
   const [isEditing, setIsEditing] = useState(forceEditing);
   const [currentText, setCurrentText] = useState(text);
@@ -92,6 +97,9 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   const [nodeOverlayPosition, setNodeOverlayPosition] = useState<{ left: number; top: number } | null>(null);
   const nodeContainerRef = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useReactFlow();
+  const [showIcons, setShowIcons] = useState(false);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const [iconPos, setIconPos] = useState<{top: number, left: number} | null>(null);
 
   // Quando entri in editing, calcola la posizione del nodo
   useEffect(() => {
@@ -122,6 +130,19 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
       setNodeOverlayPosition(null);
     }
   }, [isEditing, nodeCanvasPosition, reactFlowInstance]);
+
+  // Calcola la posizione delle icone appena fuori dal bordo destro del nodo
+  useEffect(() => {
+    if (showIcons && labelRef.current) {
+      const labelRect = labelRef.current.getBoundingClientRect();
+      setIconPos({
+        top: labelRect.top,
+        left: labelRect.right + 4 // 4px fuori dal bordo destro
+      });
+    } else {
+      setIconPos(null);
+    }
+  }, [showIcons]);
 
   useEffect(() => {
     if (forceEditing) setIsEditing(true);
@@ -242,36 +263,40 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
     };
   }
 
-  // Calcolo il colore di sfondo per la label
+  // Calcolo il colore di sfondo e testo per la label
   let bgColor = '';
-  if ((categoryType && categoryType.toLowerCase() === 'backendactions') || (text && text.toLowerCase().includes('backend call'))) {
-    bgColor = '#add8e6'; // azzurro
-  } else if (Array.isArray(userActs) && userActs.length > 0) {
-    bgColor = '#ffd699'; // arancione
-  } else {
-    bgColor = '#b2fab4'; // verde chiaro
+  let labelTextColor = '';
+  if (typeof propBgColor === 'string') bgColor = propBgColor;
+  if (typeof propTextColor === 'string') labelTextColor = propTextColor;
+  if (!bgColor || !labelTextColor) {
+    if ((typeof (userActs) !== 'undefined' && Array.isArray(userActs) && userActs.length > 0)) {
+      bgColor = LABEL_COLORS.agentActs.interactive.bg;
+      labelTextColor = LABEL_COLORS.agentActs.interactive.text;
+    } else if (categoryType && categoryType.toLowerCase() === 'backendactions') {
+      bgColor = LABEL_COLORS.backendActions.bg;
+      labelTextColor = LABEL_COLORS.backendActions.text;
+    } else if (categoryType && categoryType.toLowerCase() === 'agentacts') {
+      bgColor = LABEL_COLORS.agentActs.informative.bg;
+      labelTextColor = LABEL_COLORS.agentActs.informative.text;
+    } else {
+      bgColor = '#7a9c59';
+      labelTextColor = '#2F6D3E';
+    }
   }
 
   return (
     <>
     <div 
       ref={nodeContainerRef}
-      className={`flex items-center bg-slate-600 py-1 px-2 rounded-md group hover:bg-slate-500 transition-colors ${
+      className={`node-row-outer flex items-center py-1 group transition-colors ${
         isHoveredTarget ? 'ring-2 ring-red-400 ring-inset' : ''
       } ${conditionalClasses}`}
-      style={conditionalStyles}
+      style={{ ...conditionalStyles, background: 'transparent', border: 'none', paddingLeft: 0, paddingRight: 0 }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      onMouseMove={onMouseMove}
+      {...(onMouseMove ? { onMouseMove } : {})}
     >
-      <div
-        className="cursor-grab nodrag"
-        onMouseDown={handleMouseDown}
-      >
-        <GripVertical 
-          className="w-3 h-3 text-slate-400 mr-2 opacity-0 group-hover:opacity-100 transition-opacity"
-        />
-      </div>
+      {/* Drag handle rimossa dal lato sinistro, ora solo in overlay */}
       
       {isEditing ? (
         <input
@@ -285,69 +310,106 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
           placeholder="Type what you need here..."
         />
       ) : (
-        <span 
-          className="flex-1 text-white text-[8px] cursor-pointer hover:text-purple-300 transition-colors flex items-center" 
-          style={{ background: bgColor, borderRadius: 4, padding: '2px 4px' }}
+        <span
+          ref={labelRef}
+          className="flex-1 text-[8px] cursor-pointer hover:text-purple-300 transition-colors flex items-center relative"
+          style={{ background: bgColor, color: labelTextColor, borderRadius: 4, paddingLeft: categoryType && categoryIcons[categoryType] ? 4 : 0, paddingRight: 0, minHeight: '22px', lineHeight: 1.2 }}
           onDoubleClick={handleDoubleClick}
           title="Double-click to edit, start typing for intellisense"
+          onMouseEnter={() => setShowIcons(true)}
+          onMouseLeave={() => setShowIcons(false)}
         >
           {/* Icona actType se presente */}
           {categoryType && categoryIcons[categoryType] && (
             <span className="mr-1 flex items-center">{categoryIcons[categoryType]}</span>
           )}
           {text}
+          {/* Overlay icone azione fuori dal nodo, allineate alla label */}
+          {showIcons && iconPos && createPortal(
+            <div
+              style={{
+                position: 'fixed',
+                top: iconPos.top,
+                left: iconPos.left,
+                display: 'flex',
+                gap: 4,
+                zIndex: 1000,
+                background: 'rgba(30,41,59,0.98)',
+                borderRadius: 6,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+                padding: '2px 4px',
+                alignItems: 'center',
+                border: '1px solid #475569',
+              }}
+              onMouseEnter={() => setShowIcons(true)}
+              onMouseLeave={() => setShowIcons(false)}
+            >
+              {/* Drag handle */}
+              <span
+                className="cursor-grab nodrag"
+                title="Trascina la riga"
+                style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 2 }}
+                onMouseDown={handleMouseDown}
+              >
+                <GripVertical className="w-4 h-4 text-slate-400 hover:text-white transition-colors" />
+              </span>
+              {/* Matita (edit) */}
+              <button 
+                onClick={() => setIsEditing(!isEditing)} 
+                className="text-slate-400 hover:text-white transition-colors"
+                title="Edit row"
+                style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
+              >
+                <Edit3 className="w-4 h-4" />
+              </button>
+              {/* Cestino (delete) */}
+              {canDelete && (
+                <button 
+                  onClick={onDelete} 
+                  className="text-red-400 hover:text-red-300 transition-colors"
+                  title="Delete row"
+                  style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>,
+            document.body
+          )}
         </span>
       )}
       
-      <div className="flex items-center space-x-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button 
-          onClick={() => setIsEditing(!isEditing)} 
-          className="text-slate-400 hover:text-white transition-colors"
-          title="Edit row"
+      {/* Intellisense Menu in overlay stile EdgeConditionSelector, posizionato sotto il nodo */}
+      {showIntellisense && isEditing && nodeOverlayPosition && createPortal(
+        <div
+          className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
+          style={{
+            left: nodeOverlayPosition.left,
+            top: nodeOverlayPosition.top + 4,
+            minWidth: '280px'
+          }}
         >
-          <Edit3 className="w-2 h-2" />
-        </button>
-        {canDelete && (
-          <button 
-            onClick={onDelete} 
-            className="text-red-400 hover:text-red-300 transition-colors"
-            title="Delete row"
-          >
-            <Trash2 className="w-2 h-2" />
-          </button>
-        )}
-      </div>
+          {/* Header */}
+          <div className="text-sm font-medium text-gray-700 mb-2">
+            Seleziona azione o atto per il nodo
+          </div>
+          {/* Help text */}
+          <div className="text-xs text-gray-500 mb-2">
+            Inizia a digitare per vedere le azioni disponibili
+          </div>
+        <IntellisenseMenu
+          isOpen={showIntellisense}
+          query={intellisenseQuery}
+          position={{ x: 0, y: 0 }}
+            referenceElement={inputRef.current}
+          onSelect={handleIntellisenseSelect}
+          onClose={handleIntellisenseClose}
+          filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
+        />
+        </div>,
+        document.body
+      )}
     </div>
-    {/* Intellisense Menu in overlay stile EdgeConditionSelector, posizionato sotto il nodo */}
-    {showIntellisense && isEditing && nodeOverlayPosition && createPortal(
-      <div
-        className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
-        style={{
-          left: nodeOverlayPosition.left,
-          top: nodeOverlayPosition.top + 4,
-          minWidth: '280px'
-        }}
-      >
-        {/* Header */}
-        <div className="text-sm font-medium text-gray-700 mb-2">
-          Seleziona azione o atto per il nodo
-        </div>
-        {/* Help text */}
-        <div className="text-xs text-gray-500 mb-2">
-          Inizia a digitare per vedere le azioni disponibili
-        </div>
-      <IntellisenseMenu
-        isOpen={showIntellisense}
-        query={intellisenseQuery}
-        position={{ x: 0, y: 0 }}
-          referenceElement={inputRef.current}
-        onSelect={handleIntellisenseSelect}
-        onClose={handleIntellisenseClose}
-        filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
-      />
-      </div>,
-      document.body
-    )}
     </>
   );
 });

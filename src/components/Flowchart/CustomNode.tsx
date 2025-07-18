@@ -117,17 +117,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   const handleIntellisenseSelectItem = (item: IntellisenseItem) => {
     if (editingRowId) {
-      // Aggiorna la riga anche con userActs se presente
+      // Aggiorna la riga anche con userActs, bgColor, textColor se presenti
       setNodeRows(prevRows => prevRows.map(row =>
         row.id === editingRowId
-          ? { ...row, text: item.name, categoryType: item.categoryType, userActs: item.userActs }
+          ? { ...row, text: item.name, categoryType: item.categoryType, userActs: item.userActs, bgColor: item.bgColor, textColor: item.textColor }
           : row
       ));
       if (data.onUpdate) {
         data.onUpdate({
           rows: nodeRows.map(row =>
             row.id === editingRowId
-              ? { ...row, text: item.name, categoryType: item.categoryType, userActs: item.userActs }
+              ? { ...row, text: item.name, categoryType: item.categoryType, userActs: item.userActs, bgColor: item.bgColor, textColor: item.textColor }
               : row
           )
         });
@@ -323,7 +323,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   return (
     <>
-      <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 w-70 min-h-[40px] relative">
+      <div className="bg-white border border-black rounded-lg shadow-xl w-70 min-h-[40px] relative">
         <NodeHeader
           title={nodeTitle}
           onDelete={handleDeleteNode}
@@ -416,6 +416,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 onMouseLeave={undefined}
                 onMouseMove={undefined}
                 userActs={row.userActs}
+                bgColor={row.bgColor}
+                textColor={row.textColor}
               />
               </React.Fragment>
             );
@@ -443,6 +445,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               totalRows={nodeRows.length}
               isBeingDragged={true}
               style={draggedRowStyle}
+              userActs={draggedItem.userActs}
+              bgColor={draggedItem.bgColor}
+              textColor={draggedItem.textColor}
             />
           )}
 

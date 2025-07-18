@@ -8,6 +8,8 @@ export interface IntellisenseItem {
   color?: string;
   userActs?: string[];
   uiColor?: string;
+  bgColor?: string; // colore di sfondo personalizzato
+  textColor?: string; // colore del testo personalizzato
 }
 
 export interface IntellisenseCategory {

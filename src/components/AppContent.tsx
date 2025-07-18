@@ -34,7 +34,6 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const handleCreateProject = async (projectData: ProjectData) => {
     setCurrentProject(projectData);
-    console.log('Nuovo progetto creato:', projectData);
     
     // Initialize project data with template
     await ProjectDataService.initializeProjectData(projectData.template, projectData.language);
@@ -65,10 +64,10 @@ export const AppContent: React.FC<AppContentProps> = ({
           {/* Toolbar */}
           <Toolbar 
             onNewProject={handleOpenNewProjectModal}
-            onOpenProject={() => console.log('Apri progetto')}
-            onSave={() => console.log('Salva')}
-            onRun={() => console.log('Esegui')}
-            onSettings={() => console.log('Impostazioni')}
+            onOpenProject={() => {}}
+            onSave={() => {}}
+            onRun={() => {}}
+            onSettings={() => {}}
           />
 
           {/* Main Layout */}

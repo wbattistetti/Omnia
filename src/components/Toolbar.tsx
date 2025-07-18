@@ -30,7 +30,7 @@ export function Toolbar({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Export failed:', error);
+      // console.error('Export failed:', error);
     }
   };
 
@@ -46,7 +46,7 @@ export function Toolbar({
           await ProjectDataService.importProjectData(text);
           window.location.reload(); // Refresh to show imported data
         } catch (error) {
-          console.error('Import failed:', error);
+          // console.error('Import failed:', error);
           alert('Errore nell\'importazione del file');
         }
       }

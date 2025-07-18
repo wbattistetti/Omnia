@@ -1,6 +1,7 @@
 import { ProjectData, EntityType, Category, ProjectEntityItem } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
+import { LABEL_COLORS } from '../components/Flowchart/labelColors';
 
 // Import template data
 import agentActsEn from '../../data/templates/utility_gas/agent_acts/en.json';
@@ -67,7 +68,7 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
 
 // Helper per accesso type-safe a ProjectData
 function getCategoriesByType(data: ProjectData, type: EntityType): Category[] {
-  return data[type];
+  return (data as ProjectData)[type];
 }
 
 export const ProjectDataService = {
@@ -125,18 +126,18 @@ export const ProjectDataService = {
       name, 
       items: [] 
     };
-    projectData[type].push(newCategory);
+    (projectData as ProjectData)[type].push(newCategory);
     return newCategory;
   },
 
   async deleteCategory(type: EntityType, categoryId: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 50));
-    projectData[type] = projectData[type].filter(c => c.id !== categoryId);
+    (projectData as ProjectData)[type] = (projectData as ProjectData)[type].filter(c => c.id !== categoryId);
   },
 
   async updateCategory(type: EntityType, categoryId: string, updates: Partial<Category>): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 50));
-    const category = projectData[type].find(c => c.id === categoryId);
+    const category = (projectData as ProjectData)[type].find(c => c.id === categoryId);
     if (category) {
       Object.assign(category, updates);
     }
@@ -144,7 +145,7 @@ export const ProjectDataService = {
 
   async addItem(type: EntityType, categoryId: string, name: string, description = ''): Promise<ProjectEntityItem> {
     await new Promise(resolve => setTimeout(resolve, 50));
-    const category = projectData[type].find(c => c.id === categoryId);
+    const category = (projectData as ProjectData)[type].find(c => c.id === categoryId);
     if (!category) throw new Error('Category not found');
     
     const newItem: ProjectEntityItem = { 
@@ -158,7 +159,7 @@ export const ProjectDataService = {
 
   async deleteItem(type: EntityType, categoryId: string, itemId: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 50));
-    const category = projectData[type].find(c => c.id === categoryId);
+    const category = (projectData as ProjectData)[type].find(c => c.id === categoryId);
     if (category) {
       category.items = category.items.filter(i => i.id !== itemId);
     }
@@ -166,7 +167,7 @@ export const ProjectDataService = {
 
   async updateItem(type: EntityType, categoryId: string, itemId: string, updates: Partial<ProjectEntityItem>): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 50));
-    const category = projectData[type].find(c => c.id === categoryId);
+    const category = (projectData as ProjectData)[type].find(c => c.id === categoryId);
     const item = category?.items.find(i => i.id === itemId);
     if (item) {
       Object.assign(item, updates);
@@ -201,7 +202,7 @@ export function prepareIntellisenseData(
     const config = categoryConfig[entityType];
     if (!config) return;
     const typedEntityType = entityType as EntityType;
-    const typedCategories: Category[] = (data as Record<EntityType, Category[]>)[typedEntityType];
+    const typedCategories: Category[] = (data as ProjectData)[typedEntityType];
     typedCategories.forEach((category: Category) => {
       category.items.forEach((item: any) => {
         intellisenseItems.push({
@@ -214,16 +215,49 @@ export function prepareIntellisenseData(
           color: config.color,
           userActs: item.userActs, // Passa la proprietà userActs se presente
           uiColor: (() => {
-            // Regola 1: Backend Call
-            if ((item.categoryDry && item.categoryDry.toLowerCase() === 'backend call') || (item.name && item.name.toLowerCase().includes('backend call'))) {
-              return '#add8e6'; // azzurro
+            let rule = '';
+            let color = '';
+            let textColor = '';
+            let bgColor = '';
+            // Backend Calls
+            if (entityType === 'backendActions') {
+              color = LABEL_COLORS.backendActions.bg;
+              bgColor = LABEL_COLORS.backendActions.bg;
+              textColor = LABEL_COLORS.backendActions.text;
+              rule = 'backendActions';
+            } else if (entityType === 'agentActs') {
+              if (Array.isArray(item.userActs) && item.userActs.length > 0) {
+                // Agent Acts che richiedono risposta
+                color = LABEL_COLORS.agentActs.interactive.bg;
+                bgColor = LABEL_COLORS.agentActs.interactive.bg;
+                textColor = LABEL_COLORS.agentActs.interactive.text;
+                rule = 'agentActs-interactive';
+              } else {
+                // Agent Acts informativi
+                color = LABEL_COLORS.agentActs.informative.bg;
+                bgColor = LABEL_COLORS.agentActs.informative.bg;
+                textColor = LABEL_COLORS.agentActs.informative.text;
+                rule = 'agentActs-informativo';
+              }
+            } else if (Array.isArray(item.userActs) && item.userActs.length > 0) {
+              color = LABEL_COLORS.agentActs.interactive.bg;
+              bgColor = LABEL_COLORS.agentActs.interactive.bg;
+              textColor = LABEL_COLORS.agentActs.interactive.text;
+              rule = 'interattivo';
+            } else {
+              color = '#7a9c59'; // fallback verde oliva
+              bgColor = '#7a9c59';
+              textColor = '#2F6D3E';
+              rule = 'informativo';
             }
-            // Regola 2: Interattivo
-            if (Array.isArray(item.userActs) && item.userActs.length > 0) {
-              return '#ffd699'; // arancione
+            // Log per debug
+            if (entityType === 'backendActions' || entityType === 'agentActs') {
+              console.log(`[INTELLISENSE COLOR] ${item.name} | entityType: ${entityType} | userActs: ${Array.isArray(item.userActs) ? item.userActs.length : 0} | bg: ${bgColor} | text: ${textColor} | regola: ${rule}`);
             }
-            // Regola 3: Informativo
-            return '#7a9c59'; // verde oliva
+            // Ritorna solo il bgColor per compatibilità, ma aggiungi anche textColor e bgColor all'oggetto
+            item.textColor = textColor;
+            item.bgColor = bgColor;
+            return bgColor;
           })()
         });
       });

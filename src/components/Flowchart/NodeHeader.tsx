@@ -86,7 +86,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
 
   return (
     <div 
-      className="flex items-center justify-between bg-slate-700 p-2 rounded-t-lg border-b border-slate-600"
+      className="flex items-center justify-between bg-orange-400 p-2 rounded-t-lg border-b border-slate-600"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

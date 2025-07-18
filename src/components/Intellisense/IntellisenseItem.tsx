@@ -34,7 +34,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       `}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
-      style={{ background: item.uiColor || undefined }}
+      style={{ background: item.bgColor || item.uiColor || undefined }}
     >
       {/* Icon */}
       <div className="mr-3 mt-0.5 flex-shrink-0">
@@ -46,7 +46,8 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       {/* Content */}
       <div className="flex-1 min-w-0">
         {/* Description (o name se manca) con highlighting */}
-        <div className="font-normal text-sm text-white mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+        <div className="font-normal text-sm mb-1 whitespace-nowrap overflow-hidden text-ellipsis"
+             style={{ color: item.textColor || undefined }}>
           {item.description
             ? highlightMatches(item.description, descriptionMatches)
             : highlightMatches(item.name, nameMatches)

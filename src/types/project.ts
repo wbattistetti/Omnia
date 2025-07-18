@@ -13,7 +13,12 @@ export interface Category {
 }
 
 export interface ProjectData {
-  [key in EntityType]: Category[];
+  agentActs: Category[];
+  userActs: Category[];
+  backendActions: Category[];
+  conditions: Category[];
+  tasks: Category[];
+  macrotasks: Category[];
 }
 
 export interface ProjectInfo {
@@ -30,4 +35,6 @@ export interface NodeRowData {
   userActs?: string[];
   categoryType?: EntityType;
   isNew?: boolean;
+  bgColor?: string;
+  textColor?: string;
 }
