@@ -86,7 +86,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
 
   return (
     <div 
-      className="flex items-center justify-between bg-orange-400 p-2 rounded-t-lg border-b border-slate-600"
+      className="flex items-center justify-between bg-gray-200 p-2 rounded-t-lg border-b border-slate-600"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -150,7 +150,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
           </div>
         ) : (
           <h3
-            className="text-white text-[8px] font-semibold cursor-pointer hover:text-purple-300 transition-colors truncate"
+            className="text-black text-[8px] font-semibold cursor-pointer hover:text-purple-300 transition-colors truncate"
             onClick={handleTitleEdit}
             title="Modifica titolo"
             style={{ display: 'inline-block' }}

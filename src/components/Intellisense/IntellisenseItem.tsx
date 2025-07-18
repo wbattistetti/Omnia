@@ -1,6 +1,7 @@
 import React from 'react';
 import { IntellisenseItem as IntellisenseItemType, IntellisenseResult } from './IntellisenseTypes';
 import { highlightMatches } from './IntellisenseSearch';
+import { Circle } from 'lucide-react';
 
 interface IntellisenseItemProps {
   result: IntellisenseResult;
@@ -38,9 +39,13 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
     >
       {/* Icon */}
       <div className="mr-3 mt-0.5 flex-shrink-0">
-        <span className="text-slate-400">
-          {item.icon}
-        </span>
+        {(!item.userActs && item.categoryType === 'agentActs') ? (
+          <Circle className="w-4 h-4 text-gray-400" />
+        ) : (
+          <span className="text-slate-400">
+            {item.icon}
+          </span>
+        )}
       </div>
       
       {/* Content */}

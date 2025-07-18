@@ -336,10 +336,16 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
       ref={menuRef}
       style={{
         ...menuStyle,
-        // Rimuovo overflowY: 'auto' dal menu esterno
-        overflowY: undefined,
+        background: '#fff',
+        border: '1px solid #d1d5db', // gray-300
+        boxShadow: '0 4px 24px 0 rgba(30,41,59,0.10)',
+        borderRadius: 12,
+        padding: 0,
+        maxHeight: `${Math.min(totalItems, 8) * 56 + 48}px`, // 56px per item + header
+        overflowY: totalItems > 8 ? 'auto' : 'visible',
+        minHeight: 0,
       }}
-      className="bg-slate-800 rounded-lg shadow-lg border border-slate-700 overflow-hidden"
+      className="bg-white rounded-lg shadow-xl border border-gray-300 overflow-hidden"
     >
       {/* Search indicator */}
       <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">

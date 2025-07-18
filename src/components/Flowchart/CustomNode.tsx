@@ -472,23 +472,23 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   );
 };
 
-// Inserter tra le righe
+// Inserter tra le righe (overlay solo su hover, nessuno spazio fisso)
 const Inserter = ({ onInsert, visible, onMouseEnter, onMouseLeave }: { onInsert: () => void; visible: boolean; onMouseEnter?: () => void; onMouseLeave?: () => void }) => (
   <div
-    className="relative flex items-center justify-center group"
-    style={{ minHeight: 9, height: 9, cursor: 'pointer' }}
+    className="relative flex items-center justify-center"
+    style={{ height: 6, minHeight: 0, margin: 0, padding: 0, cursor: 'pointer' }}
     onMouseEnter={() => { if (onMouseEnter) onMouseEnter(); }}
     onMouseLeave={() => { if (onMouseLeave) onMouseLeave(); }}
   >
     {visible && (
       <button
-        className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent shadow-none hover:text-yellow-400 transition-colors"
-        style={{ zIndex: 10, width: 12, height: 12, padding: 0 }}
-        title="Clicca per inserire un act qui..."
+        className="absolute left-1/2 -translate-x-1/2 -top-1 p-0 hover:bg-yellow-100 transition"
+        style={{ zIndex: 10, width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', boxShadow: 'none' }}
+        title="Inserisci qui"
         tabIndex={-1}
         onClick={onInsert}
       >
-        <PlusCircle className="w-3 h-3 text-yellow-400 group-hover:text-yellow-600" />
+        <PlusCircle className="w-2.5 h-2.5 text-yellow-500" />
       </button>
     )}
   </div>

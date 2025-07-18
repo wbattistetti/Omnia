@@ -288,10 +288,10 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
     <>
     <div 
       ref={nodeContainerRef}
-      className={`node-row-outer flex items-center py-1 group transition-colors ${
+      className={`node-row-outer flex items-center group transition-colors ${
         isHoveredTarget ? 'ring-2 ring-red-400 ring-inset' : ''
       } ${conditionalClasses}`}
-      style={{ ...conditionalStyles, background: 'transparent', border: 'none', paddingLeft: 0, paddingRight: 0 }}
+      style={{ ...conditionalStyles, background: 'transparent', border: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       {...(onMouseMove ? { onMouseMove } : {})}
@@ -305,7 +305,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
           value={currentText}
           onChange={handleTextChange}
           onKeyDown={handleKeyDownInternal}
-          className="flex-1 bg-slate-700 text-white text-[8px] px-2 py-1 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 border border-slate-500 nodrag"
+          className="flex-1 bg-white text-black text-[8px] px-2 py-1 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 border border-black nodrag"
           autoFocus
           placeholder="Type what you need here..."
         />
@@ -313,7 +313,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
         <span
           ref={labelRef}
           className="flex-1 text-[8px] cursor-pointer hover:text-purple-300 transition-colors flex items-center relative"
-          style={{ background: bgColor, color: labelTextColor, borderRadius: 4, paddingLeft: categoryType && categoryIcons[categoryType] ? 4 : 0, paddingRight: 0, minHeight: '22px', lineHeight: 1.2 }}
+          style={{ background: bgColor, color: labelTextColor, borderRadius: 4, paddingLeft: categoryType && categoryIcons[categoryType] ? 4 : 0, paddingRight: 0, minHeight: '18px', lineHeight: 1.1, marginTop: 0, marginBottom: 0 }}
           onDoubleClick={handleDoubleClick}
           title="Double-click to edit, start typing for intellisense"
           onMouseEnter={() => setShowIcons(true)}
