@@ -7,6 +7,7 @@ import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { NodeRowData, EntityType } from '../../types/project';
 import { PlusCircle } from 'lucide-react';
+import { RowInserter } from './RowInserter';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -347,7 +348,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             return (
               <React.Fragment key={row.id}>
                 {/* Inserter tra le righe: sempre presente, + solo su hover e se nessuna label è in editing */}
-                <Inserter
+                <RowInserter
                   visible={hoveredInserter === idx && editingRowId === null}
                   onInsert={() => handleInsertRow(idx)}
                   onMouseEnter={() => setHoveredInserter(idx)}
@@ -360,12 +361,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                     rowRefs.current.set(row.id, el);
                   }
                 }}
-                id={row.id}
-                text={row.text}
+                row={row}
                 nodeTitle={nodeTitle}
                 nodeCanvasPosition={undefined}
-                categoryType={row.categoryType}
-                onUpdate={(newText) => {
+                onUpdate={(row, newText) => {
                   if (row.isNew) {
                     if (newText.trim() === '') {
                       setNodeRows(prev => prev.filter(r => r.id !== row.id));
@@ -379,7 +378,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                   setEditingRowId(null);
                   setHasAddedNewRow(false);
                 }}
-                onUpdateWithCategory={(newText, categoryType) => {
+                onUpdateWithCategory={(row, newText, categoryType) => {
                   if (row.isNew) {
                     if (newText.trim() === '') {
                       setNodeRows(prev => prev.filter(r => r.id !== row.id));
@@ -393,7 +392,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                   setEditingRowId(null);
                   setHasAddedNewRow(false);
                 }}
-                onDelete={() => handleDeleteRow(row.id)}
+                onDelete={(row) => handleDeleteRow(row.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape' && editingRowId === row.id && row.isNew) {
                     setNodeRows(prev => prev.filter(r => r.id !== row.id));
@@ -423,7 +422,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             );
           })}
           {/* Inserter dopo l'ultima riga: sempre presente, + solo su hover e se nessuna label è in editing */}
-          <Inserter
+          <RowInserter
             visible={hoveredInserter === displayRows.length && editingRowId === null}
             onInsert={() => handleInsertRow(displayRows.length)}
             onMouseEnter={() => setHoveredInserter(displayRows.length)}
@@ -437,9 +436,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               id={draggedItem.id}
               text={draggedItem.text}
               categoryType={draggedItem.categoryType}
-              onUpdate={() => {}} // Non permettere modifiche durante il trascinamento
-              onUpdateWithCategory={() => {}} // Non permettere modifiche durante il trascinamento
-              onDelete={() => {}} // Non permettere cancellazione durante il trascinamento
+              onUpdate={(row, newText) => {}} // Non permettere modifiche durante il trascinamento
+              onUpdateWithCategory={(row, newText, categoryType) => {}} // Non permettere modifiche durante il trascinamento
+              onDelete={(row) => {}} // Non permettere cancellazione durante il trascinamento
               index={draggedRowOriginalIndex || 0}
               canDelete={nodeRows.length > 1}
               totalRows={nodeRows.length}
@@ -471,25 +470,3 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     </>
   );
 };
-
-// Inserter tra le righe (overlay solo su hover, nessuno spazio fisso)
-const Inserter = ({ onInsert, visible, onMouseEnter, onMouseLeave }: { onInsert: () => void; visible: boolean; onMouseEnter?: () => void; onMouseLeave?: () => void }) => (
-  <div
-    className="relative flex items-center justify-center"
-    style={{ height: 6, minHeight: 0, margin: 0, padding: 0, cursor: 'pointer' }}
-    onMouseEnter={() => { if (onMouseEnter) onMouseEnter(); }}
-    onMouseLeave={() => { if (onMouseLeave) onMouseLeave(); }}
-  >
-    {visible && (
-      <button
-        className="absolute left-1/2 -translate-x-1/2 -top-1 p-0 hover:bg-yellow-100 transition"
-        style={{ zIndex: 10, width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', boxShadow: 'none' }}
-        title="Inserisci qui"
-        tabIndex={-1}
-        onClick={onInsert}
-      >
-        <PlusCircle className="w-2.5 h-2.5 text-yellow-500" />
-      </button>
-    )}
-  </div>
-);

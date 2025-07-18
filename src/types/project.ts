@@ -1,19 +1,33 @@
 export type EntityType = 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'tasks' | 'macrotasks';
 
+/**
+ * Rappresenta un'entità generica di progetto (es. task, backend action, ecc.)
+ */
 export interface ProjectEntityItem {
   id: string;
   name: string;
   description: string;
 }
 
-export interface Category {
+/**
+ * Rappresenta una categoria di entità (es. gruppo di agent acts, tasks, ecc.)
+ * T è il tipo di item contenuto (default: ProjectEntityItem)
+ */
+export interface Category<T = ProjectEntityItem> {
   id: string;
   name: string;
-  items: ProjectEntityItem[];
+  items: T[];
+}
+
+/**
+ * Rappresenta un agent act, che può avere userActs associati (se interattivo)
+ */
+export interface AgentActItem extends ProjectEntityItem {
+  userActs?: string[];
 }
 
 export interface ProjectData {
-  agentActs: Category[];
+  agentActs: Category<AgentActItem>[];
   userActs: Category[];
   backendActions: Category[];
   conditions: Category[];
@@ -29,6 +43,9 @@ export interface ProjectInfo {
   language: string;
 }
 
+/**
+ * Rappresenta una riga/azione di un nodo del flowchart
+ */
 export interface NodeRowData {
   id: string;
   text: string;

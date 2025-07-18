@@ -28,10 +28,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
     <div
       className={`
         flex items-start p-3 cursor-pointer rounded-lg transition-all duration-150
-        ${isSelected 
-          ? 'bg-slate-700 shadow-md' 
-          : 'hover:bg-slate-700/50'
-        }
+        ${isSelected ? 'border border-black' : 'border border-transparent'}
       `}
       onClick={onClick}
       onMouseEnter={onMouseEnter}

@@ -5,6 +5,9 @@ import { GripVertical, Trash2, Edit3, Bot, User, Database } from 'lucide-react';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { LABEL_COLORS } from './labelColors';
+import { getLabelColor } from '../../utils/labelColor';
+import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
+import { useOverlayBuffer } from '../../hooks/useOverlayBuffer';
 
 // Mappa delle icone per i tipi di categoria
 const categoryIcons: { [key: string]: JSX.Element } = {
@@ -37,14 +40,12 @@ const categoryIcons: { [key: string]: JSX.Element } = {
  * @property userActs - array di stringhe per le azioni dell'utente (opzionale)
  */
 export interface NodeRowProps {
-  id: string;
-  text: string;
+  row: NodeRowData;
   nodeTitle?: string;
   nodeCanvasPosition?: { x: number; y: number };
-  categoryType?: string;
-  onUpdate: (newText: string) => void;
-  onUpdateWithCategory?: (newText: string, categoryType?: string) => void;
-  onDelete: () => void;
+  onUpdate: (row: NodeRowData, newText: string) => void;
+  onUpdateWithCategory?: (row: NodeRowData, newText: string, categoryType?: string) => void;
+  onDelete: (row: NodeRowData) => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
   onDragStart?: (id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => void;
   index: number;
@@ -55,7 +56,6 @@ export interface NodeRowProps {
   isPlaceholder?: boolean;
   style?: React.CSSProperties;
   forceEditing?: boolean;
-  userActs?: string[];
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onMouseMove?: (e: React.MouseEvent) => void;
@@ -64,11 +64,9 @@ export interface NodeRowProps {
 }
 
 export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({ 
-  id,
-  text,
+  row,
   nodeTitle,
   nodeCanvasPosition,
-  categoryType,
   onUpdate, 
   onUpdateWithCategory,
   onDelete, 
@@ -82,7 +80,6 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   isPlaceholder = false,
   style,
   forceEditing = false,
-  userActs,
   onMouseEnter,
   onMouseLeave,
   onMouseMove,
@@ -90,7 +87,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   textColor: propTextColor
 }, ref) => {
   const [isEditing, setIsEditing] = useState(forceEditing);
-  const [currentText, setCurrentText] = useState(text);
+  const [currentText, setCurrentText] = useState(row.text);
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisenseQuery, setIntellisenseQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -100,6 +97,9 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   const [showIcons, setShowIcons] = useState(false);
   const labelRef = useRef<HTMLSpanElement>(null);
   const [iconPos, setIconPos] = useState<{top: number, left: number} | null>(null);
+
+  // Calcola la posizione e dimensione della zona buffer
+  const bufferRect = useOverlayBuffer(labelRef, iconPos, showIcons);
 
   // Quando entri in editing, calcola la posizione del nodo
   useEffect(() => {
@@ -149,14 +149,14 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   }, [forceEditing]);
 
   const handleSave = () => {
-    onUpdate(currentText.trim() || text);
+    onUpdate(row, currentText.trim() || row.text);
     setIsEditing(false);
     setShowIntellisense(false);
     setIntellisenseQuery('');
   };
 
   const handleCancel = () => {
-    setCurrentText(text);
+    setCurrentText(row.text);
     setIsEditing(false);
     setShowIntellisense(false);
     setIntellisenseQuery('');
@@ -213,9 +213,9 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
     
     // Auto-save the selection with category type
     if (onUpdateWithCategory) {
-      onUpdateWithCategory(item.name, item.categoryType);
+      onUpdateWithCategory(row, item.name, item.categoryType);
     } else {
-      onUpdate(item.name);
+      onUpdate(row, item.name);
     }
     setIsEditing(false);
   };
@@ -235,7 +235,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
 
     if (onDragStart && ref && 'current' in ref && ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      onDragStart(id, index, e.clientX, e.clientY, rect);
+      onDragStart(row.id, index, e.clientX, e.clientY, rect);
     }
   };
 
@@ -269,33 +269,41 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   if (typeof propBgColor === 'string') bgColor = propBgColor;
   if (typeof propTextColor === 'string') labelTextColor = propTextColor;
   if (!bgColor || !labelTextColor) {
-    if ((typeof (userActs) !== 'undefined' && Array.isArray(userActs) && userActs.length > 0)) {
-      bgColor = LABEL_COLORS.agentActs.interactive.bg;
-      labelTextColor = LABEL_COLORS.agentActs.interactive.text;
-    } else if (categoryType && categoryType.toLowerCase() === 'backendactions') {
-      bgColor = LABEL_COLORS.backendActions.bg;
-      labelTextColor = LABEL_COLORS.backendActions.text;
-    } else if (categoryType && categoryType.toLowerCase() === 'agentacts') {
-      bgColor = LABEL_COLORS.agentActs.informative.bg;
-      labelTextColor = LABEL_COLORS.agentActs.informative.text;
-    } else {
-      bgColor = '#7a9c59';
-      labelTextColor = '#2F6D3E';
-    }
+    const colorObj = getLabelColor(row.categoryType, row.userActs);
+    bgColor = colorObj.bg;
+    labelTextColor = colorObj.text;
   }
 
   return (
     <>
-    <div 
-      ref={nodeContainerRef}
-      className={`node-row-outer flex items-center group transition-colors ${
-        isHoveredTarget ? 'ring-2 ring-red-400 ring-inset' : ''
-      } ${conditionalClasses}`}
-      style={{ ...conditionalStyles, background: 'transparent', border: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      {...(onMouseMove ? { onMouseMove } : {})}
-    >
+      {/* Zona buffer invisibile per tolleranza spaziale */}
+      {bufferRect && showIcons && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: bufferRect.top,
+            left: bufferRect.left,
+            width: bufferRect.width,
+            height: bufferRect.height,
+            zIndex: 9998,
+            pointerEvents: 'auto',
+            background: 'transparent',
+          }}
+          onMouseEnter={() => setShowIcons(true)}
+          onMouseLeave={() => setShowIcons(false)}
+        />,
+        document.body
+      )}
+      <div 
+        ref={nodeContainerRef}
+        className={`node-row-outer flex items-center group transition-colors ${
+          isHoveredTarget ? 'ring-2 ring-red-400 ring-inset' : ''
+        } ${conditionalClasses}`}
+        style={{ ...conditionalStyles, background: 'transparent', border: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}
+        onMouseEnter={() => setShowIcons(true)}
+        onMouseLeave={() => setShowIcons(false)}
+        {...(onMouseMove ? { onMouseMove } : {})}
+      >
       {/* Drag handle rimossa dal lato sinistro, ora solo in overlay */}
       
       {isEditing ? (
@@ -313,67 +321,28 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
         <span
           ref={labelRef}
           className="flex-1 text-[8px] cursor-pointer hover:text-purple-300 transition-colors flex items-center relative"
-          style={{ background: bgColor, color: labelTextColor, borderRadius: 4, paddingLeft: categoryType && categoryIcons[categoryType] ? 4 : 0, paddingRight: 0, minHeight: '18px', lineHeight: 1.1, marginTop: 0, marginBottom: 0 }}
+          style={{ background: bgColor, color: labelTextColor, borderRadius: 4, paddingLeft: row.categoryType && categoryIcons[row.categoryType] ? 4 : 0, paddingRight: 8, minHeight: '18px', lineHeight: 1.1, marginTop: 0, marginBottom: 0 }}
           onDoubleClick={handleDoubleClick}
           title="Double-click to edit, start typing for intellisense"
-          onMouseEnter={() => setShowIcons(true)}
-          onMouseLeave={() => setShowIcons(false)}
         >
           {/* Icona actType se presente */}
-          {categoryType && categoryIcons[categoryType] && (
-            <span className="mr-1 flex items-center">{categoryIcons[categoryType]}</span>
+          {row.categoryType && categoryIcons[row.categoryType] && (
+            <span className="mr-1 flex items-center">{categoryIcons[row.categoryType]}</span>
           )}
-          {text}
+          {row.text}
           {/* Overlay icone azione fuori dal nodo, allineate alla label */}
           {showIcons && iconPos && createPortal(
-            <div
-              style={{
-                position: 'fixed',
-                top: iconPos.top,
-                left: iconPos.left,
-                display: 'flex',
-                gap: 4,
-                zIndex: 1000,
-                background: 'rgba(30,41,59,0.98)',
-                borderRadius: 6,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-                padding: '2px 4px',
-                alignItems: 'center',
-                border: '1px solid #475569',
-              }}
-              onMouseEnter={() => setShowIcons(true)}
-              onMouseLeave={() => setShowIcons(false)}
-            >
-              {/* Drag handle */}
-              <span
-                className="cursor-grab nodrag"
-                title="Trascina la riga"
-                style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 2 }}
-                onMouseDown={handleMouseDown}
-              >
-                <GripVertical className="w-4 h-4 text-slate-400 hover:text-white transition-colors" />
-              </span>
-              {/* Matita (edit) */}
-              <button 
-                onClick={() => setIsEditing(!isEditing)} 
-                className="text-slate-400 hover:text-white transition-colors"
-                title="Edit row"
-                style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
-              >
-                <Edit3 className="w-4 h-4" />
-              </button>
-              {/* Cestino (delete) */}
-              {canDelete && (
-                <button 
-                  onClick={onDelete} 
-                  className="text-red-400 hover:text-red-300 transition-colors"
-                  title="Delete row"
-                  style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>,
+            <NodeRowActionsOverlay
+              iconPos={iconPos}
+              showIcons={showIcons}
+              canDelete={canDelete}
+              onEdit={() => setIsEditing(!isEditing)}
+              onDelete={() => onDelete(row)}
+              onDrag={handleMouseDown}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+              labelRef={labelRef}
+            />,
             document.body
           )}
         </span>

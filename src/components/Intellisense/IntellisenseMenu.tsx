@@ -86,7 +86,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   useEffect(() => {
     // Calcola il numero totale di risultati fuzzy
     const fuzzyCount = Array.from(fuzzyResults.values()).reduce((sum, arr) => sum + arr.length, 0);
-    console.log(`[INTELLISENSE] Query: '${query}' | Risultati fuzzy: ${fuzzyCount}`);
   }, [allIntellisenseItems, query, fuzzyResults, semanticResults]);
 
   // Calculate total items for navigation
@@ -221,7 +220,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     setSelectedIndex(0);
     
     // Dopo aver ottenuto fuzzyResults
-    console.log(`[INTELLISENSE] Query: '${query}' | Risultati fuzzy: ${fuzzyResults.length}`);
   }, [query, isInitialized, allIntellisenseItems]);
 
   // Get all results in order for navigation
@@ -377,7 +375,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         layoutConfig={defaultLayoutConfig}
         categoryConfig={categoryConfig}
         onItemSelect={(result) => onSelect(result.item)}
-        onItemHover={setSelectedIndex}
+        onItemHover={(result) => setSelectedIndex(result.index)}
       />
     </div>
   );

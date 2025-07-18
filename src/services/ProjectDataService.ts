@@ -1,7 +1,8 @@
-import { ProjectData, EntityType, Category, ProjectEntityItem } from '../types/project';
+import { ProjectData, EntityType, Category, ProjectEntityItem, AgentActItem } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 import { LABEL_COLORS } from '../components/Flowchart/labelColors';
+import { getLabelColor } from '../utils/labelColor';
 
 // Import template data
 import agentActsEn from '../../data/templates/utility_gas/agent_acts/en.json';
@@ -35,19 +36,16 @@ let projectData: ProjectData = {
   macrotasks: []
 };
 
-// Helper function to convert template data to internal format
-const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
+// Funzione specifica per agent acts
+const convertAgentActsToCategories = <T extends AgentActItem>(templateArray: any[]): Category<T>[] => {
   if (!Array.isArray(templateArray)) {
     console.warn("Expected an array for template data, but received:", templateArray);
     return [];
   }
-
-  const categoriesMap: { [key: string]: Category } = {};
-
+  const categoriesMap: { [key: string]: Category<T> } = {};
   templateArray.forEach((item: any) => {
     const categoryName = item.category || item.categoryDry || 'Uncategorized';
     const categoryKey = categoryName.replace(/\s+/g, '_').toLowerCase();
-
     if (!categoriesMap[categoryKey]) {
       categoriesMap[categoryKey] = {
         id: uuidv4(),
@@ -55,14 +53,39 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
         items: []
       };
     }
+    categoriesMap[categoryKey].items.push({
+      id: item.id || uuidv4(),
+      name: item.name || item.nameDry || 'Unnamed Item',
+      description: item.description || item.discursive || '',
+      userActs: item.userActs
+    } as T);
+  });
+  return Object.values(categoriesMap);
+};
 
+// Versione non generica per le altre entità
+const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
+  if (!Array.isArray(templateArray)) {
+    console.warn("Expected an array for template data, but received:", templateArray);
+    return [];
+  }
+  const categoriesMap: { [key: string]: Category } = {};
+  templateArray.forEach((item: any) => {
+    const categoryName = item.category || item.categoryDry || 'Uncategorized';
+    const categoryKey = categoryName.replace(/\s+/g, '_').toLowerCase();
+    if (!categoriesMap[categoryKey]) {
+      categoriesMap[categoryKey] = {
+        id: uuidv4(),
+        name: categoryName,
+        items: []
+      };
+    }
     categoriesMap[categoryKey].items.push({
       id: item.id || uuidv4(),
       name: item.name || item.nameDry || 'Unnamed Item',
       description: item.description || item.discursive || ''
     });
   });
-
   return Object.values(categoriesMap);
 };
 
@@ -105,7 +128,7 @@ export const ProjectDataService = {
 
     // Convert template data to internal format
     projectData = {
-      agentActs: convertTemplateDataToCategories(languageData.agentActs),
+      agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
       userActs: convertTemplateDataToCategories(languageData.userActs),
       backendActions: convertTemplateDataToCategories(languageData.backendActions),
       conditions: convertTemplateDataToCategories(languageData.conditions),
@@ -213,51 +236,12 @@ export function prepareIntellisenseData(
           categoryType: typedEntityType,
           icon: config.icon,
           color: config.color,
-          userActs: item.userActs, // Passa la proprietà userActs se presente
+          userActs: item.userActs,
           uiColor: (() => {
-            let rule = '';
-            let color = '';
-            let textColor = '';
-            let bgColor = '';
-            // Backend Calls
-            if (entityType === 'backendActions') {
-              color = LABEL_COLORS.backendActions.bg;
-              bgColor = LABEL_COLORS.backendActions.bg;
-              textColor = LABEL_COLORS.backendActions.text;
-              rule = 'backendActions';
-            } else if (entityType === 'agentActs') {
-              if (Array.isArray(item.userActs) && item.userActs.length > 0) {
-                // Agent Acts che richiedono risposta
-                color = LABEL_COLORS.agentActs.interactive.bg;
-                bgColor = LABEL_COLORS.agentActs.interactive.bg;
-                textColor = LABEL_COLORS.agentActs.interactive.text;
-                rule = 'agentActs-interactive';
-              } else {
-                // Agent Acts informativi
-                color = LABEL_COLORS.agentActs.informative.bg;
-                bgColor = LABEL_COLORS.agentActs.informative.bg;
-                textColor = LABEL_COLORS.agentActs.informative.text;
-                rule = 'agentActs-informativo';
-              }
-            } else if (Array.isArray(item.userActs) && item.userActs.length > 0) {
-              color = LABEL_COLORS.agentActs.interactive.bg;
-              bgColor = LABEL_COLORS.agentActs.interactive.bg;
-              textColor = LABEL_COLORS.agentActs.interactive.text;
-              rule = 'interattivo';
-            } else {
-              color = '#7a9c59'; // fallback verde oliva
-              bgColor = '#7a9c59';
-              textColor = '#2F6D3E';
-              rule = 'informativo';
-            }
-            // Log per debug
-            if (entityType === 'backendActions' || entityType === 'agentActs') {
-              console.log(`[INTELLISENSE COLOR] ${item.name} | entityType: ${entityType} | userActs: ${Array.isArray(item.userActs) ? item.userActs.length : 0} | bg: ${bgColor} | text: ${textColor} | regola: ${rule}`);
-            }
-            // Ritorna solo il bgColor per compatibilità, ma aggiungi anche textColor e bgColor all'oggetto
-            item.textColor = textColor;
-            item.bgColor = bgColor;
-            return bgColor;
+            const colorObj = getLabelColor(entityType, item.userActs);
+            item.textColor = colorObj.text;
+            item.bgColor = colorObj.bg;
+            return colorObj.bg;
           })()
         });
       });
