@@ -69,7 +69,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       row.id === rowId ? { ...row, text: newText, categoryType } : row
     );
     setNodeRows(updatedRows);
-    
+    console.log('[CustomNode] nodeRows dopo update:', updatedRows);
     if (data.onUpdate) {
       data.onUpdate({ rows: updatedRows });
     }
@@ -118,21 +118,19 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   };
 
   const handleIntellisenseSelectItem = (item: IntellisenseItem) => {
+    console.log('[CustomNode] Intellisense item ricevuto:', item);
     if (editingRowId) {
-      // Aggiorna la riga anche con userActs, bgColor, textColor se presenti
-      setNodeRows(prevRows => prevRows.map(row =>
+      console.log('[CustomNode] nodeRows PRIMA update:', nodeRows);
+      const updatedRows = nodeRows.map(row =>
         row.id === editingRowId
-          ? { ...row, text: item.name, categoryType: item.categoryType, userActs: item.userActs, bgColor: item.bgColor, textColor: item.textColor }
+          ? { ...row, ...item, id: row.id }
           : row
-      ));
+      );
+      console.log('[CustomNode] nodeRows DOPO update:', updatedRows);
+      setNodeRows(updatedRows);
       if (data.onUpdate) {
-        data.onUpdate({
-          rows: nodeRows.map(row =>
-            row.id === editingRowId
-              ? { ...row, text: item.name, categoryType: item.categoryType, userActs: item.userActs, bgColor: item.bgColor, textColor: item.textColor }
-              : row
-          )
-        });
+        console.log('[CustomNode] data.onUpdate rows:', updatedRows);
+        data.onUpdate({ rows: updatedRows });
       }
     }
     setShowIntellisense(false);
@@ -332,7 +330,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onToggleEdit={() => setIsEditingNode(!isEditingNode)}
           onTitleUpdate={handleTitleUpdate}
           isEditing={isEditingNode}
-          onPlay={data.onPlayNode ? () => data.onPlayNode(id) : undefined}
+          onPlay={data.onPlayNode ? () => { console.log('[CustomNode] onPlayNode chiamato', id); data.onPlayNode(id); } : undefined}
           alwaysShowTrash
         />
         

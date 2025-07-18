@@ -295,6 +295,11 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
     labelTextColor = colorObj.text;
   }
 
+  // LOG: stampa id, forceEditing, isEditing
+  useEffect(() => {
+    console.log(`[NodeRow] render row.id=${row.id} forceEditing=${forceEditing} isEditing=${isEditing}`);
+  });
+
   return (
     <>
       {/* Zona buffer invisibile per tolleranza spaziale */}

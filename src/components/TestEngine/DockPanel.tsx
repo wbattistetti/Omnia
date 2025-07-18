@@ -3,10 +3,11 @@ import React from 'react';
 interface DockPanelProps {
   open: boolean;
   onClose: () => void;
+  onClear?: () => void; // aggiunto per clear chat
   children: React.ReactNode;
 }
 
-export const DockPanel: React.FC<DockPanelProps> = ({ open, onClose, children }) => {
+export const DockPanel: React.FC<DockPanelProps> = ({ open, onClose, onClear, children }) => {
   return (
     <div
       className={`
@@ -17,7 +18,7 @@ export const DockPanel: React.FC<DockPanelProps> = ({ open, onClose, children })
       `}
       style={{ boxShadow: open ? '0 0 16px #0002' : 'none' }}
     >
-      {/* Barra superiore con titolo e cestino */}
+      {/* Barra superiore con titolo e clear chat */}
       <div className="absolute top-0 left-0 w-full flex items-center justify-center h-10 border-b bg-gray-50">
         <button
           className="absolute left-2 text-gray-500 hover:text-gray-800"
@@ -28,9 +29,16 @@ export const DockPanel: React.FC<DockPanelProps> = ({ open, onClose, children })
         </button>
         <span className="font-bold text-center flex-1">Conversazione</span>
         <div className="absolute right-2 flex items-center gap-2">
-          <button className="text-gray-500 hover:text-red-600" aria-label="Cestino">
-            🗑️
-          </button>
+          {onClear && (
+            <button
+              className="text-gray-500 hover:text-red-600"
+              aria-label="Clear chat"
+              onClick={onClear}
+              title="Pulisci la chat"
+            >
+              🗑️ <span className="sr-only">Clear chat</span>
+            </button>
+          )}
         </div>
       </div>
       <div className="pt-10 h-full overflow-y-auto">{children}</div>

@@ -13,14 +13,39 @@ function AppInner() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [testPanelOpen, setTestPanelOpen] = useState(false);
   const [testNodeId, setTestNodeId] = useState<string | null>(null);
+  const [testNodeRows, setTestNodeRows] = useState([]); // nuovo stato
   const { data: projectData } = useProjectData();
   // Prendi tutti gli agentActs come flat array
   const agentActs = projectData?.agentActs?.flatMap(cat => cat.items) || [];
 
+  // Stato chat spostato qui
+  const [userReplies, setUserReplies] = useState<(string | undefined)[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [showChat, setShowChat] = useState(true); // nuovo stato
+
   // Callback da passare ai nodi
-  const handlePlayNode = (nodeId: string) => {
+  const handlePlayNode = (nodeId, nodeRows) => {
     setTestNodeId(nodeId);
+    setTestNodeRows(nodeRows || []);
     setTestPanelOpen(true);
+    setShowChat(true); // mostra la chat quando si avvia il test
+  };
+
+  // Funzione per clear chat
+  const handleClearChat = () => {
+    setUserReplies([]);
+    setInputValue('');
+    setShowChat(false); // nascondi tutto
+  };
+
+  // Funzione per invio risposta
+  const handleSend = (currentPromptIdx: number | undefined) => {
+    if (!inputValue.trim() || currentPromptIdx === undefined) return;
+    const newReplies = [...userReplies];
+    newReplies[currentPromptIdx] = inputValue;
+    setUserReplies(newReplies);
+    setInputValue('');
+    setShowChat(true); // ri-mostra la chat se era stata svuotata
   };
 
   return (
@@ -46,9 +71,20 @@ function AppInner() {
       >
         🧪
       </button>
-      <DockPanel open={testPanelOpen} onClose={() => setTestPanelOpen(false)}>
-        {testPanelOpen && (
-          <ChatPanel agentActs={agentActs} testNodeId={testNodeId} />
+      <DockPanel open={testPanelOpen} onClose={() => setTestPanelOpen(false)} onClear={handleClearChat}>
+        {testPanelOpen && showChat && (
+          <ChatPanel
+            agentActs={[]}
+            testNodeId={testNodeId}
+            userReplies={userReplies}
+            setUserReplies={setUserReplies}
+            inputValue={inputValue}
+            setInputValue={setInputValue}
+            onSend={handleSend}
+            onClear={handleClearChat}
+            showChat={showChat}
+            nodeRows={testNodeRows}
+          />
         )}
       </DockPanel>
     </>

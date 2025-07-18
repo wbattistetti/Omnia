@@ -31,48 +31,15 @@ const edgeTypes = {
   custom: CustomEdge,
 };
 
-const initialNodes: Node<NodeData>[] = [
-  {
-    id: '1',
-    type: 'custom',
-    position: { x: 250, y: 50 },
-    data: { 
-      title: 'Start Node', 
-      rows: [
-        { id: '1', text: 'Initialize process' },
-        { id: '2', text: 'Verify user identity' }
-      ] 
-    },
-  },
-  {
-    id: '2',
-    type: 'custom',
-    position: { x: 250, y: 300 },
-    data: { 
-      title: 'Process Data', 
-      rows: [
-        { id: '1', text: 'Fetch user data' }, 
-        { id: '2', text: 'Validate input' },
-        { id: '3', text: 'Process request' }
-      ] 
-    },
-  },
-];
-
-const initialEdges: Edge<EdgeData>[] = [
-  { 
-    id: 'e1-2', 
-    source: '1', 
-    target: '2', 
-  },
-];
+const initialNodes: Node<NodeData>[] = [];
+const initialEdges: Edge<EdgeData>[] = [];
 
 interface FlowEditorProps {
   testPanelOpen: boolean;
   setTestPanelOpen: (open: boolean) => void;
   testNodeId: string | null;
   setTestNodeId: (id: string | null) => void;
-  onPlayNode: (nodeId: string) => void;
+  onPlayNode: (nodeId: string, nodeRows: any[]) => void;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
@@ -167,7 +134,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           ...node.data,
           onDelete: () => deleteNode(node.id),
           onUpdate: (updates: any) => updateNode(node.id, updates),
-          onPlayNode: onPlayNode,
+          onPlayNode: onPlayNode ? () => onPlayNode(node.id, node.data.rows) : undefined,
         },
       }))
     );

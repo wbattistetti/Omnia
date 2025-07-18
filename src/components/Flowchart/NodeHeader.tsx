@@ -186,7 +186,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
                 <Trash2 className="w-3 h-3" />
               </button>
               <button
-                onClick={onPlay ? onPlay : () => {}}
+                onClick={() => { console.log('[NodeHeader] Play click!'); onPlay && onPlay(); }}
                 className="p-1 text-green-500 hover:text-green-700 transition-colors"
                 title="Simula nodo"
                 style={{ fontSize: '14px', marginLeft: '2px' }}
