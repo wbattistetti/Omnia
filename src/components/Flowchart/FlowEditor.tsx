@@ -540,6 +540,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         onConnectEnd={onConnectEnd}
         onNodeDragStart={onNodeDragStart}
         fitView
+        maxZoom={4}
         className="bg-white"
         style={{ backgroundColor: '#ffffff' }}
       >
