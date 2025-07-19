@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Folder, FileText, Zap } from 'lucide-react';
+import { ProjectData, ProjectInfo } from '../types/project';
 
 interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateProject: (projectData: ProjectData) => void;
-}
-
-export interface ProjectData {
-  name: string;
-  description: string;
-  template: string;
-  language: string;
+  onCreateProject: (projectInfo: ProjectInfo) => Promise<boolean>;
+  onLoadProject?: (id?: string) => void;
+  duplicateNameError?: string | null;
+  onProjectNameChange?: () => void;
 }
 
 const templates = [
@@ -31,21 +28,38 @@ const languages = [
   { id: 'fr', name: 'Français' }
 ];
 
-export function NewProjectModal({ isOpen, onClose, onCreateProject }: NewProjectModalProps) {
-  const [formData, setFormData] = useState<ProjectData>({
+export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProject, duplicateNameError, onProjectNameChange }: NewProjectModalProps) {
+  const [formData, setFormData] = useState<ProjectInfo>({
+    id: '',
     name: '',
     description: '',
     template: 'utility_gas',
     language: 'en'
   });
+  const [errors, setErrors] = useState<Partial<ProjectInfo>>({});
+  const [recentProjects, setRecentProjects] = useState<any[]>([]);
+  const [selectedProjectIdx, setSelectedProjectIdx] = useState<number | null>(null);
 
-  const [errors, setErrors] = useState<Partial<ProjectData>>({});
+  useEffect(() => {
+    if (isOpen) {
+      fetch('http://localhost:3100/projects')
+        .then(res => res.json())
+        .then(data => setRecentProjects(data))
+        .catch(() => setRecentProjects([]));
+    }
+  }, [isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleLoadSelectedProject = () => {
+    if (selectedProjectIdx === null || !recentProjects[selectedProjectIdx]) return;
+    const id = recentProjects[selectedProjectIdx]._id;
+    if (onLoadProject) onLoadProject(id);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validation
-    const newErrors: Partial<ProjectData> = {};
+    const newErrors: Partial<ProjectInfo> = {};
     if (!formData.name.trim()) {
       newErrors.name = 'Il nome del progetto è obbligatorio';
     }
@@ -55,23 +69,29 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject }: NewProject
       return;
     }
 
-    onCreateProject(formData);
-    onClose();
-    
-    // Reset form
-    setFormData({
-      name: '',
-      description: '',
-      template: 'utility_gas',
-      language: 'en'
-    });
-    setErrors({});
+    // Attendi il risultato della creazione
+    const created = await onCreateProject(formData);
+    if (created) {
+      onClose();
+      // Reset form solo se creato
+      setFormData({
+        id: '',
+        name: '',
+        description: '',
+        template: 'utility_gas',
+        language: 'en'
+      });
+      setErrors({});
+    }
   };
 
-  const handleInputChange = (field: keyof ProjectData, value: string) => {
+  const handleInputChange = (field: keyof ProjectInfo, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+    if (field === 'name' && onProjectNameChange) {
+      onProjectNameChange();
     }
   };
 
@@ -94,8 +114,8 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject }: NewProject
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* Project Name */}
-          <div>
-            <label className="block text-sm font-medium text-slate-200 mb-2">
+          <div className="relative">
+            <label className="block text-base font-medium text-slate-200 mb-2">
               Nome Progetto *
             </label>
             <input
@@ -103,10 +123,14 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject }: NewProject
               value={formData.name}
               onChange={(e) => handleInputChange('name', e.target.value)}
               className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
-                errors.name ? 'border-red-500' : 'border-slate-600'
+                errors.name || duplicateNameError ? 'border-red-500' : 'border-slate-600'
               }`}
               placeholder="Inserisci il nome del progetto"
             />
+            {/* Messaggio errore duplicato sotto la textbox */}
+            {duplicateNameError && formData.name.trim() && (
+              <p className="mt-1 text-sm text-red-400">{duplicateNameError}</p>
+            )}
             {errors.name && (
               <p className="mt-1 text-sm text-red-400">{errors.name}</p>
             )}

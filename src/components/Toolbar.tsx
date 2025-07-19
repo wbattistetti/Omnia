@@ -1,22 +1,30 @@
 import React from 'react';
-import { Plus, Save, FolderOpen, Settings, Play, Download, Upload } from 'lucide-react';
+import { Plus, Save, FolderOpen, Settings, Play, Download, Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { ProjectDataService } from '../services/ProjectDataService';
 
-interface ToolbarProps {
+export interface ToolbarProps {
   onNewProject: () => void;
   onOpenProject?: () => void;
-  onSave?: () => void;
-  onRun?: () => void;
-  onSettings?: () => void;
+  onSave: () => void | Promise<void>;
+  onRun: () => void;
+  onSettings: () => void;
+  projectName?: string;
+  isSaving?: boolean;
+  saveSuccess?: boolean;
+  saveError?: string | null;
 }
 
 export function Toolbar({ 
   onNewProject, 
   onOpenProject, 
   onSave, 
+  isSaving = false,
+  saveSuccess = false,
+  saveError = null,
   onRun, 
-  onSettings 
-}: ToolbarProps) {
+  onSettings, 
+  projectName 
+}: ToolbarProps & { isSaving?: boolean; saveSuccess?: boolean; saveError?: string | null }) {
   const handleExport = async () => {
     try {
       const data = await ProjectDataService.exportProjectData();
@@ -76,10 +84,23 @@ export function Toolbar({
         
         <button
           onClick={onSave}
-          className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-lg transition-colors duration-200"
+          className={`relative flex items-center gap-2 px-4 py-2 rounded bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-colors disabled:opacity-60`}
+          disabled={isSaving}
+          style={{ position: 'relative' }}
         >
-          <Save className="w-4 h-4" />
-          <span>Salva</span>
+          {isSaving ? (
+            <Loader2 className="animate-spin w-5 h-5" />
+          ) : saveSuccess ? (
+            <CheckCircle className="w-5 h-5 text-green-400" />
+          ) : (
+            <span>Salva</span>
+          )}
+          {/* Tooltip errore */}
+          {saveError && (
+            <span className="absolute left-1/2 top-full mt-2 -translate-x-1/2 bg-red-600 text-white text-xs rounded px-2 py-1 shadow z-20 whitespace-nowrap flex items-center gap-1">
+              <AlertCircle className="w-4 h-4 mr-1" /> {saveError}
+            </span>
+          )}
         </button>
         
         <div className="h-6 w-px bg-slate-600"></div>
@@ -107,7 +128,7 @@ export function Toolbar({
       <div className="flex items-center space-x-3">
         <div className="text-slate-300 text-sm">
           <span className="text-slate-500">Progetto:</span>
-          <span className="ml-2 font-medium">Nessun progetto aperto</span>
+          <span className="ml-2 font-medium">{projectName ? projectName : "Nessun progetto aperto"}</span>
         </div>
       </div>
 

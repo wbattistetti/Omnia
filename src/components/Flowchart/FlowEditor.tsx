@@ -12,6 +12,8 @@ import ReactFlow, {
   BackgroundVariant,
   useReactFlow,
   ReactFlowInstance,
+  applyNodeChanges,
+  applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { CustomNode } from './CustomNode';
@@ -22,6 +24,9 @@ import { CustomEdge } from './CustomEdge';
 import { useEdgeManager, EdgeData } from '../../hooks/useEdgeManager';
 import { useConnectionMenu } from '../../hooks/useConnectionMenu';
 import { useNodeManager, NodeData } from '../../hooks/useNodeManager';
+
+export type { NodeData } from '../../hooks/useNodeManager';
+export type { EdgeData } from '../../hooks/useEdgeManager';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -40,6 +45,10 @@ interface FlowEditorProps {
   testNodeId: string | null;
   setTestNodeId: (id: string | null) => void;
   onPlayNode: (nodeId: string, nodeRows: any[]) => void;
+  nodes: Node<NodeData>[];
+  setNodes: React.Dispatch<React.SetStateAction<Node<NodeData>[]>>;
+  edges: Edge<EdgeData>[];
+  setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
@@ -47,10 +56,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   setTestPanelOpen,
   testNodeId,
   setTestNodeId,
-  onPlayNode
+  onPlayNode,
+  nodes,
+  setNodes,
+  edges,
+  setEdges
 }) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState<NodeData>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<EdgeData>(initialEdges);
   // Ref sempre aggiornata con lo stato dei nodi
   const nodesRef = useRef(nodes);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
@@ -472,8 +483,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onNodesChange={changes => setNodes(nds => applyNodeChanges(changes, nds))}
+        onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}

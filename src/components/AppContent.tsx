@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
-import { NewProjectModal, ProjectData } from './NewProjectModal';
+import { NewProjectModal } from './NewProjectModal';
 import { Sidebar } from './Sidebar/Sidebar';
 import { FlowEditor } from './Flowchart/FlowEditor';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectDataUpdate } from '../context/ProjectDataContext';
+import { Node, Edge } from 'reactflow';
+import { NodeData, EdgeData } from './Flowchart/FlowEditor';
+import { ProjectInfo } from '../types/project';
+import { useEffect } from 'react';
+import { ProjectService, ProjectData } from '../services/ProjectService';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -38,19 +43,97 @@ export const AppContent: React.FC<AppContentProps> = ({
 }) => {
   const { refreshData } = useProjectDataUpdate();
 
+  // Stato globale per nodi e edge
+  const [nodes, setNodes] = useState<Node<NodeData>[]>([]);
+  const [edges, setEdges] = useState<Edge<EdgeData>[]>([]);
+  // Stato per feedback salvataggio
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // Stato per gestione progetti
+  const [recentProjects, setRecentProjects] = useState<any[]>([]);
+  const [allProjects, setAllProjects] = useState<any[]>([]);
+  const [showAllProjectsModal, setShowAllProjectsModal] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Carica progetti recenti (ultimi 10)
+  const fetchRecentProjects = async () => {
+    try {
+      setRecentProjects(await ProjectService.getRecentProjects());
+    } catch (e) {
+      setRecentProjects([]);
+    }
+  };
+  // Carica tutti i progetti
+  const fetchAllProjects = async () => {
+    try {
+      setAllProjects(await ProjectService.getAllProjects());
+    } catch (e) {
+      setAllProjects([]);
+    }
+  };
+
+  // Elimina singolo progetto
+  const handleDeleteProject = async (id: string) => {
+    await ProjectService.deleteProject(id);
+    setToast('Progetto eliminato!');
+    await fetchRecentProjects();
+    await fetchAllProjects();
+    setTimeout(() => setToast(null), 2000);
+  };
+  // Elimina tutti i progetti
+  const handleDeleteAllProjects = async () => {
+    await ProjectService.deleteAllProjects();
+    setToast('Tutti i progetti eliminati!');
+    await fetchRecentProjects();
+    await fetchAllProjects();
+    setTimeout(() => setToast(null), 2000);
+  };
+
+  // Callback per LandingPage
+  const handleLandingNewProject = () => setAppState('creatingProject');
+  const handleLandingLoadProject = async () => {
+    await fetchRecentProjects();
+  };
+  const handleLandingShowAllProjects = async () => {
+    await fetchAllProjects();
+    setShowAllProjectsModal(true);
+  };
+
   const handleOpenNewProjectModal = () => {
     setAppState('creatingProject');
   };
 
-  const handleCreateProject = async (projectData: ProjectData) => {
-    setCurrentProject(projectData);
-    
-    // Initialize project data with template
-    await ProjectDataService.initializeProjectData(projectData.template, projectData.language);
+  const handleCreateProject = async (projectInfo: ProjectInfo): Promise<boolean> => {
+    setCreateError(null);
+    // Verifica nome univoco
+    const existing = await ProjectService.getProjectByName(projectInfo.name);
+    if (existing) {
+      setCreateError('Esiste già un progetto con questo nome!');
+      return false;
+    }
+    // Inizializza i dati di progetto dai template
+    await ProjectDataService.initializeProjectData(projectInfo.template, projectInfo.language);
+    const templateDicts = await ProjectDataService.loadProjectData();
+    // Crea il nuovo progetto con info base e dizionari copiati
+    const newProject: ProjectData & ProjectInfo = {
+      ...projectInfo,
+      agentActs: JSON.parse(JSON.stringify(templateDicts.agentActs)),
+      userActs: JSON.parse(JSON.stringify(templateDicts.userActs)),
+      backendActions: JSON.parse(JSON.stringify(templateDicts.backendActions)),
+      conditions: JSON.parse(JSON.stringify(templateDicts.conditions)),
+      tasks: JSON.parse(JSON.stringify(templateDicts.tasks)),
+      macrotasks: JSON.parse(JSON.stringify(templateDicts.macrotasks)),
+    };
+    setCurrentProject(newProject);
+    setNodes([]);
+    setEdges([]);
     await refreshData();
-    
-    // Switch to main app
     setAppState('mainApp');
+    return true;
   };
 
   const handleCloseNewProjectModal = () => {
@@ -61,11 +144,159 @@ export const AppContent: React.FC<AppContentProps> = ({
     }
   };
 
+  const handleSaveProject = async () => {
+    if (!currentProject) return;
+    setIsSaving(true);
+    setSaveSuccess(false);
+    setSaveError(null);
+    try {
+      const {
+        agentActs,
+        userActs,
+        backendActions,
+        conditions,
+        tasks,
+        macrotasks,
+        ...rest
+      } = currentProject;
+      const response = await fetch('http://localhost:3100/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...rest,
+          agentActs,
+          userActs,
+          backendActions,
+          conditions,
+          tasks,
+          macrotasks,
+          nodes,
+          edges
+        }),
+      });
+      if (!response.ok) throw new Error('Errore nel salvataggio');
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      setSaveError('Salvataggio fallito');
+      setTimeout(() => setSaveError(null), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleShowRecentProjects = async (id?: string) => {
+    if (id) {
+      await handleOpenProjectById(id);
+      setAppState('mainApp');
+      return;
+    }
+    try {
+      const response = await fetch('http://localhost:3100/projects');
+      if (!response.ok) throw new Error('Errore nel recupero progetti');
+      const projects = await response.json();
+      if (!projects.length) {
+        alert('Nessun progetto recente trovato.');
+        return;
+      }
+      const choices = projects.map((p: any, i: number) => `${i + 1}. ${p.name || '(senza nome)'} [${p._id}]`).join('\n');
+      const idx = prompt(`Progetti recenti:\n${choices}\n\nInserisci il numero del progetto da caricare:`);
+      const selected = parseInt(idx || '', 10);
+      if (!selected || selected < 1 || selected > projects.length) return;
+      const selId = projects[selected - 1]._id;
+      await handleOpenProjectById(selId);
+      setAppState('mainApp');
+    } catch (err) {
+      alert('Errore: ' + (err instanceof Error ? err.message : err));
+    }
+  };
+
+  const handleOpenProjectById = async (id: string) => {
+    if (!id) return;
+    try {
+      const response = await fetch(`http://localhost:3100/projects/${id}`);
+      if (!response.ok) throw new Error('Errore nel caricamento');
+      const project = await response.json();
+      console.log('[DEBUG] Progetto caricato dal backend:', project);
+      console.log('[DEBUG] agentActs:', project.agentActs);
+      console.log('[DEBUG] userActs:', project.userActs);
+      console.log('[DEBUG] backendActions:', project.backendActions);
+      console.log('[DEBUG] conditions:', project.conditions);
+      console.log('[DEBUG] tasks:', project.tasks);
+      console.log('[DEBUG] macrotasks:', project.macrotasks);
+      setCurrentProject(project); // carica TUTTI i dati, inclusi i dizionari
+      // AGGIUNTA: aggiorna anche nodi e edge se presenti
+      setNodes(Array.isArray(project.nodes) ? project.nodes : []);
+      setEdges(Array.isArray(project.edges) ? project.edges : []);
+      await ProjectDataService.importProjectData(JSON.stringify(project));
+      await refreshData();
+      setTimeout(() => {
+        // LOG DATI NEL CONTEXT DOPO REFRESH
+        try {
+          // Import dinamico per evitare hook fuori da componenti
+          const { useProjectData } = require('../context/ProjectDataContext');
+          const { data: projectData } = useProjectData();
+          console.log('[DEBUG][SIDEBAR] Dati nel context dopo refresh:', projectData);
+          if (projectData) {
+            console.log('[DEBUG][SIDEBAR] agentActs:', projectData.agentActs);
+            console.log('[DEBUG][SIDEBAR] userActs:', projectData.userActs);
+            console.log('[DEBUG][SIDEBAR] backendActions:', projectData.backendActions);
+            console.log('[DEBUG][SIDEBAR] conditions:', projectData.conditions);
+            console.log('[DEBUG][SIDEBAR] tasks:', projectData.tasks);
+            console.log('[DEBUG][SIDEBAR] macrotasks:', projectData.macrotasks);
+          }
+        } catch (e) {
+          console.log('[DEBUG][SIDEBAR] Impossibile leggere projectData dal context:', e);
+        }
+      }, 1000);
+    } catch (err) {
+      alert('Errore: ' + (err instanceof Error ? err.message : err));
+    }
+  };
+
+  // Passa una funzione a NewProjectModal per azzerare l'errore duplicato quando cambia il nome
+  const handleProjectNameChange = () => {
+    if (createError) setCreateError(null);
+  };
+
+  // Carica progetti recenti ogni volta che si entra nella landing
+  useEffect(() => {
+    if (appState === 'landing') {
+      fetchRecentProjects();
+    }
+  }, [appState]);
+
+  useEffect(() => {
+    if (showAllProjectsModal) {
+      fetchAllProjects();
+    }
+  }, [showAllProjectsModal]);
+
   return (
     <div className="min-h-screen">
+      {/* Toast feedback */}
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-700 text-white px-6 py-3 rounded shadow-lg z-50 animate-fade-in">
+          {toast}
+        </div>
+      )}
       {/* Landing Page */}
       {(appState === 'landing' || appState === 'creatingProject') && (
-        <LandingPage onStartClick={handleOpenNewProjectModal} />
+        <LandingPage
+          onNewProject={handleLandingNewProject}
+          recentProjects={recentProjects}
+          allProjects={allProjects}
+          onDeleteProject={handleDeleteProject}
+          onDeleteAllProjects={handleDeleteAllProjects}
+          showAllProjectsModal={showAllProjectsModal}
+          setShowAllProjectsModal={setShowAllProjectsModal}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          onSelectProject={async (id: string) => {
+            await handleOpenProjectById(id);
+            setAppState('mainApp');
+          }}
+        />
       )}
       
       {/* Main App */}
@@ -74,10 +305,14 @@ export const AppContent: React.FC<AppContentProps> = ({
           {/* Toolbar */}
           <Toolbar 
             onNewProject={handleOpenNewProjectModal}
-            onOpenProject={() => {}}
-            onSave={() => {}}
+            onOpenProject={handleShowRecentProjects}
+            onSave={handleSaveProject}
+            isSaving={isSaving}
+            saveSuccess={saveSuccess}
+            saveError={saveError}
             onRun={() => {}}
             onSettings={() => {}}
+            projectName={(currentProject as any)?.name}
           />
 
           {/* Main Layout */}
@@ -93,6 +328,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                 testNodeId={testNodeId}
                 setTestNodeId={setTestNodeId}
                 onPlayNode={onPlayNode}
+                nodes={nodes}
+                setNodes={setNodes}
+                edges={edges}
+                setEdges={setEdges}
               />
             </div>
           </div>
@@ -104,6 +343,9 @@ export const AppContent: React.FC<AppContentProps> = ({
         isOpen={appState === 'creatingProject'}
         onClose={handleCloseNewProjectModal}
         onCreateProject={handleCreateProject}
+        onLoadProject={handleShowRecentProjects}
+        duplicateNameError={createError}
+        onProjectNameChange={handleProjectNameChange}
       />
     </div>
   );

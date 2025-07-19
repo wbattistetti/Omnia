@@ -63,7 +63,8 @@
     ],
     "category": "Agent verifies user's identity",
     "discursive": "Agent asks for customer's full name",
-    "name": "Agent asks for customer's full name"
+    "name": "Agent asks for customer's full name",
+    "userActs": ["UA001"]
   },
   {
     "id": "AA007",
@@ -74,7 +75,8 @@
     ],
     "category": "Agent verifies user's identity",
     "discursive": "Agent asks for tax identification number",
-    "name": "Agent asks for tax identification number"
+    "name": "Agent asks for tax identification number",
+    "userActs": ["UA002"]
   },
   {
     "id": "AA008",
@@ -85,7 +87,8 @@
     ],
     "category": "Agent handles: contact information",
     "discursive": "Agent asks for phone number",
-    "name": "Agent asks for phone number"
+    "name": "Agent asks for phone number",
+    "userActs": ["UA003"]
   },
   {
     "id": "AA009",
@@ -96,7 +99,8 @@
     ],
     "category": "Agent collects user's contact information",
     "discursive": "Agent asks for email address",
-    "name": "Agent asks for email address"
+    "name": "Agent asks for email address",
+    "userActs": ["UA004"]
   },
   {
     "id": "AA010",
@@ -107,7 +111,8 @@
     ],
     "category": "Agent provides general or miscellaneous information",
     "discursive": "Agent asks for service address",
-    "name": "Agent asks for service address"
+    "name": "Agent asks for service address",
+    "userActs": ["UA007"]
   },
   {
     "id": "AA011",
@@ -118,7 +123,8 @@
     ],
     "category": "Agent provides general or miscellaneous information",
     "discursive": "Agent requests POD/PDR code",
-    "name": "Agent requests POD/PDR code"
+    "name": "Agent requests POD/PDR code",
+    "userActs": ["UA006"]
   },
   {
     "id": "AA012",
@@ -129,7 +135,8 @@
     ],
     "category": "Agent provides general or miscellaneous information",
     "discursive": "Agent asks about estimated annual consumption",
-    "name": "Agent asks about estimated annual consumption"
+    "name": "Agent asks about estimated annual consumption",
+    "userActs": ["UA0011"]
   },
   {
     "id": "AA013",
@@ -140,7 +147,8 @@
     ],
     "category": "Agent provides general or miscellaneous information",
     "discursive": "Agent asks for meter power",
-    "name": "Agent asks for meter power"
+    "name": "Agent asks for meter power",
+    "userActs": ["UA008"]
   },
   {
     "id": "AA014",
@@ -151,7 +159,8 @@
     ],
     "category": "Agent provides general or miscellaneous information",
     "discursive": "Agent asks about solar panel installation",
-    "name": "Agent asks about solar panel installation"
+    "name": "Agent asks about solar panel installation",
+    "userActs": ["UA009"]
   },
   {
     "id": "AA015",
@@ -240,544 +249,5 @@
     "category": "Agent handles: activation and timeline",
     "discursive": "Agent explains activation timeline",
     "name": "Agent explains activation timeline"
-  },
-  {
-    "id": "AA023",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Is everything clear so far?"
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent asks if customer understood",
-    "name": "Agent asks if customer understood"
-  },
-  {
-    "id": "AA024",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Can we go ahead with the activation?"
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent asks for confirmation to proceed",
-    "name": "Agent asks for confirmation to proceed"
-  },
-  {
-    "id": "AA025",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Do you consent to the processing of your data as per the privacy notice?"
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent requests privacy consent",
-    "name": "Agent requests privacy consent"
-  },
-  {
-    "id": "AA026",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Do you consent to this call being recorded?"
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent requests consent for call recording",
-    "name": "Agent requests consent for call recording"
-  },
-  {
-    "id": "AA027",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Certainly, I can better explain the duration."
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent clarifies customer's doubt",
-    "name": "Agent clarifies customer's doubt"
-  },
-  {
-    "id": "AA028",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "I understand, may I offer you an alternative?"
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent handles customer's refusal",
-    "name": "Agent handles customer's refusal"
-  },
-  {
-    "id": "AA029",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Would you like some time to think it over?"
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent manages customer's indecision",
-    "name": "Agent manages customer's indecision"
-  },
-  {
-    "id": "AA030",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Would you like to be called back at another time?"
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent proposes a callback",
-    "name": "Agent proposes a callback"
-  },
-  {
-    "id": "AA031",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Thank you for choosing our service."
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent closes the call",
-    "name": "Agent closes the call"
-  },
-  {
-    "id": "AA032",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "All right, thank you anyway for your time."
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent closes the call",
-    "name": "Agent closes the call"
-  },
-  {
-    "id": "AA033",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Thank you for your availability, have a great day."
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent thanks the customer",
-    "name": "Agent thanks the customer"
-  },
-  {
-    "id": "AA034",
-    "description": "",
-    "categoryDry": "Data Validation",
-    "examples": [
-      "\"The POD code ends in 91, is that correct?\""
-    ],
-    "category": "Agent handles: data validation",
-    "discursive": "Agent verifies POD/PDR accuracy",
-    "name": "Agent verifies POD/PDR accuracy"
-  },
-  {
-    "id": "AA035",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"It appears to be registered to Maria Rossi, can you confirm?\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent confirms data from system",
-    "name": "Agent confirms data from system"
-  },
-  {
-    "id": "AA036",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Would you like to use the IBAN you provided previously?\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent confirms payment method",
-    "name": "Agent confirms payment method"
-  },
-  {
-    "id": "AA037",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"One moment while I retrieve the data from the system.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent informs about waiting time",
-    "name": "Agent informs about waiting time"
-  },
-  {
-    "id": "AA038",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Perfect, the procedure was successful.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent confirms system operation",
-    "name": "Agent confirms system operation"
-  },
-  {
-    "id": "AA039",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"I’m transferring you to a colleague who can better handle your case.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent escalates to another operator",
-    "name": "Agent escalates to another operator"
-  },
-  {
-    "id": "AA040",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Would you prefer to also receive the information via email?\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent offers alternative communication channel",
-    "name": "Agent offers alternative communication channel"
-  },
-  {
-    "id": "AA041",
-    "description": "",
-    "categoryDry": "Preferences",
-    "examples": [
-      "\"Do you prefer a postal slip or direct debit?\""
-    ],
-    "category": "Agent asks for user's preferences",
-    "discursive": "Agent asks for preferred payment method",
-    "name": "Agent asks for preferred payment method"
-  },
-  {
-    "id": "AA042",
-    "description": "",
-    "categoryDry": "Preferences",
-    "examples": [
-      "\"Is it better to contact you by phone or email?\""
-    ],
-    "category": "Agent asks for user's preferences",
-    "discursive": "Agent asks for preferred communication channel",
-    "name": "Agent asks for preferred communication channel"
-  },
-  {
-    "id": "AA043",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Are you also interested in our WiFi package?\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent offers additional service",
-    "name": "Agent offers additional service"
-  },
-  {
-    "id": "AA044",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"With the boiler package, maintenance is included.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent explain  extra service benefits",
-    "name": "Explain  extra service benefits"
-  },
-  {
-    "id": "AA045",
-    "description": "",
-    "categoryDry": "Post-Sales Information",
-    "examples": [
-      "\"Would you like me to send the contract PDF to your email?\""
-    ],
-    "category": "Agent handles: post-sales information",
-    "discursive": "Agent offers to send contract copy",
-    "name": "Agent offers to send contract copy"
-  },
-  {
-    "id": "AA046",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Just a minute to evaluate the quality of the call.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent requests service quality feedback",
-    "name": "Agent requests service quality feedback"
-  },
-  {
-    "id": "AA047",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"The system is currently unresponsive, please bear with me.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent informs about technical issue",
-    "name": "Agent informs about technical issue"
-  },
-  {
-    "id": "AA048",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Can I call you back in 10 minutes, as soon as the system is back?\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent informs about technical issue",
-    "name": "Agent informs about technical issue"
-  },
-  {
-    "id": "AA049",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"There’s an overdue bill: shall we check it together?\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent checks for overdue payments",
-    "name": "Agent checks for overdue payments"
-  },
-  {
-    "id": "AA050",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"The contract cannot be activated until the debt is settled.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent explain  arrears consequences",
-    "name": "Explain  arrears consequences"
-  },
-  {
-    "id": "AA051",
-    "description": "",
-    "categoryDry": "Holder Information",
-    "examples": [
-      "\"We also need the name of the second holder.\""
-    ],
-    "category": "Agent collects information about contract holders",
-    "discursive": "Agent requests details of contract co-holder",
-    "name": "Agent requests details of contract co-holder"
-  },
-  {
-    "id": "AA052",
-    "description": "",
-    "categoryDry": "Holder Information",
-    "examples": [
-      "\"Can you tell me the name of the previous holder?\""
-    ],
-    "category": "Agent collects information about contract holders",
-    "discursive": "Agent requests previous holder info",
-    "name": "Agent requests previous holder info"
-  },
-  {
-    "id": "AA053",
-    "description": "",
-    "categoryDry": "Fiscal Information",
-    "examples": [
-      "\"Reactivation is when the meter is closed, transfer is when it's still active.\""
-    ],
-    "category": "Agent collects fiscal or administrative data",
-    "discursive": "Agent explain  the difference between reactivation and transfer",
-    "name": "Explain  the difference between reactivation and transfer"
-  },
-  {
-    "id": "AA054",
-    "description": "",
-    "categoryDry": "Regulatory Context",
-    "examples": [
-      "\"The offer falls under the SIMILE protection service, it's non-binding.\""
-    ],
-    "category": "Agent explains market or regulatory context",
-    "discursive": "Agent explain  simile protection / free market",
-    "name": "Explain  simile protection / free market"
-  },
-  {
-    "id": "AA055",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"You have 14 days to withdraw at no cost, as per regulation.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent explain  withdrawal rights",
-    "name": "Explain  withdrawal rights"
-  },
-  {
-    "id": "AA056",
-    "description": "",
-    "categoryDry": "Contact Information",
-    "examples": [
-      "\"I'm contacting you following your request from last week.\""
-    ],
-    "category": "Agent collects user's contact information",
-    "discursive": "Agent calls back missed contact",
-    "name": "Agent calls back missed contact"
-  },
-  {
-    "id": "AA057",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"I wanted to check if you had a chance to review the offer we sent you.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent follows up on previous offer",
-    "name": "Agent follows up on previous offer"
-  },
-  {
-    "id": "AA058",
-    "description": "",
-    "categoryDry": "Referral",
-    "examples": [
-      "\"If you’re satisfied, feel free to recommend us to a friend or family member.\""
-    ],
-    "category": "Agent invites customer to refer the service",
-    "discursive": "Agent asks customer for recommendation",
-    "name": "Agent asks customer for recommendation"
-  },
-  {
-    "id": "AA059",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"I suggest registering to the customer area to monitor your usage.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent invites to customer portal",
-    "name": "Agent invites to customer portal"
-  },
-  {
-    "id": "AA060",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"If you need help after activation, you can reach us at the toll-free number.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent follows up on previous offer",
-    "name": "Agent follows up on previous offer"
-  },
-  {
-    "id": "AA061",
-    "description": "",
-    "categoryDry": "Billing Information",
-    "examples": [
-      "\"Your first bill will arrive within 45 days of activation.\""
-    ],
-    "category": "Agent provides billing or invoice details",
-    "discursive": "Agent informs about first bill timeline",
-    "name": "Agent informs about first bill timeline"
-  },
-  {
-    "id": "AA062",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Monitoring your usage helps you optimize your spending.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent explain  monitoring consumption benefits",
-    "name": "Explain  monitoring consumption benefits"
-  },
-  {
-    "id": "AA063",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"You can read your meter and send us the reading every month.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent educates on self-reading",
-    "name": "Agent educates on self-reading"
-  },
-  {
-    "id": "AA064",
-    "description": "",
-    "categoryDry": "Sustainability Information",
-    "examples": [
-      "\"The supplied energy comes from certified renewable sources.\""
-    ],
-    "category": "Agent promotes sustainability or green options",
-    "discursive": "Agent mentions energy from renewable sources",
-    "name": "Agent mentions energy from renewable sources"
-  },
-  {
-    "id": "AA065",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Choosing a green offer contributes to the ecological transition.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent promotes sustainable choices",
-    "name": "Agent promotes sustainable choices"
-  },
-  {
-    "id": "AA066",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"I’ll log the issue and forward it to the appropriate department.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent logs a complaint or request",
-    "name": "Agent logs a complaint or request"
-  },
-  {
-    "id": "AA067",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Your report number is 38492.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent provides tracking number",
-    "name": "Agent provides tracking number"
-  },
-  {
-    "id": "AA068",
-    "description": "",
-    "categoryDry": "Fiscal Information",
-    "examples": [
-      "\"Do you have a VAT number to associate with the contract?\""
-    ],
-    "category": "Agent collects fiscal or administrative data",
-    "discursive": "Agent requests VAT number",
-    "name": "Agent requests VAT number"
-  },
-  {
-    "id": "AA069",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Different conditions apply to non-residential customers.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent explain  residential/non-residential customer difference",
-    "name": "Explain  residential/non-residential customer difference"
-  },
-  {
-    "id": "AA070",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"We currently have a promotion with free activation.\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "name_discursive": "Agent announces active promotion",
-    "name": "Agent announces active promotion"
-  },
-  {
-    "id": "AA071",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "\"Would you like to join the campaign active until the end of the month?\""
-    ],
-    "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent presents current campaign",
-    "name": "Agent presents current campaign"
   }
 ]

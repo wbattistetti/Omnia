@@ -173,50 +173,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {Object.entries(filteredData).map(([entityType, categories]) => {
-          const config = entityConfig[entityType as EntityType];
-          
-          return (
-            <Accordion
-              key={entityType}
-              title={config.title}
-              icon={config.icon}
-              isOpen={openAccordion === entityType}
-              onToggle={() => setOpenAccordion(openAccordion === entityType ? '' : entityType)}
-            >
-              {categories.map((category) => (
-                <CategoryItem
-                  key={category.id}
-                  category={category}
-                  entityType={entityType as EntityType}
-                  onAddItem={(name, description) => 
-                    addItem(entityType as EntityType, category.id, name, description)
-                  }
-                  onDeleteCategory={() => 
-                    deleteCategory(entityType as EntityType, category.id)
-                  }
-                  onUpdateCategory={(updates) => 
-                    updateCategory(entityType as EntityType, category.id, updates)
-                  }
-                  onDeleteItem={(itemId) => 
-                    deleteItem(entityType as EntityType, category.id, itemId)
-                  }
-                  onUpdateItem={(itemId, updates) => 
-                    updateItem(entityType as EntityType, category.id, itemId, updates)
-                  }
-                />
-              ))}
-              
-              <div className="mt-3">
-                <AddButton
-                  label="Nuova Categoria"
-                  onAdd={(name) => addCategory(entityType as EntityType, name)}
-                  placeholder="Enter category name..."
-                />
-              </div>
-            </Accordion>
-          );
-        })}
+        {Object.entries(filteredData)
+          // Mostra solo le entità previste da entityConfig (ignora nodes, edges, ecc)
+          .filter(([entityType]) => entityConfig.hasOwnProperty(entityType))
+          .map(([entityType, categories]: [string, any[]]) => {
+            const config = entityConfig[entityType as EntityType];
+            return (
+              <Accordion
+                key={entityType}
+                title={config.title}
+                icon={config.icon}
+                isOpen={openAccordion === entityType}
+                onToggle={() => setOpenAccordion(openAccordion === entityType ? '' : entityType)}
+              >
+                {categories
+                  // Salta categorie non conformi
+                  .filter((category: any) => category && typeof category.name === 'string' && Array.isArray(category.items))
+                  .map((category: any) => (
+                    <CategoryItem
+                      key={category.id}
+                      category={category}
+                      entityType={entityType as EntityType}
+                      onAddItem={(name: string, description?: string) => 
+                        addItem(entityType as EntityType, category.id, name, description || '')
+                      }
+                      onDeleteCategory={() => 
+                        deleteCategory(entityType as EntityType, category.id)
+                      }
+                      onUpdateCategory={(updates: any) => 
+                        updateCategory(entityType as EntityType, category.id, updates)
+                      }
+                      onDeleteItem={(itemId: string) => 
+                        deleteItem(entityType as EntityType, category.id, itemId)
+                      }
+                      onUpdateItem={(itemId: string, updates: any) => 
+                        updateItem(entityType as EntityType, category.id, itemId, updates)
+                      }
+                    />
+                  ))}
+                <div className="mt-3">
+                  <AddButton
+                    label="Nuova Categoria"
+                    onAdd={(name: string) => addCategory(entityType as EntityType, name)}
+                    placeholder="Enter category name..."
+                  />
+                </div>
+              </Accordion>
+            );
+          })}
       </div>
     </div>
   );
