@@ -50,6 +50,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
     <>
       {rows.map((row, idx) => (
         <React.Fragment key={row.id}>
+          {/* Inserter sopra la label */}
           <RowInserter
             visible={hoveredInserter === idx && editingRowId === null}
             onInsert={() => handleInsertRow(idx)}
@@ -66,13 +67,18 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onKeyDown={onKeyDown}
             onDragStart={onDragStart}
             index={idx}
-            canDelete={canDelete(row)}
+            canDelete={true}
             totalRows={totalRows}
             isHoveredTarget={Boolean(hoveredRowIndex === idx)}
             isBeingDragged={false}
             isPlaceholder={Boolean(row.isPlaceholder)}
             forceEditing={editingRowId === row.id}
             onEditingEnd={onEditingEnd}
+            onMouseEnter={(type, i) => {
+              if (type === 'top') setHoveredInserter(i);
+              else if (type === 'bottom') setHoveredInserter(i + 1);
+            }}
+            onMouseLeave={() => setHoveredInserter(null)}
           />
         </React.Fragment>
       ))}

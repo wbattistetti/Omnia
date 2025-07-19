@@ -6,7 +6,7 @@ import { NodeHandles } from './NodeHandles';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { NodeRowData, EntityType } from '../../types/project';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2 } from 'lucide-react';
 import { RowInserter } from './RowInserter';
 import { useNodeRowDrag } from '../../hooks/useNodeRowDrag';
 import { NodeRowList } from './NodeRowList';
@@ -31,15 +31,19 @@ export interface CustomNodeData {
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
   id, 
   data, 
-  isConnectable 
+  isConnectable, selected
 }) => {
   const [isEditingNode, setIsEditingNode] = useState(false);
   const [nodeTitle, setNodeTitle] = useState(data.title || 'New Node');
-  const [nodeRows, setNodeRows] = useState<NodeRowData[]>(data.rows || [{ id: '1', text: 'Default Row' }]);
+  // Se il nodo è nuovo e vuoto, crea subito una row vuota e metti in editing
+  const isNewAndEmpty = !data.rows || data.rows.length === 0;
+  const initialRowId = isNewAndEmpty ? '1' : (data.rows && data.rows[0]?.id);
+  const [nodeRows, setNodeRows] = useState<NodeRowData[]>(
+    isNewAndEmpty ? [{ id: '1', text: '' }] : (data.rows || [])
+  );
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
-  // Imposta editingRowId sulla prima riga se il nodo è nuovo
-  const [editingRowId, setEditingRowId] = useState<string | null>(data.isTemporary ? (data.rows && data.rows[0]?.id) || '1' : null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(isNewAndEmpty ? '1' : null);
   // Wrapper per setEditingRowId con log
   const setEditingRowIdWithLog = (val: string | null) => {
     setEditingRowId(val);
@@ -58,6 +62,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Stato per gestire l'inserter hover
   const [hoveredInserter, setHoveredInserter] = useState<number | null>(null);
 
+  // Inizio stato per overlay azioni
+  const [showActions, setShowActions] = useState(false);
+
   const handleDeleteNode = () => {
     if (data.onDelete) {
       data.onDelete();
@@ -69,8 +76,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       row.id === rowId ? { ...row, text: newText, categoryType } : row
     );
     setNodeRows(updatedRows);
-    console.log('[CustomNode] nodeRows dopo update:', updatedRows);
-    if (data.onUpdate) {
+    if (typeof data.onUpdate === 'function') {
       data.onUpdate({ rows: updatedRows });
     }
   };
@@ -118,18 +124,14 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   };
 
   const handleIntellisenseSelectItem = (item: IntellisenseItem) => {
-    console.log('[CustomNode] Intellisense item ricevuto:', item);
     if (editingRowId) {
-      console.log('[CustomNode] nodeRows PRIMA update:', nodeRows);
       const updatedRows = nodeRows.map(row =>
         row.id === editingRowId
           ? { ...row, ...item, id: row.id }
           : row
       );
-      console.log('[CustomNode] nodeRows DOPO update:', updatedRows);
       setNodeRows(updatedRows);
       if (data.onUpdate) {
-        console.log('[CustomNode] data.onUpdate rows:', updatedRows);
         data.onUpdate({ rows: updatedRows });
       }
     }
@@ -321,18 +323,60 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     );
   }
 
+  // LOG SOLO PER SELECTED
+  console.log('[DEBUG][CustomNode] selected:', selected);
+
   return (
     <>
-      <div className="bg-white border border-black rounded-lg shadow-xl w-70 min-h-[40px] relative">
-        <NodeHeader
-          title={nodeTitle}
-          onDelete={handleDeleteNode}
-          onToggleEdit={() => setIsEditingNode(!isEditingNode)}
-          onTitleUpdate={handleTitleUpdate}
-          isEditing={isEditingNode}
-          onPlay={data.onPlayNode ? () => { console.log('[CustomNode] onPlayNode chiamato', id); data.onPlayNode(id); } : undefined}
-          alwaysShowTrash
-        />
+      <div className={`bg-white border-black rounded-lg shadow-xl w-70 min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}>
+        <div className="relative" onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)}>
+          {/* Toolbar overlay sopra il nodo, allineata a destra, staccata di 2px */}
+          {showActions && (
+            <div
+              className="absolute right-2 flex gap-2 items-center z-20 bg-white border border-gray-300 rounded-lg shadow px-1.5 py-0.5"
+              style={{ pointerEvents: 'auto', top: '-32px' }}
+            >
+              <button
+                onClick={() => setIsEditingNode(true)}
+                className="p-0 text-slate-500 hover:text-green-500 transition-colors bg-transparent border-none shadow-none"
+                title="Modifica titolo"
+                style={{ background: 'none', padding: 0, margin: 0 }}
+              >
+                <Edit3 className="w-3 h-3" style={{ width: 12, height: 12 }} />
+              </button>
+              <button
+                onClick={handleDeleteNode}
+                className="p-0 text-red-500 hover:text-red-700 transition-colors bg-transparent border-none shadow-none"
+                title="Elimina nodo"
+                style={{ background: 'none', padding: 0, margin: 0 }}
+              >
+                <Trash2 className="w-3 h-3" style={{ width: 12, height: 12 }} />
+              </button>
+              <button
+                onClick={() => data.onPlayNode && data.onPlayNode(id)}
+                className="p-0 text-blue-500 hover:text-blue-700 transition-colors bg-transparent border-none shadow-none"
+                title="Simula nodo"
+                style={{ background: 'none', fontSize: '12px', padding: 0, margin: 0 }}
+              >
+                ▶️
+              </button>
+            </div>
+          )}
+          {/* Buffer invisibile tra titolo e toolbar per tolleranza mouse */}
+          {showActions && (
+            <div
+              className="absolute right-2 z-10"
+              style={{ top: '-8px', height: '8px', width: '120px', pointerEvents: 'auto' }}
+            />
+          )}
+          <NodeHeader
+            title={nodeTitle}
+            onDelete={handleDeleteNode}
+            onToggleEdit={() => setIsEditingNode(!isEditingNode)}
+            onTitleUpdate={handleTitleUpdate}
+            isEditing={isEditingNode}
+          />
+        </div>
         
         <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }}>
           <NodeRowList
@@ -342,8 +386,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             setHoveredInserter={setHoveredInserter}
             handleInsertRow={handleInsertRow}
             nodeTitle={nodeTitle}
-            onUpdate={handleUpdateRow}
-            onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType)}
+            onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType)}
+            onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType as EntityType)}
             onDelete={(row) => handleDeleteRow(row.id)}
             onKeyDown={(e) => {/* logica keydown se serve */}}
             onDragStart={handleRowDragStart}
@@ -352,7 +396,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             hoveredRowIndex={drag.hoveredRowIndex}
             draggedRowId={drag.draggedRowId}
             draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
-            draggedItem={draggedItem}
+            draggedItem={draggedItem ?? null}
             draggedRowStyle={draggedRowStyle}
             onEditingEnd={() => setEditingRowIdWithLog(null)}
           />
@@ -361,20 +405,16 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           {draggedItem && (
             <NodeRow
               key={`dragged-${draggedItem.id}`}
-              id={draggedItem.id}
-              text={draggedItem.text}
-              categoryType={draggedItem.categoryType}
-              onUpdate={(row, newText) => {}} // Non permettere modifiche durante il trascinamento
-              onUpdateWithCategory={(row, newText, categoryType) => {}} // Non permettere modifiche durante il trascinamento
-              onDelete={(row) => {}} // Non permettere cancellazione durante il trascinamento
+              row={draggedItem}
+              nodeTitle={nodeTitle}
+              onUpdate={() => {}}
+              onUpdateWithCategory={() => {}}
+              onDelete={() => {}}
               index={drag.draggedRowOriginalIndex || 0}
               canDelete={nodeRows.length > 1}
               totalRows={nodeRows.length}
               isBeingDragged={true}
               style={draggedRowStyle}
-              userActs={draggedItem.userActs}
-              bgColor={draggedItem.bgColor}
-              textColor={draggedItem.textColor}
               onEditingEnd={() => setEditingRowIdWithLog(null)}
             />
           )}

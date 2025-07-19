@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Folder, FileText, Zap } from 'lucide-react';
 import { ProjectData, ProjectInfo } from '../types/project';
 
@@ -9,6 +9,7 @@ interface NewProjectModalProps {
   onLoadProject?: (id?: string) => void;
   duplicateNameError?: string | null;
   onProjectNameChange?: () => void;
+  isLoading?: boolean;
 }
 
 const templates = [
@@ -28,7 +29,7 @@ const languages = [
   { id: 'fr', name: 'Français' }
 ];
 
-export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProject, duplicateNameError, onProjectNameChange }: NewProjectModalProps) {
+export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProject, duplicateNameError, onProjectNameChange, isLoading }: NewProjectModalProps) {
   const [formData, setFormData] = useState<ProjectInfo>({
     id: '',
     name: '',
@@ -39,6 +40,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
   const [errors, setErrors] = useState<Partial<ProjectInfo>>({});
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
   const [selectedProjectIdx, setSelectedProjectIdx] = useState<number | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -46,6 +48,12 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
         .then(res => res.json())
         .then(data => setRecentProjects(data))
         .catch(() => setRecentProjects([]));
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && nameInputRef.current) {
+      nameInputRef.current.focus();
     }
   }, [isOpen]);
 
@@ -72,8 +80,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     // Attendi il risultato della creazione
     const created = await onCreateProject(formData);
     if (created) {
-      onClose();
-      // Reset form solo se creato
+      // onClose(); // RIMOSSO: la chiusura è gestita dal parent tramite appState
       setFormData({
         id: '',
         name: '',
@@ -99,13 +106,23 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
+        {/* Spinner overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-50 rounded-2xl">
+            <svg className="animate-spin h-12 w-12 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-700">
           <h2 className="text-2xl font-bold text-white">Nuovo Progetto</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+            disabled={isLoading}
           >
             <X className="w-5 h-5" />
           </button>
@@ -119,6 +136,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
               Nome Progetto *
             </label>
             <input
+              ref={nameInputRef}
               type="text"
               value={formData.name}
               onChange={(e) => handleInputChange('name', e.target.value)}
@@ -126,6 +144,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 errors.name || duplicateNameError ? 'border-red-500' : 'border-slate-600'
               }`}
               placeholder="Inserisci il nome del progetto"
+              disabled={isLoading}
             />
             {/* Messaggio errore duplicato sotto la textbox */}
             {duplicateNameError && formData.name.trim() && (
@@ -149,6 +168,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 errors.description ? 'border-red-500' : 'border-slate-600'
               }`}
               placeholder="Descrivi brevemente il progetto"
+              disabled={isLoading}
             />
             {errors.description && (
               <p className="mt-1 text-sm text-red-400">{errors.description}</p>
@@ -179,6 +199,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                       checked={formData.template === template.id}
                       onChange={(e) => handleInputChange('template', e.target.value)}
                       className="sr-only"
+                      disabled={isLoading}
                     />
                     <IconComponent className={`w-6 h-6 mr-3 ${template.color}`} />
                     <div>
@@ -200,6 +221,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
               value={formData.language}
               onChange={(e) => handleInputChange('language', e.target.value)}
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
+              disabled={isLoading}
             >
               {languages.map((lang) => (
                 <option key={lang.id} value={lang.id}>
@@ -215,14 +237,16 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
               type="button"
               onClick={onClose}
               className="px-6 py-2 text-slate-300 hover:text-white transition-colors"
+              disabled={isLoading}
             >
               Annulla
             </button>
             <button
               type="submit"
               className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+              disabled={isLoading}
             >
-              Crea Progetto
+              {isLoading ? 'Caricamento...' : 'Crea Progetto'}
             </button>
           </div>
         </form>

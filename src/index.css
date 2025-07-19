@@ -38,3 +38,8 @@
   display: inline-block;
   animation: smooth-brush-glow 0.6s ease-in-out forwards;
 }
+
+/* Forza tutti i bordi con classe 'border' a 1px */
+.border {
+  border-width: 1px !important;
+}

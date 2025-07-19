@@ -11,6 +11,7 @@ import { NodeData, EdgeData } from './Flowchart/FlowEditor';
 import { ProjectInfo } from '../types/project';
 import { useEffect } from 'react';
 import { ProjectService, ProjectData } from '../services/ProjectService';
+import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -51,6 +52,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
 
   // Stato per gestione progetti
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
@@ -109,39 +111,44 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const handleCreateProject = async (projectInfo: ProjectInfo): Promise<boolean> => {
     setCreateError(null);
-    // Verifica nome univoco
-    const existing = await ProjectService.getProjectByName(projectInfo.name);
-    if (existing) {
-      setCreateError('Esiste già un progetto con questo nome!');
-      return false;
-    }
-    // Inizializza i dati di progetto dai template
-    await ProjectDataService.initializeProjectData(projectInfo.template, projectInfo.language);
-    const templateDicts = await ProjectDataService.loadProjectData();
-    // Crea il nuovo progetto con info base e dizionari copiati
-    const newProject: ProjectData & ProjectInfo = {
-      ...projectInfo,
-      agentActs: JSON.parse(JSON.stringify(templateDicts.agentActs)),
-      userActs: JSON.parse(JSON.stringify(templateDicts.userActs)),
-      backendActions: JSON.parse(JSON.stringify(templateDicts.backendActions)),
-      conditions: JSON.parse(JSON.stringify(templateDicts.conditions)),
-      tasks: JSON.parse(JSON.stringify(templateDicts.tasks)),
-      macrotasks: JSON.parse(JSON.stringify(templateDicts.macrotasks)),
-    };
-    setCurrentProject(newProject);
-    setNodes([]);
-    setEdges([]);
+    setIsCreatingProject(true);
+    try {
+      // Verifica nome univoco
+      const existing = await ProjectService.getProjectByName(projectInfo.name);
+      if (existing) {
+        setCreateError('Esiste già un progetto con questo nome!');
+        setIsCreatingProject(false);
+        return false;
+      }
+      // Inizializza i dati di progetto dai template
+      await ProjectDataService.initializeProjectData(projectInfo.template, projectInfo.language);
+      const templateDicts = await ProjectDataService.loadProjectData();
+      // Crea il nuovo progetto con info base e dizionari copiati
+      const newProject: ProjectData & ProjectInfo = {
+        ...projectInfo,
+        agentActs: JSON.parse(JSON.stringify(templateDicts.agentActs)),
+        userActs: JSON.parse(JSON.stringify(templateDicts.userActs)),
+        backendActions: JSON.parse(JSON.stringify(templateDicts.backendActions)),
+        conditions: JSON.parse(JSON.stringify(templateDicts.conditions)),
+        tasks: JSON.parse(JSON.stringify(templateDicts.tasks)),
+        macrotasks: JSON.parse(JSON.stringify(templateDicts.macrotasks)),
+      };
+      setCurrentProject(newProject);
+      setNodes([]);
+      setEdges([]);
     await refreshData();
     setAppState('mainApp');
-    return true;
+      return true;
+    } catch (e) {
+      setCreateError('Errore nella creazione del progetto');
+      return false;
+    } finally {
+      setIsCreatingProject(false);
+    }
   };
 
   const handleCloseNewProjectModal = () => {
-    if (currentProject) {
-      setAppState('mainApp');
-    } else {
-      setAppState('landing');
-    }
+    setAppState('landing');
   };
 
   const handleSaveProject = async () => {
@@ -316,25 +323,27 @@ export const AppContent: React.FC<AppContentProps> = ({
           />
 
           {/* Main Layout */}
-          <div className="flex-1 flex h-[calc(100vh-64px)]">
-            <Sidebar 
-              isCollapsed={isSidebarCollapsed}
-              onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            />
-            <div className="flex-1">
-              <FlowEditor 
-                testPanelOpen={testPanelOpen}
-                setTestPanelOpen={setTestPanelOpen}
-                testNodeId={testNodeId}
-                setTestNodeId={setTestNodeId}
-                onPlayNode={onPlayNode}
-                nodes={nodes}
-                setNodes={setNodes}
-                edges={edges}
-                setEdges={setEdges}
+          <SidebarThemeProvider>
+            <div className="flex-1 flex h-[calc(100vh-64px)]">
+              <Sidebar 
+                isCollapsed={isSidebarCollapsed}
+                onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               />
+              <div className="flex-1">
+                <FlowEditor 
+                  testPanelOpen={testPanelOpen}
+                  setTestPanelOpen={setTestPanelOpen}
+                  testNodeId={testNodeId}
+                  setTestNodeId={setTestNodeId}
+                  onPlayNode={onPlayNode}
+                  nodes={nodes}
+                  setNodes={setNodes}
+                  edges={edges}
+                  setEdges={setEdges}
+                />
+              </div>
             </div>
-          </div>
+          </SidebarThemeProvider>
         </div>
       )}
       
@@ -346,6 +355,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         onLoadProject={handleShowRecentProjects}
         duplicateNameError={createError}
         onProjectNameChange={handleProjectNameChange}
+        isLoading={isCreatingProject}
       />
     </div>
   );

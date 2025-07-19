@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
-import { GripVertical, Trash2, Edit3, Bot, User, Database } from 'lucide-react';
+import { GripVertical, Trash2, Edit3 } from 'lucide-react';
+import { SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { LABEL_COLORS } from './labelColors';
@@ -9,13 +10,8 @@ import { getLabelColor } from '../../utils/labelColor';
 import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
 import { useOverlayBuffer } from '../../hooks/useOverlayBuffer';
 import { NodeRowEditor } from './NodeRowEditor';
-
-// Mappa delle icone per i tipi di categoria
-const categoryIcons: { [key: string]: JSX.Element } = {
-  agentActs: <Bot className="w-3 h-3 text-purple-400" />,
-  userActs: <User className="w-3 h-3 text-green-400" />,
-  backendActions: <Database className="w-3 h-3 text-blue-400" />,
-};
+import { NodeRowData } from '../../types/project';
+import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 
 /**
  * Props per NodeRow
@@ -58,7 +54,7 @@ export interface NodeRowProps {
   isPlaceholder?: boolean;
   style?: React.CSSProperties;
   forceEditing?: boolean;
-  onMouseEnter?: () => void;
+  onMouseEnter?: (type: 'top' | 'bottom', index: number) => void;
   onMouseLeave?: () => void;
   onMouseMove?: (e: React.MouseEvent) => void;
   bgColor?: string;
@@ -158,6 +154,13 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   }, [isEditing]);
 
   useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
     if (!isEditing && typeof onEditingEnd === 'function') {
       onEditingEnd();
     }
@@ -174,12 +177,16 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   };
 
   const handleCancel = () => {
-    setCurrentText(row.text);
-    setIsEditing(false);
-    setShowIntellisense(false);
-    setIntellisenseQuery('');
-    if (typeof onEditingEnd === 'function') {
-      onEditingEnd();
+    if (currentText.trim() === '') {
+      onDelete(row);
+    } else {
+      setCurrentText(row.text);
+      setIsEditing(false);
+      setShowIntellisense(false);
+      setIntellisenseQuery('');
+      if (typeof onEditingEnd === 'function') {
+        onEditingEnd();
+      }
     }
   };
 
@@ -287,18 +294,26 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
   // Calcolo il colore di sfondo e testo per la label
   let bgColor = '';
   let labelTextColor = '';
-  if (typeof propBgColor === 'string') bgColor = propBgColor;
-  if (typeof propTextColor === 'string') labelTextColor = propTextColor;
-  if (!bgColor || !labelTextColor) {
-    const colorObj = getLabelColor(row.categoryType, row.userActs);
-    bgColor = colorObj.bg;
-    labelTextColor = colorObj.text;
+  if (row.categoryType && SIDEBAR_TYPE_COLORS[row.categoryType]) {
+    bgColor = SIDEBAR_TYPE_COLORS[row.categoryType].light;
+    labelTextColor = '#111';
+  } else {
+    if (typeof propBgColor === 'string') bgColor = propBgColor;
+    if (typeof propTextColor === 'string') labelTextColor = propTextColor;
+    if (!bgColor || !labelTextColor) {
+      const colorObj = getLabelColor(row.categoryType, row.userActs);
+      bgColor = colorObj.bg;
+      labelTextColor = colorObj.text;
+    }
   }
 
   // LOG: stampa id, forceEditing, isEditing
   useEffect(() => {
     console.log(`[NodeRow] render row.id=${row.id} forceEditing=${forceEditing} isEditing=${isEditing}`);
   });
+
+  // Uso l'icona centralizzata
+  const Icon = row.categoryType ? SIDEBAR_TYPE_ICONS[row.categoryType] : null;
 
   return (
     <>
@@ -341,34 +356,45 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
           placeholder="Type what you need here..."
         />
       ) : (
-        <span
-          ref={labelRef}
-          className="flex-1 text-[8px] cursor-pointer hover:text-purple-300 transition-colors flex items-center relative"
-          style={{ background: bgColor, color: labelTextColor, borderRadius: 4, paddingLeft: row.categoryType && categoryIcons[row.categoryType] ? 4 : 0, paddingRight: 8, minHeight: '18px', lineHeight: 1.1, marginTop: 0, marginBottom: 0 }}
-          onDoubleClick={handleDoubleClick}
-          title="Double-click to edit, start typing for intellisense"
-        >
-          {/* Icona actType se presente */}
-          {row.categoryType && categoryIcons[row.categoryType] && (
-            <span className="mr-1 flex items-center">{categoryIcons[row.categoryType]}</span>
-          )}
-          {row.text}
-          {/* Overlay icone azione fuori dal nodo, allineate alla label */}
-          {showIcons && iconPos && createPortal(
-            <NodeRowActionsOverlay
-              iconPos={iconPos}
-              showIcons={showIcons}
-              canDelete={canDelete}
-              onEdit={() => setIsEditing(!isEditing)}
-              onDelete={() => onDelete(row)}
-              onDrag={handleMouseDown}
-              isEditing={isEditing}
-              setIsEditing={setIsEditing}
-              labelRef={labelRef}
-            />,
-            document.body
-          )}
-        </span>
+        <div className="relative flex-1">
+          {/* Area sensibile sopra la label */}
+          <div
+            style={{ position: 'absolute', top: -8, left: 0, right: 0, height: 8, zIndex: 2, cursor: 'pointer' }}
+            onMouseEnter={() => { if (typeof onMouseEnter === 'function') onMouseEnter('top', index); }}
+            onMouseLeave={() => onMouseLeave && onMouseLeave()}
+          />
+          {/* Label vera e propria */}
+          <span
+            ref={labelRef}
+            className="block text-[8px] cursor-pointer hover:text-purple-300 transition-colors flex items-center relative"
+            style={{ background: bgColor, color: labelTextColor, borderRadius: 4, paddingLeft: row.categoryType && Icon ? 4 : 0, paddingRight: 8, minHeight: '18px', lineHeight: 1.1, marginTop: 0, marginBottom: 0 }}
+            onDoubleClick={handleDoubleClick}
+            title="Double-click to edit, start typing for intellisense"
+          >
+            {Icon && <Icon style={{ fontSize: '0.9em', marginRight: 4 }} />}
+            {row.text}
+            {showIcons && iconPos && createPortal(
+              <NodeRowActionsOverlay
+                iconPos={iconPos}
+                showIcons={showIcons}
+                canDelete={canDelete}
+                onEdit={() => setIsEditing(!isEditing)}
+                onDelete={() => onDelete(row)}
+                onDrag={handleMouseDown}
+                isEditing={isEditing}
+                setIsEditing={setIsEditing}
+                labelRef={labelRef}
+              />, 
+              document.body
+            )}
+          </span>
+          {/* Area sensibile sotto la label */}
+          <div
+            style={{ position: 'absolute', bottom: -8, left: 0, right: 0, height: 8, zIndex: 2, cursor: 'pointer' }}
+            onMouseEnter={() => { if (typeof onMouseEnter === 'function') onMouseEnter('bottom', index); }}
+            onMouseLeave={() => onMouseLeave && onMouseLeave()}
+          />
+        </div>
       )}
       
       {/* Intellisense Menu in overlay stile EdgeConditionSelector, posizionato sotto il nodo */}

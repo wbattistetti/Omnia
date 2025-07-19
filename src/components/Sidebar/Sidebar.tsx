@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
-import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, Square } from 'lucide-react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, Square, Plus } from 'lucide-react';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { Accordion } from './Accordion';
 import { CategoryItem } from './CategoryItem';
 import { AddButton } from './AddButton';
 import { EntityType } from '../../types/project';
+import { useSidebarTheme } from './SidebarThemeContext';
 
 const entityConfig = {
   agentActs: { 
@@ -38,6 +39,14 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
 }
 
+const MIN_WIDTH = 320; // px (w-80)
+
+// FONT RESIZE SIDEBAR START
+const MIN_FONT_SIZE = 12;
+const MAX_FONT_SIZE = 24;
+const DEFAULT_FONT_SIZE = 16;
+// FONT RESIZE SIDEBAR END
+
 export const Sidebar: React.FC<SidebarProps> = ({ 
   isCollapsed = false, 
   onToggleCollapse 
@@ -54,6 +63,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
   
   const [searchTerm, setSearchTerm] = useState('');
   const [openAccordion, setOpenAccordion] = useState<string>('agentActs');
+  const [sidebarWidth, setSidebarWidth] = useState(MIN_WIDTH);
+  const isResizing = useRef(false);
+  // FONT RESIZE SIDEBAR START
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        setFontSize((prev) => {
+          let next = prev + (e.deltaY < 0 ? 1 : -1);
+          next = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, next));
+          return next;
+        });
+      }
+    };
+    const node = sidebarRef.current;
+    if (node) node.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      if (node) node.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+  // FONT RESIZE SIDEBAR END
+
+  const handleMouseDown = () => {
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return;
+    const newWidth = Math.max(MIN_WIDTH, e.clientX);
+    setSidebarWidth(newWidth);
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    isResizing.current = false;
+    document.body.style.cursor = '';
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
 
   if (loading) {
     return (
@@ -97,7 +154,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   if (isCollapsed) {
     return (
-      <div className="w-12 bg-slate-800 border-r border-slate-700 flex flex-col items-center py-4 transition-all duration-300">
+      <div
+        // FONT RESIZE SIDEBAR START
+        ref={sidebarRef}
+        style={{ fontSize: `${fontSize}px` }}
+        // FONT RESIZE SIDEBAR END
+        className="w-12 bg-slate-800 border-r border-slate-700 flex flex-col items-center py-4 transition-all duration-300">
         <button
           onClick={onToggleCollapse}
           className="p-2 text-slate-400 hover:text-white transition-colors mb-4"
@@ -116,112 +178,138 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   return (
-    <div className="w-80 bg-slate-800 border-r border-slate-700 flex flex-col transition-all duration-300">
+    <div
+      // FONT RESIZE SIDEBAR START
+      ref={sidebarRef}
+      style={{ width: sidebarWidth, minWidth: MIN_WIDTH, fontSize: `${fontSize}px`, color: '#111', background: '#f7f7fa', border: '1px solid #111' }}
+      // FONT RESIZE SIDEBAR END
+      className="flex flex-col transition-all duration-100 relative">
       {/* Header */}
-      <div className="p-4 border-b border-slate-700">
+      <div className="p-4 border-b border-slate-300">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Project Structure</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Project Structure</h2>
           <div className="flex items-center space-x-2">
             <button
-              className="p-1 text-slate-400 hover:text-white transition-colors"
+              className="p-1 text-gray-400 hover:text-gray-700 transition-colors"
               title="Settings"
             >
               <Settings className="w-4 h-4" />
             </button>
             <button
               onClick={onToggleCollapse}
-              className="p-1 text-slate-400 hover:text-white transition-colors"
+              className="p-1 text-gray-400 hover:text-gray-700 transition-colors"
               title="Collapse sidebar"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
           </div>
         </div>
-        {/* Nuova riga icone grandi */}
-        <div className="flex gap-4 justify-center items-center py-3 border-b border-slate-700 bg-slate-800">
+        {/* Nuova riga icone grandi - ora su fondo bianco con bordo nero */}
+        <div className="flex gap-4 justify-center items-center py-3 border-b" style={{ background: '#fff', borderBottom: '1px solid #111' }}>
           <div className="flex flex-col items-center">
-            <div className="rounded-full bg-violet-200 p-3">
+            <div className="rounded-full bg-violet-100 p-3 border border-violet-300">
               <Layers className="w-7 h-7 text-violet-700" />
             </div>
             <span className="text-xs text-violet-700 mt-1">MacroTask</span>
           </div>
           <div className="flex flex-col items-center">
-            <div className="rounded-full bg-blue-200 p-3">
+            <div className="rounded-full bg-blue-100 p-3 border border-blue-300">
               <CheckSquare className="w-7 h-7 text-blue-700" />
             </div>
             <span className="text-xs text-blue-700 mt-1">Task</span>
           </div>
           <div className="flex flex-col items-center">
-            <div className="rounded-full bg-gray-200 p-3">
+            <div className="rounded-full bg-gray-100 p-3 border border-gray-300">
               <Square className="w-7 h-7 text-gray-700" />
             </div>
             <span className="text-xs text-gray-700 mt-1">Nodo</span>
           </div>
         </div>
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+        {/* Search - ora chiara */}
+        <div className="relative mt-2 mb-2">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Search entities..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-purple-500 transition-colors"
+            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500 transition-colors"
           />
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {Object.entries(filteredData)
-          // Mostra solo le entità previste da entityConfig (ignora nodes, edges, ecc)
-          .filter(([entityType]) => entityConfig.hasOwnProperty(entityType))
-          .map(([entityType, categories]: [string, any[]]) => {
-            const config = entityConfig[entityType as EntityType];
-            return (
-              <Accordion
-                key={entityType}
-                title={config.title}
-                icon={config.icon}
-                isOpen={openAccordion === entityType}
-                onToggle={() => setOpenAccordion(openAccordion === entityType ? '' : entityType)}
-              >
-                {categories
-                  // Salta categorie non conformi
-                  .filter((category: any) => category && typeof category.name === 'string' && Array.isArray(category.items))
-                  .map((category: any) => (
-                    <CategoryItem
-                      key={category.id}
-                      category={category}
-                      entityType={entityType as EntityType}
-                      onAddItem={(name: string, description?: string) => 
-                        addItem(entityType as EntityType, category.id, name, description || '')
-                      }
-                      onDeleteCategory={() => 
-                        deleteCategory(entityType as EntityType, category.id)
-                      }
-                      onUpdateCategory={(updates: any) => 
-                        updateCategory(entityType as EntityType, category.id, updates)
-                      }
-                      onDeleteItem={(itemId: string) => 
-                        deleteItem(entityType as EntityType, category.id, itemId)
-                      }
-                      onUpdateItem={(itemId: string, updates: any) => 
-                        updateItem(entityType as EntityType, category.id, itemId, updates)
-                      }
-                    />
-                  ))}
-                <div className="mt-3">
-                  <AddButton
-                    label="Nuova Categoria"
-                    onAdd={(name: string) => addCategory(entityType as EntityType, name)}
-                    placeholder="Enter category name..."
-                  />
-                </div>
-              </Accordion>
-            );
-          })}
+        {(() => {
+          const { colors } = useSidebarTheme();
+          return Object.entries(filteredData)
+            .filter(([entityType]) => entityConfig.hasOwnProperty(entityType))
+            .map(([entityType, categories]: [string, any[]]) => {
+              const config = entityConfig[entityType as EntityType];
+              return (
+                <Accordion
+                  key={entityType}
+                  title={config.title}
+                  icon={config.icon}
+                  isOpen={openAccordion === entityType}
+                  onToggle={() => setOpenAccordion(openAccordion === entityType ? '' : entityType)}
+                  bgColor={colors[entityType]}
+                  action={
+                    <button
+                      className="p-1 text-blue-500 hover:text-blue-700 transition-colors"
+                      title="Aggiungi categoria"
+                      onClick={e => { e.stopPropagation(); addCategory(entityType as EntityType, 'Nuova Categoria'); }}
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  }
+                >
+                  {categories
+                    .filter((category: any) => category && typeof category.name === 'string' && Array.isArray(category.items))
+                    .map((category: any) => (
+                      <CategoryItem
+                        key={category.id}
+                        category={category}
+                        entityType={entityType as EntityType}
+                        onAddItem={(name: string, description?: string) => 
+                          addItem(entityType as EntityType, category.id, name, description || '')
+                        }
+                        onDeleteCategory={() => 
+                          deleteCategory(entityType as EntityType, category.id)
+                        }
+                        onUpdateCategory={(updates: any) => 
+                          updateCategory(entityType as EntityType, category.id, updates)
+                        }
+                        onDeleteItem={(itemId: string) => 
+                          deleteItem(entityType as EntityType, category.id, itemId)
+                        }
+                        onUpdateItem={(itemId: string, updates: any) => 
+                          updateItem(entityType as EntityType, category.id, itemId, updates)
+                        }
+                      />
+                    ))}
+                </Accordion>
+              );
+            });
+        })()}
       </div>
+      {/* Resizer handle */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: 8,
+          height: '100%',
+          cursor: 'col-resize',
+          zIndex: 10,
+          background: 'transparent',
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(100,100,100,0.1)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        title="Trascina per ridimensionare"
+      />
     </div>
   );
 };

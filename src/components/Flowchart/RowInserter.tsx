@@ -25,7 +25,7 @@ export const RowInserter: React.FC<RowInserterProps> = ({ visible, onInsert, onM
           tabIndex={-1}
           onClick={onInsert}
         >
-          <PlusCircle className="w-2.5 h-2.5 text-yellow-500" />
+          <PlusCircle className="w-2.5 h-2.5 text-blue-500" />
         </button>
       )}
     </div>

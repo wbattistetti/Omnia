@@ -7,6 +7,8 @@ interface AccordionProps {
   isOpen: boolean;
   onToggle: () => void;
   icon?: React.ReactNode;
+  bgColor?: { header: string; light: string };
+  action?: React.ReactNode;
 }
 
 export const Accordion: React.FC<AccordionProps> = ({ 
@@ -14,7 +16,9 @@ export const Accordion: React.FC<AccordionProps> = ({
   children, 
   isOpen,
   onToggle,
-  icon 
+  icon,
+  bgColor,
+  action
 }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
@@ -32,21 +36,23 @@ export const Accordion: React.FC<AccordionProps> = ({
   }, [isOpen]);
 
   return (
-    <div className="mb-4">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between p-3 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-left"
-      >
-        <div className="flex items-center">
+    <div className="mb-4" style={isOpen && bgColor ? { background: bgColor.light, borderRadius: 12, padding: 2 } : undefined}>
+      <div className="flex items-center justify-between p-3 rounded-lg transition-colors" style={bgColor ? { background: bgColor.header, color: '#fff', borderRadius: 12, width: '100%' } : undefined}>
+        <button
+          onClick={onToggle}
+          className="flex items-center flex-1 text-left group bg-transparent border-none outline-none"
+          style={{ background: 'none', boxShadow: 'none', padding: 0 }}
+        >
           {icon && <span className="mr-3">{icon}</span>}
-          <span className="font-semibold text-white">{title}</span>
-        </div>
+          <span className="font-semibold group-hover:font-bold" style={bgColor ? { color: '#fff' } : {}}>{title}</span>
+        </button>
+        {action && <span className="ml-2">{action}</span>}
         {isOpen ? (
-          <ChevronDown className="w-5 h-5 text-slate-400" />
+          <ChevronDown className="w-5 h-5 text-slate-400 ml-2" />
         ) : (
-          <ChevronRight className="w-5 h-5 text-slate-400" />
+          <ChevronRight className="w-5 h-5 text-slate-400 ml-2" />
         )}
-      </button>
+      </div>
       
       <div 
         ref={contentRef}

@@ -71,7 +71,7 @@ export const AddButton: React.FC<AddButtonProps> = ({
   return (
     <button
       onClick={() => setIsAdding(true)}
-      className={`flex items-center space-x-2 text-purple-400 hover:text-purple-300 transition-colors text-sm ${className}`}
+      className={`flex items-center space-x-2 text-blue-500 hover:text-blue-700 transition-colors text-sm ${className}`}
     >
       <Plus className="w-4 h-4" />
       <span>{label}</span>

@@ -2,6 +2,7 @@ import React from 'react';
 import { IntellisenseItem as IntellisenseItemType, IntellisenseResult } from './IntellisenseTypes';
 import { highlightMatches } from './IntellisenseSearch';
 import { Circle } from 'lucide-react';
+import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 
 interface IntellisenseItemProps {
   result: IntellisenseResult;
@@ -32,16 +33,14 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       `}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
-      style={{ background: item.bgColor || item.uiColor || undefined }}
+      style={{ background: item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined }}
     >
       {/* Icon */}
       <div className="mr-3 mt-0.5 flex-shrink-0">
-        {(!item.userActs && item.categoryType === 'agentActs') ? (
-          <Circle className="w-4 h-4 text-gray-400" />
+        {item.iconComponent ? (
+          <item.iconComponent className="w-4 h-4" style={{ color: item.color || item.textColor || undefined }} />
         ) : (
-          <span className="text-slate-400">
-            {item.icon}
-          </span>
+          <Circle className="w-4 h-4 text-gray-400" />
         )}
       </div>
       

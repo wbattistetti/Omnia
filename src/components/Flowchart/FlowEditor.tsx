@@ -129,7 +129,26 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     [addEdgeManaged, onDeleteEdge, openMenu],
   );
 
-  const { addNode, deleteNode, updateNode, addNodeAtPosition } = useNodeManager(setNodes, setNodeIdCounter);
+  // Log dettagliato su ogni cambiamento di nodes.length
+  useEffect(() => {
+    if (reactFlowInstance) {
+      const viewport = reactFlowInstance.getViewport ? reactFlowInstance.getViewport() : { x: 0, y: 0, zoom: 1 };
+      const viewportEl = document.querySelector('.react-flow') as HTMLElement;
+      const rect = viewportEl ? viewportEl.getBoundingClientRect() : null;
+      console.log('[DEBUG][FlowEditor][nodes.length]', nodes.length, 'viewport:', viewport, 'rect:', rect, 'nodes:', nodes);
+    }
+  }, [nodes.length, reactFlowInstance]);
+
+  // Log su addNodeAtPosition e deleteNode
+  const { addNode, deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodes, setNodeIdCounter);
+  const addNodeAtPosition = useCallback((node: Node<NodeData>, x: number, y: number) => {
+    console.log('[DEBUG][FlowEditor][addNodeAtPosition] node:', node, 'x:', x, 'y:', y);
+    originalAddNodeAtPosition(node, x, y);
+  }, [originalAddNodeAtPosition]);
+  const deleteNodeWithLog = useCallback((id: string) => {
+    console.log('[DEBUG][FlowEditor][deleteNode] id:', id);
+    deleteNode(id);
+  }, [deleteNode]);
 
   // Patch all edges after mount
   React.useEffect(() => {
@@ -143,13 +162,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         ...node,
         data: {
           ...node.data,
-          onDelete: () => deleteNode(node.id),
+          onDelete: () => deleteNodeWithLog(node.id),
           onUpdate: (updates: any) => updateNode(node.id, updates),
           onPlayNode: onPlayNode ? () => onPlayNode(node.id, node.data.rows) : undefined,
         },
       }))
     );
-  }, [deleteNode, updateNode, setNodes, onPlayNode]);
+  }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode]);
 
   // Aggiorna edges con onUpdate per ogni edge custom
   useEffect(() => {
@@ -191,6 +210,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   const NODE_WIDTH = 280; // px (tailwind w-70)
   const NODE_HEIGHT = 40; // px (min-h-[40px])
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
     setSelectedEdgeId(null); // Reset edge selezionata quando si clicca sul canvas
@@ -201,27 +221,44 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     if (timeDiff < 300) {
       event.preventDefault();
       const newNodeId = nodeIdCounter.toString();
+      let x = 0, y = 0;
+      if (reactFlowInstance) {
+        const viewport = document.querySelector('.react-flow') as HTMLElement;
+        let xScreen = 0, yScreen = 0;
+        if (viewport) {
+          const rect = viewport.getBoundingClientRect();
+          xScreen = rect.left + rect.width / 2;
+          yScreen = rect.top + 100;
+          console.log('[DEBUG][FlowEditor] viewport.getBoundingClientRect():', rect);
+        }
+        console.log('[DEBUG][FlowEditor] event.clientX:', event.clientX, 'event.clientY:', event.clientY);
+        console.log('[DEBUG][FlowEditor] xScreen:', xScreen, 'yScreen:', yScreen);
+        if (reactFlowInstance.getViewport) {
+          const viewportObj = reactFlowInstance.getViewport();
+          console.log('[DEBUG][FlowEditor] reactFlowInstance.getViewport():', viewportObj);
+        }
+        // Usa screenToFlowPosition per convertire coordinate schermo in coordinate flow
+        const pos = reactFlowInstance.screenToFlowPosition({ x: xScreen, y: yScreen });
+        x = pos.x - NODE_WIDTH / 2;
+        y = pos.y;
+        console.log('[DEBUG][FlowEditor] Nodo centrato rispetto alla finestra visibile:', { x, y });
+      }
       const node: Node<NodeData> = {
         id: newNodeId,
         type: 'custom',
-        position: { x: 0, y: 0 }, // verrà sovrascritto
+        position: { x, y },
         data: {
           title: 'Title missing...',
-          rows: [{ id: '1', text: 'New action' }],
-          onDelete: () => deleteNode(newNodeId),
+          rows: [],
+          onDelete: () => deleteNodeWithLog(newNodeId),
           onUpdate: (updates: any) => updateNode(newNodeId, updates),
         },
       };
-      // Centra il nodo rispetto al click
-      const { x, y } = reactFlowInstance.screenToFlowPosition({
-        x: event.clientX - NODE_WIDTH / 2,
-        y: event.clientY - NODE_HEIGHT / 2,
-      });
       addNodeAtPosition(node, x, y);
     }
     
     lastClickTime.current = currentTime;
-  }, [addNodeAtPosition, nodeIdCounter, deleteNode, updateNode, reactFlowInstance]);
+  }, [addNodeAtPosition, nodeIdCounter, deleteNodeWithLog, updateNode, reactFlowInstance, nodes]);
 
   const onConnectStart = useCallback((event: any, { nodeId, handleId }: any) => {
     setSource(nodeId || '', handleId || undefined);
@@ -356,9 +393,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       type: 'custom',
       position,
       data: {
-        title: 'Title missing...', // <-- sempre questo!
-        rows: [{ id: '1', text: 'New action' }],
-        onDelete: () => deleteNode(newNodeId),
+        title: 'Title missing...',
+        rows: [],
+        onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
       },
     };
@@ -388,7 +425,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setNodeIdCounter(prev => prev + 1);
     setSelectedEdgeId(newEdgeId);
     closeMenu();
-  }, [setEdges, nodeIdCounter, onDeleteEdge, updateNode, deleteNode, setNodes, reactFlowInstance, connectionMenuRef, nodes]);
+  }, [setEdges, nodeIdCounter, onDeleteEdge, updateNode, deleteNodeWithLog, setNodes, reactFlowInstance, connectionMenuRef, nodes]);
 
   const handleSelectUnconditioned = useCallback(() => {
     const sourceNodeId = connectionMenuRef.current.sourceNodeId;
@@ -422,8 +459,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       position,
       data: {
         title: 'New Node',
-        rows: [{ id: '1', text: 'New action' }],
-        onDelete: () => deleteNode(newNodeId),
+        rows: [],
+        onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
       },
     };
@@ -455,7 +492,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     });
     setNodeIdCounter(prev => prev + 1);
     closeMenu();
-  }, [nodeIdCounter, onDeleteEdge, updateNode, deleteNode, setNodes, setEdges, reactFlowInstance, connectionMenuRef, nodes]);
+  }, [nodeIdCounter, onDeleteEdge, updateNode, deleteNodeWithLog, setNodes, setEdges, reactFlowInstance, connectionMenuRef, nodes]);
 
   // Handler robusto per chiusura intellisense/condition menu
   const handleConnectionMenuClose = useCallback(() => {
@@ -478,8 +515,17 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setSelectedEdgeId(edge.id);
   }, []);
 
+  // Forza la viewport in alto dopo la creazione progetto/canvas vuoto
+  useEffect(() => {
+    if (reactFlowInstance && nodes.length === 0) {
+      const viewport = reactFlowInstance.getViewport ? reactFlowInstance.getViewport() : { zoom: 1 };
+      reactFlowInstance.setViewport({ x: 0, y: 0, zoom: viewport.zoom || 1 }, { duration: 0 });
+      console.log('[DEBUG][FlowEditor] setViewport to x:0 y:0 zoom:', viewport.zoom);
+    }
+  }, [reactFlowInstance, nodes.length]);
+
   return (
-    <div className="flex-1 h-full relative">
+    <div className="flex-1 h-full relative" ref={canvasRef}>
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
@@ -522,40 +568,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         </svg>
       </ReactFlow>
       
-      {/* Floating Add Button */}
-      <button
-        onClick={() => {
-          const newNodeId = nodeIdCounter.toString();
-          const node: Node<NodeData> = {
-            id: newNodeId,
-            type: 'custom',
-            position: { x: 0, y: 0 },
-            data: {
-              title: 'Title missing...',
-              rows: [{ id: '1', text: 'New action' }],
-              onDelete: () => deleteNode(newNodeId),
-              onUpdate: (updates: any) => updateNode(newNodeId, updates),
-            },
-          };
-          // Centra il nodo rispetto alla posizione random
-          const randomX = Math.random() * 400 + 100;
-          const randomY = Math.random() * 400 + 100;
-          const { x, y } = reactFlowInstance.screenToFlowPosition({
-            x: randomX - NODE_WIDTH / 2,
-            y: randomY - NODE_HEIGHT / 2,
-          });
-          addNodeAtPosition(node, x, y);
-        }}
-        className="absolute top-4 right-4 bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-full shadow-lg transition-colors z-10"
-        title="Add new node (or double-click on canvas)"
-      >
-        <Plus className="w-5 h-5" />
-      </button>
-      
-      {/* Instructions */}
-      <div className="absolute bottom-4 left-4 bg-slate-800 text-white px-3 py-2 rounded-lg text-sm shadow-lg z-10">
-        💡 Double-click sul canvas per creare un nodo centrato
-      </div>
+      {/* Messaggio istruzione in alto a sinistra, solo se canvas vuoto */}
+      {nodes.length === 0 && (
+        <div className="absolute top-4 left-4 bg-slate-800 text-white px-4 py-2 rounded-lg text-base shadow-lg z-10 font-medium">
+          💡 Double-click sul canvas per creare un nodo
+        </div>
+      )}
       
       {connectionMenu.show && (
         <EdgeConditionSelector

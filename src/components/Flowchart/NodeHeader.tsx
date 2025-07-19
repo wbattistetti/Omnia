@@ -163,40 +163,6 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
           </h3>
         )}
       </div>
-      {/* Azioni a destra: SOLO se non in editing */}
-      {!isEditingTitle && (
-        <div
-          className="flex items-center ml-2"
-          style={{ minWidth: 40, height: 20, justifyContent: 'flex-end' }}
-        >
-          {(alwaysShowTrash || isHovered) && (
-            <>
-              <button 
-                onClick={handleTitleEdit} 
-                className="p-1 text-slate-400 hover:text-green-400 transition-colors"
-                title="Modifica titolo"
-              >
-                <Edit3 className={`w-3 h-3 ${isEditing ? 'text-green-400' : ''}`} />
-              </button>
-              <button 
-                onClick={onDelete} 
-                className="p-1 text-red-400 hover:text-red-300 transition-colors"
-                title="Delete node"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-              <button
-                onClick={() => { console.log('[NodeHeader] Play click!'); onPlay && onPlay(); }}
-                className="p-1 text-green-500 hover:text-green-700 transition-colors"
-                title="Simula nodo"
-                style={{ fontSize: '14px', marginLeft: '2px' }}
-              >
-                ▶️
-              </button>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 };

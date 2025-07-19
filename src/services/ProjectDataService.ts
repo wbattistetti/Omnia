@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 import { LABEL_COLORS } from '../components/Flowchart/labelColors';
 import { getLabelColor } from '../utils/labelColor';
+import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
 
 // Import template data
 import agentActsEn from '../../data/templates/utility_gas/agent_acts/en.json';
@@ -215,34 +216,29 @@ export const ProjectDataService = {
  * Prepare intellisense data from project data
  */
 export function prepareIntellisenseData(
-  data: ProjectData, 
-  categoryConfig: Record<string, { title: string; icon: React.ReactNode; color: string }>
+  data: ProjectData
 ): IntellisenseItem[] {
   const intellisenseItems: IntellisenseItem[] = [];
   
   // Process each entity type
   Object.entries(data).forEach(([entityType, _categories]) => {
-    const config = categoryConfig[entityType];
-    if (!config) return;
+    const Icon = SIDEBAR_TYPE_ICONS[entityType as EntityType];
+    const color = SIDEBAR_TYPE_COLORS[entityType as EntityType]?.main;
+    if (!Icon || !color) return;
     const typedEntityType = entityType as EntityType;
     const typedCategories: Category[] = (data as ProjectData)[typedEntityType];
     typedCategories.forEach((category: Category) => {
       category.items.forEach((item: any) => {
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
-          name: item.name, // nome tecnico
-          description: item.discursive || item.description || item.name, // descrizione discorsiva
+          name: item.name,
+          description: item.discursive || item.description || item.name,
           category: category.name,
           categoryType: typedEntityType,
-          icon: config.icon,
-          color: config.color,
+          iconComponent: Icon, // solo riferimento al componente
+          color,
           userActs: item.userActs,
-          uiColor: (() => {
-            const colorObj = getLabelColor(entityType, item.userActs);
-            item.textColor = colorObj.text;
-            item.bgColor = colorObj.bg;
-            return colorObj.bg;
-          })()
+          uiColor: undefined // o la tua logica per il colore di sfondo
         });
       });
     });

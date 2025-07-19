@@ -9,41 +9,7 @@ import {
 import { IntellisenseItem, IntellisenseResult, IntellisenseLayoutConfig } from './IntellisenseTypes';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { prepareIntellisenseData } from '../../services/ProjectDataService';
-import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
-
-// Category configuration matching the sidebar
-const categoryConfig = {
-  agentActs: { 
-    title: 'Agent Acts', 
-    icon: <Bot className="w-4 h-4 text-purple-400" />,
-    color: 'text-purple-600'
-  },
-  userActs: { 
-    title: 'User Acts', 
-    icon: <User className="w-4 h-4 text-green-400" />,
-    color: 'text-green-600'
-  },
-  backendActions: { 
-    title: 'Backend Actions', 
-    icon: <Database className="w-4 h-4 text-blue-400" />,
-    color: 'text-blue-600'
-  },
-  conditions: { 
-    title: 'Conditions', 
-    icon: <GitBranch className="w-4 h-4 text-yellow-400" />,
-    color: 'text-amber-700'
-  },
-  tasks: { 
-    title: 'Tasks', 
-    icon: <CheckSquare className="w-4 h-4 text-orange-400" />,
-    color: 'text-orange-600'
-  },
-  macrotasks: { 
-    title: 'Macrotasks', 
-    icon: <Layers className="w-4 h-4 text-red-400" />,
-    color: 'text-red-600'
-  }
-};
+import { SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
 
 const defaultLayoutConfig: IntellisenseLayoutConfig = {
   maxVisibleItems: 12,
@@ -180,7 +146,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   // Initialize fuzzy search when data is available
   useEffect(() => {
     if (data && !isInitialized) {
-      let intellisenseData = prepareIntellisenseData(data, categoryConfig);
+      let intellisenseData = prepareIntellisenseData(data); // categoryConfig non serve più
       
       // Filter by category types if specified
       if (filterCategoryTypes && filterCategoryTypes.length > 0) {
@@ -373,7 +339,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         semanticResults={semanticResults}
         selectedIndex={selectedIndex}
         layoutConfig={defaultLayoutConfig}
-        categoryConfig={categoryConfig}
         onItemSelect={(result) => onSelect(result.item)}
         onItemHover={(result) => setSelectedIndex(result.index)}
       />

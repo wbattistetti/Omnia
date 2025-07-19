@@ -7,6 +7,8 @@ interface EditableTextProps {
   placeholder?: string;
   className?: string;
   showEditIcon?: boolean;
+  title?: string;
+  style?: React.CSSProperties;
 }
 
 export const EditableText: React.FC<EditableTextProps> = ({ 
@@ -14,7 +16,9 @@ export const EditableText: React.FC<EditableTextProps> = ({
   onSave, 
   placeholder = "Enter text...", 
   className = "",
-  showEditIcon = true 
+  showEditIcon = true,
+  title,
+  style
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(value);
@@ -63,7 +67,9 @@ export const EditableText: React.FC<EditableTextProps> = ({
         onBlur={handleSave}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        className={`bg-slate-600 text-white px-2 py-1 rounded border border-slate-500 focus:outline-none focus:border-purple-500 ${className}`}
+        className={`px-2 py-1 rounded border border-slate-500 focus:outline-none focus:border-purple-500 ${className}`}
+        style={{ background: 'inherit', color: 'inherit', ...style }}
+        autoFocus
       />
     );
   }
@@ -74,8 +80,12 @@ export const EditableText: React.FC<EditableTextProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => setIsEditing(true)}
+      style={style}
     >
-      <span className="text-slate-200 hover:text-white transition-colors">
+      <span
+        className="transition-colors group-hover:font-bold"
+        title={title}
+      >
         {value || placeholder}
       </span>
       {showEditIcon && isHovered && (
