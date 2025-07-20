@@ -1,5 +1,7 @@
 export interface IntellisenseItem {
   id: string;
+  label: string; // testo principale da mostrare
+  shortLabel?: string; // opzionale, versione sintetica
   name: string;
   description: string;
   category: string;

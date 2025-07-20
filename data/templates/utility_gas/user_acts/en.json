@@ -1,542 +1,663 @@
 [
   {
     "id": "UA001",
-    "name": "Provision of first and last name",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Full name",
+    "label": "Provision of first and last name",
+    "description": "Provides first and last name",
     "category": "",
-    "examples": [
-      "My name is Giulia Bianchi."
-    ],
-    "discursive": "Provides first and last name"
+    "categoryDescription": "",
+    "tags": ["data_collection"],
+    "examples": ["My name is Giulia Bianchi."]
   },
   {
     "id": "UA002",
-    "name": "Provision of tax code",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Tax code",
+    "label": "Provision of tax code",
+    "description": "Provides tax code",
     "category": "",
-    "examples": [
-      "My tax code is BNCGLI80A41H501R."
-    ],
-    "discursive": "Provides tax code"
+    "categoryDescription": "",
+    "tags": ["data_collection"],
+    "examples": ["My tax code is BNCGLI80A41H501R."]
   },
   {
     "id": "UA003",
-    "name": "Provision of phone number",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Phone number",
+    "label": "Provision of phone number",
+    "description": "Provides phone number",
     "category": "",
-    "examples": [
-      "You can call me at 329..."
-    ],
-    "discursive": "Provides phone number"
+    "categoryDescription": "",
+    "tags": ["data_collection"],
+    "examples": ["You can call me at 329..."]
   },
   {
     "id": "UA004",
-    "name": "Provision of email",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Email",
+    "label": "Provision of email",
+    "description": "Provides email",
     "category": "",
-    "examples": [
-      "My email is g.bianchi@email.it."
-    ],
-    "discursive": "Provides email"
+    "categoryDescription": "",
+    "tags": ["data_collection"],
+    "examples": ["My email is g.bianchi@email.it."]
   },
   {
     "id": "UA005",
-    "name": "Account holder confirmation",
+    "type": "user_act",
+    "shortLabel": "Account holder confirmation",
+    "label": "Account holder confirmation",
     "description": "Technical Data / Supply",
     "category": "",
-    "examples": [
-      "Yes, the contract is in my name."
-    ],
-    "discursive": "Technical Data / Supply"
+    "categoryDescription": "",
+    "tags": ["technical_data"],
+    "examples": ["Yes, the contract is in my name."]
   },
   {
     "id": "UA006",
-    "name": "Provision of POD/PDR",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "POD/PDR",
+    "label": "Provision of POD/PDR",
+    "description": "Provides pod/pdr",
     "category": "",
-    "examples": [
-      "My POD is IT001E..."
-    ],
-    "discursive": "Provides pod/pdr"
+    "categoryDescription": "",
+    "tags": ["data_collection"],
+    "examples": ["My POD is IT001E..."]
   },
   {
     "id": "UA007",
-    "name": "Provision of supply address",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Supply address",
+    "label": "Provision of supply address",
+    "description": "Provides supply address",
     "category": "",
-    "examples": [
-      "The address is Via Verdi 10."
-    ],
-    "discursive": "Provides supply address"
+    "categoryDescription": "",
+    "tags": ["data_collection"],
+    "examples": ["The address is Via Verdi 10."]
   },
   {
     "id": "UA008",
-    "name": "Indication of meter power",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Meter power",
+    "label": "Indication of meter power",
+    "description": "Indication of meter power",
     "category": "",
-    "examples": [
-      "I have a 3 kW meter."
-    ],
-    "discursive": "Indication of meter power"
+    "categoryDescription": "",
+    "tags": ["data_collection"],
+    "examples": ["I have a 3 kW meter."]
   },
   {
     "id": "UA009",
-    "name": "Presence of solar panels",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Solar panels",
+    "label": "Presence of solar panels",
+    "description": "Presence of solar panels",
     "category": "",
-    "examples": [
-      "Yes, we have photovoltaic panels."
-    ],
-    "discursive": "Presence of solar panels"
+    "categoryDescription": "",
+    "tags": ["data_collection"],
+    "examples": ["Yes, we have photovoltaic panels."]
   },
   {
     "id": "UA010",
-    "name": "Number of household members",
+    "type": "user_act",
+    "shortLabel": "Household members",
+    "label": "Number of household members",
     "description": "Consumption / Habits",
     "category": "",
-    "examples": [
-      "There are four of us at home."
-    ],
-    "discursive": "Consumption / Habits"
+    "categoryDescription": "",
+    "tags": ["consumption"],
+    "examples": ["There are four of us at home."]
   },
   {
     "id": "UA011",
-    "name": "Description of estimated annual consumption",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Annual consumption",
+    "label": "Description of estimated annual consumption",
+    "description": "Description of estimated annual consumption",
     "category": "",
-    "examples": [
-      "I use about 2700 kWh per year."
-    ],
-    "discursive": "Description of estimated annual consumption"
+    "categoryDescription": "",
+    "tags": ["consumption"],
+    "examples": ["I use about 2700 kWh per year."]
   },
   {
     "id": "UA012",
-    "name": "Consumption time slots",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Consumption slots",
+    "label": "Consumption time slots",
+    "description": "Consumption time slots",
     "category": "",
-    "examples": [
-      "I use more electricity in the evening."
-    ],
-    "discursive": "Consumption time slots"
+    "categoryDescription": "",
+    "tags": ["consumption"],
+    "examples": ["I use more electricity in the evening."]
   },
   {
     "id": "UA013",
-    "name": "Use of electricity for heating",
+    "type": "user_act",
+    "shortLabel": "Electric heating",
+    "label": "Use of electricity for heating",
     "description": "Decision / Offer Acceptance",
     "category": "",
-    "examples": [
-      "I use electric heaters in winter."
-    ],
-    "discursive": "Decision / Offer Acceptance"
+    "categoryDescription": "",
+    "tags": ["decision"],
+    "examples": ["I use electric heaters in winter."]
   },
   {
     "id": "UA014",
-    "name": "Offer acceptance",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Offer acceptance",
+    "label": "Offer acceptance",
+    "description": "Offer acceptance",
     "category": "",
-    "examples": [
-      "All right, let's proceed."
-    ],
-    "discursive": "Offer acceptance"
+    "categoryDescription": "",
+    "tags": ["decision"],
+    "examples": ["All right, let's proceed."]
   },
   {
     "id": "UA015",
-    "name": "Offer refusal",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Offer refusal",
+    "label": "Offer refusal",
+    "description": "Offer refusal",
     "category": "",
-    "examples": [
-      "No, I'm not interested."
-    ],
-    "discursive": "Offer refusal"
+    "categoryDescription": "",
+    "tags": ["decision"],
+    "examples": ["No, I'm not interested."]
   },
   {
     "id": "UA016",
-    "name": "Request for time to decide",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Time to decide",
+    "label": "Request for time to decide",
+    "description": "Request for time to decide",
     "category": "",
-    "examples": [
-      "I need to think about it."
-    ],
-    "discursive": "Request for time to decide"
+    "categoryDescription": "",
+    "tags": ["decision"],
+    "examples": ["I need to think about it."]
   },
   {
     "id": "UA017",
-    "name": "Request for alternative proposal",
+    "type": "user_act",
+    "shortLabel": "Alternative proposal",
+    "label": "Request for alternative proposal",
     "description": "Consent / Compliance",
     "category": "",
-    "examples": [
-      "Do you have other offers?"
-    ],
-    "discursive": "Consent / Compliance"
+    "categoryDescription": "",
+    "tags": ["consent"],
+    "examples": ["Do you have other offers?"]
   },
   {
     "id": "UA018",
-    "name": "Privacy consent",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Privacy consent",
+    "label": "Privacy consent",
+    "description": "Privacy consent",
     "category": "",
-    "examples": [
-      "Yes, I accept the data processing."
-    ],
-    "discursive": "Privacy consent"
+    "categoryDescription": "",
+    "tags": ["consent"],
+    "examples": ["Yes, I accept the data processing."]
   },
   {
     "id": "UA019",
-    "name": "Voice recording consent",
+    "type": "user_act",
+    "shortLabel": "Recording consent",
+    "label": "Voice recording consent",
     "description": "Requests / Information",
     "category": "",
-    "examples": [
-      "I consent to the recording."
-    ],
-    "discursive": "Requests / Information"
+    "categoryDescription": "",
+    "tags": ["consent"],
+    "examples": ["I consent to the recording."]
   },
   {
     "id": "UA020",
-    "name": "Request for offer clarification",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Offer clarification",
+    "label": "Request for offer clarification",
+    "description": "Request for offer clarification",
     "category": "",
-    "examples": [
-      "What does the offer include?"
-    ],
-    "discursive": "Request for offer clarification"
+    "categoryDescription": "",
+    "tags": ["clarification"],
+    "examples": ["What does the offer include?"]
   },
   {
     "id": "UA021",
-    "name": "Question about contract duration",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Contract duration",
+    "label": "Question about contract duration",
+    "description": "Question about contract duration",
     "category": "",
-    "examples": [
-      "How long does the offer last?"
-    ],
-    "discursive": "Question about contract duration"
+    "categoryDescription": "",
+    "tags": ["clarification"],
+    "examples": ["How long does the offer last?"]
   },
   {
     "id": "UA022",
-    "name": "Question about hidden costs",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Hidden costs",
+    "label": "Question about hidden costs",
+    "description": "Question about hidden costs",
     "category": "",
-    "examples": [
-      "Are there any extra charges?"
-    ],
-    "discursive": "Question about hidden costs"
+    "categoryDescription": "",
+    "tags": ["clarification"],
+    "examples": ["Are there any extra charges?"]
   },
   {
     "id": "UA023",
-    "name": "Request to send documentation",
+    "type": "user_act",
+    "shortLabel": "Send documentation",
+    "label": "Request to send documentation",
     "description": "Objections / Issues",
     "category": "",
-    "examples": [
-      "Can you send me the contract by email?"
-    ],
-    "discursive": "Objections / Issues"
+    "categoryDescription": "",
+    "tags": ["objection"],
+    "examples": ["Can you send me the contract by email?"]
   },
   {
     "id": "UA024",
-    "name": "Price objection",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Price objection",
+    "label": "Price objection",
+    "description": "Price objection",
     "category": "",
-    "examples": [
-      "It seems too expensive to me."
-    ],
-    "discursive": "Price objection"
+    "categoryDescription": "",
+    "tags": ["objection"],
+    "examples": ["It seems too expensive to me."]
   },
   {
     "id": "UA025",
-    "name": "Objection about payment",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Payment objection",
+    "label": "Objection about payment",
+    "description": "Objection about payment",
     "category": "",
-    "examples": [
-      "I don't want direct debit."
-    ],
-    "discursive": "Objection about payment"
+    "categoryDescription": "",
+    "tags": ["objection"],
+    "examples": ["I don't want direct debit."]
   },
   {
     "id": "UA026",
-    "name": "Report of arrears or previous issues",
+    "type": "user_act",
+    "shortLabel": "Report arrears",
+    "label": "Report of arrears or previous issues",
     "description": "Closing / Follow-Up",
     "category": "",
-    "examples": [
-      "I've had problems with the bill."
-    ],
-    "discursive": "Closing / Follow-Up"
+    "categoryDescription": "",
+    "tags": ["issue"],
+    "examples": ["I've had problems with the bill."]
   },
   {
     "id": "UA027",
-    "name": "Request for recontact",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Request recontact",
+    "label": "Request for recontact",
+    "description": "Request for recontact",
     "category": "",
-    "examples": [
-      "Can you call me back tomorrow?"
-    ],
-    "discursive": "Request for recontact"
+    "categoryDescription": "",
+    "tags": ["request"],
+    "examples": ["Can you call me back tomorrow?"]
   },
   {
     "id": "UA028",
-    "name": "Refusal of callback",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Refusal callback",
+    "label": "Refusal of callback",
+    "description": "Refusal of callback",
     "category": "",
-    "examples": [
-      "I'd rather not be contacted again."
-    ],
-    "discursive": "Refusal of callback"
+    "categoryDescription": "",
+    "tags": ["refusal"],
+    "examples": ["I'd rather not be contacted again."]
   },
   {
     "id": "UA029",
-    "name": "Thanks",
-    "description": "",
+    "type": "user_act",
+    "shortLabel": "Thanks",
+    "label": "Thanks",
+    "description": "Thanks",
     "category": "",
-    "examples": [
-      "Thank you for the information."
-    ],
-    "discursive": "Thanks"
+    "categoryDescription": "",
+    "tags": ["gratitude"],
+    "examples": ["Thank you for the information."]
   },
   {
     "id": "UA030",
-    "name": "Final greeting",
+    "type": "user_act",
+    "shortLabel": "Final greeting",
+    "label": "Final greeting",
     "description": "Emotional / Attitudinal Reactions",
     "category": "",
-    "examples": [
-      "Goodbye."
-    ],
-    "discursive": "Emotional / Attitudinal Reactions"
+    "categoryDescription": "",
+    "tags": ["greeting"],
+    "examples": ["Goodbye."]
   },
   {
     "id": "UA031",
-    "name": "Expression of dissatisfaction",
+    "type": "user_act",
+    "shortLabel": "Dissatisfaction",
+    "label": "Expression of dissatisfaction",
     "description": "\"I'm already tired of these calls.\"",
     "category": "",
-    "examples": [],
-    "discursive": "\"I'm already tired of these calls.\""
+    "categoryDescription": "",
+    "tags": ["emotion"],
+    "examples": []
   },
   {
     "id": "UA032",
-    "name": "Expression of surprise or uncertainty",
+    "type": "user_act",
+    "shortLabel": "Surprise/uncertainty",
+    "label": "Expression of surprise or uncertainty",
     "description": "\"Really? I didn't think it was so easy to change supplier.\"",
     "category": "",
-    "examples": [],
-    "discursive": "\"Really? I didn't think it was so easy to change supplier.\""
+    "categoryDescription": "",
+    "tags": ["emotion"],
+    "examples": []
   },
   {
     "id": "UA033",
-    "name": "Expression of enthusiasm",
+    "type": "user_act",
+    "shortLabel": "Enthusiasm",
+    "label": "Expression of enthusiasm",
     "description": "\"Great, it really seems interesting!\"",
     "category": "",
-    "examples": [],
-    "discursive": "\"Great, it really seems interesting!\""
+    "categoryDescription": "",
+    "tags": ["emotion"],
+    "examples": []
   },
   {
     "id": "UA034",
-    "name": "Ironic / provocative tone",
+    "type": "user_act",
+    "shortLabel": "Ironic tone",
+    "label": "Ironic / provocative tone",
     "description": "\"So you're giving me electricity for free, right?\"",
     "category": "📂 Control / Disintermediation Behaviors",
-    "examples": [],
-    "discursive": "\"So you're giving me electricity for free, right?\""
+    "categoryDescription": "",
+    "tags": ["irony"],
+    "examples": []
   },
   {
     "id": "UA035",
-    "name": "Request for self-activation link",
+    "type": "user_act",
+    "shortLabel": "Self-activation link",
+    "label": "Request for self-activation link",
     "description": "\"Can you send me a link and I'll do it myself?\"",
     "category": "📂 Control / Disintermediation Behaviors",
-    "examples": [],
-    "discursive": "\"Can you send me a link and I'll do it myself?\""
+    "categoryDescription": "",
+    "tags": ["self_service"],
+    "examples": []
   },
   {
     "id": "UA036",
-    "name": "Preference for self-service / app",
+    "type": "user_act",
+    "shortLabel": "Self-service/app",
+    "label": "Preference for self-service / app",
     "description": "\"If I can do everything from the app, that's better.\"",
     "category": "📂 Proactive Checks",
-    "examples": [],
-    "discursive": "\"If I can do everything from the app, that's better.\""
+    "categoryDescription": "",
+    "tags": ["self_service"],
+    "examples": []
   },
   {
     "id": "UA037",
-    "name": "Check on offer validity",
+    "type": "user_act",
+    "shortLabel": "Offer validity check",
+    "label": "Check on offer validity",
     "description": "\"Is it also written on the website, this offer?\"",
     "category": "📂 Proactive Checks",
-    "examples": [],
-    "discursive": "\"Is it also written on the website, this offer?\""
+    "categoryDescription": "",
+    "tags": ["check"],
+    "examples": []
   },
   {
     "id": "UA038",
-    "name": "Check operator reliability",
+    "type": "user_act",
+    "shortLabel": "Operator reliability",
+    "label": "Check operator reliability",
     "description": "\"Can you tell me your code and where you work?\"",
     "category": "📂 Expression of latent or implicit needs",
-    "examples": [],
-    "discursive": "\"Can you tell me your code and where you work?\""
+    "categoryDescription": "",
+    "tags": ["check"],
+    "examples": []
   },
   {
     "id": "UA039",
-    "name": "Indirect question about savings",
+    "type": "user_act",
+    "shortLabel": "Savings question",
+    "label": "Indirect question about savings",
     "description": "\"But in the end, do I really save something or not?\"",
     "category": "📂 Expression of latent or implicit needs",
-    "examples": [],
-    "discursive": "\"But in the end, do I really save something or not?\""
+    "categoryDescription": "",
+    "tags": ["clarification"],
+    "examples": []
   },
   {
     "id": "UA040",
-    "name": "Question about real duration of the procedure",
+    "type": "user_act",
+    "shortLabel": "Procedure duration",
+    "label": "Question about real duration of the procedure",
     "description": "\"How long does it take to change supplier?\"",
     "category": "📂 Logistical / situational information",
-    "examples": [],
-    "discursive": "\"How long does it take to change supplier?\""
+    "categoryDescription": "",
+    "tags": ["clarification"],
+    "examples": []
   },
   {
     "id": "UA041",
-    "name": "Reporting inconvenient moment",
+    "type": "user_act",
+    "shortLabel": "Inconvenient moment",
+    "label": "Reporting inconvenient moment",
     "description": "\"I can't talk right now, call me back.\"",
     "category": "📂 Logistical / situational information",
-    "examples": [],
-    "discursive": "\"I can't talk right now, call me back.\""
+    "categoryDescription": "",
+    "tags": ["logistics"],
+    "examples": []
   },
   {
     "id": "UA042",
-    "name": "Declaration of not being the account holder",
+    "type": "user_act",
+    "shortLabel": "Not account holder",
+    "label": "Declaration of not being the account holder",
     "description": "\"I'm not the account holder, it's my husband.\"",
     "category": "📂 Logistical / situational information",
-    "examples": [],
-    "discursive": "\"I'm not the account holder, it's my husband.\""
+    "categoryDescription": "",
+    "tags": ["logistics"],
+    "examples": []
   },
   {
     "id": "UA043",
-    "name": "Communication of imminent house move",
+    "type": "user_act",
+    "shortLabel": "Imminent move",
+    "label": "Communication of imminent house move",
     "description": "\"I'm about to move, does it make sense to activate now?\"",
     "category": "📂 Post-activation interactions",
-    "examples": [],
-    "discursive": "\"I'm about to move, does it make sense to activate now?\""
+    "categoryDescription": "",
+    "tags": ["logistics"],
+    "examples": []
   },
   {
     "id": "UA044",
-    "name": "Question about first bill",
+    "type": "user_act",
+    "shortLabel": "First bill",
+    "label": "Question about first bill",
     "description": "\"When will I receive the first invoice?\"",
     "category": "📂 Post-activation interactions",
-    "examples": [],
-    "discursive": "\"When will I receive the first invoice?\""
+    "categoryDescription": "",
+    "tags": ["clarification"],
+    "examples": []
   },
   {
     "id": "UA045",
-    "name": "Request for access to customer area",
+    "type": "user_act",
+    "shortLabel": "Customer area access",
+    "label": "Request for access to customer area",
     "description": "Defensive / disengaged behaviors",
     "category": "📂 Post-activation interactions",
-    "examples": [],
-    "discursive": "Defensive / disengaged behaviors"
+    "categoryDescription": "",
+    "tags": ["request"],
+    "examples": []
   },
   {
     "id": "UA046",
-    "name": "Refusal to provide data",
+    "type": "user_act",
+    "shortLabel": "Refusal to provide data",
+    "label": "Refusal to provide data",
     "description": "\"I don't want to give my tax code.\"",
     "category": "📂 Post-activation interactions",
-    "examples": [],
-    "discursive": "\"I don't want to give my tax code.\""
+    "categoryDescription": "",
+    "tags": ["refusal"],
+    "examples": []
   },
   {
     "id": "UA047",
-    "name": "Refusal to listen to the offer",
+    "type": "user_act",
+    "shortLabel": "Refusal to listen",
+    "label": "Refusal to listen to the offer",
     "description": "\"I'm not interested, I'm in a hurry.\"",
     "category": "📂 Post-activation interactions",
-    "examples": [],
-    "discursive": "\"I'm not interested, I'm in a hurry.\""
+    "categoryDescription": "",
+    "tags": ["refusal"],
+    "examples": []
   },
   {
     "id": "UA048",
-    "name": "Immediate closing",
+    "type": "user_act",
+    "shortLabel": "Immediate closing",
+    "label": "Immediate closing",
     "description": "\"No thanks, goodbye.\"",
     "category": "📂 Ambiguous / interlocutory interactions",
-    "examples": [],
-    "discursive": "\"No thanks, goodbye.\""
+    "categoryDescription": "",
+    "tags": ["closure"],
+    "examples": []
   },
   {
     "id": "UA049",
-    "name": "Vague / evasive answer",
+    "type": "user_act",
+    "shortLabel": "Vague answer",
+    "label": "Vague / evasive answer",
     "description": "\"Yes... well... I don't know...\"",
     "category": "📂 Ambiguous / interlocutory interactions",
-    "examples": [],
-    "discursive": "\"Yes... well... I don't know...\""
+    "categoryDescription": "",
+    "tags": ["uncertainty"],
+    "examples": []
   },
   {
     "id": "UA050",
-    "name": "Request for repetition",
+    "type": "user_act",
+    "shortLabel": "Request repetition",
+    "label": "Request for repetition",
     "description": "\"Can you repeat the amount?\"",
     "category": "📂 Ambiguous / interlocutory interactions",
-    "examples": [],
-    "discursive": "\"Can you repeat the amount?\""
+    "categoryDescription": "",
+    "tags": ["request"],
+    "examples": []
   },
   {
     "id": "UA051",
-    "name": "Expression of doubt / suspicion",
+    "type": "user_act",
+    "shortLabel": "Doubt/suspicion",
+    "label": "Expression of doubt / suspicion",
     "description": "\"Are you sure this is a real company?\"",
     "category": "📂 Expert or informed customers",
-    "examples": [],
-    "discursive": "\"Are you sure this is a real company?\""
+    "categoryDescription": "",
+    "tags": ["doubt"],
+    "examples": []
   },
   {
     "id": "UA052",
-    "name": "Comparison with competitor offers",
+    "type": "user_act",
+    "shortLabel": "Competitor comparison",
+    "label": "Comparison with competitor offers",
     "description": "\"Enel charges me less per kWh.\"",
     "category": "📂 Expert or informed customers",
-    "examples": [],
-    "discursive": "\"Enel charges me less per kWh.\""
+    "categoryDescription": "",
+    "tags": ["comparison"],
+    "examples": []
   },
   {
     "id": "UA053",
-    "name": "Quoting regulations / conditions",
+    "type": "user_act",
+    "shortLabel": "Quote regulations",
+    "label": "Quoting regulations / conditions",
     "description": "\"I have the right to withdraw within 14 days, right?\"",
     "category": "📂 Expert or informed customers",
-    "examples": [],
-    "discursive": "\"I have the right to withdraw within 14 days, right?\""
+    "categoryDescription": "",
+    "tags": ["regulation"],
+    "examples": []
   },
   {
     "id": "UA054",
-    "name": "Question about specific contract clauses",
+    "type": "user_act",
+    "shortLabel": "Contract clauses",
+    "label": "Question about specific contract clauses",
     "description": "\"Is there a penalty if I close before 12 months?\"",
     "category": "📂 Language / Understanding",
-    "examples": [],
-    "discursive": "\"Is there a penalty if I close before 12 months?\""
+    "categoryDescription": "",
+    "tags": ["clarification"],
+    "examples": []
   },
   {
     "id": "UA055",
-    "name": "Request to speak in another language",
+    "type": "user_act",
+    "shortLabel": "Other language",
+    "label": "Request to speak in another language",
     "description": "\"Do you speak English?\"",
     "category": "📂 Language / Understanding",
-    "examples": [],
-    "discursive": "\"Do you speak English?\""
+    "categoryDescription": "",
+    "tags": ["language"],
+    "examples": []
   },
   {
     "id": "UA056",
-    "name": "Expression of difficulty understanding",
+    "type": "user_act",
+    "shortLabel": "Difficulty understanding",
+    "label": "Expression of difficulty understanding",
     "description": "\"You speak too fast, I don't understand.\"",
     "category": "📂 Historical data or past relationship",
-    "examples": [],
-    "discursive": "\"You speak too fast, I don't understand.\""
+    "categoryDescription": "",
+    "tags": ["understanding"],
+    "examples": []
   },
   {
     "id": "UA057",
-    "name": "Reference to previous contact",
+    "type": "user_act",
+    "shortLabel": "Previous contact",
+    "label": "Reference to previous contact",
     "description": "\"You already called me last week.\"",
     "category": "📂 Historical data or past relationship",
-    "examples": [],
-    "discursive": "\"You already called me last week.\""
+    "categoryDescription": "",
+    "tags": ["history"],
+    "examples": []
   },
   {
     "id": "UA058",
-    "name": "Reporting recent supplier change",
+    "type": "user_act",
+    "shortLabel": "Recent supplier change",
+    "label": "Reporting recent supplier change",
     "description": "\"I've already changed supplier recently.\"",
     "category": "📂 Specific administrative / fiscal aspects",
-    "examples": [],
-    "discursive": "\"I've already changed supplier recently.\""
+    "categoryDescription": "",
+    "tags": ["history"],
+    "examples": []
   },
   {
     "id": "UA059",
-    "name": "Request for paper / electronic invoice",
+    "type": "user_act",
+    "shortLabel": "Invoice preference",
+    "label": "Request for paper / electronic invoice",
     "description": "\"Can I receive the bill only in paper form?\"",
     "category": "📂 Specific administrative / fiscal aspects",
-    "examples": [],
-    "discursive": "\"Can I receive the bill only in paper form?\""
+    "categoryDescription": "",
+    "tags": ["billing"],
+    "examples": []
   },
   {
     "id": "UA060",
-    "name": "Communication of IBAN / account change",
+    "type": "user_act",
+    "shortLabel": "IBAN/account change",
+    "label": "Communication of IBAN / account change",
     "description": "Associate modifiers or secondary signals (e.g. hesitation, sarcasm, urgency).",
     "category": "📂 Specific administrative / fiscal aspects",
-    "examples": [],
-    "discursive": "Associate modifiers or secondary signals (e.g. hesitation, sarcasm, urgency)."
+    "categoryDescription": "",
+    "tags": ["banking"],
+    "examples": []
   }
 ]
+  

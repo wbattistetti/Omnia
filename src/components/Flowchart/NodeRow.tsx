@@ -12,6 +12,7 @@ import { useOverlayBuffer } from '../../hooks/useOverlayBuffer';
 import { NodeRowEditor } from './NodeRowEditor';
 import { NodeRowData } from '../../types/project';
 import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
+import { NodeRowLabel } from './NodeRowLabel';
 
 /**
  * Props per NodeRow
@@ -62,32 +63,36 @@ export interface NodeRowProps {
   onEditingEnd?: () => void;
 }
 
-export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({ 
-  row,
-  nodeTitle,
-  nodeCanvasPosition,
-  onUpdate, 
-  onUpdateWithCategory,
-  onDelete, 
-  onKeyDown,
-  onDragStart,
-  index,
-  canDelete,
-  totalRows,
-  isHoveredTarget = false,
-  isBeingDragged = false,
-  isPlaceholder = false,
-  style,
-  forceEditing = false,
-  onMouseEnter,
-  onMouseLeave,
-  onMouseMove,
-  bgColor: propBgColor,
-  textColor: propTextColor,
-  onEditingEnd
-}, ref) => {
+export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
+  {
+    row,
+    nodeTitle,
+    nodeCanvasPosition,
+    onUpdate,
+    onUpdateWithCategory,
+    onDelete,
+    onKeyDown,
+    onDragStart,
+    index,
+    canDelete,
+    totalRows,
+    isHoveredTarget = false,
+    isBeingDragged = false,
+    isPlaceholder = false,
+    style,
+    forceEditing = false,
+    onMouseEnter,
+    onMouseLeave,
+    onMouseMove,
+    bgColor: propBgColor,
+    textColor: propTextColor,
+    onEditingEnd
+  },
+  ref
+) => {
   const [isEditing, setIsEditing] = useState(forceEditing);
   const [currentText, setCurrentText] = useState(row.text);
+  const [included, setIncluded] = useState(row.included !== false); // default true
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisenseQuery, setIntellisenseQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -301,7 +306,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
     if (typeof propBgColor === 'string') bgColor = propBgColor;
     if (typeof propTextColor === 'string') labelTextColor = propTextColor;
     if (!bgColor || !labelTextColor) {
-      const colorObj = getLabelColor(row.categoryType, row.userActs);
+      const colorObj = getLabelColor(row.categoryType || '', row.userActs);
       bgColor = colorObj.bg;
       labelTextColor = colorObj.text;
     }
@@ -332,7 +337,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
           }}
           onMouseEnter={() => setShowIcons(true)}
           onMouseLeave={() => setShowIcons(false)}
-        />,
+        />, 
         document.body
       )}
       <div 
@@ -340,62 +345,45 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
         className={`node-row-outer flex items-center group transition-colors ${
           isHoveredTarget ? 'ring-2 ring-red-400 ring-inset' : ''
         } ${conditionalClasses}`}
-        style={{ ...conditionalStyles, background: 'transparent', border: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}
+        style={{ ...conditionalStyles, background: included ? 'transparent' : '#f3f4f6', border: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}
         onMouseEnter={() => setShowIcons(true)}
         onMouseLeave={() => setShowIcons(false)}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
-      {/* Drag handle rimossa dal lato sinistro, ora solo in overlay */}
-      
-      {isEditing ? (
-        <NodeRowEditor
-          value={currentText}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDownInternal}
-          inputRef={inputRef}
-          placeholder="Type what you need here..."
-        />
-      ) : (
-        <div className="relative flex-1">
-          {/* Area sensibile sopra la label */}
-          <div
-            style={{ position: 'absolute', top: -8, left: 0, right: 0, height: 8, zIndex: 2, cursor: 'pointer' }}
-            onMouseEnter={() => { if (typeof onMouseEnter === 'function') onMouseEnter('top', index); }}
-            onMouseLeave={() => onMouseLeave && onMouseLeave()}
+        {isEditing ? (
+          <NodeRowEditor
+            value={currentText}
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDownInternal}
+            inputRef={inputRef}
+            placeholder="Type what you need here..."
           />
-          {/* Label vera e propria */}
-          <span
-            ref={labelRef}
-            className="block text-[8px] cursor-pointer hover:text-purple-300 transition-colors flex items-center relative"
-            style={{ background: bgColor, color: labelTextColor, borderRadius: 4, paddingLeft: row.categoryType && Icon ? 4 : 0, paddingRight: 8, minHeight: '18px', lineHeight: 1.1, marginTop: 0, marginBottom: 0 }}
+        ) : (
+          <NodeRowLabel
+            row={row}
+            included={included}
+            setIncluded={val => {
+              setIncluded(val);
+              if (typeof onUpdate === 'function') {
+                onUpdate({ ...row, included: val }, row.text);
+              }
+            }}
+            labelRef={labelRef}
+            Icon={Icon}
+            showIcons={showIcons}
+            iconPos={iconPos}
+            canDelete={canDelete}
+            onEdit={() => setIsEditing(!isEditing)}
+            onDelete={() => onDelete(row)}
+            onDrag={handleMouseDown}
+            isEditing={isEditing}
+            setIsEditing={setIsEditing}
+            bgColor={bgColor}
+            labelTextColor={labelTextColor}
             onDoubleClick={handleDoubleClick}
-            title="Double-click to edit, start typing for intellisense"
-          >
-            {Icon && <Icon style={{ fontSize: '0.9em', marginRight: 4 }} />}
-            {row.text}
-            {showIcons && iconPos && createPortal(
-              <NodeRowActionsOverlay
-                iconPos={iconPos}
-                showIcons={showIcons}
-                canDelete={canDelete}
-                onEdit={() => setIsEditing(!isEditing)}
-                onDelete={() => onDelete(row)}
-                onDrag={handleMouseDown}
-                isEditing={isEditing}
-                setIsEditing={setIsEditing}
-                labelRef={labelRef}
-              />, 
-              document.body
-            )}
-          </span>
-          {/* Area sensibile sotto la label */}
-          <div
-            style={{ position: 'absolute', bottom: -8, left: 0, right: 0, height: 8, zIndex: 2, cursor: 'pointer' }}
-            onMouseEnter={() => { if (typeof onMouseEnter === 'function') onMouseEnter('bottom', index); }}
-            onMouseLeave={() => onMouseLeave && onMouseLeave()}
           />
-        </div>
-      )}
+        )}
+      </div>
       
       {/* Intellisense Menu in overlay stile EdgeConditionSelector, posizionato sotto il nodo */}
       {showIntellisense && isEditing && nodeOverlayPosition && createPortal(
@@ -427,7 +415,6 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>(({
         </div>,
         document.body
       )}
-    </div>
     </>
   );
 });

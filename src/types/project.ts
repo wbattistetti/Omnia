@@ -54,4 +54,5 @@ export interface NodeRowData {
   isNew?: boolean;
   bgColor?: string;
   textColor?: string;
+  included?: boolean; // true se la row è inclusa nel flusso
 }

@@ -1,253 +1,1088 @@
 [
   {
     "id": "AA001",
-    "description": "",
-    "categoryDry": "Presentation",
-    "examples": [
-      "Good morning, this is Marco."
-    ],
-    "category": "Agent handles: presentation",
-    "discursive": "Agent says their name",
-    "name": "Agent says their name"
+    "type": "agent_act",
+    "label": "Agent says their name",
+    "description": "Agent introduces themselves with name",
+    "category": "Presentation",
+    "categoryDescription": "Agent handles: presentation",
+    "tags": ["presentation"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Good morning, this is Marco.",
+      "formal": ""
+    }
   },
   {
     "id": "AA002",
-    "description": "",
-    "categoryDry": "Identification",
-    "examples": [
-      "My code is 12345."
-    ],
-    "category": "Agent handles: identification",
-    "discursive": "Agent states their operator code",
-    "name": "Agent states their operator code"
+    "type": "agent_act",
+    "label": "Agent asks for user's name",
+    "description": "Agent requests the user's name in a polite way",
+    "category": "Presentation",
+    "categoryDescription": "Agent handles: presentation",
+    "tags": ["presentation"],
+    "data": {
+      "type": "Fullname",
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "May I have your name, please?",
+      "formal": ""
+    }
   },
   {
     "id": "AA003",
-    "description": "",
-    "categoryDry": "Identification",
-    "examples": [
-      "I'm calling you from the Milan service center."
-    ],
-    "category": "Agent handles: identification",
-    "discursive": "Agent states their location",
-    "name": "Agent states their location"
+    "type": "agent_act",
+    "label": "Agent confirms user's name",
+    "description": "Agent repeats the user's name for confirmation",
+    "category": "Confirmation",
+    "categoryDescription": "Agent handles: confirmation",
+    "tags": ["confirmation"],
+    "data": {
+      "type": "Fullname",
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "So, your name is Marco, correct?",
+      "formal": ""
+    }
   },
   {
     "id": "AA004",
-    "description": "",
-    "categoryDry": "Call Purpose",
-    "examples": [
-      "I'm calling you to verify your contract."
-    ],
-    "category": "Agent handles: call purpose",
-    "discursive": "Agent explains reason for the call",
-    "name": "Agent explains reason for the call"
+    "type": "agent_act",
+    "label": "Agent says goodbye",
+    "description": "Agent ends the conversation politely",
+    "category": "Closure",
+    "categoryDescription": "Agent handles: closure",
+    "tags": ["closure"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Goodbye and have a nice day!",
+      "formal": ""
+    }
   },
   {
     "id": "AA005",
-    "description": "",
-    "categoryDry": "Identity Verification",
-    "examples": [
-      "Am I speaking with Mr. Giovanni?"
-    ],
-    "category": "Agent verifies user's identity",
-    "discursive": "Agent verifies customer's identity",
-    "name": "Agent verifies customer's identity"
+    "type": "agent_act",
+    "label": "Agent asks for user's date of birth",
+    "description": "Agent requests the user's date of birth",
+    "category": "Data Collection",
+    "categoryDescription": "Agent handles: data collection",
+    "tags": ["data collection"],
+    "data": {
+      "type": "DateOfBirth",
+      "constraints": ["past"]
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "Can you tell me your date of birth?",
+      "formal": ""
+    }
   },
   {
     "id": "AA006",
-    "description": "",
-    "categoryDry": "Identity Verification",
-    "examples": [
-      "Could you tell me your full name?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks for customer's full name",
+    "description": "Agent asks for customer's full name",
     "category": "Agent verifies user's identity",
-    "discursive": "Agent asks for customer's full name",
-    "name": "Agent asks for customer's full name",
-    "userActs": ["UA001"]
+    "categoryDescription": "Agent verifies user's identity",
+    "tags": ["identity verification"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "Could you tell me your full name?",
+      "formal": ""
+    }
   },
   {
     "id": "AA007",
-    "description": "",
-    "categoryDry": "Identity Verification",
-    "examples": [
-      "Can you provide your tax code?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks for tax identification number",
+    "description": "Agent asks for tax identification number",
     "category": "Agent verifies user's identity",
-    "discursive": "Agent asks for tax identification number",
-    "name": "Agent asks for tax identification number",
-    "userActs": ["UA002"]
+    "categoryDescription": "Agent verifies user's identity",
+    "tags": ["identity verification"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "Can you provide your tax code?",
+      "formal": ""
+    }
   },
   {
     "id": "AA008",
-    "description": "",
-    "categoryDry": "Contact Information",
-    "examples": [
-      "What number can we reach you on?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks for phone number",
+    "description": "Agent asks for phone number",
     "category": "Agent handles: contact information",
-    "discursive": "Agent asks for phone number",
-    "name": "Agent asks for phone number",
-    "userActs": ["UA003"]
+    "categoryDescription": "Agent handles: contact information",
+    "tags": ["contact information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "What number can we reach you on?",
+      "formal": ""
+    }
   },
   {
     "id": "AA009",
-    "description": "",
-    "categoryDry": "Contact Information",
-    "examples": [
-      "Do you have an email address you can give us?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks for email address",
+    "description": "Agent asks for email address",
     "category": "Agent collects user's contact information",
-    "discursive": "Agent asks for email address",
-    "name": "Agent asks for email address",
-    "userActs": ["UA004"]
+    "categoryDescription": "Agent collects user's contact information",
+    "tags": ["contact information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "Do you have an email address you can give us?",
+      "formal": ""
+    }
   },
   {
     "id": "AA010",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Where is your supply active?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks for service address",
+    "description": "Agent asks for service address",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent asks for service address",
-    "name": "Agent asks for service address",
-    "userActs": ["UA007"]
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "Where is your supply active?",
+      "formal": ""
+    }
   },
   {
     "id": "AA011",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Can you give me your POD or PDR code?"
-    ],
+    "type": "agent_act",
+    "label": "Agent requests POD/PDR code",
+    "description": "Agent requests POD/PDR code",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent requests POD/PDR code",
-    "name": "Agent requests POD/PDR code",
-    "userActs": ["UA006"]
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "Can you give me your POD or PDR code?",
+      "formal": ""
+    }
   },
   {
     "id": "AA012",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Approximately how many kWh do you consume per year?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks about estimated annual consumption",
+    "description": "Agent asks about estimated annual consumption",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent asks about estimated annual consumption",
-    "name": "Agent asks about estimated annual consumption",
-    "userActs": ["UA0011"]
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "Approximately how many kWh do you consume per year?",
+      "formal": ""
+    }
   },
   {
     "id": "AA013",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "What is the power of your meter, if you know?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks for meter power",
+    "description": "Agent asks for meter power",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent asks for meter power",
-    "name": "Agent asks for meter power",
-    "userActs": ["UA008"]
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "What is the power of your meter, if you know?",
+      "formal": ""
+    }
   },
   {
     "id": "AA014",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "Do you have solar panels installed?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks about solar panel installation",
+    "description": "Agent asks about solar panel installation",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent asks about solar panel installation",
-    "name": "Agent asks about solar panel installation",
-    "userActs": ["UA009"]
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": true,
+    "prompts": {
+      "informal": "Do you have solar panels installed?",
+      "formal": ""
+    }
   },
   {
     "id": "AA015",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "How many people live in the house?"
-    ],
+    "type": "agent_act",
+    "label": "Agent asks number of household residents",
+    "description": "Agent asks number of household residents",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent asks number of household residents",
-    "name": "Agent asks number of household residents"
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "How many people live in the house?",
+      "formal": ""
+    }
   },
   {
     "id": "AA016",
-    "description": "",
-    "categoryDry": "Offer Explanation",
-    "examples": [
-      "The offer is called 'EnergiaSicura' and is single-rate."
-    ],
+    "type": "agent_act",
+    "label": "Agent explains offer name and type",
+    "description": "Agent explains offer name and type",
     "category": "Agent explains the offer or contract details",
-    "discursive": "Agent explains offer name and type",
-    "name": "Agent explains offer name and type"
+    "categoryDescription": "Agent explains the offer or contract details",
+    "tags": ["offer explanation"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "The offer is called 'EnergiaSicura' and is single-rate.",
+      "formal": ""
+    }
   },
   {
     "id": "AA017",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "It has a fixed cost of €6 per month."
-    ],
+    "type": "agent_act",
+    "label": "Agent explains fixed monthly costs",
+    "description": "Agent explains fixed monthly costs",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent explains fixed monthly costs",
-    "name": "Agent explains fixed monthly costs"
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "It has a fixed cost of €6 per month.",
+      "formal": ""
+    }
   },
   {
     "id": "AA018",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "The price per kWh is €0.12."
-    ],
+    "type": "agent_act",
+    "label": "Agent explains variable usage costs",
+    "description": "Agent explains variable usage costs",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent explains variable usage costs",
-    "name": "Agent explains variable usage costs"
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "The price per kWh is €0.12.",
+      "formal": ""
+    }
   },
   {
     "id": "AA019",
-    "description": "",
-    "categoryDry": "Offer Explanation",
-    "examples": [
-      "The price is locked in for 12 months."
-    ],
+    "type": "agent_act",
+    "label": "Agent explains contract duration",
+    "description": "Agent explains contract duration",
     "category": "Agent explains the offer or contract details",
-    "discursive": "Agent explains contract duration",
-    "name": "Agent explains contract duration"
+    "categoryDescription": "Agent explains the offer or contract details",
+    "tags": ["offer explanation"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "The price is locked in for 12 months.",
+      "formal": ""
+    }
   },
   {
     "id": "AA020",
-    "description": "",
-    "categoryDry": "General Information",
-    "examples": [
-      "It includes a welcome bonus of €30 on your bill."
-    ],
+    "type": "agent_act",
+    "label": "Agent explains bonuses and incentives",
+    "description": "Agent explains bonuses and incentives",
     "category": "Agent provides general or miscellaneous information",
-    "discursive": "Agent explains bonuses and incentives",
-    "name": "Agent explains bonuses and incentives"
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "It includes a welcome bonus of €30 on your bill.",
+      "formal": ""
+    }
   },
   {
     "id": "AA021",
-    "description": "",
-    "categoryDry": "Offer Explanation",
-    "examples": [
-      "Payment is made via direct debit."
-    ],
+    "type": "agent_act",
+    "label": "Agent explains payment method",
+    "description": "Agent explains payment method",
     "category": "Agent explains the offer or contract details",
-    "discursive": "Agent explains payment method",
-    "name": "Agent explains payment method"
+    "categoryDescription": "Agent explains the offer or contract details",
+    "tags": ["offer explanation"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Payment is made via direct debit.",
+      "formal": ""
+    }
   },
   {
     "id": "AA022",
-    "description": "",
-    "categoryDry": "Activation and Timeline",
-    "examples": [
-      "Activation takes place within 45 days."
-    ],
+    "type": "agent_act",
+    "label": "Agent explains activation timeline",
+    "description": "Agent explains activation timeline",
     "category": "Agent handles: activation and timeline",
-    "discursive": "Agent explains activation timeline",
-    "name": "Agent explains activation timeline"
+    "categoryDescription": "Agent handles: activation and timeline",
+    "tags": ["activation and timeline"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Activation takes place within 45 days.",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA023",
+    "type": "agent_act",
+    "label": "Agent asks if customer understood",
+    "description": "Agent asks if customer understood",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Is everything clear so far?",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA024",
+    "type": "agent_act",
+    "label": "Agent asks for confirmation to proceed",
+    "description": "Agent asks for confirmation to proceed",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Can we go ahead with the activation?",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA025",
+    "type": "agent_act",
+    "label": "Agent requests privacy consent",
+    "description": "Agent requests privacy consent",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Do you consent to the processing of your data as per the privacy notice?",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA026",
+    "type": "agent_act",
+    "label": "Agent requests consent for call recording",
+    "description": "Agent requests consent for call recording",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Do you consent to this call being recorded?",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA027",
+    "type": "agent_act",
+    "label": "Agent clarifies customer's doubt",
+    "description": "Agent clarifies customer's doubt",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Certainly, I can better explain the duration.",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA028",
+    "type": "agent_act",
+    "label": "Agent handles customer's refusal",
+    "description": "Agent handles customer's refusal",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "I understand, may I offer you an alternative?",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA029",
+    "type": "agent_act",
+    "label": "Agent manages customer's indecision",
+    "description": "Agent manages customer's indecision",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Would you like some time to think it over?",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA030",
+    "type": "agent_act",
+    "label": "Agent proposes a callback",
+    "description": "Agent proposes a callback",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Would you like to be called back at another time?",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA031",
+    "type": "agent_act",
+    "label": "Agent closes the call",
+    "description": "Agent closes the call",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Thank you for choosing our service.",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA032",
+    "type": "agent_act",
+    "label": "Agent closes the call",
+    "description": "Agent closes the call",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "All right, thank you anyway for your time.",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA033",
+    "type": "agent_act",
+    "label": "Agent thanks the customer",
+    "description": "Agent thanks the customer",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "Thank you for your availability, have a great day.",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA034",
+    "type": "agent_act",
+    "label": "Agent verifies POD/PDR accuracy",
+    "description": "Agent verifies POD/PDR accuracy",
+    "category": "Agent handles: data validation",
+    "categoryDescription": "Agent handles: data validation",
+    "tags": ["data validation"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "\"The POD code ends in 91, is that correct?\"",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA035",
+    "type": "agent_act",
+    "label": "Agent confirms data from system",
+    "description": "Agent confirms data from system",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "\"It appears to be registered to Maria Rossi, can you confirm?\"",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA036",
+    "type": "agent_act",
+    "label": "Agent confirms payment method",
+    "description": "Agent confirms payment method",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "\"Would you like to use the IBAN you provided previously?\"",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA037",
+    "type": "agent_act",
+    "label": "Agent informs about waiting time",
+    "description": "Agent informs about waiting time",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "\"One moment while I retrieve the data from the system.\"",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA038",
+    "type": "agent_act",
+    "label": "Agent confirms system operation",
+    "description": "Agent confirms system operation",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "\"Perfect, the procedure was successful.\"",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA039",
+    "type": "agent_act",
+    "label": "Agent escalates to another operator",
+    "description": "Agent escalates to another operator",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": {
+      "type": null,
+      "constraints": []
+    },
+    "isInteractive": false,
+    "prompts": {
+      "informal": "\"I’m transferring you to a colleague who can better handle your case.\"",
+      "formal": ""
+    }
+  },
+  {
+    "id": "AA040",
+    "type": "agent_act",
+    "label": "Agent offers alternative communication channel",
+    "description": "Agent offers alternative communication channel",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Would you prefer to also receive the information via email?\"", "formal": "" }
+  },
+  {
+    "id": "AA041",
+    "type": "agent_act",
+    "label": "Agent asks for preferred payment method",
+    "description": "Agent asks for preferred payment method",
+    "category": "Agent asks for user's preferences",
+    "categoryDescription": "Agent asks for user's preferences",
+    "tags": ["preferences"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Do you prefer a postal slip or direct debit?\"", "formal": "" }
+  },
+  {
+    "id": "AA042",
+    "type": "agent_act",
+    "label": "Agent asks for preferred communication channel",
+    "description": "Agent asks for preferred communication channel",
+    "category": "Agent asks for user's preferences",
+    "categoryDescription": "Agent asks for user's preferences",
+    "tags": ["preferences"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Is it better to contact you by phone or email?\"", "formal": "" }
+  },
+  {
+    "id": "AA043",
+    "type": "agent_act",
+    "label": "Agent offers additional service",
+    "description": "Agent offers additional service",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Are you also interested in our WiFi package?\"", "formal": "" }
+  },
+  {
+    "id": "AA044",
+    "type": "agent_act",
+    "label": "Explain  extra service benefits",
+    "description": "Explain  extra service benefits",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"With the boiler package, maintenance is included.\"", "formal": "" }
+  },
+  {
+    "id": "AA045",
+    "type": "agent_act",
+    "label": "Agent offers to send contract copy",
+    "description": "Agent offers to send contract copy",
+    "category": "Agent handles: post-sales information",
+    "categoryDescription": "Agent handles: post-sales information",
+    "tags": ["post-sales information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Would you like me to send the contract PDF to your email?\"", "formal": "" }
+  },
+  {
+    "id": "AA046",
+    "type": "agent_act",
+    "label": "Agent requests service quality feedback",
+    "description": "Agent requests service quality feedback",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Just a minute to evaluate the quality of the call.\"", "formal": "" }
+  },
+  {
+    "id": "AA047",
+    "type": "agent_act",
+    "label": "Agent informs about technical issue",
+    "description": "Agent informs about technical issue",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"The system is currently unresponsive, please bear with me.\"", "formal": "" }
+  },
+  {
+    "id": "AA048",
+    "type": "agent_act",
+    "label": "Agent informs about technical issue",
+    "description": "Agent informs about technical issue",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Can I call you back in 10 minutes, as soon as the system is back?\"", "formal": "" }
+  },
+  {
+    "id": "AA049",
+    "type": "agent_act",
+    "label": "Agent checks for overdue payments",
+    "description": "Agent checks for overdue payments",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"There’s an overdue bill: shall we check it together?\"", "formal": "" }
+  },
+  {
+    "id": "AA050",
+    "type": "agent_act",
+    "label": "Explain  arrears consequences",
+    "description": "Explain  arrears consequences",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"The contract cannot be activated until the debt is settled.\"", "formal": "" }
+  },
+  {
+    "id": "AA051",
+    "type": "agent_act",
+    "label": "Agent requests details of contract co-holder",
+    "description": "Agent requests details of contract co-holder",
+    "category": "Agent collects information about contract holders",
+    "categoryDescription": "Agent collects information about contract holders",
+    "tags": ["holder information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"We also need the name of the second holder.\"", "formal": "" }
+  },
+  {
+    "id": "AA052",
+    "type": "agent_act",
+    "label": "Agent requests previous holder info",
+    "description": "Agent requests previous holder info",
+    "category": "Agent collects information about contract holders",
+    "categoryDescription": "Agent collects information about contract holders",
+    "tags": ["holder information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Can you tell me the name of the previous holder?\"", "formal": "" }
+  },
+  {
+    "id": "AA053",
+    "type": "agent_act",
+    "label": "Explain  the difference between reactivation and transfer",
+    "description": "Explain  the difference between reactivation and transfer",
+    "category": "Agent collects fiscal or administrative data",
+    "categoryDescription": "Agent collects fiscal or administrative data",
+    "tags": ["fiscal information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Reactivation is when the meter is closed, transfer is when it's still active.\"", "formal": "" }
+  },
+  {
+    "id": "AA054",
+    "type": "agent_act",
+    "label": "Explain  simile protection / free market",
+    "description": "Explain  simile protection / free market",
+    "category": "Agent explains market or regulatory context",
+    "categoryDescription": "Agent explains market or regulatory context",
+    "tags": ["regulatory context"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"The offer falls under the SIMILE protection service, it's non-binding.\"", "formal": "" }
+  },
+  {
+    "id": "AA055",
+    "type": "agent_act",
+    "label": "Explain  withdrawal rights",
+    "description": "Explain  withdrawal rights",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"You have 14 days to withdraw at no cost, as per regulation.\"", "formal": "" }
+  },
+  {
+    "id": "AA056",
+    "type": "agent_act",
+    "label": "Agent calls back missed contact",
+    "description": "Agent calls back missed contact",
+    "category": "Agent collects user's contact information",
+    "categoryDescription": "Agent collects user's contact information",
+    "tags": ["contact information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"I'm contacting you following your request from last week.\"", "formal": "" }
+  },
+  {
+    "id": "AA057",
+    "type": "agent_act",
+    "label": "Agent follows up on previous offer",
+    "description": "Agent follows up on previous offer",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"I wanted to check if you had a chance to review the offer we sent you.\"", "formal": "" }
+  },
+  {
+    "id": "AA058",
+    "type": "agent_act",
+    "label": "Agent asks customer for recommendation",
+    "description": "Agent asks customer for recommendation",
+    "category": "Agent invites customer to refer the service",
+    "categoryDescription": "Agent invites customer to refer the service",
+    "tags": ["referral"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"If you’re satisfied, feel free to recommend us to a friend or family member.\"", "formal": "" }
+  },
+  {
+    "id": "AA059",
+    "type": "agent_act",
+    "label": "Agent invites to customer portal",
+    "description": "Agent invites to customer portal",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"I suggest registering to the customer area to monitor your usage.\"", "formal": "" }
+  },
+  {
+    "id": "AA060",
+    "type": "agent_act",
+    "label": "Agent follows up on previous offer",
+    "description": "Agent follows up on previous offer",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"If you need help after activation, you can reach us at the toll-free number.\"", "formal": "" }
+  },
+  {
+    "id": "AA061",
+    "type": "agent_act",
+    "label": "Agent informs about first bill timeline",
+    "description": "Agent informs about first bill timeline",
+    "category": "Agent provides billing or invoice details",
+    "categoryDescription": "Agent provides billing or invoice details",
+    "tags": ["billing information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Your first bill will arrive within 45 days of activation.\"", "formal": "" }
+  },
+  {
+    "id": "AA062",
+    "type": "agent_act",
+    "label": "Explain  monitoring consumption benefits",
+    "description": "Explain  monitoring consumption benefits",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Monitoring your usage helps you optimize your spending.\"", "formal": "" }
+  },
+  {
+    "id": "AA063",
+    "type": "agent_act",
+    "label": "Agent educates on self-reading",
+    "description": "Agent educates on self-reading",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"You can read your meter and send us the reading every month.\"", "formal": "" }
+  },
+  {
+    "id": "AA064",
+    "type": "agent_act",
+    "label": "Agent mentions energy from renewable sources",
+    "description": "Agent mentions energy from renewable sources",
+    "category": "Agent promotes sustainability or green options",
+    "categoryDescription": "Agent promotes sustainability or green options",
+    "tags": ["sustainability information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"The supplied energy comes from certified renewable sources.\"", "formal": "" }
+  },
+  {
+    "id": "AA065",
+    "type": "agent_act",
+    "label": "Agent promotes sustainable choices",
+    "description": "Agent promotes sustainable choices",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Choosing a green offer contributes to the ecological transition.\"", "formal": "" }
+  },
+  {
+    "id": "AA066",
+    "type": "agent_act",
+    "label": "Agent logs a complaint or request",
+    "description": "Agent logs a complaint or request",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"I’ll log the issue and forward it to the appropriate department.\"", "formal": "" }
+  },
+  {
+    "id": "AA067",
+    "type": "agent_act",
+    "label": "Agent provides tracking number",
+    "description": "Agent provides tracking number",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Your report number is 38492.\"", "formal": "" }
+  },
+  {
+    "id": "AA068",
+    "type": "agent_act",
+    "label": "Agent requests VAT number",
+    "description": "Agent requests VAT number",
+    "category": "Agent collects fiscal or administrative data",
+    "categoryDescription": "Agent collects fiscal or administrative data",
+    "tags": ["fiscal information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Do you have a VAT number to associate with the contract?\"", "formal": "" }
+  },
+  {
+    "id": "AA069",
+    "type": "agent_act",
+    "label": "Explain  residential/non-residential customer difference",
+    "description": "Explain  residential/non-residential customer difference",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Different conditions apply to non-residential customers.\"", "formal": "" }
+  },
+  {
+    "id": "AA070",
+    "type": "agent_act",
+    "label": "Agent announces active promotion",
+    "description": "Agent announces active promotion",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"We currently have a promotion with free activation.\"", "formal": "" }
+  },
+  {
+    "id": "AA071",
+    "type": "agent_act",
+    "label": "Agent presents current campaign",
+    "description": "Agent presents current campaign",
+    "category": "Agent provides general or miscellaneous information",
+    "categoryDescription": "Agent provides general or miscellaneous information",
+    "tags": ["general information"],
+    "data": { "type": null, "constraints": [] },
+    "isInteractive": false,
+    "prompts": { "informal": "\"Would you like to join the campaign active until the end of the month?\"", "formal": "" }
   }
 ]

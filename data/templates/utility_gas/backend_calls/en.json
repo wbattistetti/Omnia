@@ -1,474 +1,1082 @@
 [
   {
-    "id": "verify_account_holder",
-    "name": "verify_account_holder",
+    "id": "BD0001",
+    "type": "backend_service",
+    "shortLabel": "Account holder check",
+    "label": "Verify account holder",
     "description": "Confirms that the provided name matches the one associated with the POD/PDR.",
     "category": "Data Verification and CRM",
-    "examples": [],
-    "discursive": "Checks account holder"
+    "categoryDescription": "Data Verification and CRM",
+    "tags": ["data_verification_and_crm"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/verify_account_holder",
+      "method": "POST",
+      "description": "Confirms that the provided name matches the one associated with the POD/PDR."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "verify_tax_code",
-    "name": "verify_tax_code",
+    "id": "BD0002",
+    "type": "backend_service",
+    "shortLabel": "Tax code check",
+    "label": "Verify tax code",
     "description": "Checks the validity of the tax code (CF) against the database.",
     "category": "Data Verification and CRM",
-    "examples": [],
-    "discursive": "Checks tax code"
+    "categoryDescription": "Data Verification and CRM",
+    "tags": ["data_verification_and_crm"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/verify_tax_code",
+      "method": "POST",
+      "description": "Checks the validity of the tax code (CF) against the database."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "verify_existing_email_phone",
-    "name": "verify_existing_email_phone",
+    "id": "BD0003",
+    "type": "backend_service",
+    "shortLabel": "Email/phone check",
+    "label": "Verify existing email and phone",
     "description": "Compares contact details with those already present in the CRM.",
     "category": "Data Verification and CRM",
-    "examples": [],
-    "discursive": "Checks email and phone"
+    "categoryDescription": "Data Verification and CRM",
+    "tags": ["data_verification_and_crm"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/verify_existing_email_phone",
+      "method": "POST",
+      "description": "Compares contact details with those already present in the CRM."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_outstanding_debt",
-    "name": "check_outstanding_debt",
+    "id": "BD0004",
+    "type": "backend_service",
+    "shortLabel": "Outstanding debt",
+    "label": "Check outstanding debt",
     "description": "Checks if the customer has any outstanding debts.",
     "category": "Data Verification and CRM",
-    "examples": [],
-    "discursive": "Checks if the customer has any outstanding debts."
+    "categoryDescription": "Data Verification and CRM",
+    "tags": ["data_verification_and_crm"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_outstanding_debt",
+      "method": "POST",
+      "description": "Checks if the customer has any outstanding debts."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "authenticate_pod_pdr",
-    "name": "authenticate_pod_pdr",
+    "id": "BD0005",
+    "type": "backend_service",
+    "shortLabel": "POD/PDR authentication",
+    "label": "Authenticate POD/PDR",
     "description": "Checks that the identification code is active and correct.",
     "category": "POD/PDR Management and User Registry",
-    "examples": [],
-    "discursive": "Checks that the identification code is active and correct."
+    "categoryDescription": "POD/PDR Management and User Registry",
+    "tags": ["pod_pdr_management_and_user_registry"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/authenticate_pod_pdr",
+      "method": "POST",
+      "description": "Checks that the identification code is active and correct."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "retrieve_user_data",
-    "name": "retrieve_user_data",
+    "id": "BD0006",
+    "type": "backend_service",
+    "shortLabel": "User data",
+    "label": "Retrieve user data",
     "description": "Obtains technical details from POD/PDR (power, usage, supplier).",
     "category": "POD/PDR Management and User Registry",
-    "examples": [],
-    "discursive": "Obtains technical details from POD/PDR (power, usage, supplier)."
+    "categoryDescription": "POD/PDR Management and User Registry",
+    "tags": ["pod_pdr_management_and_user_registry"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/retrieve_user_data",
+      "method": "POST",
+      "description": "Obtains technical details from POD/PDR (power, usage, supplier)."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_domestic_usage",
-    "name": "check_domestic_usage",
+    "id": "BD0007",
+    "type": "backend_service",
+    "shortLabel": "Domestic usage",
+    "label": "Check domestic usage",
     "description": "Determines if the supply is domestic or business.",
     "category": "POD/PDR Management and User Registry",
-    "examples": [],
-    "discursive": "Determines if the supply is domestic or business."
+    "categoryDescription": "POD/PDR Management and User Registry",
+    "tags": ["pod_pdr_management_and_user_registry"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_domestic_usage",
+      "method": "POST",
+      "description": "Determines if the supply is domestic or business."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "retrieve_available_offers",
-    "name": "retrieve_available_offers",
+    "id": "BD0008",
+    "type": "backend_service",
+    "shortLabel": "Available offers",
+    "label": "Retrieve available offers",
     "description": "Loads from the price list the offers compatible with the customer.",
     "category": "Offers and Profiling",
-    "examples": [],
-    "discursive": "Loads from the price list the offers compatible with the customer."
+    "categoryDescription": "Offers and Profiling",
+    "tags": ["offers_and_profiling"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/retrieve_available_offers",
+      "method": "POST",
+      "description": "Loads from the price list the offers compatible with the customer."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "calculate_applicable_bonus",
-    "name": "calculate_applicable_bonus",
+    "id": "BD0009",
+    "type": "backend_service",
+    "shortLabel": "Applicable bonus",
+    "label": "Calculate applicable bonus",
     "description": "Determines any discounts or incentives for the profile.",
     "category": "Offers and Profiling",
-    "examples": [],
-    "discursive": "Determines any discounts or incentives for the profile."
+    "categoryDescription": "Offers and Profiling",
+    "tags": ["offers_and_profiling"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/calculate_applicable_bonus",
+      "method": "POST",
+      "description": "Determines any discounts or incentives for the profile."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_bonus_compatibility",
-    "name": "check_bonus_compatibility",
+    "id": "BD0010",
+    "type": "backend_service",
+    "shortLabel": "Bonus compatibility",
+    "label": "Check bonus compatibility",
     "description": "Compares the selected offer with the bonus requirements.",
     "category": "Offers and Profiling",
-    "examples": [],
-    "discursive": "Compares the selected offer with the bonus requirements."
+    "categoryDescription": "Offers and Profiling",
+    "tags": ["offers_and_profiling"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_bonus_compatibility",
+      "method": "POST",
+      "description": "Compares the selected offer with the bonus requirements."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "simulate_expected_savings",
-    "name": "simulate_expected_savings",
+    "id": "BD0011",
+    "type": "backend_service",
+    "shortLabel": "Expected savings",
+    "label": "Simulate expected savings",
     "description": "Calculates the difference between the new offer and the current contract.",
     "category": "Offers and Profiling",
-    "examples": [],
-    "discursive": "Calculates the difference between the new offer and the current contract."
+    "categoryDescription": "Offers and Profiling",
+    "tags": ["offers_and_profiling"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/simulate_expected_savings",
+      "method": "POST",
+      "description": "Calculates the difference between the new offer and the current contract."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "create_activation_case",
-    "name": "create_activation_case",
+    "id": "BD0012",
+    "type": "backend_service",
+    "shortLabel": "Activation case",
+    "label": "Create activation case",
     "description": "Generates a new case in the management system.",
     "category": "Contract Activation",
-    "examples": [],
-    "discursive": "Generates a new case in the management system."
+    "categoryDescription": "Contract Activation",
+    "tags": ["contract_activation"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/create_activation_case",
+      "method": "POST",
+      "description": "Generates a new case in the management system."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "send_contract_pdf",
-    "name": "send_contract_pdf",
+    "id": "BD0013",
+    "type": "backend_service",
+    "shortLabel": "Send contract PDF",
+    "label": "Send contract PDF",
     "description": "Sends the official document to the customer via email/SMS.",
     "category": "Contract Activation",
-    "examples": [],
-    "discursive": "Sends the official document to the customer via email/SMS."
+    "categoryDescription": "Contract Activation",
+    "tags": ["contract_activation"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/send_contract_pdf",
+      "method": "POST",
+      "description": "Sends the official document to the customer via email/SMS."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "flag_contract_active",
-    "name": "flag_contract_active",
+    "id": "BD0014",
+    "type": "backend_service",
+    "shortLabel": "Flag contract active",
+    "label": "Flag contract active",
     "description": "Marks the activation as confirmed in the backend.",
     "category": "Contract Activation",
-    "examples": [],
-    "discursive": "Marks the activation as confirmed in the backend."
+    "categoryDescription": "Contract Activation",
+    "tags": ["contract_activation"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/flag_contract_active",
+      "method": "POST",
+      "description": "Marks the activation as confirmed in the backend."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "register_voice_consent",
-    "name": "register_voice_consent",
+    "id": "BD0015",
+    "type": "backend_service",
+    "shortLabel": "Register voice consent",
+    "label": "Register voice consent",
     "description": "Saves the audio file with formal consent.",
     "category": "Contract Activation",
-    "examples": [],
-    "discursive": "Saves the audio file with formal consent."
+    "categoryDescription": "Contract Activation",
+    "tags": ["contract_activation"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/register_voice_consent",
+      "method": "POST",
+      "description": "Saves the audio file with formal consent."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "set_payment_method",
-    "name": "set_payment_method",
+    "id": "BD0016",
+    "type": "backend_service",
+    "shortLabel": "Set payment method",
+    "label": "Set payment method",
     "description": "Defines direct debit or payment slip for the supply.",
     "category": "Payments and Billing",
-    "examples": [],
-    "discursive": "Defines direct debit or payment slip for the supply."
+    "categoryDescription": "Payments and Billing",
+    "tags": ["payments_and_billing"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/set_payment_method",
+      "method": "POST",
+      "description": "Defines direct debit or payment slip for the supply."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_payment_method_compatibility",
-    "name": "check_payment_method_compatibility",
+    "id": "BD0017",
+    "type": "backend_service",
+    "shortLabel": "Payment method compatibility",
+    "label": "Check payment method compatibility",
     "description": "Checks if the IBAN is valid/registered to the account holder.",
     "category": "Payments and Billing",
-    "examples": [],
-    "discursive": "Checks if the IBAN is valid/registered to the account holder."
+    "categoryDescription": "Payments and Billing",
+    "tags": ["payments_and_billing"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_payment_method_compatibility",
+      "method": "POST",
+      "description": "Checks if the IBAN is valid/registered to the account holder."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_digital_bill",
-    "name": "check_digital_bill",
+    "id": "BD0018",
+    "type": "backend_service",
+    "shortLabel": "Digital bill",
+    "label": "Check digital bill",
     "description": "Indicates if electronic billing is active.",
     "category": "Payments and Billing",
-    "examples": [],
-    "discursive": "Indicates if electronic billing is active."
+    "categoryDescription": "Payments and Billing",
+    "tags": ["payments_and_billing"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_digital_bill",
+      "method": "POST",
+      "description": "Indicates if electronic billing is active."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "retrieve_activation_status",
-    "name": "retrieve_activation_status",
+    "id": "BD0019",
+    "type": "backend_service",
+    "shortLabel": "Activation status",
+    "label": "Retrieve activation status",
     "description": "Shows the progress of the case.",
     "category": "After-sales / Contract Status",
-    "examples": [],
-    "discursive": "Shows the progress of the case."
+    "categoryDescription": "After-sales / Contract Status",
+    "tags": ["after_sales_contract_status"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/retrieve_activation_status",
+      "method": "POST",
+      "description": "Shows the progress of the case."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "retrieve_first_expected_invoice",
-    "name": "retrieve_first_expected_invoice",
+    "id": "BD0020",
+    "type": "backend_service",
+    "shortLabel": "First expected invoice",
+    "label": "Retrieve first expected invoice",
     "description": "Estimates the timing of the first bill.",
     "category": "After-sales / Contract Status",
-    "examples": [],
-    "discursive": "Estimates the timing of the first bill."
+    "categoryDescription": "After-sales / Contract Status",
+    "tags": ["after_sales_contract_status"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/retrieve_first_expected_invoice",
+      "method": "POST",
+      "description": "Estimates the timing of the first bill."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "retrieve_client_area_access_data",
-    "name": "retrieve_client_area_access_data",
+    "id": "BD0021",
+    "type": "backend_service",
+    "shortLabel": "Client area access",
+    "label": "Retrieve client area access data",
     "description": "Returns link or initial credentials.",
     "category": "After-sales / Contract Status",
-    "examples": [],
-    "discursive": "Returns link or initial credentials."
+    "categoryDescription": "After-sales / Contract Status",
+    "tags": ["after_sales_contract_status"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/retrieve_client_area_access_data",
+      "method": "POST",
+      "description": "Returns link or initial credentials."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "initialize_transfer",
-    "name": "initialize_transfer",
+    "id": "BD0022",
+    "type": "backend_service",
+    "shortLabel": "Transfer initialization",
+    "label": "Initialize transfer",
     "description": "Opens a transfer procedure on the existing contract.",
     "category": "Specific Contract Management",
-    "examples": [],
-    "discursive": "Opens a transfer procedure on the existing contract."
+    "categoryDescription": "Specific Contract Management",
+    "tags": ["specific_contract_management"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/initialize_transfer",
+      "method": "POST",
+      "description": "Opens a transfer procedure on the existing contract."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "initialize_takeover",
-    "name": "initialize_takeover",
+    "id": "BD0023",
+    "type": "backend_service",
+    "shortLabel": "Takeover initialization",
+    "label": "Initialize takeover",
     "description": "Starts a takeover on a deactivated meter.",
     "category": "Specific Contract Management",
-    "examples": [],
-    "discursive": "Starts a takeover on a deactivated meter."
+    "categoryDescription": "Specific Contract Management",
+    "tags": ["specific_contract_management"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/initialize_takeover",
+      "method": "POST",
+      "description": "Starts a takeover on a deactivated meter."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "change_meter_power",
-    "name": "change_meter_power",
+    "id": "BD0024",
+    "type": "backend_service",
+    "shortLabel": "Change meter power",
+    "label": "Change meter power",
     "description": "Requests a contractual power change.",
     "category": "Specific Contract Management",
-    "examples": [],
-    "discursive": "Requests a contractual power change."
+    "categoryDescription": "Specific Contract Management",
+    "tags": ["specific_contract_management"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/change_meter_power",
+      "method": "POST",
+      "description": "Requests a contractual power change."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "request_account_holder_change",
-    "name": "request_account_holder_change",
+    "id": "BD0025",
+    "type": "backend_service",
+    "shortLabel": "Account holder change",
+    "label": "Request account holder change",
     "description": "Manages a change of account holder on an active supply.",
     "category": "Specific Contract Management",
-    "examples": [],
-    "discursive": "Manages a change of account holder on an active supply."
+    "categoryDescription": "Specific Contract Management",
+    "tags": ["specific_contract_management"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/request_account_holder_change",
+      "method": "POST",
+      "description": "Manages a change of account holder on an active supply."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "send_digital_signature_link",
-    "name": "send_digital_signature_link",
+    "id": "BD0026",
+    "type": "backend_service",
+    "shortLabel": "Digital signature link",
+    "label": "Send digital signature link",
     "description": "Sends a link for remote contract signing.",
     "category": "Documentation and Signature Management",
-    "examples": [],
-    "discursive": "Sends a link for remote contract signing."
+    "categoryDescription": "Documentation and Signature Management",
+    "tags": ["documentation_and_signature_management"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/send_digital_signature_link",
+      "method": "POST",
+      "description": "Sends a link for remote contract signing."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_signature_completed",
-    "name": "check_signature_completed",
+    "id": "BD0027",
+    "type": "backend_service",
+    "shortLabel": "Signature completed",
+    "label": "Check signature completed",
     "description": "Checks if the digital signature has been completed.",
     "category": "Documentation and Signature Management",
-    "examples": [],
-    "discursive": "Checks if the digital signature has been completed."
+    "categoryDescription": "Documentation and Signature Management",
+    "tags": ["documentation_and_signature_management"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_signature_completed",
+      "method": "POST",
+      "description": "Checks if the digital signature has been completed."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "archive_signed_document",
-    "name": "archive_signed_document",
+    "id": "BD0028",
+    "type": "backend_service",
+    "shortLabel": "Archive signed document",
+    "label": "Archive signed document",
     "description": "Saves the signed contract in the document repository.",
     "category": "Documentation and Signature Management",
-    "examples": [],
-    "discursive": "Saves the signed contract in the document repository."
+    "categoryDescription": "Documentation and Signature Management",
+    "tags": ["documentation_and_signature_management"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/archive_signed_document",
+      "method": "POST",
+      "description": "Saves the signed contract in the document repository."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "retrieve_client_historical_documents",
-    "name": "retrieve_client_historical_documents",
+    "id": "BD0029",
+    "type": "backend_service",
+    "shortLabel": "Historical documents",
+    "label": "Retrieve client historical documents",
     "description": "Makes previous contractual PDFs available.",
     "category": "Documentation and Signature Management",
-    "examples": [],
-    "discursive": "Makes previous contractual PDFs available."
+    "categoryDescription": "Documentation and Signature Management",
+    "tags": ["documentation_and_signature_management"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/retrieve_client_historical_documents",
+      "method": "POST",
+      "description": "Makes previous contractual PDFs available."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "update_contact_preferences",
-    "name": "update_contact_preferences",
+    "id": "BD0030",
+    "type": "backend_service",
+    "shortLabel": "Contact preferences",
+    "label": "Update contact preferences",
     "description": "Modifies preferred channel (email, phone, SMS).",
     "category": "Customer Management (Extended CRM)",
-    "examples": [],
-    "discursive": "Modifies preferred channel (email, phone, SMS)."
+    "categoryDescription": "Customer Management (Extended CRM)",
+    "tags": ["customer_management_extended_crm"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/update_contact_preferences",
+      "method": "POST",
+      "description": "Modifies preferred channel (email, phone, SMS)."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "register_operator_note",
-    "name": "register_operator_note",
+    "id": "BD0031",
+    "type": "backend_service",
+    "shortLabel": "Operator note",
+    "label": "Register operator note",
     "description": "Inserts a contextual note in the customer record.",
     "category": "Customer Management (Extended CRM)",
-    "examples": [],
-    "discursive": "Inserts a contextual note in the customer record."
+    "categoryDescription": "Customer Management (Extended CRM)",
+    "tags": ["customer_management_extended_crm"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/register_operator_note",
+      "method": "POST",
+      "description": "Inserts a contextual note in the customer record."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "update_customer_status",
-    "name": "update_customer_status",
+    "id": "BD0032",
+    "type": "backend_service",
+    "shortLabel": "Customer status",
+    "label": "Update customer status",
     "description": "E.g., from prospect to active customer.",
     "category": "Customer Management (Extended CRM)",
-    "examples": [],
-    "discursive": "E.g., from prospect to active customer."
+    "categoryDescription": "Customer Management (Extended CRM)",
+    "tags": ["customer_management_extended_crm"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/update_customer_status",
+      "method": "POST",
+      "description": "E.g., from prospect to active customer."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_marketing_segmentation",
-    "name": "check_marketing_segmentation",
+    "id": "BD0033",
+    "type": "backend_service",
+    "shortLabel": "Marketing segmentation",
+    "label": "Check marketing segmentation",
     "description": "Retrieves CRM cluster or tag for profiling.",
     "category": "Customer Management (Extended CRM)",
-    "examples": [],
-    "discursive": "Retrieves CRM cluster or tag for profiling."
+    "categoryDescription": "Customer Management (Extended CRM)",
+    "tags": ["customer_management_extended_crm"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_marketing_segmentation",
+      "method": "POST",
+      "description": "Retrieves CRM cluster or tag for profiling."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "send_activation_sms_notification",
-    "name": "send_activation_sms_notification",
+    "id": "BD0034",
+    "type": "backend_service",
+    "shortLabel": "Activation SMS",
+    "label": "Send activation SMS notification",
     "description": "Confirms activation via SMS.",
     "category": "Notifications and Multichannel",
-    "examples": [],
-    "discursive": "Confirms activation via SMS."
+    "categoryDescription": "Notifications and Multichannel",
+    "tags": ["notifications_and_multichannel"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/send_activation_sms_notification",
+      "method": "POST",
+      "description": "Confirms activation via SMS."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "send_welcome_email",
-    "name": "send_welcome_email",
+    "id": "BD0035",
+    "type": "backend_service",
+    "shortLabel": "Welcome email",
+    "label": "Send welcome email",
     "description": "Sends onboarding message after activation.",
     "category": "Notifications and Multichannel",
-    "examples": [],
-    "discursive": "Sends onboarding message after activation."
+    "categoryDescription": "Notifications and Multichannel",
+    "tags": ["notifications_and_multichannel"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/send_welcome_email",
+      "method": "POST",
+      "description": "Sends onboarding message after activation."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "schedule_automatic_callback",
-    "name": "schedule_automatic_callback",
+    "id": "BD0036",
+    "type": "backend_service",
+    "shortLabel": "Automatic callback",
+    "label": "Schedule automatic callback",
     "description": "Inserts an appointment in the management system.",
     "category": "Notifications and Multichannel",
-    "examples": [],
-    "discursive": "Inserts an appointment in the management system."
+    "categoryDescription": "Notifications and Multichannel",
+    "tags": ["notifications_and_multichannel"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/schedule_automatic_callback",
+      "method": "POST",
+      "description": "Inserts an appointment in the management system."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "send_client_area_link",
-    "name": "send_client_area_link",
+    "id": "BD0037",
+    "type": "backend_service",
+    "shortLabel": "Client area link",
+    "label": "Send client area link",
     "description": "Provides a personalized URL for portal access.",
     "category": "Notifications and Multichannel",
-    "examples": [],
-    "discursive": "Provides a personalized URL for portal access."
+    "categoryDescription": "Notifications and Multichannel",
+    "tags": ["notifications_and_multichannel"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/send_client_area_link",
+      "method": "POST",
+      "description": "Provides a personalized URL for portal access."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_outstanding_balance",
-    "name": "check_outstanding_balance",
+    "id": "BD0038",
+    "type": "backend_service",
+    "shortLabel": "Outstanding balance",
+    "label": "Check outstanding balance",
     "description": "Checks for overdue amounts or open installments.",
     "category": "Billing and Economic Status",
-    "examples": [],
-    "discursive": "Checks for overdue amounts or open installments."
+    "categoryDescription": "Billing and Economic Status",
+    "tags": ["billing_and_economic_status"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_outstanding_balance",
+      "method": "POST",
+      "description": "Checks for overdue amounts or open installments."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "activate_payment_installment",
-    "name": "activate_payment_installment",
+    "id": "BD0039",
+    "type": "backend_service",
+    "shortLabel": "Payment installment",
+    "label": "Activate payment installment",
     "description": "Starts a payment plan for settlement.",
     "category": "Billing and Economic Status",
-    "examples": [],
-    "discursive": "Starts a payment plan for settlement."
+    "categoryDescription": "Billing and Economic Status",
+    "tags": ["billing_and_economic_status"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/activate_payment_installment",
+      "method": "POST",
+      "description": "Starts a payment plan for settlement."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "deactivate_incompatible_offer",
-    "name": "deactivate_incompatible_offer",
+    "id": "BD0040",
+    "type": "backend_service",
+    "shortLabel": "Deactivate offer",
+    "label": "Deactivate incompatible offer",
     "description": "Closes promotions not combinable with the new contract.",
     "category": "Billing and Economic Status",
-    "examples": [],
-    "discursive": "Closes promotions not combinable with the new contract."
+    "categoryDescription": "Billing and Economic Status",
+    "tags": ["billing_and_economic_status"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/deactivate_incompatible_offer",
+      "method": "POST",
+      "description": "Closes promotions not combinable with the new contract."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "generate_monthly_bill_estimate",
-    "name": "generate_monthly_bill_estimate",
+    "id": "BD0041",
+    "type": "backend_service",
+    "shortLabel": "Bill estimate",
+    "label": "Generate monthly bill estimate",
     "description": "Creates a simulation based on annual consumption.",
     "category": "Billing and Economic Status",
-    "examples": [],
-    "discursive": "Creates a simulation based on annual consumption."
+    "categoryDescription": "Billing and Economic Status",
+    "tags": ["billing_and_economic_status"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/generate_monthly_bill_estimate",
+      "method": "POST",
+      "description": "Creates a simulation based on annual consumption."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_open_fault_report",
-    "name": "check_open_fault_report",
+    "id": "BD0042",
+    "type": "backend_service",
+    "shortLabel": "Fault report",
+    "label": "Check open fault report",
     "description": "Checks if there is a service request on the POD.",
     "category": "Technical Support / Diagnostics",
-    "examples": [],
-    "discursive": "Checks if there is a service request on the POD."
+    "categoryDescription": "Technical Support / Diagnostics",
+    "tags": ["technical_support_diagnostics"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_open_fault_report",
+      "method": "POST",
+      "description": "Checks if there is a service request on the POD."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "open_technical_ticket",
-    "name": "open_technical_ticket",
+    "id": "BD0043",
+    "type": "backend_service",
+    "shortLabel": "Technical ticket",
+    "label": "Open technical ticket",
     "description": "Creates a technical report in the system.",
     "category": "Technical Support / Diagnostics",
-    "examples": [],
-    "discursive": "Creates a technical report in the system."
+    "categoryDescription": "Technical Support / Diagnostics",
+    "tags": ["technical_support_diagnostics"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/open_technical_ticket",
+      "method": "POST",
+      "description": "Creates a technical report in the system."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "send_self_reading_link",
-    "name": "send_self_reading_link",
+    "id": "BD0044",
+    "type": "backend_service",
+    "shortLabel": "Self reading link",
+    "label": "Send self reading link",
     "description": "Sends the link for customer meter reading via SMS/email.",
     "category": "Technical Support / Diagnostics",
-    "examples": [],
-    "discursive": "Sends the link for customer meter reading via SMS/email."
+    "categoryDescription": "Technical Support / Diagnostics",
+    "tags": ["technical_support_diagnostics"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/send_self_reading_link",
+      "method": "POST",
+      "description": "Sends the link for customer meter reading via SMS/email."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "retrieve_self_reading_history",
-    "name": "retrieve_self_reading_history",
+    "id": "BD0045",
+    "type": "backend_service",
+    "shortLabel": "Self reading history",
+    "label": "Retrieve self reading history",
     "description": "Displays the latest readings provided by the customer.",
     "category": "Technical Support / Diagnostics",
-    "examples": [],
-    "discursive": "Displays the latest readings provided by the customer."
+    "categoryDescription": "Technical Support / Diagnostics",
+    "tags": ["technical_support_diagnostics"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/retrieve_self_reading_history",
+      "method": "POST",
+      "description": "Displays the latest readings provided by the customer."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "open_customer_complaint",
-    "name": "open_customer_complaint",
+    "id": "BD0046",
+    "type": "backend_service",
+    "shortLabel": "Customer complaint",
+    "label": "Open customer complaint",
     "description": "Inserts an official complaint case.",
     "category": "Complaints and Tracking",
-    "examples": [],
-    "discursive": "Inserts an official complaint case."
+    "categoryDescription": "Complaints and Tracking",
+    "tags": ["complaints_and_tracking"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/open_customer_complaint",
+      "method": "POST",
+      "description": "Inserts an official complaint case."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "update_complaint_outcome",
-    "name": "update_complaint_outcome",
+    "id": "BD0047",
+    "type": "backend_service",
+    "shortLabel": "Complaint outcome",
+    "label": "Update complaint outcome",
     "description": "Records the resolution of the open complaint.",
     "category": "Complaints and Tracking",
-    "examples": [],
-    "discursive": "Records the resolution of the open complaint."
+    "categoryDescription": "Complaints and Tracking",
+    "tags": ["complaints_and_tracking"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/update_complaint_outcome",
+      "method": "POST",
+      "description": "Records the resolution of the open complaint."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "retrieve_open_tickets",
-    "name": "retrieve_open_tickets",
+    "id": "BD0048",
+    "type": "backend_service",
+    "shortLabel": "Open tickets",
+    "label": "Retrieve open tickets",
     "description": "Returns the list of ongoing requests.",
     "category": "Complaints and Tracking",
-    "examples": [],
-    "discursive": "Returns the list of ongoing requests."
+    "categoryDescription": "Complaints and Tracking",
+    "tags": ["complaints_and_tracking"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/retrieve_open_tickets",
+      "method": "POST",
+      "description": "Returns the list of ongoing requests."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "send_complaint_feedback",
-    "name": "send_complaint_feedback",
+    "id": "BD0049",
+    "type": "backend_service",
+    "shortLabel": "Complaint feedback",
+    "label": "Send complaint feedback",
     "description": "Notifies the customer of the complaint progress.",
     "category": "Complaints and Tracking",
-    "examples": [],
-    "discursive": "Notifies the customer of the complaint progress."
+    "categoryDescription": "Complaints and Tracking",
+    "tags": ["complaints_and_tracking"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/send_complaint_feedback",
+      "method": "POST",
+      "description": "Notifies the customer of the complaint progress."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "register_marketing_communications_block",
-    "name": "register_marketing_communications_block",
+    "id": "BD0050",
+    "type": "backend_service",
+    "shortLabel": "Marketing block",
+    "label": "Register marketing communications block",
     "description": "The customer does not want to be contacted again.",
     "category": "Regulations / GDPR Block / Preferences",
-    "examples": [],
-    "discursive": "The customer does not want to be contacted again."
+    "categoryDescription": "Regulations / GDPR Block / Preferences",
+    "tags": ["regulations_gdpr_block_preferences"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/register_marketing_communications_block",
+      "method": "POST",
+      "description": "The customer does not want to be contacted again."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "update_marketing_consent",
-    "name": "update_marketing_consent",
+    "id": "BD0051",
+    "type": "backend_service",
+    "shortLabel": "Marketing consent",
+    "label": "Update marketing consent",
     "description": "Modifies extended or informed privacy consent.",
     "category": "Regulations / GDPR Block / Preferences",
-    "examples": [],
-    "discursive": "Modifies extended or informed privacy consent."
+    "categoryDescription": "Regulations / GDPR Block / Preferences",
+    "tags": ["regulations_gdpr_block_preferences"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/update_marketing_consent",
+      "method": "POST",
+      "description": "Modifies extended or informed privacy consent."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "delete_personal_data_on_request",
-    "name": "delete_personal_data_on_request",
+    "id": "BD0052",
+    "type": "backend_service",
+    "shortLabel": "Delete personal data",
+    "label": "Delete personal data on request",
     "description": "Processes a data deletion request.",
     "category": "Regulations / GDPR Block / Preferences",
-    "examples": [],
-    "discursive": "Processes a data deletion request."
+    "categoryDescription": "Regulations / GDPR Block / Preferences",
+    "tags": ["regulations_gdpr_block_preferences"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/delete_personal_data_on_request",
+      "method": "POST",
+      "description": "Processes a data deletion request."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_gdpr_consent",
-    "name": "check_gdpr_consent",
+    "id": "BD0053",
+    "type": "backend_service",
+    "shortLabel": "GDPR consent",
+    "label": "Check GDPR consent",
     "description": "Checks the status of each type of consent.",
     "category": "Regulations / GDPR Block / Preferences",
-    "examples": [],
-    "discursive": "Checks the status of each type of consent."
+    "categoryDescription": "Regulations / GDPR Block / Preferences",
+    "tags": ["regulations_gdpr_block_preferences"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_gdpr_consent",
+      "method": "POST",
+      "description": "Checks the status of each type of consent."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_joint_account_holder",
-    "name": "check_joint_account_holder",
+    "id": "BD0054",
+    "type": "backend_service",
+    "shortLabel": "Joint account holder",
+    "label": "Check joint account holder",
     "description": "Checks if the supply has multiple account holders.",
     "category": "Multi-account Holder / Delegations",
-    "examples": [],
-    "discursive": "Checks if the supply has multiple account holders."
+    "categoryDescription": "Multi-account Holder / Delegations",
+    "tags": ["multi_account_holder_delegations"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_joint_account_holder",
+      "method": "POST",
+      "description": "Checks if the supply has multiple account holders."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "register_authenticated_delegation",
-    "name": "register_authenticated_delegation",
+    "id": "BD0055",
+    "type": "backend_service",
+    "shortLabel": "Authenticated delegation",
+    "label": "Register authenticated delegation",
     "description": "Marks a delegation as valid for operations.",
     "category": "Multi-account Holder / Delegations",
-    "examples": [],
-    "discursive": "Marks a delegation as valid for operations."
+    "categoryDescription": "Multi-account Holder / Delegations",
+    "tags": ["multi_account_holder_delegations"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/register_authenticated_delegation",
+      "method": "POST",
+      "description": "Marks a delegation as valid for operations."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "request_delegation_documentation",
-    "name": "request_delegation_documentation",
+    "id": "BD0056",
+    "type": "backend_service",
+    "shortLabel": "Delegation documentation",
+    "label": "Request delegation documentation",
     "description": "Sends a formal request for delegation documents.",
     "category": "Multi-account Holder / Delegations",
-    "examples": [],
-    "discursive": "Sends a formal request for delegation documents."
+    "categoryDescription": "Multi-account Holder / Delegations",
+    "tags": ["multi_account_holder_delegations"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/request_delegation_documentation",
+      "method": "POST",
+      "description": "Sends a formal request for delegation documents."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "check_multi_service_packages",
-    "name": "check_multi_service_packages",
+    "id": "BD0057",
+    "type": "backend_service",
+    "shortLabel": "Multi-service packages",
+    "label": "Check multi service packages",
     "description": "E.g., electricity + gas + boiler + internet.",
     "category": "Advanced Contractual / Multi-service",
-    "examples": [],
-    "discursive": "E.g., electricity + gas + boiler + internet."
+    "categoryDescription": "Advanced Contractual / Multi-service",
+    "tags": ["advanced_contractual_multi_service"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/check_multi_service_packages",
+      "method": "POST",
+      "description": "E.g., electricity + gas + boiler + internet."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "activate_additional_service",
-    "name": "activate_additional_service",
+    "id": "BD0058",
+    "type": "backend_service",
+    "shortLabel": "Additional service",
+    "label": "Activate additional service",
     "description": "E.g., maintenance, boiler assistance, alarm system.",
     "category": "Advanced Contractual / Multi-service",
-    "examples": [],
-    "discursive": "E.g., maintenance, boiler assistance, alarm system."
+    "categoryDescription": "Advanced Contractual / Multi-service",
+    "tags": ["advanced_contractual_multi_service"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/activate_additional_service",
+      "method": "POST",
+      "description": "E.g., maintenance, boiler assistance, alarm system."
+    },
+    "inputParams": [],
+    "outputParams": []
   },
   {
-    "id": "deactivate_unused_service",
-    "name": "deactivate_unused_service",
+    "id": "BD0059",
+    "type": "backend_service",
+    "shortLabel": "Deactivate service",
+    "label": "Deactivate unused service",
     "description": "Closes an optional service no longer required.",
     "category": "Advanced Contractual / Multi-service",
-    "examples": [],
-    "discursive": "Closes an optional service no longer required."
+    "categoryDescription": "Advanced Contractual / Multi-service",
+    "tags": ["advanced_contractual_multi_service"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/deactivate_unused_service",
+      "method": "POST",
+      "description": "Closes an optional service no longer required."
+    },
+    "inputParams": [],
+    "outputParams": []
+  },
+  {
+    "id": "BD0060",
+    "type": "backend_service",
+    "shortLabel": "Deactivate service",
+    "label": "Deactivate unused service",
+    "description": "Closes an optional service no longer required.",
+    "category": "Advanced Contractual / Multi-service",
+    "categoryDescription": "Advanced Contractual / Multi-service",
+    "tags": ["advanced_contractual_multi_service"],
+    "isInteractive": false,
+    "endpoint": {
+      "url": "/api/deactivate_unused_service",
+      "method": "POST",
+      "description": "Closes an optional service no longer required."
+    },
+    "inputParams": [],
+    "outputParams": []
   }
 ]

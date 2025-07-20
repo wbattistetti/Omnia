@@ -1,930 +1,1162 @@
 [
   {
-    "id": "valid_tax_code",
-    "name": "valid_tax_code",
+    "id": "CO0001",
+    "type": "condition",
+    "shortLabel": "Valid tax code",
+    "label": "Tax code is valid",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Tax code is valid"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "invalid_tax_code",
-    "name": "invalid_tax_code",
+    "id": "CO0002",
+    "type": "condition",
+    "shortLabel": "Invalid tax code",
+    "label": "Tax code is not valid",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Tax code has is NOT valid"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "account_holder_verified",
-    "name": "account_holder_verified",
+    "id": "CO0003",
+    "type": "condition",
+    "shortLabel": "Account holder verified",
+    "label": "Account holder has been verified",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Account holder has been verified"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "account_holder_not_verified",
-    "name": "account_holder_not_verified",
+    "id": "CO0004",
+    "type": "condition",
+    "shortLabel": "Account holder not verified",
+    "label": "Account holder has not been verified",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Account holder has NOT been verified"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "existing_customer",
-    "name": "existing_customer",
+    "id": "CO0005",
+    "type": "condition",
+    "shortLabel": "Existing customer",
+    "label": "Customer exists",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Customer exists"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "new_customer",
-    "name": "new_customer",
+    "id": "CO0006",
+    "type": "condition",
+    "shortLabel": "New customer",
+    "label": "Customer is new",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Customer is new"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "resident_customer",
-    "name": "resident_customer",
+    "id": "CO0007",
+    "type": "condition",
+    "shortLabel": "Resident customer",
+    "label": "Customer is resident",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Customer is resident"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "non_resident_customer",
-    "name": "non_resident_customer",
+    "id": "CO0008",
+    "type": "condition",
+    "shortLabel": "Non-resident customer",
+    "label": "Customer is not resident",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Customer is NOT resident"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "current_supplier_known",
-    "name": "current_supplier_known",
+    "id": "CO0009",
+    "type": "condition",
+    "shortLabel": "Supplier known",
+    "label": "Current supplier is known",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Current supplier is known"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "current_supplier_unknown",
-    "name": "current_supplier_unknown",
+    "id": "CO0010",
+    "type": "condition",
+    "shortLabel": "Supplier unknown",
+    "label": "Current supplier is unknown",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Current supplier is unknown"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "customer_in_arrears",
-    "name": "customer_in_arrears",
+    "id": "CO0011",
+    "type": "condition",
+    "shortLabel": "Customer in arrears",
+    "label": "Customer is in arrears",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Customer is in arrears"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "regular_customer",
-    "name": "regular_customer",
+    "id": "CO0012",
+    "type": "condition",
+    "shortLabel": "Regular customer",
+    "label": "Customer is regular",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Customer is regular"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "pod_validated",
-    "name": "pod_validated",
+    "id": "CO0013",
+    "type": "condition",
+    "shortLabel": "POD validated",
+    "label": "POD validated",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "POD validated"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "pod_invalid",
-    "name": "pod_invalid",
+    "id": "CO0014",
+    "type": "condition",
+    "shortLabel": "POD invalid",
+    "label": "POD is not valid",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "POD is NOT valid"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "power_3kw",
-    "name": "power_3kw",
+    "id": "CO0015",
+    "type": "condition",
+    "shortLabel": "Power 3kW",
+    "label": "Power is 3kW",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Power is 3kW"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "power_above_3kw",
-    "name": "power_above_3kw",
+    "id": "CO0016",
+    "type": "condition",
+    "shortLabel": "Power above 3kW",
+    "label": "Power is above 3kW",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Power is ABOVE 3kW"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "solar_panels_present",
-    "name": "solar_panels_present",
+    "id": "CO0017",
+    "type": "condition",
+    "shortLabel": "Solar panels present",
+    "label": "Solar panels in place",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Solar panels in place"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "no_solar_panels",
-    "name": "no_solar_panels",
+    "id": "CO0018",
+    "type": "condition",
+    "shortLabel": "No solar panels",
+    "label": "Solar panels not in place",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Solar panels NOT in place"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "primary_residence",
-    "name": "primary_residence",
+    "id": "CO0019",
+    "type": "condition",
+    "shortLabel": "Primary residence",
+    "label": "Residence is primary",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Residence is primary"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "secondary_residence",
-    "name": "secondary_residence",
+    "id": "CO0020",
+    "type": "condition",
+    "shortLabel": "Secondary residence",
+    "label": "Residence is secondary",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Residence is secondary"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "electricity_supply",
-    "name": "electricity_supply",
+    "id": "CO0021",
+    "type": "condition",
+    "shortLabel": "Electricity supply",
+    "label": "Supply of electricity",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Supply of electricity"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "gas_supply",
-    "name": "gas_supply",
+    "id": "CO0022",
+    "type": "condition",
+    "shortLabel": "Gas supply",
+    "label": "Supply of gas",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Supply of gas"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "dual_supply",
-    "name": "dual_supply",
+    "id": "CO0023",
+    "type": "condition",
+    "shortLabel": "Dual supply",
+    "label": "Supply is dual",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Supply is dual"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "offer_accepted",
-    "name": "offer_accepted",
+    "id": "CO0024",
+    "type": "condition",
+    "shortLabel": "Offer accepted",
+    "label": "Offer accepted",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Offer accepted"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "offer_rejected",
-    "name": "offer_rejected",
+    "id": "CO0025",
+    "type": "condition",
+    "shortLabel": "Offer rejected",
+    "label": "Offer rejected",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Offer rejected"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "bonus_applicable",
-    "name": "bonus_applicable",
+    "id": "CO0026",
+    "type": "condition",
+    "shortLabel": "Bonus applicable",
+    "label": "Bonus applicable",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Bonus applicable"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "bonus_not_applicable",
-    "name": "bonus_not_applicable",
+    "id": "CO0027",
+    "type": "condition",
+    "shortLabel": "Bonus not applicable",
+    "label": "Bonus not applicable",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Bonus NOT applicable"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "payment_direct_debit",
-    "name": "payment_direct_debit",
+    "id": "CO0028",
+    "type": "condition",
+    "shortLabel": "Direct debit",
+    "label": "Payment direct debit",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Payment direct debit"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "payment_slip",
-    "name": "payment_slip",
+    "id": "CO0029",
+    "type": "condition",
+    "shortLabel": "Payment slip",
+    "label": "Payment slip",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Payment slip"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "fixed_offer",
-    "name": "fixed_offer",
+    "id": "CO0030",
+    "type": "condition",
+    "shortLabel": "Fixed offer",
+    "label": "Offer fixed",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Offer fixed"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "variable_offer",
-    "name": "variable_offer",
+    "id": "CO0031",
+    "type": "condition",
+    "shortLabel": "Variable offer",
+    "label": "Offer is variable",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Offer is variable"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "contract_duration_12_months",
-    "name": "contract_duration_12_months",
+    "id": "CO0032",
+    "type": "condition",
+    "shortLabel": "12 months duration",
+    "label": "Contract duration of 12 months",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Contract duration of 12 months"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "contract_duration_less_12_months",
-    "name": "contract_duration_less_12_months",
+    "id": "CO0033",
+    "type": "condition",
+    "shortLabel": "Duration < 12 months",
+    "label": "Contract duration less than 12 months",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Contract duration less than 12 months"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "pdf_requested",
-    "name": "pdf_requested",
+    "id": "CO0034",
+    "type": "condition",
+    "shortLabel": "PDF requested",
+    "label": "PDF requested",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "PDF requested"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "no_pdf_requested",
-    "name": "no_pdf_requested",
+    "id": "CO0035",
+    "type": "condition",
+    "shortLabel": "No PDF requested",
+    "label": "PDF not requested",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "PDF NOT requested"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "high_consumption",
-    "name": "high_consumption",
+    "id": "CO0036",
+    "type": "condition",
+    "shortLabel": "High consumption",
+    "label": "High consumption",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "High Consumption"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "low_consumption",
-    "name": "low_consumption",
+    "id": "CO0037",
+    "type": "condition",
+    "shortLabel": "Low consumption",
+    "label": "Low consumption",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Low Consumption"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "savings_oriented",
-    "name": "savings_oriented",
+    "id": "CO0038",
+    "type": "condition",
+    "shortLabel": "Savings oriented",
+    "label": "Customer savings oriented",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Customer savings oriented"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "not_savings_oriented",
-    "name": "not_savings_oriented",
+    "id": "CO0039",
+    "type": "condition",
+    "shortLabel": "Not savings oriented",
+    "label": "Customer not savings oriented",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Customer NOT savings oriented"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "consumption_f1",
-    "name": "consumption_f1",
+    "id": "CO0040",
+    "type": "condition",
+    "shortLabel": "Consumption F1",
+    "label": "Consumption F1",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Consumption F1"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "consumption_f23",
-    "name": "consumption_f23",
+    "id": "CO0041",
+    "type": "condition",
+    "shortLabel": "Consumption F23",
+    "label": "Consumption F23",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Consumption F23"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "mixed_consumption",
-    "name": "mixed_consumption",
+    "id": "CO0042",
+    "type": "condition",
+    "shortLabel": "Mixed consumption",
+    "label": "Consumption mixed",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Consumption mixed"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "self_reading_required",
-    "name": "self_reading_required",
+    "id": "CO0043",
+    "type": "condition",
+    "shortLabel": "Self reading required",
+    "label": "Self reading required",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "self reading required"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "understanding_confirmed",
-    "name": "understanding_confirmed",
+    "id": "CO0044",
+    "type": "condition",
+    "shortLabel": "Understanding confirmed",
+    "label": "Understanding confirmed",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Understanding confirmed"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "understanding_not_confirmed",
-    "name": "understanding_not_confirmed",
+    "id": "CO0045",
+    "type": "condition",
+    "shortLabel": "Understanding not confirmed",
+    "label": "Understanding not confirmed",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Understanding NOT confirmed"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "privacy_consent_given",
-    "name": "privacy_consent_given",
+    "id": "CO0046",
+    "type": "condition",
+    "shortLabel": "Privacy consent given",
+    "label": "Privacy consent given",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Privacy consent given"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "privacy_consent_denied",
-    "name": "privacy_consent_denied",
+    "id": "CO0047",
+    "type": "condition",
+    "shortLabel": "Privacy consent denied",
+    "label": "Privacy consent denied",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Privacy consent denied"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "voice_consent_given",
-    "name": "voice_consent_given",
+    "id": "CO0048",
+    "type": "condition",
+    "shortLabel": "Voice consent given",
+    "label": "Voice given",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Voice given"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "voice_consent_denied",
-    "name": "voice_consent_denied",
+    "id": "CO0049",
+    "type": "condition",
+    "shortLabel": "Voice consent denied",
+    "label": "Voice consent denied",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Voice consent denied"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "extra_info_requested",
-    "name": "extra_info_requested",
+    "id": "CO0050",
+    "type": "condition",
+    "shortLabel": "Extra info requested",
+    "label": "Extra info requested has been present",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "extra info requested has been present"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "explicit_objection",
-    "name": "explicit_objection",
+    "id": "CO0051",
+    "type": "condition",
+    "shortLabel": "Explicit objection",
+    "label": "Explicit objection has been present",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "explicit objection has been present"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "explicit_refusal",
-    "name": "explicit_refusal",
+    "id": "CO0052",
+    "type": "condition",
+    "shortLabel": "Explicit refusal",
+    "label": "Explicit refusal has been present",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "explicit refusal has been present"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "previous_step_completed",
-    "name": "previous_step_completed",
+    "id": "CO0053",
+    "type": "condition",
+    "shortLabel": "Previous step completed",
+    "label": "Previous step has been completed",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Previous step has been completed"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "previous_step_not_completed",
-    "name": "previous_step_not_completed",
+    "id": "CO0054",
+    "type": "condition",
+    "shortLabel": "Previous step not completed",
+    "label": "Previous step has not been completed",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Previous step has not been completed"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "multiple_input_errors",
-    "name": "multiple_input_errors",
+    "id": "CO0055",
+    "type": "condition",
+    "shortLabel": "Multiple input errors",
+    "label": "Multiple input errors are present",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Multiple input errors are present"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "voice_channel",
-    "name": "voice_channel",
+    "id": "CO0056",
+    "type": "condition",
+    "shortLabel": "Voice channel",
+    "label": "Channel has been voice",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "Channel has been voice"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "chat_channel",
-    "name": "chat_channel",
+    "id": "CO0057",
+    "type": "condition",
+    "shortLabel": "Chat channel",
+    "label": "Channel has been chat",
     "description": "",
     "category": "Customer Interaction",
-    "examples": [],
-    "discursive": "Channel has been chat"
+    "categoryDescription": "Customer Interaction",
+    "tags": ["customer_interaction"]
   },
   {
-    "id": "app_channel",
-    "name": "app_channel",
+    "id": "CO0058",
+    "type": "condition",
+    "shortLabel": "App channel",
+    "label": "Channel has been app",
     "description": "",
     "category": "Customer Interaction",
-    "examples": [],
-    "discursive": "Channel has been app"
+    "categoryDescription": "Customer Interaction",
+    "tags": ["customer_interaction"]
   },
   {
-    "id": "callback_attempts_exceeded",
-    "name": "callback_attempts_exceeded",
+    "id": "CO0059",
+    "type": "condition",
+    "shortLabel": "Callback attempts exceeded",
+    "label": "Callback attempts are exceeded",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Callback attempts are exceeded"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "escalation_required",
-    "name": "escalation_required",
+    "id": "CO0060",
+    "type": "condition",
+    "shortLabel": "Escalation required",
+    "label": "Escalation has been required",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Escalation has been required"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "api_response_ok",
-    "name": "api_response_ok",
+    "id": "CO0061",
+    "type": "condition",
+    "shortLabel": "API response OK",
+    "label": "API response has been OK",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "API response has been OK"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "api_response_error",
-    "name": "api_response_error",
+    "id": "CO0062",
+    "type": "condition",
+    "shortLabel": "API response error",
+    "label": "API response has error",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "API response has error"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "activation_flag_present",
-    "name": "activation_flag_present",
+    "id": "CO0063",
+    "type": "condition",
+    "shortLabel": "Activation flag present",
+    "label": "Activation flag has been present",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Activation flag has been present"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "activation_flag_absent",
-    "name": "activation_flag_absent",
+    "id": "CO0064",
+    "type": "condition",
+    "shortLabel": "Activation flag absent",
+    "label": "Activation flag has not been present",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Activation flag has not been present"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "bonus_calculated_positive",
-    "name": "bonus_calculated_positive",
+    "id": "CO0065",
+    "type": "condition",
+    "shortLabel": "Bonus positive",
+    "label": "Bonus calculation has been positive",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Bonus calculation has been positive"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "bonus_calculated_zero",
-    "name": "bonus_calculated_zero",
+    "id": "CO0066",
+    "type": "condition",
+    "shortLabel": "Bonus zero",
+    "label": "Bonus calculation has been zero",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Bonus calculation has been zero"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "operator_code_authorized",
-    "name": "operator_code_authorized",
+    "id": "CO0067",
+    "type": "condition",
+    "shortLabel": "Operator authorized",
+    "label": "Operator code has been authorized",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Operator code has been authorized"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "operator_code_not_authorized",
-    "name": "operator_code_not_authorized",
+    "id": "CO0068",
+    "type": "condition",
+    "shortLabel": "Operator not authorized",
+    "label": "Operator code has not been authorized",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Operator code has not been authorized"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "document_sent",
-    "name": "document_sent",
+    "id": "CO0069",
+    "type": "condition",
+    "shortLabel": "Document sent",
+    "label": "Document has been sent",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Document has been sent"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "document_not_sent",
-    "name": "document_not_sent",
+    "id": "CO0070",
+    "type": "condition",
+    "shortLabel": "Document not sent",
+    "label": "Document has not been sent",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Document has not been sent"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "foreign_customer",
-    "name": "foreign_customer",
+    "id": "CO0071",
+    "type": "condition",
+    "shortLabel": "Foreign customer",
+    "label": "Customer has been foreign",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Customer has been foreign"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "identity_document_provided",
-    "name": "identity_document_provided",
+    "id": "CO0072",
+    "type": "condition",
+    "shortLabel": "Identity doc provided",
+    "label": "Identity document has been provided",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Identity document has been provided"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "identity_document_not_provided",
-    "name": "identity_document_not_provided",
+    "id": "CO0073",
+    "type": "condition",
+    "shortLabel": "Identity doc not provided",
+    "label": "Identity document has not been provided",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Identity document has not been provided"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "mobile_phone",
-    "name": "mobile_phone",
+    "id": "CO0074",
+    "type": "condition",
+    "shortLabel": "Mobile phone",
+    "label": "Phone has been mobile",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Phone has been mobile"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "landline_phone",
-    "name": "landline_phone",
+    "id": "CO0075",
+    "type": "condition",
+    "shortLabel": "Landline phone",
+    "label": "Phone has been landline",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Phone has been landline"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "valid_email",
-    "name": "valid_email",
+    "id": "CO0076",
+    "type": "condition",
+    "shortLabel": "Valid email",
+    "label": "Email has been valid",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Email has been valid"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "invalid_email",
-    "name": "invalid_email",
+    "id": "CO0077",
+    "type": "condition",
+    "shortLabel": "Invalid email",
+    "label": "Email has not been valid",
     "description": "",
     "category": "Customer Identification",
-    "examples": [],
-    "discursive": "Email has not been valid"
+    "categoryDescription": "Customer Identification",
+    "tags": ["customer_identification"]
   },
   {
-    "id": "domestic_customer",
-    "name": "domestic_customer",
+    "id": "CO0078",
+    "type": "condition",
+    "shortLabel": "Domestic customer",
+    "label": "Customer has been domestic",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "Customer has been domestic"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "non_domestic_customer",
-    "name": "non_domestic_customer",
+    "id": "CO0079",
+    "type": "condition",
+    "shortLabel": "Non-domestic customer",
+    "label": "Customer has not been domestic",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "Customer has not been domestic"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "alternative_fuel_usage",
-    "name": "alternative_fuel_usage",
+    "id": "CO0080",
+    "type": "condition",
+    "shortLabel": "Alternative fuel usage",
+    "label": "Alternative fuel usage has been present",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "alternative fuel usage has been present"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "active_meter",
-    "name": "active_meter",
+    "id": "CO0081",
+    "type": "condition",
+    "shortLabel": "Active meter",
+    "label": "Meter has been active",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "Meter has been active"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "deactivated_meter",
-    "name": "deactivated_meter",
+    "id": "CO0082",
+    "type": "condition",
+    "shortLabel": "Deactivated meter",
+    "label": "Meter has not been active",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "Meter has not been active"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "customer_in_transfer",
-    "name": "customer_in_transfer",
+    "id": "CO0083",
+    "type": "condition",
+    "shortLabel": "Customer in transfer",
+    "label": "Customer has been in transfer",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "Customer has been in transfer"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "customer_in_takeover",
-    "name": "customer_in_takeover",
+    "id": "CO0084",
+    "type": "condition",
+    "shortLabel": "Customer in takeover",
+    "label": "Customer has been in takeover",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "Customer has been in takeover"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "shared_supply",
-    "name": "shared_supply",
+    "id": "CO0085",
+    "type": "condition",
+    "shortLabel": "Shared supply",
+    "label": "Supply has been shared",
     "description": "",
     "category": "Supply Details",
-    "examples": [],
-    "discursive": "Supply has been shared"
+    "categoryDescription": "Supply Details",
+    "tags": ["supply_details"]
   },
   {
-    "id": "time_limited_offer",
-    "name": "time_limited_offer",
+    "id": "CO0086",
+    "type": "condition",
+    "shortLabel": "Time limited offer",
+    "label": "Offer has been time limited",
     "description": "",
     "category": "Commercial Offer",
-    "examples": [],
-    "discursive": "Offer has been time limited"
+    "categoryDescription": "Commercial Offer",
+    "tags": ["commercial_offer"]
   },
   {
-    "id": "exclusive_online_offer",
-    "name": "exclusive_online_offer",
+    "id": "CO0087",
+    "type": "condition",
+    "shortLabel": "Exclusive online offer",
+    "label": "Offer has been exclusive online",
     "description": "",
     "category": "Commercial Offer",
-    "examples": [],
-    "discursive": "Offer has been exclusive online"
+    "categoryDescription": "Commercial Offer",
+    "tags": ["commercial_offer"]
   },
   {
-    "id": "bonus_incompatible_offer",
-    "name": "bonus_incompatible_offer",
+    "id": "CO0088",
+    "type": "condition",
+    "shortLabel": "Bonus incompatible offer",
+    "label": "Offer has been bonus incompatible",
     "description": "",
     "category": "Commercial Offer",
-    "examples": [],
-    "discursive": "Offer has been bonus incompatible"
+    "categoryDescription": "Commercial Offer",
+    "tags": ["commercial_offer"]
   },
   {
-    "id": "contract_already_active",
-    "name": "contract_already_active",
+    "id": "CO0089",
+    "type": "condition",
+    "shortLabel": "Contract already active",
+    "label": "Contract has been already active",
     "description": "",
     "category": "Commercial Offer",
-    "examples": [],
-    "discursive": "Contract has been already active"
+    "categoryDescription": "Commercial Offer",
+    "tags": ["commercial_offer"]
   },
   {
-    "id": "contract_in_activation",
-    "name": "contract_in_activation",
+    "id": "CO0090",
+    "type": "condition",
+    "shortLabel": "Contract in activation",
+    "label": "Contract has been in activation",
     "description": "",
     "category": "Commercial Offer",
-    "examples": [],
-    "discursive": "Contract has been in activation"
+    "categoryDescription": "Commercial Offer",
+    "tags": ["commercial_offer"]
   },
   {
-    "id": "previously_proposed_offer",
-    "name": "previously_proposed_offer",
+    "id": "CO0091",
+    "type": "condition",
+    "shortLabel": "Previously proposed offer",
+    "label": "Offer was previously proposed",
     "description": "",
     "category": "Commercial Offer",
-    "examples": [],
-    "discursive": "Offer was previously proposed"
+    "categoryDescription": "Commercial Offer",
+    "tags": ["commercial_offer"]
   },
   {
-    "id": "repeated_offer",
-    "name": "repeated_offer",
+    "id": "CO0092",
+    "type": "condition",
+    "shortLabel": "Repeated offer",
+    "label": "Offer has been repeated",
     "description": "",
     "category": "Commercial Offer",
-    "examples": [],
-    "discursive": "Offer has been repeated"
+    "categoryDescription": "Commercial Offer",
+    "tags": ["commercial_offer"]
   },
   {
-    "id": "user_does_not_answer_question",
-    "name": "user_does_not_answer_question",
+    "id": "CO0093",
+    "type": "condition",
+    "shortLabel": "No answer",
+    "label": "User does not answer question",
     "description": "",
     "category": "Customer Behavior",
-    "examples": [],
-    "discursive": "User does NOT answer question"
+    "categoryDescription": "Customer Behavior",
+    "tags": ["customer_behavior"]
   },
   {
-    "id": "user_requests_summary",
-    "name": "user_requests_summary",
+    "id": "CO0094",
+    "type": "condition",
+    "shortLabel": "Requests summary",
+    "label": "User requests summary",
     "description": "",
     "category": "Customer Behavior",
-    "examples": [],
-    "discursive": "User requests summary"
+    "categoryDescription": "Customer Behavior",
+    "tags": ["customer_behavior"]
   },
   {
-    "id": "user_compares_rates",
-    "name": "user_compares_rates",
+    "id": "CO0095",
+    "type": "condition",
+    "shortLabel": "Compares rates",
+    "label": "User compares rates",
     "description": "",
     "category": "Customer Behavior",
-    "examples": [],
-    "discursive": "User compares rates"
+    "categoryDescription": "Customer Behavior",
+    "tags": ["customer_behavior"]
   },
   {
-    "id": "user_mentions_other_supplier",
-    "name": "user_mentions_other_supplier",
+    "id": "CO0096",
+    "type": "condition",
+    "shortLabel": "Mentions other supplier",
+    "label": "User mentions other supplier",
     "description": "",
     "category": "Customer Behavior",
-    "examples": [],
-    "discursive": "User mentions other supplier"
+    "categoryDescription": "Customer Behavior",
+    "tags": ["customer_behavior"]
   },
   {
-    "id": "user_shows_aggressiveness",
-    "name": "user_shows_aggressiveness",
+    "id": "CO0097",
+    "type": "condition",
+    "shortLabel": "Shows aggressiveness",
+    "label": "User shows aggressiveness",
     "description": "",
     "category": "Customer Behavior",
-    "examples": [],
-    "discursive": "User shows aggressiveness"
+    "categoryDescription": "Customer Behavior",
+    "tags": ["customer_behavior"]
   },
   {
-    "id": "user_does_not_understand_language",
-    "name": "user_does_not_understand_language",
+    "id": "CO0098",
+    "type": "condition",
+    "shortLabel": "Does not understand language",
+    "label": "User does not understand language",
     "description": "",
     "category": "Customer Behavior",
-    "examples": [],
-    "discursive": "User does NOT understand language"
+    "categoryDescription": "Customer Behavior",
+    "tags": ["customer_behavior"]
   },
   {
-    "id": "user_speaks_english",
-    "name": "user_speaks_english",
+    "id": "CO0099",
+    "type": "condition",
+    "shortLabel": "Speaks English",
+    "label": "User speaks English",
     "description": "",
     "category": "Customer Behavior",
-    "examples": [],
-    "discursive": "User speaks Englhas beenh"
+    "categoryDescription": "Customer Behavior",
+    "tags": ["customer_behavior"]
   },
   {
-    "id": "user_enables_self_connection",
-    "name": "user_enables_self_connection",
+    "id": "CO0100",
+    "type": "condition",
+    "shortLabel": "Enables self connection",
+    "label": "User enables self connection",
     "description": "",
     "category": "Customer Behavior",
-    "examples": [],
-    "discursive": "User enables self connection"
+    "categoryDescription": "Customer Behavior",
+    "tags": ["customer_behavior"]
   },
   {
-    "id": "crm_accessible",
-    "name": "crm_accessible",
+    "id": "CO0101",
+    "type": "condition",
+    "shortLabel": "CRM accessible",
+    "label": "CRM has been accessible",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "CRM has been accessible"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "crm_unavailable",
-    "name": "crm_unavailable",
+    "id": "CO0102",
+    "type": "condition",
+    "shortLabel": "CRM unavailable",
+    "label": "CRM has not been accessible",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "CRM has not been accessible"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "contract_uploaded",
-    "name": "contract_uploaded",
+    "id": "CO0103",
+    "type": "condition",
+    "shortLabel": "Contract uploaded",
+    "label": "Contract has been uploaded",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "Contract has been uploaded"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "contract_not_found",
-    "name": "contract_not_found",
+    "id": "CO0104",
+    "type": "condition",
+    "shortLabel": "Contract not found",
+    "label": "Contract has not been found",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "Contract has not been found"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "bonus_inserted",
-    "name": "bonus_inserted",
+    "id": "CO0105",
+    "type": "condition",
+    "shortLabel": "Bonus inserted",
+    "label": "Bonus has been inserted",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "Bonus has been inserted"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "bonus_not_available",
-    "name": "bonus_not_available",
+    "id": "CO0106",
+    "type": "condition",
+    "shortLabel": "Bonus not available",
+    "label": "Bonus has not been available",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "Bonus has not been available"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "pdf_generated",
-    "name": "pdf_generated",
+    "id": "CO0107",
+    "type": "condition",
+    "shortLabel": "PDF generated",
+    "label": "PDF has been generated",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "PDF has been generated"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "pdf_generation_error",
-    "name": "pdf_generation_error",
+    "id": "CO0108",
+    "type": "condition",
+    "shortLabel": "PDF generation error",
+    "label": "PDF generation has error",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "PDF generation has error"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "voice_recorded",
-    "name": "voice_recorded",
+    "id": "CO0109",
+    "type": "condition",
+    "shortLabel": "Voice recorded",
+    "label": "Voice has been recorded",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "Voice has been recorded"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "voice_not_recorded",
-    "name": "voice_not_recorded",
+    "id": "CO0110",
+    "type": "condition",
+    "shortLabel": "Voice not recorded",
+    "label": "Voice has not been recorded",
     "description": "",
     "category": "System Status",
-    "examples": [],
-    "discursive": "Voice has not been recorded"
+    "categoryDescription": "System Status",
+    "tags": ["system_status"]
   },
   {
-    "id": "verification_attempts_exceeded",
-    "name": "verification_attempts_exceeded",
+    "id": "CO0111",
+    "type": "condition",
+    "shortLabel": "Verification attempts exceeded",
+    "label": "Verification attempts are exceeded",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Verification attempts are exceeded"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "session_timeout",
-    "name": "session_timeout",
+    "id": "CO0112",
+    "type": "condition",
+    "shortLabel": "Session timeout",
+    "label": "Session has been timed out",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Session has been timed out"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "flow_cancelled_by_user",
-    "name": "flow_cancelled_by_user",
+    "id": "CO0113",
+    "type": "condition",
+    "shortLabel": "Flow cancelled",
+    "label": "Flow has been cancelled by user",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Flow has been cancelled by user"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "request_new_operator",
-    "name": "request_new_operator",
+    "id": "CO0114",
+    "type": "condition",
+    "shortLabel": "Request new operator",
+    "label": "New operator has been requested",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "New operator has been requested"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "escalation_completed",
-    "name": "escalation_completed",
+    "id": "CO0115",
+    "type": "condition",
+    "shortLabel": "Escalation completed",
+    "label": "Escalation has been completed",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Escalation has been completed"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   },
   {
-    "id": "escalation_not_completed",
-    "name": "escalation_not_completed",
+    "id": "CO0116",
+    "type": "condition",
+    "shortLabel": "Escalation not completed",
+    "label": "Escalation has not been completed",
     "description": "",
     "category": "Operational Flow",
-    "examples": [],
-    "discursive": "Escalation has not been completed"
+    "categoryDescription": "Operational Flow",
+    "tags": ["operational_flow"]
   }
 ]

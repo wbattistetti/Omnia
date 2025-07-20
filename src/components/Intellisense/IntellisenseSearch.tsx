@@ -11,7 +11,7 @@ const DEFAULT_SEARCH_OPTIONS: IntellisenseSearchOptions = {
   includeScore: true,
   includeMatches: true,
   keys: [
-    'name'
+    'label', 'shortLabel', 'description'
   ]
 };
 
@@ -38,8 +38,10 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
 
   const results = allItems
     .map((item: IntellisenseItem) => {
-      const words = item.name.toLowerCase().split(/\s+/);
-      // AND logico: ogni keyword deve matchare almeno una parola del titolo
+      // Cerca su label, shortLabel e description
+      const fields = [item.label, item.shortLabel, item.description].filter((f): f is string => typeof f === 'string' && f.trim() !== '').map(f => f.toLowerCase());
+      const words = fields.join(' ').split(/\s+/);
+      // AND logico: ogni keyword deve matchare almeno una parola di uno dei campi
       const allMatched = keywords.every(k => words.some(w => w.startsWith(k)));
       if (!allMatched) return null;
       // Highlight: per ogni parola, se matcha una keyword, segna la lunghezza

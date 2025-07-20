@@ -46,13 +46,13 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       
       {/* Content */}
       <div className="flex-1 min-w-0">
-        {/* Description (o name se manca) con highlighting */}
-        <div className="font-normal text-sm mb-1 whitespace-nowrap overflow-hidden text-ellipsis"
-             style={{ color: item.textColor || undefined }}>
-          {item.description
-            ? highlightMatches(item.description, descriptionMatches)
-            : highlightMatches(item.name, nameMatches)
-          }
+        {/* Label principale con tooltip se description */}
+        <div
+          className="font-normal text-sm mb-1 whitespace-nowrap overflow-hidden text-ellipsis"
+          style={{ color: item.textColor || undefined }}
+          title={item.description && item.description.trim() !== '' ? item.description : undefined}
+        >
+          {highlightMatches(item.label || item.name, nameMatches)}
         </div>
         
         {/* AI Badge */}

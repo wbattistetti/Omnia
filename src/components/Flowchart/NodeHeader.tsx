@@ -48,7 +48,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
       if (titleInputRef.current) {
         const rect = titleInputRef.current.getBoundingClientRect();
         setIntellisensePosition({ x: rect.left, y: rect.bottom + 2 });
-        setShowIntellisense(true);
+        // setShowIntellisense(true); // Disabilitato su richiesta
       }
     }, 0);
   };
@@ -111,7 +111,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
                 if (titleInputRef.current) {
                   const rect = titleInputRef.current.getBoundingClientRect();
                   setIntellisensePosition({ x: rect.left, y: rect.bottom + 2 });
-                  setShowIntellisense(true);
+                  // setShowIntellisense(true); // Disabilitato su richiesta
                 }
               }}
             />

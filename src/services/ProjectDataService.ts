@@ -56,8 +56,8 @@ const convertAgentActsToCategories = <T extends AgentActItem>(templateArray: any
     }
     categoriesMap[categoryKey].items.push({
       id: item.id || uuidv4(),
-      name: item.name || item.nameDry || 'Unnamed Item',
-      description: item.description || item.discursive || '',
+      name: item.label || item.shortLabel || item.name || 'Unnamed Item',
+      description: item.description || item.label || item.shortLabel || item.name || '',
       userActs: item.userActs
     } as T);
   });
@@ -83,8 +83,8 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
     }
     categoriesMap[categoryKey].items.push({
       id: item.id || uuidv4(),
-      name: item.name || item.nameDry || 'Unnamed Item',
-      description: item.description || item.discursive || ''
+      name: item.label || item.shortLabel || item.name || 'Unnamed Item',
+      description: item.description || item.label || item.shortLabel || item.name || ''
     });
   });
   return Object.values(categoriesMap);
@@ -231,8 +231,10 @@ export function prepareIntellisenseData(
       category.items.forEach((item: any) => {
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
-          name: item.name,
-          description: item.discursive || item.description || item.name,
+          label: item.label || item.name || item.discursive || item.shortLabel || 'Unnamed',
+          shortLabel: item.shortLabel || item.label || item.name || item.discursive || '',
+          name: item.name || item.label || item.shortLabel || item.discursive || '',
+          description: item.description || item.discursive || item.label || item.name || '',
           category: category.name,
           categoryType: typedEntityType,
           iconComponent: Icon, // solo riferimento al componente
