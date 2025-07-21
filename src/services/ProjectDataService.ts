@@ -212,6 +212,12 @@ export const ProjectDataService = {
   }
 };
 
+export async function getAllDialogueTemplates() {
+  const res = await fetch('http://localhost:3100/api/factory/dialogue-templates');
+  if (!res.ok) throw new Error('Errore nel recupero dei DataDialogueTemplates');
+  return res.json();
+}
+
 /**
  * Prepare intellisense data from project data
  */

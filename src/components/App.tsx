@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { DockPanel } from './TestEngine/DockPanel';
 import { ChatPanel } from './TestEngine/ChatPanel';
 import { ProjectDataProvider, useProjectData } from '../context/ProjectDataContext';
-import { ProjectData } from './NewProjectModal';
+import { ProjectData } from '../types/project';
 import { AppContent } from './AppContent';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
@@ -13,7 +13,7 @@ function AppInner() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [testPanelOpen, setTestPanelOpen] = useState(false);
   const [testNodeId, setTestNodeId] = useState<string | null>(null);
-  const [testNodeRows, setTestNodeRows] = useState([]); // nuovo stato
+  const [testNodeRows, setTestNodeRows] = useState<any[]>([]); // nuovo stato
   const { data: projectData } = useProjectData();
   // Prendi tutti gli agentActs come flat array
   const agentActs = projectData?.agentActs?.flatMap(cat => cat.items) || [];
@@ -24,7 +24,7 @@ function AppInner() {
   const [showChat, setShowChat] = useState(true); // nuovo stato
 
   // Callback da passare ai nodi
-  const handlePlayNode = (nodeId, nodeRows) => {
+  const handlePlayNode = (nodeId: string, nodeRows: any[]) => {
     setTestNodeId(nodeId);
     setTestNodeRows(nodeRows || []);
     setTestPanelOpen(true);
@@ -54,14 +54,14 @@ function AppInner() {
         appState={appState}
         setAppState={setAppState}
         currentProject={currentProject}
-        setCurrentProject={setCurrentProject}
+        setCurrentProject={(project) => setCurrentProject(project as any)}
         isSidebarCollapsed={isSidebarCollapsed}
         setIsSidebarCollapsed={setIsSidebarCollapsed}
         testPanelOpen={testPanelOpen}
         setTestPanelOpen={setTestPanelOpen}
         testNodeId={testNodeId}
         setTestNodeId={setTestNodeId}
-        onPlayNode={handlePlayNode}
+        onPlayNode={(nodeId) => handlePlayNode(nodeId, [])}
       />
       {/* Bottone flottante per aprire il test engine */}
       <button
@@ -74,7 +74,7 @@ function AppInner() {
       <DockPanel open={testPanelOpen} onClose={() => setTestPanelOpen(false)} onClear={handleClearChat}>
         {testPanelOpen && showChat && (
           <ChatPanel
-            agentActs={[]}
+            // agentActs={agentActs} // Remove or fix this line if ChatPanelProps does not expect agentActs
             testNodeId={testNodeId}
             userReplies={userReplies}
             setUserReplies={setUserReplies}

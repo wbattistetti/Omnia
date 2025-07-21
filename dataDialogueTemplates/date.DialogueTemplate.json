@@ -1,0 +1,35 @@
+{
+  "id": "Date",
+  "label": "Date",
+  "description": "A date value (day, month, year)",
+  "subTemplates": ["dayOfMonth", "month", "year"],
+  "responses": {
+    "Normal": [
+      { "id": "SayMessage1", "type": "SayMessage" }
+    ],
+    "NoInput": [
+      { "id": "SayMessage2", "type": "SayMessage" },
+      { "id": "TransferToOperator", "type": "TransferToOperator" }
+    ],
+    "NoMatch": [
+      { "id": "SayMessage3", "type": "SayMessage" },
+      { "id": "TransferToOperator", "type": "TransferToOperator" }
+    ]
+  },
+  "constraints": [
+    {
+      "type": "pastOnly",
+      "message": "The date must be in the past.",
+      "violationEvent": "date.pastOnly.violated"
+    }
+  ],
+  "events": {
+    "date.pastOnly.violated": {
+      "responses": {
+        "Normal": [
+          { "id": "SayMessage4", "type": "SayMessage" }
+        ]
+      }
+    }
+  }
+} 

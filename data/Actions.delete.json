@@ -1,0 +1,18 @@
+[
+  {"id":"sayMessage","label":"Message","description":"Sends a text message to the user.","icon":"MessageCircle","color":"text-blue-500","params":{"text":{"type":"string","required":true,"multilang":true,"multistyle":true}}},
+  {"id":"askQuestion","label":"Question","description":"Asks a question and waits for user input.","icon":"HelpCircle","color":"text-purple-500","params":{"text":{"type":"string","required":true,"multilang":true,"multistyle":true}}},
+  {"id":"escalateToHuman","label":"To Human","description":"Escalates the conversation to a human agent.","icon":"Headphones","color":"text-green-500","params":{}},
+  {"id":"escalateToGuardVR","label":"To Guard VR","description":"Escalates the conversation to a virtual guard.","icon":"Shield","color":"text-indigo-500","params":{}},
+  {"id":"hangUp","label":"Hang Up","description":"Ends the call or conversation.","icon":"PhoneOff","color":"text-red-500","params":{}},
+  {"id":"readFromBackend","label":"Read from Backend","description":"Reads data from the backend system.","icon":"Database","color":"text-cyan-500","params":{"endpoint":{"type":"string","required":true}}},
+  {"id":"writeToBackend","label":"Write to Backend","description":"Writes data to the backend system.","icon":"ServerCog","color":"text-blue-600","params":{"endpoint":{"type":"string","required":true},"data":{"type":"object","required":false}}},
+  {"id":"sendEmail","label":"Send Email","description":"Sends an email to the user.","icon":"Mail","color":"text-yellow-600","params":{"to":{"type":"string","required":true},"subject":{"type":"string","required":true,"multilang":true},"body":{"type":"string","required":true,"multilang":true}}},
+  {"id":"sendSMS","label":"Send SMS","description":"Sends an SMS to the user.","icon":"MessageSquare","color":"text-teal-500","params":{"to":{"type":"string","required":true},"body":{"type":"string","required":true,"multilang":true}}},
+  {"id":"assign","label":"Assign","description":"Assigns a value to a variable.","icon":"Function","color":"text-violet-500","params":{"key":{"type":"string","required":true},"value":{"type":"string","required":true}}},
+  {"id":"playJingle","label":"Play Jingle","description":"Plays a jingle or audio clip.","icon":"Music","color":"text-pink-500","params":{"url":{"type":"string","required":true,"multilang":true,"multistyle":true}}},
+  {"id":"clear","label":"Clear","description":"Clears variables or state.","icon":"Eraser","color":"text-gray-500","params":{}},
+  {"id":"jump","label":"Jump","description":"Jumps to another block or state.","icon":"ArrowRight","color":"text-emerald-500","params":{"target":{"type":"string","required":true}}},
+  {"id":"logData","label":"Log Data","description":"Logs data for analytics or debugging.","icon":"Tag","color":"text-orange-500","params":{"value":{"type":"string","required":true}}},
+  {"id":"logLabel","label":"Log Label","description":"Logs a label for analytics or debugging.","icon":"Tag","color":"text-amber-500","params":{"label":{"type":"string","required":true}}},
+  {"id":"waitForAgent","label":"Wait for Agent","description":"Waits for a human agent to join.","icon":"Clock","color":"text-lime-600","params":{}}
+] 

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "DDT_BirthOfDate",
+    "label": "Acquire date of birth",
+    "description": "Flow to acquire the user's date of birth, handling partial input, validation, and confirmation.",
+    "dataType": {
+      "type": "Date",
+      "fields": ["DayOfMonth", "Month", "Year"]
+    },
+    "variable": "dateOfBirth",
+    "constraints": [
+      {
+        "name": "date_format",
+        "script": "isValidDate(dateOfBirth)",
+        "description": "Checks that the date is in a valid format (YYYY-MM-DD)."
+      },
+      {
+        "name": "past",
+        "script": "dateOfBirth < now",
+        "description": "Checks that the date is in the past."
+      },
+      {
+        "name": "age_min",
+        "script": "getAge(dateOfBirth) >= 18",
+        "description": "Checks that the user is at least 18 years old."
+      }
+    ],
+    "steps": {
+      "normal": [
+        { "actionInstanceId": "askQuestion1", "actionType": "askQuestion" }
+      ],
+      "noInput": [
+        { "actionInstanceId": "sayMessage1", "actionType": "sayMessage" }
+      ],
+      "noMatch": [
+        { "actionInstanceId": "sayMessage2", "actionType": "sayMessage" }
+      ],
+      "explicitConfirmation": [
+        { "actionInstanceId": "askConfirmation1", "actionType": "askConfirmation" }
+      ],
+      "conditionalConfirmation": [
+        {
+          "condition": "getAge(dateOfBirth) < 25",
+          "actions": [
+            { "actionInstanceId": "askConfirmation2", "actionType": "askConfirmation" }
+          ]
+        }
+      ],
+      "date_format.violation": [
+        { "actionInstanceId": "sayMessage3", "actionType": "sayMessage" }
+      ],
+      "past.violation": [
+        { "actionInstanceId": "sayMessage4", "actionType": "sayMessage" }
+      ],
+      "age_min.violation": [
+        { "actionInstanceId": "sayMessage5", "actionType": "sayMessage" }
+      ]
+    },
+    "success": {
+      "actions": [
+        { "actionInstanceId": "sayMessageSuccess", "actionType": "sayMessage" }
+      ]
+    }
+  }
+] 

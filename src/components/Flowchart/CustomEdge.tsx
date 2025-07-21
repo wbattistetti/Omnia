@@ -153,11 +153,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       if (svg && svg.getScreenCTM) {
         const ctm = svg.getScreenCTM();
         if (ctm) {
-          const pt = svg.createSVGPoint();
-          pt.x = point.x;
-          pt.y = point.y;
+        const pt = svg.createSVGPoint();
+        pt.x = point.x;
+        pt.y = point.y;
           const transformed = pt.matrixTransform(ctm);
-          setScreenPoint({ x: transformed.x, y: transformed.y });
+        setScreenPoint({ x: transformed.x, y: transformed.y });
         }
       }
     }
@@ -175,11 +175,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         if (svg && svg.getScreenCTM) {
           const ctm = svg.getScreenCTM();
           if (ctm) {
-            const pt = svg.createSVGPoint();
-            pt.x = point.x;
-            pt.y = point.y;
+          const pt = svg.createSVGPoint();
+          pt.x = point.x;
+          pt.y = point.y;
             const transformed = pt.matrixTransform(ctm);
-            setScreenPoint({ x: transformed.x, y: transformed.y });
+          setScreenPoint({ x: transformed.x, y: transformed.y });
           }
         }
       }

@@ -1,11 +1,6 @@
 // src/services/ProjectService.ts
 
-export interface ProjectData {
-  _id?: string;
-  name: string;
-  description?: string;
-  [key: string]: any;
-}
+import { ProjectData } from '../types/project';
 
 const API = 'http://localhost:3100';
 

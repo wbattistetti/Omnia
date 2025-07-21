@@ -9,7 +9,11 @@ interface NodeRowEditorProps {
 }
 
 export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
-  value, onChange, onKeyDown, inputRef, placeholder
+  value,
+  onChange,
+  onKeyDown,
+  inputRef,
+  placeholder
 }) => (
   <input
     ref={inputRef}
@@ -17,8 +21,9 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
     value={value}
     onChange={onChange}
     onKeyDown={onKeyDown}
-    className="flex-1 bg-white text-black text-[8px] px-2 py-1 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 border border-black nodrag"
     autoFocus
-    placeholder={placeholder || "Type what you need here..."}
+    className="min-w-0 bg-slate-600 text-white text-[8px] px-1.5 py-1 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 border-2 border-purple-400 nodrag"
+    style={{ width: '70%', maxWidth: '70%' }}
+    placeholder={placeholder}
   />
 ); 

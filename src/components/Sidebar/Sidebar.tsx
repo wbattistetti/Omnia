@@ -6,6 +6,7 @@ import { CategoryItem } from './CategoryItem';
 import { AddButton } from './AddButton';
 import { EntityType } from '../../types/project';
 import { useSidebarTheme } from './SidebarThemeContext';
+import { getAllDialogueTemplates } from '../../services/ProjectDataService';
 
 const entityConfig = {
   agentActs: { 
@@ -62,6 +63,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   } = useProjectDataUpdate();
   
   const [searchTerm, setSearchTerm] = useState('');
+  const [dialogueTemplates, setDialogueTemplates] = useState<any[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<string>('agentActs');
   const [sidebarWidth, setSidebarWidth] = useState(MIN_WIDTH);
   const isResizing = useRef(false);
@@ -86,6 +89,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }, []);
   // FONT RESIZE SIDEBAR END
+
+  useEffect(() => {
+    setLoadingTemplates(true);
+    getAllDialogueTemplates()
+      .then(setDialogueTemplates)
+      .catch(() => setDialogueTemplates([]))
+      .finally(() => setLoadingTemplates(false));
+  }, []);
 
   const handleMouseDown = () => {
     isResizing.current = true;
@@ -240,6 +251,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
+        {/* DataDialogueTemplates Accordion */}
+        <Accordion
+          title="Data Dialogue Templates"
+          icon={<Puzzle className="w-5 h-5 text-fuchsia-400" />}
+          isOpen={openAccordion === 'dataDialogueTemplates'}
+          onToggle={() => setOpenAccordion(openAccordion === 'dataDialogueTemplates' ? '' : 'dataDialogueTemplates')}
+          bgColor={{ header: '#a21caf', light: '#f3e8ff' }}
+        >
+          {loadingTemplates ? (
+            <div className="text-slate-400 px-2 py-2">Caricamento...</div>
+          ) : dialogueTemplates.length === 0 ? (
+            <div className="text-slate-400 px-2 py-2">Nessun template trovato</div>
+          ) : (
+            <div className="max-h-64 overflow-y-auto pr-2">
+              {dialogueTemplates.map((dt) => (
+                <div key={dt._id || dt.id} className="mb-2 p-2 rounded bg-fuchsia-50 border border-fuchsia-200">
+                  <div className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || dt._id || dt.id}</div>
+                  {dt.description && <div className="text-xs text-fuchsia-700 mt-1">{dt.description}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </Accordion>
         {(() => {
           const { colors } = useSidebarTheme();
           return Object.entries(filteredData)

@@ -1,23 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 
-export function useOverlayBuffer(labelRef: React.RefObject<HTMLElement>, iconPos: { top: number; left: number } | null, showIcons: boolean) {
-  const [bufferRect, setBufferRect] = useState<{top: number, left: number, width: number, height: number} | null>(null);
+export function useOverlayBuffer(
+  labelRef: React.RefObject<HTMLSpanElement>,
+  iconPos: { top: number; left: number } | null,
+  showIcons: boolean
+) {
+  const [bufferRect, setBufferRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
-    if (labelRef.current && iconPos) {
+    if (showIcons && labelRef.current && iconPos) {
       const labelRect = labelRef.current.getBoundingClientRect();
-      const overlayWidth = 44; // larghezza stimata overlay icone
-      const buffer = 8; // px di tolleranza
       setBufferRect({
-        top: labelRect.top - buffer,
-        left: labelRect.left - buffer,
-        width: (labelRect.width + overlayWidth + buffer * 2),
-        height: Math.max(labelRect.height, 22) + buffer * 2
-      });
+        top: labelRect.top,
+        left: labelRect.right,
+        width: iconPos.left - labelRect.right + 32, // 32px di tolleranza
+        height: labelRect.height,
+        right: iconPos.left + 32,
+        bottom: labelRect.bottom,
+        x: labelRect.right,
+        y: labelRect.top,
+        toJSON: () => ({})
+      } as DOMRect);
     } else {
       setBufferRect(null);
     }
-  }, [showIcons, iconPos, labelRef]);
+  }, [showIcons, labelRef, iconPos]);
 
   return bufferRect;
 } 

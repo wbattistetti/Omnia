@@ -11,82 +11,36 @@ import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
 import { useOverlayBuffer } from '../../hooks/useOverlayBuffer';
 import { NodeRowEditor } from './NodeRowEditor';
 import { NodeRowData } from '../../types/project';
+import { NodeRowProps } from '../../types/NodeRowTypes';
 import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
-
-/**
- * Props per NodeRow
- * @property id - id della riga
- * @property text - testo della riga
- * @property nodeTitle - titolo del nodo (opzionale)
- * @property nodeCanvasPosition - posizione canvas del nodo (opzionale)
- * @property categoryType - tipo categoria (opzionale)
- * @property onUpdate - callback per aggiornare il testo
- * @property onUpdateWithCategory - callback per aggiornare testo e categoria
- * @property onDelete - callback per eliminare la riga
- * @property onKeyDown - callback per keydown (opzionale)
- * @property onDragStart - callback per drag (opzionale)
- * @property index - indice della riga
- * @property canDelete - true se la riga può essere eliminata
- * @property totalRows - numero totale di righe
- * @property isHoveredTarget - true se la riga è target di hover (opzionale)
- * @property isBeingDragged - true se la riga è in drag (opzionale)
- * @property isPlaceholder - true se la riga è placeholder (opzionale)
- * @property style - stile custom (opzionale)
- * @property forceEditing - forza editing (opzionale)
- * @property onMouseEnter, onMouseLeave, onMouseMove - eventi mouse (opzionali)
- * @property userActs - array di stringhe per le azioni dell'utente (opzionale)
- * @property onEditingEnd - callback chiamato dopo il salvataggio o annullamento dell'editing
- */
-export interface NodeRowProps {
-  row: NodeRowData;
-  nodeTitle?: string;
-  nodeCanvasPosition?: { x: number; y: number };
-  onUpdate: (row: NodeRowData, newText: string) => void;
-  onUpdateWithCategory?: (row: NodeRowData, newText: string, categoryType?: string) => void;
-  onDelete: (row: NodeRowData) => void;
-  onKeyDown?: (e: React.KeyboardEvent) => void;
-  onDragStart?: (id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => void;
-  index: number;
-  canDelete: boolean;
-  totalRows: number;
-  isHoveredTarget?: boolean;
-  isBeingDragged?: boolean;
-  isPlaceholder?: boolean;
-  style?: React.CSSProperties;
-  forceEditing?: boolean;
-  onMouseEnter?: (type: 'top' | 'bottom', index: number) => void;
-  onMouseLeave?: () => void;
-  onMouseMove?: (e: React.MouseEvent) => void;
-  bgColor?: string;
-  textColor?: string;
-  onEditingEnd?: () => void;
-}
+import { NodeRowIntellisense } from './NodeRowIntellisense';
+import { useNodeRowDrag } from '../../hooks/useNodeRowDrag';
 
 export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   {
-    row,
-    nodeTitle,
-    nodeCanvasPosition,
-    onUpdate,
-    onUpdateWithCategory,
-    onDelete,
-    onKeyDown,
-    onDragStart,
-    index,
-    canDelete,
-    totalRows,
-    isHoveredTarget = false,
-    isBeingDragged = false,
-    isPlaceholder = false,
-    style,
-    forceEditing = false,
-    onMouseEnter,
-    onMouseLeave,
-    onMouseMove,
-    bgColor: propBgColor,
-    textColor: propTextColor,
-    onEditingEnd
+  row,
+  nodeTitle,
+  nodeCanvasPosition,
+  onUpdate, 
+  onUpdateWithCategory,
+  onDelete, 
+  onKeyDown,
+  onDragStart,
+  index,
+  canDelete,
+  totalRows,
+  isHoveredTarget = false,
+  isBeingDragged = false,
+  isPlaceholder = false,
+  style,
+  forceEditing = false,
+  onMouseEnter,
+  onMouseLeave,
+  onMouseMove,
+  bgColor: propBgColor,
+  textColor: propTextColor,
+  onEditingEnd
   },
   ref
 ) => {
@@ -337,7 +291,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
           }}
           onMouseEnter={() => setShowIcons(true)}
           onMouseLeave={() => setShowIcons(false)}
-        />, 
+        />,
         document.body
       )}
       <div 
@@ -350,15 +304,15 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
         onMouseLeave={() => setShowIcons(false)}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
-        {isEditing ? (
-          <NodeRowEditor
-            value={currentText}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDownInternal}
-            inputRef={inputRef}
-            placeholder="Type what you need here..."
-          />
-        ) : (
+      {isEditing ? (
+        <NodeRowEditor
+          value={currentText}
+          onChange={handleTextChange}
+          onKeyDown={handleKeyDownInternal}
+          inputRef={inputRef}
+          placeholder="Type what you need here..."
+        />
+      ) : (
           <NodeRowLabel
             row={row}
             included={included}
@@ -371,50 +325,29 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
             labelRef={labelRef}
             Icon={Icon}
             showIcons={showIcons}
-            iconPos={iconPos}
-            canDelete={canDelete}
-            onEdit={() => setIsEditing(!isEditing)}
-            onDelete={() => onDelete(row)}
-            onDrag={handleMouseDown}
-            isEditing={isEditing}
-            setIsEditing={setIsEditing}
+                iconPos={iconPos}
+                canDelete={canDelete}
+                onEdit={() => setIsEditing(!isEditing)}
+                onDelete={() => onDelete(row)}
+                onDrag={handleMouseDown}
+                isEditing={isEditing}
+                setIsEditing={setIsEditing}
             bgColor={bgColor}
             labelTextColor={labelTextColor}
             onDoubleClick={handleDoubleClick}
           />
         )}
-      </div>
+        </div>
       
-      {/* Intellisense Menu in overlay stile EdgeConditionSelector, posizionato sotto il nodo */}
-      {showIntellisense && isEditing && nodeOverlayPosition && createPortal(
-        <div
-          className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
-          style={{
-            left: nodeOverlayPosition.left,
-            top: nodeOverlayPosition.top + 4,
-            minWidth: '280px'
-          }}
-        >
-          {/* Header */}
-          <div className="text-sm font-medium text-gray-700 mb-2">
-            Seleziona azione o atto per il nodo
-          </div>
-          {/* Help text */}
-          <div className="text-xs text-gray-500 mb-2">
-            Inizia a digitare per vedere le azioni disponibili
-          </div>
-        <IntellisenseMenu
-          isOpen={showIntellisense}
-          query={intellisenseQuery}
-          position={{ x: 0, y: 0 }}
-            referenceElement={inputRef.current}
-          onSelect={handleIntellisenseSelect}
-          onClose={handleIntellisenseClose}
-          filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
-        />
-        </div>,
-        document.body
-      )}
+      <NodeRowIntellisense
+        showIntellisense={showIntellisense}
+        isEditing={isEditing}
+        nodeOverlayPosition={nodeOverlayPosition}
+        intellisenseQuery={intellisenseQuery}
+        inputRef={inputRef}
+        handleIntellisenseSelect={handleIntellisenseSelect}
+        handleIntellisenseClose={handleIntellisenseClose}
+      />
     </>
   );
 });

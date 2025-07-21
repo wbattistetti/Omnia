@@ -1,0 +1,146 @@
+[
+  {
+    "id": "operatorName",
+    "label": { "en": "Operator Name", "it": "Nome Operatore" },
+    "description": {
+      "en": "The name of the operator handling the conversation.",
+      "it": "Il nome dell'operatore che gestisce la conversazione."
+    },
+    "defaultValue": "Marco"
+  },
+  {
+    "id": "userName",
+    "label": { "en": "User Name", "it": "Nome Utente" },
+    "description": {
+      "en": "The name of the user.",
+      "it": "Il nome dell'utente."
+    },
+    "defaultValue": "Giulia"
+  },
+  {
+    "id": "dateOfBirth",
+    "label": { "en": "Date of Birth", "it": "Data di Nascita" },
+    "description": {
+      "en": "The user's date of birth.",
+      "it": "La data di nascita dell'utente."
+    },
+    "defaultValue": "01/01/1990"
+  },
+  {
+    "id": "taxCode",
+    "label": { "en": "Tax Code", "it": "Codice Fiscale" },
+    "description": {
+      "en": "The user's tax identification code.",
+      "it": "Il codice fiscale dell'utente."
+    },
+    "defaultValue": "RSSMRA80A01H501Z"
+  },
+  {
+    "id": "phoneNumber",
+    "label": { "en": "Phone Number", "it": "Numero di Telefono" },
+    "description": {
+      "en": "The user's phone number.",
+      "it": "Il numero di telefono dell'utente."
+    },
+    "defaultValue": "+39 333 1234567"
+  },
+  {
+    "id": "emailAddress",
+    "label": { "en": "Email Address", "it": "Indirizzo Email" },
+    "description": {
+      "en": "The user's email address.",
+      "it": "L'indirizzo email dell'utente."
+    },
+    "defaultValue": "giulia.rossi@email.com"
+  },
+  {
+    "id": "serviceAddress",
+    "label": { "en": "Service Address", "it": "Indirizzo di Fornitura" },
+    "description": {
+      "en": "The address where the service is active.",
+      "it": "L'indirizzo dove è attiva la fornitura."
+    },
+    "defaultValue": "Via Roma 1, Milano"
+  },
+  {
+    "id": "podPdrCode",
+    "label": { "en": "POD/PDR Code", "it": "Codice POD/PDR" },
+    "description": {
+      "en": "The user's POD or PDR code.",
+      "it": "Il codice POD o PDR dell'utente."
+    },
+    "defaultValue": "IT001E00000000000"
+  },
+  {
+    "id": "contractNumber",
+    "label": { "en": "Contract Number", "it": "Numero di Contratto" },
+    "description": {
+      "en": "The user's contract number.",
+      "it": "Il numero di contratto dell'utente."
+    },
+    "defaultValue": "1234567890"
+  },
+  {
+    "id": "iban",
+    "label": { "en": "IBAN", "it": "IBAN" },
+    "description": {
+      "en": "The user's IBAN for payments.",
+      "it": "L'IBAN dell'utente per i pagamenti."
+    },
+    "defaultValue": "IT60X0542811101000000123456"
+  },
+  {
+    "id": "billingAddress",
+    "label": { "en": "Billing Address", "it": "Indirizzo di Fatturazione" },
+    "description": {
+      "en": "The user's billing address.",
+      "it": "L'indirizzo di fatturazione dell'utente."
+    },
+    "defaultValue": "Via Garibaldi 10, Torino"
+  },
+  {
+    "id": "meterReading",
+    "label": { "en": "Meter Reading", "it": "Lettura Contatore" },
+    "description": {
+      "en": "The user's current meter reading.",
+      "it": "La lettura attuale del contatore dell'utente."
+    },
+    "defaultValue": "12345"
+  },
+  {
+    "id": "supplyActivationDate",
+    "label": { "en": "Supply Activation Date", "it": "Data di Attivazione Fornitura" },
+    "description": {
+      "en": "The activation date of the user's supply.",
+      "it": "La data di attivazione della fornitura dell'utente."
+    },
+    "defaultValue": "01/01/2020"
+  },
+  {
+    "id": "supplyDeactivationDate",
+    "label": { "en": "Supply Deactivation Date", "it": "Data di Disattivazione Fornitura" },
+    "description": {
+      "en": "The deactivation date of the user's supply.",
+      "it": "La data di disattivazione della fornitura dell'utente."
+    },
+    "defaultValue": "31/12/2025"
+  },
+  {
+    "id": "contractRenewalDate",
+    "label": { "en": "Contract Renewal Date", "it": "Data di Rinnovo Contratto" },
+    "description": {
+      "en": "The renewal date of the user's supply contract.",
+      "it": "La data di rinnovo del contratto di fornitura dell'utente."
+    },
+    "defaultValue": "01/01/2026"
+  },
+  {
+    "id": "contractCancellationDate",
+    "label": { "en": "Contract Cancellation Date", "it": "Data di Disdetta Contratto" },
+    "description": {
+      "en": "The cancellation date of the user's supply contract.",
+      "it": "La data di disdetta del contratto di fornitura dell'utente."
+    },
+    "defaultValue": "31/12/2026"
+  }
+] 

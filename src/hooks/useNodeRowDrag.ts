@@ -10,9 +10,9 @@ export function useNodeRowDrag(nodeRows: NodeRowData[]) {
   const [draggedRowCurrentClientX, setDraggedRowCurrentClientX] = useState<number | null>(null);
   const [draggedRowCurrentClientY, setDraggedRowCurrentClientY] = useState<number | null>(null);
   const [hoveredRowIndex, setHoveredRowIndex] = useState<number | null>(null);
-  const [visualSnapOffset, setVisualSnapOffset] = useState({ x: 0, y: 0 });
+  const [visualSnapOffset, setVisualSnapOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Puoi aggiungere qui eventuali handler per il drag&drop
+  // Puoi aggiungere qui altre funzioni di utilità per il drag
 
   return {
     draggedRowId,
@@ -32,6 +32,6 @@ export function useNodeRowDrag(nodeRows: NodeRowData[]) {
     hoveredRowIndex,
     setHoveredRowIndex,
     visualSnapOffset,
-    setVisualSnapOffset,
+    setVisualSnapOffset
   };
 } 

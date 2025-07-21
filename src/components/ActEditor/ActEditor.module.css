@@ -1,0 +1,29 @@
+/* Executive summary: CSS module for the main layout and header styles of the Actions Editor. */
+.container {
+  height: 100%;
+  width: 100%;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  background: #eff6ff;
+  padding: 0.75rem;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+  border-bottom: 1px solid #dbeafe;
+}
+
+.headerTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.body {
+  flex-grow: 1;
+  overflow: hidden;
+} 

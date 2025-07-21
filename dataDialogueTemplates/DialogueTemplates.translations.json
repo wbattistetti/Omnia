@@ -1,0 +1,25 @@
+{
+  "Date.responses.Normal.SayMessage1.text.Style.Formal.Language.en": "Can you tell me the date?",
+  "Date.responses.Normal.SayMessage1.text.Style.Formal.Language.it": "Puoi dirmi la data?",
+  "Date.responses.Normal.SayMessage1.text.Style.Formal.Language.pt": "Pode me dizer a data?",
+
+  "Date.responses.NoInput.SayMessage2.text.Style.Formal.Language.en": "Sorry, I didn't hear a date. Can you repeat?",
+  "Date.responses.NoInput.SayMessage2.text.Style.Formal.Language.it": "Scusa, non ho sentito una data. Puoi ripetere?",
+  "Date.responses.NoInput.SayMessage2.text.Style.Formal.Language.pt": "Desculpe, não ouvi uma data. Pode repetir?",
+
+  "Date.responses.NoInput.TransferToOperator.text.Style.Formal.Language.en": "I'm transferring you to an operator.",
+  "Date.responses.NoInput.TransferToOperator.text.Style.Formal.Language.it": "Ti trasferisco a un operatore.",
+  "Date.responses.NoInput.TransferToOperator.text.Style.Formal.Language.pt": "Estou transferindo você para um operador.",
+
+  "Date.responses.NoMatch.SayMessage3.text.Style.Formal.Language.en": "I didn't understand the date. Can you repeat?",
+  "Date.responses.NoMatch.SayMessage3.text.Style.Formal.Language.it": "Non ho capito la data. Puoi ripetere?",
+  "Date.responses.NoMatch.SayMessage3.text.Style.Formal.Language.pt": "Não entendi a data. Pode repetir?",
+
+  "Date.responses.NoMatch.TransferToOperator.text.Style.Formal.Language.en": "I'm transferring you to an operator.",
+  "Date.responses.NoMatch.TransferToOperator.text.Style.Formal.Language.it": "Ti trasferisco a un operatore.",
+  "Date.responses.NoMatch.TransferToOperator.text.Style.Formal.Language.pt": "Estou transferindo você para um operador.",
+
+  "Date.events.date.pastOnly.violated.Normal.SayMessage4.text.Style.Formal.Language.en": "The date must be in the past. Please try again.",
+  "Date.events.date.pastOnly.violated.Normal.SayMessage4.text.Style.Formal.Language.it": "La data deve essere nel passato. Riprova.",
+  "Date.events.date.pastOnly.violated.Normal.SayMessage4.text.Style.Formal.Language.pt": "A data deve estar no passado. Por favor, tente novamente."
+} 

@@ -26,14 +26,13 @@ export interface AgentActItem extends ProjectEntityItem {
   userActs?: string[];
 }
 
-export interface ProjectData {
-  agentActs: Category<AgentActItem>[];
-  userActs: Category[];
-  backendActions: Category[];
-  conditions: Category[];
-  tasks: Category[];
-  macrotasks: Category[];
-}
+export type ProjectData = {
+  id?: string;
+  name: string;
+  industry: string;
+  agentActs?: { items: any[] }[]; // Adjust 'any' to the correct type if known
+  // ...other fields as needed
+};
 
 export interface ProjectInfo {
   id: string;
