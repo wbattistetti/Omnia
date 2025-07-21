@@ -44,6 +44,31 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
   }
 });
 
+app.delete('/api/factory/dialogue-templates/:id', async (req, res) => {
+  const id = req.params.id;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    let filter;
+    if (/^[a-fA-F0-9]{24}$/.test(id)) {
+      filter = { _id: new ObjectId(id) };
+    } else {
+      filter = { _id: id };
+    }
+    const result = await db.collection('DataDialogueTemplates').deleteOne(filter);
+    if (result.deletedCount === 1) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Template non trovato' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
 app.get('/api/factory/industries', async (req, res) => {
   const client = new MongoClient(uri);
   try {

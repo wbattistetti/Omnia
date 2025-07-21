@@ -48,9 +48,9 @@ export const Accordion: React.FC<AccordionProps> = ({
         </button>
         {action && <span className="ml-2">{action}</span>}
         {isOpen ? (
-          <ChevronDown className="w-5 h-5 text-slate-400 ml-2" />
+          <ChevronDown className="w-5 h-5 text-slate-400 ml-2" onClick={onToggle} style={{ cursor: 'pointer' }} />
         ) : (
-          <ChevronRight className="w-5 h-5 text-slate-400 ml-2" />
+          <ChevronRight className="w-5 h-5 text-slate-400 ml-2" onClick={onToggle} style={{ cursor: 'pointer' }} />
         )}
       </div>
       

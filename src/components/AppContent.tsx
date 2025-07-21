@@ -224,38 +224,12 @@ export const AppContent: React.FC<AppContentProps> = ({
       const response = await fetch(`http://localhost:3100/projects/${id}`);
       if (!response.ok) throw new Error('Errore nel caricamento');
       const project = await response.json();
-      console.log('[DEBUG] Progetto caricato dal backend:', project);
-      console.log('[DEBUG] agentActs:', project.agentActs);
-      console.log('[DEBUG] userActs:', project.userActs);
-      console.log('[DEBUG] backendActions:', project.backendActions);
-      console.log('[DEBUG] conditions:', project.conditions);
-      console.log('[DEBUG] tasks:', project.tasks);
-      console.log('[DEBUG] macrotasks:', project.macrotasks);
       setCurrentProject(project); // carica TUTTI i dati, inclusi i dizionari
       // AGGIUNTA: aggiorna anche nodi e edge se presenti
       setNodes(Array.isArray(project.nodes) ? project.nodes : []);
       setEdges(Array.isArray(project.edges) ? project.edges : []);
       await ProjectDataService.importProjectData(JSON.stringify(project));
       await refreshData();
-      setTimeout(() => {
-        // LOG DATI NEL CONTEXT DOPO REFRESH
-        try {
-          // Import dinamico per evitare hook fuori da componenti
-          const { useProjectData } = require('../context/ProjectDataContext');
-          const { data: projectData } = useProjectData();
-          console.log('[DEBUG][SIDEBAR] Dati nel context dopo refresh:', projectData);
-          if (projectData) {
-            console.log('[DEBUG][SIDEBAR] agentActs:', projectData.agentActs);
-            console.log('[DEBUG][SIDEBAR] userActs:', projectData.userActs);
-            console.log('[DEBUG][SIDEBAR] backendActions:', projectData.backendActions);
-            console.log('[DEBUG][SIDEBAR] conditions:', projectData.conditions);
-            console.log('[DEBUG][SIDEBAR] tasks:', projectData.tasks);
-            console.log('[DEBUG][SIDEBAR] macrotasks:', projectData.macrotasks);
-          }
-        } catch (e) {
-          console.log('[DEBUG][SIDEBAR] Impossibile leggere projectData dal context:', e);
-        }
-      }, 1000);
     } catch (err) {
       alert('Errore: ' + (err instanceof Error ? err.message : err));
     }

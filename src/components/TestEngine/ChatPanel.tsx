@@ -20,9 +20,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ testNodeId, userReplies, s
   // Filtra solo le row agent
   const agentRows = nodeRows.filter(row => row.categoryType === 'agentActs');
 
-  // DEBUG LOG: mostra agentRows e userActs
-  console.log('[ChatPanel] agentRows dettagliato:', agentRows);
-
   // Calcola quali prompt mostrare: tutti fino al prossimo che aspetta risposta
   let shownIndices: number[] = [];
   let idx = 0;

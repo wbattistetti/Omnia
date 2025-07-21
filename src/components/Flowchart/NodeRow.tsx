@@ -268,7 +268,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
 
   // LOG: stampa id, forceEditing, isEditing
   useEffect(() => {
-    console.log(`[NodeRow] render row.id=${row.id} forceEditing=${forceEditing} isEditing=${isEditing}`);
+    // console.log(`[NodeRow] render row.id=${row.id} forceEditing=${forceEditing} isEditing=${isEditing}`);
   });
 
   // Uso l'icona centralizzata

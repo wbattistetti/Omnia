@@ -135,18 +135,15 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       const viewport = reactFlowInstance.getViewport ? reactFlowInstance.getViewport() : { x: 0, y: 0, zoom: 1 };
       const viewportEl = document.querySelector('.react-flow') as HTMLElement;
       const rect = viewportEl ? viewportEl.getBoundingClientRect() : null;
-      console.log('[DEBUG][FlowEditor][nodes.length]', nodes.length, 'viewport:', viewport, 'rect:', rect, 'nodes:', nodes);
     }
   }, [nodes.length, reactFlowInstance]);
 
   // Log su addNodeAtPosition e deleteNode
   const { addNode, deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodes, setNodeIdCounter);
   const addNodeAtPosition = useCallback((node: Node<NodeData>, x: number, y: number) => {
-    console.log('[DEBUG][FlowEditor][addNodeAtPosition] node:', node, 'x:', x, 'y:', y);
     originalAddNodeAtPosition(node, x, y);
   }, [originalAddNodeAtPosition]);
   const deleteNodeWithLog = useCallback((id: string) => {
-    console.log('[DEBUG][FlowEditor][deleteNode] id:', id);
     deleteNode(id);
   }, [deleteNode]);
 
@@ -229,19 +226,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           const rect = viewport.getBoundingClientRect();
           xScreen = rect.left + rect.width / 2;
           yScreen = rect.top + 100;
-          console.log('[DEBUG][FlowEditor] viewport.getBoundingClientRect():', rect);
         }
-        console.log('[DEBUG][FlowEditor] event.clientX:', event.clientX, 'event.clientY:', event.clientY);
-        console.log('[DEBUG][FlowEditor] xScreen:', xScreen, 'yScreen:', yScreen);
         if (reactFlowInstance.getViewport) {
           const viewportObj = reactFlowInstance.getViewport();
-          console.log('[DEBUG][FlowEditor] reactFlowInstance.getViewport():', viewportObj);
         }
         // Usa screenToFlowPosition per convertire coordinate schermo in coordinate flow
         const pos = reactFlowInstance.screenToFlowPosition({ x: xScreen, y: yScreen });
         x = pos.x - NODE_WIDTH / 2;
         y = pos.y;
-        console.log('[DEBUG][FlowEditor] Nodo centrato rispetto alla finestra visibile:', { x, y });
       }
       const node: Node<NodeData> = {
         id: newNodeId,
@@ -520,7 +512,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     if (reactFlowInstance && nodes.length === 0) {
       const viewport = reactFlowInstance.getViewport ? reactFlowInstance.getViewport() : { zoom: 1 };
       reactFlowInstance.setViewport({ x: 0, y: 0, zoom: viewport.zoom || 1 }, { duration: 0 });
-      console.log('[DEBUG][FlowEditor] setViewport to x:0 y:0 zoom:', viewport.zoom);
     }
   }, [reactFlowInstance, nodes.length]);
 

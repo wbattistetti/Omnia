@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, Square, Plus } from 'lucide-react';
+import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, Square, Plus, Calendar, Mail, MapPin, FileText, Trash2 } from 'lucide-react';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { Accordion } from './Accordion';
 import { CategoryItem } from './CategoryItem';
@@ -89,13 +89,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }, []);
   // FONT RESIZE SIDEBAR END
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     setLoadingTemplates(true);
     getAllDialogueTemplates()
-      .then(setDialogueTemplates)
-      .catch(() => setDialogueTemplates([]))
-      .finally(() => setLoadingTemplates(false));
+      .then((data) => {
+        setDialogueTemplates(data);
+      })
+      .catch((err) => {
+        setDialogueTemplates([]);
+      })
+      .finally(() => {
+        setLoadingTemplates(false);
+      });
   }, []);
 
   const handleMouseDown = () => {
@@ -188,6 +195,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     );
   }
 
+  const handleDeleteDDT = async (ddtId: string) => {
+    console.log('[DEBUG][Sidebar] Inizio eliminazione DDT:', ddtId);
+    try {
+      const res = await fetch(`http://localhost:3100/api/factory/dialogue-templates/${ddtId}`, { method: 'DELETE' });
+      console.log('[DEBUG][Sidebar] Risposta DELETE:', res);
+      if (!res.ok) throw new Error('Errore eliminazione');
+      const result = await res.json();
+      console.log('[DEBUG][Sidebar] Risultato JSON:', result);
+      if (result.success) {
+        setDialogueTemplates((prev) => prev.filter(dt => (dt._id || dt.id) !== ddtId));
+        setShowDeleteConfirm(null);
+        console.log('[DEBUG][Sidebar] Eliminazione riuscita, aggiornata lista DDT');
+      } else {
+        console.error('[DEBUG][Sidebar] Errore dal backend:', result.error);
+        alert('Errore: ' + (result.error || 'Impossibile eliminare il template.'));
+      }
+    } catch (err: any) {
+      console.error('[DEBUG][Sidebar] Errore catch eliminazione:', err);
+      alert('Errore: ' + (err.message || err));
+    }
+  };
+
   return (
     <div
       // FONT RESIZE SIDEBAR START
@@ -256,23 +285,69 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="Data Dialogue Templates"
           icon={<Puzzle className="w-5 h-5 text-fuchsia-400" />}
           isOpen={openAccordion === 'dataDialogueTemplates'}
-          onToggle={() => setOpenAccordion(openAccordion === 'dataDialogueTemplates' ? '' : 'dataDialogueTemplates')}
+          onToggle={() => {
+            setOpenAccordion(openAccordion === 'dataDialogueTemplates' ? '' : 'dataDialogueTemplates');
+          }}
           bgColor={{ header: '#a21caf', light: '#f3e8ff' }}
         >
-          {loadingTemplates ? (
-            <div className="text-slate-400 px-2 py-2">Caricamento...</div>
-          ) : dialogueTemplates.length === 0 ? (
-            <div className="text-slate-400 px-2 py-2">Nessun template trovato</div>
-          ) : (
-            <div className="max-h-64 overflow-y-auto pr-2">
-              {dialogueTemplates.map((dt) => (
-                <div key={dt._id || dt.id} className="mb-2 p-2 rounded bg-fuchsia-50 border border-fuchsia-200">
-                  <div className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || dt._id || dt.id}</div>
-                  {dt.description && <div className="text-xs text-fuchsia-700 mt-1">{dt.description}</div>}
-                </div>
-              ))}
-            </div>
-          )}
+          {(() => {
+            const isOpen = openAccordion === 'dataDialogueTemplates';
+            return loadingTemplates ? (
+              <div className="text-slate-400 px-2 py-2">Caricamento...</div>
+            ) : dialogueTemplates.length === 0 ? (
+              <div className="text-slate-400 px-2 py-2">Nessun template trovato</div>
+            ) : (
+              <div className="max-h-64 overflow-y-auto pr-2">
+                {dialogueTemplates.map((dt) => {
+                  let icon = <FileText className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                  const type = dt.dataType?.type?.toLowerCase();
+                  if (type === 'date') icon = <Calendar className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                  else if (type === 'email') icon = <Mail className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                  else if (type === 'address') icon = <MapPin className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                  const ddtId = dt._id || dt.id;
+                  console.log('[DEBUG][Sidebar] DDT:', dt.label, 'id:', dt.id, '_id:', dt._id);
+                  return (
+                    <div key={ddtId} className="mb-2 p-2 rounded bg-fuchsia-50 border border-fuchsia-200 flex flex-col">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          {icon}
+                          <span className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || ddtId}</span>
+                        </div>
+                        <div className="flex items-center gap-2 ml-2">
+                          <button className="p-1 text-fuchsia-700 hover:text-fuchsia-900" title="Impostazioni">
+                            <Settings className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="p-1 text-red-500 hover:text-red-700"
+                            title="Elimina template"
+                            onClick={() => setShowDeleteConfirm(ddtId)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {showDeleteConfirm === ddtId && (
+                        <div className="mt-2 flex gap-2 items-center bg-red-50 border border-red-200 rounded px-3 py-2">
+                          <button
+                            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold"
+                            onClick={() => handleDeleteDDT(ddtId)}
+                          >
+                            Conferma
+                          </button>
+                          <button
+                            className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 font-semibold"
+                            onClick={() => setShowDeleteConfirm(null)}
+                          >
+                            Annulla
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </Accordion>
         {(() => {
           const { colors } = useSidebarTheme();
