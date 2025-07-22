@@ -1,17 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
 import { Sidebar } from './Sidebar/Sidebar';
-import { FlowEditor } from './Flowchart/FlowEditor';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
 import { NodeData, EdgeData } from './Flowchart/FlowEditor';
 import { ProjectInfo } from '../types/project';
 import { useEffect } from 'react';
-import { ProjectService, ProjectData } from '../services/ProjectService';
+import { ProjectService } from '../services/ProjectService';
+import { ProjectData } from '../types/project';
 import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
+import ActEditor from './ActEditor';
+import { DockablePanelsHandle } from './DockablePanels';
+import DockablePanels from './DockablePanels';
+import { FlowEditor } from './Flowchart/FlowEditor';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -42,6 +46,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   setTestNodeId,
   onPlayNode
 }) => {
+  console.log('[AppContent] Render', { appState, currentProject, isSidebarCollapsed, testPanelOpen, testNodeId });
   const { refreshData } = useProjectDataUpdate();
 
   // Stato globale per nodi e edge
@@ -60,6 +65,40 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [showAllProjectsModal, setShowAllProjectsModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Stato per finestre editor DDT aperte (ora con react-mosaic)
+  const [mosaicNodes, setMosaicNodes] = useState<any>(null);
+  const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
+
+  const handleOpenDDTEditor = (ddt: any, translations: any, lang: string) => {
+    const id = ddt._id || ddt.id;
+    const title = ddt.label || ddt.name || id;
+    if (dockablePanelsRef.current) {
+      dockablePanelsRef.current.openPanel({ id, title, ddt, translations, lang });
+    } else {
+      console.log('[AppContent] dockablePanelsRef non disponibile, ritento tra 100ms');
+      setTimeout(() => {
+        if (dockablePanelsRef.current) {
+          dockablePanelsRef.current.openPanel({ id, title, ddt, translations, lang });
+        } else {
+          console.error('[AppContent] dockablePanelsRef ancora non disponibile!');
+        }
+      }, 100);
+    }
+  };
+
+  // Pannello di test in alto a sinistra all'avvio
+  React.useEffect(() => {
+    if (dockablePanelsRef.current) {
+      dockablePanelsRef.current.openPanel({
+        id: 'test-panel',
+        title: 'Test Panel',
+        ddt: { label: 'Test Panel' },
+        translations: {},
+        lang: 'it'
+      });
+    }
+  }, []);
 
   // Carica progetti recenti (ultimi 10)
   const fetchRecentProjects = async () => {
@@ -132,6 +171,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         conditions: JSON.parse(JSON.stringify(templateDicts.conditions)),
         tasks: JSON.parse(JSON.stringify(templateDicts.tasks)),
         macrotasks: JSON.parse(JSON.stringify(templateDicts.macrotasks)),
+        industry: (templateDicts.industry || 'defaultIndustry'),
       };
       setCurrentProject(newProject);
       setNodes([]);
@@ -253,6 +293,12 @@ export const AppContent: React.FC<AppContentProps> = ({
     }
   }, [showAllProjectsModal]);
 
+  const flowContainerRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    console.log('[AppContent] Rendering FlowEditor', { nodes, edges, currentProject });
+    console.log('[AppContent] Rendering DockablePanels');
+  });
+
   return (
     <div className="min-h-screen">
       {/* Toast feedback */}
@@ -302,19 +348,27 @@ export const AppContent: React.FC<AppContentProps> = ({
               <Sidebar 
                 isCollapsed={isSidebarCollapsed}
                 onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                onOpenDDTEditor={handleOpenDDTEditor}
               />
-              <div className="flex-1">
-                <FlowEditor 
-                  testPanelOpen={testPanelOpen}
-                  setTestPanelOpen={setTestPanelOpen}
-                  testNodeId={testNodeId}
-                  setTestNodeId={setTestNodeId}
-                  onPlayNode={onPlayNode}
+              <div
+                className="flex-1 relative"
+                style={{ height: '100vh', minHeight: 400, background: '#fff' }}
+                ref={flowContainerRef}
+              >
+                <FlowEditor
                   nodes={nodes}
                   setNodes={setNodes}
                   edges={edges}
                   setEdges={setEdges}
+                  currentProject={currentProject}
+                  setCurrentProject={setCurrentProject}
+                  onPlayNode={onPlayNode}
+                  testPanelOpen={testPanelOpen}
+                  setTestPanelOpen={setTestPanelOpen}
+                  testNodeId={testNodeId}
+                  setTestNodeId={setTestNodeId}
                 />
+                <DockablePanels ref={dockablePanelsRef} />
               </div>
             </div>
           </SidebarThemeProvider>

@@ -3,7 +3,13 @@ import React from 'react';
 import ActionList from './ActionViewer/ActionList';
 import styles from './ActEditor.module.css';
 
-const ActEditor: React.FC = () => {
+type ActEditorProps = {
+  ddt: any;
+  translations: any;
+  lang: string;
+};
+
+const ActEditor: React.FC<ActEditorProps> = ({ ddt, translations, lang }) => {
   return (
     <div className={styles.container}>
       <div className={styles.header}>

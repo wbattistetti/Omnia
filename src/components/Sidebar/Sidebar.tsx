@@ -38,6 +38,7 @@ const entityConfig = {
 interface SidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onOpenDDTEditor?: (ddt: any, translations: any, lang: string) => void;
 }
 
 const MIN_WIDTH = 320; // px (w-80)
@@ -50,7 +51,8 @@ const DEFAULT_FONT_SIZE = 16;
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   isCollapsed = false, 
-  onToggleCollapse 
+  onToggleCollapse,
+  onOpenDDTEditor
 }) => {
   const { data, loading, error } = useProjectData();
   const { 
@@ -314,7 +316,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <span className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || ddtId}</span>
                         </div>
                         <div className="flex items-center gap-2 ml-2">
-                          <button className="p-1 text-fuchsia-700 hover:text-fuchsia-900" title="Impostazioni">
+                          <button
+                            className="p-1 text-fuchsia-700 hover:text-fuchsia-900"
+                            title="Impostazioni"
+                            onClick={() => onOpenDDTEditor && onOpenDDTEditor(dt, {}, 'it')}
+                          >
                             <Settings className="w-4 h-4" />
                           </button>
                           <button

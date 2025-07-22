@@ -48,18 +48,21 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
   }, []);
 
   const addNode = useCallback((data: any) => {
-    setNodes(nodes => [
-      ...nodes,
-      {
+    console.log('[addNode] Chiamato con data:', data);
+    setNodes(nodes => {
+      const newNode = {
         id: Math.random().toString(36).substr(2, 9),
         text: data.label,
-        type: 'action',
+        type: 'action' as const,
         icon: data.icon,
         color: data.color,
-        level: 0,
+        level: 0, // sibling del root
+        parentId: undefined, // nessun parent
         onDrop: handleDrop
-      }
-    ]);
+      };
+      console.log('[addNode] Nuovo nodo creato:', newNode);
+      return [...nodes, newNode];
+    });
   }, [handleDrop]);
 
   return { nodes, setNodes, handleDrop, addNode };

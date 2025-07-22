@@ -31,6 +31,11 @@ export type ProjectData = {
   name: string;
   industry: string;
   agentActs?: { items: any[] }[]; // Adjust 'any' to the correct type if known
+  userActs?: any[];
+  backendActions?: any[];
+  conditions?: any[];
+  tasks?: any[];
+  macrotasks?: any[];
   // ...other fields as needed
 };
 

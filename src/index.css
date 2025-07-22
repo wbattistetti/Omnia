@@ -43,3 +43,7 @@
 .border {
   border-width: 1px !important;
 }
+
+.dockview-theme-light {
+  background: transparent !important;
+}

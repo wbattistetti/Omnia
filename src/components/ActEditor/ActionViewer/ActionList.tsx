@@ -61,6 +61,7 @@ const ActionList: React.FC = () => {
           <ActionItem
             key={action.id || index}
             icon={iconMap[action.icon] || <Tag size={24} />}
+            iconName={action.icon}
             label={action.label?.[lang] || action.label?.en || action.id}
             color={action.color}
             description={action.description?.[lang] || action.description?.en || ''}

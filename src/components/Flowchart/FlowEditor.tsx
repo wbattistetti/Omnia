@@ -49,6 +49,8 @@ interface FlowEditorProps {
   setNodes: React.Dispatch<React.SetStateAction<Node<NodeData>[]>>;
   edges: Edge<EdgeData>[];
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>;
+  currentProject: any;
+  setCurrentProject: (project: any) => void;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({

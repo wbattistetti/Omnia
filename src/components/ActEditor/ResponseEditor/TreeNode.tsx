@@ -34,6 +34,16 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    // Accetta sempre il drop se c'è un oggetto action
+    let isAction = false;
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      isAction = data && data.type === 'action';
+    } catch {
+      // fallback: accetta comunque
+      isAction = true;
+    }
+    if (!isAction) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const x = e.clientX - rect.left;
