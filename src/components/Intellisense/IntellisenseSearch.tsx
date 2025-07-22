@@ -209,7 +209,6 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
     try {
       semanticMatches = JSON.parse(content);
     } catch (parseError) {
-      console.error('❌ Failed to parse Groq JSON response:', content);
       throw new Error('Invalid JSON response from Groq');
     }
     
@@ -237,8 +236,6 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
     return results;
     
   } catch (error) {
-    console.error('❌ Semantic search error:', error);
-    
     // Return empty results on error to not break the UI
     return [];
   }

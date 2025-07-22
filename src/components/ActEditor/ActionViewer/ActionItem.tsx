@@ -1,7 +1,7 @@
 // Executive summary: Represents a single draggable action item with icon and label.
 import React from 'react';
 import styles from './ActionItem.module.css';
-import { useDraggable } from '@dnd-kit/core';
+import { useDrag } from 'react-dnd';
 
 const MIN_THUMBNAIL_WIDTH = 100;
 
@@ -25,25 +25,35 @@ const iconSVGMap: Record<string, string> = {
 };
 
 interface ActionItemProps {
-  action: any; // Assuming action is an object with id, iconName, label, color, description
+  action: any; // Assuming action is an object with id, iconName, label, color, description, primaryValue, parameters
   icon: React.ReactNode;
   iconName: string;
   label: string;
   color: string;
   description?: string;
+  primaryValue?: string;
+  parameters?: { key: string; value: string }[];
 }
 
-const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, color, description }) => {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: action.id,
-    data: { action }
+const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, color, description, primaryValue, parameters }) => {
+  const [{ isDragging }, dragRef] = useDrag({
+    type: 'ACTION',
+    item: {
+      action,
+      label,
+      icon: iconName,
+      color,
+      primaryValue,
+      parameters
+    },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
   });
 
   return (
     <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
+      ref={dragRef}
       style={{
         opacity: isDragging ? 0.5 : 1,
         cursor: 'grab',

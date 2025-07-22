@@ -36,19 +36,14 @@ export const ActionsCatalogProvider: React.FC<ActionsCatalogProviderProps> = ({ 
   const [actionsCatalog, _setActionsCatalog] = useState<any[]>(initialActions);
 
   useEffect(() => {
-    console.log('[ActionsCatalogProvider][DEBUG] MOUNT', { initialActions });
-    return () => console.log('[ActionsCatalogProvider][DEBUG] UNMOUNT');
   }, []);
 
   useEffect(() => {
-    console.log('[ActionsCatalogProvider][DEBUG] actionsCatalog changed', actionsCatalog);
   }, [actionsCatalog]);
 
   const setActionsCatalog = useCallback((actions: any[]) => {
-    console.log('[ActionsCatalogProvider][DEBUG] setActionsCatalog called', actions);
     _setActionsCatalog(actions);
     setTimeout(() => {
-      console.log('[ActionsCatalogProvider][DEBUG] actionsCatalog after set', actionsCatalog);
     }, 100);
   }, [actionsCatalog]);
 

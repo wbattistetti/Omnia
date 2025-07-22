@@ -5,6 +5,8 @@ import { ProjectDataProvider, useProjectData } from '../context/ProjectDataConte
 import { ProjectData } from '../types/project';
 import { AppContent } from './AppContent';
 import { ActionsCatalogProvider, useSetActionsCatalog } from '../context/ActionsCatalogContext';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -107,7 +109,9 @@ export default function App() {
   return (
     <ProjectDataProvider>
       <ActionsCatalogProvider>
-        <AppInner />
+        <DndProvider backend={HTML5Backend}>
+          <AppInner />
+        </DndProvider>
       </ActionsCatalogProvider>
     </ProjectDataProvider>
   );

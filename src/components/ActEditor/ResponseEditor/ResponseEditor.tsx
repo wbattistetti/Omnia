@@ -7,9 +7,6 @@ import ToolbarButton from './ToolbarButton';
 import TreeView from './TreeView';
 import styles from './ResponseEditor.module.css';
 import { TreeNodeProps } from './types';
-import { DndContext, DragOverlay } from '@dnd-kit/core';
-import { useDDTContext } from '../../context/DDTContext';
-import { useActionsCatalog } from '../../context/ActionsCatalogContext';
 import { useTreeNodes } from './useTreeNodes';
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -30,26 +27,18 @@ const stepIndent: Record<string, number> = {
 };
 
 const estraiParametroPrincipale = (action: any, catalog: any, translations: any, lang: string) => {
-  console.log('[estraiParametroPrincipale] Azione:', action);
-  console.log('[estraiParametroPrincipale] Catalogo trovato:', catalog);
   if (!catalog || !catalog.params) {
-    console.log('[estraiParametroPrincipale] Nessun catalogo o params', { action, catalog });
     return '[catalogo non trovato]';
   }
   const paramKey = Object.keys(catalog.params).find(k => catalog.params[k].type === 'string');
-  console.log('[estraiParametroPrincipale] Parametro principale scelto:', paramKey, { action, catalog });
   if (!paramKey) {
-    console.log('[estraiParametroPrincipale] Nessun parametro principale trovato', { action, catalog });
     return '[parametro principale non trovato]';
   }
   const translationKey = action[paramKey];
-  console.log('[estraiParametroPrincipale] Chiave di traduzione cercata:', translationKey, { action, paramKey });
   if (!translationKey) {
-    console.log('[estraiParametroPrincipale] Nessuna chiave di traduzione trovata', { action, paramKey });
     return '[chiave di traduzione mancante]';
   }
   if (!translations) {
-    console.log('[estraiParametroPrincipale] Translations non fornito', { action, paramKey, translationKey });
     return `[${translationKey}] [translations mancante]`;
   }
   let value = translationKey;
@@ -59,35 +48,24 @@ const estraiParametroPrincipale = (action: any, catalog: any, translations: any,
     if (t && t.value && t.value[lang]) {
       value = t.value[lang];
       found = true;
-      console.log('[estraiParametroPrincipale] Traduzione trovata (array)', { translationKey, value, lang });
-    } else {
-      console.log('[estraiParametroPrincipale] Traduzione NON trovata (array)', { translationKey, lang });
     }
   } else if (typeof translations === 'object') {
     if (translations[translationKey] && translations[translationKey][lang]) {
       value = translations[translationKey][lang];
       found = true;
-      console.log('[estraiParametroPrincipale] Traduzione trovata (object)', { translationKey, value, lang });
-    } else {
-      console.log('[estraiParametroPrincipale] Traduzione NON trovata (object)', { translationKey, lang });
     }
   }
   if (!found) {
     value = `[${translationKey}] non trovato!`;
-    console.log('[estraiParametroPrincipale] Valore finale mostrato:', value);
-  } else {
-    console.log('[estraiParametroPrincipale] Valore finale mostrato:', value);
   }
   return value;
 };
 
 const estraiValoreTradotto = (key: string, translations: any, lang: string) => {
   if (!key) {
-    console.log('[estraiValoreTradotto] Chiave mancante');
     return '';
   }
   if (!translations) {
-    console.log('[estraiValoreTradotto] Translations non fornito', { key });
     return '';
   }
   let value = '';
@@ -95,14 +73,10 @@ const estraiValoreTradotto = (key: string, translations: any, lang: string) => {
     const t = translations.find((t: any) => t.key === key);
     if (t && t.value && t.value[lang]) {
       value = t.value[lang];
-    } else {
-      console.log('[estraiValoreTradotto] Traduzione NON trovata (array)', { key, lang });
     }
   } else if (typeof translations === 'object') {
     if (translations[key] && translations[key][lang]) {
       value = translations[key][lang];
-    } else {
-      console.log('[estraiValoreTradotto] Traduzione NON trovata (object)', { key, lang });
     }
   }
   return value;
@@ -142,7 +116,6 @@ interface ResponseEditorProps {
 }
 
 const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it' }) => {
-  console.log('[ResponseEditor] props', { ddt, translations, lang });
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [actionCatalog, setActionCatalog] = useState<any[]>([]);
   const [showLabel, setShowLabel] = useState(false);
@@ -163,82 +136,38 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   // Hook per aggiungere nodi (canvas drop)
   const { addNode } = useTreeNodes([]); // NB: qui serve solo addNode, lo stato è gestito in TreeView
 
-  const handleDragStart = (event: any) => {
-    if (event.active && event.active.data && event.active.data.current) {
-      setActiveDragAction(event.active.data.current.action);
-    }
-  };
-  const handleDragEnd = (event: any) => {
-    setActiveDragAction(null);
-    if (event.over && event.over.id === 'canvas' && event.active && event.active.data && event.active.data.current) {
-      // Dati dell'action trascinata
-      const actionData = event.active.data.current.action;
-      if (actionData) {
-        addNode({
-          label: actionData.label?.[lang] || actionData.label?.en || actionData.id,
-          icon: actionData.icon,
-          color: actionData.color,
-        });
-      }
-    }
-  };
+  // Rimuovi DndContext, DragOverlay e la logica collegata
 
   return (
-    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className={styles.container}>
-        <div className={styles.header}>
-          <div className={styles.toolbar}>
-            {stepKeys.map((step) => (
-              <ToolbarButton
-                key={step}
-                label={step}
-                active={selectedStep === step}
-                onClick={() => setSelectedStep(step)}
-              />
-            ))}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label style={{ fontSize: 13, color: '#555' }}>
-                <input type="checkbox" checked={showLabel} onChange={e => setShowLabel(e.target.checked)} style={{ marginRight: 4 }} />
-                Mostra label azione
-              </label>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
-          <div style={{ flex: 2, minWidth: 0, padding: 16 }}>
-            <TreeView />
-          </div>
-          <div style={{ flex: 1, minWidth: 220, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff' }}>
-            <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
-            <ActionList />
+    <div className={styles.container}>
+      <div className={styles.header}>
+        <div className={styles.toolbar}>
+          {stepKeys.map((step) => (
+            <ToolbarButton
+              key={step}
+              label={step}
+              active={selectedStep === step}
+              onClick={() => setSelectedStep(step)}
+            />
+          ))}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ fontSize: 13, color: '#555' }}>
+              <input type="checkbox" checked={showLabel} onChange={e => setShowLabel(e.target.checked)} style={{ marginRight: 4 }} />
+              Mostra label azione
+            </label>
           </div>
         </div>
       </div>
-      <DragOverlay>
-        {activeDragAction ? (
-          <div style={{
-            padding: 6,
-            background: '#fff',
-            border: '2px solid #2563eb',
-            borderRadius: 6,
-            boxShadow: '0 2px 8px #0002',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            minWidth: 120,
-            maxWidth: 320,
-            overflow: 'hidden'
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center' }}>
-              {iconMap[activeDragAction.icon] || <Tag size={24} />}
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 500, color: '#333', marginLeft: 6, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-              {activeDragAction.label?.[lang] || activeDragAction.label?.en || activeDragAction.id}
-            </span>
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+      <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
+        <div style={{ flex: 2, minWidth: 0, padding: 16 }}>
+          <TreeView />
+        </div>
+        <div style={{ flex: 1, minWidth: 220, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff' }}>
+          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
+          <ActionList />
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -60,20 +60,36 @@ const ActionList: React.FC = () => {
       >
         {actionsCatalog.map((action, index) => {
           if (!action) {
-            console.error('[ActionList][ERROR] action undefined at index', index);
             return null;
           }
+          // Estrai label, description, primaryValue, parameters come stringhe
+          const label = typeof action.label === 'object' ? action.label[lang] || action.label.en || action.id : action.label;
+          const description = typeof action.description === 'object' ? action.description[lang] || action.description.en || '' : action.description;
+          // Esempio: primaryValue = action.text[lang] o action.text
+          let primaryValue = '';
+          if (action.text) {
+            primaryValue = typeof action.text === 'object' ? action.text[lang] || action.text.en || '' : action.text;
+          }
+          // Parametri figli: estrai solo quelli che sono oggetti lingua o stringhe
+          let parameters = [];
+          if (action.parameters && Array.isArray(action.parameters)) {
+            parameters = action.parameters.map((param: any) => ({
+              key: param.key,
+              value: typeof param.value === 'object' ? param.value[lang] || param.value.en || '' : param.value
+            }));
+          }
           const props = {
-            key: action.id || index,
             action,
             icon: iconMap[action.icon] || <Tag size={24} />,
             iconName: action.icon,
-            label: action.label?.[lang] || action.label?.en || action.id,
+            label,
             color: action.color,
-            description: action.description?.[lang] || action.description?.en || ''
+            description,
+            primaryValue,
+            parameters
           };
-          console.log('[ActionList][DEBUG] rendering ActionItem', props);
-          return <ActionItem {...props} />;
+          // Passa key direttamente, NON dentro props
+          return <ActionItem key={action.id || index} {...props} />;
         })}
       </div>
     </div>

@@ -46,7 +46,6 @@ export const AppContent: React.FC<AppContentProps> = ({
   setTestNodeId,
   onPlayNode
 }) => {
-  console.log('[AppContent] Render', { appState, currentProject, isSidebarCollapsed, testPanelOpen, testNodeId });
   const { refreshData } = useProjectDataUpdate();
 
   // Stato globale per nodi e edge
@@ -76,12 +75,11 @@ export const AppContent: React.FC<AppContentProps> = ({
     if (dockablePanelsRef.current) {
       dockablePanelsRef.current.openPanel({ id, title, ddt, translations, lang });
     } else {
-      console.log('[AppContent] dockablePanelsRef non disponibile, ritento tra 100ms');
       setTimeout(() => {
         if (dockablePanelsRef.current) {
           dockablePanelsRef.current.openPanel({ id, title, ddt, translations, lang });
         } else {
-          console.error('[AppContent] dockablePanelsRef ancora non disponibile!');
+          // console.error('[AppContent] dockablePanelsRef ancora non disponibile!');
         }
       }, 100);
     }
@@ -295,8 +293,6 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const flowContainerRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    console.log('[AppContent] Rendering FlowEditor', { nodes, edges, currentProject });
-    console.log('[AppContent] Rendering DockablePanels');
   });
 
   return (

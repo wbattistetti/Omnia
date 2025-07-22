@@ -198,23 +198,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   const handleDeleteDDT = async (ddtId: string) => {
-    console.log('[DEBUG][Sidebar] Inizio eliminazione DDT:', ddtId);
     try {
       const res = await fetch(`http://localhost:3100/api/factory/dialogue-templates/${ddtId}`, { method: 'DELETE' });
-      console.log('[DEBUG][Sidebar] Risposta DELETE:', res);
       if (!res.ok) throw new Error('Errore eliminazione');
       const result = await res.json();
-      console.log('[DEBUG][Sidebar] Risultato JSON:', result);
       if (result.success) {
         setDialogueTemplates((prev) => prev.filter(dt => (dt._id || dt.id) !== ddtId));
         setShowDeleteConfirm(null);
-        console.log('[DEBUG][Sidebar] Eliminazione riuscita, aggiornata lista DDT');
       } else {
-        console.error('[DEBUG][Sidebar] Errore dal backend:', result.error);
         alert('Errore: ' + (result.error || 'Impossibile eliminare il template.'));
       }
     } catch (err: any) {
-      console.error('[DEBUG][Sidebar] Errore catch eliminazione:', err);
       alert('Errore: ' + (err.message || err));
     }
   };
@@ -307,7 +301,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   else if (type === 'email') icon = <Mail className="w-4 h-4 text-fuchsia-700 mr-2" />;
                   else if (type === 'address') icon = <MapPin className="w-4 h-4 text-fuchsia-700 mr-2" />;
                   const ddtId = dt._id || dt.id;
-                  console.log('[DEBUG][Sidebar] DDT:', dt.label, 'id:', dt.id, '_id:', dt._id);
                   return (
                     <div key={ddtId} className="mb-2 p-2 rounded bg-fuchsia-50 border border-fuchsia-200 flex flex-col">
                       <div className="flex items-center justify-between">

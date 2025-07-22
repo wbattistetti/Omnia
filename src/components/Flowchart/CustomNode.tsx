@@ -323,107 +323,97 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     );
   }
 
-  // LOG SOLO PER SELECTED
-  console.log('[DEBUG][CustomNode] selected:', selected);
-
   return (
-    <>
-      <div className={`bg-white border-black rounded-lg shadow-xl w-70 min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}>
-        <div className="relative" onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)}>
-          {/* Toolbar overlay sopra il nodo, allineata a destra, staccata di 2px */}
-          {showActions && (
-            <div
-              className="absolute right-2 flex gap-2 items-center z-20 bg-white border border-gray-300 rounded-lg shadow px-1.5 py-0.5"
-              style={{ pointerEvents: 'auto', top: '-32px' }}
+    <div className={`bg-white border-black rounded-lg shadow-xl w-70 min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}>
+      <div className="relative" onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)}>
+        {/* Toolbar overlay sopra il nodo, allineata a destra, staccata di 2px */}
+        {showActions && (
+          <div
+            className="absolute right-2 flex gap-2 items-center z-20 bg-white border border-gray-300 rounded-lg shadow px-1.5 py-0.5"
+            style={{ pointerEvents: 'auto', top: '-32px' }}
+          >
+            <button
+              onClick={() => setIsEditingNode(true)}
+              className="p-0 text-slate-500 hover:text-green-500 transition-colors bg-transparent border-none shadow-none"
+              title="Modifica titolo"
+              style={{ background: 'none', padding: 0, margin: 0 }}
             >
-              <button
-                onClick={() => setIsEditingNode(true)}
-                className="p-0 text-slate-500 hover:text-green-500 transition-colors bg-transparent border-none shadow-none"
-                title="Modifica titolo"
-                style={{ background: 'none', padding: 0, margin: 0 }}
-              >
-                <Edit3 className="w-3 h-3" style={{ width: 12, height: 12 }} />
-              </button>
-              <button
-                onClick={handleDeleteNode}
-                className="p-0 text-red-500 hover:text-red-700 transition-colors bg-transparent border-none shadow-none"
-                title="Elimina nodo"
-                style={{ background: 'none', padding: 0, margin: 0 }}
-              >
-                <Trash2 className="w-3 h-3" style={{ width: 12, height: 12 }} />
-              </button>
-              <button
-                onClick={() => data.onPlayNode && data.onPlayNode(id)}
-                className="p-0 text-blue-500 hover:text-blue-700 transition-colors bg-transparent border-none shadow-none"
-                title="Simula nodo"
-                style={{ background: 'none', fontSize: '12px', padding: 0, margin: 0 }}
-              >
-                ▶️
-              </button>
-            </div>
-          )}
-          {/* Buffer invisibile tra titolo e toolbar per tolleranza mouse */}
-          {showActions && (
-            <div
-              className="absolute right-2 z-10"
-              style={{ top: '-8px', height: '8px', width: '120px', pointerEvents: 'auto' }}
-            />
-          )}
-          <NodeHeader
-            title={nodeTitle}
-            onDelete={handleDeleteNode}
-            onToggleEdit={() => setIsEditingNode(!isEditingNode)}
-            onTitleUpdate={handleTitleUpdate}
-            isEditing={isEditingNode}
+              <Edit3 className="w-3 h-3" style={{ width: 12, height: 12 }} />
+            </button>
+            <button
+              onClick={handleDeleteNode}
+              className="p-0 text-red-500 hover:text-red-700 transition-colors bg-transparent border-none shadow-none"
+              title="Elimina nodo"
+              style={{ background: 'none', padding: 0, margin: 0 }}
+            >
+              <Trash2 className="w-3 h-3" style={{ width: 12, height: 12 }} />
+            </button>
+            <button
+              onClick={() => data.onPlayNode && data.onPlayNode(id)}
+              className="p-0 text-blue-500 hover:text-blue-700 transition-colors bg-transparent border-none shadow-none"
+              title="Simula nodo"
+              style={{ background: 'none', fontSize: '12px', padding: 0, margin: 0 }}
+            >
+              ▶️
+            </button>
+          </div>
+        )}
+        {/* Buffer invisibile tra titolo e toolbar per tolleranza mouse */}
+        {showActions && (
+          <div
+            className="absolute right-2 z-10"
+            style={{ top: '-8px', height: '8px', width: '120px', pointerEvents: 'auto' }}
           />
-        </div>
-        
-        <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }}>
-          <NodeRowList
-            rows={displayRows}
-            editingRowId={editingRowId}
-            hoveredInserter={hoveredInserter}
-            setHoveredInserter={setHoveredInserter}
-            handleInsertRow={handleInsertRow}
+        )}
+        <NodeHeader
+          title={nodeTitle}
+          onDelete={handleDeleteNode}
+          onToggleEdit={() => setIsEditingNode(!isEditingNode)}
+          onTitleUpdate={handleTitleUpdate}
+          isEditing={isEditingNode}
+        />
+      </div>
+      <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }}>
+        <NodeRowList
+          rows={displayRows}
+          editingRowId={editingRowId}
+          hoveredInserter={hoveredInserter}
+          setHoveredInserter={setHoveredInserter}
+          handleInsertRow={handleInsertRow}
+          nodeTitle={nodeTitle}
+          onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType)}
+          onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType as EntityType)}
+          onDelete={(row) => handleDeleteRow(row.id)}
+          onKeyDown={(e) => {/* logica keydown se serve */}}
+          onDragStart={handleRowDragStart}
+          canDelete={(row) => nodeRows.length > 1}
+          totalRows={nodeRows.length}
+          hoveredRowIndex={drag.hoveredRowIndex}
+          draggedRowId={drag.draggedRowId}
+          draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
+          draggedItem={draggedItem ?? null}
+          draggedRowStyle={draggedRowStyle}
+          onEditingEnd={() => setEditingRowIdWithLog(null)}
+        />
+        {/* Renderizza la riga trascinata separatamente */}
+        {draggedItem && (
+          <NodeRow
+            key={`dragged-${draggedItem.id}`}
+            row={draggedItem}
             nodeTitle={nodeTitle}
-            onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType)}
-            onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType as EntityType)}
-            onDelete={(row) => handleDeleteRow(row.id)}
-            onKeyDown={(e) => {/* logica keydown se serve */}}
-            onDragStart={handleRowDragStart}
-            canDelete={(row) => nodeRows.length > 1}
+            onUpdate={() => {}}
+            onUpdateWithCategory={() => {}}
+            onDelete={() => {}}
+            index={drag.draggedRowOriginalIndex || 0}
+            canDelete={nodeRows.length > 1}
             totalRows={nodeRows.length}
-            hoveredRowIndex={drag.hoveredRowIndex}
-            draggedRowId={drag.draggedRowId}
-            draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
-            draggedItem={draggedItem ?? null}
-            draggedRowStyle={draggedRowStyle}
+            isBeingDragged={true}
+            style={draggedRowStyle}
             onEditingEnd={() => setEditingRowIdWithLog(null)}
           />
-          
-          {/* Renderizza la riga trascinata separatamente */}
-          {draggedItem && (
-            <NodeRow
-              key={`dragged-${draggedItem.id}`}
-              row={draggedItem}
-              nodeTitle={nodeTitle}
-              onUpdate={() => {}}
-              onUpdateWithCategory={() => {}}
-              onDelete={() => {}}
-              index={drag.draggedRowOriginalIndex || 0}
-              canDelete={nodeRows.length > 1}
-              totalRows={nodeRows.length}
-              isBeingDragged={true}
-              style={draggedRowStyle}
-              onEditingEnd={() => setEditingRowIdWithLog(null)}
-            />
-          )}
-
-        </div>
-        
-        <NodeHandles isConnectable={isConnectable} />
+        )}
       </div>
-
+      <NodeHandles isConnectable={isConnectable} />
       {/* Mock Intellisense Menu */}
       {showIntellisense && (
         <IntellisenseMenu
@@ -436,6 +426,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
         />
       )}
-    </>
+    </div>
   );
 };
