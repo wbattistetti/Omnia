@@ -3,6 +3,7 @@ import React from 'react';
 import TreeNode from './TreeNode';
 import { TreeNodeProps } from './types';
 import { useTreeNodes } from './useTreeNodes';
+import { useDroppable } from '@dnd-kit/core';
 
 interface TreeViewProps {
   initialNodes?: TreeNodeProps[];
@@ -16,44 +17,20 @@ const defaultNodes: TreeNodeProps[] = [
 
 const TreeView: React.FC<TreeViewProps> = ({ initialNodes }) => {
   const { nodes, handleDrop, addNode } = useTreeNodes(initialNodes || defaultNodes);
-
-  const handleCanvasDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    try {
-      const data = JSON.parse(e.dataTransfer.getData('application/json'));
-      console.log('[TreeView] handleCanvasDrop chiamato con data:', data);
-      addNode(data);
-    } catch (error) {
-      console.error('[TreeView] Error handling canvas drop:', error);
-    }
-  };
-
-  const handleCanvasDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    console.log('[TreeView] handleCanvasDragOver');
-  };
+  const { setNodeRef, isOver } = useDroppable({ id: 'canvas' });
 
   return (
-    <div className="h-full flex flex-col" style={{ position: 'relative' }}>
-      {/* Area di drop sopra tutto */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 9999,
-          minHeight: 100,
-          background: 'rgba(37,99,235,0.08)',
-          border: '4px solid #2563eb',
-          pointerEvents: 'all',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}
-        onDrop={handleCanvasDrop}
-        onDragOver={handleCanvasDragOver}
-      >
-        <span style={{ color: '#1e3a8a', fontWeight: 600, fontSize: 18 }}>Drop here</span>
-      </div>
+    <div
+      ref={setNodeRef}
+      className="h-full flex flex-col"
+      style={{
+        position: 'relative',
+        minHeight: 200,
+        border: '2px solid transparent',
+        transition: 'border 0.2s',
+        background: isOver ? 'rgba(37,99,235,0.08)' : undefined
+      }}
+    >
       {/* Lista dei nodi */}
       <div>
         {nodes.map(node => (

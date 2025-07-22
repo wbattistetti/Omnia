@@ -1,6 +1,7 @@
 // Executive summary: Represents a single draggable action item with icon and label.
 import React from 'react';
 import styles from './ActionItem.module.css';
+import { useDraggable } from '@dnd-kit/core';
 
 const MIN_THUMBNAIL_WIDTH = 100;
 
@@ -24,6 +25,7 @@ const iconSVGMap: Record<string, string> = {
 };
 
 interface ActionItemProps {
+  action: any; // Assuming action is an object with id, iconName, label, color, description
   icon: React.ReactNode;
   iconName: string;
   label: string;
@@ -31,39 +33,26 @@ interface ActionItemProps {
   description?: string;
 }
 
-const ActionItem: React.FC<ActionItemProps> = ({ icon, iconName, label, color, description }) => {
-  const handleDragStart = (e: React.DragEvent) => {
-    console.log('[ActionItem] handleDragStart', { label, iconName, color, description });
-    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'action', label, color, icon: label, iconName }));
-    e.dataTransfer.effectAllowed = 'copy';
-
-    // Usa direttamente iconName per selezionare l'SVG
-    const svgString = iconSVGMap[iconName] || iconSVGMap['MessageCircle'];
-
-    // Crea un div che contiene l'SVG per il drag image
-    const dragImage = document.createElement('div');
-    dragImage.style.position = 'absolute';
-    dragImage.style.top = '-9999px';
-    dragImage.style.left = '-9999px';
-    dragImage.style.width = '32px';
-    dragImage.style.height = '32px';
-    dragImage.style.display = 'flex';
-    dragImage.style.alignItems = 'center';
-    dragImage.style.justifyContent = 'center';
-    dragImage.style.background = 'transparent';
-    dragImage.innerHTML = svgString;
-    document.body.appendChild(dragImage);
-    e.dataTransfer.setDragImage(dragImage, 16, 16);
-    setTimeout(() => document.body.removeChild(dragImage), 0);
-  };
+const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, color, description }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: action.id,
+    data: { action }
+  });
 
   return (
-    <div 
-      className={styles.item}
-      style={{ minWidth: MIN_THUMBNAIL_WIDTH }}
-      draggable
-      onDragStart={handleDragStart}
-      title={description || ''}
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={{
+        opacity: isDragging ? 0.5 : 1,
+        cursor: 'grab',
+        border: isDragging ? '2px solid #2563eb' : undefined,
+        background: isDragging ? '#e0e7ff' : undefined,
+        padding: 8,
+        borderRadius: 6,
+        marginBottom: 4
+      }}
     >
       <div className={`${color} ${styles.icon}`}>
         {icon}

@@ -7,6 +7,10 @@ import ToolbarButton from './ToolbarButton';
 import TreeView from './TreeView';
 import styles from './ResponseEditor.module.css';
 import { TreeNodeProps } from './types';
+import { DndContext, DragOverlay } from '@dnd-kit/core';
+import { useDDTContext } from '../../context/DDTContext';
+import { useActionsCatalog } from '../../context/ActionsCatalogContext';
+import { useTreeNodes } from './useTreeNodes';
 
 const iconMap: Record<string, React.ReactNode> = {
   MessageCircle: <MessageCircle size={24} />,  HelpCircle: <HelpCircle size={24} />,  Headphones: <Headphones size={24} />,  Shield: <Shield size={24} />,  PhoneOff: <PhoneOff size={24} />,  Database: <Database size={24} />,  Mail: <Mail size={24} />,  MessageSquare: <MessageSquare size={24} />,  Function: <Function size={24} />,  Music: <Music size={24} />,  Eraser: <Eraser size={24} />,  ArrowRight: <ArrowRight size={24} />,  Tag: <Tag size={24} />,  Clock: <Clock size={24} />,  ServerCog: <ServerCog size={24} />
@@ -142,6 +146,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [actionCatalog, setActionCatalog] = useState<any[]>([]);
   const [showLabel, setShowLabel] = useState(false);
+  const [activeDragAction, setActiveDragAction] = useState<any>(null);
   const stepKeys = ddt && ddt.steps ? Object.keys(ddt.steps) : [];
   React.useEffect(() => {
     if (stepKeys.length > 0 && !selectedStep) {
@@ -155,94 +160,85 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       .then(setActionCatalog);
   }, []);
 
-  const initialNodes = estraiNodiDaDDT(ddt);
-  const actions = ddt && selectedStep && ddt.steps && ddt.steps[selectedStep]
-    ? Array.isArray(ddt.steps[selectedStep])
-      ? ddt.steps[selectedStep]
-      : ddt.steps[selectedStep].actions || []
-    : [];
-  console.log('[ResponseEditor] actions for step', selectedStep, actions);
+  // Hook per aggiungere nodi (canvas drop)
+  const { addNode } = useTreeNodes([]); // NB: qui serve solo addNode, lo stato è gestito in TreeView
+
+  const handleDragStart = (event: any) => {
+    if (event.active && event.active.data && event.active.data.current) {
+      setActiveDragAction(event.active.data.current.action);
+    }
+  };
+  const handleDragEnd = (event: any) => {
+    setActiveDragAction(null);
+    if (event.over && event.over.id === 'canvas' && event.active && event.active.data && event.active.data.current) {
+      // Dati dell'action trascinata
+      const actionData = event.active.data.current.action;
+      if (actionData) {
+        addNode({
+          label: actionData.label?.[lang] || actionData.label?.en || actionData.id,
+          icon: actionData.icon,
+          color: actionData.color,
+        });
+      }
+    }
+  };
 
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <div className={styles.toolbar}>
-          {stepKeys.map((step) => (
-            <ToolbarButton
-              key={step}
-              label={step}
-              active={selectedStep === step}
-              onClick={() => setSelectedStep(step)}
-            />
-          ))}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{ fontSize: 13, color: '#555' }}>
-              <input type="checkbox" checked={showLabel} onChange={e => setShowLabel(e.target.checked)} style={{ marginRight: 4 }} />
-              Mostra label azione
-            </label>
+    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <div className={styles.toolbar}>
+            {stepKeys.map((step) => (
+              <ToolbarButton
+                key={step}
+                label={step}
+                active={selectedStep === step}
+                onClick={() => setSelectedStep(step)}
+              />
+            ))}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ fontSize: 13, color: '#555' }}>
+                <input type="checkbox" checked={showLabel} onChange={e => setShowLabel(e.target.checked)} style={{ marginRight: 4 }} />
+                Mostra label azione
+              </label>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
+          <div style={{ flex: 2, minWidth: 0, padding: 16 }}>
+            <TreeView />
+          </div>
+          <div style={{ flex: 1, minWidth: 220, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff' }}>
+            <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
+            <ActionList />
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
-        <div style={{ flex: 2, minWidth: 0, padding: 16 }}>
-          {actions.length === 0 ? (
-            <div style={{ color: '#888' }}>Nessuna azione per questo step</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {actions.map((action: any, idx: number) => {
-                const catalog = actionCatalog.find(a => a.id === action.actionType);
-                const bg = stepBg[selectedStep!] || '#eaf6ff';
-                const indent = stepIndent[selectedStep!] || 12;
-                const paramValue = estraiParametroPrincipale(action, catalog, translations, lang);
-                if (!paramValue || paramValue === action.text || paramValue === action.label) {
-                  console.log('[ResponseEditor] Nessuna traduzione trovata per', { action, catalog, lang, paramValue });
-                } else {
-                  console.log('[ResponseEditor] Valore tradotto', { action, catalog, lang, paramValue });
-                }
-                // Primary parameter (for now always 'text')
-                const primaryParam = 'text';
-                const primaryKey = action[primaryParam];
-                let primaryValue = estraiValoreTradotto(primaryKey, translations, lang);
-                if (!primaryValue) primaryValue = 'Scrivi messaggio qui...';
-                // Label azione
-                const actionLabel = estraiLabelAzione(action.actionType, translations, lang);
-                // Altri parametri
-                const otherParams = catalog && catalog.params ? Object.keys(catalog.params).filter(p => p !== primaryParam) : [];
-                return (
-                  <div key={action.actionInstanceId || idx} style={{ background: bg, borderRadius: 8, padding: '10px 16px', marginLeft: indent, boxShadow: '0 1px 2px #0001', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <span>{catalog ? iconMap[catalog.icon] : <Tag size={24} />}</span>
-                      {actionLabel && (
-                        <span style={{ fontSize: 12, color: '#888', opacity: 0.7, textShadow: '0 1px 4px #fff', marginRight: 8 }}>
-                          {actionLabel}
-                        </span>
-                      )}
-                      <span style={{ fontWeight: 500, fontSize: 15 }}>{primaryValue}</span>
-                    </div>
-                    {/* Altri parametri come figli indentati */}
-                    <div style={{ marginLeft: 32, marginTop: 2 }}>
-                      {otherParams.map(paramKey => {
-                        const chiave = action[paramKey];
-                        const valore = estraiValoreTradotto(chiave, translations, lang);
-                        return (
-                          <div key={paramKey} style={{ fontSize: 14, color: '#333', marginBottom: 2 }}>
-                            <b>{paramKey}:</b> {valore}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        <div style={{ flex: 1, minWidth: 220, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff' }}>
-          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
-          <ActionList />
-        </div>
-      </div>
-    </div>
+      <DragOverlay>
+        {activeDragAction ? (
+          <div style={{
+            padding: 6,
+            background: '#fff',
+            border: '2px solid #2563eb',
+            borderRadius: 6,
+            boxShadow: '0 2px 8px #0002',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            minWidth: 120,
+            maxWidth: 320,
+            overflow: 'hidden'
+          }}>
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              {iconMap[activeDragAction.icon] || <Tag size={24} />}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 500, color: '#333', marginLeft: 6, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+              {activeDragAction.label?.[lang] || activeDragAction.label?.en || activeDragAction.id}
+            </span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 };
 

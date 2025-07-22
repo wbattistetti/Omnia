@@ -4,6 +4,7 @@ import { ChatPanel } from './TestEngine/ChatPanel';
 import { ProjectDataProvider, useProjectData } from '../context/ProjectDataContext';
 import { ProjectData } from '../types/project';
 import { AppContent } from './AppContent';
+import { ActionsCatalogProvider, useSetActionsCatalog } from '../context/ActionsCatalogContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -22,6 +23,17 @@ function AppInner() {
   const [userReplies, setUserReplies] = useState<(string | undefined)[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [showChat, setShowChat] = useState(true); // nuovo stato
+  const { setActionsCatalog } = useSetActionsCatalog();
+
+  React.useEffect(() => {
+    fetch('/data/actionsCatalog.json')
+      .then(res => res.json())
+      .then(data => setActionsCatalog(data))
+      .catch(err => {
+        setActionsCatalog([]);
+        console.error('[App][ERROR] fetch actionsCatalog', err);
+      });
+  }, [setActionsCatalog]);
 
   // Callback da passare ai nodi
   const handlePlayNode = (nodeId: string, nodeRows: any[]) => {
@@ -94,7 +106,9 @@ function AppInner() {
 export default function App() {
   return (
     <ProjectDataProvider>
-      <AppInner />
+      <ActionsCatalogProvider>
+        <AppInner />
+      </ActionsCatalogProvider>
     </ProjectDataProvider>
   );
 }
