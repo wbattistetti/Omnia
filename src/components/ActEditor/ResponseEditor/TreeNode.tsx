@@ -4,7 +4,7 @@ import { ChevronRight, ChevronDown, MessageCircle } from 'lucide-react';
 import getIconComponent from './icons';
 import { TreeNodeProps } from './types';
 import styles from './TreeNode.module.css';
-import { useDrop } from 'react-dnd';
+import { useDrop, useDrag } from 'react-dnd';
 
 const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boolean; domId?: string; onCancelNewNode?: (id: string) => void }> = ({ 
   text, 
@@ -31,6 +31,8 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
   const [editValue, setEditValue] = useState(primaryValue || '');
   const [hasEdited, setHasEdited] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Stato per drag&drop
+  const [isDragging, setIsDragging] = useState(false);
 
   // Focus automatico solo subito dopo il drop (selected true e non ancora editato)
   useEffect(() => {
@@ -79,9 +81,9 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
       }
     },
     drop(item: any, monitor) {
-      if (dropTarget && item && typeof item === 'object' && item.action) {
-        console.log('[DROP][NODE]', { id, dropTarget, item });
-        onDrop(id, dropTarget, item.action);
+      console.log('[DROP][NODE] drop handler', { id, dropTarget, item });
+      if (dropTarget && item && typeof item === 'object') {
+        onDrop(id, dropTarget, item);
       }
       setDropTarget(null);
     },
@@ -89,6 +91,20 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
       isOver: monitor.isOver({ shallow: true })
     })
   });
+
+  // Drag source per evidenziare il nodo trascinato
+  const [{ isDragging: isDraggingNode }, drag, preview] = useDrag({
+    type: 'ACTION',
+    item: () => {
+      console.log('[DRAG][BEGIN]', { id });
+      return { id };
+    },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging()
+    })
+  });
+
+  drag(drop(nodeRef));
 
   const getBgClass = () => {
     switch (type) {
@@ -103,13 +119,14 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
     }
   };
 
-  drop(nodeRef);
+  // Determina se mostrare la textbox di editing solo per Messaggio o Domanda
+  const showEditingBox = (icon === 'MessageCircle' || icon === 'HelpCircle');
 
   return (
     <div 
       ref={nodeRef}
       id={domId}
-      style={{ position: 'relative' }}
+      style={{ position: 'relative', opacity: isDraggingNode ? 0.5 : 1 }}
     >
       {/* Feedback visivo react-dnd */}
       {isOver && dropTarget === 'before' && (
@@ -119,21 +136,25 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
         className={`${styles.node} ${getBgClass()}`}
         style={{
           marginLeft: `${level * INDENT_WIDTH}px`,
-          border: selected ? '2px solid #2563eb' : undefined,
-          boxShadow: selected ? '0 0 0 2px #93c5fd' : undefined,
-          background: selected ? '#e0e7ff' : undefined
+          border: selected ? '2px solid #2563eb' : isDraggingNode ? '2px solid #60a5fa' : undefined,
+          boxShadow: selected || isDraggingNode ? '0 0 0 2px #93c5fd' : undefined,
+          background: selected ? '#e0e7ff' : isDraggingNode ? '#e0f2fe' : undefined
         }}
       >
         {expanded ? <ChevronDown size={16} style={{ marginRight: 8 }} /> : <ChevronRight size={16} style={{ marginRight: 8 }} />}
         <div style={{ marginRight: 8 }} className={color || ''}>
-          {type === 'action' && icon ? getIconComponent(icon) : <MessageCircle size={16} />}
+          {(() => {
+            const iconComponent = type === 'action' && icon ? getIconComponent(icon) : null;
+            console.log('[TreeNode] icon:', icon, 'iconComponent:', iconComponent);
+            return iconComponent || <MessageCircle size={16} />;
+          })()}
         </div>
         {/* LABEL opzionale */}
         {showLabel && label && (
           <span style={{ fontSize: 12, color: '#888', opacity: 0.7, marginRight: 8 }}>{label}</span>
         )}
-        {/* Valore principale: textbox se editing, altrimenti normale */}
-        {editing && primaryValue !== undefined && !hasEdited ? (
+        {/* Valore principale: textbox se editing SOLO per Messaggio o Domanda */}
+        {showEditingBox && editing && primaryValue !== undefined && !hasEdited ? (
           <input
             ref={inputRef}
             value={editValue}
@@ -157,7 +178,7 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
           <span style={{ fontSize: '0.875rem' }}>{text}</span>
         )}
         {isOver && dropTarget === 'child' && (
-          <div style={{ position: 'absolute', inset: 0, border: '2px solid #2563eb', borderRadius: 6, pointerEvents: 'none', zIndex: 10 }} />
+          <div style={{ position: 'absolute', inset: 0, border: '2px solid #2563eb', borderRadius: 6, pointerEvents: 'none', zIndex: 10, background: 'rgba(96,165,250,0.08)' }} />
         )}
       </div>
       {/* Parametri figli indentati */}

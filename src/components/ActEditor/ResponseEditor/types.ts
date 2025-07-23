@@ -16,5 +16,5 @@ export interface TreeNodeProps {
   label?: string;
   primaryValue?: string;
   parameters?: TreeNodeParameter[];
-  onDrop: (id: string, position: 'before' | 'after' | 'child' | 'parent-sibling', draggedData: any) => void;
+  onDrop?: (id: string, position: 'before' | 'after' | 'child' | 'parent-sibling', draggedData: any) => void;
 } 

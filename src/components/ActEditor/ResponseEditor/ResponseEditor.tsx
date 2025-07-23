@@ -8,6 +8,7 @@ import TreeView from './TreeView';
 import styles from './ResponseEditor.module.css';
 import { TreeNodeProps } from './types';
 import { useTreeNodes } from './useTreeNodes';
+import { useReducer } from 'react';
 
 const iconMap: Record<string, React.ReactNode> = {
   MessageCircle: <MessageCircle size={24} />,  HelpCircle: <HelpCircle size={24} />,  Headphones: <Headphones size={24} />,  Shield: <Shield size={24} />,  PhoneOff: <PhoneOff size={24} />,  Database: <Database size={24} />,  Mail: <Mail size={24} />,  MessageSquare: <MessageSquare size={24} />,  Function: <Function size={24} />,  Music: <Music size={24} />,  Eraser: <Eraser size={24} />,  ArrowRight: <ArrowRight size={24} />,  Tag: <Tag size={24} />,  Clock: <Clock size={24} />,  ServerCog: <ServerCog size={24} />
@@ -115,6 +116,61 @@ interface ResponseEditorProps {
   lang?: string;
 }
 
+const defaultNodes: TreeNodeProps[] = [
+  { id: '1', text: "What is the patient's date of birth?", type: 'root' },
+  { id: '2', text: "I didn't understand. Could you provide the patient's date of birth?", type: 'nomatch', level: 1, parentId: '1' },
+  { id: '3', text: "Please provide the patient's date of birth.", type: 'noinput', level: 1, parentId: '1' }
+];
+
+// Inserisce un nodo nell'array subito prima o dopo il targetId, mantenendo parentId e level
+function insertNodeAt(nodes: TreeNodeProps[], newNode: TreeNodeProps, targetId: string, position: 'before' | 'after'): TreeNodeProps[] {
+  const idx = nodes.findIndex(n => n.id === targetId);
+  if (idx === -1) return [...nodes, newNode];
+  const before = position === 'before';
+  // Trova tutti i nodi con lo stesso parentId e level del target
+  const target = nodes[idx];
+  const siblings = nodes.filter(n => n.parentId === target.parentId && n.level === target.level);
+  // Trova la posizione tra i fratelli
+  const siblingIdx = siblings.findIndex(n => n.id === targetId);
+  // Costruisci il nuovo array
+  const result: TreeNodeProps[] = [];
+  let inserted = false;
+  for (let n of nodes) {
+    if (n.parentId === target.parentId && n.level === target.level && siblings.includes(n)) {
+      if (!inserted && n.id === targetId && before) {
+        result.push(newNode);
+        inserted = true;
+      }
+      result.push(n);
+      if (!inserted && n.id === targetId && !before) {
+        result.push(newNode);
+        inserted = true;
+      }
+    } else {
+      result.push(n);
+    }
+  }
+  if (!inserted) result.push(newNode);
+  return result;
+}
+
+function nodesReducer(state: TreeNodeProps[], action: any): TreeNodeProps[] {
+  switch (action.type) {
+    case 'SET':
+      return action.nodes;
+    case 'ADD':
+      if (action.insertAt) {
+        // Inserimento ordinato tra fratelli
+        return insertNodeAt(state, action.node, action.targetId, action.position);
+      }
+      return [...state, action.node];
+    case 'REMOVE':
+      return state.filter(n => n.id !== action.id);
+    default:
+      return state;
+  }
+}
+
 const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it' }) => {
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [actionCatalog, setActionCatalog] = useState<any[]>([]);
@@ -133,10 +189,55 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       .then(setActionCatalog);
   }, []);
 
-  // Hook per aggiungere nodi (canvas drop)
-  const { addNode } = useTreeNodes([]); // NB: qui serve solo addNode, lo stato è gestito in TreeView
+  const [nodes, dispatch] = useReducer(nodesReducer, defaultNodes);
 
-  // Rimuovi DndContext, DragOverlay e la logica collegata
+  // handleDrop logica semplificata (solo aggiunta root per demo)
+  const handleDrop = (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => {
+    console.log('[handleDrop] CALLED', { targetId, position, item, nodes });
+    if (item && item.action) {
+      const action = item.action;
+      const id = Math.random().toString(36).substr(2, 9);
+      const newNode: TreeNodeProps = {
+        id,
+        text: typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label,
+        type: 'action',
+        icon: item.icon,
+        color: item.color,
+        label: typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label,
+        primaryValue: item.primaryValue,
+        parameters: item.parameters,
+      };
+      if (targetId === null) {
+        console.log('[handleDrop] DROP SU CANVAS: aggiungo come root', { newNode });
+        dispatch({ type: 'ADD', node: { ...newNode, level: 0, parentId: undefined } });
+      } else {
+        const targetNode = nodes.find(n => n.id === targetId);
+        if (!targetNode) {
+          console.log('[handleDrop] TARGET NON TROVATO, aggiungo come root', { newNode });
+          dispatch({ type: 'ADD', node: { ...newNode, level: 0, parentId: undefined } });
+        } else if (position === 'before' || position === 'after') {
+          console.log('[handleDrop] DROP SIBLING', { newNode, targetNode, position });
+          dispatch({
+            type: 'ADD',
+            node: { ...newNode, level: targetNode.level, parentId: targetNode.parentId },
+            insertAt: true,
+            targetId,
+            position
+          });
+        } else if (position === 'child') {
+          console.log('[handleDrop] DROP CHILD', { newNode, targetNode });
+          dispatch({ type: 'ADD', node: { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id } });
+        }
+      }
+      setTimeout(() => {
+        console.log('[handleDrop] NODES AFTER', nodes);
+      }, 100);
+      return id;
+    }
+    // Spostamento nodo esistente: da implementare se serve
+    return null;
+  };
+  const removeNode = (id: string) => dispatch({ type: 'REMOVE', id });
 
   return (
     <div className={styles.container}>
@@ -160,7 +261,11 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       </div>
       <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
         <div style={{ flex: 2, minWidth: 0, padding: 16 }}>
-          <TreeView />
+          <TreeView
+            nodes={nodes}
+            onDrop={handleDrop}
+            onRemove={removeNode}
+          />
         </div>
         <div style={{ flex: 1, minWidth: 220, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff' }}>
           <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>

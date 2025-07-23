@@ -52,7 +52,7 @@ const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, 
   });
 
   return (
-    <div
+    <div 
       ref={dragRef}
       style={{
         opacity: isDragging ? 0.5 : 1,
