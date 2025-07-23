@@ -26,6 +26,7 @@ const renderTree = (
   onRemove: TreeViewProps['onRemove'],
   setSelectedNodeId: (id: string | null) => void
 ) => {
+  console.log('[renderTree] called', { parentId, level, nodes });
   return nodes
     .filter(node => node.parentId === parentId)
     .map(node => (
@@ -35,6 +36,7 @@ const renderTree = (
           level={level}
           selected={selectedNodeId === node.id}
           onDrop={(id, position, item) => {
+            console.log('[TreeNode onDrop] called', { id, position, item });
             // Forza il tipo per evitare errori di tipo
             const safePosition = (position === 'before' || position === 'after' || position === 'child') ? position : 'after';
             const result = onDrop(id, safePosition, item);
@@ -53,6 +55,7 @@ const renderTree = (
 };
 
 const TreeView: React.FC<TreeViewProps> = ({ nodes, onDrop, onRemove }) => {
+  console.log('[TreeView] render', { nodes });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -60,13 +63,16 @@ const TreeView: React.FC<TreeViewProps> = ({ nodes, onDrop, onRemove }) => {
   const [{ isOver }, dropRef] = useDrop({
     accept: 'ACTION',
     drop(item: any, monitor) {
+      console.log('[TreeView useDrop] drop handler', { item, monitor });
       if (item && typeof item === 'object') {
         const clientOffset = monitor.getClientOffset();
         if (!clientOffset) {
+          console.log('[TreeView useDrop] clientOffset missing');
           return;
         }
         const containerRect = containerRef.current?.getBoundingClientRect();
         if (!containerRect) {
+          console.log('[TreeView useDrop] containerRect missing');
           return;
         }
         const y = clientOffset.y - containerRect.top;
@@ -91,12 +97,14 @@ const TreeView: React.FC<TreeViewProps> = ({ nodes, onDrop, onRemove }) => {
         });
         // Se non ci sono nodi, aggiungi come root
         if (nodes.length === 0) {
+          console.log('[TreeView useDrop] drop on canvas (no nodes)', { item });
           onDrop(null, 'after', item);
           setSelectedNodeId(null);
           return;
         }
         // Se il punto di drop è sopra il primo nodo o sotto l'ultimo nodo, aggiungi come root
         if (y < minY - 16 || y > maxY + 16) { // 16px di tolleranza
+          console.log('[TreeView useDrop] drop on canvas (sopra/sotto tutti i nodi)', { item });
           onDrop(null, 'after', item);
           setSelectedNodeId(null);
           return;
@@ -109,6 +117,7 @@ const TreeView: React.FC<TreeViewProps> = ({ nodes, onDrop, onRemove }) => {
             const rect = nodeElem.getBoundingClientRect();
             const centerY = rect.top + rect.height / 2 - containerRect.top;
             position = y < centerY ? 'before' : 'after';
+            console.log('[TreeView useDrop] drop on node', { targetId: nodes[closestIdx].id, position, item });
             const result = onDrop(nodes[closestIdx].id, position, item);
             if (typeof result === 'string') {
               setSelectedNodeId(result);
@@ -136,6 +145,7 @@ const TreeView: React.FC<TreeViewProps> = ({ nodes, onDrop, onRemove }) => {
     const draggedNode = nodes.find(n => n.id === item.id);
     if (!draggedNode) return null;
     const previewText = (draggedNode.text || draggedNode.label || '').slice(0, 30) + (draggedNode.text && draggedNode.text.length > 30 ? '...' : '');
+    console.log('[CustomDragLayer] render', { draggedNode, previewText });
     return (
       <div style={{
         position: 'fixed',

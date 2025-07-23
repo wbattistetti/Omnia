@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { ProjectData, EntityType, Category, ProjectEntityItem } from '../types/project';
 
@@ -61,11 +61,6 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
 
   useEffect(() => {
     loadData();
-  }, []);
-
-  React.useEffect(() => {
-    console.log('[ProjectDataProvider] MOUNTED');
-    return () => console.log('[ProjectDataProvider] UNMOUNTED');
   }, []);
 
   const refreshData = async () => {
@@ -142,14 +137,8 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     updateItem
   };
 
-  const value = useMemo(() => {
-    const v = { data, loading, error };
-    console.log("[Context] ProjectData reference", v);
-    return v;
-  }, [data, loading, error]);
-
   return (
-    <ProjectDataContext.Provider value={value}>
+    <ProjectDataContext.Provider value={contextValue}>
       <ProjectDataUpdateContext.Provider value={updateContextValue}>
         {children}
       </ProjectDataUpdateContext.Provider>

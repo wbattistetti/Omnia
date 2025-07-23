@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef, useEffect, memo } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   Controls,
@@ -13,9 +13,7 @@ import ReactFlow, {
   useReactFlow,
   ReactFlowInstance,
   applyNodeChanges,
-  applyEdgeChanges,
-  NodeChange,
-  EdgeChange
+  applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { CustomNode } from './CustomNode';
@@ -64,10 +62,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   nodes,
   setNodes,
   edges,
-  setEdges,
-  ...rest
+  setEdges
 }) => {
-  console.log('[FlowEditorContent] render', { nodes, edges });
   // Ref sempre aggiornata con lo stato dei nodi
   const nodesRef = useRef(nodes);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
@@ -159,7 +155,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [patchEdges]);
 
   // Update existing nodes with callbacks and onPlayNode
-  /*
   React.useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => ({
@@ -173,10 +168,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       }))
     );
   }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode]);
-  */
 
   // Aggiorna edges con onUpdate per ogni edge custom
-  /*
   useEffect(() => {
     setEdges(eds => eds.map(e =>
       e.type === 'custom'
@@ -202,24 +195,17 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         : e
     ));
   }, [onDeleteEdge, setEdges]);
-  */
 
-  // Forza tutti gli edge a solidi dopo la mount o ogni volta che edges cambiano
-  /*
+  // Forza tutti gli edge a solidi dopo il mount o ogni volta che edges cambiano
   React.useEffect(() => {
-    setEdges((eds) => {
-      let changed = false;
-      const newEdges = eds.map(e => {
-        if (e.style && e.style.strokeDasharray) {
-          changed = true;
-          return { ...e, style: { ...e.style, strokeDasharray: undefined } };
-        }
-        return e;
-      });
-      return changed ? newEdges : eds;
-    });
+    setEdges((eds) =>
+      eds.map(e =>
+        e.style && e.style.strokeDasharray
+          ? { ...e, style: { ...e.style, strokeDasharray: undefined } }
+          : e
+      )
+    );
   }, [setEdges]);
-  */
 
   const NODE_WIDTH = 280; // px (tailwind w-70)
   const NODE_HEIGHT = 40; // px (min-h-[40px])
@@ -531,44 +517,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [reactFlowInstance, nodes.length]);
 
-  // Memoized handlers for ReactFlow
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    const onlyDimensions = changes.every(change => change.type === "dimensions");
-    if (onlyDimensions) {
-      console.log("[FlowEditor] Skipping dimensions-only change");
-      return;
-    }
-    console.log('[FlowEditor] onNodesChange', JSON.stringify(changes));
-    setNodes(prevNodes => {
-      const nextNodes = applyNodeChanges(changes, prevNodes);
-      // Shallow compare: se la lunghezza e tutti gli id e data sono uguali, non aggiorno
-      const isSame =
-        nextNodes.length === prevNodes.length &&
-        nextNodes.every((n, i) => {
-          const p = prevNodes[i];
-          // Confronta id e data (shallow)
-          return n.id === p.id && n.type === p.type && n.position.x === p.position.x && n.position.y === p.position.y && JSON.stringify(n.data) === JSON.stringify(p.data);
-        });
-      if (isSame) {
-        console.log('[FlowEditor] onNodesChange: NO ACTUAL CHANGE, skip setNodes');
-        return prevNodes;
-      }
-      console.log('[FlowEditor] onNodesChange: nodes changed, updating');
-      return nextNodes;
-    });
-  }, [setNodes]);
-  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
-    console.log('[FlowEditor] onEdgesChange', changes);
-    setEdges(eds => applyEdgeChanges(changes, eds));
-  }, [setEdges]);
-
   return (
-    <div className="flex-1 h-full relative" ref={canvasRef} style={{ width: 1000, height: 600, background: '#fff' }}>
+    <div className="flex-1 h-full relative" ref={canvasRef}>
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onNodesChange={changes => setNodes(nds => applyNodeChanges(changes, nds))}
+        onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -629,12 +584,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 // Ref globale per edge temporaneo
 const tempEdgeIdGlobal = { current: null as string | null };
 
-const FlowEditorComponent: React.FC<FlowEditorProps> = (props) => {
+export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   return (
     <ReactFlowProvider>
       <FlowEditorContent {...props} />
     </ReactFlowProvider>
   );
 };
-
-export const FlowEditor = memo(FlowEditorComponent);

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
@@ -8,6 +8,7 @@ import { useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
 import { NodeData, EdgeData } from './Flowchart/FlowEditor';
 import { ProjectInfo } from '../types/project';
+import { useEffect } from 'react';
 import { ProjectService } from '../services/ProjectService';
 import { ProjectData } from '../types/project';
 import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
@@ -15,6 +16,7 @@ import ActEditor from './ActEditor';
 import { DockablePanelsHandle } from './DockablePanels';
 import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
+import ResponseEditor from './ActEditor/ResponseEditor/ResponseEditor';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -45,12 +47,11 @@ export const AppContent: React.FC<AppContentProps> = ({
   setTestNodeId,
   onPlayNode
 }) => {
+  const { refreshData } = useProjectDataUpdate();
+
   // Stato globale per nodi e edge
-  const [nodesState, setNodes] = useState<Node<NodeData>[]>([]);
-  const [edgesState, setEdges] = useState<Edge<EdgeData>[]>([]);
-  // Memo per garantire reference stabile
-  const nodes = useMemo(() => nodesState, [nodesState]);
-  const edges = useMemo(() => edgesState, [edgesState]);
+  const [nodes, setNodes] = useState<Node<NodeData>[]>([]);
+  const [edges, setEdges] = useState<Edge<EdgeData>[]>([]);
   // Stato per feedback salvataggio
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -68,112 +69,14 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Stato per finestre editor DDT aperte (ora con react-mosaic)
   const [mosaicNodes, setMosaicNodes] = useState<any>(null);
   const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
+  const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
+  const [selectedDDTTranslations, setSelectedDDTTranslations] = useState<any | null>(null);
+  const [selectedDDTLanguage, setSelectedDDTLanguage] = useState<string>('it');
 
-  // Step 1: Stato dei pannelli dockabili
-
-  type PanelType = 'canvas' | 'responseEditor';
-
-  interface PanelData {
-    id: string;
-    type: PanelType;
-    title: string;
-    params?: any;
-  }
-
-  const [openPanels, setOpenPanels] = useState<PanelData[]>([
-    { id: 'canvas', type: 'canvas', title: 'Flowchart' }
-  ]);
-
-  const flowEditorProps = {
-    nodes,
-    setNodes,
-    edges,
-    setEdges,
-    currentProject,
-    setCurrentProject,
-    onPlayNode,
-    testPanelOpen,
-    setTestPanelOpen,
-    testNodeId,
-    setTestNodeId
-  };
-
-  // LOG SENTINELLA: mount/unmount
-  useEffect(() => {
-    console.log('[AppContent] MOUNTED');
-    return () => {
-      console.log('[AppContent] UNMOUNTED');
-    };
-  }, []);
-
-  // LOG SENTINELLA: cambi di appState
-  useEffect(() => {
-    console.log('[AppContent] appState changed:', appState);
-  }, [appState]);
-
-  // Log useEffect su nodes/edges
-  useEffect(() => {
-    console.log('[AppContent] useEffect nodes/edges', { nodes, edges });
-  }, [nodes, edges]);
-
-  // Log useEffect su showAllProjectsModal
-  useEffect(() => {
-    console.log('[AppContent] useEffect showAllProjectsModal', showAllProjectsModal);
-  }, [showAllProjectsModal]);
-
-  // Log useEffect su appState per fetchRecentProjects
-  useEffect(() => {
-    if (appState === 'landing') {
-      console.log('[AppContent] useEffect appState landing: fetchRecentProjects');
-      fetchRecentProjects();
-    }
-  }, [appState]);
-
-  // Log ogni chiamata a setAppState
-  const setAppStateLogged = (state: AppState) => {
-    console.log('[AppContent] setAppState called:', state);
-    setAppState(state);
-  };
-
-  // Log ogni chiamata a setNodes
-  const setNodesLogged = useCallback((value: Node<NodeData>[] | ((prev: Node<NodeData>[]) => Node<NodeData>[])) => {
-    console.log('[AppContent] setNodes called:', value);
-    setNodes(value);
-  }, []);
-
-  // Log ogni chiamata a setEdges
-  const setEdgesLogged = useCallback((value: Edge<EdgeData>[] | ((prev: Edge<EdgeData>[]) => Edge<EdgeData>[])) => {
-    console.log('[AppContent] setEdges called:', value);
-    setEdges(value);
-  }, []);
-
-  const { refreshData } = useProjectDataUpdate();
-  // Wrap refreshData per log
-  const refreshDataWithLog = async () => {
-    console.log('[refreshDataWithLog] called');
-    await refreshData();
-    console.log('[refreshDataWithLog] done');
-  };
-
-  // Step 2: Funzioni per aprire/chiudere pannelli
-  const openPanel = (panel: PanelData) => {
-    setOpenPanels(panels => panels.some(p => p.id === panel.id) ? panels : [...panels, panel]);
-  };
-
-  const closePanel = (id: string) => {
-    setOpenPanels(panels => panels.filter(p => p.id !== id && p.type !== 'canvas'));
-  };
-
-  // handleOpenDDTEditor ora usa openPanel
   const handleOpenDDTEditor = (ddt: any, translations: any, lang: string) => {
-    const id = ddt._id || ddt.id;
-    const title = ddt.label || ddt.name || id;
-    openPanel({
-      id,
-      type: 'responseEditor',
-      title,
-      params: { ddt, translations, lang }
-    });
+    setSelectedDDT(ddt);
+    setSelectedDDTTranslations(translations);
+    setSelectedDDTLanguage(lang);
   };
 
   // Pannello di test in alto a sinistra all'avvio
@@ -224,10 +127,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   };
 
   // Callback per LandingPage
-  const handleLandingNewProject = () => {
-    console.log('[setAppState] creatingProject (handleLandingNewProject)');
-    setAppStateLogged('creatingProject');
-  };
+  const handleLandingNewProject = () => setAppState('creatingProject');
   const handleLandingLoadProject = async () => {
     await fetchRecentProjects();
   };
@@ -237,8 +137,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   };
 
   const handleOpenNewProjectModal = () => {
-    console.log('[setAppState] creatingProject (handleOpenNewProjectModal)');
-    setAppStateLogged('creatingProject');
+    setAppState('creatingProject');
   };
 
   const handleCreateProject = async (projectInfo: ProjectInfo): Promise<boolean> => {
@@ -266,21 +165,11 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks: JSON.parse(JSON.stringify(templateDicts.macrotasks)),
         industry: (templateDicts.industry || 'defaultIndustry'),
       };
-      console.log('[handleCreateProject] newProject:', newProject);
       setCurrentProject(newProject);
-      await ProjectDataService.importProjectData(JSON.stringify(newProject));
-      setNodesLogged([{
-        id: '1',
-        type: 'custom',
-        position: { x: 250, y: 150 },
-        data: { title: 'Nodo iniziale', rows: [] }
-      }]);
-      console.log('[handleCreateProject] setNodes([Nodo iniziale])');
-      setEdgesLogged([]); console.log('[handleCreateProject] setEdges([])');
-      console.log('[handleCreateProject] calling refreshData');
-      await refreshData();
-      console.log('[handleCreateProject] setAppState(mainApp)');
-      setAppStateLogged('mainApp');
+      setNodes([]);
+      setEdges([]);
+    await refreshData();
+    setAppState('mainApp');
       return true;
     } catch (e) {
       setCreateError('Errore nella creazione del progetto');
@@ -291,8 +180,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   };
 
   const handleCloseNewProjectModal = () => {
-    console.log('[setAppState] landing (handleCloseNewProjectModal)');
-    setAppStateLogged('landing');
+    setAppState('landing');
   };
 
   const handleSaveProject = async () => {
@@ -339,8 +227,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const handleShowRecentProjects = async (id?: string) => {
     if (id) {
       await handleOpenProjectById(id);
-      console.log('[setAppState] mainApp (handleShowRecentProjects, id)');
-      setAppStateLogged('mainApp');
+      setAppState('mainApp');
       return;
     }
     try {
@@ -357,8 +244,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (!selected || selected < 1 || selected > projects.length) return;
       const selId = projects[selected - 1]._id;
       await handleOpenProjectById(selId);
-      console.log('[setAppState] mainApp (handleShowRecentProjects, prompt)');
-      setAppStateLogged('mainApp');
+      setAppState('mainApp');
     } catch (err) {
       alert('Errore: ' + (err instanceof Error ? err.message : err));
     }
@@ -370,16 +256,12 @@ export const AppContent: React.FC<AppContentProps> = ({
       const response = await fetch(`http://localhost:3100/projects/${id}`);
       if (!response.ok) throw new Error('Errore nel caricamento');
       const project = await response.json();
-      console.log('[handleOpenProjectById] loaded project:', project);
       setCurrentProject(project); // carica TUTTI i dati, inclusi i dizionari
-      setNodesLogged(Array.isArray(project.nodes) ? project.nodes : []);
-      console.log('[handleOpenProjectById] setNodes:', Array.isArray(project.nodes) ? project.nodes : []);
-      setEdgesLogged(Array.isArray(project.edges) ? project.edges : []);
-      console.log('[handleOpenProjectById] setEdges:', Array.isArray(project.edges) ? project.edges : []);
+      // AGGIUNTA: aggiorna anche nodi e edge se presenti
+      setNodes(Array.isArray(project.nodes) ? project.nodes : []);
+      setEdges(Array.isArray(project.edges) ? project.edges : []);
       await ProjectDataService.importProjectData(JSON.stringify(project));
-      console.log('[handleOpenProjectById] after importProjectData');
       await refreshData();
-      console.log('[handleOpenProjectById] after refreshData');
     } catch (err) {
       alert('Errore: ' + (err instanceof Error ? err.message : err));
     }
@@ -405,62 +287,80 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const flowContainerRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    console.log('[AppContent] flowContainerRef:', flowContainerRef.current);
-    console.log('[AppContent] dockablePanelsRef:', dockablePanelsRef.current);
-  }, [appState]);
-
-  // Loggo la fase di render dei blocchi principali
-  if (appState === 'mainApp') {
-    console.log('[AppContent] Sidebar render');
-    console.log('[AppContent] FlowEditor container render');
-    console.log('[AppContent] FlowEditor render');
-    console.log('[AppContent] DockablePanels render');
-  }
-
-  // DebugDiv per loggare mount/unmount del parent di DockablePanels
-  const DebugDiv: React.FC<{children: React.ReactNode}> = ({children}) => {
-    React.useEffect(() => {
-      console.log('[DebugDiv] MOUNTED');
-      return () => console.log('[DebugDiv] UNMOUNTED');
-    }, []);
-    return <div className="flex-1 relative" style={{ height: '100vh', minHeight: 400, background: '#fff' }}>{children}</div>;
-  };
-
-  // DebugMainApp per loggare mount/unmount del contenitore principale di mainApp
-  const DebugMainApp: React.FC<{children: React.ReactNode}> = ({children}) => {
-    React.useEffect(() => {
-      console.log('[DebugMainApp] MOUNTED');
-      return () => console.log('[DebugMainApp] UNMOUNTED');
-    }, []);
-    return <div className="min-h-screen bg-slate-900 flex flex-col">{children}</div>;
-  };
-
-  // reference checker
-  const prevNodesRef = useRef(nodes);
-  useEffect(() => {
-    console.log("[AppContent] nodes === prev:", nodes === prevNodesRef.current);
-    prevNodesRef.current = nodes;
-  }, [nodes]);
-
-  console.log("[Render] AppContent");
+  });
 
   return (
-    <DebugMainApp>
-      <DebugDiv>
-        <FlowEditor
-          nodes={nodes}
-          setNodes={setNodesLogged}
-          edges={edges}
-          setEdges={setEdgesLogged}
-          currentProject={currentProject}
-          setCurrentProject={setCurrentProject}
-          onPlayNode={onPlayNode}
-          testPanelOpen={testPanelOpen}
-          setTestPanelOpen={setTestPanelOpen}
-          testNodeId={testNodeId}
-          setTestNodeId={setTestNodeId}
-        />
-      </DebugDiv>
-    </DebugMainApp>
+    <div className="min-h-screen" style={{ position: 'relative' }}>
+      {/* Toast feedback */}
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-700 text-white px-6 py-3 rounded shadow-lg z-50 animate-fade-in">
+          {toast}
+        </div>
+      )}
+      {/* Landing Page + New Project Modal */}
+      {(appState === 'landing' || appState === 'creatingProject') && (
+        <>
+          <LandingPage
+            onNewProject={handleLandingNewProject}
+            recentProjects={recentProjects}
+            allProjects={allProjects}
+            onDeleteProject={handleDeleteProject}
+            onDeleteAllProjects={handleDeleteAllProjects}
+            showAllProjectsModal={showAllProjectsModal}
+            setShowAllProjectsModal={setShowAllProjectsModal}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            onSelectProject={async (id: string) => {
+              await handleOpenProjectById(id);
+              setAppState('mainApp');
+            }}
+          />
+          <NewProjectModal
+            isOpen={appState === 'creatingProject'}
+            onClose={handleCloseNewProjectModal}
+            onCreateProject={handleCreateProject}
+            onLoadProject={handleShowRecentProjects}
+            duplicateNameError={createError}
+            onProjectNameChange={handleProjectNameChange}
+            isLoading={isCreatingProject}
+          />
+        </>
+      )}
+      {/* Main App: Sidebar + FlowEditor */}
+      {appState === 'mainApp' && (
+        <div className="min-h-screen flex">
+          <SidebarThemeProvider>
+            <Sidebar
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              onOpenDDTEditor={handleOpenDDTEditor}
+            />
+          </SidebarThemeProvider>
+          <div className="flex-1 flex flex-col">
+            <FlowEditor
+              nodes={nodes}
+              setNodes={setNodes}
+              edges={edges}
+              setEdges={setEdges}
+              currentProject={currentProject}
+              setCurrentProject={setCurrentProject}
+              onPlayNode={onPlayNode}
+              testPanelOpen={testPanelOpen}
+              setTestPanelOpen={setTestPanelOpen}
+              testNodeId={testNodeId}
+              setTestNodeId={setTestNodeId}
+            />
+            {selectedDDT && (
+              <ResponseEditor
+                ddt={selectedDDT}
+                translations={selectedDDTTranslations}
+                lang={selectedDDTLanguage}
+                onClose={() => setSelectedDDT(null)}
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };

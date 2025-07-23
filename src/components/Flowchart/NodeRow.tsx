@@ -266,6 +266,14 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     }
   }
 
+  // LOG: stampa id, forceEditing, isEditing
+  useEffect(() => {
+    // console.log(`[NodeRow] render row.id=${row.id} forceEditing=${forceEditing} isEditing=${isEditing}`);
+  });
+
+  // Uso l'icona centralizzata
+  const Icon = row.categoryType ? SIDEBAR_TYPE_ICONS[row.categoryType] : null;
+
   return (
     <>
       {/* Zona buffer invisibile per tolleranza spaziale */}
@@ -315,7 +323,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
               }
             }}
             labelRef={labelRef}
-            Icon={row.categoryType ? SIDEBAR_TYPE_ICONS[row.categoryType] : null}
+            Icon={Icon}
             showIcons={showIcons}
                 iconPos={iconPos}
                 canDelete={canDelete}
