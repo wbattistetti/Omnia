@@ -101,6 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       })
       .catch((err) => {
         setDialogueTemplates([]);
+        console.error('Errore fetch dialogueTemplates:', err);
       })
       .finally(() => {
         setLoadingTemplates(false);

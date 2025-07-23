@@ -12,6 +12,7 @@ interface LandingPageProps {
   searchTerm: string;
   setSearchTerm: (v: string) => void;
   onSelectProject: (id: string) => void;
+  onOpenDockTest?: () => void; // nuova prop opzionale
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
@@ -25,6 +26,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   searchTerm,
   setSearchTerm,
   onSelectProject,
+  onOpenDockTest,
 }) => {
   const [showHelp, setShowHelp] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -41,6 +43,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-900 flex flex-col items-center justify-center relative overflow-hidden">
+      {/* Pulsante test dockable panels in alto a sinistra */}
+      {onOpenDockTest && (
+        <button
+          className="absolute top-6 left-8 z-20 flex items-center gap-2 bg-yellow-400 text-emerald-900 px-4 py-2 rounded-full shadow hover:bg-yellow-300 font-bold border-2 border-yellow-600"
+          onClick={onOpenDockTest}
+        >
+          Test Dockable Panels
+        </button>
+      )}
       {/* Help button in top-right */}
       <button
         className="absolute top-6 right-8 z-20 flex items-center gap-2 bg-white/90 text-emerald-900 px-4 py-2 rounded-full shadow hover:bg-white"

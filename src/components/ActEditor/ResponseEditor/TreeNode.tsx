@@ -81,7 +81,6 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
       }
     },
     drop(item: any, monitor) {
-      console.log('[DROP][NODE] drop handler', { id, dropTarget, item });
       if (dropTarget && item && typeof item === 'object') {
         onDrop(id, dropTarget, item);
       }
@@ -96,7 +95,6 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
   const [{ isDragging: isDraggingNode }, drag, preview] = useDrag({
     type: 'ACTION',
     item: () => {
-      console.log('[DRAG][BEGIN]', { id });
       return { id };
     },
     collect: (monitor) => ({
@@ -145,7 +143,6 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
         <div style={{ marginRight: 8 }} className={color || ''}>
           {(() => {
             const iconComponent = type === 'action' && icon ? getIconComponent(icon) : null;
-            console.log('[TreeNode] icon:', icon, 'iconComponent:', iconComponent);
             return iconComponent || <MessageCircle size={16} />;
           })()}
         </div>

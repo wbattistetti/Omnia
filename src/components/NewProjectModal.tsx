@@ -47,7 +47,10 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
       fetch('http://localhost:3100/projects')
         .then(res => res.json())
         .then(data => setRecentProjects(data))
-        .catch(() => setRecentProjects([]));
+        .catch((err) => {
+          setRecentProjects([]);
+          console.error('Errore fetch recentProjects in NewProjectModal:', err);
+        });
     }
   }, [isOpen]);
 

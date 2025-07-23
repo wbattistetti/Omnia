@@ -29,6 +29,8 @@ const templateData = {
 
 // Internal project data storage
 let projectData: ProjectData = {
+  name: '',
+  industry: '',
   agentActs: [],
   userActs: [],
   backendActions: [],
@@ -103,6 +105,8 @@ export const ProjectDataService = {
     if (!template) {
       console.warn(`Template ${templateName} not found, using empty data`);
       projectData = {
+        name: '',
+        industry: '',
         agentActs: [],
         userActs: [],
         backendActions: [],
@@ -117,6 +121,8 @@ export const ProjectDataService = {
     if (!languageData) {
       console.warn(`Language ${language} not found for template ${templateName}, using empty data`);
       projectData = {
+        name: '',
+        industry: '',
         agentActs: [],
         userActs: [],
         backendActions: [],
@@ -129,6 +135,8 @@ export const ProjectDataService = {
 
     // Convert template data to internal format
     projectData = {
+      name: '',
+      industry: '',
       agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
       userActs: convertTemplateDataToCategories(languageData.userActs),
       backendActions: convertTemplateDataToCategories(languageData.backendActions),
@@ -140,7 +148,9 @@ export const ProjectDataService = {
 
   async loadProjectData(): Promise<ProjectData> {
     await new Promise(resolve => setTimeout(resolve, 50));
-    return { ...projectData };
+    const result = { ...projectData };
+    console.log('[ProjectDataService.loadProjectData] returning:', result);
+    return result;
   },
 
   async addCategory(type: EntityType, name: string): Promise<Category> {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
 
 interface ActionsCatalogContextType {
   actionsCatalog: any[];
@@ -35,7 +35,9 @@ interface ActionsCatalogProviderProps {
 export const ActionsCatalogProvider: React.FC<ActionsCatalogProviderProps> = ({ children, initialActions = [] }) => {
   const [actionsCatalog, _setActionsCatalog] = useState<any[]>(initialActions);
 
-  useEffect(() => {
+  React.useEffect(() => {
+    console.log('[ActionsCatalogProvider] MOUNTED');
+    return () => console.log('[ActionsCatalogProvider] UNMOUNTED');
   }, []);
 
   useEffect(() => {
@@ -47,8 +49,14 @@ export const ActionsCatalogProvider: React.FC<ActionsCatalogProviderProps> = ({ 
     }, 100);
   }, [actionsCatalog]);
 
+  const value = useMemo(() => {
+    const v = { actionsCatalog };
+    console.log("[Context] ActionsCatalog reference", v);
+    return v;
+  }, [actionsCatalog]);
+
   return (
-    <ActionsCatalogContext.Provider value={{ actionsCatalog }}>
+    <ActionsCatalogContext.Provider value={value}>
       <SetActionsCatalogContext.Provider value={{ setActionsCatalog }}>
         {children}
       </SetActionsCatalogContext.Provider>

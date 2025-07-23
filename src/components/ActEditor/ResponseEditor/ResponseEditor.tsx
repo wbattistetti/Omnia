@@ -186,14 +186,17 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   React.useEffect(() => {
     fetch('/data/actionsCatalog.json')
       .then(res => res.json())
-      .then(setActionCatalog);
+      .then(setActionCatalog)
+      .catch(err => {
+        setActionCatalog([]);
+        console.error('Errore fetch actionsCatalog in ResponseEditor:', err);
+      });
   }, []);
 
   const [nodes, dispatch] = useReducer(nodesReducer, defaultNodes);
 
   // handleDrop logica semplificata (solo aggiunta root per demo)
   const handleDrop = (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => {
-    console.log('[handleDrop] CALLED', { targetId, position, item, nodes });
     if (item && item.action) {
       const action = item.action;
       const id = Math.random().toString(36).substr(2, 9);
@@ -208,15 +211,12 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         parameters: item.parameters,
       };
       if (targetId === null) {
-        console.log('[handleDrop] DROP SU CANVAS: aggiungo come root', { newNode });
         dispatch({ type: 'ADD', node: { ...newNode, level: 0, parentId: undefined } });
       } else {
         const targetNode = nodes.find(n => n.id === targetId);
         if (!targetNode) {
-          console.log('[handleDrop] TARGET NON TROVATO, aggiungo come root', { newNode });
           dispatch({ type: 'ADD', node: { ...newNode, level: 0, parentId: undefined } });
         } else if (position === 'before' || position === 'after') {
-          console.log('[handleDrop] DROP SIBLING', { newNode, targetNode, position });
           dispatch({
             type: 'ADD',
             node: { ...newNode, level: targetNode.level, parentId: targetNode.parentId },
@@ -225,13 +225,9 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
             position
           });
         } else if (position === 'child') {
-          console.log('[handleDrop] DROP CHILD', { newNode, targetNode });
           dispatch({ type: 'ADD', node: { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id } });
         }
       }
-      setTimeout(() => {
-        console.log('[handleDrop] NODES AFTER', nodes);
-      }, 100);
       return id;
     }
     // Spostamento nodo esistente: da implementare se serve
