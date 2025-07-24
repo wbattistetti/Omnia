@@ -35,17 +35,11 @@ interface ActionsCatalogProviderProps {
 export const ActionsCatalogProvider: React.FC<ActionsCatalogProviderProps> = ({ children, initialActions = [] }) => {
   const [actionsCatalog, _setActionsCatalog] = useState<any[]>(initialActions);
 
-  useEffect(() => {
-  }, []);
-
-  useEffect(() => {
-  }, [actionsCatalog]);
-
   const setActionsCatalog = useCallback((actions: any[]) => {
     _setActionsCatalog(actions);
     setTimeout(() => {
     }, 100);
-  }, [actionsCatalog]);
+  }, []);
 
   return (
     <ActionsCatalogContext.Provider value={{ actionsCatalog }}>

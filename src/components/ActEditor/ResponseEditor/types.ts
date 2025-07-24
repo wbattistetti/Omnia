@@ -6,7 +6,7 @@ export interface TreeNodeParameter {
 
 export interface TreeNodeProps {
   text: string;
-  type: 'root' | 'nomatch' | 'noinput' | 'action';
+  type: 'root' | 'nomatch' | 'noinput' | 'action' | 'success' | string;
   level?: number;
   expanded?: boolean;
   id: string;

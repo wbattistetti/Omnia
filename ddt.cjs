@@ -2,100 +2,90 @@
 
 
 
-
-
-
-
-
 const { MongoClient } = require('mongodb');
-
 // CONFIGURA QUI
 const uri = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
-const dbName = 'factory';
-const collectionName = 'Translations';
 
-// TUTTE LE TRANSLATIONS DEL TUO DDT:
-const translations = {
-  "DataDialogueTemplates.DDT_BirthOfDate.label": {
-    "it": "Acquisisci data di nascita",
-    "en": "Acquire date of birth"
+const DB_NAME = 'factory';
+const COLLECTION = 'Translations';
+
+// Dati delle translations da INSERIRE/AGGIORNARE (chiavi corrette!)
+const newTranslations = {
+  "runtime.DDT_BirthOfDate.askQuestion1.text": {
+    "en": "What is the patient's date of birth?",
+    "it": "Qual è la data di nascita del paziente?",
+    "fr": "Quelle est la date de naissance du patient ?"
   },
-  "DataDialogueTemplates.DDT_BirthOfDate.description": {
-    "it": "Flusso per acquisire la data di nascita dell'utente, gestendo input parziale, validazione e conferma.",
-    "en": "Flow to acquire the user's date of birth, handling partial input, validation, and confirmation."
+  "runtime.DDT_BirthOfDate.sayMessage1.text": {
+    "en": "Please provide the patient's date of birth.",
+    "it": "Per favore, inserisci la data di nascita del paziente.",
+    "fr": "Veuillez fournir la date de naissance du patient."
   },
-  "DataDialogueTemplates.DDT_BirthOfDate.constraints.date_format.description": {
-    "it": "Controlla che la data sia in un formato valido (YYYY-MM-DD).",
-    "en": "Checks that the date is in a valid format (YYYY-MM-DD)."
+  "runtime.DDT_BirthOfDate.sayMessage2.text": {
+    "en": "I didn't understand. Could you provide the patient's date of birth?",
+    "it": "Non ho capito. Puoi fornire la data di nascita del paziente?",
+    "fr": "Je n'ai pas compris. Pouvez-vous fournir la date de naissance du patient ?"
   },
-  "DataDialogueTemplates.DDT_BirthOfDate.constraints.past.description": {
-    "it": "Controlla che la data sia nel passato.",
-    "en": "Checks that the date is in the past."
+  "runtime.DDT_BirthOfDate.askConfirmation1.text": {
+    "en": "Just to confirm, is your date of birth {dateOfBirth}?",
+    "it": "Solo per confermare, la tua data di nascita è {dateOfBirth}?",
+    "fr": "Juste pour confirmer, votre date de naissance est-elle {dateOfBirth} ?"
   },
-  "DataDialogueTemplates.DDT_BirthOfDate.constraints.age_min.description": {
-    "it": "Controlla che l'utente abbia almeno 18 anni.",
-    "en": "Checks that the user is at least 18 years old."
+  "runtime.DDT_BirthOfDate.askConfirmation2.text": {
+    "en": "Since you are under 25, can you confirm your date of birth: {dateOfBirth}?",
+    "it": "Poiché hai meno di 25 anni, puoi confermare la tua data di nascita: {dateOfBirth}?",
+    "fr": "Puisque vous avez moins de 25 ans, pouvez-vous confirmer votre date de naissance : {dateOfBirth} ?"
   },
-  "Actions.askQuestion1.text": {
-    "it": "Qual è la tua data di nascita?",
-    "en": "What is your date of birth?"
-  },
-  "Actions.sayMessage1.text": {
-    "it": "Per favore, inserisci la tua data di nascita.",
-    "en": "Please enter your date of birth."
-  },
-  "Actions.sayMessage2.text": {
-    "it": "Non ho capito la data. Puoi ripetere?",
-    "en": "I didn't understand the date. Can you repeat?"
-  },
-  "Actions.askConfirmation1.text": {
-    "it": "Confermi questa data di nascita?",
-    "en": "Do you confirm this date of birth?"
-  },
-  "Actions.askConfirmation2.text": {
-    "it": "Hai meno di 25 anni, confermi la data inserita?",
-    "en": "You are under 25, do you confirm the entered date?"
-  },
-  "Actions.sayMessage3.text": {
+  "runtime.DDT_BirthOfDate.sayMessage3.text": {
+    "en": "The date format is invalid. Please use YYYY-MM-DD.",
     "it": "Il formato della data non è valido. Usa AAAA-MM-GG.",
-    "en": "The date format is not valid. Use YYYY-MM-DD."
+    "fr": "Le format de la date n'est pas valide. Utilisez AAAA-MM-JJ."
   },
-  "Actions.sayMessage4.text": {
-    "it": "La data deve essere nel passato.",
-    "en": "The date must be in the past."
+  "runtime.DDT_BirthOfDate.sayMessage4.text": {
+    "en": "The date of birth must be in the past.",
+    "it": "La data di nascita deve essere nel passato.",
+    "fr": "La date de naissance doit être dans le passé."
   },
-  "Actions.sayMessage5.text": {
+  "runtime.DDT_BirthOfDate.sayMessage5.text": {
+    "en": "You must be at least 18 years old.",
     "it": "Devi avere almeno 18 anni.",
-    "en": "You must be at least 18 years old."
+    "fr": "Vous devez avoir au moins 18 ans."
   },
-  "Actions.sayMessageSuccess.text": {
-    "it": "Data di nascita acquisita con successo.",
-    "en": "Date of birth successfully acquired."
+  "runtime.DDT_BirthOfDate.sayMessageSuccess.text": {
+    "en": "Thank you! Your date of birth has been recorded.",
+    "it": "Grazie! La tua data di nascita è stata registrata.",
+    "fr": "Merci ! Votre date de naissance a été enregistrée."
   }
 };
 
-async function importTranslations() {
+async function main() {
   const client = new MongoClient(uri);
   try {
     await client.connect();
-    const db = client.db(dbName);
-    const collection = db.collection(collectionName);
+    const db = client.db(DB_NAME);
+    const collection = db.collection(COLLECTION);
 
-    let upserted = 0;
-    for (const [key, value] of Object.entries(translations)) {
-      const result = await collection.updateOne(
-        { key }, // filtro per chiave
-        { $set: { key, ...value } }, // aggiorna o inserisce
-        { upsert: true }
-      );
-      if (result.upsertedCount > 0 || result.modifiedCount > 0) upserted++;
+    for (const [key, value] of Object.entries(newTranslations)) {
+      const existing = await collection.findOne({ key });
+      if (existing) {
+        const updatedValue = { ...existing.value, ...value };
+        if (JSON.stringify(existing.value) !== JSON.stringify(updatedValue)) {
+          await collection.updateOne(
+            { key },
+            { $set: { value: updatedValue } }
+          );
+          console.log(`Aggiornato: ${key}`);
+        } else {
+          console.log(`Nessun cambiamento per: ${key}`);
+        }
+      } else {
+        await collection.insertOne({ key, value });
+        console.log(`Inserito: ${key}`);
+      }
     }
-    console.log(`Upserted/updated ${upserted} translation records in ${collectionName}`);
-  } catch (err) {
-    console.error('Errore durante l\'importazione:', err);
   } finally {
     await client.close();
   }
 }
 
-importTranslations();
+main().catch(console.error);

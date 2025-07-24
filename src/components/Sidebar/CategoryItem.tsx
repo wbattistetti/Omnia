@@ -16,15 +16,7 @@ interface CategoryItemProps {
   onUpdateItem: (itemId: string, updates: Partial<ProjectEntityItem>) => void;
 }
 
-export const CategoryItem: React.FC<CategoryItemProps> = ({
-  category,
-  entityType,
-  onAddItem,
-  onDeleteCategory,
-  onUpdateCategory,
-  onDeleteItem,
-  onUpdateItem
-}) => {
+const CategoryItem = (props: CategoryItemProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -32,14 +24,14 @@ export const CategoryItem: React.FC<CategoryItemProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleAddItem = (name: string) => {
-    onAddItem(name, '');
+    props.onAddItem(name, '');
     setIsAdding(false);
     setNewItemName("");
   };
 
   const { colors, icons, fontSizes } = useSidebarTheme();
   return (
-    <div className="mb-3" style={{ background: colors[entityType]?.light, borderRadius: 12, padding: 2 }}>
+    <div className="mb-3" style={{ background: colors[props.entityType]?.light, borderRadius: 12, padding: 2 }}>
       <div 
         className="flex items-center justify-between p-2 rounded-lg transition-colors group"
         onMouseEnter={() => setIsHovered(true)}
@@ -50,19 +42,19 @@ export const CategoryItem: React.FC<CategoryItemProps> = ({
           onClick={() => setIsExpanded(!isExpanded)}
         >
           {(() => {
-            const Icon = icons[entityType];
-            return <Icon style={{ fontSize: `${fontSizes.icon}em`, color: colors[entityType]?.main }} className="mr-2" />;
+            const Icon = icons[props.entityType];
+            return <Icon style={{ fontSize: `${fontSizes.icon}em`, color: colors[props.entityType]?.main }} className="mr-2" />;
           })()}
           <EditableText
-            value={category.name}
-            onSave={(name) => onUpdateCategory({ name })}
+            value={props.category.name}
+            onSave={(name) => props.onUpdateCategory({ name })}
             placeholder="Category name"
             className="font-bold"
             showEditIcon={false}
-            style={{ fontSize: `${fontSizes.category}em`, color: colors[entityType]?.main }}
+            style={{ fontSize: `${fontSizes.category}em`, color: colors[props.entityType]?.main }}
           />
-          <span className="ml-2" style={{ fontSize: `${fontSizes.count}em`, color: colors[entityType]?.main, fontWeight: 600 }}>
-            ({category.items.length})
+          <span className="ml-2" style={{ fontSize: `${fontSizes.count}em`, color: colors[props.entityType]?.main, fontWeight: 600 }}>
+            ({props.category.items.length})
           </span>
         </div>
         {/* Pulsante + come icona compatta nell'header */}
@@ -93,7 +85,7 @@ export const CategoryItem: React.FC<CategoryItemProps> = ({
           <div className="flex gap-2">
             <button
               className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold text-sm"
-              onClick={() => { setShowDeleteConfirm(false); onDeleteCategory(); }}
+              onClick={() => { setShowDeleteConfirm(false); props.onDeleteCategory(); }}
             >
               Conferma
             </button>
@@ -139,15 +131,15 @@ export const CategoryItem: React.FC<CategoryItemProps> = ({
               </button>
             </div>
           )}
-          {category.items.map((item) => (
+          {props.category.items.map((item) => (
             <SidebarItem
               key={item.id}
               item={item}
-              onUpdate={(updates) => onUpdateItem(item.id, updates)}
-              onDelete={() => onDeleteItem(item.id)}
-              entityType={entityType}
+              onUpdate={(updates) => props.onUpdateItem(item.id, updates)}
+              onDelete={() => props.onDeleteItem(item.id)}
+              entityType={props.entityType}
               textColor="#111"
-              bgColor={colors[entityType]?.light}
+              bgColor={colors[props.entityType]?.light}
             />
           ))}
         </div>
@@ -155,3 +147,5 @@ export const CategoryItem: React.FC<CategoryItemProps> = ({
     </div>
   );
 };
+
+export default React.memo(CategoryItem);

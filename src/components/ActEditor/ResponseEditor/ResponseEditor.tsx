@@ -1,5 +1,21 @@
+// REGOLA GLOBALE PER LE CHIAVI DI TRANSLATION DEI DDT (runtime):
+// Formato:
+//   runtime.<DDT_ID>.<step>[#<n>].<actionInstanceId>.text
+// - <DDT_ID>: l'id del DataDialogueTemplate (es: DDT_BirthOfDate)
+// - <step>: tipo di step (es: normal, noInput, noMatch, explicitConfirmation, success, ecc.)
+// - [#<n>]: numero escalation (opzionale, parte da 1 se ci sono più azioni per step)
+// - <actionInstanceId>: es. sayMessage2, askQuestion1, ecc.
+// - .text: suffisso fisso per il testo principale
+// Esempi:
+//   runtime.DDT_BirthOfDate.normal#1.askQuestion1.text
+//   runtime.DDT_BirthOfDate.noInput#1.sayMessage1.text
+//   runtime.DDT_BirthOfDate.noMatch#2.sayMessageX.text
+//   runtime.DDT_BirthOfDate.success#1.sayMessageSuccess.text
+// Note: questa regola va rispettata sia negli script di inserimento/aggiornamento che nel codice di lookup delle translations.
+//
+// ---
 // Executive summary: Main entry point for the Response Editor component. Handles layout and orchestration of the response tree.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ActionItem from '../ActionViewer/ActionItem';
 import ActionList from '../ActionViewer/ActionList';
 import { Tag, MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Clock, ServerCog } from 'lucide-react';
@@ -83,19 +99,67 @@ const estraiValoreTradotto = (key: string, translations: any, lang: string) => {
   return value;
 };
 
-const estraiNodiDaDDT = (ddt: any): TreeNodeProps[] => {
-  // TODO: implementa la logica reale di estrazione
-  if (!ddt) return [];
-  // Esempio: supponiamo che ddt.prompts sia un array di stringhe
-  if (Array.isArray(ddt?.prompts)) {
-    return ddt.prompts.map((text: string, i: number) => ({
-      id: String(i + 1),
-      text,
-      type: i === 0 ? 'root' : 'action',
-      onDrop: () => {}
-    }));
+// Funzione di lookup con log dettagliati
+function getTranslationText(translations, ddtId, step, escalation, actionInstanceId, lang) {
+  const key = `runtime.${ddtId}.${step}#${escalation}.${actionInstanceId}.text`;
+  const fallbackKey = `runtime.${ddtId}.${step}.${actionInstanceId}.text`;
+  const actionsKey = `Actions.${actionInstanceId}.text`;
+  console.log('[Translation Lookup] Provo:', key, fallbackKey, actionsKey);
+  if (translations[key] && translations[key][lang]) {
+    console.log(`[Translation Lookup] TROVATA: ${key} -> ${translations[key][lang]}`);
+    return translations[key][lang];
   }
-  return [];
+  if (translations[fallbackKey] && translations[fallbackKey][lang]) {
+    console.log(`[Translation Lookup] TROVATA (fallback): ${fallbackKey} -> ${translations[fallbackKey][lang]}`);
+    return translations[fallbackKey][lang];
+  }
+  if (translations[actionsKey] && translations[actionsKey][lang]) {
+    console.log(`[Translation Lookup] TROVATA (Actions): ${actionsKey} -> ${translations[actionsKey][lang]}`);
+    return translations[actionsKey][lang];
+  }
+  console.warn(`[Translation Lookup] NON TROVATA: ${key} / ${fallbackKey} / ${actionsKey}`);
+  return '';
+}
+
+const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodeProps[] => {
+  if (!ddt || !ddt.steps) return [];
+  const nodes: TreeNodeProps[] = [];
+  let idCounter = 1;
+  // Per ogni step (normal, noInput, noMatch, ecc.)
+  for (const [stepKey, actions] of Object.entries(ddt.steps)) {
+    if (Array.isArray(actions)) {
+      actions.forEach((action: any, idx: number) => {
+        const actionInstanceId = action.actionInstanceId;
+        const type = stepKey;
+        // Calcola escalation (parte da 1)
+        const escalation = actions.length > 1 ? idx + 1 : 1;
+        const ddtId = ddt.id || ddt._id;
+        const text = getTranslationText(translations, ddtId, stepKey, escalation, actionInstanceId, lang);
+        nodes.push({
+          id: String(idCounter++),
+          text,
+          type,
+          actionInstanceId,
+        });
+      });
+    }
+  }
+  // Success step (può essere oggetto)
+  if (ddt.steps.success && ddt.steps.success.actions) {
+    ddt.steps.success.actions.forEach((action: any, idx: number) => {
+      const actionInstanceId = action.actionInstanceId;
+      const ddtId = ddt.id || ddt._id;
+      const escalation = 1 + idx;
+      const text = getTranslationText(translations, ddtId, 'success', escalation, actionInstanceId, lang);
+      nodes.push({
+        id: String(idCounter++),
+        text,
+        type: 'success',
+        actionInstanceId,
+      });
+    });
+  }
+  return nodes;
 };
 
 const estraiLabelAzione = (actionType: string, translations: any, lang: string) => {
@@ -117,11 +181,7 @@ interface ResponseEditorProps {
   onClose?: () => void;
 }
 
-const defaultNodes: TreeNodeProps[] = [
-  { id: '1', text: "What is the patient's date of birth?", type: 'root' },
-  { id: '2', text: "I didn't understand. Could you provide the patient's date of birth?", type: 'nomatch', level: 1, parentId: '1' },
-  { id: '3', text: "Please provide the patient's date of birth.", type: 'noinput', level: 1, parentId: '1' }
-];
+// Rimuovo defaultNodes
 
 // Inserisce un nodo nell'array subito prima o dopo il targetId, mantenendo parentId e level
 function insertNodeAt(nodes: TreeNodeProps[], newNode: TreeNodeProps, targetId: string, position: 'before' | 'after'): TreeNodeProps[] {
@@ -190,7 +250,11 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       .then(setActionCatalog);
   }, []);
 
-  const [nodes, dispatch] = useReducer(nodesReducer, defaultNodes);
+  // Stato nodi dinamico dal DDT
+  const [nodes, setNodes] = useState<TreeNodeProps[]>([]);
+  useEffect(() => {
+    setNodes(estraiNodiDaDDT(ddt, translations, lang));
+  }, [ddt, translations, lang]);
 
   // handleDrop logica semplificata (solo aggiunta root per demo)
   const handleDrop = (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => {
@@ -210,24 +274,18 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       };
       if (targetId === null) {
         console.log('[handleDrop] DROP SU CANVAS: aggiungo come root', { newNode });
-        dispatch({ type: 'ADD', node: { ...newNode, level: 0, parentId: undefined } });
+        setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
       } else {
         const targetNode = nodes.find(n => n.id === targetId);
         if (!targetNode) {
           console.log('[handleDrop] TARGET NON TROVATO, aggiungo come root', { newNode });
-          dispatch({ type: 'ADD', node: { ...newNode, level: 0, parentId: undefined } });
+          setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
         } else if (position === 'before' || position === 'after') {
           console.log('[handleDrop] DROP SIBLING', { newNode, targetNode, position });
-          dispatch({
-            type: 'ADD',
-            node: { ...newNode, level: targetNode.level, parentId: targetNode.parentId },
-            insertAt: true,
-            targetId,
-            position
-          });
+          setNodes(prev => insertNodeAt(prev, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position));
         } else if (position === 'child') {
           console.log('[handleDrop] DROP CHILD', { newNode, targetNode });
-          dispatch({ type: 'ADD', node: { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id } });
+          setNodes(prev => [...prev, { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id }]);
         }
       }
       setTimeout(() => {
@@ -238,7 +296,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     // Spostamento nodo esistente: da implementare se serve
     return null;
   };
-  const removeNode = (id: string) => dispatch({ type: 'REMOVE', id });
+  const removeNode = (id: string) => setNodes(prev => prev.filter(n => n.id !== id));
 
   return (
     <div className={styles.responseEditorRoot}>

@@ -11,21 +11,13 @@ interface AccordionProps {
   action?: React.ReactNode;
 }
 
-export const Accordion: React.FC<AccordionProps> = ({ 
-  title, 
-  children, 
-  isOpen,
-  onToggle,
-  icon,
-  bgColor,
-  action
-}) => {
+const Accordion = (props: AccordionProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);
 
   useEffect(() => {
     if (contentRef.current) {
-      if (isOpen) {
+      if (props.isOpen) {
         // Restore scroll position when opening
         contentRef.current.scrollTop = lastScrollTop.current;
       } else {
@@ -33,24 +25,24 @@ export const Accordion: React.FC<AccordionProps> = ({
         lastScrollTop.current = contentRef.current.scrollTop;
       }
     }
-  }, [isOpen]);
+  }, [props.isOpen]);
 
   return (
-    <div className="mb-4" style={isOpen && bgColor ? { background: bgColor.light, borderRadius: 12, padding: 2 } : undefined}>
-      <div className="flex items-center justify-between p-3 rounded-lg transition-colors" style={bgColor ? { background: bgColor.header, color: '#fff', borderRadius: 12, width: '100%' } : undefined}>
+    <div className="mb-4" style={props.isOpen && props.bgColor ? { background: props.bgColor.light, borderRadius: 12, padding: 2 } : undefined}>
+      <div className="flex items-center justify-between p-3 rounded-lg transition-colors" style={props.bgColor ? { background: props.bgColor.header, color: '#fff', borderRadius: 12, width: '100%' } : undefined}>
         <button
-          onClick={onToggle}
+          onClick={props.onToggle}
           className="flex items-center flex-1 text-left group bg-transparent border-none outline-none"
           style={{ background: 'none', boxShadow: 'none', padding: 0 }}
         >
-          {icon && <span className="mr-3">{icon}</span>}
-          <span className="font-semibold group-hover:font-bold" style={bgColor ? { color: '#fff' } : {}}>{title}</span>
+          {props.icon && <span className="mr-3">{props.icon}</span>}
+          <span className="font-semibold group-hover:font-bold" style={props.bgColor ? { color: '#fff' } : {}}>{props.title}</span>
         </button>
-        {action && <span className="ml-2">{action}</span>}
-        {isOpen ? (
-          <ChevronDown className="w-5 h-5 text-slate-400 ml-2" onClick={onToggle} style={{ cursor: 'pointer' }} />
+        {props.action && <span className="ml-2">{props.action}</span>}
+        {props.isOpen ? (
+          <ChevronDown className="w-5 h-5 text-slate-400 ml-2" onClick={props.onToggle} style={{ cursor: 'pointer' }} />
         ) : (
-          <ChevronRight className="w-5 h-5 text-slate-400 ml-2" onClick={onToggle} style={{ cursor: 'pointer' }} />
+          <ChevronRight className="w-5 h-5 text-slate-400 ml-2" onClick={props.onToggle} style={{ cursor: 'pointer' }} />
         )}
       </div>
       
@@ -58,13 +50,15 @@ export const Accordion: React.FC<AccordionProps> = ({
         ref={contentRef}
         className="mt-2 pl-2 transition-all duration-200 overflow-y-auto"
         style={{
-          maxHeight: isOpen ? '300px' : '0px'
+          maxHeight: props.isOpen ? '300px' : '0px'
         }}
       >
         <div className="pb-2">
-          {children}
+          {props.children}
         </div>
       </div>
     </div>
   );
 };
+
+export default React.memo(Accordion);

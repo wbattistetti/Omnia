@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
@@ -73,11 +73,11 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [selectedDDTTranslations, setSelectedDDTTranslations] = useState<any | null>(null);
   const [selectedDDTLanguage, setSelectedDDTLanguage] = useState<string>('it');
 
-  const handleOpenDDTEditor = (ddt: any, translations: any, lang: string) => {
+  const handleOpenDDTEditor = useCallback((ddt: any, translations: any, lang: string) => {
     setSelectedDDT(ddt);
     setSelectedDDTTranslations(translations);
     setSelectedDDTLanguage(lang);
-  };
+  }, []);
 
   // Pannello di test in alto a sinistra all'avvio
   React.useEffect(() => {
@@ -109,38 +109,30 @@ export const AppContent: React.FC<AppContentProps> = ({
     }
   };
 
-  // Elimina singolo progetto
-  const handleDeleteProject = async (id: string) => {
+  const handleDeleteProject = useCallback(async (id: string) => {
     await ProjectService.deleteProject(id);
     setToast('Progetto eliminato!');
     await fetchRecentProjects();
     await fetchAllProjects();
     setTimeout(() => setToast(null), 2000);
-  };
-  // Elimina tutti i progetti
-  const handleDeleteAllProjects = async () => {
+  }, [fetchRecentProjects, fetchAllProjects]);
+
+  const handleDeleteAllProjects = useCallback(async () => {
     await ProjectService.deleteAllProjects();
     setToast('Tutti i progetti eliminati!');
     await fetchRecentProjects();
     await fetchAllProjects();
     setTimeout(() => setToast(null), 2000);
-  };
+  }, [fetchRecentProjects, fetchAllProjects]);
 
   // Callback per LandingPage
-  const handleLandingNewProject = () => setAppState('creatingProject');
-  const handleLandingLoadProject = async () => {
-    await fetchRecentProjects();
-  };
-  const handleLandingShowAllProjects = async () => {
-    await fetchAllProjects();
-    setShowAllProjectsModal(true);
-  };
+  const handleLandingNewProject = useCallback(() => setAppState('creatingProject'), [setAppState]);
+  const handleLandingLoadProject = useCallback(async () => { await fetchRecentProjects(); }, [fetchRecentProjects]);
+  const handleLandingShowAllProjects = useCallback(async () => { await fetchAllProjects(); setShowAllProjectsModal(true); }, [fetchAllProjects]);
 
-  const handleOpenNewProjectModal = () => {
-    setAppState('creatingProject');
-  };
+  const handleOpenNewProjectModal = useCallback(() => setAppState('creatingProject'), [setAppState]);
 
-  const handleCreateProject = async (projectInfo: ProjectInfo): Promise<boolean> => {
+  const handleCreateProject = useCallback(async (projectInfo: ProjectInfo): Promise<boolean> => {
     setCreateError(null);
     setIsCreatingProject(true);
     try {
@@ -177,13 +169,11 @@ export const AppContent: React.FC<AppContentProps> = ({
     } finally {
       setIsCreatingProject(false);
     }
-  };
+  }, [refreshData, setAppState]);
 
-  const handleCloseNewProjectModal = () => {
-    setAppState('landing');
-  };
+  const handleCloseNewProjectModal = useCallback(() => setAppState('landing'), [setAppState]);
 
-  const handleSaveProject = async () => {
+  const handleSaveProject = useCallback(async () => {
     if (!currentProject) return;
     setIsSaving(true);
     setSaveSuccess(false);
@@ -222,9 +212,26 @@ export const AppContent: React.FC<AppContentProps> = ({
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [currentProject, nodes, edges]);
 
-  const handleShowRecentProjects = async (id?: string) => {
+  const handleOpenProjectById = useCallback(async (id: string) => {
+    if (!id) return;
+    try {
+      const response = await fetch(`http://localhost:3100/projects/${id}`);
+      if (!response.ok) throw new Error('Errore nel caricamento');
+      const project = await response.json();
+      setCurrentProject(project); // carica TUTTI i dati, inclusi i dizionari
+      // AGGIUNTA: aggiorna anche nodi e edge se presenti
+      setNodes(Array.isArray(project.nodes) ? project.nodes : []);
+      setEdges(Array.isArray(project.edges) ? project.edges : []);
+      await ProjectDataService.importProjectData(JSON.stringify(project));
+      await refreshData();
+    } catch (err) {
+      alert('Errore: ' + (err instanceof Error ? err.message : err));
+    }
+  }, [refreshData]);
+
+  const handleShowRecentProjects = useCallback(async (id?: string) => {
     if (id) {
       await handleOpenProjectById(id);
       setAppState('mainApp');
@@ -248,46 +255,25 @@ export const AppContent: React.FC<AppContentProps> = ({
     } catch (err) {
       alert('Errore: ' + (err instanceof Error ? err.message : err));
     }
-  };
-
-  const handleOpenProjectById = async (id: string) => {
-    if (!id) return;
-    try {
-      const response = await fetch(`http://localhost:3100/projects/${id}`);
-      if (!response.ok) throw new Error('Errore nel caricamento');
-      const project = await response.json();
-      setCurrentProject(project); // carica TUTTI i dati, inclusi i dizionari
-      // AGGIUNTA: aggiorna anche nodi e edge se presenti
-      setNodes(Array.isArray(project.nodes) ? project.nodes : []);
-      setEdges(Array.isArray(project.edges) ? project.edges : []);
-      await ProjectDataService.importProjectData(JSON.stringify(project));
-      await refreshData();
-    } catch (err) {
-      alert('Errore: ' + (err instanceof Error ? err.message : err));
-    }
-  };
+  }, [handleOpenProjectById, setAppState]);
 
   // Passa una funzione a NewProjectModal per azzerare l'errore duplicato quando cambia il nome
-  const handleProjectNameChange = () => {
+  const handleProjectNameChange = useCallback(() => {
     if (createError) setCreateError(null);
-  };
+  }, [createError]);
 
   // Carica progetti recenti ogni volta che si entra nella landing
   useEffect(() => {
     if (appState === 'landing') {
       fetchRecentProjects();
     }
-  }, [appState]);
+  }, [appState, fetchRecentProjects]);
 
   useEffect(() => {
     if (showAllProjectsModal) {
       fetchAllProjects();
     }
-  }, [showAllProjectsModal]);
-
-  const flowContainerRef = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
-  });
+  }, [showAllProjectsModal, fetchAllProjects]);
 
   return (
     <div className="min-h-screen" style={{ position: 'relative' }}>

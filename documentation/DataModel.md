@@ -329,3 +329,30 @@ Se la variabile (es: dateOfBirth) è parzialmente saturata (es: solo mese e anno
 - Centralizzare le traduzioni in file separati
 
 --- 
+
+---
+
+## 13. Regola globale per le chiavi di translation dei DDT (runtime)
+
+**Formato chiave:**
+
+```
+runtime.<DDT_ID>.<step>[#<n>].<actionInstanceId>.text
+```
+
+- `<DDT_ID>`: id del DataDialogueTemplate (es: DDT_BirthOfDate)
+- `<step>`: tipo di step (normal, noInput, noMatch, explicitConfirmation, success, ecc.)
+- `[#<n>]`: numero escalation (opzionale, parte da 1 se ci sono più azioni per step)
+- `<actionInstanceId>`: es. sayMessage2, askQuestion1, ecc.
+- `.text`: suffisso fisso per il testo principale
+
+**Esempi:**
+- runtime.DDT_BirthOfDate.normal#1.askQuestion1.text
+- runtime.DDT_BirthOfDate.noInput#1.sayMessage1.text
+- runtime.DDT_BirthOfDate.noMatch#2.sayMessageX.text
+- runtime.DDT_BirthOfDate.success#1.sayMessageSuccess.text
+
+**Note:**
+- Se c'è una sola azione per step, il numero escalation può essere omesso o impostato a 1.
+- Usare sempre questa regola per tutte le chiavi di translation dei DDT.
+- Questa regola va rispettata sia negli script di inserimento/aggiornamento che nel codice di lookup delle translations. 
