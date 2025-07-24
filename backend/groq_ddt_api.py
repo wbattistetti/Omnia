@@ -2,6 +2,7 @@ from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import requests
+import json
 
 GROQ_KEY = os.environ.get("Groq_key")
 IDE_LANGUE = os.environ.get("IdeLangue", "it")
@@ -77,12 +78,85 @@ def step3b(user_constraints: str = Body(...), meaning: str = Body(...), desc: st
 
 @app.post("/step4")
 def step4(meaning: str = Body(...), desc: str = Body(...), constraints: str = Body(...)):
+    DDT_EXAMPLE_JSON = """
+    {
+      "_id": "687dc1d84a68b869802aea16",
+      "id": "DDT_BirthOfDate",
+      "label": "Acquire date of birth",
+      "description": "Flow to acquire the user's date of birth, handling partial input, validation, confirmation, and success.",
+      "dataType": "Object",
+      "variable": "dateOfBirth",
+      "constraints": [],
+      "steps": {
+        "start": [
+          { "actionInstanceId": "SayMessage_GUID1", "actionType": "askQuestion" }
+        ],
+        "noMatch": [
+          { "actionInstanceId": "SayMessage_GUID2", "actionType": "escalation" },
+          { "actionInstanceId": "SayMessage_GUID3", "actionType": "escalation" },
+          { "actionInstanceId": "SayMessage_GUID4", "actionType": "escalation" }
+        ],
+        "noInput": [
+          { "actionInstanceId": "SayMessage_GUID5", "actionType": "escalation" },
+          { "actionInstanceId": "SayMessage_GUID6", "actionType": "escalation" },
+          { "actionInstanceId": "SayMessage_GUID7", "actionType": "escalation" }
+        ],
+        "confirmation": [
+          { "actionInstanceId": "SayMessage_GUID8", "actionType": "confirmation" },
+          { "actionInstanceId": "SayMessage_GUID9", "actionType": "confirmation" }
+        ],
+        "success": [
+          { "actionInstanceId": "SayMessage_GUID10", "actionType": "success" }
+        ],
+        "notAcquired": [
+          { "actionInstanceId": "SayMessage_GUID11", "actionType": "notAcquired" }
+        ]
+      },
+      "success": {}
+    }
+    """
     prompt = (
-        f"Rispondi in {IDE_LANGUE}. Ecco le specifiche raccolte:\nTipo: {meaning}\nDescrizione: {desc}\nConstraint: {constraints}\n"
-        "Genera la struttura completa del DDT, con tutti i prompt necessari per:\n- Acquisizione\n- Conferma\n- Errori di validazione (per ogni constraint)\n- Successo\n- Prompt noInput/noMatch con 3 escalation\nRestituisci i messaggi in modo strutturato e chiaro."
+        f"""You are an expert dialogue template generator for conversational AI.
+Given the following specifications:
+- Data type: {meaning}
+- Description: {desc}
+
+Generate ONLY a JSON object with EXACTLY this structure:
+
+{{
+  "ddt": <COMPLETE_DDT_OBJECT>,
+  "messages": <RUNTIME_MESSAGES_OBJECT>
+}}
+
+Where:
+- "ddt" is a Data Dialogue Template object with the same ontological structure as this example: {DDT_EXAMPLE_JSON}
+- Include the standard steps: start, noMatch (3 escalations), noInput (3 escalations), confirmation (2 escalations), success, notAcquired.
+- Each actionInstanceId must be the action name plus a randomly generated GUID/UUID (e.g., SayMessage_3f2a1b4c-...).
+- For each action, generate a runtime string key as: runtime.<DDT_ID>.<step>#<n>.<actionInstanceId>.text
+  - <n> is the escalation number (starting from 1) for that step. ALWAYS include #<n> even if there is only one action for that step.
+  - Example: runtime.DDT_Phone.noMatch#2.SayMessage_GUID.text
+- "messages" is an object with all runtime string keys and their values (in Italian and English).
+  - Each value in the "messages" object MUST be a multilingual object with language codes as keys (e.g., {{ "it": "...", "en": "..." }}). DO NOT use plain strings or arrays.
+  - Example:
+    "runtime.DDT_Phone.noMatch#1.SayMessage_GUID.text": {{ "it": "Testo in italiano", "en": "English text" }}
+- The messages MUST be synthetic and highly conversational, as if for a fast-paced call center conversation (short, direct, natural, not formal).
+- The messages object must contain ALL the new runtime string keys and their values, so they can be added to the existing translations structure in memory (do NOT overwrite existing keys, only add new ones).
+- DO NOT include any explanation, markdown, or text outside the JSON object.
+- The output MUST be valid JSON, parsable by Python.
+
+Example output:
+{{
+  "ddt": {{ ... }},
+  "messages": {{ ... }}
+}}
+"""
     )
     ai = call_groq([
-        {"role": "system", "content": f"Rispondi sempre in {IDE_LANGUE}."},
+        {"role": "system", "content": "Always reply in English."},
         {"role": "user", "content": prompt}
     ])
-    return {"ai": ai} 
+    try:
+        ai_obj = json.loads(ai)
+        return {"ai": ai_obj}
+    except Exception as e:
+        return {"ai": None, "error": f"Failed to parse AI JSON: {str(e)}"} 

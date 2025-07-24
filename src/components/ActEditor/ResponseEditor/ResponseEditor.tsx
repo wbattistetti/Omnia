@@ -99,49 +99,79 @@ const estraiValoreTradotto = (key: string, translations: any, lang: string) => {
   return value;
 };
 
-// Funzione di lookup con log dettagliati
-function getTranslationText(translations, ddtId, step, escalation, actionInstanceId, lang) {
+// Funzione di lookup con tipi espliciti
+function getTranslationText(
+  translations: Record<string, any>,
+  ddtId: string,
+  step: string,
+  escalation: number,
+  actionInstanceId: string,
+  lang: string
+) {
   const key = `runtime.${ddtId}.${step}#${escalation}.${actionInstanceId}.text`;
   const fallbackKey = `runtime.${ddtId}.${step}.${actionInstanceId}.text`;
   const actionsKey = `Actions.${actionInstanceId}.text`;
-  console.log('[Translation Lookup] Provo:', key, fallbackKey, actionsKey);
   if (translations[key] && translations[key][lang]) {
-    console.log(`[Translation Lookup] TROVATA: ${key} -> ${translations[key][lang]}`);
     return translations[key][lang];
   }
   if (translations[fallbackKey] && translations[fallbackKey][lang]) {
-    console.log(`[Translation Lookup] TROVATA (fallback): ${fallbackKey} -> ${translations[fallbackKey][lang]}`);
     return translations[fallbackKey][lang];
   }
   if (translations[actionsKey] && translations[actionsKey][lang]) {
-    console.log(`[Translation Lookup] TROVATA (Actions): ${actionsKey} -> ${translations[actionsKey][lang]}`);
     return translations[actionsKey][lang];
   }
-  console.warn(`[Translation Lookup] NON TROVATA: ${key} / ${fallbackKey} / ${actionsKey}`);
   return '';
+}
+
+// Funzione per numerale ordinale italiano (1° 2° 3° ...)
+function ordinalIt(n: number) {
+  return n + '°';
 }
 
 const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodeProps[] => {
   if (!ddt || !ddt.steps) return [];
   const nodes: TreeNodeProps[] = [];
-  let idCounter = 1;
-  // Per ogni step (normal, noInput, noMatch, ecc.)
   for (const [stepKey, actions] of Object.entries(ddt.steps)) {
     if (Array.isArray(actions)) {
-      actions.forEach((action: any, idx: number) => {
-        const actionInstanceId = action.actionInstanceId;
-        const type = stepKey;
-        // Calcola escalation (parte da 1)
-        const escalation = actions.length > 1 ? idx + 1 : 1;
-        const ddtId = ddt.id || ddt._id;
-        const text = getTranslationText(translations, ddtId, stepKey, escalation, actionInstanceId, lang);
-        nodes.push({
-          id: String(idCounter++),
-          text,
-          type,
-          actionInstanceId,
+      if (actions.length > 1 && (stepKey === 'noMatch' || stepKey === 'noInput' || stepKey === 'confirmation' || stepKey === 'notAcquired')) {
+        // Step con escalation: crea un nodo escalation per ogni escalation
+        actions.forEach((action: any, idx: number) => {
+          const escalationId = `${stepKey}_escalation_${idx + 1}`;
+          // Nodo escalation (visuale, non azione vera)
+          nodes.push({
+            id: escalationId,
+            text: `${ordinalIt(idx + 1)} recovery`,
+            type: 'escalation',
+            level: idx + 1, // <-- parte da 1
+            // parentId: undefined
+          });
+          // Nodo azione come figlio
+          const actionInstanceId = action.actionInstanceId;
+          const ddtId = ddt.id || ddt._id;
+          const text = getTranslationText(translations, ddtId, stepKey, idx + 1, actionInstanceId, lang);
+          nodes.push({
+            id: actionInstanceId,
+            text,
+            type: stepKey,
+            level: idx + 2, // <-- escalation+1
+            parentId: escalationId,
+          });
         });
-      });
+      } else {
+        // Step senza escalation: azioni root
+        actions.forEach((action: any, idx: number) => {
+          const actionInstanceId = action.actionInstanceId;
+          const ddtId = ddt.id || ddt._id;
+          const text = getTranslationText(translations, ddtId, stepKey, 1, actionInstanceId, lang);
+          nodes.push({
+            id: actionInstanceId,
+            text,
+            type: stepKey,
+            level: 0,
+            // parentId: undefined
+          });
+        });
+      }
     }
   }
   // Success step (può essere oggetto)
@@ -149,13 +179,13 @@ const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodePro
     ddt.steps.success.actions.forEach((action: any, idx: number) => {
       const actionInstanceId = action.actionInstanceId;
       const ddtId = ddt.id || ddt._id;
-      const escalation = 1 + idx;
-      const text = getTranslationText(translations, ddtId, 'success', escalation, actionInstanceId, lang);
+      const text = getTranslationText(translations, ddtId, 'success', 1 + idx, actionInstanceId, lang);
       nodes.push({
-        id: String(idCounter++),
+        id: actionInstanceId,
         text,
         type: 'success',
-        actionInstanceId,
+        level: 0,
+        // parentId: undefined
       });
     });
   }
@@ -233,6 +263,13 @@ function nodesReducer(state: TreeNodeProps[], action: any): TreeNodeProps[] {
 }
 
 const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it', onClose }) => {
+  // LOG: stampa le props ricevute
+  // LOG: oggetto translations appena ricevuto
+  if (translations) {
+    const tObj = translations as Record<string, any>;
+  } else {
+    // LOG: translations è undefined o null!
+  }
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [actionCatalog, setActionCatalog] = useState<any[]>([]);
   const [showLabel, setShowLabel] = useState(false);
@@ -256,9 +293,25 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     setNodes(estraiNodiDaDDT(ddt, translations, lang));
   }, [ddt, translations, lang]);
 
+  // Filtro i nodi per lo step selezionato
+  let filteredNodes: TreeNodeProps[] = [];
+  if (selectedStep) {
+    // Step con escalation
+    const escalationSteps = ['noMatch', 'noInput', 'confirmation', 'notAcquired'];
+    if (escalationSteps.includes(selectedStep)) {
+      // Prendi tutti i nodi escalation di questo step e i loro figli
+      const escalationNodes = nodes.filter(n => n.type === 'escalation' && n.id.startsWith(`${selectedStep}_escalation_`));
+      const escalationIds = escalationNodes.map(n => n.id);
+      const childNodes = nodes.filter(n => n.parentId && escalationIds.includes(n.parentId));
+      filteredNodes = [...escalationNodes, ...childNodes];
+    } else {
+      // Step senza escalation: prendi solo le azioni root di questo step
+      filteredNodes = nodes.filter(n => n.type === selectedStep && !n.parentId);
+    }
+  }
+
   // handleDrop logica semplificata (solo aggiunta root per demo)
   const handleDrop = (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => {
-    console.log('[handleDrop] CALLED', { targetId, position, item, nodes });
     if (item && item.action) {
       const action = item.action;
       const id = Math.random().toString(36).substr(2, 9);
@@ -273,23 +326,18 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         parameters: item.parameters,
       };
       if (targetId === null) {
-        console.log('[handleDrop] DROP SU CANVAS: aggiungo come root', { newNode });
         setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
       } else {
         const targetNode = nodes.find(n => n.id === targetId);
         if (!targetNode) {
-          console.log('[handleDrop] TARGET NON TROVATO, aggiungo come root', { newNode });
           setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
         } else if (position === 'before' || position === 'after') {
-          console.log('[handleDrop] DROP SIBLING', { newNode, targetNode, position });
           setNodes(prev => insertNodeAt(prev, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position));
         } else if (position === 'child') {
-          console.log('[handleDrop] DROP CHILD', { newNode, targetNode });
           setNodes(prev => [...prev, { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id }]);
         }
       }
       setTimeout(() => {
-        console.log('[handleDrop] NODES AFTER', nodes);
       }, 100);
       return id;
     }
@@ -331,7 +379,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
         <div style={{ flex: 2, minWidth: 0, padding: 16 }}>
           <TreeView
-            nodes={nodes}
+            nodes={filteredNodes}
             onDrop={handleDrop}
             onRemove={removeNode}
           />

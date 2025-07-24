@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Pencil } from 'lucide-react';
 
 interface DDTBuilderProps {
-  onComplete?: (newDDT: any) => void;
+  onComplete?: (newDDT: any, messages?: any) => void;
   onCancel?: () => void;
 }
 
@@ -69,14 +69,12 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
     setError(null);
     try {
       const aiResp = await fetchStep2IA(input);
-      console.log('IA response step 1:', aiResp);
       const [m, ...dArr] = aiResp.split(' ');
       setMeaning(m);
       setDesc(dArr.join(' '));
       setInput('');
       setStep(1);
     } catch (err) {
-      console.error('Errore comunicazione IA:', err);
       setError('Errore di comunicazione con la IA. Riprova o contatta il supporto.');
     }
     setLoading(false);
@@ -88,19 +86,19 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
     try {
       // Chiedi alla IA la struttura DDT completa (steps, prompt, escalation...)
       const response = await fetchStep4DDT(meaning, desc);
-      // Ora la IA restituisce { ddt, messages }
-      if (response.ddt && response.messages) {
-        setMessages(response.messages); // puoi usare questo stato per la treeview/editor
-        if (onComplete) onComplete(response.ddt);
-      } else if (onComplete) {
-        // fallback: se la IA restituisce solo il DDT
-        onComplete(response);
+      // Validate response
+      if (!response || !response.ddt || !response.messages || typeof response.ddt !== 'object' || typeof response.messages !== 'object' || Object.keys(response.ddt).length === 0) {
+        setError('La IA non ha restituito un Data Template valido. Riprova o controlla la connessione.');
+        setLoading(false);
+        return;
       }
-    } catch (err) {
-      console.error('Errore creazione DDT:', err);
-      setError('Errore durante la creazione del template DDT. Riprova o contatta il supporto.');
+      setMessages(response.messages);
+      if (onComplete) onComplete(response.ddt, response.messages);
+    } catch (err: any) {
+      setError('Errore nella creazione del Data Template: ' + (err.message || err));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const summaryLabels = (

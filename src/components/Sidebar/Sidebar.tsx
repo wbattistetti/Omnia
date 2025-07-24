@@ -1,3 +1,7 @@
+// Sidebar.tsx
+// Sidebar component for project structure navigation and DDT management.
+// Features: search/filter, font resize, resizable width, DDT builder, memoized category rendering.
+
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, Square, Plus, Calendar, Mail, MapPin, FileText, Trash2 } from 'lucide-react';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
@@ -10,6 +14,7 @@ import { getAllDialogueTemplates } from '../../services/ProjectDataService';
 import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
 import { useFilteredProjectData } from './useFilteredProjectData';
 
+// Configuration for each entity type in the sidebar
 const entityConfig = {
   agentActs: { 
     title: 'Agent Acts', 
@@ -44,18 +49,26 @@ interface SidebarProps {
 }
 
 const MIN_WIDTH = 320; // px (w-80)
-
-// FONT RESIZE SIDEBAR START
+// Font resize constants
 const MIN_FONT_SIZE = 12;
 const MAX_FONT_SIZE = 24;
 const DEFAULT_FONT_SIZE = 16;
-// FONT RESIZE SIDEBAR END
 
+/**
+ * Sidebar component for project navigation and DDT management.
+ * - Displays project entities (Agent Acts, User Acts, etc.) in accordions.
+ * - Allows searching/filtering entities and categories.
+ * - Supports font resizing (Ctrl + mouse wheel).
+ * - Sidebar width is resizable by dragging the right edge.
+ * - Data Dialogue Templates (DDT) are managed in a dedicated accordion.
+ * - Uses memoized components (Accordion, CategoryItem) for performance.
+ */
 export const Sidebar: React.FC<SidebarProps> = ({ 
   isCollapsed = false, 
   onToggleCollapse,
   onOpenDDTEditor
 }) => {
+  // Project data and update handlers from context
   const { data, loading, error } = useProjectData();
   const { 
     addCategory, 
@@ -66,16 +79,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
     updateItem 
   } = useProjectDataUpdate();
   
-  // Sostituisco filteredData, searchTerm, setSearchTerm con il custom hook
+  // Custom hook: handles search/filter logic and exposes filteredData, searchTerm, setSearchTerm
   const { filteredData, searchTerm, setSearchTerm } = useFilteredProjectData(data);
+
+  // State for DDT templates and UI
   const [dialogueTemplates, setDialogueTemplates] = useState<any[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<string>('agentActs');
   const [sidebarWidth, setSidebarWidth] = useState(MIN_WIDTH);
   const isResizing = useRef(false);
-  // FONT RESIZE SIDEBAR START
+  // Font size state for Ctrl+wheel zoom
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  // Confirm dialog for DDT deletion
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  // Show/hide DDTBuilder inline
+  const [showDDTBuilder, setShowDDTBuilder] = useState(false);
+
+  // Font resize: handle Ctrl+wheel to zoom font size
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey) {
@@ -93,10 +114,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       if (node) node.removeEventListener('wheel', handleWheel);
     };
   }, []);
-  // FONT RESIZE SIDEBAR END
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
-  const [showDDTBuilder, setShowDDTBuilder] = useState(false);
 
+  // Fetch DDT templates from backend on mount
   useEffect(() => {
     setLoadingTemplates(true);
     getAllDialogueTemplates()
@@ -111,28 +130,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       });
   }, []);
 
-  useEffect(() => {
-    dialogueTemplates.forEach((dt, idx) => {
-      const ddtId = dt._id || dt.id;
-    });
-  }, [dialogueTemplates]);
-
+  // Sidebar width resize logic
   const handleMouseDown = () => {
     isResizing.current = true;
     document.body.style.cursor = 'col-resize';
   };
-
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing.current) return;
     const newWidth = Math.max(MIN_WIDTH, e.clientX);
     setSidebarWidth(newWidth);
   }, []);
-
   const handleMouseUp = useCallback(() => {
     isResizing.current = false;
     document.body.style.cursor = '';
   }, []);
-
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -142,6 +153,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }, [handleMouseMove, handleMouseUp]);
 
+  // Loading and error states
   if (loading) {
     return (
       <div className={`bg-slate-800 border-r border-slate-700 flex items-center justify-center ${
@@ -151,7 +163,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
     );
   }
-
   if (error) {
     return (
       <div className={`bg-slate-800 border-r border-slate-700 flex items-center justify-center ${
@@ -161,11 +172,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
     );
   }
-
   if (!data) {
     return null;
   }
 
+  // Handler for DDT deletion
   const handleDeleteDDT = async (ddtId: string) => {
     try {
       const res = await fetch(`http://localhost:3100/api/factory/dialogue-templates/${ddtId}`, { method: 'DELETE' });
@@ -182,18 +193,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // Handler to open the DDT editor (calls parent prop)
   const handleOpenDDTEditor = (ddt: any, translations: any, lang: any) => {
     if (onOpenDDTEditor) onOpenDDTEditor(ddt, translations, lang);
   };
 
+  // Collapsed sidebar UI (icons only)
+  if (isCollapsed) {
+    return (
+      <div
+        ref={sidebarRef}
+        style={{ fontSize: `${fontSize}px` }}
+        className="w-12 bg-slate-800 border-r border-slate-700 flex flex-col items-center py-4 transition-all duration-300">
+        <button
+          onClick={onToggleCollapse}
+          className="p-2 text-slate-400 hover:text-white transition-colors mb-4"
+          title="Expand sidebar"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+        {/* Entity icons */}
+        {Object.entries(entityConfig).map(([key, config]) => (
+          <div key={key} className="mb-3" title={config.title}>
+            {config.icon}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Main sidebar UI
   return (
     <div
-      // FONT RESIZE SIDEBAR START
       ref={sidebarRef}
       style={{ width: sidebarWidth, minWidth: MIN_WIDTH, fontSize: `${fontSize}px`, color: '#111', background: '#f7f7fa', border: '1px solid #111' }}
-      // FONT RESIZE SIDEBAR END
       className="flex flex-col transition-all duration-100 relative">
-      {/* Header */}
+      {/* Header: project structure, collapse/settings, entity icons */}
       <div className="p-4 border-b border-slate-300">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Project Structure</h2>
@@ -213,7 +248,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
         </div>
-        {/* Nuova riga icone grandi - ora su fondo bianco con bordo nero */}
+        {/* Large entity icons row */}
         <div className="flex gap-4 justify-center items-center py-3 border-b" style={{ background: '#fff', borderBottom: '1px solid #111' }}>
           <div className="flex flex-col items-center">
             <div className="rounded-full bg-violet-100 p-3 border border-violet-300">
@@ -234,7 +269,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="text-xs text-gray-700 mt-1">Nodo</span>
           </div>
         </div>
-        {/* Search - ora chiara */}
+        {/* Search input for filtering entities/categories */}
         <div className="relative mt-2 mb-2">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -247,9 +282,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Content */}
+      {/* Main content: DDT accordion and entity accordions */}
       <div className="flex-1 overflow-y-auto p-4">
-        {/* DataDialogueTemplates Accordion */}
+        {/* Data Dialogue Templates (DDT) accordion */}
         <Accordion
           title="Data Dialogue Templates"
           icon={<Puzzle className="w-5 h-5 text-fuchsia-400" />}
@@ -262,98 +297,122 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               className="p-1 text-fuchsia-500 hover:text-fuchsia-700 transition-colors"
               title="Aggiungi DDT"
-              onClick={e => { e.stopPropagation(); setShowDDTBuilder(v => !v); }}
+              onClick={e => {
+                e.stopPropagation();
+                if (openAccordion !== 'dataDialogueTemplates') {
+                  setOpenAccordion('dataDialogueTemplates');
+                  setShowDDTBuilder(true);
+                } else {
+                  setShowDDTBuilder(v => !v);
+                }
+              }}
             >
               <Plus className="w-5 h-5" />
             </button>
           }
         >
+          {/* DDT list and builder */}
           {(() => {
             const isOpen = openAccordion === 'dataDialogueTemplates';
             return loadingTemplates ? (
               <div className="text-slate-400 px-2 py-2">Caricamento...</div>
             ) : dialogueTemplates.length === 0 ? (
-              <div className="text-slate-400 px-2 py-2">Nessun template trovato</div>
-            ) : (
-              <div className="max-h-64 overflow-y-auto pr-2">
-                {dialogueTemplates.map((dt, idx) => {
-                  const ddtId = dt._id || dt.id;
-                  let icon = <FileText className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                  const type = dt.dataType?.type?.toLowerCase();
-                  if (type === 'date') icon = <Calendar className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                  else if (type === 'email') icon = <Mail className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                  else if (type === 'address') icon = <MapPin className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                  return (
-                    <div key={ddtId} style={{ marginBottom: 2, padding: 4, borderRadius: 8, background: '#f3e8ff', border: '1px solid #f3e8ff', display: 'flex', flexDirection: 'column' }}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          {icon}
-                          <span className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || ddtId}</span>
-                        </div>
-                        <div className="flex items-center gap-2 ml-2">
-                          <button
-                            className="p-1 text-fuchsia-700 hover:text-fuchsia-900"
-                            title="Impostazioni"
-                            onClick={() => handleOpenDDTEditor(dt, {}, 'it')}
-                          >
-                            <Settings className="w-4 h-4" />
-                          </button>
-                          <button
-                            className="p-1 text-red-500 hover:text-red-700"
-                            title="Elimina template"
-                            onClick={() => setShowDeleteConfirm(ddtId)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                      {showDeleteConfirm === ddtId && (
-                        <div className="mt-2 flex gap-2 items-center bg-red-50 border border-red-200 rounded px-3 py-2">
-                          <button
-                            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold"
-                            onClick={() => handleDeleteDDT(ddtId)}
-                          >
-                            Conferma
-                          </button>
-                          <button
-                            className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 font-semibold"
-                            onClick={() => setShowDeleteConfirm(null)}
-                          >
-                            Annulla
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {/* Espansione inline DDTBuilder */}
+              <>
                 {showDDTBuilder && (
                   <div style={{ padding: 0, margin: 0, marginBottom: 8, background: 'white', border: '1px solid #f3e8ff', borderRadius: 8, boxShadow: 'none' }}>
                     <DDTBuilder
-                      onComplete={newDDT => {
+                      onComplete={(newDDT, messages) => {
                         setDialogueTemplates(prev => [...prev, newDDT]);
                         setShowDDTBuilder(false);
-                        if (onOpenDDTEditor) onOpenDDTEditor(newDDT, {}, 'it'); // apre automaticamente l'editor
+                        if (onOpenDDTEditor) onOpenDDTEditor(newDDT, messages || {}, 'it');
                       }}
                       onCancel={() => setShowDDTBuilder(false)}
                     />
                   </div>
                 )}
-              </div>
+                <div className="text-slate-400 px-2 py-2">Nessun template trovato</div>
+              </>
+            ) : (
+              <>
+                {/* Wizard sempre in alto */}
+                {showDDTBuilder && (
+                  <div style={{ padding: 0, margin: 0, marginBottom: 8, background: 'white', border: '1px solid #f3e8ff', borderRadius: 8, boxShadow: 'none' }}>
+                    <DDTBuilder
+                      onComplete={(newDDT, messages) => {
+                        setDialogueTemplates(prev => [...prev, newDDT]);
+                        setShowDDTBuilder(false);
+                        if (onOpenDDTEditor) onOpenDDTEditor(newDDT, messages || {}, 'it');
+                      }}
+                      onCancel={() => setShowDDTBuilder(false)}
+                    />
+                  </div>
+                )}
+                {/* Lista scrollabile dei template */}
+                <div className="max-h-64 overflow-y-auto pr-2">
+                  {dialogueTemplates.map((dt, idx) => {
+                    const ddtId = dt._id || dt.id;
+                    let icon = <FileText className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                    const type = dt.dataType?.type?.toLowerCase();
+                    if (type === 'date') icon = <Calendar className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                    else if (type === 'email') icon = <Mail className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                    else if (type === 'address') icon = <MapPin className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                    return (
+                      <div key={ddtId} style={{ marginBottom: 2, padding: 4, borderRadius: 8, background: '#f3e8ff', border: '1px solid #f3e8ff', display: 'flex', flexDirection: 'column' }}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            {icon}
+                            <span className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || ddtId}</span>
+                          </div>
+                          <div className="flex items-center gap-2 ml-2">
+                            <button
+                              className="p-1 text-fuchsia-700 hover:text-fuchsia-900"
+                              title="Impostazioni"
+                              onClick={() => handleOpenDDTEditor(dt, {}, 'it')}
+                            >
+                              <Settings className="w-4 h-4" />
+                            </button>
+                            <button
+                              className="p-1 text-red-500 hover:text-red-700"
+                              title="Elimina template"
+                              onClick={() => setShowDeleteConfirm(ddtId)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        {showDeleteConfirm === ddtId && (
+                          <div className="mt-2 flex gap-2 items-center bg-red-50 border border-red-200 rounded px-3 py-2">
+                            <button
+                              className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold"
+                              onClick={() => handleDeleteDDT(ddtId)}
+                            >
+                              Conferma
+                            </button>
+                            <button
+                              className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 font-semibold"
+                              onClick={() => setShowDeleteConfirm(null)}
+                            >
+                              Annulla
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             );
           })()}
         </Accordion>
+        {/* Entity accordions (Agent Acts, User Acts, etc.) */}
         {(() => {
           const { colors } = useSidebarTheme();
           return Object.entries(filteredData)
             .filter(([entityType]) => entityConfig.hasOwnProperty(entityType))
             .map(([entityType, categories]: [string, any[]]) => {
               const config = entityConfig[entityType as EntityType];
-              // Memo: filteredCategories per ogni entityType
-              const filteredCategories = useMemo(() =>
-                (categories as any[]).filter((category: any) => category && typeof category.name === 'string' && Array.isArray(category.items)),
-                [categories]
-              );
+              // Calcola filteredCategories SENZA useMemo
+              const filteredCategories = (categories as any[]).filter((category: any) => category && typeof category.name === 'string' && Array.isArray(category.items));
               return (
                 <Accordion
                   key={entityType}
@@ -366,12 +425,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <button
                       className="p-1 text-blue-500 hover:text-blue-700 transition-colors"
                       title="Aggiungi categoria"
-                      onClick={e => { e.stopPropagation(); addCategory(entityType as EntityType, 'Nuova Categoria'); }}
+                      onClick={e => { e.stopPropagation(); setOpenAccordion(entityType); addCategory(entityType as EntityType, 'Nuova Categoria'); }}
                     >
                       <Plus className="w-5 h-5" />
                     </button>
                   }
                 >
+                  {/* Render each category with memoized CategoryItem */}
                   {filteredCategories.map((category: any) => (
                     <CategoryItem
                       key={category.id}
@@ -399,7 +459,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             });
         })()}
       </div>
-      {/* Resizer handle */}
+      {/* Sidebar resizer handle */}
       <div
         style={{
           position: 'absolute',

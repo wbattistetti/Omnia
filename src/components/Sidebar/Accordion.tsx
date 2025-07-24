@@ -1,3 +1,7 @@
+// Accordion.tsx
+// Generic collapsible section for the sidebar, used for entities and DDTs.
+// Memoized with React.memo for performance.
+
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -11,6 +15,22 @@ interface AccordionProps {
   action?: React.ReactNode;
 }
 
+/**
+ * Accordion
+ * Generic collapsible section for grouping sidebar content.
+ * - Receives title, icon, open state, toggle handler, and children as props.
+ * - Used for both entity sections and DDT section in the sidebar.
+ * - Uses React.memo to avoid unnecessary re-renders unless props change.
+ *
+ * Props:
+ *   - title: Section title
+ *   - icon: Icon element
+ *   - isOpen: Whether the section is expanded
+ *   - onToggle: Handler to expand/collapse
+ *   - bgColor: Optional background color config
+ *   - action: Optional action button (e.g., add)
+ *   - children: Section content
+ */
 const Accordion = (props: AccordionProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef<number>(0);

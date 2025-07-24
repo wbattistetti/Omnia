@@ -29,29 +29,37 @@ const renderTree = (
   console.log('[renderTree] called', { parentId, level, nodes });
   return nodes
     .filter(node => node.parentId === parentId)
-    .map(node => (
-      <React.Fragment key={node.id}>
-        <TreeNode
-          {...node}
-          level={level}
-          selected={selectedNodeId === node.id}
-          onDrop={(id, position, item) => {
-            console.log('[TreeNode onDrop] called', { id, position, item });
-            // Forza il tipo per evitare errori di tipo
-            const safePosition = (position === 'before' || position === 'after' || position === 'child') ? position : 'after';
-            const result = onDrop(id, safePosition, item);
-            if (typeof result === 'string') {
-              setSelectedNodeId(result); // Se è stato aggiunto un nuovo nodo, seleziona quello
-            } else {
-              setSelectedNodeId(id); // Altrimenti seleziona il nodo target
-            }
-          }}
-          onCancelNewNode={onRemove}
-          domId={'tree-node-' + node.id}
-        />
-        {renderTree(nodes, node.id, level + 1, selectedNodeId, onDrop, onRemove, setSelectedNodeId)}
-      </React.Fragment>
-    ));
+    .map(node => {
+      // Se escalation, raccogli i figli
+      const childrenNodes = node.type === 'escalation'
+        ? nodes.filter(n => n.parentId === node.id).map(child => ({ ...child, level: level + 1 }))
+        : undefined;
+      return (
+        <React.Fragment key={node.id}>
+          <TreeNode
+            {...node}
+            level={level}
+            selected={selectedNodeId === node.id}
+            onDrop={(id, position, item) => {
+              console.log('[TreeNode onDrop] called', { id, position, item });
+              // Forza il tipo per evitare errori di tipo
+              const safePosition = (position === 'before' || position === 'after' || position === 'child') ? position : 'after';
+              const result = onDrop(id, safePosition, item);
+              if (typeof result === 'string') {
+                setSelectedNodeId(result); // Se è stato aggiunto un nuovo nodo, seleziona quello
+              } else {
+                setSelectedNodeId(id); // Altrimenti seleziona il nodo target
+              }
+            }}
+            onCancelNewNode={onRemove}
+            domId={'tree-node-' + node.id}
+            {...(node.type === 'escalation' ? { childrenNodes } : {})}
+          />
+          {/* Solo se non escalation, ricorsione classica */}
+          {node.type !== 'escalation' && renderTree(nodes, node.id, level + 1, selectedNodeId, onDrop, onRemove, setSelectedNodeId)}
+        </React.Fragment>
+      );
+    });
 };
 
 const TreeView: React.FC<TreeViewProps> = ({ nodes, onDrop, onRemove }) => {

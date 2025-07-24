@@ -6,7 +6,7 @@ import { TreeNodeProps } from './types';
 import styles from './TreeNode.module.css';
 import { useDrop, useDrag } from 'react-dnd';
 
-const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boolean; domId?: string; onCancelNewNode?: (id: string) => void }> = ({ 
+const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boolean; domId?: string; onCancelNewNode?: (id: string) => void; childrenNodes?: TreeNodeProps[] }> = ({ 
   text, 
   type,
   level = 0, 
@@ -22,7 +22,8 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
   selected,
   domId,
   onDrop,
-  onCancelNewNode
+  onCancelNewNode,
+  childrenNodes = []
 }) => {
   const INDENT_WIDTH = 24;
   const [dropTarget, setDropTarget] = useState<'before' | 'after' | 'child' | null>(null);
@@ -33,6 +34,7 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
   const inputRef = useRef<HTMLInputElement>(null);
   // Stato per drag&drop
   const [isDragging, setIsDragging] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   // Focus automatico solo subito dopo il drop (selected true e non ancora editato)
   useEffect(() => {
@@ -81,7 +83,6 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
       }
     },
     drop(item: any, monitor) {
-      console.log('[DROP][NODE] drop handler', { id, dropTarget, item });
       if (dropTarget && item && typeof item === 'object') {
         onDrop(id, dropTarget, item);
       }
@@ -96,7 +97,6 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
   const [{ isDragging: isDraggingNode }, drag, preview] = useDrag({
     type: 'ACTION',
     item: () => {
-      console.log('[DRAG][BEGIN]', { id });
       return { id };
     },
     collect: (monitor) => ({
@@ -122,6 +122,37 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
   // Determina se mostrare la textbox di editing solo per Messaggio o Domanda
   const showEditingBox = (icon === 'MessageCircle' || icon === 'HelpCircle');
 
+  // LOG: stampa il testo del nodo
+  // console.log('[TreeNode] render', { id, text });
+
+  // Nodo escalation: stile speciale, label, collassabile
+  if (type === 'escalation') {
+    // LOG: debug indentazione escalation
+    // eslint-disable-next-line no-console
+    console.log(`[ESCALATION NODE] id=${id} text=${text} level=${level} parentId=${parentId} childrenCount=${childrenNodes?.length}`);
+    return (
+      <div
+        ref={nodeRef}
+        id={domId}
+        className={styles.escalationBlock}
+        // Nessuna indentazione dinamica
+        // style={{ marginLeft: `${level * INDENT_WIDTH}px` }}
+      >
+        <div className={styles.escalationHeader} onClick={() => setCollapsed(c => !c)} style={{ cursor: 'pointer', userSelect: 'none' }}>
+          {collapsed ? <ChevronRight size={16} style={{ marginRight: 4, verticalAlign: 'middle' }} /> : <ChevronDown size={16} style={{ marginRight: 4, verticalAlign: 'middle' }} />}
+          <span>{text}</span>
+        </div>
+        {!collapsed && childrenNodes && childrenNodes.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            {childrenNodes.map(child => (
+              <TreeNode key={child.id} {...child} level={level + 1} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div 
       ref={nodeRef}
@@ -138,14 +169,14 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
           marginLeft: `${level * INDENT_WIDTH}px`,
           border: selected ? '2px solid #2563eb' : isDraggingNode ? '2px solid #60a5fa' : undefined,
           boxShadow: selected || isDraggingNode ? '0 0 0 2px #93c5fd' : undefined,
-          background: selected ? '#e0e7ff' : isDraggingNode ? '#e0f2fe' : undefined
+          background: selected ? '#e0e7ff' : isDraggingNode ? '#e0f2fe' : undefined,
+          color: '#111' // Forecolor nero per il testo
         }}
       >
         {expanded ? <ChevronDown size={16} style={{ marginRight: 8 }} /> : <ChevronRight size={16} style={{ marginRight: 8 }} />}
         <div style={{ marginRight: 8 }} className={color || ''}>
           {(() => {
             const iconComponent = type === 'action' && icon ? getIconComponent(icon) : null;
-            console.log('[TreeNode] icon:', icon, 'iconComponent:', iconComponent);
             return iconComponent || <MessageCircle size={16} />;
           })()}
         </div>

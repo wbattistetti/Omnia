@@ -1,3 +1,7 @@
+// CategoryItem.tsx
+// Renders a single category and its items in the sidebar, with controls for editing, deleting, and adding items.
+// Memoized with React.memo for performance.
+
 import React, { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
@@ -16,6 +20,18 @@ interface CategoryItemProps {
   onUpdateItem: (itemId: string, updates: Partial<ProjectEntityItem>) => void;
 }
 
+/**
+ * CategoryItem
+ * Renders a category section in the sidebar, including its items and controls.
+ * - Receives category data, entity type, and handler callbacks as props.
+ * - Supports editing the category name, adding new items, and deleting the category.
+ * - Uses React.memo to avoid unnecessary re-renders unless props change.
+ *
+ * Props:
+ *   - category: The category object (with items)
+ *   - entityType: The type of entity (agentActs, userActs, etc.)
+ *   - onAddItem, onDeleteCategory, onUpdateCategory, onDeleteItem, onUpdateItem: handler functions
+ */
 const CategoryItem = (props: CategoryItemProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isHovered, setIsHovered] = useState(false);

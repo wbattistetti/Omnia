@@ -55,4 +55,38 @@
   background: #3b82f6;
   bottom: -4px;
   left: 0;
+}
+.escalationBlock {
+  background: transparent;
+  border-radius: 12px;
+  border: 1.5px solid #ffd6d6;
+  padding: 0.75rem 1.25rem 0.75rem 1.25rem;
+  margin-bottom: 0.5rem;
+  margin-top: 0.5rem;
+  position: relative;
+  box-shadow: 0 1px 4px rgba(255, 0, 0, 0.04);
+}
+.escalationHeader {
+  display: flex;
+  align-items: center;
+  min-height: 2.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #d32f2f;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+.escalationLabel {
+  position: absolute;
+  top: 0.5rem;
+  left: 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #d32f2f;
+  background: #fff6f6;
+  border-radius: 8px;
+  padding: 0.1rem 0.7rem;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+  z-index: 2;
 } 
