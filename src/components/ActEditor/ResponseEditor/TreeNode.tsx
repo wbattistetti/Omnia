@@ -1,6 +1,6 @@
 // Executive summary: Represents a single node in the response tree, including drag & drop and visual state.
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronRight, ChevronDown, MessageCircle } from 'lucide-react';
+import { ChevronRight, ChevronDown, MessageCircle, Trash2 } from 'lucide-react';
 import getIconComponent from './icons';
 import { TreeNodeProps } from './types';
 import styles from './TreeNode.module.css';
@@ -130,6 +130,7 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
     // LOG: debug indentazione escalation
     // eslint-disable-next-line no-console
     console.log(`[ESCALATION NODE] id=${id} text=${text} level=${level} parentId=${parentId} childrenCount=${childrenNodes?.length}`);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     return (
       <div
         ref={nodeRef}
@@ -138,9 +139,32 @@ const TreeNode: React.FC<TreeNodeProps & { showLabel?: boolean; selected?: boole
         // Nessuna indentazione dinamica
         // style={{ marginLeft: `${level * INDENT_WIDTH}px` }}
       >
-        <div className={styles.escalationHeader} onClick={() => setCollapsed(c => !c)} style={{ cursor: 'pointer', userSelect: 'none' }}>
+        <div className={styles.escalationHeader} style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center' }} onClick={() => setCollapsed(c => !c)}>
           {collapsed ? <ChevronRight size={16} style={{ marginRight: 4, verticalAlign: 'middle' }} /> : <ChevronDown size={16} style={{ marginRight: 4, verticalAlign: 'middle' }} />}
           <span>{text}</span>
+          {onCancelNewNode && !showDeleteConfirm && (
+            <span title="Elimina recovery">
+              <Trash2
+                size={17}
+                style={{ color: '#ef4444', marginLeft: 12, cursor: 'pointer' }}
+                onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                onMouseOver={e => { e.currentTarget.style.color = '#b91c1c'; }}
+                onMouseOut={e => { e.currentTarget.style.color = '#ef4444'; }}
+              />
+            </span>
+          )}
+          {showDeleteConfirm && (
+            <span style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
+              <button
+                style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '2px 12px', fontWeight: 700, cursor: 'pointer' }}
+                onClick={e => { e.stopPropagation(); setShowDeleteConfirm(false); if (onCancelNewNode) onCancelNewNode(id); }}
+              >Conferma</button>
+              <button
+                style={{ background: '#eee', color: '#333', border: 'none', borderRadius: 6, padding: '2px 12px', fontWeight: 500, cursor: 'pointer' }}
+                onClick={e => { e.stopPropagation(); setShowDeleteConfirm(false); }}
+              >Annulla</button>
+            </span>
+          )}
         </div>
         {!collapsed && childrenNodes && childrenNodes.length > 0 && (
           <div style={{ marginTop: 8 }}>

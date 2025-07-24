@@ -18,7 +18,7 @@
 import React, { useState, useEffect } from 'react';
 import ActionItem from '../ActionViewer/ActionItem';
 import ActionList from '../ActionViewer/ActionList';
-import { Tag, MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Clock, ServerCog } from 'lucide-react';
+import { Tag, MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Clock, ServerCog, Calendar, MapPin, FileText, PlayCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle, Plus } from 'lucide-react';
 import ToolbarButton from './ToolbarButton';
 import TreeView from './TreeView';
 import styles from './ResponseEditor.module.css';
@@ -326,19 +326,28 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         parameters: item.parameters,
       };
       if (targetId === null) {
+        // Drop su canvas: aggiungi come root
         setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
       } else {
         const targetNode = nodes.find(n => n.id === targetId);
         if (!targetNode) {
           setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
-        } else if (position === 'before' || position === 'after') {
-          setNodes(prev => insertNodeAt(prev, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position));
-        } else if (position === 'child') {
+        } else if (targetNode.type === 'escalation' && position === 'child') {
+          // Drop su escalation: aggiungi come figlio
           setNodes(prev => [...prev, { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id }]);
+        } else if (targetNode.type === 'escalation' && (position === 'before' || position === 'after')) {
+          // Drop su escalation come before/after: aggiungi come root (stesso livello escalation)
+          setNodes(prev => insertNodeAt(prev, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position));
+        } else if (targetNode.type === 'action') {
+          // Drop su action: aggiungi come fratello (stesso parentId e livello)
+          const pos: 'before' | 'after' = position === 'before' ? 'before' : 'after';
+          setNodes(prev => insertNodeAt(prev, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, pos));
+        } else {
+          // Fallback: aggiungi come root
+          setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
         }
       }
-      setTimeout(() => {
-      }, 100);
+      setTimeout(() => {}, 100);
       return id;
     }
     // Spostamento nodo esistente: da implementare se serve
@@ -346,8 +355,69 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   };
   const removeNode = (id: string) => setNodes(prev => prev.filter(n => n.id !== id));
 
+  // Funzione per aggiungere escalation nello step corrente
+  const handleAddEscalation = () => {
+    if (!selectedStep) return;
+    const escalationNodes = nodes.filter(n => n.type === 'escalation' && n.id.startsWith(`${selectedStep}_escalation_`));
+    const newIdx = escalationNodes.length + 1;
+    const escalationId = `${selectedStep}_escalation_${newIdx}`;
+    setNodes(prev => [
+      ...prev,
+      {
+        id: escalationId,
+        text: `${ordinalIt(newIdx)} recovery`,
+        type: 'escalation',
+        level: newIdx,
+      }
+    ]);
+  };
+
+  // Header DDT con icona e label
+  const getDDTIcon = (type: string) => {
+    if (!type) return <FileText className="w-5 h-5 text-fuchsia-100 mr-2" />;
+    const t = type.toLowerCase();
+    if (t === 'date') return <Calendar className="w-5 h-5 text-fuchsia-100 mr-2" />;
+    if (t === 'email') return <Mail className="w-5 h-5 text-fuchsia-100 mr-2" />;
+    if (t === 'address') return <MapPin className="w-5 h-5 text-fuchsia-100 mr-2" />;
+    return <FileText className="w-5 h-5 text-fuchsia-100 mr-2" />;
+  };
+
+  // Mapping step -> icona, colore, label user-friendly
+  const stepMeta: Record<string, { icon: JSX.Element; label: string; border: string; bg: string; color: string; bgActive: string }> = {
+    start:        { icon: <PlayCircle size={17} />,        label: 'Chiede il dato',      border: '#3b82f6', bg: 'rgba(59,130,246,0.08)', color: '#3b82f6', bgActive: 'rgba(59,130,246,0.18)' },
+    noMatch:      { icon: <HelpCircle size={17} />,        label: 'Non ha capito',       border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
+    noInput:      { icon: <MicOff size={17} />,            label: 'Non ha sentito',      border: '#6b7280', bg: 'rgba(107,114,128,0.08)', color: '#6b7280', bgActive: 'rgba(107,114,128,0.18)' },
+    confirmation: { icon: <CheckCircle2 size={17} />,      label: 'Deve confermare',     border: '#eab308', bg: 'rgba(234,179,8,0.08)', color: '#eab308', bgActive: 'rgba(234,179,8,0.18)' },
+    success:      { icon: <CheckSquare size={17} />,       label: 'Ha capito!',          border: '#22c55e', bg: 'rgba(34,197,94,0.08)', color: '#22c55e', bgActive: 'rgba(34,197,94,0.18)' },
+    notAcquired:  { icon: <AlertCircle size={17} />,       label: 'Dato non acquisito',  border: '#f59e42', bg: 'rgba(245,158,66,0.08)', color: '#f59e42', bgActive: 'rgba(245,158,66,0.18)' },
+  };
+
   return (
     <div className={styles.responseEditorRoot}>
+      {/* Header DDT con icona e label */}
+      <div
+        style={{
+          background: '#a21caf',
+          color: '#fff',
+          padding: '10px 0 10px 32px',
+          textAlign: 'left',
+          fontWeight: 700,
+          fontSize: 18,
+          borderTopLeftRadius: 10,
+          borderTopRightRadius: 10,
+          marginBottom: 12,
+          letterSpacing: 0.2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          gap: 12
+        }}
+      >
+        {getDDTIcon(ddt?.dataType?.type)}
+        <span style={{ fontWeight: 700, fontSize: 18, color: '#fff', letterSpacing: 0.2 }}>
+          {ddt?.label || ddt?.name || '—'}
+        </span>
+      </div>
       {/* Bottone di chiusura in alto a destra */}
       {onClose && (
         <button
@@ -359,21 +429,45 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         </button>
       )}
       <div className={styles.header}>
-        <div className={styles.toolbar}>
-          {stepKeys.map((step) => (
-            <ToolbarButton
-              key={step}
-              label={step}
-              active={selectedStep === step}
-              onClick={() => setSelectedStep(step)}
-            />
-          ))}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+          <span style={{ fontWeight: 600, color: '#fff', fontSize: 15, marginRight: 8 }}>Il Bot:</span>
+          <span style={{ display: 'inline-flex', gap: 8 }}>
+            {stepKeys.filter(step => step !== 'notAcquired').map((step) => {
+              const meta = stepMeta[step] || { icon: <PlayCircle size={17} />, label: step, border: '#888', bg: 'rgba(100,100,100,0.08)', color: '#888', bgActive: 'rgba(100,100,100,0.18)' };
+              const isActive = selectedStep === step;
+              return (
+                <button
+                  key={step}
+                  onClick={() => setSelectedStep(step)}
+                  style={{
+                    border: `1.5px solid ${meta.border}`,
+                    background: isActive ? meta.bgActive : meta.bg,
+                    color: meta.color,
+                    borderRadius: 999,
+                    padding: '3px 16px',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    cursor: 'pointer',
+                    boxShadow: isActive ? `0 0 0 2px ${meta.border}33` : undefined,
+                    outline: 'none',
+                    transition: 'background 0.15s, box-shadow 0.15s',
+                  }}
+                >
+                  {meta.icon}
+                  {meta.label}
+                </button>
+              );
+            })}
+          </span>
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
             <label style={{ fontSize: 13, color: '#555' }}>
               <input type="checkbox" checked={showLabel} onChange={e => setShowLabel(e.target.checked)} style={{ marginRight: 4 }} />
               Mostra label azione
             </label>
-          </div>
+          </span>
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
@@ -382,7 +476,47 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
             nodes={filteredNodes}
             onDrop={handleDrop}
             onRemove={removeNode}
+            onAddEscalation={handleAddEscalation}
           />
+          {/* Bottone aggiungi escalation in fondo alla lista escalation */}
+          {selectedStep && ['noMatch', 'noInput', 'confirmation'].includes(selectedStep) && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+              <button
+                onClick={() => {
+                  // Trova quanti escalation ci sono già
+                  const escalationNodes = nodes.filter(n => n.type === 'escalation' && n.id.startsWith(`${selectedStep}_escalation_`));
+                  const newIdx = escalationNodes.length + 1;
+                  const escalationId = `${selectedStep}_escalation_${newIdx}`;
+                  setNodes(prev => [
+                    ...prev,
+                    {
+                      id: escalationId,
+                      text: `${ordinalIt(newIdx)} recovery`,
+                      type: 'escalation',
+                      level: newIdx,
+                    }
+                  ]);
+                }}
+                style={{
+                  color: '#ef4444',
+                  border: '1.5px solid #ef4444',
+                  background: 'rgba(239,68,68,0.08)',
+                  borderRadius: 999,
+                  padding: '5px 18px',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  cursor: 'pointer',
+                  marginTop: 8
+                }}
+              >
+                <Plus size={18} style={{ marginRight: 6 }} />
+                Aggiungi recovery
+              </button>
+            </div>
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 220, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff' }}>
           <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>

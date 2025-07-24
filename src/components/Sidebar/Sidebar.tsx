@@ -176,21 +176,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return null;
   }
 
-  // Handler for DDT deletion
-  const handleDeleteDDT = async (ddtId: string) => {
-    try {
-      const res = await fetch(`http://localhost:3100/api/factory/dialogue-templates/${ddtId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Errore eliminazione');
-      const result = await res.json();
-      if (result.success) {
-        setDialogueTemplates((prev) => prev.filter(dt => (dt._id || dt.id) !== ddtId));
-        setShowDeleteConfirm(null);
-      } else {
-        alert('Errore: ' + (result.error || 'Impossibile eliminare il template.'));
-      }
-    } catch (err: any) {
-      alert('Errore: ' + (err.message || err));
-    }
+  // Handler for DDT deletion (in-memory only)
+  const handleDeleteDDT = (ddtId: string) => {
+    setDialogueTemplates((prev) => prev.filter(dt => (dt._id || dt.id) !== ddtId));
+    setShowDeleteConfirm(null);
+    // TODO: trigger toast/snackbar "Template eliminato" se vuoi feedback
   };
 
   // Handler to open the DDT editor (calls parent prop)

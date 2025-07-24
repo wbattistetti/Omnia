@@ -3,6 +3,7 @@ import React, { useRef, useState } from 'react';
 import TreeNode from './TreeNode';
 import { TreeNodeProps } from './types';
 import { useDrop, useDragLayer } from 'react-dnd';
+import { Plus } from 'lucide-react';
 
 // Sposto defaultNodes fuori dal componente
 const defaultNodes: TreeNodeProps[] = [
@@ -62,7 +63,7 @@ const renderTree = (
     });
 };
 
-const TreeView: React.FC<TreeViewProps> = ({ nodes, onDrop, onRemove }) => {
+const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void }> = ({ nodes, onDrop, onRemove, onAddEscalation }) => {
   console.log('[TreeView] render', { nodes });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -195,6 +196,31 @@ const TreeView: React.FC<TreeViewProps> = ({ nodes, onDrop, onRemove }) => {
       <div>
         {renderTree(nodes, undefined, 0, selectedNodeId, onDrop, onRemove, setSelectedNodeId)}
       </div>
+      {/* Bottone aggiungi escalation in fondo se ci sono escalation visibili */}
+      {onAddEscalation && nodes.some(n => n.type === 'escalation') && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+          <button
+            onClick={onAddEscalation}
+            style={{
+              color: '#ef4444',
+              border: '1.5px solid #ef4444',
+              background: 'rgba(239,68,68,0.08)',
+              borderRadius: 999,
+              padding: '5px 18px',
+              fontWeight: 700,
+              fontSize: 15,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              marginTop: 8
+            }}
+          >
+            <Plus size={18} style={{ marginRight: 6 }} />
+            Aggiungi recovery
+          </button>
+        </div>
+      )}
     </div>
   );
 };

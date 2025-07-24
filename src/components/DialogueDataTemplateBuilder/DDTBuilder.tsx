@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Pencil } from 'lucide-react';
+import SupportReportModal from '../SupportReportModal';
 
 interface DDTBuilderProps {
   onComplete?: (newDDT: any, messages?: any) => void;
@@ -52,7 +53,30 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0); // 0: input, 1: review/crea
   const [messages, setMessages] = useState<any>(null); // runtime strings per la treeview/editor
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [errorData, setErrorData] = useState<any>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Reset state when wizard is mounted (es. riapertura)
+  useEffect(() => {
+    setInput('');
+    setPrompt(initialPrompt);
+    setMeaning('');
+    setDesc('');
+    setLoading(false);
+    setShimmer(false);
+    setError(null);
+    setStep(0);
+    setMessages(null);
+    setShowSupportModal(false);
+    setIsSending(false);
+    setSent(false);
+    setErrorData(null);
+    setWarning(null);
+  }, []);
 
   useEffect(() => {
     if (inputRef.current) inputRef.current.focus();
@@ -64,11 +88,39 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
     return () => clearTimeout(t);
   }, [step]);
 
+  // Animazione puntini
+  const [dots, setDots] = useState('');
+  useEffect(() => {
+    if ((loading && step === 0) || (loading && step === 1)) {
+      const interval = setInterval(() => {
+        setDots(d => d.length < 3 ? d + '.' : '');
+      }, 400);
+      return () => clearInterval(interval);
+    } else {
+      setDots('');
+    }
+  }, [loading, step]);
+
   const handleSend = async () => {
     setLoading(true);
     setError(null);
+    setWarning(null);
     try {
       const aiResp = await fetchStep2IA(input);
+      // Gestione robusta: oggetto con error, stringa vuota, stringa con pattern
+      const respStr = typeof aiResp === 'string' ? aiResp.trim().toLowerCase() : '';
+      if (
+        (aiResp && typeof aiResp === 'object' && aiResp.error && aiResp.error === 'unrecognized_data_type') ||
+        respStr === '' ||
+        respStr.includes('non capito') ||
+        respStr.includes('non riconosciuto') ||
+        respStr.includes('unknown') ||
+        respStr.includes('unrecognized')
+      ) {
+        setWarning('Non ho capito cosa intendi. Che tipo di dato vuoi acquisire? Puoi riscrivere meglio?');
+        setLoading(false);
+        return;
+      }
       const [m, ...dArr] = aiResp.split(' ');
       setMeaning(m);
       setDesc(dArr.join(' '));
@@ -94,23 +146,88 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
       }
       setMessages(response.messages);
       if (onComplete) onComplete(response.ddt, response.messages);
+      setLoading(false);
+      // RIMOSSO: alert('Sponsorizza!');
+      if (onCancel) onCancel(); // chiudi wizard
     } catch (err: any) {
       setError('Errore nella creazione del Data Template: ' + (err.message || err));
-    } finally {
       setLoading(false);
     }
   };
 
+  const handleSupport = () => {
+    setErrorData({
+      errorId: error || 'Errore sconosciuto',
+      step,
+      input,
+      browser: navigator.userAgent,
+      os: navigator.platform
+    });
+    if (onCancel) onCancel();
+    setShowSupportModal(true);
+  };
+  const handleSendReport = () => {
+    setIsSending(true);
+    setTimeout(() => {
+      setIsSending(false);
+      setSent(true);
+    }, 1500);
+  };
+  const handleCloseModal = () => {
+    setShowSupportModal(false);
+    setIsSending(false);
+    setSent(false);
+  };
+
+  // LABEL TEMPLATE FOR
   const summaryLabels = (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-      {meaning && (
-        <span style={{ background: '#ede9fe', color: '#111', borderRadius: 8, padding: '2px 10px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-          Vuoi: <span style={{ fontWeight: 700, margin: '0 4px' }}>{meaning}</span>
-          <Pencil size={14} style={{ marginLeft: 6, cursor: 'pointer' }} onClick={() => setStep(0)} />
+    meaning ? (
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, marginTop: 2 }}>
+        <span style={{ fontWeight: 400, fontSize: 15, color: '#fff', textAlign: 'left', marginRight: 0 }}>
+          Template for:
         </span>
-      )}
-    </div>
+        <span style={{
+          border: '1.5px solid #a21caf',
+          background: 'rgba(162,28,175,0.06)',
+          color: '#fff',
+          borderRadius: 8,
+          padding: '2px 14px',
+          fontSize: 15,
+          fontWeight: 700,
+          letterSpacing: 0.2,
+          display: 'inline-flex',
+          alignItems: 'center',
+          marginLeft: 6
+        }}>
+          {meaning}
+          <span title="Correggi tipo di dato">
+            <Pencil size={16} style={{ marginLeft: 8, cursor: 'pointer', color: '#a21caf' }} onClick={() => setStep(0)} />
+          </span>
+        </span>
+      </div>
+    ) : null
   );
+
+  // MESSAGGIO ANALISI IA
+  const analyzingBox = (loading && step === 0) ? (
+    <div style={{ fontSize: 13, color: '#a21caf', marginBottom: 6, marginLeft: 2, fontWeight: 500 }}>
+      Sto analizzando{dots}
+    </div>
+  ) : null;
+
+  // WARNING BOX
+  const warningBox = warning ? (
+    <div style={{ fontSize: 13, color: '#f59e42', marginBottom: 6, marginLeft: 2, fontWeight: 500 }}>
+      {warning}
+    </div>
+  ) : null;
+
+  // MESSAGGIO CREAZIONE TEMPLATE
+  const creatingBox = (loading && step === 1) ? (
+    <div style={{ fontSize: 13, color: '#a21caf', marginBottom: 6, marginLeft: 2, fontWeight: 500 }}>
+      Sto costruendo il template{dots}
+    </div>
+  ) : null;
 
   const questionBox = (
     <div className={shimmer ? 'ddt-shimmer' : ''} style={{
@@ -153,19 +270,20 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
     />
   );
 
+  // PULSANTI ALLINEATI
   const buttons = (
-    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: 18 }}>
       {onCancel && (
-        <button onClick={onCancel} style={{ color: '#a21caf', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 500 }} disabled={loading}>
+        <button onClick={onCancel} style={{ color: '#a21caf', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 500, fontSize: 15, padding: '4px 0' }} disabled={loading}>
           Annulla
         </button>
       )}
       {step === 0 ? (
-        <button onClick={handleSend} style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 18px', fontWeight: 500, cursor: 'pointer' }} disabled={loading || !input.trim()}>
+        <button onClick={handleSend} style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 28px', fontWeight: 500, cursor: 'pointer', fontSize: 15, marginLeft: 'auto' }} disabled={loading || !input.trim()}>
           Invia
         </button>
       ) : (
-        <button onClick={handleCreate} style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 18px', fontWeight: 500, cursor: 'pointer' }} disabled={loading}>
+        <button style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 28px', fontWeight: 500, cursor: 'pointer', fontSize: 15, marginLeft: 'auto' }} disabled={loading} onClick={handleCreate}>
           Crea
         </button>
       )}
@@ -204,14 +322,7 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
       <div style={{ padding: 22, paddingTop: 18 }}>
         {/* Prompt */}
         {step === 0 && (
-          <div style={{
-            color: '#fff',
-            fontWeight: 600,
-            fontSize: 18,
-            marginBottom: 8,
-            textAlign: 'left',
-            lineHeight: 1.3
-          }}>
+          <div style={{ color: '#fff', fontWeight: 600, fontSize: 18, marginBottom: 8, textAlign: 'left', lineHeight: 1.3 }}>
             Che dato vuoi acquisire?<br />
             <span style={{ fontWeight: 400, fontSize: 15, color: '#e0e0e0' }}>
               (es: data di nascita, email, ecc):
@@ -219,14 +330,39 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
           </div>
         )}
         {summaryLabels}
+        {warningBox}
+        {analyzingBox}
+        {creatingBox}
         {error && (
-          <div style={{ color: '#dc2626', background: '#fef2f2', borderRadius: 6, padding: '6px 10px', marginBottom: 8, fontWeight: 500 }}>
-            {error}
+          <div style={{ background: '#450a0a', borderRadius: 6, padding: '10px 10px', marginBottom: 8, fontWeight: 500, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+            <div style={{ color: '#f87171', fontWeight: 700, fontSize: 17, marginBottom: 4 }}>AI is not responding!</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => { step === 0 ? handleSend() : handleCreate(); }}
+                style={{ background: '#fff', color: '#a21caf', border: '1px solid #a21caf', borderRadius: 4, padding: '2px 10px', fontWeight: 500, fontSize: 12, cursor: 'pointer' }}
+              >
+                Retry
+              </button>
+              <button
+                onClick={handleSupport}
+                style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 10px', fontWeight: 500, fontSize: 12, cursor: 'pointer' }}
+              >
+                Contact support
+              </button>
+            </div>
           </div>
         )}
         {step === 0 && inputBox}
         {buttons}
       </div>
+      <SupportReportModal
+        isOpen={showSupportModal}
+        onClose={handleCloseModal}
+        errorData={errorData || { errorId: error || 'Errore sconosciuto' }}
+        onSend={handleSendReport}
+        isLoading={isSending}
+        sent={sent}
+      />
     </div>
   );
 };

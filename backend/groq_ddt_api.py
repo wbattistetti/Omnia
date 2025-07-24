@@ -42,16 +42,32 @@ def step1():
 
 @app.post("/step2")
 def step2(user_desc: str = Body(...)):
-    meanings_str = ', '.join(MEANINGS)
+    IT_MEANINGS = [
+        'data di nascita', 'email', 'numero di telefono', 'indirizzo', 'numero', 'testo', 'booleano'
+    ]
     prompt = (
-        f"Rispondi in {IDE_LANGUE}. Dato il testo: '{user_desc}', scegli il tipo di meaning più adatto tra questa lista: [{meanings_str}]. "
-        "Rispondi solo con il nome del meaning e una breve descrizione."
+        f"You are a data type classifier. Given the user text: '{user_desc}', extract ONLY the most appropriate data type from this list (in Italian): [{', '.join(IT_MEANINGS)}].\n"
+        "Reply ONLY with a valid JSON object: { \"type\": <type> } where <type> is the Italian name of the type (e.g., 'numero di telefono', 'email', 'data di nascita', etc.).\n"
+        "If the text is ambiguous, nonsense, or does NOT clearly indicate one of these types, reply ONLY with: { \"type\": \"unrecognized_data_type\" }.\n"
+        "Do NOT guess, do NOT reply 'text' if you are not sure. If in doubt, reply only with { \"type\": \"unrecognized_data_type\" }.\n"
+        "Examples:\n"
+        "- Input: 'Voglio una cosa che riconosca i numeri di telefono' → Output: { \"type\": \"numero di telefono\" }\n"
+        "- Input: 'Serve la data di nascita' → Output: { \"type\": \"data di nascita\" }\n"
+        "- Input: 'asdasd' → Output: { \"type\": \"unrecognized_data_type\" }\n"
     )
     ai = call_groq([
-        {"role": "system", "content": f"Rispondi sempre in {IDE_LANGUE}."},
+        {"role": "system", "content": "Reply always in Italian."},
         {"role": "user", "content": prompt}
     ])
-    return {"ai": ai}
+    try:
+        ai_obj = json.loads(ai)
+        if not isinstance(ai_obj, dict) or 'type' not in ai_obj:
+            return {"error": "unrecognized_data_type"}
+        if ai_obj['type'] == 'unrecognized_data_type':
+            return {"error": "unrecognized_data_type"}
+        return {"ai": ai_obj['type']}
+    except Exception:
+        return {"error": "unrecognized_data_type"}
 
 @app.post("/step3")
 def step3(meaning: str = Body(...), desc: str = Body(...)):
