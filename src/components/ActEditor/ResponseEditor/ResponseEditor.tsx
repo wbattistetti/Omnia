@@ -15,7 +15,8 @@
 //
 // ---
 // Executive summary: Main entry point for the Response Editor component. Handles layout and orchestration of the response tree.
-import React, { useState, useEffect } from 'react';
+import React, { useReducer, useEffect } from 'react';
+import ResponseEditorUI from './ResponseEditorUI';
 import ActionItem from '../ActionViewer/ActionItem';
 import ActionList from '../ActionViewer/ActionList';
 import { Tag, MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Clock, ServerCog, Calendar, MapPin, FileText, PlayCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle, Plus } from 'lucide-react';
@@ -24,7 +25,9 @@ import TreeView from './TreeView';
 import styles from './ResponseEditor.module.css';
 import { TreeNodeProps } from './types';
 import { useTreeNodes } from './useTreeNodes';
-import { useReducer } from 'react';
+import { useRef, useCallback } from 'react';
+import { insertNodeAt, addNode, removeNode as removeNodePure } from './treeMutations';
+import { v4 as uuidv4 } from 'uuid';
 
 const iconMap: Record<string, React.ReactNode> = {
   MessageCircle: <MessageCircle size={24} />,  HelpCircle: <HelpCircle size={24} />,  Headphones: <Headphones size={24} />,  Shield: <Shield size={24} />,  PhoneOff: <PhoneOff size={24} />,  Database: <Database size={24} />,  Mail: <Mail size={24} />,  MessageSquare: <MessageSquare size={24} />,  Function: <Function size={24} />,  Music: <Music size={24} />,  Eraser: <Eraser size={24} />,  ArrowRight: <ArrowRight size={24} />,  Tag: <Tag size={24} />,  Clock: <Clock size={24} />,  ServerCog: <ServerCog size={24} />
@@ -133,45 +136,33 @@ const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodePro
   const nodes: TreeNodeProps[] = [];
   for (const [stepKey, actions] of Object.entries(ddt.steps)) {
     if (Array.isArray(actions)) {
-      if (actions.length > 1 && (stepKey === 'noMatch' || stepKey === 'noInput' || stepKey === 'confirmation' || stepKey === 'notAcquired')) {
-        // Step con escalation: crea un nodo escalation per ogni escalation
-        actions.forEach((action: any, idx: number) => {
-          const escalationId = `${stepKey}_escalation_${idx + 1}`;
-          // Nodo escalation (visuale, non azione vera)
+      // Solo struttura nuova: ogni step ha sempre almeno una escalation, tutte le azioni sono figlie di escalation
+      let currentEscalationId: string | undefined = undefined;
+      let escalationIdx = 0;
+      actions.forEach((action: any, idx: number) => {
+        if (action.type === 'escalation' && action.id) {
+          currentEscalationId = action.id;
+          escalationIdx++;
           nodes.push({
-            id: escalationId,
-            text: `${ordinalIt(idx + 1)} recovery`,
+            id: action.id,
+            text: 'recovery',
             type: 'escalation',
-            level: idx + 1, // <-- parte da 1
-            // parentId: undefined
-          });
-          // Nodo azione come figlio
-          const actionInstanceId = action.actionInstanceId;
-          const ddtId = ddt.id || ddt._id;
-          const text = getTranslationText(translations, ddtId, stepKey, idx + 1, actionInstanceId, lang);
-          nodes.push({
-            id: actionInstanceId,
-            text,
-            type: stepKey,
-            level: idx + 2, // <-- escalation+1
-            parentId: escalationId,
-          });
-        });
-      } else {
-        // Step senza escalation: azioni root
-        actions.forEach((action: any, idx: number) => {
-          const actionInstanceId = action.actionInstanceId;
-          const ddtId = ddt.id || ddt._id;
-          const text = getTranslationText(translations, ddtId, stepKey, 1, actionInstanceId, lang);
-          nodes.push({
-            id: actionInstanceId,
-            text,
-            type: stepKey,
             level: 0,
-            // parentId: undefined
+            included: true,
           });
-        });
-      }
+        } else if (action.actionInstanceId && currentEscalationId) {
+          const actionInstanceId = action.actionInstanceId;
+          const ddtId = ddt.id || ddt._id;
+          const text = getTranslationText(translations, ddtId, stepKey, escalationIdx, actionInstanceId, lang);
+          nodes.push({
+            id: actionInstanceId,
+            text,
+            type: stepKey,
+            level: 1,
+            parentId: currentEscalationId,
+          });
+        }
+      });
     }
   }
   // Success step (può essere oggetto)
@@ -179,14 +170,8 @@ const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodePro
     ddt.steps.success.actions.forEach((action: any, idx: number) => {
       const actionInstanceId = action.actionInstanceId;
       const ddtId = ddt.id || ddt._id;
-      const text = getTranslationText(translations, ddtId, 'success', 1 + idx, actionInstanceId, lang);
-      nodes.push({
-        id: actionInstanceId,
-        text,
-        type: 'success',
-        level: 0,
-        // parentId: undefined
-      });
+      // Qui anche il success deve essere sempre sotto escalation (per coerenza)
+      // Ma per retrocompatibilità, se serve, puoi aggiungere qui la logica
     });
   }
   return nodes;
@@ -214,37 +199,6 @@ interface ResponseEditorProps {
 // Rimuovo defaultNodes
 
 // Inserisce un nodo nell'array subito prima o dopo il targetId, mantenendo parentId e level
-function insertNodeAt(nodes: TreeNodeProps[], newNode: TreeNodeProps, targetId: string, position: 'before' | 'after'): TreeNodeProps[] {
-  const idx = nodes.findIndex(n => n.id === targetId);
-  if (idx === -1) return [...nodes, newNode];
-  const before = position === 'before';
-  // Trova tutti i nodi con lo stesso parentId e level del target
-  const target = nodes[idx];
-  const siblings = nodes.filter(n => n.parentId === target.parentId && n.level === target.level);
-  // Trova la posizione tra i fratelli
-  const siblingIdx = siblings.findIndex(n => n.id === targetId);
-  // Costruisci il nuovo array
-  const result: TreeNodeProps[] = [];
-  let inserted = false;
-  for (let n of nodes) {
-    if (n.parentId === target.parentId && n.level === target.level && siblings.includes(n)) {
-      if (!inserted && n.id === targetId && before) {
-        result.push(newNode);
-        inserted = true;
-      }
-      result.push(n);
-      if (!inserted && n.id === targetId && !before) {
-        result.push(newNode);
-        inserted = true;
-      }
-    } else {
-      result.push(n);
-    }
-  }
-  if (!inserted) result.push(newNode);
-  return result;
-}
-
 function nodesReducer(state: TreeNodeProps[], action: any): TreeNodeProps[] {
   switch (action.type) {
     case 'SET':
@@ -270,44 +224,207 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   } else {
     // LOG: translations è undefined o null!
   }
-  const [selectedStep, setSelectedStep] = useState<string | null>(null);
-  const [actionCatalog, setActionCatalog] = useState<any[]>([]);
-  const [showLabel, setShowLabel] = useState(false);
-  const [activeDragAction, setActiveDragAction] = useState<any>(null);
-  const stepKeys = ddt && ddt.steps ? Object.keys(ddt.steps) : [];
-  React.useEffect(() => {
-    if (stepKeys.length > 0 && !selectedStep) {
-      setSelectedStep(stepKeys[0]);
-    }
-  }, [stepKeys, selectedStep]);
+  type EditorState = {
+    selectedStep: string | null;
+    actionCatalog: any[];
+    showLabel: boolean;
+    activeDragAction: any;
+    nodes: TreeNodeProps[];
+  };
 
+  type EditorAction =
+    | { type: 'SET_STEP'; step: string }
+    | { type: 'SET_ACTION_CATALOG'; catalog: any[] }
+    | { type: 'SET_SHOW_LABEL'; show: boolean }
+    | { type: 'SET_ACTIVE_DRAG_ACTION'; action: any }
+    | { type: 'SET_NODES'; nodes: TreeNodeProps[] }
+    | { type: 'ADD_NODE'; node: TreeNodeProps }
+    | { type: 'REMOVE_NODE'; id: string }
+    | { type: 'ADD_ESCALATION' }
+    | { type: 'SET_ALL_STATE'; state: EditorState }
+    | { type: 'TOGGLE_ESCALATION_INCLUDE'; id: string; included: boolean }
+    ;
+
+  const initialEditorState: EditorState = {
+    selectedStep: null,
+    actionCatalog: [],
+    showLabel: false,
+    activeDragAction: null,
+    nodes: [],
+  };
+
+  function editorReducer(state: EditorState, action: EditorAction): EditorState {
+    // LOG: azione ricevuta
+    console.log('[editorReducer] action', action);
+    switch (action.type) {
+      case 'SET_STEP':
+        return { ...state, selectedStep: action.step };
+      case 'SET_ACTION_CATALOG':
+        return { ...state, actionCatalog: action.catalog };
+      case 'SET_SHOW_LABEL':
+        return { ...state, showLabel: action.show };
+      case 'SET_ACTIVE_DRAG_ACTION':
+        return { ...state, activeDragAction: action.action };
+      case 'SET_NODES':
+        return { ...state, nodes: action.nodes };
+      case 'ADD_NODE':
+        return { ...state, nodes: addNode(state.nodes, action.node) };
+      case 'REMOVE_NODE': {
+        if (typeof action.id !== 'string') {
+          console.error('[REMOVE_NODE] id non è una stringa:', action.id);
+          return state;
+        }
+        console.log('[REMOVE_NODE] id:', action.id);
+        const nodeToRemove = state.nodes.find(n => n.id === action.id);
+        if (nodeToRemove && nodeToRemove.type === 'escalation') {
+          console.log('[REMOVE_NODE] escalation, elimino anche figli:', action.id);
+          return {
+            ...state,
+            nodes: removeNodePure(state.nodes, action.id, true)
+          };
+        } else {
+          return {
+            ...state,
+            nodes: removeNodePure(state.nodes, action.id, false)
+          };
+        }
+      }
+      case 'ADD_ESCALATION': {
+        console.log('[ADD_ESCALATION] step:', state.selectedStep);
+        if (!state.selectedStep) return state;
+        const escalationId = `${state.selectedStep}_escalation_${uuidv4()}`;
+        console.log('[ADD_ESCALATION] adding:', escalationId);
+        return {
+          ...state,
+          nodes: addNode(state.nodes, {
+            id: escalationId,
+            text: 'recovery', // la label visuale è calcolata a runtime
+            type: 'escalation',
+            level: 0,
+            included: true,
+          })
+        };
+      }
+      case 'TOGGLE_ESCALATION_INCLUDE':
+        return {
+          ...state,
+          nodes: state.nodes.map(n =>
+            n.id === action.id ? { ...n, included: action.included } : n
+          )
+        };
+      case 'SET_ALL_STATE':
+        return { ...action.state };
+      default:
+        return state;
+    }
+  }
+
+  const [editorState, dispatch] = useReducer(editorReducer, initialEditorState);
+  const stepKeys = ddt && ddt.steps ? Object.keys(ddt.steps) : [];
+  // --- HISTORY/UNDO/REDO ---
+  const historyRef = useRef<EditorState[]>([initialEditorState]);
+  const indexRef = useRef(0);
+  const [_, forceUpdate] = React.useReducer(x => x + 1, 0); // forzare il rerender su undo/redo
+
+  // Wrapper per dispatch che aggiorna la history
+  const dispatchWithHistory = useCallback((action: EditorAction) => {
+    console.log('[dispatchWithHistory] action', action);
+    // Calcola il nuovo stato
+    const newState = editorReducer(editorState, action);
+    console.log('[dispatchWithHistory] newState', newState);
+    // Se lo stato è cambiato, aggiorna la history
+    if (JSON.stringify(newState) !== JSON.stringify(editorState)) {
+      // Tronca la history se siamo in mezzo
+      const newHistory = historyRef.current.slice(0, indexRef.current + 1);
+      newHistory.push(newState);
+      historyRef.current = newHistory;
+      indexRef.current = newHistory.length - 1;
+      console.log('[dispatchWithHistory] history updated', historyRef.current);
+      forceUpdate();
+    }
+    // Applica il dispatch normale
+    dispatch(action);
+  }, [editorState]);
+
+  // Undo
+  const canUndo = indexRef.current > 0;
+  const handleUndo = () => {
+    if (canUndo) {
+      indexRef.current -= 1;
+      const prevState = historyRef.current[indexRef.current];
+      dispatch({ type: 'SET_ALL_STATE', state: prevState });
+      forceUpdate();
+    }
+  };
+  // Redo
+  const canRedo = indexRef.current < historyRef.current.length - 1;
+  const handleRedo = () => {
+    if (canRedo) {
+      indexRef.current += 1;
+      const nextState = historyRef.current[indexRef.current];
+      dispatch({ type: 'SET_ALL_STATE', state: nextState });
+      forceUpdate();
+    }
+  };
+
+  // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
+  React.useEffect(() => {
+    if (stepKeys.length > 0 && !editorState.selectedStep) {
+      dispatchWithHistory({ type: 'SET_STEP', step: stepKeys[0] });
+    }
+  }, [stepKeys, editorState.selectedStep]);
+
+  // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
   React.useEffect(() => {
     fetch('/data/actionsCatalog.json')
       .then(res => res.json())
-      .then(setActionCatalog);
+      .then(data => dispatchWithHistory({ type: 'SET_ACTION_CATALOG', catalog: data }));
   }, []);
 
   // Stato nodi dinamico dal DDT
-  const [nodes, setNodes] = useState<TreeNodeProps[]>([]);
+  // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
   useEffect(() => {
-    setNodes(estraiNodiDaDDT(ddt, translations, lang));
+    const estratti = estraiNodiDaDDT(ddt, translations, lang);
+    console.log('[ResponseEditor] estraiNodiDaDDT nodes:', estratti);
+    // Logga i nodi root per ogni step
+    const rootByStep: Record<string, any[]> = {};
+    estratti.forEach((n: any) => {
+      if ((n.parentId === undefined || n.parentId === null || n.parentId === '') && n.type !== 'escalation') {
+        if (!rootByStep[n.type]) rootByStep[n.type] = [];
+        rootByStep[n.type].push(n);
+      }
+    });
+    Object.entries(rootByStep).forEach(([step, nodes]) => {
+      const arr = nodes as any[];
+      console.log(`[ResponseEditor] ROOT NODES for step '${step}':`, arr.map((n: any) => ({ id: n.id, text: n.text, parentId: n.parentId })));
+    });
+    dispatchWithHistory({ type: 'SET_NODES', nodes: estratti });
   }, [ddt, translations, lang]);
 
   // Filtro i nodi per lo step selezionato
   let filteredNodes: TreeNodeProps[] = [];
-  if (selectedStep) {
+  if (editorState.selectedStep) {
     // Step con escalation
     const escalationSteps = ['noMatch', 'noInput', 'confirmation', 'notAcquired'];
-    if (escalationSteps.includes(selectedStep)) {
+    if (escalationSteps.includes(editorState.selectedStep)) {
       // Prendi tutti i nodi escalation di questo step e i loro figli
-      const escalationNodes = nodes.filter(n => n.type === 'escalation' && n.id.startsWith(`${selectedStep}_escalation_`));
+      const escalationNodes = editorState.nodes.filter(n => n.type === 'escalation' && n.id.startsWith(`${editorState.selectedStep}_escalation_`));
       const escalationIds = escalationNodes.map(n => n.id);
-      const childNodes = nodes.filter(n => n.parentId && escalationIds.includes(n.parentId));
+      const childNodes = editorState.nodes.filter(n => n.parentId && escalationIds.includes(n.parentId));
       filteredNodes = [...escalationNodes, ...childNodes];
     } else {
-      // Step senza escalation: prendi solo le azioni root di questo step
-      filteredNodes = nodes.filter(n => n.type === selectedStep && !n.parentId);
+      // Step senza escalation: prendi tutte le azioni di questo step che NON sono escalation e NON hanno parentId (root)
+      filteredNodes = editorState.nodes.filter(
+        n => n.type === editorState.selectedStep && n.type !== 'escalation' && (n.parentId === undefined || n.parentId === null || n.parentId === '')
+      );
     }
+  }
+  // LOG: filteredNodes dopo il filtro per la tab corrente
+  console.log('[ResponseEditor] filteredNodes:', filteredNodes, 'selectedStep:', editorState.selectedStep);
+  if (filteredNodes.length > 0) {
+    filteredNodes.forEach(n => {
+      console.log(`[ResponseEditor] FILTERED NODE: id=${n.id} type=${n.type} parentId=${n.parentId} text=${n.text}`);
+    });
   }
 
   // handleDrop logica semplificata (solo aggiunta root per demo)
@@ -326,25 +443,22 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         parameters: item.parameters,
       };
       if (targetId === null) {
-        // Drop su canvas: aggiungi come root
-        setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
+        dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
       } else {
-        const targetNode = nodes.find(n => n.id === targetId);
+        const targetNode = editorState.nodes.find(n => n.id === targetId);
         if (!targetNode) {
-          setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
+          dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
         } else if (targetNode.type === 'escalation' && position === 'child') {
-          // Drop su escalation: aggiungi come figlio
-          setNodes(prev => [...prev, { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id }]);
+          dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id } });
         } else if (targetNode.type === 'escalation' && (position === 'before' || position === 'after')) {
-          // Drop su escalation come before/after: aggiungi come root (stesso livello escalation)
-          setNodes(prev => insertNodeAt(prev, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position));
+          const inserted = insertNodeAt(editorState.nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position);
+          dispatchWithHistory({ type: 'SET_NODES', nodes: inserted });
         } else if (targetNode.type === 'action') {
-          // Drop su action: aggiungi come fratello (stesso parentId e livello)
           const pos: 'before' | 'after' = position === 'before' ? 'before' : 'after';
-          setNodes(prev => insertNodeAt(prev, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, pos));
+          const inserted = insertNodeAt(editorState.nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, pos);
+          dispatchWithHistory({ type: 'SET_NODES', nodes: inserted });
         } else {
-          // Fallback: aggiungi come root
-          setNodes(prev => [...prev, { ...newNode, level: 0, parentId: undefined }]);
+          dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
         }
       }
       setTimeout(() => {}, 100);
@@ -353,23 +467,17 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     // Spostamento nodo esistente: da implementare se serve
     return null;
   };
-  const removeNode = (id: string) => setNodes(prev => prev.filter(n => n.id !== id));
+  const removeNode = (id: string) => {
+    if (typeof id !== 'string') {
+      console.error('[removeNode] id non è una stringa:', id, 'typeof:', typeof id);
+      return;
+    }
+    dispatchWithHistory({ type: 'REMOVE_NODE', id });
+  };
 
   // Funzione per aggiungere escalation nello step corrente
   const handleAddEscalation = () => {
-    if (!selectedStep) return;
-    const escalationNodes = nodes.filter(n => n.type === 'escalation' && n.id.startsWith(`${selectedStep}_escalation_`));
-    const newIdx = escalationNodes.length + 1;
-    const escalationId = `${selectedStep}_escalation_${newIdx}`;
-    setNodes(prev => [
-      ...prev,
-      {
-        id: escalationId,
-        text: `${ordinalIt(newIdx)} recovery`,
-        type: 'escalation',
-        level: newIdx,
-      }
-    ]);
+    dispatchWithHistory({ type: 'ADD_ESCALATION' });
   };
 
   // Header DDT con icona e label
@@ -392,138 +500,45 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     notAcquired:  { icon: <AlertCircle size={17} />,       label: 'Dato non acquisito',  border: '#f59e42', bg: 'rgba(245,158,66,0.08)', color: '#f59e42', bgActive: 'rgba(245,158,66,0.18)' },
   };
 
+  // Funzioni di callback per la UI presentational
+  const onStepChange = (step: string) => dispatchWithHistory({ type: 'SET_STEP', step });
+  const onShowLabelChange = (show: boolean) => dispatchWithHistory({ type: 'SET_SHOW_LABEL', show });
+
+  // Props per la UI
+  const ddtType = ddt?.dataType?.type;
+  const ddtLabel = ddt?.label || ddt?.name || '—';
+
+  // Estendi editorState con funzioni per la UI
+  const editorStateForUI = {
+    ...editorState,
+    ddtType,
+    ddtLabel,
+    onStepChange,
+    onShowLabelChange,
+  };
+
+  // Funzione per toggle
+  const handleToggleInclude = (id: string, included: boolean) => {
+    dispatchWithHistory({ type: 'TOGGLE_ESCALATION_INCLUDE', id, included });
+  };
+
   return (
-    <div className={styles.responseEditorRoot}>
-      {/* Header DDT con icona e label */}
-      <div
-        style={{
-          background: '#a21caf',
-          color: '#fff',
-          padding: '10px 0 10px 32px',
-          textAlign: 'left',
-          fontWeight: 700,
-          fontSize: 18,
-          borderTopLeftRadius: 10,
-          borderTopRightRadius: 10,
-          marginBottom: 12,
-          letterSpacing: 0.2,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          gap: 12
-        }}
-      >
-        {getDDTIcon(ddt?.dataType?.type)}
-        <span style={{ fontWeight: 700, fontSize: 18, color: '#fff', letterSpacing: 0.2 }}>
-          {ddt?.label || ddt?.name || '—'}
-        </span>
-      </div>
-      {/* Bottone di chiusura in alto a destra */}
-      {onClose && (
-        <button
-          style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}
-          onClick={onClose}
-          title="Chiudi editor"
-        >
-          ✕
-        </button>
-      )}
-      <div className={styles.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <span style={{ fontWeight: 600, color: '#fff', fontSize: 15, marginRight: 8 }}>Il Bot:</span>
-          <span style={{ display: 'inline-flex', gap: 8 }}>
-            {stepKeys.filter(step => step !== 'notAcquired').map((step) => {
-              const meta = stepMeta[step] || { icon: <PlayCircle size={17} />, label: step, border: '#888', bg: 'rgba(100,100,100,0.08)', color: '#888', bgActive: 'rgba(100,100,100,0.18)' };
-              const isActive = selectedStep === step;
-              return (
-                <button
-                  key={step}
-                  onClick={() => setSelectedStep(step)}
-                  style={{
-                    border: `1.5px solid ${meta.border}`,
-                    background: isActive ? meta.bgActive : meta.bg,
-                    color: meta.color,
-                    borderRadius: 999,
-                    padding: '3px 16px',
-                    fontWeight: 700,
-                    fontSize: 15,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    cursor: 'pointer',
-                    boxShadow: isActive ? `0 0 0 2px ${meta.border}33` : undefined,
-                    outline: 'none',
-                    transition: 'background 0.15s, box-shadow 0.15s',
-                  }}
-                >
-                  {meta.icon}
-                  {meta.label}
-                </button>
-              );
-            })}
-          </span>
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{ fontSize: 13, color: '#555' }}>
-              <input type="checkbox" checked={showLabel} onChange={e => setShowLabel(e.target.checked)} style={{ marginRight: 4 }} />
-              Mostra label azione
-            </label>
-          </span>
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
-        <div style={{ flex: 2, minWidth: 0, padding: 16 }}>
-          <TreeView
-            nodes={filteredNodes}
-            onDrop={handleDrop}
-            onRemove={removeNode}
-            onAddEscalation={handleAddEscalation}
-          />
-          {/* Bottone aggiungi escalation in fondo alla lista escalation */}
-          {selectedStep && ['noMatch', 'noInput', 'confirmation'].includes(selectedStep) && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
-              <button
-                onClick={() => {
-                  // Trova quanti escalation ci sono già
-                  const escalationNodes = nodes.filter(n => n.type === 'escalation' && n.id.startsWith(`${selectedStep}_escalation_`));
-                  const newIdx = escalationNodes.length + 1;
-                  const escalationId = `${selectedStep}_escalation_${newIdx}`;
-                  setNodes(prev => [
-                    ...prev,
-                    {
-                      id: escalationId,
-                      text: `${ordinalIt(newIdx)} recovery`,
-                      type: 'escalation',
-                      level: newIdx,
-                    }
-                  ]);
-                }}
-                style={{
-                  color: '#ef4444',
-                  border: '1.5px solid #ef4444',
-                  background: 'rgba(239,68,68,0.08)',
-                  borderRadius: 999,
-                  padding: '5px 18px',
-                  fontWeight: 700,
-                  fontSize: 15,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  cursor: 'pointer',
-                  marginTop: 8
-                }}
-              >
-                <Plus size={18} style={{ marginRight: 6 }} />
-                Aggiungi recovery
-              </button>
-            </div>
-          )}
-        </div>
-        <div style={{ flex: 1, minWidth: 220, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff' }}>
-          <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
-          <ActionList />
-        </div>
-      </div>
-    </div>
+    <ResponseEditorUI
+      editorState={editorStateForUI}
+      filteredNodes={filteredNodes}
+      stepKeys={stepKeys}
+      stepMeta={stepMeta}
+      handleDrop={handleDrop}
+      removeNode={removeNode}
+      handleAddEscalation={handleAddEscalation}
+      handleUndo={handleUndo}
+      handleRedo={handleRedo}
+      canUndo={canUndo}
+      canRedo={canRedo}
+      getDDTIcon={getDDTIcon}
+      onClose={onClose || (() => {})}
+      onToggleInclude={handleToggleInclude}
+    />
   );
 };
 

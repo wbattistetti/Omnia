@@ -23,4 +23,15 @@
   flex-grow: 1;
   padding: 1rem;
   overflow-y: auto;
+}
+
+.stepTab {
+  font-weight: 400;
+  background: transparent;
+  transition: background 0.15s, font-weight 0.15s;
+}
+
+.stepTabActive {
+  font-weight: 700;
+  /* lo sfondo pastello viene già dal meta.bgActive inline */
 } 

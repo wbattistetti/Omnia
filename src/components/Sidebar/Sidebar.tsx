@@ -95,6 +95,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   // Show/hide DDTBuilder inline
   const [showDDTBuilder, setShowDDTBuilder] = useState(false);
+  // Stato per il DDT attualmente aperto in ResponseEditor
+  const [openedDDTId, setOpenedDDTId] = useState<string | null>(null);
+
+  // Ref per ogni card DDT per scroll automatico
+  const cardRefs = useRef<{ [id: string]: HTMLDivElement | null }>({});
+  useEffect(() => {
+    if (showDeleteConfirm && cardRefs.current[showDeleteConfirm]) {
+      cardRefs.current[showDeleteConfirm]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [showDeleteConfirm]);
 
   // Font resize: handle Ctrl+wheel to zoom font size
   useEffect(() => {
@@ -185,8 +195,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Handler to open the DDT editor (calls parent prop)
   const handleOpenDDTEditor = (ddt: any, translations: any, lang: any) => {
+    setOpenedDDTId(ddt._id || ddt.id);
     if (onOpenDDTEditor) onOpenDDTEditor(ddt, translations, lang);
   };
+
+  // Handler per chiudere il ResponseEditor (da passare come prop)
+  const handleCloseDDTEditor = () => setOpenedDDTId(null);
 
   // Collapsed sidebar UI (icons only)
   if (isCollapsed) {
@@ -273,7 +287,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Main content: DDT accordion and entity accordions */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 p-4">
         {/* Data Dialogue Templates (DDT) accordion */}
         <Accordion
           title="Data Dialogue Templates"
@@ -302,97 +316,113 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }
         >
           {/* DDT list and builder */}
-          {(() => {
-            const isOpen = openAccordion === 'dataDialogueTemplates';
-            return loadingTemplates ? (
-              <div className="text-slate-400 px-2 py-2">Caricamento...</div>
-            ) : dialogueTemplates.length === 0 ? (
-              <>
-                {showDDTBuilder && (
-                  <div style={{ padding: 0, margin: 0, marginBottom: 8, background: 'white', border: '1px solid #f3e8ff', borderRadius: 8, boxShadow: 'none' }}>
-                    <DDTBuilder
-                      onComplete={(newDDT, messages) => {
-                        setDialogueTemplates(prev => [...prev, newDDT]);
-                        setShowDDTBuilder(false);
-                        if (onOpenDDTEditor) onOpenDDTEditor(newDDT, messages || {}, 'it');
-                      }}
-                      onCancel={() => setShowDDTBuilder(false)}
-                    />
-                  </div>
-                )}
-                <div className="text-slate-400 px-2 py-2">Nessun template trovato</div>
-              </>
-            ) : (
-              <>
-                {/* Wizard sempre in alto */}
-                {showDDTBuilder && (
-                  <div style={{ padding: 0, margin: 0, marginBottom: 8, background: 'white', border: '1px solid #f3e8ff', borderRadius: 8, boxShadow: 'none' }}>
-                    <DDTBuilder
-                      onComplete={(newDDT, messages) => {
-                        setDialogueTemplates(prev => [...prev, newDDT]);
-                        setShowDDTBuilder(false);
-                        if (onOpenDDTEditor) onOpenDDTEditor(newDDT, messages || {}, 'it');
-                      }}
-                      onCancel={() => setShowDDTBuilder(false)}
-                    />
-                  </div>
-                )}
-                {/* Lista scrollabile dei template */}
-                <div className="max-h-64 overflow-y-auto pr-2">
-                  {dialogueTemplates.map((dt, idx) => {
-                    const ddtId = dt._id || dt.id;
-                    let icon = <FileText className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                    const type = dt.dataType?.type?.toLowerCase();
-                    if (type === 'date') icon = <Calendar className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                    else if (type === 'email') icon = <Mail className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                    else if (type === 'address') icon = <MapPin className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                    return (
-                      <div key={ddtId} style={{ marginBottom: 2, padding: 4, borderRadius: 8, background: '#f3e8ff', border: '1px solid #f3e8ff', display: 'flex', flexDirection: 'column' }}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            {icon}
-                            <span className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || ddtId}</span>
-                          </div>
-                          <div className="flex items-center gap-2 ml-2">
-                            <button
-                              className="p-1 text-fuchsia-700 hover:text-fuchsia-900"
-                              title="Impostazioni"
-                              onClick={() => handleOpenDDTEditor(dt, {}, 'it')}
-                            >
-                              <Settings className="w-4 h-4" />
-                            </button>
-                            <button
-                              className="p-1 text-red-500 hover:text-red-700"
-                              title="Elimina template"
-                              onClick={() => setShowDeleteConfirm(ddtId)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                        {showDeleteConfirm === ddtId && (
-                          <div className="mt-2 flex gap-2 items-center bg-red-50 border border-red-200 rounded px-3 py-2">
-                            <button
-                              className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold"
-                              onClick={() => handleDeleteDDT(ddtId)}
-                            >
-                              Conferma
-                            </button>
-                            <button
-                              className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 font-semibold"
-                              onClick={() => setShowDeleteConfirm(null)}
-                            >
-                              Annulla
-                            </button>
-                          </div>
-                        )}
+          {/* Wizard SEMPRE fuori dal div scrollabile */}
+          {showDDTBuilder && (
+            <div style={{
+              background: '#f3e8ff',
+              borderBottom: '1px solid #e5e7eb',
+              paddingBottom: 8,
+              marginBottom: 8,
+              borderRadius: 8,
+            }}>
+              <DDTBuilder
+                onComplete={(newDDT, messages) => {
+                  setDialogueTemplates(prev => [...prev, newDDT]);
+                  setShowDDTBuilder(false);
+                  if (onOpenDDTEditor) onOpenDDTEditor(newDDT, messages || {}, 'it');
+                }}
+                onCancel={() => setShowDDTBuilder(false)}
+              />
+            </div>
+          )}
+          {/* Lista scrollabile dei template */}
+          {loadingTemplates ? (
+            <div className="text-slate-400 px-2 py-2">Caricamento...</div>
+          ) : dialogueTemplates.length === 0 ? (
+            <div className="text-slate-400 px-2 py-2">Nessun template trovato</div>
+          ) : (
+            <div
+              className="overflow-y-auto pr-2"
+              style={{ maxHeight: 260 }}
+            >
+              {dialogueTemplates.map((dt, idx) => {
+                const ddtId = dt._id || dt.id;
+                let icon = <FileText className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                const type = dt.dataType?.type?.toLowerCase();
+                if (type === 'date') icon = <Calendar className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                else if (type === 'email') icon = <Mail className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                else if (type === 'address') icon = <MapPin className="w-4 h-4 text-fuchsia-700 mr-2" />;
+                return (
+                  <div key={ddtId} ref={el => { cardRefs.current[ddtId] = el; }} style={{ marginBottom: 2, padding: 4, borderRadius: 8, background: '#f3e8ff', border: '1px solid #f3e8ff', display: 'flex', flexDirection: 'column' }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        {icon}
+                        <span className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || ddtId}</span>
                       </div>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
+                      <div className="flex items-center gap-2 ml-2">
+                        <button
+                          className={`p-1 transition-colors ${
+                            openedDDTId === ddtId
+                              ? 'text-fuchsia-900 font-bold'
+                              : 'text-fuchsia-700 hover:text-fuchsia-900'
+                          }`}
+                          style={
+                            openedDDTId === ddtId
+                              ? {
+                                  borderRadius: '50%',
+                                  background: '#f3e8ff',
+                                  border: '2px solid #a21caf',
+                                  boxShadow: '0 0 0 2px #a21caf33',
+                                  padding: 4,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: 32,
+                                  height: 32
+                                }
+                              : { padding: 4 }
+                          }
+                          title="Impostazioni"
+                          onClick={() => handleOpenDDTEditor(dt, {}, 'it')}
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                        <button
+                          className="p-1 text-red-500 hover:text-red-700"
+                          title="Elimina template"
+                          onClick={() => {
+                            setShowDeleteConfirm(ddtId);
+                            if (openAccordion !== 'dataDialogueTemplates') setOpenAccordion('dataDialogueTemplates');
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {showDeleteConfirm === ddtId && (
+                      <div
+                        className="mt-2 flex gap-2 items-center bg-red-50 border border-red-200 rounded px-3 py-2"
+                        style={{ position: 'relative', zIndex: 10, minHeight: 56, overflow: 'visible' }}
+                      >
+                        <button
+                          className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold"
+                          onClick={() => handleDeleteDDT(ddtId)}
+                        >
+                          Conferma
+                        </button>
+                        <button
+                          className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 font-semibold"
+                          onClick={() => setShowDeleteConfirm(null)}
+                        >
+                          Annulla
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Accordion>
         {/* Entity accordions (Agent Acts, User Acts, etc.) */}
         {(() => {

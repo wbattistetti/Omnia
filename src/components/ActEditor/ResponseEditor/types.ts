@@ -5,16 +5,16 @@ export interface TreeNodeParameter {
 }
 
 export interface TreeNodeProps {
-  text: string;
-  type: 'root' | 'nomatch' | 'noinput' | 'action' | 'success' | string;
-  level?: number;
-  expanded?: boolean;
   id: string;
+  text: string;
+  type: string;
+  level?: number;
+  parentId?: string;
   icon?: string;
   color?: string;
-  parentId?: string;
   label?: string;
   primaryValue?: string;
-  parameters?: TreeNodeParameter[];
+  parameters?: any[];
+  included?: boolean; // Per recovery/escalation: se incluso nel dialogo
   onDrop?: (id: string, position: 'before' | 'after' | 'child' | 'parent-sibling', draggedData: any) => void;
 } 

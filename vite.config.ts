@@ -14,6 +14,7 @@ export default defineConfig({
       '/step3': 'http://localhost:8000',
       '/step3b': 'http://localhost:8000',
       '/step4': 'http://localhost:8000',
+      '/api': 'http://localhost:8000',
     }
   }
 });

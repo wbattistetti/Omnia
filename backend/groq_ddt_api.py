@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import requests
@@ -45,27 +45,39 @@ def step2(user_desc: str = Body(...)):
     IT_MEANINGS = [
         'data di nascita', 'email', 'numero di telefono', 'indirizzo', 'numero', 'testo', 'booleano'
     ]
+    MEANING_ICONS = {
+        'data di nascita': 'Calendar',
+        'email': 'Mail',
+        'numero di telefono': 'Phone',
+        'indirizzo': 'MapPin',
+        'numero': 'Hash',
+        'testo': 'Type',
+        'booleano': 'CheckSquare'
+    }
+    ICON_LIST = list(set(MEANING_ICONS.values()) | {'HelpCircle', 'Sparkles', 'FileQuestion', 'Gift', 'IdCard'})
     prompt = (
-        f"You are a data type classifier. Given the user text: '{user_desc}', extract ONLY the most appropriate data type from this list (in Italian): [{', '.join(IT_MEANINGS)}].\n"
-        "Reply ONLY with a valid JSON object: { \"type\": <type> } where <type> is the Italian name of the type (e.g., 'numero di telefono', 'email', 'data di nascita', etc.).\n"
-        "If the text is ambiguous, nonsense, or does NOT clearly indicate one of these types, reply ONLY with: { \"type\": \"unrecognized_data_type\" }.\n"
-        "Do NOT guess, do NOT reply 'text' if you are not sure. If in doubt, reply only with { \"type\": \"unrecognized_data_type\" }.\n"
-        "Examples:\n"
-        "- Input: 'Voglio una cosa che riconosca i numeri di telefono' → Output: { \"type\": \"numero di telefono\" }\n"
-        "- Input: 'Serve la data di nascita' → Output: { \"type\": \"data di nascita\" }\n"
-        "- Input: 'asdasd' → Output: { \"type\": \"unrecognized_data_type\" }\n"
+        f"Sei un classificatore di tipi di dato. Dato il testo utente: '{user_desc}', estrai SOLO il tipo di dato più specifico possibile tra questi (in italiano): {IT_MEANINGS}.\n"
+        "Se il tipo non è presente, proponi un nuovo tipo.\n"
+        f"Associa anche una icona Lucide tra queste: {ICON_LIST}.\n"
+        "Se non esiste un'icona adatta, usa 'HelpCircle'.\n"
+        "Rispondi SOLO con un oggetto JSON: { \"type\": <tipo>, \"icon\": <nomeMini> }.\n"
+        "Esempi:\n"
+        "- Input: 'Voglio una cosa che riconosca i numeri di telefono' → Output: { \"type\": \"numero di telefono\", \"icon\": \"Phone\" }\n"
+        "- Input: 'Serve la data di nascita' → Output: { \"type\": \"data di nascita\", \"icon\": \"Calendar\" }\n"
+        "- Input: 'codice promozionale' → Output: { \"type\": \"codice promozionale\", \"icon\": \"Gift\" }\n"
+        "- Input: 'asdasd' → Output: { \"type\": \"unrecognized_data_type\", \"icon\": \"HelpCircle\" }\n"
     )
     ai = call_groq([
-        {"role": "system", "content": "Reply always in Italian."},
+        {"role": "system", "content": "Rispondi sempre in italiano."},
         {"role": "user", "content": prompt}
     ])
     try:
         ai_obj = json.loads(ai)
-        if not isinstance(ai_obj, dict) or 'type' not in ai_obj:
+        if not isinstance(ai_obj, dict) or 'type' not in ai_obj or 'icon' not in ai_obj:
             return {"error": "unrecognized_data_type"}
         if ai_obj['type'] == 'unrecognized_data_type':
             return {"error": "unrecognized_data_type"}
-        return {"ai": ai_obj['type']}
+        return {"ai": ai_obj}
     except Exception:
         return {"error": "unrecognized_data_type"}
 
@@ -104,35 +116,33 @@ def step4(meaning: str = Body(...), desc: str = Body(...), constraints: str = Bo
       "variable": "dateOfBirth",
       "constraints": [],
       "steps": {
-        "start": [
-          { "actionInstanceId": "SayMessage_GUID1", "actionType": "askQuestion" }
-        ],
         "noMatch": [
-          { "actionInstanceId": "SayMessage_GUID2", "actionType": "escalation" },
-          { "actionInstanceId": "SayMessage_GUID3", "actionType": "escalation" },
-          { "actionInstanceId": "SayMessage_GUID4", "actionType": "escalation" }
+          { "id": "noMatch_escalation_UUID1", "type": "escalation" },
+          { "actionInstanceId": "SayMessage_UUID2", "parentId": "noMatch_escalation_UUID1", "actionType": "sayMessage" },
+          { "id": "noMatch_escalation_UUID3", "type": "escalation" },
+          { "actionInstanceId": "SayMessage_UUID4", "parentId": "noMatch_escalation_UUID3", "actionType": "sayMessage" }
         ],
         "noInput": [
-          { "actionInstanceId": "SayMessage_GUID5", "actionType": "escalation" },
-          { "actionInstanceId": "SayMessage_GUID6", "actionType": "escalation" },
-          { "actionInstanceId": "SayMessage_GUID7", "actionType": "escalation" }
+          { "id": "noInput_escalation_UUID5", "type": "escalation" },
+          { "actionInstanceId": "SayMessage_UUID6", "parentId": "noInput_escalation_UUID5", "actionType": "sayMessage" },
+          { "id": "noInput_escalation_UUID7", "type": "escalation" },
+          { "actionInstanceId": "SayMessage_UUID8", "parentId": "noInput_escalation_UUID7", "actionType": "sayMessage" }
         ],
         "confirmation": [
-          { "actionInstanceId": "SayMessage_GUID8", "actionType": "confirmation" },
-          { "actionInstanceId": "SayMessage_GUID9", "actionType": "confirmation" }
-        ],
-        "success": [
-          { "actionInstanceId": "SayMessage_GUID10", "actionType": "success" }
+          { "id": "confirmation_escalation_UUID9", "type": "escalation" },
+          { "actionInstanceId": "SayMessage_UUID10", "parentId": "confirmation_escalation_UUID9", "actionType": "sayMessage" },
+          { "id": "confirmation_escalation_UUID11", "type": "escalation" },
+          { "actionInstanceId": "SayMessage_UUID12", "parentId": "confirmation_escalation_UUID11", "actionType": "sayMessage" }
         ],
         "notAcquired": [
-          { "actionInstanceId": "SayMessage_GUID11", "actionType": "notAcquired" }
+          { "id": "notAcquired_escalation_UUID13", "type": "escalation" },
+          { "actionInstanceId": "SayMessage_UUID14", "parentId": "notAcquired_escalation_UUID13", "actionType": "sayMessage" }
         ]
       },
       "success": {}
     }
     """
-    prompt = (
-        f"""You are an expert dialogue template generator for conversational AI.
+    prompt = f"""You are an expert dialogue template generator for conversational AI.
 Given the following specifications:
 - Data type: {meaning}
 - Description: {desc}
@@ -145,20 +155,18 @@ Generate ONLY a JSON object with EXACTLY this structure:
 }}
 
 Where:
-- "ddt" is a Data Dialogue Template object with the same ontological structure as this example: {DDT_EXAMPLE_JSON}
-- Include the standard steps: start, noMatch (3 escalations), noInput (3 escalations), confirmation (2 escalations), success, notAcquired.
-- Each actionInstanceId must be the action name plus a randomly generated GUID/UUID (e.g., SayMessage_3f2a1b4c-...).
+- "ddt" is a Data Dialogue Template object with the same ontological structure as this example:
+{DDT_EXAMPLE_JSON}
+- For each step that supports escalation (e.g., noMatch, noInput, confirmation, notAcquired), alternate escalation nodes and their child actions as shown above.
+- Each escalation must have a unique id (e.g., "noMatch_escalation_<UUID>") and each action must have a parentId pointing to its escalation.
+- The order of escalation blocks in the array determines their visual index (for labels like "1° recovery", "2° recovery", ...).
 - For each action, generate a runtime string key as: runtime.<DDT_ID>.<step>#<n>.<actionInstanceId>.text
-  - <n> is the escalation number (starting from 1) for that step. ALWAYS include #<n> even if there is only one action for that step.
-  - Example: runtime.DDT_Phone.noMatch#2.SayMessage_GUID.text
+  - <n> is the escalation index (starting from 1) based on the position of the escalation node in the array for that step (count only escalation nodes, not actions).
+  - Example: runtime.DDT_Phone.noMatch#2.SayMessage_UUID.text
 - "messages" is an object with all runtime string keys and their values (in Italian and English).
-  - Each value in the "messages" object MUST be a multilingual object with language codes as keys (e.g., {{ "it": "...", "en": "..." }}). DO NOT use plain strings or arrays.
-  - Example:
-    "runtime.DDT_Phone.noMatch#1.SayMessage_GUID.text": {{ "it": "Testo in italiano", "en": "English text" }}
-- The messages MUST be synthetic and highly conversational, as if for a fast-paced call center conversation (short, direct, natural, not formal).
-- The messages object must contain ALL the new runtime string keys and their values, so they can be added to the existing translations structure in memory (do NOT overwrite existing keys, only add new ones).
-- DO NOT include any explanation, markdown, or text outside the JSON object.
+  - Each value in the "messages" object MUST be a multilingual object with language codes as keys (e.g., {{ "it": "...", "en": "..." }}).
 - The output MUST be valid JSON, parsable by Python.
+- DO NOT include any explanation, markdown, or text outside the JSON object.
 
 Example output:
 {{
@@ -166,7 +174,6 @@ Example output:
   "messages": {{ ... }}
 }}
 """
-    )
     ai = call_groq([
         {"role": "system", "content": "Always reply in English."},
         {"role": "user", "content": prompt}
@@ -175,4 +182,30 @@ Example output:
         ai_obj = json.loads(ai)
         return {"ai": ai_obj}
     except Exception as e:
-        return {"ai": None, "error": f"Failed to parse AI JSON: {str(e)}"} 
+        return {"ai": None, "error": f"Failed to parse AI JSON: {str(e)}"}
+
+# --- Constraint Generation Endpoint ---
+
+@app.post("/api/generateConstraint")
+async def generate_constraint(request: Request):
+    data = await request.json()
+    description = data.get("description", "")
+    variable = data.get("variable", "value")
+    type_ = data.get("type", "string")
+    # MOCK: restituisci un constraint fittizio
+    return {
+        "id": "constraint1",
+        "title": f"Constraint per {variable}",
+        "script": "return value < Date.now();",
+        "explanation": f"Il valore di {variable} deve essere nel passato.",
+        "messages": [
+            "Il valore inserito non è valido.",
+            "Per favore inserisci un valore corretto."
+        ],
+        "testCases": [
+            {"input": "2020-01-01", "expected": True, "description": "Valore valido"},
+            {"input": "2099-01-01", "expected": False, "description": "Valore futuro"}
+        ],
+        "variable": variable,
+        "type": type_
+    } 

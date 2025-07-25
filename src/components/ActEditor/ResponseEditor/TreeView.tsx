@@ -16,6 +16,8 @@ interface TreeViewProps {
   nodes: TreeNodeProps[];
   onDrop: (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => void;
   onRemove: (id: string) => void;
+  onToggleInclude?: (id: string) => void; // Aggiunto per passare la funzione di toggle
+  bgColor?: string; // nuovo prop opzionale
 }
 
 const renderTree = (
@@ -25,16 +27,36 @@ const renderTree = (
   selectedNodeId: string | null,
   onDrop: TreeViewProps['onDrop'],
   onRemove: TreeViewProps['onRemove'],
-  setSelectedNodeId: (id: string | null) => void
+  setSelectedNodeId: (id: string | null) => void,
+  stepKey?: string, // aggiunto per propagare lo step corrente
+  extraProps?: Partial<TreeViewProps> & { foreColor?: string; bgColor?: string },
+  singleEscalationSteps: string[] = ['start', 'success', 'confirmation']
 ) => {
   console.log('[renderTree] called', { parentId, level, nodes });
   return nodes
     .filter(node => node.parentId === parentId)
-    .map(node => {
+    .map((node, idx, siblings) => {
+      // Se escalation, calcola la label dinamica solo tra escalation dello stesso step
+      let escalationLabel = undefined;
+      if (node.type === 'escalation') {
+        // Ricava lo stepKey dal node.id (es: noMatch_escalation_1)
+        const match = node.id.match(/^([a-zA-Z0-9_]+)_escalation_/);
+        const nodeStepKey = match ? match[1] : undefined;
+        // Trova tutti i fratelli escalation con stesso stepKey
+        const allEscalations = siblings.filter(n => n.type === 'escalation' && n.id.startsWith(`${nodeStepKey}_escalation_`));
+        const escIdx = allEscalations.findIndex(n => n.id === node.id);
+        escalationLabel = `${escIdx + 1}° recovery`;
+      }
       // Se escalation, raccogli i figli
       const childrenNodes = node.type === 'escalation'
         ? nodes.filter(n => n.parentId === node.id).map(child => ({ ...child, level: level + 1 }))
         : undefined;
+      // Calcola se questa escalation è l'unica nello step e lo step è single-escalation
+      let isSingleEscalation = false;
+      if (node.type === 'escalation' && stepKey && singleEscalationSteps.includes(stepKey)) {
+        const escCount = siblings.filter(n => n.type === 'escalation').length;
+        if (escCount === 1) isSingleEscalation = true;
+      }
       return (
         <React.Fragment key={node.id}>
           <TreeNode
@@ -42,28 +64,26 @@ const renderTree = (
             level={level}
             selected={selectedNodeId === node.id}
             onDrop={(id, position, item) => {
-              console.log('[TreeNode onDrop] called', { id, position, item });
-              // Forza il tipo per evitare errori di tipo
               const safePosition = (position === 'before' || position === 'after' || position === 'child') ? position : 'after';
               const result = onDrop(id, safePosition, item);
               if (typeof result === 'string') {
-                setSelectedNodeId(result); // Se è stato aggiunto un nuovo nodo, seleziona quello
+                setSelectedNodeId(result);
               } else {
-                setSelectedNodeId(id); // Altrimenti seleziona il nodo target
+                setSelectedNodeId(id);
               }
             }}
             onCancelNewNode={onRemove}
             domId={'tree-node-' + node.id}
-            {...(node.type === 'escalation' ? { childrenNodes } : {})}
+            {...(node.type === 'escalation' ? { childrenNodes, escalationLabel, included: node.included, onToggleInclude: extraProps?.onToggleInclude, isSingleEscalation, foreColor: extraProps?.foreColor, bgColor: extraProps?.bgColor } : {})}
           />
           {/* Solo se non escalation, ricorsione classica */}
-          {node.type !== 'escalation' && renderTree(nodes, node.id, level + 1, selectedNodeId, onDrop, onRemove, setSelectedNodeId)}
+          {node.type !== 'escalation' && renderTree(nodes, node.id, level + 1, selectedNodeId, onDrop, onRemove, setSelectedNodeId, stepKey, extraProps, singleEscalationSteps)}
         </React.Fragment>
       );
     });
 };
 
-const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void }> = ({ nodes, onDrop, onRemove, onAddEscalation }) => {
+const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void; stepKey?: string; foreColor?: string; bgColor?: string }> = ({ nodes, onDrop, onRemove, onAddEscalation, onToggleInclude, stepKey, foreColor, bgColor }) => {
   console.log('[TreeView] render', { nodes });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -194,7 +214,7 @@ const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void }> = ({ 
     >
       <CustomDragLayer nodes={nodes} />
       <div>
-        {renderTree(nodes, undefined, 0, selectedNodeId, onDrop, onRemove, setSelectedNodeId)}
+        {renderTree(nodes, undefined, 0, selectedNodeId, onDrop, onRemove, setSelectedNodeId, stepKey, { onToggleInclude, foreColor, bgColor })}
       </div>
       {/* Bottone aggiungi escalation in fondo se ci sono escalation visibili */}
       {onAddEscalation && nodes.some(n => n.type === 'escalation') && (
@@ -202,9 +222,9 @@ const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void }> = ({ 
           <button
             onClick={onAddEscalation}
             style={{
-              color: '#ef4444',
-              border: '1.5px solid #ef4444',
-              background: 'rgba(239,68,68,0.08)',
+              color: foreColor || '#ef4444',
+              border: `1.5px solid ${foreColor || '#ef4444'}`,
+              background: bgColor || 'rgba(239,68,68,0.08)',
               borderRadius: 999,
               padding: '5px 18px',
               fontWeight: 700,
@@ -217,7 +237,7 @@ const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void }> = ({ 
             }}
           >
             <Plus size={18} style={{ marginRight: 6 }} />
-            Aggiungi recovery
+            {stepKey === 'confirmation' ? 'Aggiungi conferma' : 'Aggiungi recovery'}
           </button>
         </div>
       )}

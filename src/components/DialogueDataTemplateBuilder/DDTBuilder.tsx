@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Pencil } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import SupportReportModal from '../SupportReportModal';
 
 interface DDTBuilderProps {
@@ -47,6 +48,7 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
   const [input, setInput] = useState('');
   const [prompt, setPrompt] = useState(initialPrompt);
   const [meaning, setMeaning] = useState('');
+  const [meaningIcon, setMeaningIcon] = useState<keyof typeof LucideIcons | null>(null);
   const [desc, setDesc] = useState('');
   const [loading, setLoading] = useState(false);
   const [shimmer, setShimmer] = useState(false);
@@ -107,23 +109,14 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
     setWarning(null);
     try {
       const aiResp = await fetchStep2IA(input);
-      // Gestione robusta: oggetto con error, stringa vuota, stringa con pattern
-      const respStr = typeof aiResp === 'string' ? aiResp.trim().toLowerCase() : '';
-      if (
-        (aiResp && typeof aiResp === 'object' && aiResp.error && aiResp.error === 'unrecognized_data_type') ||
-        respStr === '' ||
-        respStr.includes('non capito') ||
-        respStr.includes('non riconosciuto') ||
-        respStr.includes('unknown') ||
-        respStr.includes('unrecognized')
-      ) {
+      if (!aiResp || aiResp.error === 'unrecognized_data_type') {
         setWarning('Non ho capito cosa intendi. Che tipo di dato vuoi acquisire? Puoi riscrivere meglio?');
         setLoading(false);
         return;
       }
-      const [m, ...dArr] = aiResp.split(' ');
-      setMeaning(m);
-      setDesc(dArr.join(' '));
+      setMeaning(aiResp.type);
+      setMeaningIcon(aiResp.icon || null);
+      setDesc('');
       setInput('');
       setStep(1);
     } catch (err) {
@@ -184,7 +177,7 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
     meaning ? (
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, marginTop: 2 }}>
         <span style={{ fontWeight: 400, fontSize: 15, color: '#fff', textAlign: 'left', marginRight: 0 }}>
-          Template for:
+          For
         </span>
         <span style={{
           border: '1.5px solid #a21caf',
@@ -199,6 +192,7 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
           alignItems: 'center',
           marginLeft: 6
         }}>
+          {meaningIcon && LucideIcons[meaningIcon] ? React.createElement(LucideIcons[meaningIcon as keyof typeof LucideIcons], { size: 28, style: { marginRight: 10 } }) : null}
           {meaning}
           <span title="Correggi tipo di dato">
             <Pencil size={16} style={{ marginLeft: 8, cursor: 'pointer', color: '#a21caf' }} onClick={() => setStep(0)} />
