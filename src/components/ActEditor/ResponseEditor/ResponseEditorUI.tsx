@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import TreeView from './TreeView';
 import styles from './ResponseEditor.module.css';
 import ConstraintWizard from '../../ConstraintGenerator/ConstraintWizard';
+import { AlertTriangle } from 'lucide-react';
 
 export interface ResponseEditorUIProps {
   editorState: any;
@@ -28,6 +29,28 @@ export interface ResponseEditorUIProps {
 
 const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
   const [showConstraintWizard, setShowConstraintWizard] = React.useState(false);
+  const [rightWidth, setRightWidth] = React.useState(360); // 3 colonne (120*3)
+  const [dragging, setDragging] = React.useState(false);
+
+  // Gestione drag splitter
+  React.useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      const totalWidth = window.innerWidth;
+      const minRight = 120; // almeno una colonna
+      const maxPossible = window.innerWidth - 320; // lascia almeno 320px a sinistra
+      const maxRight = Math.min(1440, maxPossible); // massimo tra 12 colonne e spazio disponibile
+      const newRightWidth = Math.max(minRight, Math.min(maxRight, totalWidth - e.clientX));
+      setRightWidth(newRightWidth);
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [dragging]);
 
   return (
     <div className={styles.responseEditorRoot}>
@@ -148,7 +171,7 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
-        <div style={{ flex: 2, minWidth: 0, padding: 16 }}>
+        <div style={{ flex: 1, minWidth: 320, padding: 16 }}>
           {/* Undo/Redo controls */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <button onClick={props.handleUndo} disabled={!props.canUndo} style={{ padding: '4px 14px', borderRadius: 6, border: '1.5px solid #888', background: props.canUndo ? '#fff' : '#eee', color: props.canUndo ? '#111' : '#aaa', fontWeight: 700, cursor: props.canUndo ? 'pointer' : 'not-allowed' }}>↶ Undo</button>
@@ -202,7 +225,25 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
             </div>
           )}
         </div>
-        <div style={{ flex: 1, minWidth: 220, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff' }}>
+        {/* Splitter verticale */}
+        <div
+          style={{ width: 8, cursor: 'col-resize', background: dragging ? '#a21caf33' : 'transparent', zIndex: 10 }}
+          onMouseDown={() => setDragging(true)}
+        />
+        {dragging && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              zIndex: 9999,
+              cursor: 'col-resize'
+            }}
+          />
+        )}
+        <div style={{ flex: 'none', minWidth: 120, width: rightWidth, maxWidth: rightWidth, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff', minHeight: 900 }}>
           {showConstraintWizard ? (
             <ConstraintWizard
               variable={props.variable || 'value'}
@@ -214,6 +255,14 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
             <>
               <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
               <ActionList />
+              <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                <button
+                  onClick={() => setShowConstraintWizard(true)}
+                  style={{ background: '#a21caf', color: '#fff', fontWeight: 700, border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 15, cursor: 'pointer' }}
+                >
+                  + Aggiungi constraint
+                </button>
+              </div>
             </>
           )}
         </div>

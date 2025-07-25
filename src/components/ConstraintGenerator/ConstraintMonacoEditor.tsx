@@ -1,4 +1,5 @@
 import React from 'react';
+import MonacoEditor from 'react-monaco-editor';
 // Se Monaco non è installato, mostra un placeholder
 // In produzione, importa: import MonacoEditor from 'react-monaco-editor';
 
@@ -9,29 +10,29 @@ interface ConstraintMonacoEditorProps {
 }
 
 const ConstraintMonacoEditor: React.FC<ConstraintMonacoEditorProps> = ({ script, onChange, readOnly }) => {
-  // Placeholder: sostituisci con MonacoEditor se disponibile
   return (
-    <textarea
+    <MonacoEditor
+      width="100%"
+      height="120"
+      language="javascript"
+      theme="vs-dark"
       value={script}
-      onChange={e => onChange(e.target.value)}
-      readOnly={readOnly}
-      style={{
-        width: '100%',
-        minHeight: 80,
-        fontFamily: 'Fira Mono, Menlo, monospace',
+      options={{
+        readOnly: !!readOnly,
+        minimap: { enabled: false },
         fontSize: 15,
-        background: '#18181b',
-        color: '#f3f3f3',
-        border: '1.5px solid #a21caf',
-        borderRadius: 8,
-        padding: 12,
-        marginTop: 8,
-        marginBottom: 8,
-        outline: 'none',
-        resize: 'vertical',
+        fontFamily: 'Fira Mono, Menlo, monospace',
+        lineNumbers: 'on',
+        scrollBeyondLastLine: false,
+        wordWrap: 'on',
+        automaticLayout: true,
+        scrollbar: { vertical: 'auto', horizontal: 'auto' },
+        overviewRulerLanes: 0,
+        renderLineHighlight: 'all',
+        fixedOverflowWidgets: true,
+        tabSize: 2
       }}
-      spellCheck={false}
-      placeholder="Scrivi qui lo script di validazione (JavaScript semplice)..."
+      onChange={onChange}
     />
   );
 };

@@ -54,13 +54,12 @@ const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, 
   return (
     <div 
       ref={dragRef}
+      className={styles.item}
       style={{
         opacity: isDragging ? 0.5 : 1,
         cursor: 'grab',
         border: isDragging ? '2px solid #2563eb' : undefined,
         background: isDragging ? '#e0e7ff' : undefined,
-        padding: 8,
-        borderRadius: 6,
         marginBottom: 4
       }}
     >

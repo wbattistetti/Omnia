@@ -218,6 +218,53 @@ app.get('/projects/:id', async (req, res) => {
   }
 });
 
+// --- GENERATIVE CONSTRAINT ENDPOINT ---
+app.post('/api/generateConstraint', async (req, res) => {
+  const { description, variable, type } = req.body;
+  // MOCK generativa: genera constraint JS e test coerenti
+  let script = '';
+  let messages = [];
+  let testCases = [];
+  let title = '';
+  let explanation = '';
+  if (description.toLowerCase().includes('passato')) {
+    script = `value => new Date(value) < new Date()`;
+    messages = ['La data deve essere nel passato'];
+    testCases = [
+      { input: '2020-01-01', expected: true, description: 'Data nel passato' },
+      { input: '2099-01-01', expected: false, description: 'Data nel futuro' }
+    ];
+    title = 'Data nel passato';
+    explanation = 'Il valore deve essere una data precedente a oggi.';
+  } else if (description.toLowerCase().includes('positivo')) {
+    script = `value => Number(value) > 0`;
+    messages = ['Il valore deve essere positivo'];
+    testCases = [
+      { input: 5, expected: true, description: 'Valore positivo' },
+      { input: -2, expected: false, description: 'Valore negativo' }
+    ];
+    title = 'Valore positivo';
+    explanation = 'Il valore deve essere maggiore di zero.';
+  } else {
+    script = `value => true`;
+    messages = ['Vincolo generico'];
+    testCases = [
+      { input: 1, expected: true, description: 'Test generico' }
+    ];
+    title = 'Vincolo generico';
+    explanation = 'Vincolo generato in modo generico.';
+  }
+  res.json({
+    variable,
+    type,
+    script,
+    messages,
+    testCases,
+    title,
+    explanation
+  });
+});
+
 app.listen(3100, () => {
   console.log('Backend API pronta su http://localhost:3100');
 });

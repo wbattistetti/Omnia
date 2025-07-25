@@ -25,5 +25,18 @@
   color: #4b5563;
   margin-top: 0.25rem;
   text-align: center;
-  white-space: nowrap;
+  white-space: normal;
+}
+
+/* Responsive grid container for action list */
+.action-list-grid-inner {
+  padding: 4px 0 0 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 60px;
+}
+
+.action-list-item {
+  padding: 0;
+  margin: 0;
 } 

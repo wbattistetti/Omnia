@@ -44,7 +44,7 @@ const ActionList: React.FC = () => {
   }, []);
 
   return (
-    <div>
+    <div className="action-list-grid" style={{ width: '100%' }}>
       {/* Se vuoi permettere la selezione lingua, aggiungi qui un select */}
       {/* <select value={lang} onChange={e => setLang(e.target.value)}>
         <option value="it">Italiano</option>
@@ -53,9 +53,12 @@ const ActionList: React.FC = () => {
       </select> */}
       <div
         ref={containerRef}
-        className="grid auto-rows-min gap-1 overflow-y-auto overflow-x-hidden h-full w-full p-2"
+        className="action-list-grid-inner"
         style={{
-          gridTemplateColumns: `repeat(${columns}, minmax(${MIN_THUMBNAIL_WIDTH}px, 1fr))`,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+          gap: 16,
+          width: '100%',
         }}
       >
         {actionsCatalog.map((action, index) => {
@@ -89,7 +92,7 @@ const ActionList: React.FC = () => {
             parameters
           };
           // Passa key direttamente, NON dentro props
-          return <ActionItem key={action.id || index} {...props} />;
+          return <div className="action-list-item" key={action.id || index}><ActionItem {...props} /></div>;
         })}
       </div>
     </div>
