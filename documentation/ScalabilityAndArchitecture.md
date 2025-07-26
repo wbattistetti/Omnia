@@ -5,7 +5,7 @@
 This document describes the architecture and scalability strategies for the OMNIA PLATFORM, designed for cloud, multi-tenant, and high-load runtime scenarios. It covers best practices for database organization, template management, isolation, and runtime performance.
 
 ---
-
+ .
 ## 2. Factory Templates and Project Isolation
 
 - **Factory Templates**:  

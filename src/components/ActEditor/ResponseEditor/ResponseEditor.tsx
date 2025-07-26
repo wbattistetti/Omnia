@@ -254,8 +254,6 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   };
 
   function editorReducer(state: EditorState, action: EditorAction): EditorState {
-    // LOG: azione ricevuta
-    console.log('[editorReducer] action', action);
     switch (action.type) {
       case 'SET_STEP':
         return { ...state, selectedStep: action.step };
@@ -274,10 +272,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
           console.error('[REMOVE_NODE] id non è una stringa:', action.id);
           return state;
         }
-        console.log('[REMOVE_NODE] id:', action.id);
         const nodeToRemove = state.nodes.find(n => n.id === action.id);
         if (nodeToRemove && nodeToRemove.type === 'escalation') {
-          console.log('[REMOVE_NODE] escalation, elimino anche figli:', action.id);
           return {
             ...state,
             nodes: removeNodePure(state.nodes, action.id, true)
@@ -290,10 +286,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         }
       }
       case 'ADD_ESCALATION': {
-        console.log('[ADD_ESCALATION] step:', state.selectedStep);
         if (!state.selectedStep) return state;
         const escalationId = `${state.selectedStep}_escalation_${uuidv4()}`;
-        console.log('[ADD_ESCALATION] adding:', escalationId);
         return {
           ...state,
           nodes: addNode(state.nodes, {
@@ -328,10 +322,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   // Wrapper per dispatch che aggiorna la history
   const dispatchWithHistory = useCallback((action: EditorAction) => {
-    console.log('[dispatchWithHistory] action', action);
     // Calcola il nuovo stato
     const newState = editorReducer(editorState, action);
-    console.log('[dispatchWithHistory] newState', newState);
     // Se lo stato è cambiato, aggiorna la history
     if (JSON.stringify(newState) !== JSON.stringify(editorState)) {
       // Tronca la history se siamo in mezzo
@@ -339,7 +331,6 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       newHistory.push(newState);
       historyRef.current = newHistory;
       indexRef.current = newHistory.length - 1;
-      console.log('[dispatchWithHistory] history updated', historyRef.current);
       forceUpdate();
     }
     // Applica il dispatch normale
@@ -385,7 +376,6 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
   useEffect(() => {
     const estratti = estraiNodiDaDDT(ddt, translations, lang);
-    console.log('[ResponseEditor] estraiNodiDaDDT nodes:', estratti);
     // Logga i nodi root per ogni step
     const rootByStep: Record<string, any[]> = {};
     estratti.forEach((n: any) => {
@@ -396,7 +386,6 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     });
     Object.entries(rootByStep).forEach(([step, nodes]) => {
       const arr = nodes as any[];
-      console.log(`[ResponseEditor] ROOT NODES for step '${step}':`, arr.map((n: any) => ({ id: n.id, text: n.text, parentId: n.parentId })));
     });
     dispatchWithHistory({ type: 'SET_NODES', nodes: estratti });
   }, [ddt, translations, lang]);
@@ -420,10 +409,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     }
   }
   // LOG: filteredNodes dopo il filtro per la tab corrente
-  console.log('[ResponseEditor] filteredNodes:', filteredNodes, 'selectedStep:', editorState.selectedStep);
   if (filteredNodes.length > 0) {
     filteredNodes.forEach(n => {
-      console.log(`[ResponseEditor] FILTERED NODE: id=${n.id} type=${n.type} parentId=${n.parentId} text=${n.text}`);
     });
   }
 

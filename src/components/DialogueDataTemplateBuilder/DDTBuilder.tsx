@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Pencil } from 'lucide-react';
+import { Pencil, Hourglass } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
+import { FunctionComponent } from 'react';
 import SupportReportModal from '../SupportReportModal';
 
 interface DDTBuilderProps {
@@ -42,6 +43,11 @@ async function fetchStep4DDT(meaning: string, desc: string) {
     body: JSON.stringify({ meaning, desc, constraints: '' })
   });
   return (await res.json()).ai;
+}
+
+// Helper to check if a value is a valid Lucide React component
+function isLucideComponent(comp: any): comp is FunctionComponent<any> {
+  return typeof comp === 'function' && comp.length <= 1;
 }
 
 const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
@@ -102,6 +108,16 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
       setDots('');
     }
   }, [loading, step]);
+
+  // Effetto cursore spinner globale
+  useEffect(() => {
+    if (loading) {
+      document.body.style.cursor = 'progress';
+    } else {
+      document.body.style.cursor = '';
+    }
+    return () => { document.body.style.cursor = ''; };
+  }, [loading]);
 
   const handleSend = async () => {
     setLoading(true);
@@ -192,7 +208,11 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
           alignItems: 'center',
           marginLeft: 6
         }}>
-          {meaningIcon && LucideIcons[meaningIcon] ? React.createElement(LucideIcons[meaningIcon as keyof typeof LucideIcons], { size: 28, style: { marginRight: 10 } }) : null}
+          {meaningIcon &&
+            isLucideComponent(LucideIcons[meaningIcon as keyof typeof LucideIcons]) &&
+            (LucideIcons[meaningIcon as keyof typeof LucideIcons] as Function).length <= 1
+            ? React.createElement(LucideIcons[meaningIcon as keyof typeof LucideIcons] as FunctionComponent<any>, { size: 28, style: { marginRight: 10 } })
+            : null}
           {meaning}
           <span title="Correggi tipo di dato">
             <Pencil size={16} style={{ marginLeft: 8, cursor: 'pointer', color: '#a21caf' }} onClick={() => setStep(0)} />
@@ -204,7 +224,8 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
 
   // MESSAGGIO ANALISI IA
   const analyzingBox = (loading && step === 0) ? (
-    <div style={{ fontSize: 13, color: '#a21caf', marginBottom: 6, marginLeft: 2, fontWeight: 500 }}>
+    <div style={{ fontSize: 13, color: '#2563eb', marginBottom: 6, marginLeft: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Hourglass size={18} style={{ color: '#2563eb', animation: 'spin 1s linear infinite', flexShrink: 0 }} />
       Sto analizzando{dots}
     </div>
   ) : null;
@@ -218,7 +239,8 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
 
   // MESSAGGIO CREAZIONE TEMPLATE
   const creatingBox = (loading && step === 1) ? (
-    <div style={{ fontSize: 13, color: '#a21caf', marginBottom: 6, marginLeft: 2, fontWeight: 500 }}>
+    <div style={{ fontSize: 13, color: '#2563eb', marginBottom: 6, marginLeft: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Hourglass size={18} style={{ color: '#2563eb', animation: 'spin 1s linear infinite', flexShrink: 0 }} />
       Sto costruendo il template{dots}
     </div>
   ) : null;
@@ -268,16 +290,16 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
   const buttons = (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: 18 }}>
       {onCancel && (
-        <button onClick={onCancel} style={{ color: '#a21caf', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 500, fontSize: 15, padding: '4px 0' }} disabled={loading}>
+        <button onClick={onCancel} style={{ color: '#a21caf', border: 'none', background: 'none', cursor: loading ? 'progress' : 'pointer', fontWeight: 500, fontSize: 15, padding: '4px 0' }} disabled={loading}>
           Annulla
         </button>
       )}
       {step === 0 ? (
-        <button onClick={handleSend} style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 28px', fontWeight: 500, cursor: 'pointer', fontSize: 15, marginLeft: 'auto' }} disabled={loading || !input.trim()}>
+        <button onClick={handleSend} style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 28px', fontWeight: 500, cursor: loading ? 'progress' : 'pointer', fontSize: 15, marginLeft: 'auto' }} disabled={loading || !input.trim()}>
           Invia
         </button>
       ) : (
-        <button style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 28px', fontWeight: 500, cursor: 'pointer', fontSize: 15, marginLeft: 'auto' }} disabled={loading} onClick={handleCreate}>
+        <button style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 28px', fontWeight: 500, cursor: loading ? 'progress' : 'pointer', fontSize: 15, marginLeft: 'auto' }} disabled={loading} onClick={handleCreate}>
           Crea
         </button>
       )}
@@ -333,13 +355,13 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={() => { step === 0 ? handleSend() : handleCreate(); }}
-                style={{ background: '#fff', color: '#a21caf', border: '1px solid #a21caf', borderRadius: 4, padding: '2px 10px', fontWeight: 500, fontSize: 12, cursor: 'pointer' }}
+                style={{ background: '#fff', color: '#a21caf', border: '1px solid #a21caf', borderRadius: 4, padding: '2px 10px', fontWeight: 500, fontSize: 12, cursor: loading ? 'progress' : 'pointer' }}
               >
                 Retry
               </button>
               <button
                 onClick={handleSupport}
-                style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 10px', fontWeight: 500, fontSize: 12, cursor: 'pointer' }}
+                style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 10px', fontWeight: 500, fontSize: 12, cursor: loading ? 'progress' : 'pointer' }}
               >
                 Contact support
               </button>

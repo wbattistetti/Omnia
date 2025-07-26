@@ -140,14 +140,8 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
   // Determina se mostrare la textbox di editing solo per Messaggio o Domanda
   const showEditingBox = (icon === 'MessageCircle' || icon === 'HelpCircle');
 
-  // LOG: stampa il testo del nodo
-  // console.log('[TreeNode] render', { id, text });
-
   // Nodo escalation: stile speciale, label, collassabile
   if (type === 'escalation') {
-    // LOG: debug indentazione escalation
-    // eslint-disable-next-line no-console
-    console.log(`[ESCALATION NODE] id=${id} escalationLabel=${escalationLabel} level=${level} parentId=${parentId} childrenCount=${childrenNodes?.length}`);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const handleDelete = () => {
       setShowDeleteConfirm(true);

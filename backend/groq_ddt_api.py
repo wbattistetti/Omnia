@@ -192,20 +192,62 @@ async def generate_constraint(request: Request):
     description = data.get("description", "")
     variable = data.get("variable", "value")
     type_ = data.get("type", "string")
-    # MOCK: restituisci un constraint fittizio
-    return {
-        "id": "constraint1",
-        "title": f"Constraint per {variable}",
-        "script": "return value < Date.now();",
-        "explanation": f"Il valore di {variable} deve essere nel passato.",
-        "messages": [
-            "Il valore inserito non è valido.",
-            "Per favore inserisci un valore corretto."
-        ],
-        "testCases": [
-            {"input": "2020-01-01", "expected": True, "description": "Valore valido"},
-            {"input": "2099-01-01", "expected": False, "description": "Valore futuro"}
-        ],
-        "variable": variable,
-        "type": type_
-    } 
+
+    prompt = f'''
+You are an expert coding assistant.
+Generate a script that solves the following problem:
+
+{description}
+
+Requirements:
+- Add a short summary at the top (in plain English) as a comment.
+- Add inline comments to explain each important step.
+- Return the script in three languages: JavaScript, Python, and TypeScript.
+- For each language, include all comments and best practices.
+- The field "tests" is MANDATORY and must contain at least 3 test cases. If you do not know what to put, invent plausible test cases.
+- The field "label" is MANDATORY and must be a synthetic name (max 2 words) that describes the constraint, suitable for use as a tab title.
+- The field "payoff" is MANDATORY and must be a natural language description (1-2 lines) that explains what the constraint does, suitable for use as a tooltip or subtitle.
+- Respond ONLY with a valid JSON object, no markdown, no explanations, no text outside the JSON. The output MUST be parsable by Python's json.loads().
+- The JSON structure must be:
+{{
+  "label": "...",
+  "payoff": "...",
+  "summary": "...",
+  "scripts": {{
+    "js": "// JavaScript code here",
+    "py": "# Python code here",
+    "ts": "// TypeScript code here"
+  }},
+  "tests": [
+    {{ "input": <example input>, "expected": <example expected>, "description": "..." }}
+  ]
+}}
+
+Example output:
+{{
+  "label": "Past Date",
+  "payoff": "Checks if the given date is in the past compared to today.",
+  "summary": "Checks if a date is in the past.",
+  "scripts": {{
+    "js": "// JavaScript code...",
+    "py": "# Python code...",
+    "ts": "// TypeScript code..."
+  }},
+  "tests": [
+    {{ "input": [2020, 1, 1], "expected": true, "description": "Past date" }},
+    {{ "input": [2099, 1, 1], "expected": false, "description": "Future date" }},
+    {{ "input": [2022, 12, 31], "expected": true, "description": "Recent past date" }}
+  ]
+}}
+'''
+
+    ai = call_groq([
+        {"role": "system", "content": "Always reply in English."},
+        {"role": "user", "content": prompt}
+    ])
+    print("AI RAW RESPONSE:", ai)
+    try:
+        ai_obj = json.loads(ai)
+        return ai_obj
+    except Exception as e:
+        return {"error": f"Failed to parse AI JSON: {str(e)}"} 

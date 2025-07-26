@@ -72,12 +72,27 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
   const [selectedDDTTranslations, setSelectedDDTTranslations] = useState<any | null>(null);
   const [selectedDDTLanguage, setSelectedDDTLanguage] = useState<string>('it');
+  const [openedDDTId, setOpenedDDTId] = useState<string | null>(null);
 
   const handleOpenDDTEditor = useCallback((ddt: any, translations: any, lang: string) => {
     setSelectedDDT(ddt);
     setSelectedDDTTranslations(translations);
     setSelectedDDTLanguage(lang);
+    setOpenedDDTId(ddt._id || ddt.id);
   }, []);
+
+  const handleCloseDDTEditor = useCallback(() => {
+    setSelectedDDT(null);
+    setOpenedDDTId(null);
+  }, []);
+
+  // Nuova funzione per gestire la cancellazione di un DDT
+  const handleDeleteDDT = useCallback((ddtId: string) => {
+    if (selectedDDT && (selectedDDT._id === ddtId || selectedDDT.id === ddtId)) {
+      setSelectedDDT(null);
+      setOpenedDDTId(null);
+    }
+  }, [selectedDDT]);
 
   // Pannello di test in alto a sinistra all'avvio
   React.useEffect(() => {
@@ -320,6 +335,8 @@ export const AppContent: React.FC<AppContentProps> = ({
               isCollapsed={isSidebarCollapsed}
               onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               onOpenDDTEditor={handleOpenDDTEditor}
+              openedDDTId={openedDDTId}
+              onDeleteDDT={handleDeleteDDT}
             />
           </SidebarThemeProvider>
           <div className="flex-1 flex flex-col">
@@ -341,7 +358,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 ddt={selectedDDT}
                 translations={selectedDDTTranslations}
                 lang={selectedDDTLanguage}
-                onClose={() => setSelectedDDT(null)}
+                onClose={handleCloseDDTEditor}
               />
             )}
           </div>

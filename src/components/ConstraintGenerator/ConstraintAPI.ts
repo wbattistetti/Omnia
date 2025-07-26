@@ -1,6 +1,6 @@
-import { Constraint } from './types';
+import { Constraint, AIScriptResult } from './types';
 
-export async function generateConstraint(description: string, variable: string, type: string): Promise<Constraint> {
+export async function generateConstraint(description: string, variable: string, type: string): Promise<AIScriptResult> {
   const res = await fetch('/api/generateConstraint', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -1,5 +1,7 @@
 import React from 'react';
 import MonacoEditor from 'react-monaco-editor';
+import * as monaco from 'monaco-editor';
+import { setMonacoMarkers } from '../../utils/monacoMarkers';
 // Se Monaco non è installato, mostra un placeholder
 // In produzione, importa: import MonacoEditor from 'react-monaco-editor';
 
@@ -7,9 +9,15 @@ interface ConstraintMonacoEditorProps {
   script: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
+  markers?: monaco.editor.IMarkerData[];
 }
 
-const ConstraintMonacoEditor: React.FC<ConstraintMonacoEditorProps> = ({ script, onChange, readOnly }) => {
+const ConstraintMonacoEditor: React.FC<ConstraintMonacoEditorProps> = ({ script, onChange, readOnly, markers }) => {
+  function handleEditorDidMount(editor: any, monacoInstance: typeof monaco) {
+    if (markers && markers.length > 0) {
+      setMonacoMarkers(editor, monacoInstance, markers);
+    }
+  }
   return (
     <MonacoEditor
       width="100%"
@@ -33,6 +41,7 @@ const ConstraintMonacoEditor: React.FC<ConstraintMonacoEditorProps> = ({ script,
         tabSize: 2
       }}
       onChange={onChange}
+      editorDidMount={handleEditorDidMount}
     />
   );
 };

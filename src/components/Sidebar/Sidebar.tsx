@@ -46,6 +46,8 @@ interface SidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onOpenDDTEditor?: (ddt: any, translations: any, lang: string) => void;
+  openedDDTId?: string | null;
+  onDeleteDDT?: (ddtId: string) => void;
 }
 
 const MIN_WIDTH = 320; // px (w-80)
@@ -66,7 +68,9 @@ const DEFAULT_FONT_SIZE = 16;
 export const Sidebar: React.FC<SidebarProps> = ({ 
   isCollapsed = false, 
   onToggleCollapse,
-  onOpenDDTEditor
+  onOpenDDTEditor,
+  openedDDTId,
+  onDeleteDDT
 }) => {
   // Project data and update handlers from context
   const { data, loading, error } = useProjectData();
@@ -95,9 +99,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   // Show/hide DDTBuilder inline
   const [showDDTBuilder, setShowDDTBuilder] = useState(false);
-  // Stato per il DDT attualmente aperto in ResponseEditor
-  const [openedDDTId, setOpenedDDTId] = useState<string | null>(null);
-
   // Ref per ogni card DDT per scroll automatico
   const cardRefs = useRef<{ [id: string]: HTMLDivElement | null }>({});
   useEffect(() => {
@@ -190,17 +191,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleDeleteDDT = (ddtId: string) => {
     setDialogueTemplates((prev) => prev.filter(dt => (dt._id || dt.id) !== ddtId));
     setShowDeleteConfirm(null);
+    if (onDeleteDDT) {
+      onDeleteDDT(ddtId);
+    }
     // TODO: trigger toast/snackbar "Template eliminato" se vuoi feedback
   };
 
   // Handler to open the DDT editor (calls parent prop)
   const handleOpenDDTEditor = (ddt: any, translations: any, lang: any) => {
-    setOpenedDDTId(ddt._id || ddt.id);
     if (onOpenDDTEditor) onOpenDDTEditor(ddt, translations, lang);
   };
-
-  // Handler per chiudere il ResponseEditor (da passare come prop)
-  const handleCloseDDTEditor = () => setOpenedDDTId(null);
+  // Handler per chiudere il ResponseEditor non serve più qui
 
   // Collapsed sidebar UI (icons only)
   if (isCollapsed) {

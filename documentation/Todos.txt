@@ -1,0 +1,5 @@
+
+
+Secondo me quando io ho la lista dei template aperta se io clicco il wizard devi allungare l'accordo con dello spazio per ospitare il wizard così visivamente meno disturbante perché la lista non viene ridotta non so se è chiaro 
+
+Farei anche 1 1 altro controllo per evitare duplicazioni se io per esempio chiedo un dato che esiste già il wizard avverte e addirittura fa scrollare eventualmente scrollare la lista sotto dei dati già disponibili dei tempi già disponibili e lo evidenzia 
