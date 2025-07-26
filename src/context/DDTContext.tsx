@@ -3,14 +3,15 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 interface DDTContextType {
   ddt: any;
   actionsCatalog: any[];
-  translations: any;
+  translationsByDDT: { [ddtId: string]: any };
   lang: string;
+  setTranslationsForDDT: (ddtId: string, translations: any) => void;
+  getTranslationsForDDT: (ddtId: string) => any;
 }
 
 interface SetDDTContextType {
   setDDT: (ddt: any) => void;
   setActionsCatalog: (actionsCatalog: any[]) => void;
-  setTranslations: (translations: any) => void;
   setLang: (lang: string) => void;
 }
 
@@ -37,7 +38,7 @@ interface DDTProviderProps {
   children: ReactNode;
   initialDDT?: any;
   initialActionsCatalog?: any[];
-  initialTranslations?: any;
+  initialTranslationsByDDT?: { [ddtId: string]: any };
   initialLang?: string;
 }
 
@@ -45,17 +46,22 @@ export const DDTProvider: React.FC<DDTProviderProps> = ({
   children,
   initialDDT = null,
   initialActionsCatalog = [],
-  initialTranslations = {},
+  initialTranslationsByDDT = {},
   initialLang = 'it',
 }) => {
   const [ddt, setDDT] = useState<any>(initialDDT);
   const [actionsCatalog, setActionsCatalog] = useState<any[]>(initialActionsCatalog);
-  const [translations, setTranslations] = useState<any>(initialTranslations);
+  const [translationsByDDT, setTranslationsByDDT] = useState<{ [ddtId: string]: any }>(initialTranslationsByDDT);
   const [lang, setLang] = useState<string>(initialLang);
 
+  const setTranslationsForDDT = (ddtId: string, translations: any) => {
+    setTranslationsByDDT(prev => ({ ...prev, [ddtId]: translations }));
+  };
+  const getTranslationsForDDT = (ddtId: string) => translationsByDDT[ddtId] || {};
+
   return (
-    <DDTContext.Provider value={{ ddt, actionsCatalog, translations, lang }}>
-      <SetDDTContext.Provider value={{ setDDT, setActionsCatalog, setTranslations, setLang }}>
+    <DDTContext.Provider value={{ ddt, actionsCatalog, translationsByDDT, lang, setTranslationsForDDT, getTranslationsForDDT }}>
+      <SetDDTContext.Provider value={{ setDDT, setActionsCatalog, setLang }}>
         {children}
       </SetDDTContext.Provider>
     </DDTContext.Provider>

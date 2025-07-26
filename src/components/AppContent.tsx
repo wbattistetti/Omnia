@@ -17,6 +17,7 @@ import { DockablePanelsHandle } from './DockablePanels';
 import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
 import ResponseEditor from './ActEditor/ResponseEditor/ResponseEditor';
+import { useDDTContext, useSetDDTContext } from '../context/DDTContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -48,6 +49,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   onPlayNode
 }) => {
   const { refreshData } = useProjectDataUpdate();
+  const ddtContext = useDDTContext();
+  const getTranslationsForDDT = ddtContext.getTranslationsForDDT;
+  const setTranslationsForDDT = ddtContext.setTranslationsForDDT;
 
   // Stato globale per nodi e edge
   const [nodes, setNodes] = useState<Node<NodeData>[]>([]);
@@ -70,16 +74,19 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [mosaicNodes, setMosaicNodes] = useState<any>(null);
   const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
   const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
-  const [selectedDDTTranslations, setSelectedDDTTranslations] = useState<any | null>(null);
   const [selectedDDTLanguage, setSelectedDDTLanguage] = useState<string>('it');
   const [openedDDTId, setOpenedDDTId] = useState<string | null>(null);
 
   const handleOpenDDTEditor = useCallback((ddt: any, translations: any, lang: string) => {
+    const ddtKey = ddt._id || ddt.id;
+    if (translations && Object.keys(translations).length > 0) {
+      setTranslationsForDDT(ddtKey, translations);
+      console.log('[AppContent] setTranslationsForDDT', { ddtKey, translations });
+    }
     setSelectedDDT(ddt);
-    setSelectedDDTTranslations(translations);
     setSelectedDDTLanguage(lang);
-    setOpenedDDTId(ddt._id || ddt.id);
-  }, []);
+    setOpenedDDTId(ddtKey);
+  }, [setTranslationsForDDT]);
 
   const handleCloseDDTEditor = useCallback(() => {
     setSelectedDDT(null);
@@ -354,9 +361,10 @@ export const AppContent: React.FC<AppContentProps> = ({
               setTestNodeId={setTestNodeId}
             />
             {selectedDDT && (
+              (() => { const t = getTranslationsForDDT(openedDDTId); console.log('[AppContent] Passo translations a ResponseEditor:', { openedDDTId, t }); return null; })(),
               <ResponseEditor
                 ddt={selectedDDT}
-                translations={selectedDDTTranslations}
+                translations={getTranslationsForDDT(openedDDTId)}
                 lang={selectedDDTLanguage}
                 onClose={handleCloseDDTEditor}
               />

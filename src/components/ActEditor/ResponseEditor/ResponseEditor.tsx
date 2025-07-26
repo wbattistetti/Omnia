@@ -26,7 +26,8 @@ import styles from './ResponseEditor.module.css';
 import { TreeNodeProps } from './types';
 import { useTreeNodes } from './useTreeNodes';
 import { useRef, useCallback } from 'react';
-import { insertNodeAt, addNode, removeNode as removeNodePure } from './treeMutations';
+import { estraiNodiDaDDT, insertNodeAt, removeNodePure, addNode } from './treeFactories';
+import { estraiParametroPrincipale, estraiValoreTradotto, getTranslationText, ordinalIt, estraiLabelAzione } from './responseEditorHelpers';
 import { v4 as uuidv4 } from 'uuid';
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -44,149 +45,6 @@ const stepIndent: Record<string, number> = {
   normal: 0,
   noMatch: 24,
   noInput: 24,
-};
-
-const estraiParametroPrincipale = (action: any, catalog: any, translations: any, lang: string) => {
-  if (!catalog || !catalog.params) {
-    return '[catalogo non trovato]';
-  }
-  const paramKey = Object.keys(catalog.params).find(k => catalog.params[k].type === 'string');
-  if (!paramKey) {
-    return '[parametro principale non trovato]';
-  }
-  const translationKey = action[paramKey];
-  if (!translationKey) {
-    return '[chiave di traduzione mancante]';
-  }
-  if (!translations) {
-    return `[${translationKey}] [translations mancante]`;
-  }
-  let value = translationKey;
-  let found = false;
-  if (Array.isArray(translations)) {
-    const t = translations.find((t: any) => t.key === translationKey);
-    if (t && t.value && t.value[lang]) {
-      value = t.value[lang];
-      found = true;
-    }
-  } else if (typeof translations === 'object') {
-    if (translations[translationKey] && translations[translationKey][lang]) {
-      value = translations[translationKey][lang];
-      found = true;
-    }
-  }
-  if (!found) {
-    value = `[${translationKey}] non trovato!`;
-  }
-  return value;
-};
-
-const estraiValoreTradotto = (key: string, translations: any, lang: string) => {
-  if (!key) {
-    return '';
-  }
-  if (!translations) {
-    return '';
-  }
-  let value = '';
-  if (Array.isArray(translations)) {
-    const t = translations.find((t: any) => t.key === key);
-    if (t && t.value && t.value[lang]) {
-      value = t.value[lang];
-    }
-  } else if (typeof translations === 'object') {
-    if (translations[key] && translations[key][lang]) {
-      value = translations[key][lang];
-    }
-  }
-  return value;
-};
-
-// Funzione di lookup con tipi espliciti
-function getTranslationText(
-  translations: Record<string, any>,
-  ddtId: string,
-  step: string,
-  escalation: number,
-  actionInstanceId: string,
-  lang: string
-) {
-  const key = `runtime.${ddtId}.${step}#${escalation}.${actionInstanceId}.text`;
-  const fallbackKey = `runtime.${ddtId}.${step}.${actionInstanceId}.text`;
-  const actionsKey = `Actions.${actionInstanceId}.text`;
-  if (translations[key] && translations[key][lang]) {
-    return translations[key][lang];
-  }
-  if (translations[fallbackKey] && translations[fallbackKey][lang]) {
-    return translations[fallbackKey][lang];
-  }
-  if (translations[actionsKey] && translations[actionsKey][lang]) {
-    return translations[actionsKey][lang];
-  }
-  return '';
-}
-
-// Funzione per numerale ordinale italiano (1° 2° 3° ...)
-function ordinalIt(n: number) {
-  return n + '°';
-}
-
-const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodeProps[] => {
-  if (!ddt || !ddt.steps) return [];
-  const nodes: TreeNodeProps[] = [];
-  for (const [stepKey, actions] of Object.entries(ddt.steps)) {
-    if (Array.isArray(actions)) {
-      // Solo struttura nuova: ogni step ha sempre almeno una escalation, tutte le azioni sono figlie di escalation
-      let currentEscalationId: string | undefined = undefined;
-      let escalationIdx = 0;
-      actions.forEach((action: any, idx: number) => {
-        if (action.type === 'escalation' && action.id) {
-          currentEscalationId = action.id;
-          escalationIdx++;
-          nodes.push({
-            id: action.id,
-            text: 'recovery',
-            type: 'escalation',
-            level: 0,
-            included: true,
-          });
-        } else if (action.actionInstanceId && currentEscalationId) {
-          const actionInstanceId = action.actionInstanceId;
-          const ddtId = ddt.id || ddt._id;
-          const text = getTranslationText(translations, ddtId, stepKey, escalationIdx, actionInstanceId, lang);
-          nodes.push({
-            id: actionInstanceId,
-            text,
-            type: stepKey,
-            level: 1,
-            parentId: currentEscalationId,
-          });
-        }
-      });
-    }
-  }
-  // Success step (può essere oggetto)
-  if (ddt.steps.success && ddt.steps.success.actions) {
-    ddt.steps.success.actions.forEach((action: any, idx: number) => {
-      const actionInstanceId = action.actionInstanceId;
-      const ddtId = ddt.id || ddt._id;
-      // Qui anche il success deve essere sempre sotto escalation (per coerenza)
-      // Ma per retrocompatibilità, se serve, puoi aggiungere qui la logica
-    });
-  }
-  return nodes;
-};
-
-const estraiLabelAzione = (actionType: string, translations: any, lang: string) => {
-  const key = `action.${actionType}.label`;
-  if (!translations) return '';
-  if (Array.isArray(translations)) {
-    const t = translations.find((t: any) => t.key === key);
-    return t && t.value && t.value[lang] ? t.value[lang] : '';
-  } else if (typeof translations === 'object') {
-    return translations[key] && translations[key][lang] ? translations[key][lang] : '';
-  }
-  return '';
 };
 
 interface ResponseEditorProps {
