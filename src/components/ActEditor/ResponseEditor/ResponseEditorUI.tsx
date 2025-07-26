@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import TreeView from './TreeView';
 import styles from './ResponseEditor.module.css';
 import ConstraintWizard from '../../ConstraintGenerator/ConstraintWizard';
+import { createConstraint, updateConstraint, removeConstraint } from './constraintFactories';
 import { AlertTriangle } from 'lucide-react';
 
 export interface ResponseEditorUIProps {
@@ -248,13 +249,13 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
             <ConstraintWizard
               variable={props.variable || 'value'}
               type={props.type || 'string'}
-              onSave={c => { setShowConstraintWizard(false); props.onAddConstraint && props.onAddConstraint(c); }}
+              onSave={c => { setShowConstraintWizard(false); props.onAddConstraint && props.onAddConstraint(createConstraint(c)); }}
               onCancel={() => setShowConstraintWizard(false)}
             />
           ) : (
             <>
               <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
-              <ActionList />
+              <ActionList actionsCatalog={[]} lang="it" />
               <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
                 <button
                   onClick={() => setShowConstraintWizard(true)}

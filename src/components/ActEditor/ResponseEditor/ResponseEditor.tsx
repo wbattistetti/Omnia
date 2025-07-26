@@ -29,6 +29,8 @@ import { useRef, useCallback } from 'react';
 import { estraiNodiDaDDT, insertNodeAt, removeNodePure, addNode } from './treeFactories';
 import { estraiParametroPrincipale, estraiValoreTradotto, getTranslationText, ordinalIt, estraiLabelAzione } from './responseEditorHelpers';
 import { v4 as uuidv4 } from 'uuid';
+import { createAction } from './actionFactories';
+import { createParameter } from './parameterFactories';
 
 const iconMap: Record<string, React.ReactNode> = {
   MessageCircle: <MessageCircle size={24} />,  HelpCircle: <HelpCircle size={24} />,  Headphones: <Headphones size={24} />,  Shield: <Shield size={24} />,  PhoneOff: <PhoneOff size={24} />,  Database: <Database size={24} />,  Mail: <Mail size={24} />,  MessageSquare: <MessageSquare size={24} />,  Function: <Function size={24} />,  Music: <Music size={24} />,  Eraser: <Eraser size={24} />,  ArrowRight: <ArrowRight size={24} />,  Tag: <Tag size={24} />,  Clock: <Clock size={24} />,  ServerCog: <ServerCog size={24} />
@@ -277,7 +279,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     if (item && item.action) {
       const action = item.action;
       const id = Math.random().toString(36).substr(2, 9);
-      const newNode: TreeNodeProps = {
+      const newNode: TreeNodeProps = createAction({
         id,
         text: typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label,
         type: 'action',
@@ -285,8 +287,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         color: item.color,
         label: typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label,
         primaryValue: item.primaryValue,
-        parameters: item.parameters,
-      };
+        parameters: item.parameters ? item.parameters.map(createParameter) : undefined,
+      });
       if (targetId === null) {
         dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
       } else {
