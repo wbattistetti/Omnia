@@ -3,7 +3,7 @@ export interface Action {
   id: string;
   type: string;
   label?: string;
-  text?: string;
+  text: string;
   [key: string]: any;
 }
 
@@ -13,7 +13,7 @@ export function createAction(data: Partial<Action>): Action {
     id: data.id || Math.random().toString(36).substr(2, 9),
     type: data.type || 'action',
     label: data.label || '',
-    text: data.text || '',
+    text: data.text ?? '',
     ...data,
   };
 }
