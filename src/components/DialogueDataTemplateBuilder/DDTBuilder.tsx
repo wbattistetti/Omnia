@@ -1,385 +1,251 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Pencil, Hourglass } from 'lucide-react';
-import * as LucideIcons from 'lucide-react';
-import { FunctionComponent } from 'react';
-import SupportReportModal from '../SupportReportModal';
+import React, { useState } from 'react';
+import { DataNode } from './orchestrator/stepGenerator';
+import { useOrchestrator } from './orchestrator/useOrchestrator';
+import { assembleFinalDDT } from './orchestrator/assembleDDT';
 
-interface DDTBuilderProps {
-  onComplete?: (newDDT: any, messages?: any) => void;
-  onCancel?: () => void;
-}
+// TODO: importa spinner, warning, icone, modale, ecc
 
-const initialPrompt = 'Che dato vuoi acquisire?(es: data di nascita, email, ecc):';
-
-// Shimmer CSS (puoi spostarlo in un file CSS o styled-component)
-const shimmerStyle = `
-@keyframes shimmer {
-  0% { box-shadow: 0 0 0 0 #a21caf44; }
-  40% { box-shadow: 0 0 0 6px #a21caf88; }
-  100% { box-shadow: 0 0 0 0 #a21caf00; }
-}
-.ddt-shimmer {
-  animation: shimmer 0.7s cubic-bezier(0.4,0,0.2,1);
-}
-`;
-
-if (typeof document !== 'undefined' && !document.getElementById('ddt-shimmer-style')) {
-  const style = document.createElement('style');
-  style.id = 'ddt-shimmer-style';
-  style.innerHTML = shimmerStyle;
-  document.head.appendChild(style);
-}
-
-async function fetchStep2IA(userDesc: string) {
-  const res = await fetch('/step2', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(userDesc) });
-  return (await res.json()).ai;
-}
-
-async function fetchStep4DDT(meaning: string, desc: string) {
-  // Chiamata a /step4 senza constraint (stringa vuota)
-  const res = await fetch('/step4', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ meaning, desc, constraints: '' })
-  });
-  return (await res.json()).ai;
-}
-
-// Helper to check if a value is a valid Lucide React component
-function isLucideComponent(comp: any): comp is FunctionComponent<any> {
-  return typeof comp === 'function' && comp.length <= 1;
-}
-
-const DDTBuilder: React.FC<DDTBuilderProps> = ({ onComplete, onCancel }) => {
-  const [input, setInput] = useState('');
-  const [prompt, setPrompt] = useState(initialPrompt);
-  const [meaning, setMeaning] = useState('');
-  const [meaningIcon, setMeaningIcon] = useState<keyof typeof LucideIcons | null>(null);
-  const [desc, setDesc] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [shimmer, setShimmer] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState(0); // 0: input, 1: review/crea
-  const [messages, setMessages] = useState<any>(null); // runtime strings per la treeview/editor
-  const [showSupportModal, setShowSupportModal] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [errorData, setErrorData] = useState<any>(null);
-  const [warning, setWarning] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Reset state when wizard is mounted (es. riapertura)
-  useEffect(() => {
-    setInput('');
-    setPrompt(initialPrompt);
-    setMeaning('');
-    setDesc('');
-    setLoading(false);
-    setShimmer(false);
-    setError(null);
-    setStep(0);
-    setMessages(null);
-    setShowSupportModal(false);
-    setIsSending(false);
-    setSent(false);
-    setErrorData(null);
-    setWarning(null);
-  }, []);
-
-  useEffect(() => {
-    if (inputRef.current) inputRef.current.focus();
-  }, [step]);
-
-  useEffect(() => {
-    setShimmer(true);
-    const t = setTimeout(() => setShimmer(false), 700);
-    return () => clearTimeout(t);
-  }, [step]);
-
-  // Animazione puntini
-  const [dots, setDots] = useState('');
-  useEffect(() => {
-    if ((loading && step === 0) || (loading && step === 1)) {
-      const interval = setInterval(() => {
-        setDots(d => d.length < 3 ? d + '.' : '');
-      }, 400);
-      return () => clearInterval(interval);
-    } else {
-      setDots('');
-    }
-  }, [loading, step]);
-
-  // Effetto cursore spinner globale
-  useEffect(() => {
-    if (loading) {
-      document.body.style.cursor = 'progress';
-    } else {
-      document.body.style.cursor = '';
-    }
-    return () => { document.body.style.cursor = ''; };
-  }, [loading]);
-
-  const handleSend = async () => {
-    setLoading(true);
-    setError(null);
-    setWarning(null);
-    try {
-      const aiResp = await fetchStep2IA(input);
-      if (!aiResp || aiResp.error === 'unrecognized_data_type') {
-        setWarning('Non ho capito cosa intendi. Che tipo di dato vuoi acquisire? Puoi riscrivere meglio?');
-        setLoading(false);
-        return;
-      }
-      setMeaning(aiResp.type);
-      setMeaningIcon(aiResp.icon || null);
-      setDesc('');
-      setInput('');
-      setStep(1);
-    } catch (err) {
-      setError('Errore di comunicazione con la IA. Riprova o contatta il supporto.');
-    }
-    setLoading(false);
-  };
-
-  const handleCreate = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Chiedi alla IA la struttura DDT completa (steps, prompt, escalation...)
-      const response = await fetchStep4DDT(meaning, desc);
-      // Validate response
-      if (!response || !response.ddt || !response.messages || typeof response.ddt !== 'object' || typeof response.messages !== 'object' || Object.keys(response.ddt).length === 0) {
-        setError('La IA non ha restituito un Data Template valido. Riprova o controlla la connessione.');
-        setLoading(false);
-        return;
-      }
-      setMessages(response.messages);
-      if (onComplete) onComplete(response.ddt, response.messages);
-      setLoading(false);
-      // RIMOSSO: alert('Sponsorizza!');
-      if (onCancel) onCancel(); // chiudi wizard
-    } catch (err: any) {
-      setError('Errore nella creazione del Data Template: ' + (err.message || err));
-      setLoading(false);
-    }
-  };
-
-  const handleSupport = () => {
-    setErrorData({
-      errorId: error || 'Errore sconosciuto',
-      step,
-      input,
-      browser: navigator.userAgent,
-      os: navigator.platform
-    });
-    if (onCancel) onCancel();
-    setShowSupportModal(true);
-  };
-  const handleSendReport = () => {
-    setIsSending(true);
-    setTimeout(() => {
-      setIsSending(false);
-      setSent(true);
-    }, 1500);
-  };
-  const handleCloseModal = () => {
-    setShowSupportModal(false);
-    setIsSending(false);
-    setSent(false);
-  };
-
-  // LABEL TEMPLATE FOR
-  const summaryLabels = (
-    meaning ? (
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, marginTop: 2 }}>
-        <span style={{ fontWeight: 400, fontSize: 15, color: '#fff', textAlign: 'left', marginRight: 0 }}>
-          For
-        </span>
-        <span style={{
-          border: '1.5px solid #a21caf',
-          background: 'rgba(162,28,175,0.06)',
-          color: '#fff',
-          borderRadius: 8,
-          padding: '2px 14px',
-          fontSize: 15,
-          fontWeight: 700,
-          letterSpacing: 0.2,
-          display: 'inline-flex',
-          alignItems: 'center',
-          marginLeft: 6
-        }}>
-          {meaningIcon &&
-            isLucideComponent(LucideIcons[meaningIcon as keyof typeof LucideIcons]) &&
-            (LucideIcons[meaningIcon as keyof typeof LucideIcons] as Function).length <= 1
-            ? React.createElement(LucideIcons[meaningIcon as keyof typeof LucideIcons] as FunctionComponent<any>, { size: 28, style: { marginRight: 10 } })
-            : null}
-          {meaning}
-          <span title="Correggi tipo di dato">
-            <Pencil size={16} style={{ marginLeft: 8, cursor: 'pointer', color: '#a21caf' }} onClick={() => setStep(0)} />
-          </span>
-        </span>
-      </div>
-    ) : null
+// Spinner semplice
+function Spinner() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '24px 0' }}>
+      <div style={{ width: 32, height: 32, border: '4px solid #2563eb', borderTop: '4px solid #fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+    </div>
   );
+}
 
-  // MESSAGGIO ANALISI IA
-  const analyzingBox = (loading && step === 0) ? (
-    <div style={{ fontSize: 13, color: '#2563eb', marginBottom: 6, marginLeft: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <Hourglass size={18} style={{ color: '#2563eb', animation: 'spin 1s linear infinite', flexShrink: 0 }} />
-      Sto analizzando{dots}
-    </div>
-  ) : null;
-
-  // WARNING BOX
-  const warningBox = warning ? (
-    <div style={{ fontSize: 13, color: '#f59e42', marginBottom: 6, marginLeft: 2, fontWeight: 500 }}>
-      {warning}
-    </div>
-  ) : null;
-
-  // MESSAGGIO CREAZIONE TEMPLATE
-  const creatingBox = (loading && step === 1) ? (
-    <div style={{ fontSize: 13, color: '#2563eb', marginBottom: 6, marginLeft: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <Hourglass size={18} style={{ color: '#2563eb', animation: 'spin 1s linear infinite', flexShrink: 0 }} />
-      Sto costruendo il template{dots}
-    </div>
-  ) : null;
-
-  const questionBox = (
-    <div className={shimmer ? 'ddt-shimmer' : ''} style={{
+const WizardCard = ({
+  userDesc, setUserDesc, handleStart, handleCancel, errorMsg
+}: {
+  userDesc: string;
+  setUserDesc: (v: string) => void;
+  handleStart: () => void;
+  handleCancel: () => void;
+  errorMsg: string | null;
+}) => (
+  <div
+    style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 2,
       background: '#18181b',
-      borderRadius: 12,
-      border: '2px solid #a21caf',
-      padding: 16,
-      marginBottom: 10,
-      transition: 'box-shadow 0.3s',
-      position: 'relative',
-      color: '#111',
-      fontWeight: 500,
-      fontSize: 16
-    }}>
-      {prompt}
+      borderRadius: 16,
+      border: '2.5px solid #a21caf',
+      margin: '0 auto 16px auto',
+      maxWidth: 420,
+      boxShadow: '0 2px 16px #0008',
+    }}
+  >
+    <div style={{ background: '#a21caf', padding: '18px 0 12px 0', textAlign: 'center' }}>
+      <span style={{ color: '#fff', fontWeight: 700, fontSize: 22, letterSpacing: 0.5 }}>Create data template</span>
     </div>
-  );
-
-  const inputBox = step === 0 && (
-    <input
-      ref={inputRef}
-      type="text"
-      value={input}
-      onChange={e => setInput(e.target.value)}
-      onKeyDown={e => { if (e.key === 'Enter' && input.trim() && !loading) handleSend(); }}
-      placeholder={'Es: data di nascita, email, codice fiscale'}
-      style={{
-        width: '100%',
-        marginTop: 2,
-        padding: '8px 10px',
-        borderRadius: 8,
-        border: '1px solid #a21caf',
-        background: '#27272a',
-        color: '#fff',
-        fontSize: 15,
-        outline: 'none',
-        marginBottom: 2
-      }}
-      disabled={loading}
-    />
-  );
-
-  // PULSANTI ALLINEATI
-  const buttons = (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: 18 }}>
-      {onCancel && (
-        <button onClick={onCancel} style={{ color: '#a21caf', border: 'none', background: 'none', cursor: loading ? 'progress' : 'pointer', fontWeight: 500, fontSize: 15, padding: '4px 0' }} disabled={loading}>
+    <div style={{ padding: '28px 32px 24px 32px', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+      <div style={{ color: '#fff', fontWeight: 700, fontSize: 20, marginBottom: 2 }}>Che dato vuoi acquisire?</div>
+      <div style={{ color: '#d1d5db', fontSize: 15, marginBottom: 18 }}>(es: data di nascita, email, ecc:)</div>
+      {errorMsg && (
+        <div style={{ color: '#f59e42', fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
+          {errorMsg}
+        </div>
+      )}
+      <input
+        type="text"
+        value={userDesc}
+        onChange={e => setUserDesc(e.target.value)}
+        placeholder="data"
+        style={{
+          fontSize: 17,
+          padding: '10px 16px',
+          width: '100%',
+          borderRadius: 8,
+          border: '2px solid #a21caf',
+          outline: 'none',
+          marginBottom: 22,
+          background: '#23232b',
+          color: '#fff',
+          boxSizing: 'border-box',
+        }}
+        onKeyDown={e => { if (e.key === 'Enter' && userDesc.trim()) handleStart(); }}
+      />
+      <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end', marginTop: 2 }}>
+        <button
+          onClick={handleCancel}
+          style={{
+            background: 'transparent',
+            color: '#a21caf',
+            border: 'none',
+            borderRadius: 8,
+            padding: '8px 24px',
+            fontWeight: 600,
+            fontSize: 16,
+            cursor: 'pointer',
+          }}
+        >
           Annulla
         </button>
-      )}
-      {step === 0 ? (
-        <button onClick={handleSend} style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 28px', fontWeight: 500, cursor: loading ? 'progress' : 'pointer', fontSize: 15, marginLeft: 'auto' }} disabled={loading || !input.trim()}>
+        <button
+          onClick={handleStart}
+          style={{
+            background: '#a21caf',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            padding: '8px 24px',
+            fontWeight: 600,
+            fontSize: 16,
+            cursor: userDesc.trim() ? 'pointer' : 'not-allowed',
+            opacity: userDesc.trim() ? 1 : 0.6,
+          }}
+          disabled={!userDesc.trim()}
+        >
           Invia
         </button>
-      ) : (
-        <button style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 28px', fontWeight: 500, cursor: loading ? 'progress' : 'pointer', fontSize: 15, marginLeft: 'auto' }} disabled={loading} onClick={handleCreate}>
-          Crea
-        </button>
-      )}
+      </div>
     </div>
-  );
+  </div>
+);
 
-  return (
-    <div
-      style={{
-        maxWidth: 400,
-        margin: '0 auto',
-        border: '2px solid #a21caf',
-        borderRadius: 16,
-        boxShadow: '0 2px 16px 0 #0002',
-        background: '#18181b',
-        padding: 0,
-        overflow: 'hidden'
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          background: '#a21caf',
-          color: '#fff',
-          padding: '10px 0 8px 0',
-          textAlign: 'center',
-          fontWeight: 700,
-          fontSize: 17,
-          borderTopLeftRadius: 14,
-          borderTopRightRadius: 14,
-          letterSpacing: 0.2,
-        }}
-      >
-        Create data template
-      </div>
-      <div style={{ padding: 22, paddingTop: 18 }}>
-        {/* Prompt */}
-        {step === 0 && (
-          <div style={{ color: '#fff', fontWeight: 600, fontSize: 18, marginBottom: 8, textAlign: 'left', lineHeight: 1.3 }}>
-            Che dato vuoi acquisire?<br />
-            <span style={{ fontWeight: 400, fontSize: 15, color: '#e0e0e0' }}>
-              (es: data di nascita, email, ecc):
-            </span>
-          </div>
-        )}
-        {summaryLabels}
-        {warningBox}
-        {analyzingBox}
-        {creatingBox}
-        {error && (
-          <div style={{ background: '#450a0a', borderRadius: 6, padding: '10px 10px', marginBottom: 8, fontWeight: 500, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-            <div style={{ color: '#f87171', fontWeight: 700, fontSize: 17, marginBottom: 4 }}>AI is not responding!</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={() => { step === 0 ? handleSend() : handleCreate(); }}
-                style={{ background: '#fff', color: '#a21caf', border: '1px solid #a21caf', borderRadius: 4, padding: '2px 10px', fontWeight: 500, fontSize: 12, cursor: loading ? 'progress' : 'pointer' }}
-              >
-                Retry
-              </button>
-              <button
-                onClick={handleSupport}
-                style={{ background: '#a21caf', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 10px', fontWeight: 500, fontSize: 12, cursor: loading ? 'progress' : 'pointer' }}
-              >
-                Contact support
-              </button>
-            </div>
-          </div>
-        )}
-        {step === 0 && inputBox}
-        {buttons}
-      </div>
-      <SupportReportModal
-        isOpen={showSupportModal}
-        onClose={handleCloseModal}
-        errorData={errorData || { errorId: error || 'Errore sconosciuto' }}
-        onSend={handleSendReport}
-        isLoading={isSending}
-        sent={sent}
-      />
+const DDTList = () => (
+  <div
+    style={{
+      overflowY: 'auto',
+      maxHeight: 220,
+      padding: 8,
+      marginTop: 0,
+    }}
+  >
+    {/* Qui va la lista DDT vera e propria */}
+    <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 12, color: '#fff' }}>Lista DDT (scrolla qui sotto)</div>
+    <ul style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 8 }}>
+      {Array.from({ length: 20 }).map((_, i) => (
+        <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #333', color: '#fff' }}>DDT {i + 1}</li>
+      ))}
+    </ul>
+  </div>
+);
+
+const DDTBuilder: React.FC = () => {
+  // Stato input box iniziale
+  const [userDesc, setUserDesc] = useState('');
+  const [started, setStarted] = useState(false);
+  const [dataNode, setDataNode] = useState<DataNode | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Orchestratore (solo dopo invio)
+  const orchestrator = dataNode ? useOrchestrator(dataNode) : null;
+
+  // Stato JSON finale
+  const [finalDDT, setFinalDDT] = useState<any>(null);
+
+  // Handler invio input iniziale
+  const handleStart = () => {
+    if (!userDesc.trim()) return;
+    // Simula errore demo (rimuovi se non serve)
+    // setErrorMsg("Non ho capito cosa intendi. Che tipo di dato vuoi acquisire? Puoi riscrivere meglio?"); return;
+    setErrorMsg(null);
+    setDataNode({ name: userDesc });
+    setStarted(true);
+  };
+  // Handler annulla
+  const handleCancel = () => {
+    setUserDesc('');
+    setStarted(false);
+    setDataNode(null);
+    setFinalDDT(null);
+    setErrorMsg(null);
+  };
+
+  // Handler fine orchestrazione
+  React.useEffect(() => {
+    if (
+      orchestrator &&
+      orchestrator.state.currentStepIndex >= orchestrator.state.steps.length &&
+      !finalDDT
+    ) {
+      setFinalDDT(assembleFinalDDT(orchestrator.state.stepResults));
+    }
+  }, [orchestrator, finalDDT]);
+
+  // Barra step e azioni errore
+  const stepBar = orchestrator ? (
+    <div style={{ margin: '16px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+      {orchestrator.state.steps.map((step, idx) => (
+        <div key={step.key} style={{
+          padding: '4px 12px',
+          borderRadius: 4,
+          background: idx === orchestrator.state.currentStepIndex ? '#2563eb' : '#e0e7ef',
+          color: idx === orchestrator.state.currentStepIndex ? '#fff' : '#222',
+          fontWeight: idx === orchestrator.state.currentStepIndex ? 700 : 400,
+          border: idx === orchestrator.state.currentStepIndex ? '2px solid #2563eb' : '1px solid #cbd5e1',
+          fontSize: 14
+        }}>{step.label}</div>
+      ))}
+      {orchestrator.state.stepLoading && <Spinner />}
     </div>
+  ) : null;
+
+  // Warning di errore
+  const errorActions = orchestrator && orchestrator.state.stepError ? (
+    <div style={{ background: '#fee2e2', color: '#b91c1c', padding: 12, borderRadius: 4, marginBottom: 12, border: '1px solid #fca5a5' }}>
+      <b>Errore durante la generazione dello step!</b>
+      <div style={{ marginTop: 4 }}>{orchestrator.state.lastError?.message || 'Errore sconosciuto.'}</div>
+      <button
+        style={{ marginTop: 8, padding: '6px 16px', borderRadius: 4, background: '#b91c1c', color: '#fff', border: 'none', fontWeight: 600 }}
+        onClick={orchestrator.retry}
+      >
+        Riprova step
+      </button>
+    </div>
+  ) : null;
+
+  // Modale debug
+  const debugModal = orchestrator && orchestrator.debugModal ? (
+    <div className="modal-debug" style={{ position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)', background: '#fff', border: '1px solid #888', borderRadius: 8, padding: 24, zIndex: 1000 }}>
+      <h3 style={{ marginBottom: 8 }}>Result from {orchestrator.debugModal.step.label}</h3>
+      <pre style={{ maxHeight: 300, overflow: 'auto', background: '#f3f3f3', padding: 12, borderRadius: 4 }}>{JSON.stringify(orchestrator.debugModal.result.payload, null, 2)}</pre>
+      <button onClick={orchestrator.closeDebugModalAndContinue} style={{ marginTop: 12 }}>OK</button>
+    </div>
+  ) : null;
+
+  // Funzione di export legacy per scaricare un file JSON
+  function downloadJSON(data: any, filename = 'ddt.json') {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Preview/export JSON finale
+  const previewBox = finalDDT ? (
+    <div style={{ marginTop: 24 }}>
+      <h3>DDT JSON Preview</h3>
+      <pre style={{ background: '#f3f3f3', padding: 12, borderRadius: 4, maxHeight: 400, overflow: 'auto' }}>{JSON.stringify(finalDDT, null, 2)}</pre>
+      <button
+        style={{ marginTop: 12, padding: '8px 16px', borderRadius: 4, background: '#059669', color: '#fff', border: 'none', fontWeight: 600 }}
+        onClick={() => downloadJSON(finalDDT)}
+      >
+        Export JSON
+      </button>
+    </div>
+  ) : null;
+
+  // In Accordion:
+  return (
+    <>
+      <WizardCard
+        userDesc={userDesc}
+        setUserDesc={setUserDesc}
+        handleStart={handleStart}
+        handleCancel={handleCancel}
+        errorMsg={errorMsg}
+      />
+      <DDTList />
+    </>
   );
 };
 
