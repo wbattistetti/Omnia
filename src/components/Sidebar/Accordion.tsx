@@ -47,6 +47,10 @@ const Accordion = (props: AccordionProps) => {
     }
   }, [props.isOpen]);
 
+  // Gestione wizard sticky + lista scrollabile
+  const childrenArray = React.Children.toArray(props.children);
+  const isStickyLayout = childrenArray.length === 2;
+
   return (
     <div className="mb-4" style={props.isOpen && props.bgColor ? { background: props.bgColor.light, borderRadius: 12, padding: 2 } : undefined}>
       <div className="flex items-center justify-between p-3 rounded-lg transition-colors" style={props.bgColor ? { background: props.bgColor.header, color: '#fff', borderRadius: 12, width: '100%' } : undefined}>
@@ -65,16 +69,24 @@ const Accordion = (props: AccordionProps) => {
           <ChevronRight className="w-5 h-5 text-slate-400 ml-2" onClick={props.onToggle} style={{ cursor: 'pointer' }} />
         )}
       </div>
-      
-      <div 
+      <div
         ref={contentRef}
-        className="mt-2 pl-2 transition-all duration-200 overflow-y-auto"
+        className="mt-2 pl-2 transition-all duration-200"
         style={{
-          maxHeight: props.isOpen ? '300px' : '0px'
+          position: 'relative',
+          paddingRight: 4,
+          display: props.isOpen ? undefined : 'none',
         }}
       >
         <div className="pb-2">
-          {props.children}
+          {isStickyLayout ? (
+            <>
+              <div>{childrenArray[0]}</div>
+              <div>{childrenArray[1]}</div>
+            </>
+          ) : (
+            props.children
+          )}
         </div>
       </div>
     </div>

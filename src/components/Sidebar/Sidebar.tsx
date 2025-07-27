@@ -99,6 +99,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   // Show/hide DDTBuilder inline
   const [showDDTBuilder, setShowDDTBuilder] = useState(false);
+  // Stato per mostrare il wizard dopo apertura accordion
+  const [pendingShowWizard, setPendingShowWizard] = useState(false);
   // Ref per ogni card DDT per scroll automatico
   const cardRefs = useRef<{ [id: string]: HTMLDivElement | null }>({});
   useEffect(() => {
@@ -203,6 +205,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
   // Handler per chiudere il ResponseEditor non serve più qui
 
+  // useEffect per mostrare il wizard dopo apertura accordion
+  useEffect(() => {
+    if (pendingShowWizard && openAccordion === 'dataDialogueTemplates') {
+      setShowDDTBuilder(true);
+      setPendingShowWizard(false);
+    }
+  }, [pendingShowWizard, openAccordion]);
+
   // Collapsed sidebar UI (icons only)
   if (isCollapsed) {
     return (
@@ -306,9 +316,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 e.stopPropagation();
                 if (openAccordion !== 'dataDialogueTemplates') {
                   setOpenAccordion('dataDialogueTemplates');
+                  setPendingShowWizard(true);
+                } else if (!showDDTBuilder) {
                   setShowDDTBuilder(true);
-                } else {
-                  setShowDDTBuilder(v => !v);
                 }
               }}
             >

@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DataNode } from './orchestrator/stepGenerator';
 import { useOrchestrator } from './orchestrator/useOrchestrator';
 import { assembleFinalDDT } from './orchestrator/assembleDDT';
+import { useProjectData } from '../../context/ProjectDataContext';
+import { getAllDialogueTemplates } from '../../services/ProjectDataService';
+import { Settings, Trash2, Calendar } from 'lucide-react';
+import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 
 // TODO: importa spinner, warning, icone, modale, ecc
 
@@ -32,8 +36,8 @@ const WizardCard = ({
       background: '#18181b',
       borderRadius: 16,
       border: '2.5px solid #a21caf',
-      margin: '0 auto 16px auto',
-      maxWidth: 420,
+      margin: '0 12px 16px 12px',
+      width: 'calc(100% - 24px)',
       boxShadow: '0 2px 16px #0008',
     }}
   >
@@ -105,31 +109,86 @@ const WizardCard = ({
   </div>
 );
 
-const DDTList = () => (
-  <div
-    style={{
-      overflowY: 'auto',
-      maxHeight: 220,
-      padding: 8,
-      marginTop: 0,
-    }}
-  >
-    {/* Qui va la lista DDT vera e propria */}
-    <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 12, color: '#fff' }}>Lista DDT (scrolla qui sotto)</div>
-    <ul style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 8 }}>
-      {Array.from({ length: 20 }).map((_, i) => (
-        <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #333', color: '#fff' }}>DDT {i + 1}</li>
-      ))}
-    </ul>
-  </div>
-);
+const DDTList = ({ ddtItems, loading, error }: { ddtItems: { id: string; name: string }[], loading: boolean, error: string | null }) => {
+  const violet = SIDEBAR_TYPE_COLORS.agentActs.main;
+  return (
+    <div
+      style={{
+        maxHeight: 300,
+        overflowY: 'auto',
+        padding: 0,
+        marginTop: 0,
+        background: 'transparent',
+        borderRadius: 12,
+      }}
+    >
+      {loading ? (
+        <div style={{ color: '#888', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>Caricamento...</div>
+      ) : error ? (
+        <div style={{ color: '#f87171', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>{error}</div>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          {ddtItems.length === 0 ? (
+            <li style={{ color: '#888', fontStyle: 'italic', padding: 16 }}>Nessun DDT presente</li>
+          ) : (
+            ddtItems.map(item => (
+              <li
+                key={item.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#18181b',
+                  borderRadius: 10,
+                  margin: '8px 8px',
+                  padding: '10px 16px',
+                  color: violet,
+                  fontWeight: 600,
+                  fontSize: 16,
+                  boxShadow: '0 2px 8px #0002',
+                  gap: 12,
+                }}
+              >
+                <Calendar size={20} style={{ marginRight: 8, flexShrink: 0, color: violet }} />
+                <span style={{ flex: 1, color: violet }}>{item.name}</span>
+                <button
+                  style={{ background: 'none', border: 'none', color: violet, marginRight: 8, cursor: 'pointer', padding: 4, borderRadius: 4, transition: 'background 0.2s' }}
+                  title="Impostazioni"
+                  onClick={() => alert(`Azione impostazioni per ${item.name}`)}
+                >
+                  <Settings size={18} />
+                </button>
+                <button
+                  style={{ background: 'none', border: 'none', color: violet, cursor: 'pointer', padding: 4, borderRadius: 4, transition: 'background 0.2s' }}
+                  title="Elimina"
+                  onClick={() => alert(`Azione elimina per ${item.name}`)}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
+};
 
-const DDTBuilder: React.FC = () => {
+interface DDTBuilderProps {
+  onCancel?: () => void;
+  onComplete?: (newDDT: any, messages?: any) => void;
+}
+
+const DDTBuilder: React.FC<DDTBuilderProps> = ({ onCancel, onComplete }) => {
   // Stato input box iniziale
   const [userDesc, setUserDesc] = useState('');
   const [started, setStarted] = useState(false);
   const [dataNode, setDataNode] = useState<DataNode | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Stato DDT list
+  const [ddtList, setDdtList] = useState<{ id: string, name: string }[]>([]);
+  const [loadingDDT, setLoadingDDT] = useState(true);
+  const [errorDDT, setErrorDDT] = useState<string | null>(null);
 
   // Orchestratore (solo dopo invio)
   const orchestrator = dataNode ? useOrchestrator(dataNode) : null;
@@ -151,8 +210,8 @@ const DDTBuilder: React.FC = () => {
     setUserDesc('');
     setStarted(false);
     setDataNode(null);
-    setFinalDDT(null);
     setErrorMsg(null);
+    if (onCancel) onCancel();
   };
 
   // Handler fine orchestrazione
@@ -165,6 +224,21 @@ const DDTBuilder: React.FC = () => {
       setFinalDDT(assembleFinalDDT(orchestrator.state.stepResults));
     }
   }, [orchestrator, finalDDT]);
+
+  // Effetto per caricare la lista DDT
+  useEffect(() => {
+    setLoadingDDT(true);
+    setErrorDDT(null);
+    getAllDialogueTemplates()
+      .then(list => {
+        setDdtList(list.map((ddt: any) => ({
+          id: ddt.id,
+          name: ddt.name || ddt.label || 'Unnamed'
+        })));
+      })
+      .catch(() => setErrorDDT('Errore nel caricamento DDT'))
+      .finally(() => setLoadingDDT(false));
+  }, []);
 
   // Barra step e azioni errore
   const stepBar = orchestrator ? (
@@ -234,9 +308,15 @@ const DDTBuilder: React.FC = () => {
     </div>
   ) : null;
 
+  const { data: projectData } = useProjectData();
+  // Prendi la lista DDT reale (esempio: tasks, oppure cambia con la categoria corretta)
+  // const ddtItems = (projectData?.tasks?.flatMap(cat => cat.items) ?? []).map(item => ({ id: item.id, name: item.name }));
+
+  // Rimuovi openWizardButton e la sua logica
+
   // In Accordion:
   return (
-    <>
+    <div>
       <WizardCard
         userDesc={userDesc}
         setUserDesc={setUserDesc}
@@ -244,8 +324,8 @@ const DDTBuilder: React.FC = () => {
         handleCancel={handleCancel}
         errorMsg={errorMsg}
       />
-      <DDTList />
-    </>
+      <DDTList ddtItems={ddtList} loading={loadingDDT} error={errorDDT} />
+    </div>
   );
 };
 
