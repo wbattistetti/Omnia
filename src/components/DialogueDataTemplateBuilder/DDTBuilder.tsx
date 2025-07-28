@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DataNode } from './orchestrator/stepGenerator';
 import { useOrchestrator } from './orchestrator/useOrchestrator';
 import { assembleFinalDDT } from './orchestrator/assembleDDT';
@@ -9,24 +9,38 @@ import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 
 // TODO: importa spinner, warning, icone, modale, ecc
 
-// Spinner semplice
-function Spinner() {
+// Spinner clessidra panciuta blu
+function HourglassSpinner() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '24px 0' }}>
-      <div style={{ width: 32, height: 32, border: '4px solid #2563eb', borderTop: '4px solid #fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <svg width="36" height="36" viewBox="0 0 36 36" style={{ animation: 'spin 1.2s linear infinite' }}>
+        <g>
+          <ellipse cx="18" cy="7" rx="7" ry="4" fill="#2563eb" />
+          <ellipse cx="18" cy="29" rx="7" ry="4" fill="#2563eb" />
+          <path d="M11 11 Q18 18 11 25" stroke="#2563eb" strokeWidth="2.8" fill="none" />
+          <path d="M25 11 Q18 18 25 25" stroke="#2563eb" strokeWidth="2.8" fill="none" />
+          <ellipse cx="18" cy="18" rx="2.5" ry="1.2" fill="#2563eb" />
+          <rect x="17.2" y="12" width="1.6" height="12" rx="0.8" fill="#2563eb" />
+        </g>
+      </svg>
       <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
 const WizardCard = ({
-  userDesc, setUserDesc, handleStart, handleCancel, errorMsg
+  userDesc, setUserDesc, handleStart, handleCancel, errorMsg, stepMessage, stepLoading, stepError, onRetry, stepDone
 }: {
   userDesc: string;
   setUserDesc: (v: string) => void;
   handleStart: () => void;
   handleCancel: () => void;
   errorMsg: string | null;
+  stepMessage?: string | null;
+  stepLoading?: boolean;
+  stepError?: string | null;
+  onRetry?: () => void;
+  stepDone?: boolean;
 }) => (
   <div
     style={{
@@ -71,6 +85,38 @@ const WizardCard = ({
         }}
         onKeyDown={e => { if (e.key === 'Enter' && userDesc.trim()) handleStart(); }}
       />
+      {/* Label step SEMPRE visibile durante la pipeline, sparisce solo a ciclo completato */}
+      {!stepDone && (
+        <div style={{
+          color: stepError ? '#dc2626' : '#2563eb',
+          background: stepError ? 'rgba(220,38,38,0.12)' : 'rgba(37,99,235,0.12)', // trasparente reale
+          borderRadius: 6,
+          padding: '10px 18px',
+          margin: '0 0 18px 0',
+          fontWeight: 600,
+          fontSize: 17,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          height: 64, // altezza fissa sufficiente per clessidra e due righe
+          minHeight: 64,
+          lineHeight: 1.3,
+          transition: 'background 0.2s, color 0.2s'
+        }}>
+          <div style={{ width: 40, minWidth: 40, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            {stepLoading && !stepError && <HourglassSpinner />}
+          </div>
+          <span style={{ flex: 1, wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
+            {stepMessage}
+            {!stepError && stepLoading && <AnimatedDots />}
+            {stepError && (
+              <>
+                <span style={{ marginLeft: 8 }}>{stepError}</span>
+              </>
+            )}
+          </span>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'flex-end', marginTop: 2 }}>
         <button
           onClick={handleCancel}
@@ -178,50 +224,81 @@ interface DDTBuilderProps {
   onComplete?: (newDDT: any, messages?: any) => void;
 }
 
-const DDTBuilder: React.FC<DDTBuilderProps> = ({ onCancel, onComplete }) => {
-  // Stato input box iniziale
-  const [userDesc, setUserDesc] = useState('');
-  const [started, setStarted] = useState(false);
-  const [dataNode, setDataNode] = useState<DataNode | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+function OrchestratorRunner({ dataNode, onComplete, onCancel, onStepState }: { dataNode: DataNode; onComplete: (newDDT: any, messages?: any) => void; onCancel: () => void; onStepState: (msg: string | null, loading: boolean, error: string | null, retryFn?: () => void) => void }) {
+  console.log('[DEBUG] OrchestratorRunner MOUNT', { dataNode });
+  useEffect(() => {
+    return () => {
+      console.log('[OrchestratorRunner] UNMOUNT', { dataNode });
+    };
+  }, []);
+  const orchestrator = useOrchestrator(dataNode);
 
   // Stato DDT list
   const [ddtList, setDdtList] = useState<{ id: string, name: string }[]>([]);
   const [loadingDDT, setLoadingDDT] = useState(true);
   const [errorDDT, setErrorDDT] = useState<string | null>(null);
 
-  // Orchestratore (solo dopo invio)
-  const orchestrator = dataNode ? useOrchestrator(dataNode) : null;
-
   // Stato JSON finale
   const [finalDDT, setFinalDDT] = useState<any>(null);
 
-  // Handler invio input iniziale
-  const handleStart = () => {
-    if (!userDesc.trim()) return;
-    // Simula errore demo (rimuovi se non serve)
-    // setErrorMsg("Non ho capito cosa intendi. Che tipo di dato vuoi acquisire? Puoi riscrivere meglio?"); return;
-    setErrorMsg(null);
-    setDataNode({ name: userDesc });
-    setStarted(true);
-  };
-  // Handler annulla
-  const handleCancel = () => {
-    setUserDesc('');
-    setStarted(false);
-    setDataNode(null);
-    setErrorMsg(null);
-    if (onCancel) onCancel();
-  };
+  // Avvia il primo step solo al mount
+  useEffect(() => {
+    console.log('[DEBUG] mount: runNextStep');
+    orchestrator.runNextStep();
+  }, []);
+
+  // Quando debugModal è presente (step completato), chiudi la modale e avanza l'indice
+  useEffect(() => {
+    console.log('[DEBUG] debugModal:', orchestrator.debugModal);
+    if (orchestrator.debugModal) {
+      setTimeout(() => {
+        console.log('[DEBUG] closeDebugModalAndContinue');
+        orchestrator.closeDebugModalAndContinue();
+      }, 400);
+    }
+  }, [orchestrator.debugModal]);
+
+  // Quando currentStepIndex cambia, avvia il prossimo step se non siamo alla fine e non c'è errore/loading
+  useEffect(() => {
+    console.log('[DEBUG] currentStepIndex:', orchestrator.state.currentStepIndex, 'stepLoading:', orchestrator.state.stepLoading, 'stepError:', orchestrator.state.stepError);
+    if (
+      orchestrator.state.currentStepIndex < orchestrator.state.steps.length &&
+      !orchestrator.state.stepLoading &&
+      !orchestrator.state.stepError
+    ) {
+      console.log('[DEBUG] runNextStep (currentStepIndex effect)');
+      orchestrator.runNextStep();
+    }
+  }, [orchestrator.state.currentStepIndex]);
+
+  // Aggiorna la UI step corrente su ogni cambiamento di stato
+  useEffect(() => {
+    const idx = orchestrator.state.currentStepIndex;
+    const step = orchestrator.state.steps[idx];
+    console.log('[DEBUG] UI step:', idx, step?.label, orchestrator.state.stepLoading, orchestrator.state.stepError);
+    if (step && onStepState) {
+      onStepState(
+        step.label,
+        orchestrator.state.stepLoading,
+        orchestrator.state.stepError ? "C'è un errore di comunicazione" : null,
+        orchestrator.retry
+      );
+    }
+  }, [orchestrator.state.currentStepIndex, orchestrator.state.stepLoading, orchestrator.state.stepError]);
 
   // Handler fine orchestrazione
   React.useEffect(() => {
+    console.log('[DEBUG] orchestrator state:', orchestrator?.state);
     if (
       orchestrator &&
       orchestrator.state.currentStepIndex >= orchestrator.state.steps.length &&
       !finalDDT
     ) {
-      setFinalDDT(assembleFinalDDT(orchestrator.state.stepResults));
+      console.log('[DEBUG] Chiamo assembleFinalDDT', orchestrator.state.stepResults);
+      const final = assembleFinalDDT(orchestrator.state.stepResults);
+      console.log('[DEBUG] Risultato assembleFinalDDT', final);
+      setFinalDDT(final);
+      if (onComplete) onComplete(final.structure, final.translations);
     }
   }, [orchestrator, finalDDT]);
 
@@ -239,47 +316,6 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onCancel, onComplete }) => {
       .catch(() => setErrorDDT('Errore nel caricamento DDT'))
       .finally(() => setLoadingDDT(false));
   }, []);
-
-  // Barra step e azioni errore
-  const stepBar = orchestrator ? (
-    <div style={{ margin: '16px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-      {orchestrator.state.steps.map((step, idx) => (
-        <div key={step.key} style={{
-          padding: '4px 12px',
-          borderRadius: 4,
-          background: idx === orchestrator.state.currentStepIndex ? '#2563eb' : '#e0e7ef',
-          color: idx === orchestrator.state.currentStepIndex ? '#fff' : '#222',
-          fontWeight: idx === orchestrator.state.currentStepIndex ? 700 : 400,
-          border: idx === orchestrator.state.currentStepIndex ? '2px solid #2563eb' : '1px solid #cbd5e1',
-          fontSize: 14
-        }}>{step.label}</div>
-      ))}
-      {orchestrator.state.stepLoading && <Spinner />}
-    </div>
-  ) : null;
-
-  // Warning di errore
-  const errorActions = orchestrator && orchestrator.state.stepError ? (
-    <div style={{ background: '#fee2e2', color: '#b91c1c', padding: 12, borderRadius: 4, marginBottom: 12, border: '1px solid #fca5a5' }}>
-      <b>Errore durante la generazione dello step!</b>
-      <div style={{ marginTop: 4 }}>{orchestrator.state.lastError?.message || 'Errore sconosciuto.'}</div>
-      <button
-        style={{ marginTop: 8, padding: '6px 16px', borderRadius: 4, background: '#b91c1c', color: '#fff', border: 'none', fontWeight: 600 }}
-        onClick={orchestrator.retry}
-      >
-        Riprova step
-      </button>
-    </div>
-  ) : null;
-
-  // Modale debug
-  const debugModal = orchestrator && orchestrator.debugModal ? (
-    <div className="modal-debug" style={{ position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)', background: '#fff', border: '1px solid #888', borderRadius: 8, padding: 24, zIndex: 1000 }}>
-      <h3 style={{ marginBottom: 8 }}>Result from {orchestrator.debugModal.step.label}</h3>
-      <pre style={{ maxHeight: 300, overflow: 'auto', background: '#f3f3f3', padding: 12, borderRadius: 4 }}>{JSON.stringify(orchestrator.debugModal.result.payload, null, 2)}</pre>
-      <button onClick={orchestrator.closeDebugModalAndContinue} style={{ marginTop: 12 }}>OK</button>
-    </div>
-  ) : null;
 
   // Funzione di export legacy per scaricare un file JSON
   function downloadJSON(data: any, filename = 'ddt.json') {
@@ -317,16 +353,109 @@ const DDTBuilder: React.FC<DDTBuilderProps> = ({ onCancel, onComplete }) => {
   // In Accordion:
   return (
     <div>
+      {/* Modale risultato step */}
+      {/* Modale preview step-by-step */}
+      {/* StepBar, errorActions, previewBox solo se dataNode */}
+      {dataNode && (
+        <>
+      {/* errorActions */}
+      {/* debugModal */}
+      {previewBox}
+        </>
+      )}
+    </div>
+  );
+}
+
+const DDTBuilder: React.FC<DDTBuilderProps> = ({ onCancel, onComplete }) => {
+  // Stato input box iniziale
+  const [userDesc, setUserDesc] = useState('');
+  const [started, setStarted] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Stato per step wizard
+  const [stepMessage, setStepMessage] = useState<string | null>(null);
+  const [stepLoading, setStepLoading] = useState(false);
+  const [stepError, setStepError] = useState<string | null>(null);
+  const [onRetry, setOnRetry] = useState<(() => void) | undefined>(undefined);
+  const [stepDone, setStepDone] = useState(false); // Aggiunto per controllare quando il ciclo è completato
+
+  // Usa useMemo per evitare nuovi oggetti ad ogni render
+  const dataNode = useMemo(() => {
+    if (!userDesc.trim()) return null;
+    return { name: userDesc.trim() };
+  }, [userDesc]);
+
+  // Handler invio input iniziale
+  const handleStart = () => {
+    if (!userDesc.trim()) return;
+    setErrorMsg(null);
+    setStarted(true);
+  };
+  // Handler annulla
+  const handleCancel = () => {
+    setUserDesc('');
+    setStarted(false);
+    setErrorMsg(null);
+    setStepMessage(null);
+    setStepLoading(false);
+    setStepError(null);
+    setOnRetry(undefined);
+    setStepDone(false); // Resetta lo stato del ciclo
+    if (onCancel) onCancel();
+  };
+
+  // Handler per ricevere stato step dal runner
+  const handleStepState = (msg: string | null, loading: boolean, error: string | null, retryFn?: () => void) => {
+    setStepMessage(msg);
+    setStepLoading(loading);
+    setStepError(error);
+    setOnRetry(() => retryFn);
+  };
+
+  // Effetto per controllare quando il ciclo è completato
+  useEffect(() => {
+    if (stepLoading === false && stepError === null && stepMessage === null) {
+      setStepDone(true);
+    } else {
+      setStepDone(false);
+    }
+  }, [stepLoading, stepError, stepMessage]);
+
+  return (
+    <div>
       <WizardCard
         userDesc={userDesc}
         setUserDesc={setUserDesc}
         handleStart={handleStart}
         handleCancel={handleCancel}
         errorMsg={errorMsg}
+        stepMessage={stepMessage}
+        stepLoading={stepLoading}
+        stepError={stepError}
+        onRetry={onRetry}
+        stepDone={stepDone}
       />
-      <DDTList ddtItems={ddtList} loading={loadingDDT} error={errorDDT} />
+      {/* Monta l'orchestratore solo quando l'utente ha premuto Invia */}
+      {started && dataNode && dataNode.name && (
+        <OrchestratorRunner
+          dataNode={dataNode as DataNode}
+          onComplete={onComplete || (() => {})}
+          onCancel={onCancel || (() => {})}
+          onStepState={handleStepState}
+        />
+      )}
     </div>
   );
 };
 
 export default DDTBuilder; 
+
+// AnimatedDots component
+function AnimatedDots() {
+  return <span style={{ display: 'inline-block', minWidth: 24 }}><span className="dot1">.</span><span className="dot2">.</span><span className="dot3">.</span><style>{`
+    .dot1, .dot2, .dot3 { opacity: 0.3; animation: blink 1.4s infinite both; }
+    .dot2 { animation-delay: .2s; }
+    .dot3 { animation-delay: .4s; }
+    @keyframes blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+  `}</style></span>;
+} 

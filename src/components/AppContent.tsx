@@ -347,6 +347,14 @@ export const AppContent: React.FC<AppContentProps> = ({
             />
           </SidebarThemeProvider>
           <div className="flex-1 flex flex-col">
+            <Toolbar
+              onNewProject={() => alert('Nuovo progetto')}
+              onOpenProject={() => alert('Apri progetto')}
+              onSave={() => alert('Salva progetto')}
+              onRun={() => alert('Esegui')}
+              onSettings={() => alert('Impostazioni')}
+              projectName={currentProject?.name}
+            />
             <FlowEditor
               nodes={nodes}
               setNodes={setNodes}

@@ -38,6 +38,9 @@ export interface OrchestratorStep {
 export type StepType =
   | 'detectType'
   | 'createFor'
+  | 'suggestStructureAndConstraints'
+  | 'suggestConstraints'
+  | 'startPrompt'
   | 'startPrompts'
   | 'noMatchPrompts'
   | 'noInputPrompts'

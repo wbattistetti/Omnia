@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Step, StepResult, OrchestratorState, Translations } from './types';
 import { generateSteps, DataNode } from './stepGenerator';
 
 export function useOrchestrator(data: DataNode) {
-  const [steps] = useState<Step[]>(generateSteps(data));
+  // Correzione: usa useMemo per generare gli step solo quando data cambia
+  const steps = useMemo(() => generateSteps(data), [data]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepError, setStepError] = useState(false);
   const [stepLoading, setStepLoading] = useState(false);
@@ -59,9 +60,9 @@ export function useOrchestrator(data: DataNode) {
   return {
     state,
     runNextStep,
+    closeDebugModalAndContinue,
     retry,
     debugModal,
-    closeDebugModalAndContinue,
     translations,
   };
 } 
