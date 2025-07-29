@@ -77,6 +77,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [selectedDDTLanguage, setSelectedDDTLanguage] = useState<string>('it');
   const [openedDDTId, setOpenedDDTId] = useState<string | null>(null);
 
+  // Stato globale per DDT
+  const [dialogueTemplates, setDialogueTemplates] = useState<any[]>([]);
+
   const handleOpenDDTEditor = useCallback((ddt: any, translations: any, lang: string) => {
     const ddtKey = ddt._id || ddt.id;
     if (translations && Object.keys(translations).length > 0) {
@@ -344,6 +347,8 @@ export const AppContent: React.FC<AppContentProps> = ({
               onOpenDDTEditor={handleOpenDDTEditor}
               openedDDTId={openedDDTId}
               onDeleteDDT={handleDeleteDDT}
+              dialogueTemplates={dialogueTemplates}
+              setDialogueTemplates={setDialogueTemplates}
             />
           </SidebarThemeProvider>
           <div className="flex-1 flex flex-col">

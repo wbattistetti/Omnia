@@ -48,6 +48,8 @@ interface SidebarProps {
   onOpenDDTEditor?: (ddt: any, translations: any, lang: string) => void;
   openedDDTId?: string | null;
   onDeleteDDT?: (ddtId: string) => void;
+  dialogueTemplates: any[];
+  setDialogueTemplates: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 const MIN_WIDTH = 320; // px (w-80)
@@ -70,7 +72,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   onOpenDDTEditor,
   openedDDTId,
-  onDeleteDDT
+  onDeleteDDT,
+  dialogueTemplates,
+  setDialogueTemplates
 }) => {
   // Project data and update handlers from context
   const { data, loading, error } = useProjectData();
@@ -87,7 +91,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { filteredData, searchTerm, setSearchTerm } = useFilteredProjectData(data);
 
   // State for DDT templates and UI
-  const [dialogueTemplates, setDialogueTemplates] = useState<any[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<string>('agentActs');
   const [sidebarWidth, setSidebarWidth] = useState(MIN_WIDTH);
@@ -129,19 +132,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, []);
 
   // Fetch DDT templates from backend on mount
-  useEffect(() => {
-    setLoadingTemplates(true);
-    getAllDialogueTemplates()
-      .then((data) => {
-        setDialogueTemplates(data);
-      })
-      .catch((err) => {
-        setDialogueTemplates([]);
-      })
-      .finally(() => {
-        setLoadingTemplates(false);
-      });
-  }, []);
+  // useEffect(() => {
+  //   setLoadingTemplates(true);
+  //   getAllDialogueTemplates()
+  //     .then((data) => {
+  //       setDialogueTemplates(data);
+  //     })
+  //     .catch((err) => {
+  //       setDialogueTemplates([]);
+  //     })
+  //     .finally(() => {
+  //       setLoadingTemplates(false);
+  //     });
+  // }, []);
 
   // Sidebar width resize logic
   const handleMouseDown = () => {
@@ -212,6 +215,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setPendingShowWizard(false);
     }
   }, [pendingShowWizard, openAccordion]);
+
+  // Logga la lista ogni volta che cambia
+  useEffect(() => {
+    console.log('LISTA DDT aggiornata:', dialogueTemplates);
+  }, [dialogueTemplates]);
+
+  // Handler per aggiunta DDT dal wizard
+  const handleAddDDT = (newDDT: any) => {
+    setDialogueTemplates(prev => {
+      const next = [...prev, newDDT];
+      console.log('LISTA DDT dopo aggiunta:', next);
+      return next;
+    });
+    setShowDDTBuilder(false);
+    if (onOpenDDTEditor) onOpenDDTEditor(newDDT, {}, 'it');
+  };
 
   // Collapsed sidebar UI (icons only)
   if (isCollapsed) {
@@ -337,103 +356,97 @@ export const Sidebar: React.FC<SidebarProps> = ({
               borderRadius: 8,
             }}>
               <DDTBuilder
-                onComplete={(newDDT, messages) => {
-                  setDialogueTemplates(prev => [...prev, newDDT]);
-                  setShowDDTBuilder(false);
-                  if (onOpenDDTEditor) onOpenDDTEditor(newDDT, messages || {}, 'it');
-                }}
+                onComplete={handleAddDDT}
                 onCancel={() => setShowDDTBuilder(false)}
               />
             </div>
           )}
           {/* Lista scrollabile dei template */}
-          {loadingTemplates ? (
-            <div className="text-slate-400 px-2 py-2">Caricamento...</div>
-          ) : dialogueTemplates.length === 0 ? (
-            <div className="text-slate-400 px-2 py-2">Nessun template trovato</div>
-          ) : (
-            <div
-              className="overflow-y-auto pr-2"
-              style={{ maxHeight: 260 }}
-            >
-              {dialogueTemplates.map((dt, idx) => {
-                const ddtId = dt._id || dt.id;
-                let icon = <FileText className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                const type = dt.dataType?.type?.toLowerCase();
-                if (type === 'date') icon = <Calendar className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                else if (type === 'email') icon = <Mail className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                else if (type === 'address') icon = <MapPin className="w-4 h-4 text-fuchsia-700 mr-2" />;
-                return (
-                  <div key={ddtId} ref={el => { cardRefs.current[ddtId] = el; }} style={{ marginBottom: 2, padding: 4, borderRadius: 8, background: '#f3e8ff', border: '1px solid #f3e8ff', display: 'flex', flexDirection: 'column' }}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        {icon}
-                        <span className="font-semibold text-fuchsia-900 truncate">{dt.label || dt.name || ddtId}</span>
-                      </div>
-                      <div className="flex items-center gap-2 ml-2">
-                        <button
-                          className={`p-1 transition-colors ${
-                            openedDDTId === ddtId
-                              ? 'text-fuchsia-900 font-bold'
-                              : 'text-fuchsia-700 hover:text-fuchsia-900'
-                          }`}
-                          style={
-                            openedDDTId === ddtId
-                              ? {
-                                  borderRadius: '50%',
-                                  background: '#f3e8ff',
-                                  border: '2px solid #a21caf',
-                                  boxShadow: '0 0 0 2px #a21caf33',
-                                  padding: 4,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: 32,
-                                  height: 32
-                                }
-                              : { padding: 4 }
-                          }
-                          title="Impostazioni"
-                          onClick={() => handleOpenDDTEditor(dt, {}, 'it')}
-                        >
-                          <Settings className="w-4 h-4" />
-                        </button>
-                        <button
-                          className="p-1 text-red-500 hover:text-red-700"
-                          title="Elimina template"
-                          onClick={() => {
-                            setShowDeleteConfirm(ddtId);
-                            if (openAccordion !== 'dataDialogueTemplates') setOpenAccordion('dataDialogueTemplates');
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+          <div>
+            {dialogueTemplates.map((dt, idx) => {
+              // Scegli icona in base al tipo/label
+              let icon = <FileText className="w-5 h-5 text-fuchsia-700" />;
+              if (/date/i.test(dt.label)) icon = <Calendar className="w-5 h-5 text-violet-700" />;
+              if (/mail|email/i.test(dt.label)) icon = <Mail className="w-5 h-5 text-blue-700" />;
+              if (/address|location|place/i.test(dt.label)) icon = <MapPin className="w-5 h-5 text-green-700" />;
+              // ...altre regole se vuoi
+              return (
+                <div
+                  key={dt.id || idx}
+                  ref={el => cardRefs.current[dt.id || idx] = el}
+                  style={{
+                    background: '#f3e8ff',
+                    margin: 4,
+                    padding: 8,
+                    borderRadius: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    border: '2px solid #a21caf',
+                    position: 'relative'
+                  }}
+                >
+                  <span style={{ marginRight: 10 }}>{icon}</span>
+                  <span style={{ fontWeight: 700, color: '#a21caf', flex: 1 }}>{dt.label || dt.id || 'NO LABEL'}</span>
+                  <button
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      marginLeft: 8,
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => setShowDeleteConfirm(dt.id)}
+                    title="Elimina"
+                  >
+                    <Trash2 className="w-5 h-5 text-fuchsia-700 hover:text-red-600" />
+                  </button>
+                  {/* Dialog conferma cancellazione */}
+                  {showDeleteConfirm === dt.id && (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      marginTop: 10,
+                      padding: 12,
+                      background: '#181028',
+                      border: '1px solid #a21caf',
+                      borderRadius: 8,
+                      boxShadow: '0 2px 8px rgba(80,0,80,0.08)'
+                    }}>
+                      <button
+                        style={{
+                          color: '#fff',
+                          background: '#ef4444',
+                          border: 'none',
+                          borderRadius: 4,
+                          padding: '10px 0',
+                          fontWeight: 700,
+                          fontSize: 16,
+                          cursor: 'pointer',
+                          marginBottom: 10,
+                          width: 140
+                        }}
+                        onClick={() => handleDeleteDDT(dt.id)}
+                      >Elimina</button>
+                      <button
+                        style={{
+                          color: '#a21caf',
+                          background: 'none',
+                          border: '1px solid #a21caf',
+                          borderRadius: 4,
+                          padding: '10px 0',
+                          fontWeight: 700,
+                          fontSize: 16,
+                          cursor: 'pointer',
+                          width: 140
+                        }}
+                        onClick={() => setShowDeleteConfirm(null)}
+                      >Annulla</button>
                     </div>
-                    {showDeleteConfirm === ddtId && (
-                      <div
-                        className="mt-2 flex gap-2 items-center bg-red-50 border border-red-200 rounded px-3 py-2"
-                        style={{ position: 'relative', zIndex: 10, minHeight: 56, overflow: 'visible' }}
-                      >
-                        <button
-                          className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold"
-                          onClick={() => handleDeleteDDT(ddtId)}
-                        >
-                          Conferma
-                        </button>
-                        <button
-                          className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 font-semibold"
-                          onClick={() => setShowDeleteConfirm(null)}
-                        >
-                          Annulla
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </Accordion>
         {/* Entity accordions (Agent Acts, User Acts, etc.) */}
         {(() => {

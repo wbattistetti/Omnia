@@ -1,5 +1,6 @@
 import { StepResult } from './types';
 import { v4 as uuidv4 } from 'uuid';
+import { assembleFinalDDT as assembleFinalDDTNew } from './assembleFinalDDT';
 
 // Tipo base per output DDT
 export interface DDTNode {
@@ -19,70 +20,47 @@ function makeRuntimeKey(ddtId: string, step: string, escalationIdx: number, acti
 }
 
 // Funzione di assemblaggio finale
-export function assembleFinalDDT(stepResults: StepResult[]): { structure: DDTNode, translations: Record<string, string> } {
-  console.log('[assembleFinalDDT] stepResults:', stepResults);
-  stepResults.forEach((result, idx) => {
-    console.log(`[assembleFinalDDT] stepResult[${idx}]:`, result.stepKey, result.payload);
-    if (result.stepKey === 'suggestStructureAndConstraints') {
-      console.log(`[assembleFinalDDT] suggestStructureAndConstraints payload:`, result.payload);
-    }
-  });
-  // Esempio: estrai nome e prompts dai risultati
-  const ddtId = 'ddt_' + Math.random().toString(36).slice(2);
-  const ddt: DDTNode = {
-    id: ddtId,
-    name: 'TODO', // verrà sovrascritto se troviamo il tipo
-    prompts: {},
-    validationRules: [],
-    constraints: [],
-    steps: [],
-    subdata: [],
-  };
-  const translations: Record<string, string> = {};
+export function assembleFinalDDT(stepResults: StepResult[]): { structure: any, translations: Record<string, string> } {
+  // --- Estrai i dati necessari dagli stepResults ---
+  let ddtId = 'ddt_' + Math.random().toString(36).slice(2);
+  let mainData: any = {};
+  let stepMessages: Record<string, string[][]> = {};
+  let translations: Record<string, string> = {};
 
-  // Esempio di mapping reale (da adattare ai tuoi stepResults)
+  // 1. Trova il tipo/nome (detectType)
   for (const result of stepResults) {
-    // Se troviamo lo step detectType, usiamo il tipo suggerito come name
     if (result.stepKey === 'detectType' && result.payload && result.payload.type) {
-      console.log('[assembleFinalDDT] detectType trovato, imposto name:', result.payload.type);
-      ddt.name = result.payload.type;
-    }
-    // Prompts (es: startPrompt, noMatchPrompts, ecc.)
-    if (result.stepKey.endsWith('Prompts') && typeof result.payload === 'object' && result.payload !== null) {
-      // Supponiamo che result.payload sia: { messages: ["msg1", "msg2", ...] }
-      const step = result.stepKey.replace('Prompts', ''); // es: start, noMatch
-      const messages = Array.isArray(result.payload) ? result.payload : result.payload.messages || result.payload;
-      if (Array.isArray(messages)) {
-        messages.forEach((msg: string, idx: number) => {
-          const actionInstanceId = `${step}Msg${idx+1}_${uuidv4()}`;
-          const runtimeKey = makeRuntimeKey(ddtId, step, idx+1, actionInstanceId);
-          translations[runtimeKey] = msg;
-          // Puoi anche popolare ddt.prompts o steps qui se serve
-          if (!ddt.prompts) ddt.prompts = {};
-          ddt.prompts[runtimeKey] = msg;
-        });
-      }
-    }
-    // TODO: mapping per validationRules, constraints, subdata, ecc.
-    if (result.stepKey === 'suggestStructureAndConstraints' && result.payload) {
-      ddt.constraints = result.payload.mainData?.constraints || [];
-      // Log dettagliato per subData
-      console.log('[assembleFinalDDT] subData trovata (root):', result.payload.subData);
-      console.log('[assembleFinalDDT] subData trovata (mainData):', result.payload.mainData?.subData);
-      // Prova entrambi i path
-      const subDataArr = result.payload.subData || result.payload.mainData?.subData || [];
-      ddt.subdata = subDataArr.map((sub: any) => ({
-        id: uuidv4(),
-        name: sub.name,
-        constraints: sub.constraints || [],
-      }));
-    }
-    // Altri step: validationRules, scripts, ecc.
-    if (result.stepKey === 'validationRules' && result.payload) {
-      ddt.validationRules = result.payload;
+      ddtId = 'ddt_' + (result.payload.type.replace(/\s+/g, '').toLowerCase() || Math.random().toString(36).slice(2));
     }
   }
-  console.log('[assembleFinalDDT] DDT finale:', ddt);
+  // 2. Trova la struttura mainData e subData (di solito in suggestStructureAndConstraints)
+  for (const result of stepResults) {
+    if (result.stepKey === 'suggestStructureAndConstraints' && result.payload) {
+      mainData = result.payload.mainData || result.payload;
+      // Se ci sono subData, assicurati che siano in mainData.subData
+      if (result.payload.subData && !mainData.subData) {
+        mainData.subData = result.payload.subData;
+      }
+      // Patch: valorizza almeno variable e label se mancano
+      if (!mainData.variable) mainData.variable = result.payload.type || result.payload.name || 'Main data';
+      if (!mainData.label) mainData.label = result.payload.type || result.payload.name || 'Main data';
+    }
+  }
+  // 3. Raccogli i messaggi per step (startPrompt, noMatchPrompts, ecc.)
+  for (const result of stepResults) {
+    if (result.stepKey.endsWith('Prompts')) {
+      const step = result.stepKey.replace('Prompts', '');
+      const messages = Array.isArray(result.payload) ? result.payload : result.payload.messages || result.payload;
+      if (!stepMessages[step]) stepMessages[step] = [];
+      // Ogni chiamata è una escalation (per ora, semplificato)
+      if (Array.isArray(messages)) stepMessages[step].push(messages);
+    }
+  }
+  // 4. Constraints, label, ecc. sono già in mainData (se la pipeline è coerente)
+  // 5. Chiama la nuova funzione ricorsiva
+  const ddt = assembleFinalDDTNew(ddtId, mainData, stepMessages, translations, stepResults);
+  // 6. Log per debug
+  console.log('[assembleFinalDDT] DDT finale (nuova):', ddt);
   console.log('[assembleFinalDDT] DDT finale (JSON):\n' + JSON.stringify(ddt, null, 2));
-  return { structure: ddt, translations };
+  return { structure: ddt, translations: ddt.translations };
 } 

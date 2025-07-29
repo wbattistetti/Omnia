@@ -78,6 +78,7 @@ function nodesReducer(state: TreeNodeProps[], action: any): TreeNodeProps[] {
 
 const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it', onClose }) => {
   // LOG: stampa le props ricevute
+  console.log('[ResponseEditor] DDT ricevuto come prop:', ddt);
   // LOG: oggetto translations appena ricevuto
   if (translations) {
     const tObj = translations as Record<string, any>;
@@ -273,6 +274,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     filteredNodes.forEach(n => {
     });
   }
+  console.log('[ResponseEditor] filteredNodes passed to TreeView:', filteredNodes);
 
   // handleDrop logica semplificata (solo aggiunta root per demo)
   const handleDrop = (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => {
@@ -360,20 +362,62 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     ...editorState,
     ddtType,
     ddtLabel,
+    ddt, // <-- aggiungo ddt esplicitamente per log
     onStepChange,
     onShowLabelChange,
   };
+
+  // LOG: ddt passato a ResponseEditorUI
+  console.log('[ResponseEditor] ddt passato a ResponseEditorUI:', editorStateForUI.ddt);
 
   // Funzione per toggle
   const handleToggleInclude = (id: string, included: boolean) => {
     dispatchWithHistory({ type: 'TOGGLE_ESCALATION_INCLUDE', id, included });
   };
 
+  const [selectedNodeIndex, setSelectedNodeIndex] = React.useState<number | null>(null);
+
+  // Funzione per estrarre il nodo selezionato
+  function getNodeByIndex(mainData, index) {
+    if (index == null) return mainData;
+    if (!mainData.subData || !mainData.subData[index]) return mainData;
+    return mainData.subData[index];
+  }
+
+  // Costruisci il DDT virtuale per la UI
+  const selectedNode = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
+  const ddtForUI = ddt ? {
+    ...ddt,
+    steps: Object.fromEntries(
+      (selectedNode?.steps || []).map(stepGroup => [
+        stepGroup.type,
+        (stepGroup.escalations || []).map(escalation => ({
+          type: 'escalation',
+          id: escalation.escalationId,
+          actions: escalation.actions
+        }))
+      ])
+    )
+  } : ddt;
+
+  React.useEffect(() => {
+    const selectedNode = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
+    console.log('[ResponseEditor] Selected node changed:', { selectedNodeIndex, selectedNode });
+    if (selectedNode) {
+      console.log('[ResponseEditor] Steps for selected node:', selectedNode.steps);
+      if (selectedNode.steps) {
+        selectedNode.steps.forEach((stepGroup, idx) => {
+          console.log(`[ResponseEditor] Step ${idx}:`, stepGroup.type, 'Escalations:', stepGroup.escalations);
+        });
+      }
+    }
+  }, [selectedNodeIndex, ddt]);
+
   return (
     <ResponseEditorUI
       editorState={editorStateForUI}
       filteredNodes={filteredNodes}
-      stepKeys={stepKeys}
+      stepKeys={ddtForUI?.steps ? Object.keys(ddtForUI.steps) : []}
       stepMeta={stepMeta}
       handleDrop={handleDrop}
       removeNode={removeNode}
@@ -385,6 +429,9 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       getDDTIcon={getDDTIcon}
       onClose={onClose || (() => {})}
       onToggleInclude={handleToggleInclude}
+      selectedNodeIndex={selectedNodeIndex}
+      onSelectNode={setSelectedNodeIndex}
+      ddt={ddtForUI}
     />
   );
 };

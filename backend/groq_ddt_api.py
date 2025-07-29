@@ -368,6 +368,7 @@ async def ddt_structure(request: Request):
 # --- stepNoMatch: Generate no match prompts ---
 @app.post("/api/stepNoMatch")
 def step_no_match(body: dict = Body(...)):
+    print("[BACKEND] /api/stepNoMatch CHIAMATA - body:", body)
     meaning = body.get('meaning', '')
     desc = body.get('desc', '')
     print("\nSTEP: /api/stepNoMatch – Generazione messaggi no match")
@@ -389,8 +390,10 @@ Return ONLY a JSON array of 3 English strings, no explanations, no comments, no 
     try:
         ai_obj = json.loads(ai)
         print("[GROQ RESPONSE /stepNoMatch]", ai_obj)
+        print("[BACKEND] /api/stepNoMatch RISPOSTA OK")
         return {"ai": ai_obj}
     except Exception as e:
+        print("[BACKEND] /api/stepNoMatch ERRORE PARSING:", str(e))
         return {"error": f"Failed to parse AI JSON: {str(e)}"}
 
 # --- stepNoInput: Generate no input prompts ---

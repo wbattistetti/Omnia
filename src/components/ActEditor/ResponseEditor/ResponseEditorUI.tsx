@@ -26,6 +26,8 @@ export interface ResponseEditorUIProps {
   constraints?: any[];
   variable?: string;
   type?: string;
+  onSelectNode?: (index: number | null) => void;
+  selectedNodeIndex: number | null;
 }
 
 const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
@@ -172,6 +174,80 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
+        {/* Pannellino subdata a sinistra */}
+        {(() => {
+          // Logga mainData e subdataArr
+          console.log('[ResponseEditorUI] ddt.mainData:', props.editorState.ddt?.mainData);
+          const mainLabel = props.editorState.ddt?.label || '—';
+          console.log('[ResponseEditorUI] mainLabel calcolato:', mainLabel);
+          const subdataArr = props.editorState.ddt?.mainData?.subData || [];
+          console.log('[ResponseEditorUI] subdataArr:', subdataArr);
+          return (
+            <div style={{
+              width: 180,
+              minWidth: 140,
+              maxWidth: 220,
+              background: 'rgba(37,99,235,0.07)',
+              borderRadius: 10,
+              marginRight: 18,
+              padding: '10px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              gap: 0,
+              boxShadow: '0 2px 8px #0001',
+              overflowY: 'auto',
+              height: 'calc(100% - 8px)'
+            }}>
+              <div style={{ fontWeight: 700, color: '#2563eb', fontSize: 15, textAlign: 'center', marginBottom: 6 }}>Subdata</div>
+              {/* Main data root selezionabile */}
+              <div
+                onClick={() => {
+                  if (props.onSelectNode) {
+                    console.log('[UI] Main node clicked:', { mainLabel });
+                    props.onSelectNode(null);
+                  }
+                }}
+                style={{
+                  fontWeight: props.selectedNodeIndex == null ? 800 : 600,
+                  background: props.selectedNodeIndex == null ? '#a21caf' : '#fff',
+                  color: props.selectedNodeIndex == null ? '#fff' : '#18181b',
+                  cursor: 'pointer',
+                  borderRadius: 6,
+                  marginBottom: 2,
+                  padding: '6px 12px',
+                  border: props.selectedNodeIndex == null ? '2px solid #a21caf' : '1px solid #e0e7ef'
+                }}
+              >
+                {mainLabel}
+              </div>
+              {/* Subdata figli selezionabili */}
+              {subdataArr.map((sub: any, i: number) => (
+                <div
+                  key={sub.id || sub.variable || sub.name}
+                  onClick={() => {
+                    if (props.onSelectNode) {
+                      console.log('[UI] Subdata node clicked:', { index: i, sub });
+                      props.onSelectNode(i);
+                    }
+                  }}
+                  style={{
+                    fontWeight: props.selectedNodeIndex === i ? 800 : 600,
+                    background: props.selectedNodeIndex === i ? '#a21caf' : '#f8fafc',
+                    color: props.selectedNodeIndex === i ? '#fff' : '#2563eb',
+                    cursor: 'pointer',
+                    borderRadius: 6,
+                    marginBottom: 2,
+                    padding: '6px 28px',
+                    border: props.selectedNodeIndex === i ? '2px solid #a21caf' : '1px solid #e0e7ef'
+                  }}
+                >
+                  {sub.name || sub.variable}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <div style={{ flex: 1, minWidth: 320, padding: 16 }}>
           {/* Undo/Redo controls */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
@@ -255,7 +331,7 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
           ) : (
             <>
               <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
-              <ActionList actionsCatalog={[]} lang="it" />
+              <ActionList lang="it" />
               <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
                 <button
                   onClick={() => setShowConstraintWizard(true)}
