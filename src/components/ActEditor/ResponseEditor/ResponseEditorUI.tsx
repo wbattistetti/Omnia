@@ -35,6 +35,13 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
   const [rightWidth, setRightWidth] = React.useState(360); // 3 colonne (120*3)
   const [dragging, setDragging] = React.useState(false);
 
+  // Log escalations for the selected step of the selected node
+  const selectedNode = props.editorState.selectedNode;
+  const selectedStep = props.editorState.selectedStep;
+  const step = selectedNode && selectedNode.steps ? selectedNode.steps.find((s: any) => s.type === selectedStep) : undefined;
+  const escalations = step?.escalations || [];
+  console.log('[CHECK] Escalations for step', selectedStep, ':', escalations);
+
   // Gestione drag splitter
   React.useEffect(() => {
     if (!dragging) return;
@@ -177,11 +184,8 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         {/* Pannellino subdata a sinistra */}
         {(() => {
           // Logga mainData e subdataArr
-          console.log('[ResponseEditorUI] ddt.mainData:', props.editorState.ddt?.mainData);
           const mainLabel = props.editorState.ddt?.label || '—';
-          console.log('[ResponseEditorUI] mainLabel calcolato:', mainLabel);
           const subdataArr = props.editorState.ddt?.mainData?.subData || [];
-          console.log('[ResponseEditorUI] subdataArr:', subdataArr);
           return (
             <div style={{
               width: 180,
@@ -204,7 +208,6 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
               <div
                 onClick={() => {
                   if (props.onSelectNode) {
-                    console.log('[UI] Main node clicked:', { mainLabel });
                     props.onSelectNode(null);
                   }
                 }}
@@ -224,10 +227,9 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
               {/* Subdata figli selezionabili */}
               {subdataArr.map((sub: any, i: number) => (
                 <div
-                  key={sub.id || sub.variable || sub.name}
+                  key={sub.id || sub.variable || sub.name || i}
                   onClick={() => {
                     if (props.onSelectNode) {
-                      console.log('[UI] Subdata node clicked:', { index: i, sub });
                       props.onSelectNode(i);
                     }
                   }}
@@ -242,7 +244,7 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
                     border: props.selectedNodeIndex === i ? '2px solid #a21caf' : '1px solid #e0e7ef'
                   }}
                 >
-                  {sub.name || sub.variable}
+                  {sub.label}
                 </div>
               ))}
             </div>
@@ -331,7 +333,7 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
           ) : (
             <>
               <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
-              <ActionList lang="it" />
+              <ActionList />
               <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
                 <button
                   onClick={() => setShowConstraintWizard(true)}

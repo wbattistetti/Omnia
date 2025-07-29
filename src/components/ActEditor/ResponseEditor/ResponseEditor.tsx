@@ -77,14 +77,11 @@ function nodesReducer(state: TreeNodeProps[], action: any): TreeNodeProps[] {
 }
 
 const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it', onClose }) => {
+  console.log('[DEBUG] [ResponseEditor] COMPONENT RENDER');
   // LOG: stampa le props ricevute
-  console.log('[ResponseEditor] DDT ricevuto come prop:', ddt);
-  // LOG: oggetto translations appena ricevuto
-  if (translations) {
-    const tObj = translations as Record<string, any>;
-  } else {
-    // LOG: translations è undefined o null!
-  }
+  console.log('[DEBUG] [ResponseEditor] DDT ricevuto come prop:', ddt);
+  // LOG: translations ricevute come prop
+  console.log('[ResponseEditor] translations ricevute come prop:', translations);
   type EditorState = {
     selectedStep: string | null;
     actionCatalog: any[];
@@ -236,7 +233,9 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   // Stato nodi dinamico dal DDT
   // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
   useEffect(() => {
-    const estratti = estraiNodiDaDDT(ddt, translations, lang);
+    const estratti = estraiNodiDaDDT(ddt?.mainData, translations, lang);
+    console.log('[DEBUG] [ResponseEditor] estraiNodiDaDDT input:', { ddt, translations, lang });
+    console.log('[DEBUG] [ResponseEditor] estraiNodiDaDDT output:', estratti);
     // Logga i nodi root per ogni step
     const rootByStep: Record<string, any[]> = {};
     estratti.forEach((n: any) => {
@@ -247,18 +246,20 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     });
     Object.entries(rootByStep).forEach(([step, nodes]) => {
       const arr = nodes as any[];
+      console.log(`[DEBUG] [ResponseEditor] root nodes for step ${step}:`, arr);
     });
     dispatchWithHistory({ type: 'SET_NODES', nodes: estratti });
   }, [ddt, translations, lang]);
 
   // Filtro i nodi per lo step selezionato
+  console.log('[DEBUG] [ResponseEditor] editorState.nodes:', editorState.nodes);
   let filteredNodes: TreeNodeProps[] = [];
   if (editorState.selectedStep) {
     // Step con escalation
     const escalationSteps = ['noMatch', 'noInput', 'confirmation', 'notAcquired'];
     if (escalationSteps.includes(editorState.selectedStep)) {
       // Prendi tutti i nodi escalation di questo step e i loro figli
-      const escalationNodes = editorState.nodes.filter(n => n.type === 'escalation' && n.id.startsWith(`${editorState.selectedStep}_escalation_`));
+      const escalationNodes = editorState.nodes.filter(n => n.type === 'escalation' && n.stepType === editorState.selectedStep);
       const escalationIds = escalationNodes.map(n => n.id);
       const childNodes = editorState.nodes.filter(n => n.parentId && escalationIds.includes(n.parentId));
       filteredNodes = [...escalationNodes, ...childNodes];
@@ -270,10 +271,9 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     }
   }
   // LOG: filteredNodes dopo il filtro per la tab corrente
-  if (filteredNodes.length > 0) {
-    filteredNodes.forEach(n => {
-    });
-  }
+  console.log('[DEBUG] [ResponseEditor] filteredNodes:', filteredNodes);
+  // LOG: selectedStep
+  console.log('[DEBUG] [ResponseEditor] selectedStep:', editorState.selectedStep);
   console.log('[ResponseEditor] filteredNodes passed to TreeView:', filteredNodes);
 
   // handleDrop logica semplificata (solo aggiunta root per demo)
@@ -368,7 +368,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   };
 
   // LOG: ddt passato a ResponseEditorUI
-  console.log('[ResponseEditor] ddt passato a ResponseEditorUI:', editorStateForUI.ddt);
+  console.log('[DEBUG] [ResponseEditor] ddt passato a ResponseEditorUI:', editorStateForUI.ddt);
 
   // Funzione per toggle
   const handleToggleInclude = (id: string, included: boolean) => {
@@ -386,6 +386,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   // Costruisci il DDT virtuale per la UI
   const selectedNode = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
+  console.log('[DEBUG] [ResponseEditor] selectedNode (calculated):', selectedNode);
   const ddtForUI = ddt ? {
     ...ddt,
     steps: Object.fromEntries(
@@ -400,17 +401,11 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     )
   } : ddt;
 
-  React.useEffect(() => {
-    const selectedNode = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
-    console.log('[ResponseEditor] Selected node changed:', { selectedNodeIndex, selectedNode });
-    if (selectedNode) {
-      console.log('[ResponseEditor] Steps for selected node:', selectedNode.steps);
-      if (selectedNode.steps) {
-        selectedNode.steps.forEach((stepGroup, idx) => {
-          console.log(`[ResponseEditor] Step ${idx}:`, stepGroup.type, 'Escalations:', stepGroup.escalations);
-        });
-      }
-    }
+  // Log selectedNodeIndex and selectedNode whenever they change
+  useEffect(() => {
+    const mainData = ddt?.mainData || {};
+    const node = getNodeByIndex(mainData, selectedNodeIndex);
+    console.log('[DEBUG] [ResponseEditor] selectedNodeIndex:', selectedNodeIndex, 'selectedNode:', node);
   }, [selectedNodeIndex, ddt]);
 
   return (

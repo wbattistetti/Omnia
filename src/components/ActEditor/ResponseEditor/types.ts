@@ -19,6 +19,7 @@ export interface TreeNodeProps {
   onDrop?: (id: string, position: 'before' | 'after' | 'child' | 'parent-sibling', draggedData: TreeNodeProps) => void;
   onCancelNewNode?: (id: string) => void;
   onToggleInclude?: (id: string, included: boolean) => void;
+  stepType?: string;
 }
 
 export interface Action {

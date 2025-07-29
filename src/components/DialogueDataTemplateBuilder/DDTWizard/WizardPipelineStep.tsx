@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Calendar } from 'lucide-react';
 import { useOrchestrator } from '../orchestrator/useOrchestrator';
-import { assembleFinalDDT } from '../orchestrator/assembleDDT';
+import { buildDDT } from '../DDTAssembler/DDTBuilder';
+import { buildStepMessagesFromResults } from '../DDTAssembler/buildStepMessagesFromResults';
 import { generateStepsSkipDetectType } from '../orchestrator/stepGenerator';
 import HourglassSpinner from './HourglassSpinner';
 
@@ -73,12 +74,26 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
         const fakeDetectType = { stepKey: 'detectType', payload: { label: confirmedLabel, type: confirmedLabel } };
         stepResults = [fakeDetectType, ...orchestrator.state.stepResults];
       }
-      const final = assembleFinalDDT(stepResults);
+      // Costruisci stepMessages con la nuova funzione
+      const stepMessages = buildStepMessagesFromResults(stepResults);
+      console.log('[WizardPipelineStep] stepMessages built for assembleMainData:', stepMessages);
+      // Assembla il DDT finale passando solo stepResults (stepMessages è già usato internamente)
+      const structureResult = stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
+      const mainData = structureResult?.payload?.mainData || structureResult?.payload;
+      console.log('[WizardPipelineStep] RAW AI mainData:', JSON.stringify(mainData, null, 2));
+      if (mainData && Array.isArray(mainData.subData)) {
+        mainData.subData.forEach((sub: any, idx: number) => {
+          console.log(`[WizardPipelineStep] RAW AI subData[${idx}]:`, JSON.stringify(sub, null, 2));
+        });
+      }
+      const ddtId = mainData?.name || dataNode.name || 'ddt_' + (dataNode?.name || 'unknown');
+      const final = buildDDT(ddtId, mainData, stepResults);
       setFinalDDT(final);
       console.log('[WizardPipelineStep] DDT finale generato', final);
-      if (onComplete) onComplete(final.structure);
+      console.log('[WizardPipelineStep] DDT finale (JSON):\n' + JSON.stringify(final, null, 2));
+      if (onComplete) onComplete(final);
     }
-  }, [orchestrator.state.currentStepIndex, orchestrator.state.steps.length, orchestrator.state.stepResults, finalDDT, onComplete, confirmedLabel]);
+  }, [orchestrator.state.currentStepIndex, orchestrator.state.steps.length, orchestrator.state.stepResults, finalDDT, onComplete, confirmedLabel, dataNode]);
 
   return (
     <div style={{ padding: 32, maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>

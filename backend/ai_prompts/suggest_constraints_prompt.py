@@ -4,9 +4,9 @@ def get_suggest_constraints_prompt(meaning, desc):
 Given the following data field (with possible subfields), suggest the most appropriate validation constraints for each field.
 
 The data is structured as JSON with the following format:
-- Each field has: \"name\", \"label\", and \"type\".
+- Each field has: \"label\" and \"type\".
 - It may optionally have \"subData\" (an array of nested fields).
-- Some fields may not have subData. In that case, omit the subData array.
+- Each subData field MUST include a \"label\" (the user-facing string in English). Do NOT use \"name\" for subData.
 
 Example input:
 {{
@@ -14,9 +14,9 @@ Example input:
   \"label\": \"Date of Birth\",
   \"type\": \"object\",
   \"subData\": [
-    {{ \"name\": \"day\", \"label\": \"Day\", \"type\": \"number\" }},
-    {{ \"name\": \"month\", \"label\": \"Month\", \"type\": \"number\" }},
-    {{ \"name\": \"year\", \"label\": \"Year\", \"type\": \"number\" }}
+    {{ \"label\": \"Day\", \"type\": \"number\" }},
+    {{ \"label\": \"Month\", \"type\": \"number\" }},
+    {{ \"label\": \"Year\", \"type\": \"number\" }}
   ]
 }}
 
@@ -38,12 +38,12 @@ Respond ONLY with a JSON object in this format:
   \"mainData\": {{
     \"constraints\": [ ... ],
     \"subData\": [
-      {{ \"name\": \"day\", \"constraints\": [ ... ] }},
-      {{ \"name\": \"month\", \"constraints\": [ ... ] }},
-      {{ \"name\": \"year\", \"constraints\": [ ... ] }}
+      {{ \"label\": \"Day\", \"constraints\": [ ... ] }},
+      {{ \"label\": \"Month\", \"constraints\": [ ... ] }},
+      {{ \"label\": \"Year\", \"constraints\": [ ... ] }}
     ]
   }}
 }}
 
-Do NOT generate any id or GUID. Do NOT include explanations or comments outside the JSON. All messages and labels must be in English.
+Do NOT generate any id or GUID. Do NOT include explanations or comments outside the JSON. All messages and labels must be in English. Each subData field MUST include a \"label\".
 """ 

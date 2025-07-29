@@ -112,6 +112,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   }, [showDeleteConfirm]);
 
+  // Stato per editing label DDT
+  const [editingDDTId, setEditingDDTId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState<string>('');
+
   // Font resize: handle Ctrl+wheel to zoom font size
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -204,7 +208,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Handler to open the DDT editor (calls parent prop)
   const handleOpenDDTEditor = (ddt: any, translations: any, lang: any) => {
-    if (onOpenDDTEditor) onOpenDDTEditor(ddt, translations, lang);
+    console.log('[Sidebar] handleOpenDDTEditor: dt:', ddt, 'dt.translations:', ddt?.translations);
+    if (onOpenDDTEditor) {
+      console.log('[Sidebar] onOpenDDTEditor: ddt:', ddt, 'translations:', translations);
+      onOpenDDTEditor(ddt, translations, lang);
+    }
   };
   // Handler per chiudere il ResponseEditor non serve più qui
 
@@ -370,6 +378,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               if (/mail|email/i.test(dt.label)) icon = <Mail className="w-5 h-5 text-blue-700" />;
               if (/address|location|place/i.test(dt.label)) icon = <MapPin className="w-5 h-5 text-green-700" />;
               // ...altre regole se vuoi
+              const isEditing = editingDDTId === (dt.id || idx);
+              const isOpened = openedDDTId === (dt.id || idx);
               return (
                 <div
                   key={dt.id || idx}
@@ -386,7 +396,84 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                 >
                   <span style={{ marginRight: 10 }}>{icon}</span>
-                  <span style={{ fontWeight: 700, color: '#a21caf', flex: 1 }}>{dt.label || dt.id || 'NO LABEL'}</span>
+                  {isEditing ? (
+                    <input
+                      value={editingLabel}
+                      autoFocus
+                      onChange={e => setEditingLabel(e.target.value)}
+                      onBlur={() => {
+                        setDialogueTemplates(prev => prev.map(t => (t.id === dt.id ? { ...t, label: editingLabel } : t)));
+                        setEditingDDTId(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          setDialogueTemplates(prev => prev.map(t => (t.id === dt.id ? { ...t, label: editingLabel } : t)));
+                          setEditingDDTId(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingDDTId(null);
+                        }
+                      }}
+                      style={{
+                        fontWeight: 700,
+                        color: '#a21caf',
+                        flex: 1,
+                        marginRight: 8,
+                        background: '#fff',
+                        border: '1px solid #a21caf',
+                        borderRadius: 4,
+                        padding: '2px 6px',
+                        minWidth: 80
+                      }}
+                    />
+                  ) : (
+                    <span
+                      style={{ fontWeight: 700, color: '#a21caf', flex: 1, marginRight: 8 }}
+                    >
+                      {dt.label || dt.id || 'NO LABEL'}
+                    </span>
+                  )}
+                  {/* Matita per edit label */}
+                  <button
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      marginLeft: 4,
+                      cursor: 'pointer',
+                      opacity: isEditing ? 0.5 : 1
+                    }}
+                    title="Modifica label"
+                    disabled={isEditing}
+                    onClick={() => {
+                      setEditingDDTId(dt.id || idx);
+                      setEditingLabel(dt.label || '');
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a21caf" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                  </button>
+                  {/* Ingranaggio per response editor */}
+                  <button
+                    style={{
+                      background: 'none',
+                      border: isOpened ? '2px solid #a21caf' : 'none',
+                      borderRadius: '50%',
+                      marginLeft: 4,
+                      cursor: 'pointer',
+                      padding: 2,
+                      boxShadow: isOpened ? '0 0 0 2px #f3e8ff' : 'none',
+                      outline: isOpened ? 'none' : undefined
+                    }}
+                    title="Apri/chiudi response editor"
+                    onClick={() => {
+                      if (isOpened && onOpenDDTEditor) {
+                        onOpenDDTEditor(null, null, 'it'); // chiudi
+                      } else {
+                        handleOpenDDTEditor(dt, {}, 'it'); // apri
+                      }
+                    }}
+                  >
+                    <Settings className="w-5 h-5" style={{ color: isOpened ? '#a21caf' : '#888' }} />
+                  </button>
+                  {/* Cestino per eliminare */}
                   <button
                     style={{
                       background: 'none',

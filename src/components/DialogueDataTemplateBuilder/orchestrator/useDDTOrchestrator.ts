@@ -4,7 +4,7 @@ import fetchStructure from './fetchStructure';
 import enrichConstraints from './enrichConstraints';
 import generateScripts from './generateScripts';
 import batchMessages from './batchMessages';
-import assembleFinalDDT from './assembleFinalDDT';
+import { buildDDT } from '../DDTAssembler/DDTBuilder';
 
 const stepOrder: DDTGenerationStep[] = [
   'recognizeType',
@@ -92,9 +92,9 @@ export default function useDDTOrchestrator() {
     console.log('[orchestrator] runAssemble: set step assemble');
     setState(s => ({ ...s, step: 'assemble', error: undefined }));
     try {
-      console.log('[orchestrator] runAssemble: calling assembleFinalDDT', { ddtWithScripts, finalMessages });
-      const final = assembleFinalDDT(ddtWithScripts, finalMessages);
-      console.log('[orchestrator] runAssemble: assembleFinalDDT OK', { final });
+      console.log('[orchestrator] runAssemble: calling buildDDT', { ddtWithScripts, finalMessages });
+      const final = buildDDT(ddtWithScripts, finalMessages);
+      console.log('[orchestrator] runAssemble: buildDDT OK', { final });
       return final;
     } catch (err: any) {
       console.error('[orchestrator] runAssemble: ERROR', err);

@@ -5,7 +5,6 @@ import WizardConfirmTypeStep from './WizardConfirmTypeStep';
 import WizardPipelineStep from './WizardPipelineStep';
 import WizardErrorStep from './WizardErrorStep';
 import WizardSupportModal from './WizardSupportModal';
-import { Step } from './types';
 
 // Tipo per dataNode
 interface DataNode {
@@ -13,7 +12,7 @@ interface DataNode {
 }
 
 const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void }> = ({ onCancel, onComplete }) => {
-  const [step, setStep] = useState<Step>('input');
+  const [step, setStep] = useState<string>('input');
   const [userDesc, setUserDesc] = useState('');
   const [detectedType, setDetectedType] = useState<string | null>(null);
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);

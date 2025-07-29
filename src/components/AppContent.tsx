@@ -374,13 +374,20 @@ export const AppContent: React.FC<AppContentProps> = ({
               setTestNodeId={setTestNodeId}
             />
             {selectedDDT && (
-              (() => { const t = getTranslationsForDDT(openedDDTId); console.log('[AppContent] Passo translations a ResponseEditor:', { openedDDTId, t }); return null; })(),
-              <ResponseEditor
-                ddt={selectedDDT}
-                translations={getTranslationsForDDT(openedDDTId)}
-                lang={selectedDDTLanguage}
-                onClose={handleCloseDDTEditor}
-              />
+              (() => {
+                const t = getTranslationsForDDT(openedDDTId);
+                const fallback = selectedDDT.translations;
+                const translationsToUse = Object.keys(t || {}).length > 0 ? t : fallback;
+                console.log('[AppContent] Passo translations a ResponseEditor:', { openedDDTId, t, fallback, translationsToUse });
+                return (
+                  <ResponseEditor
+                    ddt={selectedDDT}
+                    translations={translationsToUse}
+                    lang={selectedDDTLanguage}
+                    onClose={handleCloseDDTEditor}
+                  />
+                );
+              })()
             )}
           </div>
         </div>
