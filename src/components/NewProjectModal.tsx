@@ -10,6 +10,7 @@ interface NewProjectModalProps {
   duplicateNameError?: string | null;
   onProjectNameChange?: () => void;
   isLoading?: boolean;
+  onFactoryTemplatesLoaded?: (templates: any[]) => void; // AGGIUNTA
 }
 
 const templates = [
@@ -29,7 +30,7 @@ const languages = [
   { id: 'fr', name: 'Français' }
 ];
 
-export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProject, duplicateNameError, onProjectNameChange, isLoading }: NewProjectModalProps) {
+export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProject, duplicateNameError, onProjectNameChange, isLoading, onFactoryTemplatesLoaded }: NewProjectModalProps) {
   const [formData, setFormData] = useState<ProjectInfo>({
     id: '',
     name: '',
@@ -80,6 +81,14 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     // Attendi il risultato della creazione
     const created = await onCreateProject(formData);
     if (created) {
+      // Dopo la creazione, carica i DDT templates dalla factory
+      if (onFactoryTemplatesLoaded) {
+        fetch('http://localhost:3100/api/factory/dialogue-templates')
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data)) onFactoryTemplatesLoaded(data);
+          });
+      }
       // onClose(); // RIMOSSO: la chiusura è gestita dal parent tramite appState
       setFormData({
         id: '',

@@ -339,6 +339,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             duplicateNameError={createError}
             onProjectNameChange={handleProjectNameChange}
             isLoading={isCreatingProject}
+            onFactoryTemplatesLoaded={setDialogueTemplates}
           />
         </>
       )}
