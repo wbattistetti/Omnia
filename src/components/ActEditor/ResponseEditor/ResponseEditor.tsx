@@ -269,6 +269,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   // handleDrop logica semplificata (solo aggiunta root per demo)
   const handleDrop = (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => {
+    console.log('[DND][handleDrop] called with:', { targetId, position, item });
+    console.log('[DND][handleDrop] nodes before:', editorState.nodes);
     if (item && item.action) {
       const action = item.action;
       const id = Math.random().toString(36).substr(2, 9);
@@ -283,21 +285,30 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         parameters: item.parameters ? item.parameters.map(createParameter) : undefined,
       });
       if (targetId === null) {
+        console.log('[DND][handleDrop] ADD_NODE as root');
         dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
       } else {
         const targetNode = editorState.nodes.find(n => n.id === targetId);
+        console.log('[DND][handleDrop] targetNode:', targetNode);
         if (!targetNode) {
+          console.log('[DND][handleDrop] targetNode not found, ADD_NODE as root');
           dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
         } else if (targetNode.type === 'escalation' && position === 'child') {
+          console.log('[DND][handleDrop] ADD_NODE as child of escalation');
           dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id } });
         } else if (targetNode.type === 'escalation' && (position === 'before' || position === 'after')) {
+          console.log('[DND][handleDrop] insertNodeAt escalation', position);
           const inserted = insertNodeAt(editorState.nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position);
+          console.log('[DND][handleDrop] nodes after insertNodeAt:', inserted);
           dispatchWithHistory({ type: 'SET_NODES', nodes: inserted });
         } else if (targetNode.type === 'action') {
           const pos: 'before' | 'after' = position === 'before' ? 'before' : 'after';
+          console.log('[DND][handleDrop] insertNodeAt action', pos);
           const inserted = insertNodeAt(editorState.nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, pos);
+          console.log('[DND][handleDrop] nodes after insertNodeAt:', inserted);
           dispatchWithHistory({ type: 'SET_NODES', nodes: inserted });
         } else {
+          console.log('[DND][handleDrop] fallback ADD_NODE as root');
           dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
         }
       }

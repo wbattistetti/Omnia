@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ArrowLeft } from 'lucide-react';
 import SmartTooltip from '../../SmartTooltip';
 import { TooltipWrapper } from '../../TooltipWrapper';
 
@@ -12,9 +12,10 @@ interface ActionRowProps {
   onDelete?: () => void;
   draggable?: boolean;
   selected?: boolean;
+  dndPreview?: 'before' | 'after';
 }
 
-const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21caf', onEdit, onDelete, draggable, selected }) => {
+const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21caf', onEdit, onDelete, draggable, selected, dndPreview }) => {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
   const [hovered, setHovered] = useState(false);
@@ -61,6 +62,9 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21c
         boxShadow: selected ? `0 2px 8px 0 ${color}22` : undefined,
         cursor: draggable ? 'grab' : 'default',
         transition: 'background 0.15s, border 0.15s',
+        position: 'relative',
+        borderTop: dndPreview === 'before' ? '2px solid #2563eb' : undefined,
+        borderBottom: dndPreview === 'after' ? '2px solid #2563eb' : undefined,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -98,7 +102,7 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21c
       {editing && (
         <>
           {/* Confirm (checkmark) */}
-          <TooltipWrapper tooltip={<SmartTooltip text="Conferma modifica" tutorId="action_confirm" />}>
+          <TooltipWrapper tooltip={<SmartTooltip text="Conferma modifica" tutorId="action_confirm"><span /></SmartTooltip>}>
             {(show, triggerProps) => (
               <button
                 {...triggerProps}
@@ -111,7 +115,7 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21c
             )}
           </TooltipWrapper>
           {/* Cancel (X) */}
-          <TooltipWrapper tooltip={<SmartTooltip text="Annulla modifica" tutorId="action_cancel" />}>
+          <TooltipWrapper tooltip={<SmartTooltip text="Annulla modifica" tutorId="action_cancel"><span /></SmartTooltip>}>
             {(show, triggerProps) => (
               <button
                 {...triggerProps}
@@ -125,7 +129,7 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21c
           </TooltipWrapper>
           {/* Delete (trash) */}
           {onDelete && (
-            <TooltipWrapper tooltip={<SmartTooltip text="Elimina messaggio" tutorId="action_delete" />}>
+            <TooltipWrapper tooltip={<SmartTooltip text="Elimina messaggio" tutorId="action_delete"><span /></SmartTooltip>}>
               {(show, triggerProps) => (
                 <button
                   {...triggerProps}
@@ -142,7 +146,7 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21c
       )}
       {/* Show pencil and trash on hover if not editing */}
       {!editing && hovered && onEdit && (
-        <TooltipWrapper tooltip={<SmartTooltip text="Modifica messaggio" tutorId="action_edit" />}>
+        <TooltipWrapper tooltip={<SmartTooltip text="Modifica messaggio" tutorId="action_edit"><span /></SmartTooltip>}>
           {(show, triggerProps) => (
             <button
               {...triggerProps}

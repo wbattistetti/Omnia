@@ -82,6 +82,9 @@ const renderTree = (
 const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void; stepKey?: string; foreColor?: string; bgColor?: string }> = ({ nodes, onDrop, onRemove, onAddEscalation, onToggleInclude, stepKey, foreColor, bgColor }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Drop preview state
+  const [dropPreviewIdx, setDropPreviewIdx] = useState<number | null>(null);
+  const [dropPreviewPosition, setDropPreviewPosition] = useState<'before' | 'after' | null>(null);
 
   // Drop su canvas (aggiungi come root)
   const [{ isOver }, dropRef] = useDrop({
@@ -90,10 +93,12 @@ const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void; stepKey
       if (item && typeof item === 'object') {
         const clientOffset = monitor.getClientOffset();
         if (!clientOffset) {
+          setDropPreviewIdx(null); setDropPreviewPosition(null);
           return;
         }
         const containerRect = containerRef.current?.getBoundingClientRect();
         if (!containerRect) {
+          setDropPreviewIdx(null); setDropPreviewPosition(null);
           return;
         }
         const y = clientOffset.y - containerRect.top;
@@ -118,12 +123,14 @@ const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void; stepKey
         });
         // Se non ci sono nodi, aggiungi come root
         if (nodes.length === 0) {
+          setDropPreviewIdx(null); setDropPreviewPosition(null);
           onDrop(null, 'after', item);
           setSelectedNodeId(null);
           return;
         }
         // Se il punto di drop è sopra il primo nodo o sotto l'ultimo nodo, aggiungi come root
         if (y < minY - 16 || y > maxY + 16) { // 16px di tolleranza
+          setDropPreviewIdx(null); setDropPreviewPosition(null);
           onDrop(null, 'after', item);
           setSelectedNodeId(null);
           return;
@@ -136,7 +143,10 @@ const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void; stepKey
             const rect = nodeElem.getBoundingClientRect();
             const centerY = rect.top + rect.height / 2 - containerRect.top;
             position = y < centerY ? 'before' : 'after';
+            setDropPreviewIdx(closestIdx);
+            setDropPreviewPosition(position);
             const result = onDrop(nodes[closestIdx].id, position, item);
+            setDropPreviewIdx(null); setDropPreviewPosition(null);
             if (typeof result === 'string') {
               setSelectedNodeId(result);
             } else {
@@ -145,7 +155,48 @@ const TreeView: React.FC<TreeViewProps & { onAddEscalation?: () => void; stepKey
             return;
           }
         }
+        setDropPreviewIdx(null); setDropPreviewPosition(null);
       }
+    },
+    hover(item, monitor) {
+      const clientOffset = monitor.getClientOffset();
+      if (!clientOffset) { setDropPreviewIdx(null); setDropPreviewPosition(null); return; }
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      if (!containerRect) { setDropPreviewIdx(null); setDropPreviewPosition(null); return; }
+      const y = clientOffset.y - containerRect.top;
+      let closestIdx = -1;
+      let minDist = Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      nodes.forEach((node, idx) => {
+        const nodeElem = document.getElementById('tree-node-' + node.id);
+        if (nodeElem) {
+          const rect = nodeElem.getBoundingClientRect();
+          const centerY = rect.top + rect.height / 2 - containerRect.top;
+          if (centerY < minY) minY = centerY;
+          if (centerY > maxY) maxY = centerY;
+          const dist = Math.abs(centerY - y);
+          if (dist < minDist) {
+            minDist = dist;
+            closestIdx = idx;
+          }
+        }
+      });
+      if (nodes.length === 0) { setDropPreviewIdx(null); setDropPreviewPosition(null); return; }
+      if (y < minY - 16 || y > maxY + 16) { setDropPreviewIdx(null); setDropPreviewPosition(null); return; }
+      let position: 'before' | 'after' = 'after';
+      if (closestIdx !== -1) {
+        const nodeElem = document.getElementById('tree-node-' + nodes[closestIdx].id);
+        if (nodeElem) {
+          const rect = nodeElem.getBoundingClientRect();
+          const centerY = rect.top + rect.height / 2 - containerRect.top;
+          position = y < centerY ? 'before' : 'after';
+          setDropPreviewIdx(closestIdx);
+          setDropPreviewPosition(position);
+          return;
+        }
+      }
+      setDropPreviewIdx(null); setDropPreviewPosition(null);
     },
     collect: monitor => ({
       isOver: monitor.isOver({ shallow: true })
