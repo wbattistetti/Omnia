@@ -75,12 +75,17 @@ export const AppContent: React.FC<AppContentProps> = ({
   const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
   const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
   const [selectedDDTLanguage, setSelectedDDTLanguage] = useState<string>('it');
-  const [openedDDTId, setOpenedDDTId] = useState<string | null>(null);
+  const [openedDDTId, setOpenedDDTId] = useState<string>('');
 
   // Stato globale per DDT
   const [dialogueTemplates, setDialogueTemplates] = useState<any[]>([]);
 
   const handleOpenDDTEditor = useCallback((ddt: any, translations: any, lang: string) => {
+    if (!ddt) {
+      setSelectedDDT(null);
+      setOpenedDDTId('');
+      return;
+    }
     const ddtKey = ddt._id || ddt.id;
     if (translations && Object.keys(translations).length > 0) {
       setTranslationsForDDT(ddtKey, translations);
@@ -93,14 +98,14 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const handleCloseDDTEditor = useCallback(() => {
     setSelectedDDT(null);
-    setOpenedDDTId(null);
+    setOpenedDDTId('');
   }, []);
 
   // Nuova funzione per gestire la cancellazione di un DDT
   const handleDeleteDDT = useCallback((ddtId: string) => {
     if (selectedDDT && (selectedDDT._id === ddtId || selectedDDT.id === ddtId)) {
       setSelectedDDT(null);
-      setOpenedDDTId(null);
+      setOpenedDDTId('');
     }
   }, [selectedDDT]);
 
@@ -345,7 +350,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               isCollapsed={isSidebarCollapsed}
               onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               onOpenDDTEditor={handleOpenDDTEditor}
-              openedDDTId={openedDDTId}
+              openedDDTId={openedDDTId || null}
               onDeleteDDT={handleDeleteDDT}
               dialogueTemplates={dialogueTemplates}
               setDialogueTemplates={setDialogueTemplates}

@@ -2,8 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Calendar } from 'lucide-react';
 import { useOrchestrator } from '../orchestrator/useOrchestrator';
 import { buildDDT } from '../DDTAssembler/DDTBuilder';
-import { buildStepMessagesFromResults } from '../DDTAssembler/buildStepMessagesFromResults';
+import { buildSteps } from '../DDTAssembler/buildStepMessagesFromResults';
 import { generateStepsSkipDetectType } from '../orchestrator/stepGenerator';
+import DataTypeLabel from './DataTypeLabel';
+import StepLabel from './StepLabel';
 import HourglassSpinner from './HourglassSpinner';
 
 interface DataNode {
@@ -75,7 +77,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
         stepResults = [fakeDetectType, ...orchestrator.state.stepResults];
       }
       // Costruisci stepMessages con la nuova funzione
-      const stepMessages = buildStepMessagesFromResults(stepResults);
+      const stepMessages = buildSteps(stepResults);
       console.log('[WizardPipelineStep] stepMessages built for assembleMainData:', stepMessages);
       // Assembla il DDT finale passando solo stepResults (stepMessages è già usato internamente)
       const structureResult = stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
@@ -96,56 +98,27 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   }, [orchestrator.state.currentStepIndex, orchestrator.state.steps.length, orchestrator.state.stepResults, finalDDT, onComplete, confirmedLabel, dataNode]);
 
   return (
-    <div style={{ padding: 32, maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 18 }}>
-        <span style={{ fontSize: 38, color: '#fff', marginBottom: 6 }}>
-          {detectTypeIcon === 'Calendar' && <Calendar size={38} style={{ marginRight: 10, verticalAlign: 'middle' }} />}
-        </span>
-        <span style={{ fontWeight: 800, fontSize: 28, color: '#a21caf', marginBottom: 0 }}>
-          {dataNode.name}
-        </span>
+    <div style={{ padding: '18px 0 12px 0', maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+      <div style={{ fontWeight: 600, fontSize: 18, color: '#fff', marginBottom: 6 }}>Creating...</div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+        <DataTypeLabel
+          icon={detectTypeIcon === 'Calendar' ? <Calendar size={18} style={{ color: '#a21caf' }} /> : null}
+          label={dataNode.name}
+        />
       </div>
-      {/* Step message, spinner, error */}
-      <div style={{ background: '#23232b', borderRadius: 12, padding: 24, color: '#fff', minHeight: 80 }}>
-        {orchestrator.state.stepLoading && (
-          <div style={{ color: '#2563eb', display: 'flex', alignItems: 'center', fontWeight: 600, fontSize: 18, justifyContent: 'center', gap: 12 }}>
-            <HourglassSpinner />
-            {orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label}
-          </div>
-        )}
-        {orchestrator.state.stepError && <div style={{ color: '#ef4444' }}>Errore step!</div>}
-        {!orchestrator.state.stepLoading && !orchestrator.state.stepError && orchestrator.state.currentStepIndex < orchestrator.state.steps.length && (
-          <div style={{ color: '#2563eb', fontWeight: 600, fontSize: 18 }}>
-            {orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label}
-          </div>
-        )}
-        {/* Mostra preview JSON finale a fine pipeline */}
-        {finalDDT && (
-          <div style={{ marginTop: 24 }}>
-            <h3>DDT JSON Preview</h3>
-            <pre style={{ background: '#f3f3f3', padding: 12, borderRadius: 4, maxHeight: 400, overflow: 'auto', color: '#222' }}>{JSON.stringify(finalDDT, null, 2)}</pre>
-          </div>
-        )}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+        <StepLabel
+          icon={<HourglassSpinner />}
+          label={orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || ''}
+        />
       </div>
-      {/* Pulsante Annulla sempre visibile */}
-      <div style={{ marginTop: 24, textAlign: 'center' }}>
-        <button
-          onClick={onCancel}
-          style={{
-            background: 'transparent',
-            color: '#a21caf',
-            border: '2px solid #a21caf',
-            borderRadius: 8,
-            padding: '10px 32px',
-            fontWeight: 700,
-            fontSize: 18,
-            cursor: 'pointer',
-            marginTop: 8,
-          }}
-        >
-          Annulla
-        </button>
-      </div>
+      {/* Mostra preview JSON finale a fine pipeline */}
+      {finalDDT && (
+        <div style={{ marginTop: 24 }}>
+          <h3>DDT JSON Preview</h3>
+          <pre style={{ background: '#f3f3f3', padding: 12, borderRadius: 4, maxHeight: 400, overflow: 'auto', color: '#222' }}>{JSON.stringify(finalDDT, null, 2)}</pre>
+        </div>
+      )}
     </div>
   );
 };

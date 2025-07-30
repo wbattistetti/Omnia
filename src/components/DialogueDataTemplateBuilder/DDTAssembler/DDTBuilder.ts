@@ -4,7 +4,7 @@ import { buildStepGroup } from './StepBuilder';
 import { StepGroup, Escalation, Action, KNOWN_ACTIONS } from './types';
 import { buildMainDataNode } from './MainDataBuilder';
 import { StepResult } from '../orchestrator/types';
-import { buildStepMessagesFromResults } from './buildStepMessagesFromResults';
+import { buildSteps } from './buildStepMessagesFromResults';
 
 // Entrypoint: costruisce il DDT completo e ricorsivo.
 export function buildDDT(
@@ -12,7 +12,7 @@ export function buildDDT(
   dataNode: any,
   stepResults: StepResult[]
 ) {
-  const stepMessages = buildStepMessagesFromResults(stepResults);
+  const stepMessages = buildSteps(stepResults);
   const translations: Record<string, string> = {};
   const mainData = buildMainDataNode(ddtId, dataNode, stepMessages, translations);
   const label = dataNode.label || ddtId;

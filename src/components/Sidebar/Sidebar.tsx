@@ -13,6 +13,7 @@ import { useSidebarTheme } from './SidebarThemeContext';
 import { getAllDialogueTemplates } from '../../services/ProjectDataService';
 import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
 import { useFilteredProjectData } from './useFilteredProjectData';
+import DeleteConfirmation from './DeleteConfirmation';
 
 // Configuration for each entity type in the sidebar
 const entityConfig = {
@@ -488,47 +489,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </button>
                   {/* Dialog conferma cancellazione */}
                   {showDeleteConfirm === dt.id && (
-                    <div style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      marginTop: 10,
-                      padding: 12,
-                      background: '#181028',
-                      border: '1px solid #a21caf',
-                      borderRadius: 8,
-                      boxShadow: '0 2px 8px rgba(80,0,80,0.08)'
-                    }}>
-                      <button
-                        style={{
-                          color: '#fff',
-                          background: '#ef4444',
-                          border: 'none',
-                          borderRadius: 4,
-                          padding: '10px 0',
-                          fontWeight: 700,
-                          fontSize: 16,
-                          cursor: 'pointer',
-                          marginBottom: 10,
-                          width: 140
-                        }}
-                        onClick={() => handleDeleteDDT(dt.id)}
-                      >Elimina</button>
-                      <button
-                        style={{
-                          color: '#a21caf',
-                          background: 'none',
-                          border: '1px solid #a21caf',
-                          borderRadius: 4,
-                          padding: '10px 0',
-                          fontWeight: 700,
-                          fontSize: 16,
-                          cursor: 'pointer',
-                          width: 140
-                        }}
-                        onClick={() => setShowDeleteConfirm(null)}
-                      >Annulla</button>
-                    </div>
+                    <DeleteConfirmation
+                      onDelete={() => handleDeleteDDT(dt.id)}
+                      onCancel={() => setShowDeleteConfirm(null)}
+                    />
                   )}
                 </div>
               );

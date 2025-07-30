@@ -6,6 +6,8 @@ import styles from './ResponseEditor.module.css';
 import ConstraintWizard from '../../ConstraintGenerator/ConstraintWizard';
 import { createConstraint, updateConstraint, removeConstraint } from './constraintFactories';
 import { AlertTriangle } from 'lucide-react';
+import ResponseEditorHeader from './ResponseEditorHeader';
+import StepStrip from './StepStrip';
 
 export interface ResponseEditorUIProps {
   editorState: any;
@@ -64,111 +66,21 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
 
   return (
     <div className={styles.responseEditorRoot}>
-      {/* Header DDT con icona e label */}
-      <div
-        style={{
-          background: '#a21caf',
-          color: '#fff',
-          padding: '10px 0 10px 32px',
-          textAlign: 'left',
-          fontWeight: 700,
-          fontSize: 18,
-          borderTopLeftRadius: 10,
-          borderTopRightRadius: 10,
-          marginBottom: 12,
-          letterSpacing: 0.2,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          gap: 12,
-          position: 'relative'
-        }}
-      >
-        {props.getDDTIcon(props.editorState.ddtType)}
-        <span style={{ fontWeight: 700, fontSize: 18, color: '#fff', letterSpacing: 0.2 }}>
-          {props.editorState.ddtLabel}
-        </span>
-        {props.onClose && (
-          <button
-            onClick={props.onClose}
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 16,
-              background: 'transparent',
-              border: 'none',
-              color: '#fff',
-              fontSize: 22,
-              fontWeight: 700,
-              cursor: 'pointer',
-              zIndex: 10
-            }}
-            title="Chiudi editor"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-      {/* Bottone di chiusura in alto a destra */}
-      {props.onClose && (
-        <button
-          style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}
-          onClick={props.onClose}
-          title="Chiudi editor"
-        >
-          ✕
-        </button>
-      )}
-      <div className={styles.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <span style={{ fontWeight: 600, color: '#fff', fontSize: 15, marginRight: 8 }}>Il Bot:</span>
-          <span style={{ display: 'inline-flex', gap: 8 }}>
-            {props.stepKeys.filter((step: string) => step !== 'notAcquired').map((step: string) => {
-              const meta = props.stepMeta[step] || { icon: null, label: step, border: '#888', bg: 'rgba(100,100,100,0.08)', color: '#888', bgActive: 'rgba(100,100,100,0.18)' };
-              const isActive = props.editorState.selectedStep === step;
-              // Colore più carico per tab attiva
-              const activeBg = isActive ? (meta.bgActive || 'rgba(59,130,246,0.28)') : 'transparent';
-              return (
-                <button
-                  key={step}
-                  onClick={() => props.editorState.onStepChange(step)}
-                  className={`${styles.stepTab} ${isActive ? styles.stepTabActive : ''}`}
-                  style={{
-                    border: `1.5px solid ${meta.border}`,
-                    background: activeBg,
-                    color: meta.color,
-                    borderRadius: 999,
-                    padding: '3px 16px',
-                    fontSize: 15,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    cursor: 'pointer',
-                    boxShadow: isActive ? `0 0 0 2px ${meta.border}33` : undefined,
-                    outline: 'none',
-                    transition: 'background 0.15s, box-shadow 0.15s',
-                  }}
-                >
-                  {meta.icon}
-                  {meta.label}
-                </button>
-              );
-            })}
-          </span>
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{ fontSize: 13, color: '#555' }}>
-              <input type="checkbox" checked={props.editorState.showLabel} onChange={e => props.editorState.onShowLabelChange(e.target.checked)} style={{ marginRight: 4 }} />
-              Mostra label azione
-            </label>
-          </span>
-          <button
-            onClick={() => setShowConstraintWizard(true)}
-            style={{ marginLeft: 16, background: '#a21caf', color: '#fff', fontWeight: 700, border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 15, cursor: 'pointer' }}
-          >
-            + Aggiungi constraint
-          </button>
-        </div>
-      </div>
+      <ResponseEditorHeader
+        ddt={props.editorState.ddt}
+        selectedNodeIndex={props.selectedNodeIndex}
+        onSelectNode={props.onSelectNode || (() => {})}
+        showLabel={props.editorState.showLabel}
+        onShowLabelChange={props.editorState.onShowLabelChange}
+        onAddConstraint={() => setShowConstraintWizard(true)}
+        getDDTIcon={props.getDDTIcon}
+      />
+      <StepStrip
+        steps={props.stepKeys}
+        stepMeta={props.stepMeta}
+        selectedStep={props.editorState.selectedStep}
+        onStepChange={props.editorState.onStepChange}
+      />
       {/* Lista constraint */}
       {props.constraints && props.constraints.length > 0 && (
         <div style={{ marginBottom: 16 }}>
@@ -181,75 +93,6 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
-        {/* Pannellino subdata a sinistra */}
-        {(() => {
-          // Logga mainData e subdataArr
-          const mainLabel = props.editorState.ddt?.label || '—';
-          const subdataArr = props.editorState.ddt?.mainData?.subData || [];
-          return (
-            <div style={{
-              width: 180,
-              minWidth: 140,
-              maxWidth: 220,
-              background: 'rgba(37,99,235,0.07)',
-              borderRadius: 10,
-              marginRight: 18,
-              padding: '10px 0',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'stretch',
-              gap: 0,
-              boxShadow: '0 2px 8px #0001',
-              overflowY: 'auto',
-              height: 'calc(100% - 8px)'
-            }}>
-              <div style={{ fontWeight: 700, color: '#2563eb', fontSize: 15, textAlign: 'center', marginBottom: 6 }}>Subdata</div>
-              {/* Main data root selezionabile */}
-              <div
-                onClick={() => {
-                  if (props.onSelectNode) {
-                    props.onSelectNode(null);
-                  }
-                }}
-                style={{
-                  fontWeight: props.selectedNodeIndex == null ? 800 : 600,
-                  background: props.selectedNodeIndex == null ? '#a21caf' : '#fff',
-                  color: props.selectedNodeIndex == null ? '#fff' : '#18181b',
-                  cursor: 'pointer',
-                  borderRadius: 6,
-                  marginBottom: 2,
-                  padding: '6px 12px',
-                  border: props.selectedNodeIndex == null ? '2px solid #a21caf' : '1px solid #e0e7ef'
-                }}
-              >
-                {mainLabel}
-              </div>
-              {/* Subdata figli selezionabili */}
-              {subdataArr.map((sub: any, i: number) => (
-                <div
-                  key={sub.id || sub.variable || sub.name || i}
-                  onClick={() => {
-                    if (props.onSelectNode) {
-                      props.onSelectNode(i);
-                    }
-                  }}
-                  style={{
-                    fontWeight: props.selectedNodeIndex === i ? 800 : 600,
-                    background: props.selectedNodeIndex === i ? '#a21caf' : '#f8fafc',
-                    color: props.selectedNodeIndex === i ? '#fff' : '#2563eb',
-                    cursor: 'pointer',
-                    borderRadius: 6,
-                    marginBottom: 2,
-                    padding: '6px 28px',
-                    border: props.selectedNodeIndex === i ? '2px solid #a21caf' : '1px solid #e0e7ef'
-                  }}
-                >
-                  {sub.label}
-                </div>
-              ))}
-            </div>
-          );
-        })()}
         <div style={{ flex: 1, minWidth: 320, padding: 16 }}>
           {/* Undo/Redo controls */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>

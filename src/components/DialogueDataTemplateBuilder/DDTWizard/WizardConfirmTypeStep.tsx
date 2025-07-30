@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calendar } from 'lucide-react';
+import DataTypeLabel from './DataTypeLabel';
 
 interface Props {
   detectedType: string | null;
@@ -10,29 +11,28 @@ interface Props {
 }
 
 const WizardConfirmTypeStep: React.FC<Props> = ({ detectedType, detectTypeIcon, onCorrect, onWrong, onCancel }) => (
-  <div style={{ padding: 32, maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
-    <div style={{ fontWeight: 600, fontSize: 18, color: '#fff', marginBottom: 10 }}>
-      You want to create a dialogue for:
+  <div style={{ padding: '16px 0 12px 0', maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+    <div style={{ fontWeight: 600, fontSize: 18, color: '#fff', marginBottom: 6 }}>
+      Create a dialogue for:
     </div>
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 18 }}>
-      <span style={{ fontSize: 38, color: '#fff', marginBottom: 6 }}>
-        {detectTypeIcon === 'Calendar' && <Calendar size={38} style={{ marginRight: 10, verticalAlign: 'middle' }} />}
-      </span>
-      <span style={{ fontWeight: 800, fontSize: 28, color: '#a21caf', marginBottom: 0 }}>
-        {detectedType}
-      </span>
+    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+      <DataTypeLabel
+        icon={detectTypeIcon === 'Calendar' ? <Calendar size={18} style={{ color: '#a21caf' }} /> : null}
+        label={detectedType || ''}
+      />
     </div>
-    <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: 14, marginBottom: 18 }}>
+    <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 6 }}>
       <button
         onClick={onCorrect}
         style={{
           background: 'none',
           color: '#22c55e',
-          border: 'none',
+          border: '1px solid #22c55e',
+          borderRadius: 6,
           fontWeight: 400,
-          fontSize: 20,
+          fontSize: 14,
           cursor: 'pointer',
-          padding: '4px 12px',
+          padding: '2px 10px',
         }}
       >
         Correct
@@ -42,11 +42,12 @@ const WizardConfirmTypeStep: React.FC<Props> = ({ detectedType, detectTypeIcon, 
         style={{
           background: 'none',
           color: '#ef4444',
-          border: 'none',
+          border: '1px solid #ef4444',
+          borderRadius: 6,
           fontWeight: 400,
-          fontSize: 20,
+          fontSize: 14,
           cursor: 'pointer',
-          padding: '4px 12px',
+          padding: '2px 10px',
         }}
       >
         Wrong
@@ -56,11 +57,12 @@ const WizardConfirmTypeStep: React.FC<Props> = ({ detectedType, detectTypeIcon, 
         style={{
           background: 'none',
           color: '#3b82f6',
-          border: 'none',
+          border: '1px solid #3b82f6',
+          borderRadius: 6,
           fontWeight: 400,
-          fontSize: 18,
+          fontSize: 14,
           cursor: 'pointer',
-          padding: '4px 12px',
+          padding: '2px 10px',
         }}
       >
         Cancel

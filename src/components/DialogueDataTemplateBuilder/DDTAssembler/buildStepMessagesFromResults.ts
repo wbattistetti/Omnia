@@ -2,7 +2,7 @@
 export type StepResults = Array<{ stepKey: string; payload: any }>;
 export type StepMessages = Record<string, string[][]>;
 
-export function buildStepMessagesFromResults(stepResults: StepResults): StepMessages {
+export function buildSteps(stepResults: StepResults): StepMessages {
   const stepKeyMap: Record<string, string> = {
     startPrompt: 'start',
     noMatchPrompts: 'noMatch',
@@ -29,7 +29,11 @@ export function buildStepMessagesFromResults(stepResults: StepResults): StepMess
     }
     if (!Array.isArray(messages) || messages.length === 0) continue;
     if (!stepMessages[mappedStep]) stepMessages[mappedStep] = [];
-    stepMessages[mappedStep].push(messages);
+    // PATCH: ogni messaggio in un array singolo
+    for (const msg of messages) {
+      stepMessages[mappedStep].push([msg]);
+    }
   }
+  console.log('[BuildSteps] Final stepMessages:', stepMessages);
   return stepMessages;
 }

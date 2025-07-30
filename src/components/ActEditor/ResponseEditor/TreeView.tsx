@@ -38,11 +38,8 @@ const renderTree = (
       // Se escalation, calcola la label dinamica solo tra escalation dello stesso step
       let escalationLabel = undefined;
       if (node.type === 'escalation') {
-        // Ricava lo stepKey dal node.id (es: noMatch_escalation_1)
-        const match = node.id.match(/^([a-zA-Z0-9_]+)_escalation_/);
-        const nodeStepKey = match ? match[1] : undefined;
-        // Trova tutti i fratelli escalation con stesso stepKey
-        const allEscalations = siblings.filter(n => n.type === 'escalation' && n.id.startsWith(`${nodeStepKey}_escalation_`));
+        // Trova tutte le escalation tra i siblings (già filtrati per step/tab)
+        const allEscalations = siblings.filter(n => n.type === 'escalation');
         const escIdx = allEscalations.findIndex(n => n.id === node.id);
         escalationLabel = `${escIdx + 1}° recovery`;
       }

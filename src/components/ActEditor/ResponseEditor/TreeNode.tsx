@@ -6,6 +6,9 @@ import { TreeNodeProps } from './types';
 import styles from './TreeNode.module.css';
 import { useDrop, useDrag } from 'react-dnd';
 import { ESCALATION_COLORS } from './escalationColors';
+import ActionRow from './ActionRow';
+import SmartTooltip from '../../SmartTooltip';
+import { TooltipWrapper } from '../../TooltipWrapper';
 
 interface TreeNodeExtraProps {
   showLabel?: boolean;
@@ -213,15 +216,22 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
               <span>{escalationLabel || text}</span>
             </span>
             {onCancelNewNode && !showDeleteConfirm && (
-              <span title="Elimina recovery">
-                <Trash2
-                  size={17}
-                  style={{ color: colorConfig.fore, marginLeft: 12, cursor: 'pointer' }}
-                  onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }}
-                  onMouseOver={e => { e.currentTarget.style.color = '#b91c1c'; }}
-                  onMouseOut={e => { e.currentTarget.style.color = colorConfig.fore; }}
-                />
-              </span>
+              <TooltipWrapper tooltip={<SmartTooltip text="Elimina recovery" tutorId="recovery_delete" />}>
+                {(show, triggerProps) => (
+                  <span
+                    {...triggerProps}
+                    style={{ position: 'relative', display: 'inline-block' }}
+                  >
+                    <Trash2
+                      size={17}
+                      style={{ color: colorConfig.fore, marginLeft: 12, cursor: 'pointer' }}
+                      onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                      onMouseOver={e => { e.currentTarget.style.color = '#b91c1c'; }}
+                      onMouseOut={e => { e.currentTarget.style.color = colorConfig.fore; }}
+                    />
+                  </span>
+                )}
+              </TooltipWrapper>
             )}
             {showDeleteConfirm && (
               <span style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
@@ -240,7 +250,19 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
         {!collapsed && childrenNodes && childrenNodes.length > 0 && (
           <div style={{ marginLeft: 24, marginTop: 8, opacity: included ? 1 : 0.5, color: included ? undefined : '#bbb' }}>
             {childrenNodes.map(child => (
-              <TreeNode key={child.id} {...child} level={level + 1} />
+              <ActionRow
+                key={child.id}
+                icon={(() => {
+                  const iconComponent = child.type === 'action' && child.icon ? getIconComponent(child.icon) : null;
+                  return iconComponent || <MessageCircle size={16} />;
+                })()}
+                label={child.label}
+                text={child.primaryValue || child.text}
+                color={child.color}
+                draggable={true}
+                onEdit={() => {}} // enable editing mode for escalation children
+                onDelete={onCancelNewNode ? () => onCancelNewNode(child.id) : undefined}
+              />
             ))}
           </div>
         )}
@@ -248,65 +270,59 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
     );
   }
 
+  // Render per nodi azione/messaggio (non escalation)
   return (
     <div 
       ref={nodeRef}
       id={domId}
       style={{ position: 'relative', opacity: isDraggingNode ? 0.5 : 1 }}
     >
-      {/* Feedback visivo react-dnd */}
+      {/* Feedback visivo react-dnd migliorato */}
       {isOver && dropTarget === 'before' && (
-        <div style={{ position: 'absolute', top: -2, left: 0, right: 0, height: 4, background: '#2563eb', borderRadius: 2, zIndex: 10 }} />
+        <div style={{
+          position: 'absolute',
+          top: -4, left: 0, right: 0, height: 6,
+          background: 'linear-gradient(90deg, #a21caf 0%, #2563eb 100%)',
+          borderRadius: 3,
+          zIndex: 20,
+          boxShadow: '0 2px 8px #a21caf44',
+        }} />
       )}
-      <div
-        className={`${styles.node} ${getBgClass()}`}
-        style={{
-          marginLeft: `${level * INDENT_WIDTH}px`,
-          border: selected ? '2px solid #2563eb' : isDraggingNode ? '2px solid #60a5fa' : undefined,
-          boxShadow: selected || isDraggingNode ? '0 0 0 2px #93c5fd' : undefined,
-          background: selected ? '#e0e7ff' : isDraggingNode ? '#e0f2fe' : undefined,
-          color: '#111' // Forecolor nero per il testo
-        }}
-      >
-        {expanded ? <ChevronDown size={16} style={{ marginRight: 8 }} /> : <ChevronRight size={16} style={{ marginRight: 8 }} />}
-        <div style={{ marginRight: 8 }} className={color || ''}>
-          {(() => {
-            const iconComponent = type === 'action' && icon ? getIconComponent(icon) : null;
-            return iconComponent || <MessageCircle size={16} />;
-          })()}
-        </div>
-        {/* LABEL opzionale */}
-        {showLabel && label && (
-          <span style={{ fontSize: 12, color: '#888', opacity: 0.7, marginRight: 8 }}>{label}</span>
-        )}
-        {/* Valore principale: textbox se editing SOLO per Messaggio o Domanda */}
-        {showEditingBox && editing && primaryValue !== undefined && !hasEdited ? (
-          <input
-            ref={inputRef}
-            value={editValue}
-            onChange={e => setEditValue(e.target.value)}
-            onBlur={handleEditBlur}
-            onKeyDown={handleEditKeyDown}
-            style={{
-              fontWeight: 500,
-              fontSize: 15,
-              padding: 2,
-              border: '1px solid #2563eb',
-              borderRadius: 4,
-              minWidth: 80,
-              width: '100%', // filla la riga!
-              boxSizing: 'border-box'
-            }}
-          />
-        ) : primaryValue ? (
-          <span style={{ fontWeight: 500, fontSize: 15 }}>{editValue}</span>
-        ) : (
-          <span style={{ fontSize: '0.875rem' }}>{text}</span>
-        )}
-        {isOver && dropTarget === 'child' && (
-          <div style={{ position: 'absolute', inset: 0, border: '2px solid #2563eb', borderRadius: 6, pointerEvents: 'none', zIndex: 10, background: 'rgba(96,165,250,0.08)' }} />
-        )}
-      </div>
+      {isOver && dropTarget === 'after' && (
+        <div style={{
+          position: 'absolute',
+          bottom: -4, left: 0, right: 0, height: 6,
+          background: 'linear-gradient(90deg, #a21caf 0%, #2563eb 100%)',
+          borderRadius: 3,
+          zIndex: 20,
+          boxShadow: '0 2px 8px #a21caf44',
+        }} />
+      )}
+      {isOver && dropTarget === 'child' && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          border: '3px solid #2563eb',
+          borderRadius: 8,
+          pointerEvents: 'none',
+          zIndex: 20,
+          background: 'rgba(96,165,250,0.12)',
+          boxShadow: '0 2px 12px #2563eb22',
+        }} />
+      )}
+      <ActionRow
+        icon={(() => {
+          const iconComponent = type === 'action' && icon ? getIconComponent(icon) : null;
+          return iconComponent || <MessageCircle size={16} />;
+        })()}
+        label={showLabel && label ? label : undefined}
+        text={primaryValue ? editValue : text}
+        color={color}
+        selected={selected}
+        draggable={true}
+        onEdit={() => {}} // enable editing mode for now
+        onDelete={onCancelNewNode ? () => onCancelNewNode(id) : undefined}
+      />
       {/* Parametri figli indentati */}
       {parameters && parameters.length > 0 && (
         <div style={{ marginLeft: `${(level + 1) * INDENT_WIDTH}px`, marginTop: 2 }}>
@@ -316,9 +332,6 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
             </div>
           ))}
         </div>
-      )}
-      {isOver && dropTarget === 'after' && (
-        <div style={{ position: 'absolute', bottom: -2, left: 0, right: 0, height: 4, background: '#2563eb', borderRadius: 2, zIndex: 10 }} />
       )}
     </div>
   );

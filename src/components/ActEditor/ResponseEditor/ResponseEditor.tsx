@@ -77,7 +77,6 @@ function nodesReducer(state: TreeNodeProps[], action: any): TreeNodeProps[] {
 }
 
 const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it', onClose }) => {
-  console.log('[DEBUG] [ResponseEditor] COMPONENT RENDER');
   // LOG: stampa le props ricevute
   console.log('[DEBUG] [ResponseEditor] DDT ricevuto come prop:', ddt);
   // LOG: translations ricevute come prop
@@ -252,26 +251,18 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   }, [ddt, translations, lang]);
 
   // Filtro i nodi per lo step selezionato
-  console.log('[DEBUG] [ResponseEditor] editorState.nodes:', editorState.nodes);
   let filteredNodes: TreeNodeProps[] = [];
   if (editorState.selectedStep) {
-    // Step con escalation
-    const escalationSteps = ['noMatch', 'noInput', 'confirmation', 'notAcquired'];
-    if (escalationSteps.includes(editorState.selectedStep)) {
-      // Prendi tutti i nodi escalation di questo step e i loro figli
-      const escalationNodes = editorState.nodes.filter(n => n.type === 'escalation' && n.stepType === editorState.selectedStep);
-      const escalationIds = escalationNodes.map(n => n.id);
-      const childNodes = editorState.nodes.filter(n => n.parentId && escalationIds.includes(n.parentId));
-      filteredNodes = [...escalationNodes, ...childNodes];
-    } else {
-      // Step senza escalation: prendi tutte le azioni di questo step che NON sono escalation e NON hanno parentId (root)
-      filteredNodes = editorState.nodes.filter(
-        n => n.type === editorState.selectedStep && n.type !== 'escalation' && (n.parentId === undefined || n.parentId === null || n.parentId === '')
-      );
-    }
+    // Mostra solo le escalation e le azioni del tipo di step selezionato
+    const escalationNodes = editorState.nodes.filter(
+      n => n.type === 'escalation' && n.stepType === editorState.selectedStep
+    );
+    const escalationIds = escalationNodes.map(n => n.id);
+    const childNodes = editorState.nodes.filter(
+      n => n.parentId && escalationIds.includes(n.parentId)
+    );
+    filteredNodes = [...escalationNodes, ...childNodes];
   }
-  // LOG: filteredNodes dopo il filtro per la tab corrente
-  console.log('[DEBUG] [ResponseEditor] filteredNodes:', filteredNodes);
   // LOG: selectedStep
   console.log('[DEBUG] [ResponseEditor] selectedStep:', editorState.selectedStep);
   console.log('[ResponseEditor] filteredNodes passed to TreeView:', filteredNodes);
@@ -341,11 +332,11 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   // Mapping step -> icona, colore, label user-friendly
   const stepMeta: Record<string, { icon: JSX.Element; label: string; border: string; bg: string; color: string; bgActive: string }> = {
-    start:        { icon: <PlayCircle size={17} />,        label: 'Chiede il dato',      border: '#3b82f6', bg: 'rgba(59,130,246,0.08)', color: '#3b82f6', bgActive: 'rgba(59,130,246,0.18)' },
-    noMatch:      { icon: <HelpCircle size={17} />,        label: 'Non ha capito',       border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
-    noInput:      { icon: <MicOff size={17} />,            label: 'Non ha sentito',      border: '#6b7280', bg: 'rgba(107,114,128,0.08)', color: '#6b7280', bgActive: 'rgba(107,114,128,0.18)' },
-    confirmation: { icon: <CheckCircle2 size={17} />,      label: 'Deve confermare',     border: '#eab308', bg: 'rgba(234,179,8,0.08)', color: '#eab308', bgActive: 'rgba(234,179,8,0.18)' },
-    success:      { icon: <CheckSquare size={17} />,       label: 'Ha capito!',          border: '#22c55e', bg: 'rgba(34,197,94,0.08)', color: '#22c55e', bgActive: 'rgba(34,197,94,0.18)' },
+    start:        { icon: <PlayCircle size={17} />,        label: 'Chiedo il dato',      border: '#3b82f6', bg: 'rgba(59,130,246,0.08)', color: '#3b82f6', bgActive: 'rgba(59,130,246,0.18)' },
+    noMatch:      { icon: <HelpCircle size={17} />,        label: 'Non capisco',         border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
+    noInput:      { icon: <MicOff size={17} />,            label: 'Non sento',           border: '#6b7280', bg: 'rgba(107,114,128,0.08)', color: '#6b7280', bgActive: 'rgba(107,114,128,0.18)' },
+    confirmation: { icon: <CheckCircle2 size={17} />,      label: 'Devo confermare',     border: '#eab308', bg: 'rgba(234,179,8,0.08)', color: '#eab308', bgActive: 'rgba(234,179,8,0.18)' },
+    success:      { icon: <CheckSquare size={17} />,       label: 'Ho capito!',           border: '#22c55e', bg: 'rgba(34,197,94,0.08)', color: '#22c55e', bgActive: 'rgba(34,197,94,0.18)' },
     notAcquired:  { icon: <AlertCircle size={17} />,       label: 'Dato non acquisito',  border: '#f59e42', bg: 'rgba(245,158,66,0.08)', color: '#f59e42', bgActive: 'rgba(245,158,66,0.18)' },
   };
 
@@ -378,7 +369,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   const [selectedNodeIndex, setSelectedNodeIndex] = React.useState<number | null>(null);
 
   // Funzione per estrarre il nodo selezionato
-  function getNodeByIndex(mainData, index) {
+  function getNodeByIndex(mainData: any, index: any) {
     if (index == null) return mainData;
     if (!mainData.subData || !mainData.subData[index]) return mainData;
     return mainData.subData[index];
@@ -390,9 +381,9 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   const ddtForUI = ddt ? {
     ...ddt,
     steps: Object.fromEntries(
-      (selectedNode?.steps || []).map(stepGroup => [
+      (selectedNode?.steps || []).map((stepGroup: any) => [
         stepGroup.type,
-        (stepGroup.escalations || []).map(escalation => ({
+        (stepGroup.escalations || []).map((escalation: any) => ({
           type: 'escalation',
           id: escalation.escalationId,
           actions: escalation.actions
@@ -406,7 +397,43 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     const mainData = ddt?.mainData || {};
     const node = getNodeByIndex(mainData, selectedNodeIndex);
     console.log('[DEBUG] [ResponseEditor] selectedNodeIndex:', selectedNodeIndex, 'selectedNode:', node);
+    if (node && node.steps) {
+      console.log('[DEBUG] [ResponseEditor] node.steps:', node.steps.map((s: any) => s.type));
+      node.steps.forEach((step: any, idx: any) => {
+        if (step.escalations) {
+          console.log(`[DEBUG] [ResponseEditor] step ${step.type} escalations:`, step.escalations);
+        }
+      });
+    } else {
+      console.log('[DEBUG] [ResponseEditor] No steps found for selected node.');
+    }
   }, [selectedNodeIndex, ddt]);
+
+  useEffect(() => {
+    // Get the current node (main or subdata)
+    const node = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
+    console.log('[DEEP LOG] [useEffect:selectedNodeIndex] selectedNodeIndex:', selectedNodeIndex, 'node:', node);
+    // Extract nodes for this node only
+    const estratti = estraiNodiDaDDT(node, translations, lang);
+    console.log('[DEEP LOG] [useEffect:selectedNodeIndex] estraiNodiDaDDT output:', estratti);
+    dispatchWithHistory({ type: 'SET_NODES', nodes: estratti });
+  }, [selectedNodeIndex, translations, lang]);
+
+  const handleSelectNode = (index: number | null) => {
+    console.log('[DEEP LOG] [handleSelectNode] index:', index);
+    setSelectedNodeIndex(index);
+    // Get the new node
+    const node = getNodeByIndex(ddt?.mainData || {}, index);
+    console.log('[DEEP LOG] [handleSelectNode] node:', node);
+    // Set the first step as selected, if available
+    if (node && node.steps && node.steps.length > 0) {
+      console.log('[DEEP LOG] [handleSelectNode] setting step:', node.steps[0].type);
+      dispatchWithHistory({ type: 'SET_STEP', step: node.steps[0].type });
+    } else {
+      console.log('[DEEP LOG] [handleSelectNode] no steps found, setting step to empty string');
+      dispatchWithHistory({ type: 'SET_STEP', step: '' });
+    }
+  };
 
   return (
     <ResponseEditorUI
@@ -425,8 +452,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       onClose={onClose || (() => {})}
       onToggleInclude={handleToggleInclude}
       selectedNodeIndex={selectedNodeIndex}
-      onSelectNode={setSelectedNodeIndex}
-      ddt={ddtForUI}
+      onSelectNode={handleSelectNode}
     />
   );
 };

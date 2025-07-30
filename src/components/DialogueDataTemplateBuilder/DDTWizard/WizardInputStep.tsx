@@ -1,16 +1,25 @@
 import React from 'react';
+import { Calendar } from 'lucide-react';
 
 interface Props {
   userDesc: string;
   setUserDesc: (v: string) => void;
   onNext: () => void;
   onCancel: () => void;
+  dataNode?: { name?: string };
 }
 
-const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel }) => (
-  <div style={{ padding: 32, maxWidth: 480, margin: '0 auto' }}>
-    <div style={{ color: '#fff', fontWeight: 700, fontSize: 20, marginBottom: 2, textAlign: 'center' }}>Che dato vuoi acquisire?</div>
-    <div style={{ color: '#d1d5db', fontSize: 15, marginBottom: 18, textAlign: 'center' }}>(es: data di nascita, email, ecc)</div>
+const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel, dataNode }) => (
+  <div style={{ padding: 8, maxWidth: 480, margin: 0 }}>
+    <div style={{ textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
+      <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 8 }}>
+        You want to create a dialogue for:
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 0 }}>
+        {dataNode?.name && <Calendar size={22} style={{ color: '#a21caf' }} />}
+        <span style={{ fontSize: 20, fontWeight: 700, color: '#a21caf' }}>{dataNode?.name || ''}</span>
+      </div>
+    </div>
     <input
       type="text"
       value={userDesc}
