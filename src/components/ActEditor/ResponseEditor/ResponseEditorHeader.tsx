@@ -10,6 +10,7 @@ interface ResponseEditorHeaderProps {
   onShowLabelChange: (checked: boolean) => void;
   onAddConstraint: () => void;
   getDDTIcon?: (type: string) => React.ReactNode;
+  onClose: () => void;
 }
 
 const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
@@ -20,6 +21,7 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
   onShowLabelChange,
   onAddConstraint,
   getDDTIcon,
+  onClose,
 }) => {
   return (
     <div style={{ background: '#a21caf', borderRadius: 10, padding: '8px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 18 }}>
@@ -98,9 +100,31 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
         </label>
         <button
           onClick={onAddConstraint}
-          style={{ marginLeft: 16, background: '#fff', color: '#a21caf', fontWeight: 700, border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 15, cursor: 'pointer' }}
+          style={{ marginLeft: 8, background: '#fff', color: '#a21caf', fontWeight: 700, border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 15, cursor: 'pointer' }}
         >
           + Aggiungi constraint
+        </button>
+        <button
+          onClick={onClose}
+          style={{
+            marginLeft: 12,
+            background: 'none',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '50%',
+            width: 32,
+            height: 32,
+            fontSize: 22,
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.15s'
+          }}
+          title="Chiudi editor"
+        >
+          ×
         </button>
       </span>
     </div>

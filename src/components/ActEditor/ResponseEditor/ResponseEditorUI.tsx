@@ -74,6 +74,7 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         onShowLabelChange={props.editorState.onShowLabelChange}
         onAddConstraint={() => setShowConstraintWizard(true)}
         getDDTIcon={props.getDDTIcon}
+        onClose={props.onClose}
       />
       <StepStrip
         steps={props.stepKeys}
