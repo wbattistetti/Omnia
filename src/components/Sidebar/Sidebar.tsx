@@ -3,7 +3,7 @@
 // Features: search/filter, font resize, resizable width, DDT builder, memoized category rendering.
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, Square, Plus, Calendar, Mail, MapPin, FileText, Trash2 } from 'lucide-react';
+import { Search, Settings, ChevronLeft, ChevronRight, Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, Square, Plus, Calendar, Mail, MapPin, FileText, Trash2, Loader, Save } from 'lucide-react';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import Accordion from './Accordion';
 import CategoryItem from './CategoryItem';
@@ -204,14 +204,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (onDeleteDDT) {
       onDeleteDDT(ddtId);
     }
-    // TODO: trigger toast/snackbar "Template eliminato" se vuoi feedback
+    // (opzionale) toast/snackbar "Template eliminato"
   };
 
   // Handler to open the DDT editor (calls parent prop)
   const handleOpenDDTEditor = (ddt: any, translations: any, lang: any) => {
-    console.log('[Sidebar] handleOpenDDTEditor: dt:', ddt, 'dt.translations:', ddt?.translations);
     if (onOpenDDTEditor) {
-      console.log('[Sidebar] onOpenDDTEditor: ddt:', ddt, 'translations:', translations);
       onOpenDDTEditor(ddt, translations, lang);
     }
   };
@@ -239,6 +237,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
     setShowDDTBuilder(false);
     if (onOpenDDTEditor) onOpenDDTEditor(newDDT, {}, 'it');
+  };
+
+  // Salvataggio DDT: spinner su save, POST che sovrascrive tutti i DDT
+  const [isSavingDDT, setIsSavingDDT] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (saveError) {
+      setOpenAccordion('dataDialogueTemplates');
+    }
+  }, [saveError]);
+
+  const handleSaveDDT = async () => {
+    setIsSavingDDT(true);
+    setSaveError(null);
+    try {
+      const res = await fetch('http://localhost:3100/api/factory/dialogue-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dialogueTemplates)
+      });
+      if (!res.ok) {
+        setSaveError('Server error: unable to save DDT');
+        return;
+      }
+      // Aggiorna la lista DDT dopo il salvataggio (refetch)
+      const updated = await getAllDialogueTemplates();
+      setDialogueTemplates(updated);
+      // TODO: feedback visivo (es. toast/snackbar)
+    } catch (err) {
+      // Distinzione tra offline e errore server
+      if (!window.navigator.onLine) {
+        setSaveError('No Internet connection');
+      } else {
+        setSaveError('Cannot reach backend server: connection refused or server is down');
+      }
+    } finally {
+      setIsSavingDDT(false);
+    }
   };
 
   // Collapsed sidebar UI (icons only)
@@ -332,28 +369,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="Data Dialogue Templates"
           icon={<Puzzle className="w-5 h-5 text-fuchsia-400" />}
           isOpen={openAccordion === 'dataDialogueTemplates'}
-          onToggle={() => {
-            setOpenAccordion(openAccordion === 'dataDialogueTemplates' ? '' : 'dataDialogueTemplates');
-          }}
+          onToggle={() => setOpenAccordion(openAccordion === 'dataDialogueTemplates' ? '' : 'dataDialogueTemplates')}
           bgColor={{ header: '#a21caf', light: '#f3e8ff' }}
           action={
-            <button
-              className="p-1 text-fuchsia-500 hover:text-fuchsia-700 transition-colors"
-              title="Aggiungi DDT"
-              onClick={e => {
-                e.stopPropagation();
-                if (openAccordion !== 'dataDialogueTemplates') {
-                  setOpenAccordion('dataDialogueTemplates');
-                  setPendingShowWizard(true);
-                } else if (!showDDTBuilder) {
-                  setShowDDTBuilder(true);
-                }
-              }}
-            >
-              <Plus className="w-5 h-5" />
-            </button>
+            <>
+              <button
+                className="p-1 text-fuchsia-500 hover:text-fuchsia-700 transition-colors"
+                title="Aggiungi DDT"
+                onClick={e => {
+                  e.stopPropagation();
+                  if (openAccordion !== 'dataDialogueTemplates') {
+                    setOpenAccordion('dataDialogueTemplates');
+                    setPendingShowWizard(true);
+                  } else if (!showDDTBuilder) {
+                    setShowDDTBuilder(true);
+                  }
+                }}
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+              <button
+                title="Salva tutti i DDT"
+                onClick={handleSaveDDT}
+                disabled={isSavingDDT}
+                style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 8 }}
+              >
+                {isSavingDDT ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              </button>
+            </>
           }
         >
+          {/* Messaggio di errore sotto header, sopra lista */}
+          {saveError && (
+            <div style={{
+              color: '#fff',
+              background: '#dc2626',
+              borderRadius: 6,
+              margin: '8px 0',
+              padding: '6px 12px',
+              fontSize: 13,
+              textAlign: 'center'
+            }}>
+              {saveError}
+            </div>
+          )}
           {/* DDT list and builder */}
           {/* Wizard SEMPRE fuori dal div scrollabile */}
           {showDDTBuilder && (
@@ -482,15 +541,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       marginLeft: 8,
                       cursor: 'pointer'
                     }}
-                    onClick={() => setShowDeleteConfirm(dt.id)}
+                    onClick={() => setShowDeleteConfirm(dt._id || dt.id)}
                     title="Elimina"
                   >
                     <Trash2 className="w-5 h-5 text-fuchsia-700 hover:text-red-600" />
                   </button>
                   {/* Dialog conferma cancellazione */}
-                  {showDeleteConfirm === dt.id && (
+                  {showDeleteConfirm === (dt._id || dt.id) && (
                     <DeleteConfirmation
-                      onDelete={() => handleDeleteDDT(dt.id)}
+                      onDelete={() => handleDeleteDDT(dt._id || dt.id)}
                       onCancel={() => setShowDeleteConfirm(null)}
                     />
                   )}
@@ -498,6 +557,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               );
             })}
           </div>
+          {/* Pulsante per salvare tutti i DDT */}
+          {/* <div className="flex justify-end mt-4">
+            <button
+              title="Salva tutti i DDT"
+              onClick={handleSaveDDT}
+              disabled={isSavingDDT}
+              style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 8 }}
+            >
+              {isSavingDDT ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+            </button>
+          </div> */}
         </Accordion>
         {/* Entity accordions (Agent Acts, User Acts, etc.) */}
         {(() => {
