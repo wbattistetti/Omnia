@@ -1,45 +1,58 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface SidebarEntityAccordionProps {
-  title: string;
+  title: React.ReactNode;
   icon: React.ReactNode;
   color: string;
+  lightColor: string;
   isOpen: boolean;
   onToggle: () => void;
-  children?: React.ReactNode;
   action?: React.ReactNode;
+  children: ReactNode;
 }
 
 const SidebarEntityAccordion: React.FC<SidebarEntityAccordionProps> = ({
   title,
   icon,
   color,
+  lightColor,
   isOpen,
   onToggle,
-  children,
-  action
-}) => (
-  <div className="mb-4">
-    <div
-      className="flex items-center justify-between p-3 rounded-lg cursor-pointer"
-      style={{ background: color, color: '#fff', borderRadius: 12, width: '100%' }}
-      onClick={onToggle}
-    >
-      <div className="flex items-center">
-        {icon && <span className="mr-3">{icon}</span>}
-        <span className="font-semibold">{title}</span>
+  action,
+  children
+}) => {
+  return (
+    <div className="mb-2">
+      <div
+        className="flex items-center justify-between cursor-pointer px-4 py-2 hover:bg-slate-700 transition-colors"
+        onClick={onToggle}
+        style={{ background: color, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5" style={{ color: '#fff' }}>{icon}</div>
+          <span className="text-white font-semibold text-sm capitalize">{title}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {action}
+          {isOpen ? (
+            <ChevronDown className="w-4 h-4 text-gray-200" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-200" />
+          )}
+        </div>
       </div>
-      <div className="flex items-center">
-        {action}
-        <span className="ml-2">{isOpen ? '▼' : '▶'}</span>
-      </div>
+      {isOpen && (
+        <div
+          className="px-4 py-2 rounded-b-md"
+          style={{ background: lightColor, outline: 'none', boxShadow: 'none' }}
+          tabIndex={-1}
+        >
+          {children}
+        </div>
+      )}
     </div>
-    {isOpen && (
-      <div className="mt-2 pl-2">
-        {children}
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 export default SidebarEntityAccordion;

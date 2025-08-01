@@ -3,6 +3,7 @@ export type StepResults = Array<{ stepKey: string; payload: any }>;
 export type StepMessages = Record<string, string[][]>;
 
 export function buildSteps(stepResults: StepResults): StepMessages {
+  
   const stepKeyMap: Record<string, string> = {
     startPrompt: 'start',
     noMatchPrompts: 'noMatch',

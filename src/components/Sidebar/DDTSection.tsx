@@ -1,0 +1,92 @@
+import React, { useState } from 'react';
+import SidebarEntityAccordion from './SidebarEntityAccordion';
+import { Calendar, Mail, MapPin, FileText, Settings, Trash2, Loader, Plus, Save } from 'lucide-react';
+import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
+
+interface DDTSectionProps {
+  ddtList: any[];
+  onAdd: (newDDT: any) => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
+  onOpenEditor: (id: string) => void;
+  isSaving: boolean;
+  onSave: () => void;
+}
+
+const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelete, onOpenEditor, isSaving, onSave }) => {
+  const [isOpen, setIsOpen] = useState(true);
+  const [showDDTBuilder, setShowDDTBuilder] = useState(false);
+
+  const handleAddClick = () => {
+    setIsOpen(true);
+    setShowDDTBuilder(true);
+  };
+
+  const handleBuilderComplete = (newDDT: any) => {
+    setShowDDTBuilder(false);
+    onAdd(newDDT);
+  };
+
+  const handleBuilderCancel = () => {
+    setShowDDTBuilder(false);
+  };
+
+  const getIconForType = (type?: string, label?: string) => {
+    if (/date/i.test(label)) return <Calendar className="w-4 h-4 text-violet-700" />;
+    if (/mail|email/i.test(label)) return <Mail className="w-4 h-4 text-blue-700" />;
+    if (/address|location|place/i.test(label)) return <MapPin className="w-4 h-4 text-green-700" />;
+    return <FileText className="w-4 h-4 text-fuchsia-700" />;
+  };
+
+  return (
+    <SidebarEntityAccordion
+      title="Data Dialogue Templates"
+      icon={<FileText className="w-5 h-5 text-fuchsia-400" />}
+      color="#a21caf"
+      isOpen={isOpen}
+      onToggle={() => setIsOpen((prev) => !prev)}
+      action={
+        <>
+          <button title="Aggiungi DDT" onClick={handleAddClick} style={{ color: '#a21caf', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <Plus className="w-5 h-5" />
+          </button>
+          <button title="Salva tutti i DDT" onClick={onSave} disabled={isSaving} style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 8 }}>
+            {isSaving ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          </button>
+        </>
+      }
+    >
+      {isOpen && (
+        <>
+          {showDDTBuilder && (
+            <div style={{ background: '#f3e8ff', borderBottom: '1px solid #e5e7eb', paddingBottom: 8, marginBottom: 8, borderRadius: 8, position: 'sticky', top: 0, zIndex: 2 }}>
+              <DDTBuilder
+                onComplete={handleBuilderComplete}
+                onCancel={handleBuilderCancel}
+              />
+            </div>
+          )}
+          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+            {ddtList.map((dt, idx) => (
+              <div key={dt.id || idx} style={{ display: 'flex', alignItems: 'center', background: '#f3e8ff', margin: 4, padding: 8, borderRadius: 8, border: '2px solid #a21caf', position: 'relative' }}>
+                <span style={{ marginRight: 10 }}>{getIconForType(dt.type, dt.label)}</span>
+                <span style={{ fontWeight: 700, color: '#a21caf', flex: 1, marginRight: 8 }}>{dt.label || dt.id || 'NO LABEL'}</span>
+                <button title="Modifica label" style={{ background: 'none', border: 'none', marginLeft: 4, cursor: 'pointer' }} onClick={() => onEdit(dt.id)}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a21caf" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                </button>
+                <button title="Apri/chiudi response editor" style={{ background: 'none', border: 'none', marginLeft: 4, cursor: 'pointer' }} onClick={() => onOpenEditor(dt.id)}>
+                  <Settings className="w-4 h-4" style={{ color: '#a21caf' }} />
+                </button>
+                <button title="Elimina" style={{ background: 'none', border: 'none', marginLeft: 8, cursor: 'pointer' }} onClick={() => onDelete(dt.id)}>
+                  <Trash2 className="w-5 h-5 text-fuchsia-700 hover:text-red-600" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </SidebarEntityAccordion>
+  );
+};
+
+export default DDTSection;

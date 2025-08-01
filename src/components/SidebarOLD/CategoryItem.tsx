@@ -9,6 +9,7 @@ import { AddButton } from './AddButton';
 import { EditableText } from './EditableText';
 import { Category, EntityType, ProjectEntityItem } from '../../types/project';
 import { useSidebarTheme } from './SidebarThemeContext';
+import Item from './Item';
 
 interface CategoryItemProps {
   category: Category;
@@ -147,15 +148,13 @@ const CategoryItem = (props: CategoryItemProps) => {
               </button>
             </div>
           )}
-          {props.category.items.map((item) => (
-            <SidebarItem
+          {props.category.items.map(item => (
+            <Item
               key={item.id}
               item={item}
-              onUpdate={(updates) => props.onUpdateItem(item.id, updates)}
-              onDelete={() => props.onDeleteItem(item.id)}
-              entityType={props.entityType}
-              textColor="#111"
-              bgColor={colors[props.entityType]?.light}
+              onDelete={props.onDeleteItem}
+              onUpdate={props.onUpdateItem}
+              textColor="#fff"
             />
           ))}
         </div>

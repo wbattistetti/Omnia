@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
-import { Sidebar } from './Sidebar/Sidebar';
+import Sidebar from './Sidebar/Sidebar';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
@@ -347,15 +347,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       {appState === 'mainApp' && (
         <div className="min-h-screen flex">
           <SidebarThemeProvider>
-            <Sidebar
-              isCollapsed={isSidebarCollapsed}
-              onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              onOpenDDTEditor={handleOpenDDTEditor}
-              openedDDTId={openedDDTId || null}
-              onDeleteDDT={handleDeleteDDT}
-              dialogueTemplates={dialogueTemplates}
-              setDialogueTemplates={setDialogueTemplates}
-            />
+            <Sidebar />
           </SidebarThemeProvider>
           <div className="flex-1 flex flex-col">
             <Toolbar

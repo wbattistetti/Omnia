@@ -1,58 +1,43 @@
 import React from 'react';
-import { Layers, CheckSquare, Square, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Layers, CheckSquare, Square, Search } from 'lucide-react';
+import { useSidebarState } from './SidebarState';
 
-/**
- * SidebarHeader: mostra titolo progetto, icone grandi, search bar, collapse.
- * TODO: Permettere editing titolo progetto.
- */
-const SidebarHeader: React.FC<{
+interface SidebarHeaderProps {
   onToggleCollapse: () => void;
-  children?: React.ReactNode;
-}> = ({ onToggleCollapse, children }) => {
+}
+
+const SidebarHeader: React.FC<SidebarHeaderProps> = ({ onToggleCollapse }) => {
+  const { isCollapsed } = useSidebarState();
+
   return (
-    <div style={{ background: '#fff', borderBottom: '1px solid #111', paddingBottom: 8 }}>
-      <div style={{ display: 'flex', gap: 24, justifyContent: 'center', alignItems: 'center', padding: '16px 0' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ borderRadius: '50%', background: '#ede9fe', padding: 12, border: '1px solid #c4b5fd' }}>
-            <Layers className="w-7 h-7 text-violet-700" />
-          </div>
-          <span style={{ fontSize: 12, color: '#6d28d9', marginTop: 4 }}>MacroTask</span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ borderRadius: '50%', background: '#dbeafe', padding: 12, border: '1px solid #93c5fd' }}>
-            <CheckSquare className="w-7 h-7 text-blue-700" />
-          </div>
-          <span style={{ fontSize: 12, color: '#1d4ed8', marginTop: 4 }}>Task</span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ borderRadius: '50%', background: '#f3f4f6', padding: 12, border: '1px solid #d1d5db' }}>
-            <Square className="w-7 h-7 text-gray-700" />
-          </div>
-          <span style={{ fontSize: 12, color: '#374151', marginTop: 4 }}>Nodo</span>
-        </div>
-        <button onClick={onToggleCollapse} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer' }}>
-          {/* TODO: Collapse/expand dinamico */}
-          <ChevronLeft className="w-6 h-6 text-gray-400" />
+    <div className="p-4 border-b border-slate-700 bg-slate-800">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-xl font-bold text-white">Progetto</h1>
+        <button onClick={onToggleCollapse} aria-label="Toggle sidebar">
+          {isCollapsed ? <ChevronRight className="w-5 h-5 text-white" /> : <ChevronLeft className="w-5 h-5 text-white" />}
         </button>
       </div>
-      {/* Search bar */}
-      <div style={{ position: 'relative', margin: '8px 16px' }}>
-        <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#9ca3af' }} />
+
+      <div className="flex gap-3 mb-4">
+        <div className="p-2 rounded border border-violet-300 bg-violet-100">
+          <Layers className="w-7 h-7 text-violet-700" />
+        </div>
+        <div className="p-2 rounded border border-blue-300 bg-blue-100">
+          <CheckSquare className="w-7 h-7 text-blue-700" />
+        </div>
+        <div className="p-2 rounded border border-gray-300 bg-gray-100">
+          <Square className="w-7 h-7 text-gray-700" />
+        </div>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
         <input
           type="text"
-          placeholder="Search entities..."
-          style={{
-            width: '100%',
-            padding: '8px 8px 8px 36px',
-            border: '1px solid #d1d5db',
-            borderRadius: 8,
-            color: '#111',
-            background: '#fff',
-            fontSize: 15,
-          }}
+          placeholder="Cerca..."
+          className="w-full pl-10 pr-3 py-2 rounded-lg border border-gray-300 text-sm text-black placeholder-gray-400"
         />
       </div>
-      {children}
     </div>
   );
 };
