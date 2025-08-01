@@ -69,6 +69,7 @@ const Sidebar: React.FC = () => {
           onOpenEditor={handleOpenEditor}
           isSaving={isSavingDDT}
           onSave={handleSaveDDT}
+          color={sidebarTheme.ddt.color}
         />
         {entityTypes.map(type => (
           <EntityAccordion
@@ -80,7 +81,7 @@ const Sidebar: React.FC = () => {
             data={data[type] || []}
             isOpen={openAccordion === type}
             onToggle={() => setOpenAccordion(openAccordion === type ? '' : type)}
-            onAddCategory={() => addCategory(type, 'Nuova categoria')}
+            onAddCategory={name => addCategory(type, name)}
             onDeleteCategory={categoryId => deleteCategory(type, categoryId)}
             onUpdateCategory={(categoryId, updates) => updateCategory(type, categoryId, updates)}
             onAddItem={(categoryId, name, desc) => addItem(type, categoryId, name, desc)}

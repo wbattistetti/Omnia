@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import SidebarEntityAccordion from './SidebarEntityAccordion';
 import { Calendar, Mail, MapPin, FileText, Settings, Trash2, Loader, Plus, Save } from 'lucide-react';
 import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
+import { getLightTone } from './sidebarTheme';
 
 interface DDTSectionProps {
   ddtList: any[];
@@ -11,11 +12,13 @@ interface DDTSectionProps {
   onOpenEditor: (id: string) => void;
   isSaving: boolean;
   onSave: () => void;
+  color: string;
 }
 
-const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelete, onOpenEditor, isSaving, onSave }) => {
+const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelete, onOpenEditor, isSaving, onSave, color }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [showDDTBuilder, setShowDDTBuilder] = useState(false);
+  const lightColor = getLightTone(color, 0.85);
 
   const handleAddClick = () => {
     setIsOpen(true);
@@ -40,9 +43,14 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
 
   return (
     <SidebarEntityAccordion
-      title="Data Dialogue Templates"
+      title={
+        <span className="flex items-center gap-2">
+          Data Dialogue Templates
+        </span>
+      }
       icon={<FileText className="w-5 h-5 text-fuchsia-400" />}
-      color="#a21caf"
+      color={color}
+      lightColor={lightColor}
       isOpen={isOpen}
       onToggle={() => setIsOpen((prev) => !prev)}
       action={
@@ -59,16 +67,16 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
       {isOpen && (
         <>
           {showDDTBuilder && (
-            <div style={{ background: '#f3e8ff', borderBottom: '1px solid #e5e7eb', paddingBottom: 8, marginBottom: 8, borderRadius: 8, position: 'sticky', top: 0, zIndex: 2 }}>
+            <div style={{ background: lightColor, borderBottom: '1px solid #e5e7eb', paddingBottom: 8, marginBottom: 8, borderRadius: 8, position: 'sticky', top: 0, zIndex: 2 }}>
               <DDTBuilder
                 onComplete={handleBuilderComplete}
                 onCancel={handleBuilderCancel}
               />
             </div>
           )}
-          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 300, overflowY: 'auto', background: lightColor }}>
             {ddtList.map((dt, idx) => (
-              <div key={dt.id || idx} style={{ display: 'flex', alignItems: 'center', background: '#f3e8ff', margin: 4, padding: 8, borderRadius: 8, border: '2px solid #a21caf', position: 'relative' }}>
+              <div key={dt.id || idx} style={{ display: 'flex', alignItems: 'center', margin: 4, padding: 8, borderRadius: 8, border: '2px solid #a21caf', position: 'relative', background: lightColor }}>
                 <span style={{ marginRight: 10 }}>{getIconForType(dt.type, dt.label)}</span>
                 <span style={{ fontWeight: 700, color: '#a21caf', flex: 1, marginRight: 8 }}>{dt.label || dt.id || 'NO LABEL'}</span>
                 <button title="Modifica label" style={{ background: 'none', border: 'none', marginLeft: 4, cursor: 'pointer' }} onClick={() => onEdit(dt.id)}>
