@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Layers, CheckSquare, Square, Search } from 'lucide-react';
 import { useSidebarState } from './SidebarState';
 
@@ -8,6 +8,14 @@ interface SidebarHeaderProps {
 
 const SidebarHeader: React.FC<SidebarHeaderProps> = ({ onToggleCollapse }) => {
   const { isCollapsed } = useSidebarState();
+  const [theme, setTheme] = useState<'light' | 'dark'>(
+    (localStorage.getItem('theme') as 'light' | 'dark') || 'light'
+  );
+
+  useEffect(() => {
+    document.body.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   return (
     <div className="p-4 border-b border-slate-700 bg-slate-800">
@@ -37,6 +45,26 @@ const SidebarHeader: React.FC<SidebarHeaderProps> = ({ onToggleCollapse }) => {
           placeholder="Cerca..."
           className="w-full pl-10 pr-3 py-2 rounded-lg border border-gray-300 text-sm text-black placeholder-gray-400"
         />
+      </div>
+
+      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700">
+        <span className="font-bold text-lg">Progetto</span>
+        <div className="flex items-center gap-2">
+          <button
+            className="p-1 text-gray-400 hover:text-blue-400"
+            onClick={onToggleCollapse}
+            title="Collapse sidebar"
+          >
+            ≡
+          </button>
+          <button
+            className="p-1 text-yellow-500 hover:text-yellow-700 text-lg"
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            title={theme === 'light' ? 'Passa a tema scuro' : 'Passa a tema chiaro'}
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -3,13 +3,11 @@ import SidebarEntityAccordion from './SidebarEntityAccordion';
 import SidebarCategory from './SidebarCategory';
 import { EntityType, Category, ProjectEntityItem } from '../../types/project';
 import ItemEditor from './ItemEditor';
-import { getLightTone } from './sidebarTheme';
 
 interface EntityAccordionProps {
   entityKey: EntityType;
   title: string;
   icon: React.ReactNode;
-  color: string;
   data: Category[];
   isOpen: boolean;
   onToggle: () => void;
@@ -25,7 +23,6 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
   entityKey,
   title,
   icon,
-  color,
   data,
   isOpen,
   onToggle,
@@ -37,7 +34,6 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
   onUpdateItem,
 }) => {
   const [adding, setAdding] = useState(false);
-  const lightColor = getLightTone(color, 0.85);
 
   return (
     <SidebarEntityAccordion
@@ -59,8 +55,6 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
         </span>
       }
       icon={icon}
-      color={color}
-      lightColor={lightColor}
       isOpen={isOpen}
       onToggle={onToggle}
     >

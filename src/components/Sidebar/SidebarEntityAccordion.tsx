@@ -4,8 +4,6 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 interface SidebarEntityAccordionProps {
   title: React.ReactNode;
   icon: React.ReactNode;
-  color: string;
-  lightColor: string;
   isOpen: boolean;
   onToggle: () => void;
   action?: React.ReactNode;
@@ -15,8 +13,6 @@ interface SidebarEntityAccordionProps {
 const SidebarEntityAccordion: React.FC<SidebarEntityAccordionProps> = ({
   title,
   icon,
-  color,
-  lightColor,
   isOpen,
   onToggle,
   action,
@@ -27,11 +23,11 @@ const SidebarEntityAccordion: React.FC<SidebarEntityAccordionProps> = ({
       <div
         className="flex items-center justify-between cursor-pointer px-4 py-2 hover:bg-slate-700 transition-colors"
         onClick={onToggle}
-        style={{ background: color, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}
+        style={{ background: 'var(--sidebar-header)', color: 'var(--sidebar-header-text)', borderTopLeftRadius: 8, borderTopRightRadius: 8 }}
       >
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5" style={{ color: '#fff' }}>{icon}</div>
-          <span className="text-white font-semibold text-sm capitalize">{title}</span>
+          <div className="w-5 h-5" style={{ color: 'var(--sidebar-header-text)' }}>{icon}</div>
+          <span className="font-semibold text-sm capitalize">{title}</span>
         </div>
         <div className="flex items-center gap-2">
           {action}
@@ -45,7 +41,7 @@ const SidebarEntityAccordion: React.FC<SidebarEntityAccordionProps> = ({
       {isOpen && (
         <div
           className="px-4 py-2 rounded-b-md"
-          style={{ background: lightColor, outline: 'none', boxShadow: 'none' }}
+          style={{ background: 'var(--sidebar-content-bg)', color: 'var(--sidebar-content-text)', outline: 'none', boxShadow: 'none' }}
           tabIndex={-1}
         >
           {children}

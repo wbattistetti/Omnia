@@ -33,7 +33,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete }) =
         />
       ) : (
         <>
-          <span className="text-gray-200 truncate">{item.name}</span>
+          <span className="truncate" style={{ color: 'var(--sidebar-content-text)' }}>{item.name}</span>
           <span className="flex items-center gap-1 ml-1" style={{ visibility: hovered ? 'visible' : 'hidden' }}>
             <button
               className="p-1 text-gray-400 hover:text-blue-400"

@@ -3,14 +3,13 @@ import ItemEditor from './ItemEditor';
 import DeleteConfirmation from './DeleteConfirmation';
 import SidebarItem from './SidebarItem';
 import { Pencil, Trash2 } from 'lucide-react';
-import { ProjectCategory, ProjectEntityItem, EntityType } from '../../types/project';
+import { Category, ProjectEntityItem } from '../../types/project';
 
 interface SidebarCategoryProps {
-  category: ProjectCategory;
-  entityType: EntityType;
+  category: Category<ProjectEntityItem>;
   onAddItem: (name: string, description?: string) => void;
   onDeleteCategory: () => void;
-  onUpdateCategory: (updates: Partial<ProjectCategory>) => void;
+  onUpdateCategory: (updates: Partial<Category<ProjectEntityItem>>) => void;
   onDeleteItem: (itemId: string) => void;
   onUpdateItem: (itemId: string, updates: Partial<ProjectEntityItem>) => void;
 }
@@ -22,7 +21,6 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
   onAddItem,
   onDeleteItem,
   onUpdateItem,
-  entityType,
 }) => {
   const [editing, setEditing] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -50,7 +48,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
           />
         ) : (
           <>
-            <span className="text-sm font-semibold text-gray-100 truncate">{category.name}</span>
+            <span className="text-sm font-semibold truncate" style={{ color: 'var(--sidebar-content-text)' }}>{category.name}</span>
             {hovered && (
               <span className="flex items-center gap-1 ml-1">
                 <button
@@ -102,14 +100,8 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
       )}
       {/* Items */}
       <div className="ml-4 mt-1">
-        {category.items.map((item) => (
-          <SidebarItem
-            key={item.id}
-            item={item}
-            onUpdate={(updates) => onUpdateItem(item.id, updates)}
-            onDelete={() => onDeleteItem(item.id)}
-            entityType={entityType}
-          />
+        {category.items.map((item: ProjectEntityItem) => (
+          <SidebarItem key={item.id} item={item} onUpdate={(updates: Partial<ProjectEntityItem>) => onUpdateItem(item.id, updates)} onDelete={() => onDeleteItem(item.id)} />
         ))}
       </div>
     </div>

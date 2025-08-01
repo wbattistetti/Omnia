@@ -53,3 +53,21 @@
 .dockview-theme-light {
   background: transparent !important;
 }
+
+:root {
+  --sidebar-bg: #f9fafb;
+  --sidebar-header: #6366f1;
+  --sidebar-header-text: #fff;
+  --sidebar-content-bg: #fff;
+  --sidebar-content-text: #1f2937;
+  --sidebar-border: #d1d5db;
+}
+
+[data-theme='dark'] {
+  --sidebar-bg: #18181b;
+  --sidebar-header: #6366f1; /* same as light theme for saturated header */
+  --sidebar-header-text: #fff;
+  --sidebar-content-bg: #18181b;
+  --sidebar-content-text: #f1f5f9;
+  --sidebar-border: #334155;
+}
