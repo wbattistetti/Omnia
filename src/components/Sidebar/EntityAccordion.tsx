@@ -57,6 +57,7 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
       icon={icon}
       isOpen={isOpen}
       onToggle={onToggle}
+      entityType={entityKey}
     >
       {adding && (
         <div className="mb-2">

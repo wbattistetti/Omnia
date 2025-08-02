@@ -347,7 +347,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       {appState === 'mainApp' && (
         <div className="min-h-screen flex">
           <SidebarThemeProvider>
-            <Sidebar />
+            <Sidebar onOpenDDTEditor={handleOpenDDTEditor} />
           </SidebarThemeProvider>
           <div className="flex-1 flex flex-col">
             <Toolbar

@@ -8,6 +8,8 @@ import { ActionsCatalogProvider, useSetActionsCatalog } from '../context/Actions
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DDTProvider } from '../context/DDTContext';
+import ColorPicker from '../theme/ColorPicker';
+import { useThemeManager, ThemeManagerProvider } from '../theme/ThemeManager';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -78,6 +80,8 @@ function AppInner() {
         setTestNodeId={setTestNodeId}
         onPlayNode={(nodeId) => handlePlayNode(nodeId, [])}
       />
+      {/* ColorPicker globale */}
+      <ColorPickerWrapper />
       {/* Bottone flottante per aprire il test engine */}
       <button
         className="fixed right-4 bottom-4 z-40 bg-blue-600 text-white rounded-full p-3 shadow-lg hover:bg-blue-700"
@@ -106,13 +110,44 @@ function AppInner() {
   );
 }
 
+// Componente wrapper per il ColorPicker
+function ColorPickerWrapper() {
+  const { isEditorOpen, editingEntity, colors, targetElement, applyChanges, cancelChanges, previewColor } = useThemeManager();
+  
+  if (!isEditorOpen || !editingEntity) return null;
+  
+  const entityNames: Record<string, string> = {
+    agentActs: 'Agent Acts',
+    userActs: 'User Acts', 
+    backendActions: 'Backend Actions',
+    conditions: 'Conditions',
+    tasks: 'Tasks',
+    macrotasks: 'Macro Tasks',
+    ddt: 'Data Dialogue Templates'
+  };
+  
+  return (
+    <ColorPicker
+      isOpen={isEditorOpen}
+      currentColor={colors[editingEntity]}
+      onApply={applyChanges}
+      onCancel={cancelChanges}
+      onPreview={previewColor}
+      title={`Modifica colore - ${entityNames[editingEntity]}`}
+      targetElement={targetElement}
+    />
+  );
+}
+
 export default function App() {
   return (
     <ProjectDataProvider>
       <ActionsCatalogProvider>
         <DndProvider backend={HTML5Backend}>
           <DDTProvider>
-            <AppInner />
+            <ThemeManagerProvider>
+              <AppInner />
+            </ThemeManagerProvider>
           </DDTProvider>
         </DndProvider>
       </ActionsCatalogProvider>

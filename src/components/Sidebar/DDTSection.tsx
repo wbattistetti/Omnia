@@ -48,6 +48,7 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
       icon={<FileText className="w-5 h-5 text-fuchsia-400" />}
       isOpen={isOpen}
       onToggle={() => setIsOpen((prev) => !prev)}
+      entityType="ddt"
       action={
         <>
           <button title="Aggiungi DDT" onClick={handleAddClick} style={{ color: '#a21caf', background: 'none', border: 'none', cursor: 'pointer' }}>
