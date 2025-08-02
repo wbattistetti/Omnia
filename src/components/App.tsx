@@ -8,6 +8,8 @@ import { ActionsCatalogProvider, useSetActionsCatalog } from '../context/Actions
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DDTProvider } from '../context/DDTContext';
+import { ThemeManagerProvider, useThemeManager } from '../theme/ThemeManager';
+import ColorPicker from '../theme/ColorPicker';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -102,7 +104,38 @@ function AppInner() {
           />
         )}
       </DockPanel>
+      
+      {/* ColorPicker globale */}
+      <ColorPickerWrapper />
     </>
+  );
+}
+
+// Componente wrapper per il ColorPicker
+function ColorPickerWrapper() {
+  const { isEditorOpen, editingEntity, colors, targetElement, applyChanges, cancelChanges, previewColor } = useThemeManager();
+  
+  if (!isEditorOpen || !editingEntity) return null;
+  
+  const entityNames: Record<string, string> = {
+    agentActs: 'Agent Acts',
+    userActs: 'User Acts', 
+    backendActions: 'Backend Actions',
+    conditions: 'Conditions',
+    tasks: 'Tasks',
+    macrotasks: 'Macro Tasks'
+  };
+  
+  return (
+    <ColorPicker
+      isOpen={isEditorOpen}
+      currentColor={colors[editingEntity]}
+      onApply={applyChanges}
+      onCancel={cancelChanges}
+      onPreview={previewColor}
+      title={`Modifica colore - ${entityNames[editingEntity]}`}
+      targetElement={targetElement}
+    />
   );
 }
 
@@ -112,7 +145,9 @@ export default function App() {
       <ActionsCatalogProvider>
         <DndProvider backend={HTML5Backend}>
           <DDTProvider>
-            <AppInner />
+            <ThemeManagerProvider>
+              <AppInner />
+            </ThemeManagerProvider>
           </DDTProvider>
         </DndProvider>
       </ActionsCatalogProvider>

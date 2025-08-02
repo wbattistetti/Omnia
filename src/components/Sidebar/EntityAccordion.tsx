@@ -63,6 +63,7 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
       lightColor={lightColor}
       isOpen={isOpen}
       onToggle={onToggle}
+      entityType={entityKey as any} // Cast sicuro perché entityKey corrisponde ai tipi del ThemeManager
     >
       {adding && (
         <div className="mb-2">
@@ -83,10 +84,10 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
           category={category}
           entityType={entityKey}
           onAddItem={name => onAddItem(category.id, name)}
-          onDeleteCategory={() => onDeleteCategory(category.id)}
-          onUpdateCategory={updates => onUpdateCategory(category.id, updates)}
           onDeleteItem={itemId => onDeleteItem(category.id, itemId)}
           onUpdateItem={(itemId, updates) => onUpdateItem(category.id, itemId, updates)}
+          onDeleteCategory={() => onDeleteCategory(category.id)}
+          onUpdateCategory={updates => onUpdateCategory(category.id, updates)}
         />
       ))}
     </SidebarEntityAccordion>

@@ -1,5 +1,6 @@
-import React, { ReactNode } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import React, { ReactNode, useCallback } from 'react';
+import { ChevronDown, ChevronRight, Paintbrush } from 'lucide-react';
+import { useThemeManager } from '../../theme/ThemeManager';
 
 interface SidebarEntityAccordionProps {
   title: React.ReactNode;
@@ -10,6 +11,7 @@ interface SidebarEntityAccordionProps {
   onToggle: () => void;
   action?: React.ReactNode;
   children: ReactNode;
+  entityType: keyof ReturnType<typeof useThemeManager>['colors'];
 }
 
 const SidebarEntityAccordion: React.FC<SidebarEntityAccordionProps> = ({
@@ -20,18 +22,38 @@ const SidebarEntityAccordion: React.FC<SidebarEntityAccordionProps> = ({
   isOpen,
   onToggle,
   action,
-  children
+  children,
+  entityType
 }) => {
+  const { isEditMode, openEditor } = useThemeManager();
+
+  const handleHeaderClick = useCallback((e: React.MouseEvent) => {
+    if (isEditMode) {
+      e.stopPropagation();
+      openEditor(entityType, e.currentTarget as HTMLElement);
+    } else {
+      onToggle();
+    }
+  }, [isEditMode, entityType, openEditor, onToggle]);
+
   return (
-    <div className="mb-2">
+    <div className="mb-2" style={{ position: 'relative' }}>
       <div
         className="flex items-center justify-between cursor-pointer px-4 py-2 hover:bg-slate-700 transition-colors"
-        onClick={onToggle}
-        style={{ background: color, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}
+        onClick={handleHeaderClick}
+        style={{ 
+          background: color, 
+          borderTopLeftRadius: 8, 
+          borderTopRightRadius: 8,
+          cursor: isEditMode ? 'pointer' : 'default'
+        }}
       >
         <div className="flex items-center gap-2">
           <div className="w-5 h-5" style={{ color: '#fff' }}>{icon}</div>
           <span className="text-white font-semibold text-sm capitalize">{title}</span>
+          {isEditMode && (
+            <Paintbrush size={14} className="text-white opacity-70" />
+          )}
         </div>
         <div className="flex items-center gap-2">
           {action}
