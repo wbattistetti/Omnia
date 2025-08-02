@@ -8,6 +8,7 @@ import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataC
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
+import { ThemeToggle } from '../../theme/components/ThemeToggle';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -61,6 +62,11 @@ const Sidebar: React.FC = () => {
     <SidebarContainer>
       <SidebarHeader onToggleCollapse={toggleCollapse} />
       <div className="p-4 overflow-y-auto" style={{ flex: 1 }}>
+        {/* Theme Toggle Button */}
+        <div className="mb-4 flex justify-center">
+          <ThemeToggle />
+        </div>
+        
         <DDTSection
           ddtList={dialogueTemplates}
           onAdd={handleAddDDT}

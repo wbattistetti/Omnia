@@ -8,6 +8,7 @@ import { ActionsCatalogProvider, useSetActionsCatalog } from '../context/Actions
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DDTProvider } from '../context/DDTContext';
+import { ThemeProvider } from '../theme/components/ThemeProvider';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -108,14 +109,16 @@ function AppInner() {
 
 export default function App() {
   return (
-    <ProjectDataProvider>
-      <ActionsCatalogProvider>
-        <DndProvider backend={HTML5Backend}>
-          <DDTProvider>
-            <AppInner />
-          </DDTProvider>
-        </DndProvider>
-      </ActionsCatalogProvider>
-    </ProjectDataProvider>
+    <ThemeProvider>
+      <ProjectDataProvider>
+        <ActionsCatalogProvider>
+          <DndProvider backend={HTML5Backend}>
+            <DDTProvider>
+              <AppInner />
+            </DDTProvider>
+          </DndProvider>
+        </ActionsCatalogProvider>
+      </ProjectDataProvider>
+    </ThemeProvider>
   );
 }
