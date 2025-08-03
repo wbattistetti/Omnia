@@ -17,14 +17,23 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
   const [isOpen, setIsOpen] = useState(true);
   const [showDDTBuilder, setShowDDTBuilder] = useState(false);
 
-  const handleAddClick = () => {
-    setIsOpen(true);
-    setShowDDTBuilder(true);
+  const handleAddClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Previene la propagazione all'header dell'accordion
+    setShowDDTBuilder(!showDDTBuilder); // Toggle del wizard
   };
 
   const handleBuilderComplete = (newDDT: any) => {
+    console.log('[DDTSection] handleBuilderComplete chiamato con:', newDDT);
+    console.log('[DDTSection] newDDT.id:', newDDT?.id);
     setShowDDTBuilder(false);
     onAdd(newDDT);
+    // Apri automaticamente il Response Editor del DDT appena creato
+    if (newDDT && newDDT.id) {
+      console.log('[DDTSection] Apro Response Editor per ID:', newDDT.id);
+      onOpenEditor(newDDT.id);
+    } else {
+      console.log('[DDTSection] ERRORE: newDDT o newDDT.id mancante:', { newDDT, hasId: !!newDDT?.id });
+    }
   };
 
   const handleBuilderCancel = () => {
@@ -50,9 +59,11 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
       onToggle={() => setIsOpen((prev) => !prev)}
       action={
         <>
-          <button title="Aggiungi DDT" onClick={handleAddClick} style={{ color: '#a21caf', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <Plus className="w-5 h-5" />
-          </button>
+          {isOpen && (
+            <button title="Aggiungi DDT" onClick={handleAddClick} style={{ color: '#a21caf', background: 'none', border: 'none', cursor: 'pointer' }}>
+              <Plus className="w-5 h-5" />
+            </button>
+          )}
           <button title="Salva tutti i DDT" onClick={onSave} disabled={isSaving} style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 8 }}>
             {isSaving ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
           </button>
