@@ -5,6 +5,7 @@ import EntityAccordion from './EntityAccordion';
 import DDTSection from './DDTSection';
 import { useSidebarState } from './SidebarState';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { useDDTManager } from '../../context/DDTManagerContext';
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
@@ -40,21 +41,43 @@ const Sidebar: React.FC = () => {
     updateItem
   } = useProjectDataUpdate();
 
-  // DDT list as top-level state
-  const [dialogueTemplates, setDialogueTemplates] = useState<any[]>([]);
+  // Usa il nuovo hook per DDT
+  const { ddtList, createDDT, openDDT, deleteDDT } = useDDTManager();
+
   const [isSavingDDT, setIsSavingDDT] = useState(false);
 
-  useEffect(() => {
-    // TODO: Replace with real fetch logic
-    setDialogueTemplates([]); // or fetch from backend
-  }, []);
+  // Handler implementati usando il hook
+  const handleAddDDT = (newDDT: any) => {
+    console.log('[Sidebar] handleAddDDT chiamato con:', newDDT);
+    createDDT(newDDT);
+  };
 
-  // Handler stubs (replace with real logic)
-  const handleAddDDT = () => {};
-  const handleEditDDT = (id: string) => {};
-  const handleDeleteDDT = (id: string) => {};
-  const handleOpenEditor = (id: string) => {};
-  const handleSaveDDT = () => {};
+  const handleEditDDT = (id: string) => {
+    console.log('[Sidebar] handleEditDDT chiamato per ID:', id);
+    // TODO: Implementare editing
+  };
+
+  const handleDeleteDDT = (id: string) => {
+    console.log('[Sidebar] handleDeleteDDT chiamato per ID:', id);
+    deleteDDT(id);
+  };
+
+  const handleOpenEditor = (id: string) => {
+    console.log('[Sidebar] handleOpenEditor chiamato per ID:', id);
+    const ddt = ddtList.find(dt => dt.id === id || dt._id === id);
+    if (ddt) {
+      console.log('[Sidebar] DDT trovato, apro editor per:', ddt.label || ddt.name);
+      openDDT(ddt);
+    } else {
+      console.error('[Sidebar] DDT non trovato per ID:', id);
+      console.log('[Sidebar] Templates disponibili:', ddtList.map(d => ({ id: d.id, _id: d._id, label: d.label })));
+    }
+  };
+
+  const handleSaveDDT = () => {
+    console.log('[Sidebar] handleSaveDDT chiamato');
+    // TODO: Implementare salvataggio
+  };
 
   if (!data) return null;
 
@@ -68,7 +91,7 @@ const Sidebar: React.FC = () => {
         </div>
         
         <DDTSection
-          ddtList={dialogueTemplates}
+          ddtList={ddtList}
           onAdd={handleAddDDT}
           onEdit={handleEditDDT}
           onDelete={handleDeleteDDT}

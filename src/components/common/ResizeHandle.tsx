@@ -11,6 +11,7 @@ interface ResizeHandleProps {
   currentSize?: number; // Per controllo esterno
   persistKey?: string; // Per persistenza localStorage
   className?: string;
+  inverted?: boolean; // Per pannelli in basso che si espandono verso l'alto
 }
 
 const ResizeHandle: React.FC<ResizeHandleProps> = ({
@@ -22,7 +23,8 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({
   position,
   currentSize,
   persistKey,
-  className = ''
+  className = '',
+  inverted = false
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -62,7 +64,10 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({
       ? e.clientX - dragStartRef.current.x
       : e.clientY - dragStartRef.current.y;
 
-    const newSize = Math.max(min, Math.min(max, dragStartRef.current.size + delta));
+    // Per pannelli invertiti (es. ResponseEditor in basso), invertiamo il delta
+    const adjustedDelta = inverted ? -delta : delta;
+    
+    const newSize = Math.max(min, Math.min(max, dragStartRef.current.size + adjustedDelta));
     
     if (!currentSize) {
       setInternalSize(newSize);
@@ -73,7 +78,7 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({
     if (persistKey) {
       localStorage.setItem(persistKey, newSize.toString());
     }
-  }, [isDragging, direction, min, max, onResize, currentSize, persistKey]);
+  }, [isDragging, direction, min, max, onResize, currentSize, persistKey, inverted]);
 
   const handlePointerUp = useCallback(() => {
     setIsDragging(false);
@@ -89,8 +94,14 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({
       if (e.key === 'ArrowLeft') newSize -= step;
       if (e.key === 'ArrowRight') newSize += step;
     } else {
-      if (e.key === 'ArrowUp') newSize -= step;
-      if (e.key === 'ArrowDown') newSize += step;
+      // Per pannelli invertiti, invertiamo anche i tasti freccia
+      if (inverted) {
+        if (e.key === 'ArrowUp') newSize += step;
+        if (e.key === 'ArrowDown') newSize -= step;
+      } else {
+        if (e.key === 'ArrowUp') newSize -= step;
+        if (e.key === 'ArrowDown') newSize += step;
+      }
     }
 
     newSize = Math.max(min, Math.min(max, newSize));
@@ -104,7 +115,7 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({
         localStorage.setItem(persistKey, newSize.toString());
       }
     }
-  }, [size, direction, min, max, onResize, currentSize, persistKey]);
+  }, [size, direction, min, max, onResize, currentSize, persistKey, inverted]);
 
   React.useEffect(() => {
     if (isDragging) {

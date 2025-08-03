@@ -37,6 +37,7 @@ const ResizableResponseEditor: React.FC<ResizableResponseEditorProps> = ({
         max={window.innerHeight * 0.8}
         initialSize={size}
         persistKey="response-editor-height"
+        inverted={true} // Per pannelli in basso che si espandono verso l'alto
       />
       <ResponseEditor
         ddt={ddt}

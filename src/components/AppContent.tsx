@@ -18,6 +18,7 @@ import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import { useDDTContext, useSetDDTContext } from '../context/DDTContext';
+import { useDDTManager } from '../context/DDTManagerContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -53,6 +54,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   const getTranslationsForDDT = ddtContext.getTranslationsForDDT;
   const setTranslationsForDDT = ddtContext.setTranslationsForDDT;
 
+  // Usa il nuovo hook per DDT
+  const { selectedDDT, closeDDT } = useDDTManager();
+
   // Stato globale per nodi e edge
   const [nodes, setNodes] = useState<Node<NodeData>[]>([]);
   const [edges, setEdges] = useState<Edge<EdgeData>[]>([]);
@@ -73,41 +77,17 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Stato per finestre editor DDT aperte (ora con react-mosaic)
   const [mosaicNodes, setMosaicNodes] = useState<any>(null);
   const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
-  const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
-  const [selectedDDTLanguage, setSelectedDDTLanguage] = useState<string>('it');
-  const [openedDDTId, setOpenedDDTId] = useState<string>('');
 
-  // Stato globale per DDT
-  const [dialogueTemplates, setDialogueTemplates] = useState<any[]>([]);
+  // Rimuovi questi stati che ora sono nel hook
+  // const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
+  // const [selectedDDTLanguage, setSelectedDDTLanguage] = useState<string>('it');
+  // const [openedDDTId, setOpenedDDTId] = useState<string>('');
+  // const [dialogueTemplates, setDialogueTemplates] = useState<any[]>([]);
 
-  const handleOpenDDTEditor = useCallback((ddt: any, translations: any, lang: string) => {
-    if (!ddt) {
-      setSelectedDDT(null);
-      setOpenedDDTId('');
-      return;
-    }
-    const ddtKey = ddt._id || ddt.id;
-    if (translations && Object.keys(translations).length > 0) {
-      setTranslationsForDDT(ddtKey, translations);
-      console.log('[AppContent] setTranslationsForDDT', { ddtKey, translations });
-    }
-    setSelectedDDT(ddt);
-    setSelectedDDTLanguage(lang);
-    setOpenedDDTId(ddtKey);
-  }, [setTranslationsForDDT]);
-
-  const handleCloseDDTEditor = useCallback(() => {
-    setSelectedDDT(null);
-    setOpenedDDTId('');
-  }, []);
-
-  // Nuova funzione per gestire la cancellazione di un DDT
-  const handleDeleteDDT = useCallback((ddtId: string) => {
-    if (selectedDDT && (selectedDDT._id === ddtId || selectedDDT.id === ddtId)) {
-      setSelectedDDT(null);
-      setOpenedDDTId('');
-    }
-  }, [selectedDDT]);
+  // Rimuovi questi handler che ora sono nel hook
+  // const handleOpenDDTEditor = useCallback(...);
+  // const handleCloseDDTEditor = useCallback(...);
+  // const handleDeleteDDT = useCallback(...);
 
   // Pannello di test in alto a sinistra all'avvio
   React.useEffect(() => {
@@ -339,7 +319,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             duplicateNameError={createError}
             onProjectNameChange={handleProjectNameChange}
             isLoading={isCreatingProject}
-            onFactoryTemplatesLoaded={setDialogueTemplates}
+            onFactoryTemplatesLoaded={setTranslationsForDDT}
           />
         </>
       )}
@@ -373,16 +353,16 @@ export const AppContent: React.FC<AppContentProps> = ({
             />
             {selectedDDT && (
               (() => {
-                const t = getTranslationsForDDT(openedDDTId);
+                const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);
                 const fallback = selectedDDT.translations;
                 const translationsToUse = Object.keys(t || {}).length > 0 ? t : fallback;
-                console.log('[AppContent] Passo translations a ResponseEditor:', { openedDDTId, t, fallback, translationsToUse });
+                console.log('[AppContent] Passo translations a ResponseEditor:', { selectedDDT, t, fallback, translationsToUse });
                 return (
                   <ResizableResponseEditor
                     ddt={selectedDDT}
                     translations={translationsToUse}
-                    lang={selectedDDTLanguage}
-                    onClose={handleCloseDDTEditor}
+                    lang="it"
+                    onClose={closeDDT}
                   />
                 );
               })()
