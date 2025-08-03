@@ -16,7 +16,7 @@ import ActEditor from './ActEditor';
 import { DockablePanelsHandle } from './DockablePanels';
 import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
-import ResponseEditor from './ActEditor/ResponseEditor/ResponseEditor';
+import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import { useDDTContext, useSetDDTContext } from '../context/DDTContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
@@ -378,7 +378,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 const translationsToUse = Object.keys(t || {}).length > 0 ? t : fallback;
                 console.log('[AppContent] Passo translations a ResponseEditor:', { openedDDTId, t, fallback, translationsToUse });
                 return (
-                  <ResponseEditor
+                  <ResizableResponseEditor
                     ddt={selectedDDT}
                     translations={translationsToUse}
                     lang={selectedDDTLanguage}
