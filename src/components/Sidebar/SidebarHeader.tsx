@@ -1,10 +1,13 @@
 import React from 'react';
-import { useThemeEditor } from '../../theme/hooks/useThemeEditor';
+import { useThemeManager } from '../../theme/ThemeManager';
 import { useThemeElement } from '../../theme/utils/elementRegistry';
-import { ThemeToggle } from '../../theme/components/ThemeToggle';
+
+// ============================================================================
+// SIDEBAR HEADER - ENTERPRISE GRADE
+// ============================================================================
 
 export default function SidebarHeader() {
-  const { isEditMode, createClickHandler } = useThemeEditor();
+  const { isEditMode, createClickHandler } = useThemeManager();
 
   // Auto-registrazione del componente
   useThemeElement(
@@ -18,8 +21,9 @@ export default function SidebarHeader() {
     }
   );
 
+  // Utilizza il nuovo ThemeManager per creare i click handler
   const handleBackgroundClick = createClickHandler('sidebar-header', 'background');
-  const handleTextClick = createClickHandler('sidebar-header', 'text');
+  const handleTextClick = createClickHandler('sidebar-header', 'color');
 
   return (
     <div 
@@ -41,7 +45,7 @@ export default function SidebarHeader() {
               className="text-lg font-semibold text-white"
               onClick={handleTextClick}
               style={{ cursor: isEditMode ? 'pointer' : 'default' }}
-              data-theme-part="text"
+              data-theme-part="color"
             >
               Omnia
             </h1>
@@ -49,13 +53,12 @@ export default function SidebarHeader() {
               className="text-sm text-gray-400"
               onClick={handleTextClick}
               style={{ cursor: isEditMode ? 'pointer' : 'default' }}
-              data-theme-part="text"
+              data-theme-part="color"
             >
               Data Dialogue Templates
             </p>
           </div>
         </div>
-        <ThemeToggle />
       </div>
     </div>
   );

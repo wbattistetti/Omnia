@@ -1,14 +1,12 @@
 import React from 'react';
-import { useThemeActions } from '../hooks/useThemeActions';
-import { useEditMode } from '../hooks/useThemeState';
+import { useThemeManager } from '../ThemeManager';
 
 // ============================================================================
-// PULSANTE TOGGLE TEMA
+// PULSANTE TOGGLE TEMA - ENTERPRISE GRADE
 // ============================================================================
 
 export function ThemeToggle() {
-  const { toggleEditMode } = useThemeActions();
-  const isEditMode = useEditMode();
+  const { isEditMode, toggleEditMode } = useThemeManager();
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -26,6 +24,7 @@ export function ThemeToggle() {
       }`}
       data-theme-ignore="true"
       title={isEditMode ? 'Disattiva editing tema' : 'Attiva editing tema'}
+      aria-label={isEditMode ? 'Disattiva editing tema' : 'Attiva editing tema'}
     >
       {isEditMode ? 'Tema ATTIVO' : 'Tema DISATTIVO'}
     </button>

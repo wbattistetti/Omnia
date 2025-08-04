@@ -1,6 +1,7 @@
 import React from 'react';
-import { Plus, Save, FolderOpen, Settings, Play, Download, Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Save, FolderOpen, Settings, Play, Download, Upload, Loader2, CheckCircle, AlertCircle, Palette } from 'lucide-react';
 import { ProjectDataService } from '../services/ProjectDataService';
+import { ThemeToggle } from '../theme/components/ThemeToggle';
 
 export interface ToolbarProps {
   onNewProject: () => void;
@@ -134,6 +135,8 @@ export function Toolbar({
 
       {/* Right side - Secondary actions */}
       <div className="flex items-center space-x-2">
+        <ThemeToggle />
+        
         <button
           onClick={onRun}
           className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-colors duration-200"

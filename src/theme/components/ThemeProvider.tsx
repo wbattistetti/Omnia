@@ -1,21 +1,35 @@
 import React from 'react';
-import { ThemeProvider as StateProvider } from '../hooks/useThemeState';
-import { MiniColorPicker } from './MiniColorPicker';
-import { useThemeState } from '../hooks/useThemeState';
+import { ThemeProvider as StateProvider } from '../context/ThemeContext';
+import { ColorPicker } from './ColorPicker';
+import { useThemeContext } from '../context/ThemeContext';
+import { useThemeManager } from '../ThemeManager';
+
+// ============================================================================
+// THEME PROVIDER - ENTERPRISE GRADE
+// ============================================================================
 
 function ThemeProviderContent({ children }: { children: React.ReactNode }) {
-  const { state } = useThemeState();
-  const { isMiniPickerOpen, editingElement, editingProperty, originalValue } = state;
+  const { state } = useThemeContext();
+  const { 
+    isColorPickerOpen, 
+    activeElement, 
+    activeProperty, 
+    pickerPosition,
+    currentColor 
+  } = state;
+
+  // Utilizza il nuovo ThemeManager per la gestione del cursor e auto-detection
+  useThemeManager();
 
   return (
     <>
       {children}
-      <MiniColorPicker
-        isOpen={isMiniPickerOpen}
-        position={{ x: 100, y: 100 }} // Default position, will be updated by actions
-        elementId={editingElement?.id || ''}
-        property={editingProperty || ''}
-        initialValue={originalValue}
+      <ColorPicker
+        isOpen={isColorPickerOpen}
+        position={pickerPosition}
+        elementId={activeElement?.id || ''}
+        property={activeProperty || ''}
+        initialColor={currentColor}
       />
     </>
   );

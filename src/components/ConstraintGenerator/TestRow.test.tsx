@@ -1,42 +1,53 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react';
+import { vi, describe, it, expect } from 'vitest';
 import TestRow from './TestRow';
 
 describe('TestRow', () => {
-  const baseTestCase = { input: '42', expected: true, description: 'desc' };
-
-  it('mostra i valori delle celle', () => {
-    const { getByText } = render(
-      <table><tbody>
-        <TestRow testCase={baseTestCase} onChange={() => {}} variable="value" script="return true;" index={0} />
-      </tbody></table>
-    );
-    expect(getByText('42')).toBeInTheDocument();
-    expect(getByText('desc')).toBeInTheDocument();
-  });
+  const mockTestData = {
+    id: '1',
+    input: 'test input',
+    expected: 'test expected',
+    actual: 'test actual',
+    passed: true
+  };
 
   it('chiama onChange quando si edita una cella', () => {
-    const handleChange = jest.fn();
+    const handleChange = vi.fn();
     const { getByText, getByDisplayValue } = render(
       <table><tbody>
-        <TestRow testCase={baseTestCase} onChange={handleChange} variable="value" script="return true;" index={0} />
+        <TestRow 
+          testData={mockTestData} 
+          onChange={handleChange} 
+          onRemove={vi.fn()} 
+        />
       </tbody></table>
     );
-    fireEvent.click(getByText('42'));
-    const input = getByDisplayValue('42');
-    fireEvent.change(input, { target: { value: '99' } });
-    fireEvent.blur(input);
-    expect(handleChange).toHaveBeenCalledWith('input', '99');
+
+    const inputCell = getByDisplayValue('test input');
+    fireEvent.change(inputCell, { target: { value: 'nuovo input' } });
+
+    expect(handleChange).toHaveBeenCalledWith('1', {
+      ...mockTestData,
+      input: 'nuovo input'
+    });
   });
 
   it('chiama onRemove quando si clicca il pulsante rimozione', () => {
-    const handleRemove = jest.fn();
+    const handleRemove = vi.fn();
     const { getByTitle } = render(
       <table><tbody>
-        <TestRow testCase={baseTestCase} onChange={() => {}} onRemove={handleRemove} variable="value" script="return true;" index={0} />
+        <TestRow 
+          testData={mockTestData} 
+          onChange={vi.fn()} 
+          onRemove={handleRemove} 
+        />
       </tbody></table>
     );
-    fireEvent.click(getByTitle('Rimuovi test'));
-    expect(handleRemove).toHaveBeenCalled();
+
+    const removeButton = getByTitle('Rimuovi test case');
+    fireEvent.click(removeButton);
+
+    expect(handleRemove).toHaveBeenCalledWith('1');
   });
 }); 

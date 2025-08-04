@@ -9,7 +9,6 @@ import { useDDTManager } from '../../context/DDTManagerContext';
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
-import { ThemeToggle } from '../../theme/components/ThemeToggle';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -83,13 +82,8 @@ const Sidebar: React.FC = () => {
 
   return (
     <SidebarContainer>
-      <SidebarHeader onToggleCollapse={toggleCollapse} />
+      <SidebarHeader />
       <div className="p-4 overflow-y-auto" style={{ flex: 1 }}>
-        {/* Theme Toggle Button */}
-        <div className="mb-4 flex justify-center">
-          <ThemeToggle />
-        </div>
-        
         <DDTSection
           ddtList={ddtList}
           onAdd={handleAddDDT}
@@ -98,7 +92,6 @@ const Sidebar: React.FC = () => {
           onOpenEditor={handleOpenEditor}
           isSaving={isSavingDDT}
           onSave={handleSaveDDT}
-          color={sidebarTheme.ddt.color}
         />
         {entityTypes.map(type => (
           <EntityAccordion
@@ -106,7 +99,6 @@ const Sidebar: React.FC = () => {
             entityKey={type}
             title={type.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
             icon={ICON_MAP[sidebarTheme[type].icon]}
-            color={sidebarTheme[type].color}
             data={data[type] || []}
             isOpen={openAccordion === type}
             onToggle={() => setOpenAccordion(openAccordion === type ? '' : type)}
