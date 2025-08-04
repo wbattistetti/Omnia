@@ -8,7 +8,7 @@ import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataC
 import { useDDTManager } from '../../context/DDTManagerContext';
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
-import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
+import { Bot, User, Database, GitBranch, CheckSquare, Layers, Loader, Save } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -41,9 +41,10 @@ const Sidebar: React.FC = () => {
   } = useProjectDataUpdate();
 
   // Usa il nuovo hook per DDT
-  const { ddtList, createDDT, openDDT, deleteDDT } = useDDTManager();
+  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError } = useDDTManager();
 
   const [isSavingDDT, setIsSavingDDT] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Handler implementati usando il hook
   const handleAddDDT = (newDDT: any) => {
@@ -73,10 +74,46 @@ const Sidebar: React.FC = () => {
     }
   };
 
-  const handleSaveDDT = () => {
+  const handleSaveDDT = async () => {
     console.log('[Sidebar] handleSaveDDT chiamato');
-    // TODO: Implementare salvataggio
+    setIsSavingDDT(true);
+    setSaveError(null);
+    try {
+      const res = await fetch('http://localhost:3100/api/factory/dialogue-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ddtList)
+      });
+      if (!res.ok) {
+        throw new Error('Server error: unable to save DDT');
+      }
+      console.log('[Sidebar] DDT salvati con successo');
+      // TODO: Mostrare feedback di successo (toast/snackbar)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Errore nel salvataggio DDT';
+      setSaveError(errorMessage);
+      console.error('[Sidebar] Errore salvataggio DDT:', err);
+      // TODO: Mostrare toast/alert con l'errore
+    } finally {
+      setIsSavingDDT(false);
+    }
   };
+
+  // Mostra errori di salvataggio
+  useEffect(() => {
+    if (saveError) {
+      console.error('[Sidebar] Errore salvataggio DDT:', saveError);
+      // TODO: Mostrare toast/alert con l'errore
+    }
+  }, [saveError]);
+
+  // Mostra errori di caricamento
+  useEffect(() => {
+    if (loadDDTError) {
+      console.error('[Sidebar] Errore caricamento DDT:', loadDDTError);
+      // TODO: Mostrare toast/alert con l'errore
+    }
+  }, [loadDDTError]);
 
   if (!data) return null;
 
@@ -92,6 +129,7 @@ const Sidebar: React.FC = () => {
           onOpenEditor={handleOpenEditor}
           isSaving={isSavingDDT}
           onSave={handleSaveDDT}
+          isLoading={isLoadingDDT}
         />
         {entityTypes.map(type => (
           <EntityAccordion
