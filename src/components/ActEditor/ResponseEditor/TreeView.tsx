@@ -70,6 +70,7 @@ const renderTree = (
             }}
             onCancelNewNode={onRemove}
             domId={'tree-node-' + node.id}
+            currentStep={stepKey}
             {...(node.type === 'escalation' ? { childrenNodes, escalationLabel, included: node.included, onToggleInclude: extraProps?.onToggleInclude, isSingleEscalation, foreColor: extraProps?.foreColor, bgColor: extraProps?.bgColor } : {})}
           />
           {/* Solo se non escalation, ricorsione classica */}

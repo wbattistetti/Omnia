@@ -19,6 +19,7 @@ interface TreeNodeExtraProps {
   escalationLabel?: string;
   foreColor?: string; // nuovo prop
   bgColor?: string; // nuovo prop
+  currentStep?: string; // per nascondere il rettangolo recovery per start/success
 }
 
 const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({ 
@@ -42,7 +43,8 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
   included,
   onToggleInclude,
   foreColor,
-  bgColor
+  bgColor,
+  currentStep
 }) => {
   const INDENT_WIDTH = 24;
   const [dropTarget, setDropTarget] = useState<'before' | 'after' | 'child' | null>(null);
@@ -157,6 +159,27 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
 
   // Nodo escalation: stile speciale, label, collassabile
   if (type === 'escalation') {
+    // Se siamo negli step start o success, non mostrare il rettangolo recovery
+    if (currentStep === 'start' || currentStep === 'success') {
+      return (
+        <div>
+          {childrenNodes.map(child => (
+            <TreeNode
+              key={child.id}
+              {...child}
+              level={level + 1}
+              selected={selected}
+              onDrop={onDrop}
+              onCancelNewNode={onCancelNewNode}
+              domId={'tree-node-' + child.id}
+              currentStep={currentStep}
+            />
+          ))}
+        </div>
+      );
+    }
+    
+    // Altrimenti mostra il rettangolo recovery normale
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const handleDelete = () => {
       setShowDeleteConfirm(true);
