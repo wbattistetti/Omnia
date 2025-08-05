@@ -25,6 +25,10 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
 }) => {
   return (
     <div style={{ background: '#a21caf', borderRadius: 10, padding: '8px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 18 }}>
+      {/* Response Editor title */}
+      <span style={{ color: 'white', fontWeight: 600, fontSize: 14 }}>Response Editor</span>
+      
+      {/* MainData and SubData buttons */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         {/* MainData button with SmartTooltip (icon expands on click) */}
         <SmartTooltip
@@ -93,40 +97,56 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
           <span style={{ fontSize: 18, color: '#fff', fontWeight: 700, margin: '0 4px' }}>)</span>
         )}
       </span>
-      <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ fontSize: 13, color: '#fff' }}>
-          <input type="checkbox" checked={showLabel} onChange={e => onShowLabelChange(e.target.checked)} style={{ marginRight: 4 }} />
-          Mostra label azione
-        </label>
+      
+      {/* Toolbar controls */}
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={showLabel}
+            onChange={(e) => onShowLabelChange(e.target.checked)}
+            style={{ margin: 0 }}
+          />
+          <span style={{ color: 'white', fontSize: 12 }}>Mostra label azione</span>
+        </div>
+        
         <button
           onClick={onAddConstraint}
-          style={{ marginLeft: 8, background: '#fff', color: '#a21caf', fontWeight: 700, border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 15, cursor: 'pointer' }}
-        >
-          + Aggiungi constraint
-        </button>
-        <button
-          onClick={onClose}
           style={{
-            marginLeft: 12,
-            background: 'none',
-            color: '#fff',
+            background: 'rgba(255,255,255,0.2)',
             border: 'none',
-            borderRadius: '50%',
-            width: 32,
-            height: 32,
-            fontSize: 22,
-            fontWeight: 700,
+            borderRadius: 6,
+            padding: '4px 12px',
+            color: 'white',
+            fontSize: 12,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'background 0.15s'
+            gap: 4
           }}
-          title="Chiudi editor"
+        >
+          + Aggiungi constraint
+        </button>
+        
+        <button
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'white',
+            fontSize: 18,
+            cursor: 'pointer',
+            padding: 0,
+            width: 24,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
         >
           ×
         </button>
-      </span>
+      </div>
     </div>
   );
 };

@@ -30,5 +30,6 @@
   "action.logLabel.label": {"en": "Log Label", "it": "Registra Etichetta", "pt": "Registrar Rótulo"},
   "action.logLabel.description": {"en": "Logs a label for analytics or debugging.", "it": "Registra un'etichetta per analisi o debug.", "pt": "Registra um rótulo para análise ou depuração."},
   "action.waitForAgent.label": {"en": "Wait for Agent", "it": "Attendi Agente", "pt": "Aguardando Agente"},
-  "action.waitForAgent.description": {"en": "Waits for a human agent to join.", "it": "Attende che un operatore umano si unisca.", "pt": "Aguarda um agente humano se juntar."}
+  "action.waitForAgent.description": {"en": "Waits for a human agent to join.", "it": "Attende che un operatore umano si unisca.", "pt": "Aguarda um agente humano se juntar."},
+  "sayMessageSuccess": {"en": "Thank you! Your date of birth has been recorded.", "it": "Grazie! La tua data di nascita è stata registrata.", "pt": "Obrigado! Sua data de nascimento foi registrada."}
 } 

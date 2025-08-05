@@ -9,6 +9,7 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
     console.warn('[estraiNodiDaDDT] Translations vuote per DDT', ddt.id || ddt._id);
   }
   const nodes: TreeNodeProps[] = [];
+  
   // Supporta nuova struttura: steps è un array
   if (Array.isArray(ddt.steps)) {
     ddt.steps.forEach((stepGroup: any) => {
@@ -86,6 +87,7 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
       }
     }
   }
+  
   console.log('[estraiNodiDaDDT] Nodi generati:', nodes);
   if (nodes.length > 0) {
     console.log('[estraiNodiDaDDT] Primo nodo:', JSON.stringify(nodes[0], null, 2));

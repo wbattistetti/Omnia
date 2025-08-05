@@ -54,11 +54,15 @@
       ],
       "age_min.violation": [
         { "actionInstanceId": "sayMessage5", "actionType": "sayMessage" }
-      ]
-    },
-    "success": {
-      "actions": [
-        { "actionInstanceId": "sayMessageSuccess", "actionType": "sayMessage" }
+      ],
+      "success": [
+        { 
+          "actionInstanceId": "sayMessageSuccess", 
+          "actionType": "sayMessage",
+          "parameters": [
+            { "value": "sayMessageSuccess" }
+          ]
+        }
       ]
     }
   }

@@ -76,12 +76,14 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         getDDTIcon={props.getDDTIcon}
         onClose={props.onClose}
       />
+      
       <StepStrip
         steps={props.stepKeys}
         stepMeta={props.stepMeta}
         selectedStep={props.editorState.selectedStep}
         onStepChange={props.editorState.onStepChange}
       />
+      
       {/* Lista constraint */}
       {props.constraints && props.constraints.length > 0 && (
         <div style={{ marginBottom: 16 }}>
@@ -93,13 +95,10 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
           </ul>
         </div>
       )}
+      
       <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
         <div style={{ flex: 1, minWidth: 320, padding: 16 }}>
-          {/* Undo/Redo controls */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <button onClick={props.handleUndo} disabled={!props.canUndo} style={{ padding: '4px 14px', borderRadius: 6, border: '1.5px solid #888', background: props.canUndo ? '#fff' : '#eee', color: props.canUndo ? '#111' : '#aaa', fontWeight: 700, cursor: props.canUndo ? 'pointer' : 'not-allowed' }}>↶ Undo</button>
-            <button onClick={props.handleRedo} disabled={!props.canRedo} style={{ padding: '4px 14px', borderRadius: 6, border: '1.5px solid #888', background: props.canRedo ? '#fff' : '#eee', color: props.canRedo ? '#111' : '#aaa', fontWeight: 700, cursor: props.canRedo ? 'pointer' : 'not-allowed' }}>↷ Redo</button>
-          </div>
+          {/* Main content area */}
           <TreeView
             nodes={props.filteredNodes}
             onDrop={props.handleDrop}

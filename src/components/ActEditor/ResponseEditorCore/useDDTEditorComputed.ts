@@ -44,7 +44,7 @@ export function useEditorComputed(
     return nodes.filter((node: any) => {
       // Per step 'start' e 'success': solo azioni dirette
       if (selectedStep === 'start' || selectedStep === 'success') {
-        return node.level === 0 && !node.parentId;
+        return node.stepType === selectedStep && node.level === 0 && !node.parentId;
       }
       
       // Per altri step: mostra escalation e azioni figlie

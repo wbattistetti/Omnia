@@ -1,19 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { TreeNodeProps } from '../types';
 
-// Funzione di filtraggio spostata in useDDTEditorComputed
+// Funzione di filtraggio che riflette la logica attuale
 function getFilteredNodes(nodes: TreeNodeProps[], selectedStep: string | null): TreeNodeProps[] {
-  if (!selectedStep) return nodes;
+  if (!selectedStep) return [];
   
-  return nodes.filter((node: any) => {
-    // Per step 'start' e 'success': solo azioni dirette
-    if (selectedStep === 'start' || selectedStep === 'success') {
-      return node.level === 0 && !node.parentId;
-    }
-    
-    // Per altri step: mostra escalation e azioni figlie
-    return node.stepType === selectedStep;
-  });
+  // Per step 'start' e 'success': solo azioni dirette (escludi escalation e figli)
+  if (selectedStep === 'start' || selectedStep === 'success') {
+    return nodes.filter(
+      n => n.stepType === selectedStep && n.type !== 'escalation' && !n.parentId
+    );
+  } else {
+    // Per altri step: mostra escalation, azioni dirette e azioni figlie
+    const escalationNodes = nodes.filter(
+      n => n.type === 'escalation' && n.stepType === selectedStep
+    );
+    const escalationIds = escalationNodes.map(n => n.id);
+    const childNodes = nodes.filter(
+      n => n.parentId && escalationIds.includes(n.parentId)
+    );
+    const directActions = nodes.filter(
+      n => n.stepType === selectedStep && n.type !== 'escalation' && !n.parentId
+    );
+    return [...escalationNodes, ...directActions, ...childNodes];
+  }
 }
 
 describe('useFilteredNodes', () => {
@@ -28,24 +38,24 @@ describe('useFilteredNodes', () => {
   ];
 
   describe('getFilteredNodes', () => {
-    it('should return all nodes when no step is selected', () => {
+    it('should return empty array when no step is selected', () => {
       const result = getFilteredNodes(mockNodes, null);
-      expect(result).toEqual(mockNodes);
+      expect(result).toEqual([]);
     });
 
-    it('should return all nodes when step is empty string', () => {
+    it('should return empty array when step is empty string', () => {
       const result = getFilteredNodes(mockNodes, '');
-      expect(result).toEqual(mockNodes);
+      expect(result).toEqual([]);
     });
 
-    it('should hide escalation for start step', () => {
+    it('should show only direct actions for start step', () => {
       const result = getFilteredNodes(mockNodes, 'start');
-      expect(result).toEqual([]);
+      expect(result).toHaveLength(0); // No direct actions for start in mock data
     });
 
-    it('should hide escalation for success step', () => {
+    it('should show only direct actions for success step', () => {
       const result = getFilteredNodes(mockNodes, 'success');
-      expect(result).toEqual([]);
+      expect(result).toHaveLength(0); // No direct actions for success in mock data
     });
 
     it('should show escalation for noMatch step', () => {

@@ -2,19 +2,29 @@ import { describe, it, expect } from 'vitest';
 import { estraiNodiDaDDT, removeNodePure } from '../treeFactories';
 import { TreeNodeProps } from '../types';
 
-// Funzione di filtraggio spostata in useDDTEditorComputed
+// Funzione di filtraggio che riflette la logica attuale
 function getFilteredNodes(nodes: TreeNodeProps[], selectedStep: string | null): TreeNodeProps[] {
   if (!selectedStep) return [];
   
-  return nodes.filter((node: any) => {
-    // Per step 'start' e 'success': solo azioni dirette
-    if (selectedStep === 'start' || selectedStep === 'success') {
-      return node.level === 0 && !node.parentId;
-    }
-    
-    // Per altri step: mostra escalation e azioni figlie
-    return node.stepType === selectedStep;
-  });
+  // Per step 'start' e 'success': solo azioni dirette (escludi escalation e figli)
+  if (selectedStep === 'start' || selectedStep === 'success') {
+    return nodes.filter(
+      n => n.stepType === selectedStep && n.type !== 'escalation' && !n.parentId
+    );
+  } else {
+    // Per altri step: mostra escalation, azioni dirette e azioni figlie
+    const escalationNodes = nodes.filter(
+      n => n.type === 'escalation' && n.stepType === selectedStep
+    );
+    const escalationIds = escalationNodes.map(n => n.id);
+    const childNodes = nodes.filter(
+      n => n.parentId && escalationIds.includes(n.parentId)
+    );
+    const directActions = nodes.filter(
+      n => n.stepType === selectedStep && n.type !== 'escalation' && !n.parentId
+    );
+    return [...escalationNodes, ...directActions, ...childNodes];
+  }
 }
 
 describe('treeFactories', () => {
@@ -165,9 +175,10 @@ describe('treeFactories', () => {
 
   describe('getFilteredNodes', () => {
     const mockNodes: TreeNodeProps[] = [
-      { id: 'action1', text: 'Action 1', type: 'start', level: 0 },
-      { id: 'esc1', text: 'recovery', type: 'escalation', level: 0, included: true },
-      { id: 'action2', text: 'Action 2', type: 'noMatch', level: 1, parentId: 'esc1' }
+      { id: 'action1', text: 'Action 1', type: 'action', stepType: 'start', level: 0 },
+      { id: 'action2', text: 'Action 2', type: 'action', stepType: 'success', level: 0 },
+      { id: 'esc1', text: 'recovery', type: 'escalation', stepType: 'noMatch', level: 0, included: true },
+      { id: 'action3', text: 'Action 3', type: 'action', stepType: 'noMatch', level: 1, parentId: 'esc1' }
     ];
 
     it('should return empty array when no step is selected', () => {
@@ -184,22 +195,22 @@ describe('treeFactories', () => {
     it('should return direct actions for success step', () => {
       const result = getFilteredNodes(mockNodes, 'success');
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('action1');
+      expect(result[0].id).toBe('action2');
     });
 
     it('should return escalations and child actions for noMatch step', () => {
       const result = getFilteredNodes(mockNodes, 'noMatch');
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('esc1');
-      expect(result[1].id).toBe('action2');
+      expect(result[1].id).toBe('action3');
     });
 
     it('should filter correctly when multiple nodes exist', () => {
       const multipleNodes = [
-        { id: 'action1', text: 'Action 1', type: 'start', level: 0 },
-        { id: 'action2', text: 'Action 2', type: 'start', level: 0 },
-        { id: 'esc1', text: 'recovery', type: 'escalation', level: 0, included: true },
-        { id: 'action3', text: 'Action 3', type: 'noMatch', level: 1, parentId: 'esc1' }
+        { id: 'action1', text: 'Action 1', type: 'action', stepType: 'start', level: 0 },
+        { id: 'action2', text: 'Action 2', type: 'action', stepType: 'start', level: 0 },
+        { id: 'esc1', text: 'recovery', type: 'escalation', stepType: 'noMatch', level: 0, included: true },
+        { id: 'action3', text: 'Action 3', type: 'action', stepType: 'noMatch', level: 1, parentId: 'esc1' }
       ];
       const result = getFilteredNodes(multipleNodes, 'start');
       expect(result).toHaveLength(2);

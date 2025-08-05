@@ -70,9 +70,9 @@ describe('useEditorComputed', () => {
 
     it('should filter nodes for start step (level 0, no parentId)', () => {
       const nodes = [
-        { id: '1', level: 0, parentId: null, stepType: 'start' },
-        { id: '2', level: 1, parentId: '1', stepType: 'start' },
-        { id: '3', level: 0, parentId: null, stepType: 'other' }
+        { id: '1', level: 0, parentId: null, stepType: 'start', type: 'action' },
+        { id: '2', level: 1, parentId: '1', stepType: 'start', type: 'action' },
+        { id: '3', level: 0, parentId: null, stepType: 'other', type: 'action' }
       ];
 
       const { result } = renderHook(() => 
@@ -80,14 +80,14 @@ describe('useEditorComputed', () => {
       );
 
       expect(result.current.filteredNodes).toEqual([
-        { id: '1', level: 0, parentId: null, stepType: 'start' }
+        { id: '1', level: 0, parentId: null, stepType: 'start', type: 'action' }
       ]);
     });
 
     it('should filter nodes for success step (level 0, no parentId)', () => {
       const nodes = [
-        { id: '1', level: 0, parentId: null, stepType: 'success' },
-        { id: '2', level: 1, parentId: '1', stepType: 'success' }
+        { id: '1', level: 0, parentId: null, stepType: 'success', type: 'action' },
+        { id: '2', level: 1, parentId: '1', stepType: 'success', type: 'action' }
       ];
 
       const { result } = renderHook(() => 
@@ -95,15 +95,15 @@ describe('useEditorComputed', () => {
       );
 
       expect(result.current.filteredNodes).toEqual([
-        { id: '1', level: 0, parentId: null, stepType: 'success' }
+        { id: '1', level: 0, parentId: null, stepType: 'success', type: 'action' }
       ]);
     });
 
     it('should filter nodes by stepType for other steps', () => {
       const nodes = [
-        { id: '1', level: 0, parentId: null, stepType: 'noMatch' },
-        { id: '2', level: 1, parentId: '1', stepType: 'noMatch' },
-        { id: '3', level: 0, parentId: null, stepType: 'other' }
+        { id: '1', level: 0, parentId: null, stepType: 'noMatch', type: 'action' },
+        { id: '2', level: 1, parentId: '1', stepType: 'noMatch', type: 'action' },
+        { id: '3', level: 0, parentId: null, stepType: 'other', type: 'action' }
       ];
 
       const { result } = renderHook(() => 
@@ -111,8 +111,8 @@ describe('useEditorComputed', () => {
       );
 
       expect(result.current.filteredNodes).toEqual([
-        { id: '1', level: 0, parentId: null, stepType: 'noMatch' },
-        { id: '2', level: 1, parentId: '1', stepType: 'noMatch' }
+        { id: '1', level: 0, parentId: null, stepType: 'noMatch', type: 'action' },
+        { id: '2', level: 1, parentId: '1', stepType: 'noMatch', type: 'action' }
       ]);
     });
   });

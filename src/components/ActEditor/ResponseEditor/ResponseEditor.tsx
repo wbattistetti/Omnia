@@ -15,13 +15,15 @@
 //
 // ---
 // Executive summary: Main entry point for the Response Editor component. Handles layout and orchestration of the response tree.
-import React, { useReducer, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import ResponseEditorUI from './ResponseEditorUI';
 import ActionItem from '../ActionViewer/ActionItem';
 import ActionList from '../ActionViewer/ActionList';
 import { Tag, MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Clock, ServerCog, Calendar, MapPin, FileText, PlayCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle, Plus } from 'lucide-react';
 import ToolbarButton from './ToolbarButton';
 import TreeView from './TreeView';
+import ResponseEditorToolbar from './ResponseEditorToolbar';
+import ResponseEditorSidebar from './ResponseEditorSidebar';
 import styles from './ResponseEditor.module.css';
 import { TreeNodeProps } from './types';
 import { useTreeNodes } from './useTreeNodes';
@@ -31,6 +33,7 @@ import { estraiParametroPrincipale, estraiValoreTradotto, getTranslationText, or
 import { v4 as uuidv4 } from 'uuid';
 import { createAction } from './actionFactories';
 import { createParameter } from './parameterFactories';
+import { useResponseEditorState } from './useResponseEditorState';
 
 const iconMap: Record<string, React.ReactNode> = {
   MessageCircle: <MessageCircle size={24} />,  HelpCircle: <HelpCircle size={24} />,  Headphones: <Headphones size={24} />,  Shield: <Shield size={24} />,  PhoneOff: <PhoneOff size={24} />,  Database: <Database size={24} />,  Mail: <Mail size={24} />,  MessageSquare: <MessageSquare size={24} />,  Function: <Function size={24} />,  Music: <Music size={24} />,  Eraser: <Eraser size={24} />,  ArrowRight: <ArrowRight size={24} />,  Tag: <Tag size={24} />,  Clock: <Clock size={24} />,  ServerCog: <ServerCog size={24} />
@@ -56,171 +59,57 @@ interface ResponseEditorProps {
   onClose?: () => void;
 }
 
-// Rimuovo defaultNodes
-
-// Inserisce un nodo nell'array subito prima o dopo il targetId, mantenendo parentId e level
-function nodesReducer(state: TreeNodeProps[], action: any): TreeNodeProps[] {
-  switch (action.type) {
-    case 'SET':
-      return action.nodes;
-    case 'ADD':
-      if (action.insertAt) {
-        // Inserimento ordinato tra fratelli
-        return insertNodeAt(state, action.node, action.targetId, action.position);
-      }
-      return [...state, action.node];
-    case 'REMOVE':
-      return state.filter(n => n.id !== action.id);
-    default:
-      return state;
-  }
-}
-
 const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it', onClose }) => {
   // LOG: stampa le props ricevute
   console.log('[DEBUG] [ResponseEditor] DDT ricevuto come prop:', ddt);
   // LOG: translations ricevute come prop
   console.log('[ResponseEditor] translations ricevute come prop:', translations);
-  type EditorState = {
-    selectedStep: string | null;
-    actionCatalog: any[];
-    showLabel: boolean;
-    activeDragAction: any;
-    nodes: TreeNodeProps[];
-  };
 
-  type EditorAction =
-    | { type: 'SET_STEP'; step: string }
-    | { type: 'SET_ACTION_CATALOG'; catalog: any[] }
-    | { type: 'SET_SHOW_LABEL'; show: boolean }
-    | { type: 'SET_ACTIVE_DRAG_ACTION'; action: any }
-    | { type: 'SET_NODES'; nodes: TreeNodeProps[] }
-    | { type: 'ADD_NODE'; node: TreeNodeProps }
-    | { type: 'REMOVE_NODE'; id: string }
-    | { type: 'ADD_ESCALATION' }
-    | { type: 'SET_ALL_STATE'; state: EditorState }
-    | { type: 'TOGGLE_ESCALATION_INCLUDE'; id: string; included: boolean }
-    ;
+  const {
+    state,
+    dispatch,
+    canUndo,
+    canRedo,
+    undo,
+    redo
+  } = useResponseEditorState();
 
-  const initialEditorState: EditorState = {
-    selectedStep: null,
-    actionCatalog: [],
-    showLabel: false,
-    activeDragAction: null,
-    nodes: [],
-  };
+  const { selectedStep, actionCatalog, showLabel, activeDragAction, nodes } = state;
 
-  function editorReducer(state: EditorState, action: EditorAction): EditorState {
-    switch (action.type) {
-      case 'SET_STEP':
-        return { ...state, selectedStep: action.step };
-      case 'SET_ACTION_CATALOG':
-        return { ...state, actionCatalog: action.catalog };
-      case 'SET_SHOW_LABEL':
-        return { ...state, showLabel: action.show };
-      case 'SET_ACTIVE_DRAG_ACTION':
-        return { ...state, activeDragAction: action.action };
-      case 'SET_NODES':
-        return { ...state, nodes: action.nodes };
-      case 'ADD_NODE':
-        return { ...state, nodes: addNode(state.nodes, action.node) };
-      case 'REMOVE_NODE': {
-        if (typeof action.id !== 'string') {
-          console.error('[REMOVE_NODE] id non è una stringa:', action.id);
-          return state;
-        }
-        const nodeToRemove = state.nodes.find(n => n.id === action.id);
-        if (nodeToRemove && nodeToRemove.type === 'escalation') {
-          return {
-            ...state,
-            nodes: removeNodePure(state.nodes, action.id, true)
-          };
-        } else {
-          return {
-            ...state,
-            nodes: removeNodePure(state.nodes, action.id, false)
-          };
-        }
-      }
-      case 'ADD_ESCALATION': {
-        if (!state.selectedStep) return state;
-        const escalationId = `${state.selectedStep}_escalation_${uuidv4()}`;
-        return {
-          ...state,
-          nodes: addNode(state.nodes, {
-            id: escalationId,
-            text: 'recovery', // la label visuale è calcolata a runtime
-            type: 'escalation',
-            level: 0,
-            included: true,
-          })
-        };
-      }
-      case 'TOGGLE_ESCALATION_INCLUDE':
-        return {
-          ...state,
-          nodes: state.nodes.map(n =>
-            n.id === action.id ? { ...n, included: action.included } : n
-          )
-        };
-      case 'SET_ALL_STATE':
-        return { ...action.state };
-      default:
-        return state;
-    }
-  }
-
-  const [editorState, dispatch] = useReducer(editorReducer, initialEditorState);
   const stepKeys = ddt && ddt.steps ? Object.keys(ddt.steps) : [];
   // --- HISTORY/UNDO/REDO ---
-  const historyRef = useRef<EditorState[]>([initialEditorState]);
+  const historyRef = useRef<any[]>([]); // Changed to any[] as per new state structure
   const indexRef = useRef(0);
   const [_, forceUpdate] = React.useReducer(x => x + 1, 0); // forzare il rerender su undo/redo
 
   // Wrapper per dispatch che aggiorna la history
-  const dispatchWithHistory = useCallback((action: EditorAction) => {
+  const dispatchWithHistory = useCallback((action: any) => { // Changed to any as per new state structure
     // Calcola il nuovo stato
-    const newState = editorReducer(editorState, action);
+    const newState = action; // Simplified as per new state structure
     // Se lo stato è cambiato, aggiorna la history
-    if (JSON.stringify(newState) !== JSON.stringify(editorState)) {
+    if (JSON.stringify(newState) !== JSON.stringify(state)) { // Changed to state
       // Tronca la history se siamo in mezzo
       const newHistory = historyRef.current.slice(0, indexRef.current + 1);
-      newHistory.push(newState);
+      newHistory.push(state); // Changed to state
       historyRef.current = newHistory;
       indexRef.current = newHistory.length - 1;
-      forceUpdate();
+
+      // Limita la history a 50 stati
+      if (historyRef.current.length > 50) {
+        historyRef.current = historyRef.current.slice(-50);
+        indexRef.current = historyRef.current.length - 1;
+      }
     }
     // Applica il dispatch normale
     dispatch(action);
-  }, [editorState]);
-
-  // Undo
-  const canUndo = indexRef.current > 0;
-  const handleUndo = () => {
-    if (canUndo) {
-      indexRef.current -= 1;
-      const prevState = historyRef.current[indexRef.current];
-      dispatch({ type: 'SET_ALL_STATE', state: prevState });
-      forceUpdate();
-    }
-  };
-  // Redo
-  const canRedo = indexRef.current < historyRef.current.length - 1;
-  const handleRedo = () => {
-    if (canRedo) {
-      indexRef.current += 1;
-      const nextState = historyRef.current[indexRef.current];
-      dispatch({ type: 'SET_ALL_STATE', state: nextState });
-      forceUpdate();
-    }
-  };
+  }, [state]); // Changed to state
 
   // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
   React.useEffect(() => {
-    if (stepKeys.length > 0 && !editorState.selectedStep) {
+    if (stepKeys.length > 0 && !selectedStep) {
       dispatchWithHistory({ type: 'SET_STEP', step: stepKeys[0] });
     }
-  }, [stepKeys, editorState.selectedStep]);
+  }, [stepKeys, selectedStep]);
 
   // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
   React.useEffect(() => {
@@ -252,25 +141,25 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   // Filtro i nodi per lo step selezionato
   let filteredNodes: TreeNodeProps[] = [];
-  if (editorState.selectedStep) {
+  if (selectedStep) {
     // Mostra solo le escalation e le azioni del tipo di step selezionato
-    const escalationNodes = editorState.nodes.filter(
-      n => n.type === 'escalation' && n.stepType === editorState.selectedStep
+    const escalationNodes = nodes.filter(
+      n => n.type === 'escalation' && n.stepType === selectedStep
     );
     const escalationIds = escalationNodes.map(n => n.id);
-    const childNodes = editorState.nodes.filter(
+    const childNodes = nodes.filter(
       n => n.parentId && escalationIds.includes(n.parentId)
     );
     filteredNodes = [...escalationNodes, ...childNodes];
   }
   // LOG: selectedStep
-  console.log('[DEBUG] [ResponseEditor] selectedStep:', editorState.selectedStep);
+  console.log('[DEBUG] [ResponseEditor] selectedStep:', selectedStep);
   console.log('[ResponseEditor] filteredNodes passed to TreeView:', filteredNodes);
 
   // handleDrop logica semplificata (solo aggiunta root per demo)
   const handleDrop = (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => {
     console.log('[DND][handleDrop] called with:', { targetId, position, item });
-    console.log('[DND][handleDrop] nodes before:', editorState.nodes);
+    console.log('[DND][handleDrop] nodes before:', nodes);
     if (item && item.action) {
       const action = item.action;
       const id = Math.random().toString(36).substr(2, 9);
@@ -288,7 +177,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         console.log('[DND][handleDrop] ADD_NODE as root');
         dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
       } else {
-        const targetNode = editorState.nodes.find(n => n.id === targetId);
+        const targetNode = nodes.find(n => n.id === targetId);
         console.log('[DND][handleDrop] targetNode:', targetNode);
         if (!targetNode) {
           console.log('[DND][handleDrop] targetNode not found, ADD_NODE as root');
@@ -298,13 +187,13 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
           dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id } });
         } else if (targetNode.type === 'escalation' && (position === 'before' || position === 'after')) {
           console.log('[DND][handleDrop] insertNodeAt escalation', position);
-          const inserted = insertNodeAt(editorState.nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position);
+          const inserted = insertNodeAt(nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position);
           console.log('[DND][handleDrop] nodes after insertNodeAt:', inserted);
           dispatchWithHistory({ type: 'SET_NODES', nodes: inserted });
         } else if (targetNode.type === 'action') {
           const pos: 'before' | 'after' = position === 'before' ? 'before' : 'after';
           console.log('[DND][handleDrop] insertNodeAt action', pos);
-          const inserted = insertNodeAt(editorState.nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, pos);
+          const inserted = insertNodeAt(nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, pos);
           console.log('[DND][handleDrop] nodes after insertNodeAt:', inserted);
           dispatchWithHistory({ type: 'SET_NODES', nodes: inserted });
         } else {
@@ -361,7 +250,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   // Estendi editorState con funzioni per la UI
   const editorStateForUI = {
-    ...editorState,
+    ...state,
     ddtType,
     ddtLabel,
     ddt, // <-- aggiungo ddt esplicitamente per log
@@ -455,8 +344,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       handleDrop={handleDrop}
       removeNode={removeNode}
       handleAddEscalation={handleAddEscalation}
-      handleUndo={handleUndo}
-      handleRedo={handleRedo}
+      handleUndo={undo}
+      handleRedo={redo}
       canUndo={canUndo}
       canRedo={canRedo}
       getDDTIcon={getDDTIcon}
