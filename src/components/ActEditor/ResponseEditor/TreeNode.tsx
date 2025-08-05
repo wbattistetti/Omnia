@@ -305,6 +305,7 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
                 draggable={true}
                 onEdit={() => {}} // enable editing mode for escalation children
                 onDelete={onCancelNewNode ? () => onCancelNewNode(child.id) : undefined}
+                data-action-id={child.id}
               />
             ))}
           </div>
@@ -343,6 +344,7 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
         draggable={true}
         onEdit={() => {}} // enable editing mode for now
         onDelete={onCancelNewNode ? () => onCancelNewNode(id) : undefined}
+        data-action-id={id}
       />
       {/* Parametri figli indentati */}
       {parameters && parameters.length > 0 && (

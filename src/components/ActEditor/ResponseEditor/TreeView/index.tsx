@@ -1,11 +1,11 @@
 // Executive summary: Refactored TreeView component that uses extracted components and hooks for better separation of concerns
 import React, { useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import TreeRenderer from './TreeView/TreeRenderer';
-import CustomDragLayer from './TreeView/CustomDragLayer';
-import DropPreview from './TreeView/DropPreview';
-import { useTreeDragDrop } from './TreeView/useTreeDragDrop';
-import { TreeViewProps } from './TreeView/TreeViewTypes';
+import TreeRenderer from './TreeRenderer';
+import CustomDragLayer from './CustomDragLayer';
+import DropPreview from './DropPreview';
+import { useTreeDragDrop } from './useTreeDragDrop';
+import { TreeViewProps } from './TreeViewTypes';
 
 const TreeView: React.FC<TreeViewProps> = ({ 
   nodes, 
@@ -67,7 +67,7 @@ const TreeView: React.FC<TreeViewProps> = ({
       />
 
       {/* Bottone aggiungi escalation in fondo se ci sono escalation visibili */}
-      {onAddEscalation && nodes.some((n: any) => n.type === 'escalation') && (
+      {onAddEscalation && nodes.some(n => n.type === 'escalation') && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
           <button
             onClick={onAddEscalation}
