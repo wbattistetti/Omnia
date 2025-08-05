@@ -180,10 +180,6 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
     }
     
     // Altrimenti mostra il rettangolo recovery normale
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const handleDelete = () => {
-      setShowDeleteConfirm(true);
-    };
     // Colore dinamico escalation
     const colorKey = (escalationLabel || '').toLowerCase();
     let colorConfig = ESCALATION_COLORS[colorKey] || ESCALATION_COLORS['default'];
@@ -275,7 +271,7 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
             </span>
             <span>{escalationLabel || text}</span>
           </span>
-          {onCancelNewNode && !showDeleteConfirm && (
+          {onCancelNewNode && (
             <TooltipWrapper tooltip={<SmartTooltip text="Elimina recovery" tutorId="recovery_delete"><span /></SmartTooltip>}>
               {(show, triggerProps) => (
                 <span
@@ -285,25 +281,13 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
                   <Trash2
                     size={17}
                     style={{ color: colorConfig.fore, marginLeft: 12, cursor: 'pointer' }}
-                    onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                    onClick={e => { e.stopPropagation(); if (onCancelNewNode) onCancelNewNode(id); }}
                     onMouseOver={e => { e.currentTarget.style.color = '#b91c1c'; }}
                     onMouseOut={e => { e.currentTarget.style.color = colorConfig.fore; }}
                   />
                 </span>
               )}
             </TooltipWrapper>
-          )}
-          {showDeleteConfirm && (
-            <span style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
-              <button
-                style={{ background: colorConfig.fore, color: '#fff', border: 'none', borderRadius: 6, padding: '2px 12px', fontWeight: 700, cursor: 'pointer' }}
-                onClick={e => { e.stopPropagation(); setShowDeleteConfirm(false); if (onCancelNewNode) onCancelNewNode(id); }}
-              >Conferma</button>
-              <button
-                style={{ background: '#eee', color: '#333', border: 'none', borderRadius: 6, padding: '2px 12px', fontWeight: 500, cursor: 'pointer' }}
-                onClick={e => { e.stopPropagation(); setShowDeleteConfirm(false); }}
-              >Annulla</button>
-            </span>
           )}
         </div>
         {!collapsed && childrenNodes && childrenNodes.length > 0 && (

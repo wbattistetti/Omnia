@@ -11,6 +11,10 @@ interface ResponseEditorHeaderProps {
   onAddConstraint: () => void;
   getDDTIcon?: (type: string) => React.ReactNode;
   onClose: () => void;
+  handleUndo: () => void;
+  handleRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
@@ -22,6 +26,10 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
   onAddConstraint,
   getDDTIcon,
   onClose,
+  handleUndo,
+  handleRedo,
+  canUndo,
+  canRedo,
 }) => {
   return (
     <div style={{ background: '#a21caf', borderRadius: 10, padding: '8px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 18 }}>
@@ -97,6 +105,48 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
           <span style={{ fontSize: 18, color: '#fff', fontWeight: 700, margin: '0 4px' }}>)</span>
         )}
       </span>
+      
+      {/* Undo/Redo buttons */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button 
+          onClick={handleUndo} 
+          disabled={!canUndo} 
+          style={{ 
+            padding: '4px 10px', 
+            borderRadius: 4, 
+            border: '1px solid rgba(255,255,255,0.3)', 
+            background: canUndo ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', 
+            color: canUndo ? 'white' : 'rgba(255,255,255,0.5)', 
+            fontWeight: 600, 
+            cursor: canUndo ? 'pointer' : 'not-allowed',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4
+          }}
+        >
+          ↶ Undo
+        </button>
+        <button 
+          onClick={handleRedo} 
+          disabled={!canRedo} 
+          style={{ 
+            padding: '4px 10px', 
+            borderRadius: 4, 
+            border: '1px solid rgba(255,255,255,0.3)', 
+            background: canRedo ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', 
+            color: canRedo ? 'white' : 'rgba(255,255,255,0.5)', 
+            fontWeight: 600, 
+            cursor: canRedo ? 'pointer' : 'not-allowed',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4
+          }}
+        >
+          ↷ Redo
+        </button>
+      </div>
       
       {/* Toolbar controls */}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>

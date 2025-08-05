@@ -44,6 +44,30 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
   const escalations = step?.escalations || [];
   console.log('[CHECK] Escalations for step', selectedStep, ':', escalations);
 
+    // Test keyboard shortcuts
+    React.useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        console.log('Key pressed:', e.key, 'Ctrl:', e.ctrlKey, 'Meta:', e.metaKey);
+        
+        // Ctrl+Z (undo)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+          console.log('Ctrl+Z detected - calling undo');
+          e.preventDefault();
+          if (props.canUndo) {
+            console.log('Can undo, calling handleUndo');
+            props.handleUndo();
+          } else {
+            console.log('Cannot undo');
+          }
+        }
+      };
+  
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }, [props.canUndo, props.handleUndo]);
+
   // Gestione drag splitter
   React.useEffect(() => {
     if (!dragging) return;
@@ -75,6 +99,10 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         onAddConstraint={() => setShowConstraintWizard(true)}
         getDDTIcon={props.getDDTIcon}
         onClose={props.onClose}
+        handleUndo={props.handleUndo}
+        handleRedo={props.handleRedo}
+        canUndo={props.canUndo}
+        canRedo={props.canRedo}
       />
       
       <StepStrip
