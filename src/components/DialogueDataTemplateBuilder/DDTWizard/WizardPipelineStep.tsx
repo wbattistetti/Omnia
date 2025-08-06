@@ -4,13 +4,16 @@ import { useOrchestrator } from '../orchestrator/useOrchestrator';
 import { buildDDT } from '../DDTAssembler/DDTBuilder';
 import { buildSteps } from '../DDTAssembler/buildStepMessagesFromResults';
 import { generateStepsSkipDetectType } from '../orchestrator/stepGenerator';
+import { calculateTotalSteps, getStepDescription } from '../utils/stepCalculator';
 import DataTypeLabel from './DataTypeLabel';
 import StepLabel from './StepLabel';
 import HourglassSpinner from './HourglassSpinner';
+import ProgressBar from '../../Common/ProgressBar';
 
 interface DataNode {
   name: string;
   type?: string;
+  subData?: string[];
 }
 
 interface Props {
@@ -19,13 +22,26 @@ interface Props {
   onCancel: () => void;
   onComplete?: (finalDDT: any) => void;
   skipDetectType?: boolean;
-  confirmedLabel?: string; // <--- AGGIUNTA
+  confirmedLabel?: string;
 }
 
 const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel }) => {
   const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType));
   const [finalDDT, setFinalDDT] = useState<any>(null);
+  const [totalSteps, setTotalSteps] = useState(0);
+  const [currentStep, setCurrentStep] = useState(1);
   const alreadyStartedRef = useRef(false);
+
+  // Calcola il numero totale di step quando il componente si monta
+  useEffect(() => {
+    const total = calculateTotalSteps(dataNode);
+    setTotalSteps(total);
+  }, [dataNode]);
+
+  // Aggiorna lo step corrente quando cambia l'indice dello step nell'orchestrator
+  useEffect(() => {
+    setCurrentStep(orchestrator.state.currentStepIndex + 1);
+  }, [orchestrator.state.currentStepIndex]);
 
   useEffect(() => {
     return () => {
@@ -86,6 +102,8 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     }
   }, [orchestrator.state.currentStepIndex, orchestrator.state.steps.length, orchestrator.state.stepResults, finalDDT, onComplete, confirmedLabel, dataNode]);
 
+  const currentDescription = getStepDescription(currentStep, dataNode);
+
   return (
     <div style={{ padding: '18px 0 12px 0', maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
       <div style={{ fontWeight: 600, fontSize: 18, color: '#fff', marginBottom: 6 }}>Creating...</div>
@@ -95,12 +113,35 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
           label={dataNode.name}
         />
       </div>
+      
+      {/* Progress Bar */}
+      <div style={{ marginBottom: 16 }}>
+        <ProgressBar 
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          label="Building your dialogue template"
+        />
+      </div>
+      
+      {/* Current Step Description */}
+      <div style={{ 
+        marginBottom: 16, 
+        padding: '8px 12px', 
+        backgroundColor: 'rgba(255,255,255,0.1)', 
+        borderRadius: '6px',
+        color: '#e5e7eb',
+        fontSize: 14
+      }}>
+        <strong>Current step:</strong> {currentDescription}
+      </div>
+      
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
         <StepLabel
           icon={<HourglassSpinner />}
           label={orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || ''}
         />
       </div>
+      
       {/* Mostra preview JSON finale a fine pipeline */}
       {finalDDT && (
         <div style={{ marginTop: 24 }}>
