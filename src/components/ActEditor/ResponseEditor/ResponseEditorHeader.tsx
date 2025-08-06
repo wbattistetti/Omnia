@@ -1,4 +1,5 @@
 import React from 'react';
+import { Play, Square } from 'lucide-react';
 import SmartTooltip from '../../SmartTooltip';
 import { TooltipWrapper } from '../../TooltipWrapper';
 
@@ -15,6 +16,8 @@ interface ResponseEditorHeaderProps {
   handleRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  onToggleSimulator?: () => void;
+  showSimulator?: boolean;
 }
 
 const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
@@ -30,6 +33,8 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
   handleRedo,
   canUndo,
   canRedo,
+  onToggleSimulator,
+  showSimulator,
 }) => {
   return (
     <div style={{ background: '#a21caf', borderRadius: 10, padding: '8px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 18 }}>
@@ -106,8 +111,32 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
         )}
       </span>
       
-      {/* Undo/Redo buttons */}
+      {/* Simulator and Undo/Redo buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* Simulator button */}
+        {onToggleSimulator && (
+          <button 
+            onClick={onToggleSimulator} 
+            style={{ 
+              padding: '4px 10px', 
+              borderRadius: 4, 
+              border: '1px solid rgba(255,255,255,0.3)', 
+              background: showSimulator ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.2)', 
+              color: 'white', 
+              fontWeight: 600, 
+              cursor: 'pointer',
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4
+            }}
+            title={showSimulator ? 'Stop simulation' : 'Test flow simulation'}
+          >
+            {showSimulator ? <Square size={14} /> : <Play size={14} />}
+            {showSimulator ? 'Stop' : 'Test'}
+          </button>
+        )}
+        
         <button 
           onClick={handleUndo} 
           disabled={!canUndo} 

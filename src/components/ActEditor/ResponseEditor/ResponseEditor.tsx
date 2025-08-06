@@ -68,6 +68,14 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     undo,
     redo
   } = useResponseEditorState();
+  
+  // Simulator state
+  const [showSimulator, setShowSimulator] = React.useState(false);
+  
+  // Toggle simulator handler
+  const handleToggleSimulator = () => {
+    setShowSimulator(!showSimulator);
+  };
 
   const { selectedStep, actionCatalog, showLabel, activeDragAction, nodes } = state;
 
@@ -344,6 +352,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       onSelectNode={handleSelectNode}
       onAIGenerate={handleAIGenerate}
       selectedStep={selectedStep}
+      onToggleSimulator={handleToggleSimulator}
+      showSimulator={showSimulator}
     />
   );
 };

@@ -8,6 +8,7 @@ import { createConstraint, updateConstraint, removeConstraint } from './constrai
 import { AlertTriangle } from 'lucide-react';
 import ResponseEditorHeader from './ResponseEditorHeader';
 import StepStrip from './StepStrip';
+import ResponseSimulator from './ChatSimulator/ResponseSimulator';
 
 export interface ResponseEditorUIProps {
   editorState: any;
@@ -32,6 +33,8 @@ export interface ResponseEditorUIProps {
   selectedNodeIndex: number | null;
   onAIGenerate?: (actionId: string, exampleMessage: string, applyToAll: boolean) => Promise<void>;
   selectedStep?: string;
+  onToggleSimulator?: () => void;
+  showSimulator?: boolean;
 }
 
 const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
@@ -98,6 +101,8 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         handleRedo={props.handleRedo}
         canUndo={props.canUndo}
         canRedo={props.canRedo}
+        onToggleSimulator={props.onToggleSimulator}
+        showSimulator={props.showSimulator}
       />
       
       <StepStrip
@@ -190,16 +195,24 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
             }}
           />
         )}
-        <div style={{ flex: 'none', minWidth: 120, width: rightWidth, maxWidth: rightWidth, borderLeft: '1px solid #eee', padding: 16, background: '#fafaff', minHeight: 900 }}>
-          {showConstraintWizard ? (
-            <ConstraintWizard
-              variable={props.variable || 'value'}
-              type={props.type || 'string'}
-              onSave={c => { setShowConstraintWizard(false); props.onAddConstraint && props.onAddConstraint(createConstraint(c)); }}
-              onCancel={() => setShowConstraintWizard(false)}
+        <div style={{ flex: 'none', minWidth: 120, width: rightWidth, maxWidth: rightWidth, borderLeft: '1px solid #eee', background: '#fafaff', minHeight: 900 }}>
+          {props.showSimulator ? (
+            <ResponseSimulator
+              ddt={props.editorState.ddt}
+              translations={props.editorState.translations}
+              selectedNode={props.editorState.selectedNode}
             />
+          ) : showConstraintWizard ? (
+            <div style={{ padding: 16 }}>
+              <ConstraintWizard
+                variable={props.variable || 'value'}
+                type={props.type || 'string'}
+                onSave={c => { setShowConstraintWizard(false); props.onAddConstraint && props.onAddConstraint(createConstraint(c)); }}
+                onCancel={() => setShowConstraintWizard(false)}
+              />
+            </div>
           ) : (
-            <>
+            <div style={{ padding: 16 }}>
               <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Azioni disponibili</h3>
               <ActionList />
               <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
@@ -210,7 +223,7 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
                   + Aggiungi constraint
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
