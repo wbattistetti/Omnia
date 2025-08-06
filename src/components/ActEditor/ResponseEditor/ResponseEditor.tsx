@@ -101,6 +101,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
   React.useEffect(() => {
+    // Seleziona automaticamente il primo step solo quando si apre il Response Editor per la prima volta
+    // (quando non c'è uno step selezionato E ci sono stepKeys disponibili)
     if (stepKeys.length > 0 && !selectedStep) {
       dispatchWithHistory({ type: 'SET_STEP', step: stepKeys[0] });
     }
@@ -277,14 +279,20 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   const handleSelectNode = (index: number | null) => {
     setSelectedNodeIndex(index);
-    // Get the new node
+    // NON resettare lo step quando si cambia nodo
+    // Mantieni lo step corrente se è disponibile nel nuovo nodo
     const node = getNodeByIndex(ddt?.mainData || {}, index);
-    // Set the first step as selected, if available
-    if (node && node.steps && node.steps.length > 0) {
-      dispatchWithHistory({ type: 'SET_STEP', step: node.steps[0].type });
-    } else {
-      dispatchWithHistory({ type: 'SET_STEP', step: '' });
+    const availableSteps = node?.steps?.map((s: any) => s.type) || [];
+    
+    // Se lo step corrente non è disponibile nel nuovo nodo, seleziona il primo disponibile
+    if (selectedStep && !availableSteps.includes(selectedStep)) {
+      if (availableSteps.length > 0) {
+        dispatchWithHistory({ type: 'SET_STEP', step: availableSteps[0] });
+      } else {
+        dispatchWithHistory({ type: 'SET_STEP', step: '' });
+      }
     }
+    // Se lo step corrente è disponibile, mantienilo (non fare nulla)
   };
 
   return (
