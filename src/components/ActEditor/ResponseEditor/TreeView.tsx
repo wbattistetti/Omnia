@@ -15,7 +15,9 @@ const TreeView: React.FC<TreeViewProps> = ({
   onToggleInclude, 
   stepKey, 
   foreColor, 
-  bgColor 
+  bgColor,
+  onAIGenerate,
+  selectedStep
 }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -63,7 +65,7 @@ const TreeView: React.FC<TreeViewProps> = ({
         onRemove={onRemove}
         setSelectedNodeId={setSelectedNodeId}
         stepKey={stepKey}
-        extraProps={{ onToggleInclude, foreColor, bgColor }}
+        extraProps={{ onToggleInclude, foreColor, bgColor, onAIGenerate, selectedStep }}
       />
 
       {/* Bottone aggiungi escalation in fondo se ci sono escalation visibili */}

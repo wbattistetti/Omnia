@@ -30,6 +30,8 @@ export interface ResponseEditorUIProps {
   type?: string;
   onSelectNode?: (index: number | null) => void;
   selectedNodeIndex: number | null;
+  onAIGenerate?: (actionId: string, exampleMessage: string, applyToAll: boolean) => Promise<void>;
+  selectedStep?: string;
 }
 
 const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
@@ -134,6 +136,8 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
             stepKey={props.editorState.selectedStep}
             foreColor={props.stepMeta[props.editorState.selectedStep]?.color || '#ef4444'}
             bgColor={props.stepMeta[props.editorState.selectedStep]?.bg || 'rgba(239,68,68,0.08)'}
+            onAIGenerate={props.onAIGenerate}
+            selectedStep={props.selectedStep}
           />
           {/* Bottone aggiungi escalation in fondo se ci sono escalation visibili */}
           {props.handleAddEscalation && props.filteredNodes.some(n => n.type === 'escalation') && (

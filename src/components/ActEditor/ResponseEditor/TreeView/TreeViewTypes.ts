@@ -9,6 +9,8 @@ export interface TreeViewProps {
   foreColor?: string;
   stepKey?: string;
   onAddEscalation?: () => void;
+  onAIGenerate?: (actionId: string, exampleMessage: string, applyToAll: boolean) => Promise<void>;
+  selectedStep?: string;
 }
 
 export interface TreeRendererProps {
@@ -20,7 +22,7 @@ export interface TreeRendererProps {
   onRemove: TreeViewProps['onRemove'];
   setSelectedNodeId: (id: string | null) => void;
   stepKey?: string;
-  extraProps?: Partial<TreeViewProps> & { foreColor?: string; bgColor?: string; onToggleInclude?: (id: string) => void };
+  extraProps?: Partial<TreeViewProps> & { foreColor?: string; bgColor?: string; onToggleInclude?: (id: string) => void; onAIGenerate?: (actionId: string, exampleMessage: string, applyToAll: boolean) => Promise<void>; selectedStep?: string };
   singleEscalationSteps?: string[];
 }
 

@@ -20,6 +20,8 @@ interface TreeNodeExtraProps {
   foreColor?: string; // nuovo prop
   bgColor?: string; // nuovo prop
   currentStep?: string; // per nascondere il rettangolo recovery per start/success
+  onAIGenerate?: (actionId: string, exampleMessage: string, applyToAll: boolean) => Promise<void>;
+  stepType?: string;
 }
 
 const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({ 
@@ -44,7 +46,9 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
   onToggleInclude,
   foreColor,
   bgColor,
-  currentStep
+  currentStep,
+  onAIGenerate,
+  stepType
 }) => {
   const INDENT_WIDTH = 24;
   const [dropTarget, setDropTarget] = useState<'before' | 'after' | 'child' | null>(null);
@@ -305,6 +309,8 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
                 draggable={true}
                 onEdit={() => {}} // enable editing mode for escalation children
                 onDelete={onCancelNewNode ? () => onCancelNewNode(child.id) : undefined}
+                onAIGenerate={onAIGenerate}
+                stepType={stepType}
                 data-action-id={child.id}
               />
             ))}
@@ -344,6 +350,8 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
         draggable={true}
         onEdit={() => {}} // enable editing mode for now
         onDelete={onCancelNewNode ? () => onCancelNewNode(id) : undefined}
+        onAIGenerate={onAIGenerate}
+        stepType={stepType}
         data-action-id={id}
       />
       {/* Parametri figli indentati */}

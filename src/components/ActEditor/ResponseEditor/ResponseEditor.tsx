@@ -295,6 +295,35 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     // Se lo step corrente è disponibile, mantienilo (non fare nulla)
   };
 
+  // Funzione per la generazione AI dei messaggi
+  const handleAIGenerate = async (actionId: string, exampleMessage: string, applyToAll: boolean) => {
+    try {
+      // TODO: Implementare la chiamata API AI
+      // Per ora simuliamo la generazione
+      console.log('AI Generation:', {
+        actionId,
+        exampleMessage,
+        applyToAll,
+        stepType: selectedStep,
+        nodeIndex: selectedNodeIndex
+      });
+
+      // Simula un delay per mostrare lo stato di caricamento
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // TODO: Qui andrà la logica per:
+      // 1. Chiamare l'API AI con exampleMessage come few-shot prompt
+      // 2. Aggiornare il messaggio specifico se applyToAll = false
+      // 3. Aggiornare tutti i messaggi dello stesso stepType se applyToAll = true
+      // 4. Aggiornare sia mainData che subData se necessario
+
+      console.log('AI generation completed');
+    } catch (error) {
+      console.error('AI generation failed:', error);
+      throw error;
+    }
+  };
+
   return (
     <ResponseEditorUI
       editorState={editorStateForUI}
@@ -313,6 +342,8 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       onToggleInclude={handleToggleInclude}
       selectedNodeIndex={selectedNodeIndex}
       onSelectNode={handleSelectNode}
+      onAIGenerate={handleAIGenerate}
+      selectedStep={selectedStep}
     />
   );
 };

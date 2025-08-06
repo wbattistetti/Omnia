@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Trash2, ArrowLeft } from 'lucide-react';
+import { Trash2, Bot } from 'lucide-react';
 import SmartTooltip from '../../SmartTooltip';
 import { TooltipWrapper } from '../../TooltipWrapper';
+import AIActionPanel from './AIActionPanel';
 
 interface ActionRowProps {
   icon?: React.ReactNode;
@@ -10,15 +11,31 @@ interface ActionRowProps {
   color?: string;
   onEdit?: (newText: string) => void;
   onDelete?: () => void;
+  onAIGenerate?: (exampleMessage: string, applyToAll: boolean) => void;
+  stepType?: string;
   draggable?: boolean;
   selected?: boolean;
   dndPreview?: 'before' | 'after';
 }
 
-const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21caf', onEdit, onDelete, draggable, selected, dndPreview }) => {
+const ActionRow: React.FC<ActionRowProps> = ({ 
+  icon, 
+  label, 
+  text, 
+  color = '#a21caf', 
+  onEdit, 
+  onDelete, 
+  onAIGenerate,
+  stepType,
+  draggable, 
+  selected, 
+  dndPreview 
+}) => {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
   const [hovered, setHovered] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleEdit = () => {
@@ -48,27 +65,42 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21c
     setEditValue(text);
   };
 
+  const handleAIGenerate = async (exampleMessage: string, applyToAll: boolean) => {
+    if (onAIGenerate) {
+      setIsGenerating(true);
+      try {
+        await onAIGenerate(exampleMessage, applyToAll);
+        setAiPanelOpen(false);
+      } catch (error) {
+        console.error('AI generation failed:', error);
+      } finally {
+        setIsGenerating(false);
+      }
+    }
+  };
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        background: selected ? '#ede9fe' : 'transparent',
-        border: selected ? `2px solid ${color}` : 'none',
-        borderRadius: 8,
-        padding: '8px 0',
-        marginBottom: 6,
-        boxShadow: selected ? `0 2px 8px 0 ${color}22` : undefined,
-        cursor: draggable ? 'grab' : 'default',
-        transition: 'background 0.15s, border 0.15s',
-        position: 'relative',
-        borderTop: dndPreview === 'before' ? '2px solid #2563eb' : undefined,
-        borderBottom: dndPreview === 'after' ? '2px solid #2563eb' : undefined,
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          background: selected ? '#ede9fe' : 'transparent',
+          border: selected ? `2px solid ${color}` : 'none',
+          borderRadius: 8,
+          padding: '8px 0',
+          marginBottom: 6,
+          boxShadow: selected ? `0 2px 8px 0 ${color}22` : undefined,
+          cursor: draggable ? 'grab' : 'default',
+          transition: 'background 0.15s, border 0.15s',
+          position: 'relative',
+          borderTop: dndPreview === 'before' ? '2px solid #2563eb' : undefined,
+          borderBottom: dndPreview === 'after' ? '2px solid #2563eb' : undefined,
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
       {icon && <span style={{ color, display: 'flex', alignItems: 'center' }}>{icon}</span>}
       {label && <span style={{ fontWeight: 600, color, marginRight: 8 }}>{label}</span>}
       <span style={{ flex: 1, color: '#fff', fontSize: 15 }}>
@@ -144,7 +176,7 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21c
           )}
         </>
       )}
-      {/* Show pencil and trash on hover if not editing */}
+      {/* Show pencil, AI, and trash on hover if not editing */}
       {!editing && hovered && onEdit && (
         <TooltipWrapper tooltip={<SmartTooltip text="Modifica messaggio" tutorId="action_edit"><span /></SmartTooltip>}>
           {(show, triggerProps) => (
@@ -159,10 +191,50 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, text, color = '#a21c
           )}
         </TooltipWrapper>
       )}
+      {!editing && hovered && onAIGenerate && stepType && (
+        <TooltipWrapper tooltip={
+          <SmartTooltip text="AI-powered message refinement" tutorId="ai_refinement">
+            <span />
+          </SmartTooltip>
+        }>
+          {(show, triggerProps) => (
+            <button
+              {...triggerProps}
+              onClick={() => setAiPanelOpen(!aiPanelOpen)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#a21caf',
+                cursor: 'pointer',
+                marginRight: 6,
+                fontSize: 18,
+                display: 'flex',
+                alignItems: 'center',
+                position: 'relative'
+              }}
+              title="AI Refinement"
+            >
+              <Bot size={18} />
+            </button>
+          )}
+        </TooltipWrapper>
+      )}
       {!editing && hovered && onDelete && (
         <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center' }} title="Elimina messaggio" tabIndex={-1}>
           <Trash2 size={18} />
         </button>
+      )}
+      </div>
+      
+      {/* AI Panel */}
+      {aiPanelOpen && onAIGenerate && stepType && (
+        <AIActionPanel
+          currentMessage={text}
+          stepType={stepType}
+          onGenerate={handleAIGenerate}
+          onClose={() => setAiPanelOpen(false)}
+          isGenerating={isGenerating}
+        />
       )}
     </div>
   );

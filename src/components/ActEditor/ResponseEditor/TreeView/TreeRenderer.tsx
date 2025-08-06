@@ -23,7 +23,7 @@ const TreeRenderer: React.FC<TreeRendererProps> = ({
     onRemove: TreeRendererProps['onRemove'],
     setSelectedNodeId: (id: string | null) => void,
     stepKey?: string,
-    extraProps?: Partial<TreeRendererProps> & { foreColor?: string; bgColor?: string },
+    extraProps?: Partial<TreeRendererProps> & { foreColor?: string; bgColor?: string; onToggleInclude?: (id: string) => void; onAIGenerate?: (actionId: string, exampleMessage: string, applyToAll: boolean) => Promise<void>; selectedStep?: string },
     singleEscalationSteps: string[] = ['start', 'success', 'confirmation']
   ) => {
     return nodes
@@ -68,6 +68,8 @@ const TreeRenderer: React.FC<TreeRendererProps> = ({
               onCancelNewNode={onRemove}
               domId={'tree-node-' + node.id}
               currentStep={stepKey}
+              onAIGenerate={extraProps?.onAIGenerate}
+              stepType={extraProps?.selectedStep}
               {...(node.type === 'escalation' ? { 
                 childrenNodes, 
                 escalationLabel, 
