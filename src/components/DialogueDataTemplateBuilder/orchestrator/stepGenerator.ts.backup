@@ -108,15 +108,13 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
           let body: any;
           if (stepDef.key === 'detectType') {
           body = JSON.stringify(data.name); // stringa pura
-                      } else if (stepDef.subDataInfo) {
-            // Per i subData, mantieni il contesto ma specifica di generare domande concise
-            const mainDataName = data.name || data.label || "birthDate";
-            const subDataName = stepDef.subDataInfo.label || stepDef.subDataInfo.name;
-            body = JSON.stringify({
-                meaning: `${subDataName} of ${mainDataName}`, // e.g., "Day of birthDate" - mantiene il contesto
-                desc: `Generate a very concise and direct question for ${subDataName} of ${mainDataName}. Use short, direct questions like "Which day?", "Which month?", "Which year?". Be extremely concise - no verbose phrases or repetition.`,
-                ...extraBody
-            });
+          } else if (stepDef.subDataInfo) {
+          // Per i subData, usa le informazioni del subData ma con gli stessi endpoint di mainData
+          body = JSON.stringify({
+              meaning: `${stepDef.subDataInfo.label || stepDef.subDataInfo.name} of ${data.name}`,
+              desc: `Subfield: ${stepDef.subDataInfo.label || stepDef.subDataInfo.name}`,
+              ...extraBody
+          });
           } else {
           body = JSON.stringify({ meaning: data.name || data.label || "birthDate", desc: '', ...extraBody });
           }

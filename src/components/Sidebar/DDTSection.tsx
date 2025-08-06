@@ -24,16 +24,11 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
   };
 
   const handleBuilderComplete = (newDDT: any) => {
-    console.log('[DDTSection] handleBuilderComplete chiamato con:', newDDT);
-    console.log('[DDTSection] newDDT.id:', newDDT?.id);
     setShowDDTBuilder(false);
     onAdd(newDDT);
     // Apri automaticamente il Response Editor del DDT appena creato
     if (newDDT && newDDT.id) {
-      console.log('[DDTSection] Apro Response Editor per ID:', newDDT.id);
       onOpenEditor(newDDT.id);
-    } else {
-      console.log('[DDTSection] ERRORE: newDDT o newDDT.id mancante:', { newDDT, hasId: !!newDDT?.id });
     }
   };
 

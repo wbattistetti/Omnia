@@ -39,21 +39,16 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const newNodes = addNode(state.nodes, action.node);
       return { ...state, nodes: newNodes };
     case 'REMOVE_NODE': {
-      console.log('[EDITOR_REDUCER] REMOVE_NODE chiamato con id:', action.id);
       if (typeof action.id !== 'string') {
-        console.error('[REMOVE_NODE] id non è una stringa:', action.id);
         return state;
       }
       const nodeToRemove = state.nodes.find(n => n.id === action.id);
-      console.log('[EDITOR_REDUCER] Nodo da rimuovere trovato:', nodeToRemove);
       if (nodeToRemove && nodeToRemove.type === 'escalation') {
-        console.log('[EDITOR_REDUCER] Rimuovendo escalation con removeChildren=true');
         return {
           ...state,
           nodes: removeNodePure(state.nodes, action.id, true)
         };
       } else {
-        console.log('[EDITOR_REDUCER] Rimuovendo nodo normale con removeChildren=false');
         return {
           ...state,
           nodes: removeNodePure(state.nodes, action.id, false)

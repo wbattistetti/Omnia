@@ -25,21 +25,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const stableDataNode = useMemo(() => dataNode, [dataNode]);
 
   useEffect(() => {
-    console.log('[DDTWizard] MOUNT');
     return () => {
-      console.log('[DDTWizard] UNMOUNT');
     };
   }, []);
 
   useEffect(() => {
-    console.log('[DDTWizard] step:', step);
     if (step === 'pipeline') {
-      console.log('[DDTWizard] PIPELINE PARTITA con dataNode:', dataNode);
     }
   }, [step]);
 
   useEffect(() => {
-    console.log('[DDTWizard] dataNode changed:', dataNode);
   }, [dataNode]);
 
   // Funzione per chiamare la detection AI
@@ -68,15 +63,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Quando confermi il tipo, crea dataNode UNA SOLA VOLTA
   const handleConfirmType = () => {
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
-    console.log('[DDTWizard] handleConfirmType', { detectedType });
     if (detectedType && !dataNodeSet.current) {
       setDataNode({ name: detectedType });
       dataNodeSet.current = true;
-      console.log('[DDTWizard] setDataNode chiamato', { name: detectedType });
-      console.log('[DDTWizard] Passo a pipeline con dataNode:', { name: detectedType });
       setStep('pipeline');
-    } else if (dataNodeSet.current) {
-      console.log('[DDTWizard] setDataNode BLOCCATO: già chiamato');
     }
   };
 
@@ -93,7 +83,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Durante la pipeline mostra SOLO la pipeline
   if (step === 'pipeline') {
     if (!stableDataNode) {
-      console.log('[DDTWizard] ERRORE: dataNode è null durante la pipeline!');
       return null;
     }
     return (

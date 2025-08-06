@@ -29,13 +29,10 @@ export function ColorPicker({
   const { state, actions } = useThemeContext();
   const [currentColor, setCurrentColor] = useState(initialColor);
   
-  console.log('🎨 ColorPicker render:', { isOpen, position, elementId, property, initialColor });
-  
   // Aggiorna il colore corrente quando cambia l'initialColor
   useEffect(() => {
     if (isOpen) {
       setCurrentColor(initialColor);
-      console.log('🎨 Colore inizializzato:', initialColor);
     }
   }, [isOpen, initialColor]);
 
@@ -45,53 +42,42 @@ export function ColorPicker({
       const element = document.querySelector(`[data-theme-element="${elementId}"]`);
       if (element) {
         (element as HTMLElement).style[property as any] = currentColor;
-        console.log('🎨 Colore applicato in tempo reale:', elementId, property, currentColor);
       }
     }
   }, [currentColor, isOpen, elementId, property]);
   
   // Se non è aperto, non renderizzare nulla
   if (!isOpen) {
-    console.log('🎨 ColorPicker non aperto, return null');
     return null;
   }
 
   const handleClose = () => {
-    console.log('🎨 ColorPicker handleClose chiamato');
     try {
       // Ripristina il colore originale dal context
       const originalColor = state.originalColor;
       const element = document.querySelector(`[data-theme-element="${elementId}"]`);
       if (element) {
         (element as HTMLElement).style[property as any] = originalColor;
-        console.log('🎨 Colore ripristinato al valore originale:', originalColor);
       }
       actions.closeColorPicker();
-      console.log('🎨 ColorPicker handleClose completato');
     } catch (error) {
       console.error('🎨 ColorPicker handleClose errore:', error);
     }
   };
 
   const handleApply = () => {
-    console.log('🎨 ColorPicker handleApply chiamato');
     try {
-      console.log('🎨 Applicando colore:', currentColor, 'a', elementId, property);
       actions.applyColorChange(elementId, property as any, currentColor);
       actions.closeColorPicker();
-      console.log('🎨 ColorPicker handleApply completato');
     } catch (error) {
       console.error('🎨 ColorPicker handleApply errore:', error);
     }
   };
 
   const handleColorChange = (newColor: string) => {
-    console.log('🎨 Colore cambiato:', newColor);
     setCurrentColor(newColor);
     actions.updateCurrentColor(newColor);
   };
-
-  console.log('🎨 ColorPicker rendering UI');
 
   return (
     <div

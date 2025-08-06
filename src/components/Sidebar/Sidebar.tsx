@@ -48,34 +48,27 @@ const Sidebar: React.FC = () => {
 
   // Handler implementati usando il hook
   const handleAddDDT = (newDDT: any) => {
-    console.log('[Sidebar] handleAddDDT chiamato con:', newDDT);
     createDDT(newDDT);
   };
 
   const handleEditDDT = (id: string) => {
-    console.log('[Sidebar] handleEditDDT chiamato per ID:', id);
     // TODO: Implementare editing
   };
 
   const handleDeleteDDT = (id: string) => {
-    console.log('[Sidebar] handleDeleteDDT chiamato per ID:', id);
     deleteDDT(id);
   };
 
   const handleOpenEditor = (id: string) => {
-    console.log('[Sidebar] handleOpenEditor chiamato per ID:', id);
     const ddt = ddtList.find(dt => dt.id === id || dt._id === id);
     if (ddt) {
-      console.log('[Sidebar] DDT trovato, apro editor per:', ddt.label || ddt.name);
       openDDT(ddt);
     } else {
       console.error('[Sidebar] DDT non trovato per ID:', id);
-      console.log('[Sidebar] Templates disponibili:', ddtList.map(d => ({ id: d.id, _id: d._id, label: d.label })));
     }
   };
 
   const handleSaveDDT = async () => {
-    console.log('[Sidebar] handleSaveDDT chiamato');
     setIsSavingDDT(true);
     setSaveError(null);
     try {
@@ -87,7 +80,6 @@ const Sidebar: React.FC = () => {
       if (!res.ok) {
         throw new Error('Server error: unable to save DDT');
       }
-      console.log('[Sidebar] DDT salvati con successo');
       // TODO: Mostrare feedback di successo (toast/snackbar)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Errore nel salvataggio DDT';

@@ -14,9 +14,7 @@ export const useTreeDragDrop = ({
 
   // Debug logging
   useEffect(() => {
-    console.log(`[TREEVIEW DEBUG] dropPreviewIdx=${dropPreviewIdx}, dropPreviewPosition=${dropPreviewPosition}`);
     if (dropPreviewIdx !== null && nodes[dropPreviewIdx]) {
-      console.log(`[TREEVIEW DEBUG] Target node:`, nodes[dropPreviewIdx]);
     }
   }, [dropPreviewIdx, dropPreviewPosition, nodes]);
 
@@ -105,16 +103,8 @@ export const useTreeDragDrop = ({
     },
     hover(item, monitor) {
       // Debug per capire il tipo di drag
-      console.log(`[DRAG DEBUG] Item being dragged:`, item);
-      console.log(`[DRAG DEBUG] Item type:`, item?.type);
-      console.log(`[DRAG DEBUG] Item id:`, item?.id);
-      
-      // Distingui tra nuova azione e azione esistente
       const isNewAction = item?.action; // Nuova azione ha 'action' property
       const isExistingAction = item?.id && !item?.action; // Azione esistente ha solo 'id'
-      
-      console.log(`[DRAG DEBUG] Is new action:`, isNewAction);
-      console.log(`[DRAG DEBUG] Is existing action:`, isExistingAction);
       
       const clientOffset = monitor.getClientOffset();
       if (!clientOffset) {
@@ -132,7 +122,6 @@ export const useTreeDragDrop = ({
       
       // LOGICA SPECIFICA PER NUOVE AZIONI
       if (isNewAction) {
-        console.log(`[DRAG DEBUG] Handling NEW ACTION drag`);
         
         // Trova il nodo più vicino
         let closestIdx = -1;
@@ -187,7 +176,6 @@ export const useTreeDragDrop = ({
               
               // Se siamo sopra l'header o sotto il nodo, non mostrare preview
               if (y < headerBottom || y > nodeBottom) {
-                console.log(`[DRAG DEBUG] Between escalations - no preview`);
                 setDropPreviewIdx(null);
                 setDropPreviewPosition(null);
                 return;
@@ -195,7 +183,6 @@ export const useTreeDragDrop = ({
             }
             
             // REGOLA 1-3: Mostra preview per azioni dentro recovery
-            console.log(`[DRAG DEBUG] Showing preview for new action at node ${targetNode.id}, position: ${position}`);
             setDropPreviewIdx(closestIdx);
             setDropPreviewPosition(position);
             return;
@@ -205,7 +192,6 @@ export const useTreeDragDrop = ({
       
       // LOGICA SPECIFICA PER AZIONI ESISTENTI (REORDERING)
       if (isExistingAction) {
-        console.log(`[DRAG DEBUG] Handling EXISTING ACTION reordering`);
         
         // Per reordering, permette preview ovunque tranne tra escalation
         let closestIdx = -1;
@@ -249,7 +235,6 @@ export const useTreeDragDrop = ({
             const position = y < centerY ? 'before' : 'after';
             
             // Per reordering, mostra sempre preview (anche tra escalation)
-            console.log(`[DRAG DEBUG] Showing preview for existing action reordering at node ${targetNode.id}, position: ${position}`);
             setDropPreviewIdx(closestIdx);
             setDropPreviewPosition(position);
             return;

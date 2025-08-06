@@ -28,14 +28,11 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   const alreadyStartedRef = useRef(false);
 
   useEffect(() => {
-    console.log('[WizardPipelineStep] MOUNT. skipDetectType:', skipDetectType);
     return () => {
-      console.log('[WizardPipelineStep] UNMOUNT');
     };
   }, []);
 
   useEffect(() => {
-    console.log('[WizardPipelineStep] RENDER', { dataNode });
   });
 
   // Resetta il ref anti-rilancio ogni volta che cambia dataNode
@@ -45,7 +42,6 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
   // Avvia pipeline ogni volta che cambia dataNode o currentStepIndex
   useEffect(() => {
-    console.log('[WizardPipelineStep] Avvio pipeline su ogni step', orchestrator.state.currentStepIndex, dataNode);
     orchestrator.runNextStep();
   }, [dataNode, orchestrator.state.currentStepIndex]);
 
@@ -53,7 +49,6 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   useEffect(() => {
     if (orchestrator.debugModal) {
       setTimeout(() => {
-        console.log('[WizardPipelineStep] closeDebugModalAndContinue', { dataNode });
         orchestrator.closeDebugModalAndContinue();
       }, 400);
     }
@@ -61,7 +56,6 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
   // Logga ogni avanzamento di step
   useEffect(() => {
-    console.log('[WizardPipelineStep] currentStepIndex:', orchestrator.state.currentStepIndex, 'step:', orchestrator.state.steps[orchestrator.state.currentStepIndex]?.key);
   }, [orchestrator.state.currentStepIndex]);
 
   // Quando pipeline finita, monta il DDT finale e chiama onComplete
@@ -78,21 +72,16 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
       }
       // Costruisci stepMessages con la nuova funzione
       const stepMessages = buildSteps(stepResults);
-      console.log('[WizardPipelineStep] stepMessages built for assembleMainData:', stepMessages);
       // Assembla il DDT finale passando solo stepResults (stepMessages è già usato internamente)
       const structureResult = stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
       const mainData = structureResult?.payload?.mainData || structureResult?.payload;
-      console.log('[WizardPipelineStep] RAW AI mainData:', JSON.stringify(mainData, null, 2));
       if (mainData && Array.isArray(mainData.subData)) {
         mainData.subData.forEach((sub: any, idx: number) => {
-          console.log(`[WizardPipelineStep] RAW AI subData[${idx}]:`, JSON.stringify(sub, null, 2));
         });
       }
       const ddtId = mainData?.name || dataNode.name || 'ddt_' + (dataNode?.name || 'unknown');
       const final = buildDDT(ddtId, mainData, stepResults);
       setFinalDDT(final);
-      console.log('[WizardPipelineStep] DDT finale generato', final);
-      console.log('[WizardPipelineStep] DDT finale (JSON):\n' + JSON.stringify(final, null, 2));
       if (onComplete) onComplete(final);
     }
   }, [orchestrator.state.currentStepIndex, orchestrator.state.steps.length, orchestrator.state.stepResults, finalDDT, onComplete, confirmedLabel, dataNode]);

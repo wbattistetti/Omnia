@@ -15,7 +15,6 @@ export function useThemeActions() {
   // ============================================================================
 
   const toggleEditMode = useCallback(() => {
-    console.log('🎨 Toggle edit mode');
     dispatch({ type: 'TOGGLE_EDIT_MODE' });
   }, [dispatch]);
 
@@ -24,11 +23,9 @@ export function useThemeActions() {
     part: 'background' | 'text' | 'border',
     coordinates: { x: number; y: number }
   ) => {
-    console.log('🎨 openEditorAt chiamato:', { elementName, part, coordinates });
     
     const element = elementRegistry.get(elementName);
     if (!element) {
-      console.warn('🎨 Elemento non trovato:', elementName);
       return;
     }
 
@@ -40,7 +37,6 @@ export function useThemeActions() {
     
     const property = propertyMap[part];
     if (!property) {
-      console.warn('🎨 Parte non valida:', part);
       return;
     }
 
@@ -56,7 +52,6 @@ export function useThemeActions() {
     position: { x: number; y: number },
     originalValue: string
   ) => {
-    console.log('🎨 Opening mini picker:', { element: element.name, property, position });
     dispatch({
       type: 'OPEN_MINI_PICKER',
       payload: { element, property, position, originalValue }
@@ -64,7 +59,6 @@ export function useThemeActions() {
   }, [dispatch]);
 
   const closeMiniPicker = useCallback(() => {
-    console.log('🎨 Closing mini picker');
     dispatch({ type: 'CLOSE_MINI_PICKER' });
   }, [dispatch]);
 
@@ -77,7 +71,6 @@ export function useThemeActions() {
     property: keyof ThemeElement['properties'],
     value: string
   ) => {
-    console.log('🎨 Applying property change:', { elementId, property, value });
     dispatch({
       type: 'APPLY_PROPERTY_CHANGE',
       payload: { elementId, property, value }
@@ -85,7 +78,6 @@ export function useThemeActions() {
   }, [dispatch]);
 
   const restoreOriginalValue = useCallback(() => {
-    console.log('🎨 Restoring original value');
     dispatch({ type: 'RESTORE_ORIGINAL_VALUE' });
   }, [dispatch]);
 
@@ -94,7 +86,6 @@ export function useThemeActions() {
   }, [dispatch]);
 
   const clearTemporaryChanges = useCallback(() => {
-    console.log('🎨 Clearing temporary changes');
     dispatch({ type: 'CLEAR_TEMPORARY_CHANGES' });
   }, [dispatch]);
 

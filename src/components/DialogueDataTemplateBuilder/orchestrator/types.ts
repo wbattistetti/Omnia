@@ -58,6 +58,8 @@ export interface Step {
   type: StepType | string; // string per step dinamici
   run: () => Promise<StepResult>;
   constraintIdeId?: string;
+  subDataInfo?: any; // Informazioni del subData per step specifici
+  subDataIndex?: number; // Indice del subData
 }
 
 export interface StepResult {

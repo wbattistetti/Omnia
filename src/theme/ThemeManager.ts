@@ -18,10 +18,8 @@ export function useThemeManager() {
   useEffect(() => {
     if (customCursor) {
       document.body.classList.add('theme-edit-mode');
-      console.log('🎨 Cursor personalizzato applicato');
     } else {
       document.body.classList.remove('theme-edit-mode');
-      console.log('🎨 Cursor personalizzato rimosso');
     }
 
     return () => {
@@ -36,7 +34,6 @@ export function useThemeManager() {
   useEffect(() => {
     if (undoStack.length > 0) {
       const lastChange = undoStack[undoStack.length - 1];
-      console.log('🎨 Applicando cambio colore:', lastChange);
       
       applyColorToElement(lastChange.elementId, lastChange.property, lastChange.newValue);
     }
@@ -50,9 +47,6 @@ export function useThemeManager() {
     const element = document.querySelector(`[data-theme-element="${elementId}"]`);
     if (element) {
       (element as HTMLElement).style[property as any] = color;
-      console.log('🎨 Colore applicato a elemento:', elementId, property, color);
-    } else {
-      console.warn('🎨 Elemento non trovato:', elementId);
     }
   }, []);
 
@@ -61,7 +55,6 @@ export function useThemeManager() {
   // ============================================================================
 
   const toggleEditMode = useCallback(() => {
-    console.log('🎨 Toggle edit mode chiamato');
     actions.toggleEditMode();
   }, [actions]);
 
@@ -79,16 +72,12 @@ export function useThemeManager() {
       event.preventDefault();
       event.stopPropagation();
       
-      console.log('🎨 Click su elemento editabile:', elementId, property);
-      
       const element = elementRegistry.get(elementId);
       if (element) {
         const position = { x: event.clientX, y: event.clientY };
         const originalColor = getCurrentElementColor(elementId, property);
         
         actions.openColorPicker(element, property, position, originalColor);
-      } else {
-        console.warn('🎨 Elemento non trovato nel registry:', elementId);
       }
     };
   }, [isEditMode, actions]);
@@ -109,7 +98,6 @@ export function useThemeManager() {
         const property = themePart.getAttribute('data-theme-part');
         
         if (elementId && property) {
-          console.log('🎨 Auto-detection:', elementId, property);
           const position = { x: event.clientX, y: event.clientY };
           const originalColor = getCurrentElementColor(elementId, property as keyof ThemeProperties);
           
@@ -157,7 +145,6 @@ export function useThemeManager() {
     // Usa il colore originale dal context
     const originalColor = state.originalColor;
     applyColorToElement(elementId, property, originalColor);
-    console.log('🎨 Colore originale ripristinato:', elementId, property, originalColor);
   }, [applyColorToElement, state.originalColor]);
 
   // ============================================================================

@@ -12,7 +12,6 @@ class ElementRegistry {
   // ============================================================================
 
   register(element: ThemeElement): void {
-    console.log('🎨 Registrando elemento:', element.id);
     this.elements.set(element.id, element);
   }
 
@@ -25,7 +24,6 @@ class ElementRegistry {
   }
 
   unregister(id: string): void {
-    console.log('🎨 Rimuovendo elemento:', id);
     this.elements.delete(id);
   }
 
@@ -43,7 +41,6 @@ class ElementRegistry {
     if (themeElement) {
       const element = this.get(themeElement);
       if (element) {
-        console.log('🎨 Elemento trovato per data-theme-element:', themeElement);
         return element;
       }
     }
@@ -53,7 +50,6 @@ class ElementRegistry {
       try {
         return target.matches(element.selector) || target.closest(element.selector);
       } catch (error) {
-        console.warn('🎨 Errore nel selector:', element.selector, error);
         return false;
       }
     });
@@ -66,7 +62,6 @@ class ElementRegistry {
   findPropertyByTarget(target: HTMLElement): { element: ThemeElement; property: keyof ThemeProperties } | undefined {
     const element = this.findElementByTarget(target);
     if (!element) {
-      console.log('🎨 Nessun elemento trovato per target:', target);
       return undefined;
     }
 
@@ -81,7 +76,6 @@ class ElementRegistry {
 
       const property = propertyMap[part as keyof typeof propertyMap];
       if (property) {
-        console.log('🎨 Proprietà trovata per data-theme-part:', part, '->', property);
         return { element, property };
       }
     }
@@ -104,13 +98,11 @@ class ElementRegistry {
       property = 'color';
     }
 
-    console.log('🎨 Auto-detection proprietà:', { clickX, clickY, width, height, property });
-
     return { element, property };
   }
 
   logAllElements(): void {
-    console.log('🎨 Elementi registrati:', this.getAll().map(el => el.id));
+    // console.log('🎨 Elementi registrati:', this.getAll().map(el => el.id));
   }
 }
 
@@ -217,7 +209,7 @@ export function registerDefaultElements(): void {
     elementRegistry.register(element);
   });
 
-  console.log('🎨 Elementi predefiniti registrati:', defaultElements.length);
+  // console.log('🎨 Elementi predefiniti registrati:', defaultElements.length);
 }
 
 // ============================================================================

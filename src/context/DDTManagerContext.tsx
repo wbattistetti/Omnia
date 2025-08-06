@@ -34,23 +34,19 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   const [loadDDTError, setLoadDDTError] = useState<string | null>(null);
 
   const createDDT = (ddt: any) => {
-    console.log('[DDTManagerContext] createDDT chiamato con:', ddt);
     setDDTList(prev => [...prev, ddt]);
     setSelectedDDT(ddt); // Apre automaticamente l'editor
   };
 
   const openDDT = (ddt: any) => {
-    console.log('[DDTManagerContext] openDDT chiamato per:', ddt.label || ddt.name);
     setSelectedDDT(ddt);
   };
 
   const closeDDT = () => {
-    console.log('[DDTManagerContext] closeDDT chiamato');
     setSelectedDDT(null);
   };
 
   const deleteDDT = (id: string) => {
-    console.log('[DDTManagerContext] deleteDDT chiamato per ID:', id);
     setDDTList(prev => prev.filter(ddt => ddt.id !== id && ddt._id !== id));
     // Se l'editor è aperto per questo DDT, chiudilo
     if (selectedDDT && (selectedDDT.id === id || selectedDDT._id === id)) {
@@ -59,12 +55,10 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   };
 
   const loadDDT = async () => {
-    console.log('[DDTManagerContext] loadDDT chiamato');
     setIsLoadingDDT(true);
     setLoadDDTError(null);
     try {
       const ddtTemplates = await getAllDialogueTemplates();
-      console.log('[DDTManagerContext] DDT caricati dal database:', ddtTemplates);
       setDDTList(ddtTemplates);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Errore nel caricamento DDT';

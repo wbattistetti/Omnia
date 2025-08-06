@@ -356,7 +356,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                 const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);
                 const fallback = selectedDDT.translations;
                 const translationsToUse = Object.keys(t || {}).length > 0 ? t : fallback;
-                console.log('[AppContent] Passo translations a ResponseEditor:', { selectedDDT, t, fallback, translationsToUse });
                 return (
                   <ResizableResponseEditor
                     ddt={selectedDDT}

@@ -10,10 +10,8 @@ export function useThemeEditor() {
   useEffect(() => {
     if (customCursor) {
       document.body.classList.add('theme-edit-mode');
-      console.log('🎨 Cursor personalizzato applicato');
     } else {
       document.body.classList.remove('theme-edit-mode');
-      console.log('🎨 Cursor personalizzato rimosso');
     }
 
     return () => {
@@ -25,22 +23,18 @@ export function useThemeEditor() {
   useEffect(() => {
     if (undoStack.length > 0) {
       const lastChange = undoStack[undoStack.length - 1];
-      console.log('🎨 Applicando cambio colore:', lastChange);
       
       // Trova l'elemento nel DOM
       const element = document.querySelector(`[data-theme-element="${lastChange.elementId}"]`);
       if (element) {
         // Applica il colore
         (element as HTMLElement).style[lastChange.property as any] = lastChange.newValue;
-        console.log('🎨 Colore applicato a elemento:', lastChange.elementId, lastChange.property, lastChange.newValue);
       } else {
-        console.warn('🎨 Elemento non trovato:', lastChange.elementId);
       }
     }
   }, [undoStack]);
 
   const toggleEditMode = useCallback(() => {
-    console.log('🎨 Toggle edit mode chiamato');
     actions.toggleEditMode();
   }, [actions]);
 
@@ -51,7 +45,6 @@ export function useThemeEditor() {
       event.preventDefault();
       event.stopPropagation();
       
-      console.log('🎨 Click su elemento editabile:', elementId, property);
       
       // Trova l'elemento nel registry
       const element = elementRegistry.get(elementId);
@@ -59,7 +52,6 @@ export function useThemeEditor() {
         const position = { x: event.clientX, y: event.clientY };
         actions.openColorPicker(element, property as any, position);
       } else {
-        console.warn('🎨 Elemento non trovato nel registry:', elementId);
       }
     };
   }, [isEditMode, actions]);
@@ -76,7 +68,7 @@ export function useThemeEditor() {
         const property = themePart.getAttribute('data-theme-part');
         
         if (elementId && property) {
-          console.log('🎨 Auto-detection:', elementId, property);
+          
           const position = { x: event.clientX, y: event.clientY };
           
           // Crea un elemento temporaneo per il color picker

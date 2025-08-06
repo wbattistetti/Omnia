@@ -60,11 +60,6 @@ interface ResponseEditorProps {
 }
 
 const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it', onClose }) => {
-  // LOG: stampa le props ricevute
-  console.log('[DEBUG] [ResponseEditor] DDT ricevuto come prop:', ddt);
-  // LOG: translations ricevute come prop
-  console.log('[ResponseEditor] translations ricevute come prop:', translations);
-
   const {
     state,
     dispatch,
@@ -122,20 +117,6 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   // NOTA: dispatchWithHistory NON va tra le dipendenze per evitare loop infinito
   useEffect(() => {
     const estratti = estraiNodiDaDDT(ddt?.mainData, translations, lang);
-    console.log('[DEBUG] [ResponseEditor] estraiNodiDaDDT input:', { ddt, translations, lang });
-    console.log('[DEBUG] [ResponseEditor] estraiNodiDaDDT output:', estratti);
-    // Logga i nodi root per ogni step
-    const rootByStep: Record<string, any[]> = {};
-    estratti.forEach((n: any) => {
-      if ((n.parentId === undefined || n.parentId === null || n.parentId === '') && n.type !== 'escalation') {
-        if (!rootByStep[n.type]) rootByStep[n.type] = [];
-        rootByStep[n.type].push(n);
-      }
-    });
-    Object.entries(rootByStep).forEach(([step, nodes]) => {
-      const arr = nodes as any[];
-      console.log(`[DEBUG] [ResponseEditor] root nodes for step ${step}:`, arr);
-    });
     dispatchWithHistory({ type: 'SET_NODES', nodes: estratti });
   }, [ddt, translations, lang]);
 
@@ -152,14 +133,9 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     );
     filteredNodes = [...escalationNodes, ...childNodes];
   }
-  // LOG: selectedStep
-  console.log('[DEBUG] [ResponseEditor] selectedStep:', selectedStep);
-  console.log('[ResponseEditor] filteredNodes passed to TreeView:', filteredNodes);
 
   // handleDrop logica semplificata (solo aggiunta root per demo)
   const handleDrop = (targetId: string | null, position: 'before' | 'after' | 'child', item: any) => {
-    console.log('[DND][handleDrop] called with:', { targetId, position, item });
-    console.log('[DND][handleDrop] nodes before:', nodes);
     if (item && item.action) {
       const action = item.action;
       const id = Math.random().toString(36).substr(2, 9);
@@ -174,34 +150,24 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
         parameters: item.parameters ? item.parameters.map(createParameter) : undefined,
       });
       if (targetId === null) {
-        console.log('[DND][handleDrop] ADD_NODE as root');
         dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
       } else {
         const targetNode = nodes.find(n => n.id === targetId);
-        console.log('[DND][handleDrop] targetNode:', targetNode);
         if (!targetNode) {
-          console.log('[DND][handleDrop] targetNode not found, ADD_NODE as root');
           dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
         } else if (targetNode.type === 'escalation' && position === 'child') {
-          console.log('[DND][handleDrop] ADD_NODE as child of escalation');
           dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: (targetNode.level || 0) + 1, parentId: targetNode.id } });
         } else if (targetNode.type === 'escalation' && (position === 'before' || position === 'after')) {
-          console.log('[DND][handleDrop] insertNodeAt escalation', position);
           const inserted = insertNodeAt(nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, position);
-          console.log('[DND][handleDrop] nodes after insertNodeAt:', inserted);
           dispatchWithHistory({ type: 'SET_NODES', nodes: inserted });
         } else if (targetNode.type === 'action') {
           const pos: 'before' | 'after' = position === 'before' ? 'before' : 'after';
-          console.log('[DND][handleDrop] insertNodeAt action', pos);
           const inserted = insertNodeAt(nodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, pos);
-          console.log('[DND][handleDrop] nodes after insertNodeAt:', inserted);
           dispatchWithHistory({ type: 'SET_NODES', nodes: inserted });
         } else {
-          console.log('[DND][handleDrop] fallback ADD_NODE as root');
           dispatchWithHistory({ type: 'ADD_NODE', node: { ...newNode, level: 0, parentId: undefined } });
         }
       }
-      setTimeout(() => {}, 100);
       return id;
     }
     // Spostamento nodo esistente: da implementare se serve
@@ -258,9 +224,6 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     onShowLabelChange,
   };
 
-  // LOG: ddt passato a ResponseEditorUI
-  console.log('[DEBUG] [ResponseEditor] ddt passato a ResponseEditorUI:', editorStateForUI.ddt);
-
   // Funzione per toggle
   const handleToggleInclude = (id: string, included: boolean) => {
     dispatchWithHistory({ type: 'TOGGLE_ESCALATION_INCLUDE', id, included });
@@ -277,7 +240,6 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
 
   // Costruisci il DDT virtuale per la UI
   const selectedNode = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
-  console.log('[DEBUG] [ResponseEditor] selectedNode (calculated):', selectedNode);
   const ddtForUI = ddt ? {
     ...ddt,
     steps: Object.fromEntries(
@@ -296,41 +258,31 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   useEffect(() => {
     const mainData = ddt?.mainData || {};
     const node = getNodeByIndex(mainData, selectedNodeIndex);
-    console.log('[DEBUG] [ResponseEditor] selectedNodeIndex:', selectedNodeIndex, 'selectedNode:', node);
     if (node && node.steps) {
-      console.log('[DEBUG] [ResponseEditor] node.steps:', node.steps.map((s: any) => s.type));
       node.steps.forEach((step: any, idx: any) => {
         if (step.escalations) {
-          console.log(`[DEBUG] [ResponseEditor] step ${step.type} escalations:`, step.escalations);
         }
       });
     } else {
-      console.log('[DEBUG] [ResponseEditor] No steps found for selected node.');
     }
   }, [selectedNodeIndex, ddt]);
 
   useEffect(() => {
     // Get the current node (main or subdata)
     const node = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
-    console.log('[DEEP LOG] [useEffect:selectedNodeIndex] selectedNodeIndex:', selectedNodeIndex, 'node:', node);
     // Extract nodes for this node only
     const estratti = estraiNodiDaDDT(node, translations, lang);
-    console.log('[DEEP LOG] [useEffect:selectedNodeIndex] estraiNodiDaDDT output:', estratti);
     dispatchWithHistory({ type: 'SET_NODES', nodes: estratti });
   }, [selectedNodeIndex, translations, lang]);
 
   const handleSelectNode = (index: number | null) => {
-    console.log('[DEEP LOG] [handleSelectNode] index:', index);
     setSelectedNodeIndex(index);
     // Get the new node
     const node = getNodeByIndex(ddt?.mainData || {}, index);
-    console.log('[DEEP LOG] [handleSelectNode] node:', node);
     // Set the first step as selected, if available
     if (node && node.steps && node.steps.length > 0) {
-      console.log('[DEEP LOG] [handleSelectNode] setting step:', node.steps[0].type);
       dispatchWithHistory({ type: 'SET_STEP', step: node.steps[0].type });
     } else {
-      console.log('[DEEP LOG] [handleSelectNode] no steps found, setting step to empty string');
       dispatchWithHistory({ type: 'SET_STEP', step: '' });
     }
   };

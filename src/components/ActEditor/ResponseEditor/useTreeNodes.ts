@@ -2,8 +2,6 @@
 import { useState, useCallback } from 'react';
 import { TreeNodeProps } from './types';
 
-console.log('[FILE][useTreeNodes] loaded');
-
 const getString = (val: any) => {
   if (typeof val === 'string') return val;
   if (typeof val === 'object' && val !== null) return val['it'] || val['en'] || Object.values(val)[0] || '';
@@ -11,17 +9,12 @@ const getString = (val: any) => {
 };
 
 export function useTreeNodes(initialNodes: TreeNodeProps[]) {
-  console.log('[HOOK][useTreeNodes] called', { initialNodes });
   const [nodes, setNodes] = useState<TreeNodeProps[]>(initialNodes);
 
   // Permetti targetId null per drop su canvas
   const handleDrop = useCallback((targetId: string | null, position: 'before' | 'after' | 'child' | 'parent-sibling', item: any) => {
-    console.log('[CALL][handleDrop]', { targetId, position, item });
     let newId = null;
-    console.log('[handleDrop] CALLED', { targetId, position, item });
     setNodes(nodes => {
-      console.log('[CALLBACK][setNodes]', { nodes });
-      console.log('[handleDrop] setNodes IN', { nodes });
       // Spostamento nodo esistente
       if (item && item.id) {
         const draggedNodeIndex = nodes.findIndex(n => n.id === item.id);
@@ -37,7 +30,6 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
           const descendants = getAllDescendants(nodeToMove.id);
           // Rimuovi nodo e figli
           newNodes = newNodes.filter(n => n.id !== nodeToMove.id && !descendants.some(d => d.id === n.id));
-          console.log('[handleDrop] MOVE: sposto nodo e figli', { nodeToMove, descendants });
           let targetIndex = newNodes.findIndex(node => node.id === targetId);
           if (targetIndex === -1 && targetId === null) {
             // Drop su canvas vuoto
@@ -46,7 +38,6 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
             descendants.forEach(desc => {
               newNodes.push({ ...desc });
             });
-            console.log('[handleDrop] DROP SU CANVAS: spostato nodo esistente come root', { nodeToMove, descendants });
           } else if (position === 'before') {
             newNodes.splice(targetIndex, 0, { ...nodeToMove, level: newNodes[targetIndex].level, parentId: newNodes[targetIndex].parentId });
             descendants.forEach(desc => {
@@ -69,7 +60,6 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
             });
           }
           newId = nodeToMove.id;
-          console.log('[handleDrop] AFTER MOVE', { newNodes });
           newNodes.forEach(n => console.log('[handleDrop] NODE', { id: n.id, parentId: n.parentId, level: n.level, text: n.text }));
         } else {
           console.warn('[handleDrop] MOVE: nodo da spostare non trovato', { item });
@@ -94,11 +84,9 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
         let newNodes = [...nodes];
         if (targetId === null) {
           newNodes.push({ ...newNode, level: 0, parentId: undefined });
-          console.log('[handleDrop] DROP SU CANVAS: aggiunto nuovo nodo root', { newNode });
         } else {
           const targetIndex = newNodes.findIndex(node => node.id === targetId);
           const targetNode = newNodes[targetIndex];
-          console.log('[handleDrop] NEW NODE', { targetIndex, targetNode, position });
           if (position === 'before') {
             newNodes.splice(targetIndex, 0, { ...newNode, level: targetNode.level, parentId: targetNode.parentId });
           } else if (position === 'after') {
@@ -110,7 +98,6 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
           }
         }
         newId = id;
-        console.log('[handleDrop] AFTER NEW NODE', { newNodes });
         newNodes.forEach(n => console.log('[handleDrop] NODE', { id: n.id, parentId: n.parentId, level: n.level, text: n.text }));
         return newNodes;
       }
@@ -118,7 +105,6 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
       console.warn('[handleDrop] DROP ignorato: item non valido', { item });
       return nodes;
     });
-    console.log('[handleDrop] RETURN', { newId });
     return newId;
   }, []);
 

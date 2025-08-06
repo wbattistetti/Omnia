@@ -181,6 +181,11 @@ def step3b(user_constraints: str = Body(...), meaning: str = Body(...), desc: st
     print(ai)
     return {"ai": ai}
 
+# --- step4b: Generate subData messages (generateSubDataMessages) ---
+# --- step5b: Generate subData validation scripts (generateSubDataScripts) ---
+# REMOVED: /api/generateSubDataMessages and /api/generateSubDataScripts endpoints
+# Now using the same endpoints for mainData and subData
+
 # --- step4: Generate DDT messages (generateMessages) ---
 @app.post("/step4")
 def step4(ddt_structure: dict = Body(...)):

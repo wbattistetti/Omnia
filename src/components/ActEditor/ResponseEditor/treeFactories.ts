@@ -3,10 +3,8 @@ import { getTranslationText } from './responseEditorHelpers';
 
 // Estrae i nodi dall'oggetto DDT e translations
 export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): TreeNodeProps[] => {
-  console.log('[estraiNodiDaDDT] input:', { ddt, translations, lang });
   if (!ddt || !ddt.steps) return [];
   if (!translations || Object.keys(translations).length === 0) {
-    console.warn('[estraiNodiDaDDT] Translations vuote per DDT', ddt.id || ddt._id);
   }
   const nodes: TreeNodeProps[] = [];
   
@@ -34,10 +32,8 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
               const ddtId = ddt.id || ddt._id;
               const key = action.parameters && action.parameters[0] && action.parameters[0].value;
               const testo = translations[key];
-              console.log('[UI] Lookup diretto (parametro text):', { key, testo, translations });
               const text = testo || '';
               if (text === '') {
-                console.warn('[estraiNodiDaDDT] Messaggio vuoto', { key, translations });
               }
               nodes.push({
                 id: actionInstanceId,
@@ -73,7 +69,6 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
             const ddtId = ddt.id || ddt._id;
             const text = getTranslationText(translations, ddtId, stepKey, escalationIdx, actionInstanceId, lang);
             if (text === '') {
-              console.warn('[estraiNodiDaDDT] Messaggio vuoto', { ddtId, stepKey, escalationIdx, actionInstanceId, lang, translations });
             }
             nodes.push({
               id: actionInstanceId,
@@ -88,12 +83,6 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
     }
   }
   
-  console.log('[estraiNodiDaDDT] Nodi generati:', nodes);
-  if (nodes.length > 0) {
-    console.log('[estraiNodiDaDDT] Primo nodo:', JSON.stringify(nodes[0], null, 2));
-    if (nodes[1]) console.log('[estraiNodiDaDDT] Secondo nodo:', JSON.stringify(nodes[1], null, 2));
-    if (nodes[2]) console.log('[estraiNodiDaDDT] Terzo nodo:', JSON.stringify(nodes[2], null, 2));
-  }
   return nodes;
 };
 

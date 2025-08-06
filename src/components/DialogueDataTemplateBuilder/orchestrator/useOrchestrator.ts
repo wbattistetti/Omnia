@@ -7,12 +7,11 @@ export function useOrchestrator(
   data: DataNode,
   customGenerateSteps?: (data: DataNode) => Step[]
 ) {
-  console.log('[useOrchestrator] MOUNT', { data });
   // Usa la funzione custom se fornita, altrimenti generateSteps
-  const steps = useMemo(() => {
-    console.log('[useOrchestrator] generateSteps', data);
+  const [steps, setSteps] = useState<Step[]>(() => {
     return customGenerateSteps ? customGenerateSteps(data) : generateSteps(data);
-  }, [data, customGenerateSteps]);
+  });
+  
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepError, setStepError] = useState(false);
   const [stepLoading, setStepLoading] = useState(false);
@@ -21,22 +20,48 @@ export function useOrchestrator(
   const [debugModal, setDebugModal] = useState<{ step: Step; result: StepResult } | null>(null);
   const [translations, setTranslations] = useState<Translations>({});
 
+  // Funzione per rigenerare gli step dopo che abbiamo la struttura con subData
+  const regenerateStepsWithSubData = useCallback((structureData: DataNode) => {
+    console.log('[DEBUG] Regenerating steps with subData:', structureData);
+    const newSteps = customGenerateSteps ? customGenerateSteps(structureData) : generateSteps(structureData);
+    setSteps(newSteps);
+    // Continue with the next step after regenerating
+    setCurrentStepIndex(prev => {
+      console.log('[DEBUG] Continuing from step index:', prev);
+      return prev; // Continue from current index
+    });
+    console.log('[DEBUG] New steps count:', newSteps.length);
+  }, [customGenerateSteps]);
+
   // Avanza sequenzialmente
   const runNextStep = useCallback(async () => {
-    console.log('[useOrchestrator] runNextStep', { currentStepIndex, data, step: steps[currentStepIndex]?.key });
     setStepError(false);
     setStepLoading(true);
     const step = steps[currentStepIndex];
     try {
       if (!step) {
-        console.log('[useOrchestrator] runNextStep: step non trovato per currentStepIndex', currentStepIndex);
         setStepLoading(false);
         return;
       }
-      console.log('[useOrchestrator] runNextStep: eseguo step.run() per', step.key);
+      
+      console.log(`[DEBUG] Executing step ${currentStepIndex}: ${step.key} (${step.type})`);
+      
       const result = await step.run();
-      console.log('[useOrchestrator] runNextStep: step.run() RISULTATO', result);
+      
+      // Log results for subData steps
+      if (step.type === 'subDataMessages' || step.type === 'subDataScripts') {
+        console.log(`[DEBUG] SubData step result for ${step.key}:`, result);
+        console.log(`[DEBUG] SubData payload content:`, JSON.stringify(result.payload, null, 2));
+      }
+      
       setStepResults(prev => [...prev, result]);
+      
+      // Se questo è il step suggestStructureAndConstraints, rigenera gli step con i subData
+      if (step.key === 'suggestStructureAndConstraints' && result.payload?.mainData) {
+        console.log('[DEBUG] Structure step completed, regenerating steps with subData');
+        regenerateStepsWithSubData(result.payload.mainData);
+      }
+      
       // Raccogli translations se presenti
       if (result.translations) {
         setTranslations(prev => ({ ...prev, ...result.translations }));
@@ -44,12 +69,11 @@ export function useOrchestrator(
       setDebugModal({ step, result }); // Mostra modale di debug
       setStepLoading(false);
     } catch (e: any) {
-      console.error('[useOrchestrator] runNextStep: ERRORE', e);
       setStepError(true);
       setLastError(e);
       setStepLoading(false);
     }
-  }, [currentStepIndex, data, steps]);
+  }, [currentStepIndex, steps, regenerateStepsWithSubData]);
 
   // Chiudi modale e avanza
   const closeDebugModalAndContinue = useCallback(() => {
