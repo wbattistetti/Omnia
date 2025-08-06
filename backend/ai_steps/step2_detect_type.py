@@ -22,6 +22,11 @@ def step2(user_desc: str = Body(...)):
             return {"error": "unrecognized_data_type"}
         if ai_obj['type'] == 'unrecognized_data_type':
             return {"error": "unrecognized_data_type"}
+        
+        # Ensure subData field exists (backward compatibility)
+        if 'subData' not in ai_obj:
+            ai_obj['subData'] = []
+        
         return {"ai": ai_obj}
     except Exception:
         return {"error": "unrecognized_data_type"} 

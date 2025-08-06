@@ -9,6 +9,7 @@ import WizardSupportModal from './WizardSupportModal';
 // Tipo per dataNode
 interface DataNode {
   name: string;
+  subData?: string[];
 }
 
 const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void }> = ({ onCancel, onComplete }) => {
@@ -16,6 +17,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [userDesc, setUserDesc] = useState('');
   const [detectedType, setDetectedType] = useState<string | null>(null);
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
+  const [detectedSubData, setDetectedSubData] = useState<string[] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dataNode, setDataNode] = useState<DataNode | null>(null);
   const [closed, setClosed] = useState(false);
@@ -53,6 +55,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const ai = result.ai || result;
       setDetectedType(ai.type || '');
       setDetectTypeIcon(ai.icon || null);
+      setDetectedSubData(ai.subData || null);
       setStep('confirm');
     } catch (err: any) {
       setErrorMsg('Errore IA: ' + (err.message || ''));
@@ -64,7 +67,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const handleConfirmType = () => {
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     if (detectedType && !dataNodeSet.current) {
-      setDataNode({ name: detectedType });
+      setDataNode({ 
+        name: detectedType,
+        subData: detectedSubData || undefined
+      });
       dataNodeSet.current = true;
       setStep('pipeline');
     }
@@ -103,13 +109,29 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Tutti gli altri step e stati sono gestiti solo prima della pipeline
   if (step === 'input') {
-    return <WizardInputStep userDesc={userDesc} setUserDesc={setUserDesc} onNext={handleDetectType} onCancel={() => handleClose()} />;
+    return <WizardInputStep 
+      userDesc={userDesc} 
+      setUserDesc={setUserDesc} 
+      onNext={handleDetectType} 
+      onCancel={() => handleClose()}
+      dataNode={detectedType ? { 
+        name: detectedType, 
+        subData: detectedSubData || undefined 
+      } : undefined}
+    />;
   }
   if (step === 'loading') {
     return <WizardLoadingStep />;
   }
   if (step === 'confirm') {
-    return <WizardConfirmTypeStep detectedType={detectedType} detectTypeIcon={detectTypeIcon} onCorrect={handleConfirmType} onWrong={() => setStep('input')} onCancel={() => handleClose()} />;
+    return <WizardConfirmTypeStep 
+      detectedType={detectedType} 
+      detectTypeIcon={detectTypeIcon} 
+      detectedSubData={detectedSubData}
+      onCorrect={handleConfirmType} 
+      onWrong={() => setStep('input')} 
+      onCancel={() => handleClose()} 
+    />;
   }
   if (step === 'error') {
     return <WizardErrorStep errorMsg={errorMsg} onRetry={handleDetectType} onSupport={() => setStep('support')} onCancel={() => handleClose()} />;

@@ -6,7 +6,7 @@ interface Props {
   setUserDesc: (v: string) => void;
   onNext: () => void;
   onCancel: () => void;
-  dataNode?: { name?: string };
+  dataNode?: { name?: string; subData?: string[] };
 }
 
 const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel, dataNode }) => (
@@ -19,12 +19,40 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         {dataNode?.name && <Calendar size={22} style={{ color: '#a21caf' }} />}
         <span style={{ fontSize: 20, fontWeight: 700, color: '#a21caf' }}>{dataNode?.name || ''}</span>
       </div>
+      
+      {/* Mostra i subData se presenti */}
+      {dataNode?.subData && dataNode.subData.length > 0 && (
+        <div style={{ 
+          marginTop: 8,
+          padding: '6px 10px', 
+          backgroundColor: 'rgba(162,28,175,0.1)', 
+          borderRadius: 6,
+          fontSize: 14,
+          color: '#e5e7eb',
+          border: '1px solid rgba(162,28,175,0.3)'
+        }}>
+          <div style={{ fontWeight: 500 }}>
+            Structure: ({dataNode.subData.join(', ')})
+          </div>
+        </div>
+      )}
     </div>
+    
+    <div style={{ marginBottom: 12, fontSize: 14, color: '#9ca3af' }}>
+      {dataNode?.name ? 
+        "Modify the description to change the data type or structure:" : 
+        "Describe the data you want to collect:"
+      }
+    </div>
+    
     <input
       type="text"
       value={userDesc}
       onChange={e => setUserDesc(e.target.value)}
-      placeholder="Describe the data..."
+      placeholder={dataNode?.name ? 
+        `e.g., "date of birth (day, month, year)" or "email"` : 
+        "e.g., date of birth, email, phone number..."
+      }
       style={{
         fontSize: 17,
         padding: '10px 16px',
