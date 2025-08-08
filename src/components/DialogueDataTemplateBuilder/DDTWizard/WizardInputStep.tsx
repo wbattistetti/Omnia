@@ -10,10 +10,20 @@ interface Props {
 }
 
 const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel, dataNode }) => (
-  <div style={{ padding: 8, maxWidth: 480, margin: 0 }}>
+  <div
+    style={{
+      background: 'var(--sidebar-content-bg, #181825)',
+      border: '2px solid #a21caf',
+      borderRadius: 16,
+      padding: 24,
+      maxWidth: 480,
+      margin: '32px auto',
+      boxSizing: 'border-box',
+    }}
+  >
     <div style={{ textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
       <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 8 }}>
-        You want to create a dialogue for:
+        Describe the data dialogue you want to create:
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 0 }}>
         {dataNode?.name && <Calendar size={22} style={{ color: '#a21caf' }} />}
@@ -49,10 +59,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
       type="text"
       value={userDesc}
       onChange={e => setUserDesc(e.target.value)}
-      placeholder={dataNode?.name ? 
-        `e.g., "date of birth (day, month, year)" or "email"` : 
-        "e.g., date of birth, email, phone number..."
-      }
+      placeholder="e.g., date of birth, email, phone number..."
       style={{
         fontSize: 17,
         padding: '10px 16px',
@@ -68,36 +75,36 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
       onKeyDown={e => { if (e.key === 'Enter' && userDesc.trim()) onNext(); }}
       autoFocus
     />
-    <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', gap: 16 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
       <button
         onClick={onCancel}
         style={{
-          background: 'transparent',
+          background: 'none',
           color: '#a21caf',
           border: 'none',
-          borderRadius: 8,
-          padding: '8px 24px',
           fontWeight: 600,
           fontSize: 16,
           cursor: 'pointer',
+          padding: '6px 18px',
         }}
       >
         Annulla
       </button>
       <button
         onClick={onNext}
+        disabled={!userDesc.trim()}
         style={{
           background: '#a21caf',
           color: '#fff',
           border: 'none',
           borderRadius: 8,
-          padding: '8px 24px',
           fontWeight: 600,
           fontSize: 16,
           cursor: userDesc.trim() ? 'pointer' : 'not-allowed',
+          padding: '8px 28px',
           opacity: userDesc.trim() ? 1 : 0.6,
+          transition: 'opacity 0.2s',
         }}
-        disabled={!userDesc.trim()}
       >
         Invia
       </button>

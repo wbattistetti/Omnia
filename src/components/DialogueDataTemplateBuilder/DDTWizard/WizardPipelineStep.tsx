@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, Hourglass } from 'lucide-react';
 import { useOrchestrator } from '../orchestrator/useOrchestrator';
 import { buildDDT } from '../DDTAssembler/DDTBuilder';
 import { buildSteps } from '../DDTAssembler/buildStepMessagesFromResults';
@@ -103,52 +103,80 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   }, [orchestrator.state.currentStepIndex, orchestrator.state.steps.length, orchestrator.state.stepResults, finalDDT, onComplete, confirmedLabel, dataNode]);
 
   const currentDescription = getStepDescription(currentStep, dataNode);
+  const detectedType = orchestrator.state.detectedType;
+  const mainData = orchestrator.state.mainData;
+  const currentStepLabel = orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || '';
 
   return (
-    <div style={{ padding: '18px 0 12px 0', maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
-      <div style={{ fontWeight: 600, fontSize: 18, color: '#fff', marginBottom: 6 }}>Creating...</div>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-        <DataTypeLabel
-          icon={detectTypeIcon === 'Calendar' ? <Calendar size={18} style={{ color: '#a21caf' }} /> : null}
-          label={dataNode.name}
-        />
+    <div
+      style={{
+        borderRadius: 16,
+        border: '2px solid #a21caf',
+        background: '#181f3a',
+        padding: 28,
+        maxWidth: 400,
+        margin: '18px auto',
+        boxShadow: '0 2px 12px rgba(162,28,175,0.08)'
+      }}
+    >
+      <div style={{ fontWeight: 600, fontSize: 20, color: '#fff', marginBottom: 24, textAlign: 'left', paddingLeft: 4 }}>
+        {`Creating "${mainData?.label || detectedType || 'data'}" data dialog:`}
       </div>
-      
-      {/* Progress Bar */}
-      <div style={{ marginBottom: 16 }}>
-        <ProgressBar 
-          currentStep={currentStep}
-          totalSteps={totalSteps}
-          label="Building your dialogue template"
-        />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a21caf', fontWeight: 500, fontSize: 16, marginBottom: 8, paddingLeft: 4 }}>
+        <Hourglass size={20} color="#a21caf" />
+        <span>{currentStepLabel}</span>
       </div>
-      
-      {/* Current Step Description */}
-      <div style={{ 
-        marginBottom: 16, 
-        padding: '8px 12px', 
-        backgroundColor: 'rgba(255,255,255,0.1)', 
-        borderRadius: '6px',
-        color: '#e5e7eb',
-        fontSize: 14
-      }}>
-        <strong>Current step:</strong> {currentDescription}
-      </div>
-      
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-        <StepLabel
-          icon={<HourglassSpinner />}
-          label={orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || ''}
-        />
-      </div>
-      
-      {/* Mostra preview JSON finale a fine pipeline */}
-      {finalDDT && (
-        <div style={{ marginTop: 24 }}>
-          <h3>DDT JSON Preview</h3>
-          <pre style={{ background: '#f3f3f3', padding: 12, borderRadius: 4, maxHeight: 400, overflow: 'auto', color: '#222' }}>{JSON.stringify(finalDDT, null, 2)}</pre>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 0 }}>
+        <div style={{
+          width: '100%',
+          maxWidth: 320,
+          minWidth: 180,
+          margin: '0 16px',
+          height: 16,
+          background: '#222b4a',
+          borderRadius: 8,
+          position: 'relative',
+          overflow: 'hidden',
+          border: '2px solid #a21caf',
+        }}>
+          <div style={{
+            width: `${totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0}%`,
+            height: '100%',
+            background: '#a21caf',
+            borderRadius: 8,
+            transition: 'width 0.3s'
+          }} />
+          <span style={{
+            position: 'absolute',
+            left: 0, right: 0, top: 0, bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            fontWeight: 600,
+            fontSize: 13
+          }}>
+            {currentStep} / {totalSteps}
+          </span>
         </div>
-      )}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+        <button
+          onClick={onCancel}
+          style={{
+            background: 'none',
+            color: '#a21caf',
+            border: '1.5px solid #a21caf',
+            borderRadius: 8,
+            fontWeight: 600,
+            fontSize: 15,
+            cursor: 'pointer',
+            padding: '7px 28px',
+          }}
+        >
+          Annulla
+        </button>
+      </div>
     </div>
   );
 };
