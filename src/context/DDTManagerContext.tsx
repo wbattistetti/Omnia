@@ -35,7 +35,7 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
 
   const createDDT = (ddt: any) => {
     setDDTList(prev => [...prev, ddt]);
-    setSelectedDDT(ddt); // Apre automaticamente l'editor
+    setSelectedDDT(ddt);
   };
 
   const openDDT = (ddt: any) => {
@@ -48,7 +48,6 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
 
   const deleteDDT = (id: string) => {
     setDDTList(prev => prev.filter(ddt => ddt.id !== id && ddt._id !== id));
-    // Se l'editor è aperto per questo DDT, chiudilo
     if (selectedDDT && (selectedDDT.id === id || selectedDDT._id === id)) {
       setSelectedDDT(null);
     }

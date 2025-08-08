@@ -11,14 +11,12 @@ def step_confirmation(body: dict = Body(...)):
     desc = body.get('desc', '')
     start_examples = body.get('start_examples', None)
     prompt = get_confirmation_prompt(meaning, desc, start_examples)
-    print("AI PROMPT ================")
-    print(prompt)
+    print("[AI PROMPT][confirmation]", prompt)
     ai = call_groq([
         {"role": "system", "content": "Always reply in English."},
         {"role": "user", "content": prompt}
     ])
-    print("AI ANSWER ================")
-    print(ai)
+    print("[AI ANSWER][confirmation]", ai)
     try:
         ai_obj = json.loads(ai)
         return {"ai": ai_obj}

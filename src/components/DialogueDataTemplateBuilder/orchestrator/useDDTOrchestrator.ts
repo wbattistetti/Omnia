@@ -6,6 +6,8 @@ import generateScripts from './generateScripts';
 import batchMessages from './batchMessages';
 import { buildDDT } from '../DDTAssembler/DDTBuilder';
 
+const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+
 const stepOrder: DDTGenerationStep[] = [
   'recognizeType',
   'structure',
@@ -17,7 +19,7 @@ const stepOrder: DDTGenerationStep[] = [
 ];
 
 async function recognizeTypeAPI(userDesc: string) {
-  const res = await fetch('/step2', {
+  const res = await fetch(`${API_BASE}/step2`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(userDesc),

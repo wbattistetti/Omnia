@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import WizardInputStep from './WizardInputStep';
 import WizardLoadingStep from './WizardLoadingStep';
-import WizardConfirmTypeStep from './WizardConfirmTypeStep';
 import WizardPipelineStep from './WizardPipelineStep';
 import WizardErrorStep from './WizardErrorStep';
 import WizardSupportModal from './WizardSupportModal';
+import MainDataCollection, { SchemaNode } from './MainDataCollection';
 
 // Tipo per dataNode
 interface DataNode {
@@ -15,13 +15,15 @@ interface DataNode {
 const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void }> = ({ onCancel, onComplete }) => {
   const [step, setStep] = useState<string>('input');
   const [userDesc, setUserDesc] = useState('');
-  const [detectedType, setDetectedType] = useState<string | null>(null);
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
-  const [detectedSubData, setDetectedSubData] = useState<string[] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dataNode, setDataNode] = useState<DataNode | null>(null);
   const [closed, setClosed] = useState(false);
   const dataNodeSet = useRef(false);
+
+  // Schema editing state (from detect schema)
+  const [schemaRootLabel, setSchemaRootLabel] = useState<string>('');
+  const [schemaMains, setSchemaMains] = useState<SchemaNode[]>([]);
 
   // Memo per dataNode stabile
   const stableDataNode = useMemo(() => dataNode, [dataNode]);
@@ -30,14 +32,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     return () => {
     };
   }, []);
-
-  useEffect(() => {
-    if (step === 'pipeline') {
-    }
-  }, [step]);
-
-  useEffect(() => {
-  }, [dataNode]);
 
   // Funzione per chiamare la detection AI
   const handleDetectType = async () => {
@@ -53,27 +47,37 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       if (!res.ok) throw new Error('Errore comunicazione IA');
       const result = await res.json();
       const ai = result.ai || result;
-      setDetectedType(ai.type || '');
-      setDetectTypeIcon(ai.icon || null);
-      setDetectedSubData(ai.subData || null);
-      setStep('confirm');
+      const schema = ai.schema;
+      if (schema && Array.isArray(schema.mainData)) {
+        setDetectTypeIcon(ai.icon || null);
+        setSchemaRootLabel(schema.label || 'Data');
+        setSchemaMains((schema.mainData || []).map((m: any) => ({
+          label: m.label || m.name || 'Field',
+          type: m.type,
+          subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type })) : [],
+        })));
+        setStep('structure');
+        return;
+      }
+      throw new Error('Schema non valido');
     } catch (err: any) {
       setErrorMsg('Errore IA: ' + (err.message || ''));
       setStep('error');
     }
   };
 
-  // Quando confermi il tipo, crea dataNode UNA SOLA VOLTA
-  const handleConfirmType = () => {
-    if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
-    if (detectedType && !dataNodeSet.current) {
-      setDataNode({ 
-        name: detectedType,
-        subData: detectedSubData || undefined
-      });
-      dataNodeSet.current = true;
-      setStep('pipeline');
-    }
+  const handleStructureContinue = () => {
+    // For now, proceed with the first main only; future: iterate all mains
+    const first = schemaMains[0];
+    if (!first) return;
+    const sub = Array.isArray(first.subData) ? first.subData.map(s => s.label) : undefined;
+    setDataNode({ name: first.label, subData: sub });
+    dataNodeSet.current = true;
+    setStep('pipeline');
+  };
+
+  const handleAddMain = () => {
+    setSchemaMains(prev => [...prev, { label: 'New main data', type: 'object', subData: [] }]);
   };
 
   // Handler per chiusura (annulla o completamento)
@@ -102,36 +106,40 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           handleClose(finalDDT);
         }}
         skipDetectType={true}
-        confirmedLabel={detectedType || ''}
+        confirmedLabel={schemaRootLabel || ''}
       />
     );
   }
 
-  // Tutti gli altri step e stati sono gestiti solo prima della pipeline
+  // Struttura: editor dei main data (primo step dopo detect)
+  if (step === 'structure') {
+    return (
+      <div style={{ padding: 16 }}>
+        <MainDataCollection
+          rootLabel={schemaRootLabel || 'Data'}
+          mains={schemaMains}
+          onChangeMains={setSchemaMains}
+          onAddMain={handleAddMain}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button onClick={() => setStep('input')} style={{ background: 'transparent', color: '#a78bfa', border: '1px solid #4c1d95', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Back</button>
+          <button onClick={handleStructureContinue} style={{ background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Continue</button>
+          <button onClick={() => handleClose()} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
   if (step === 'input') {
     return <WizardInputStep 
       userDesc={userDesc} 
       setUserDesc={setUserDesc} 
       onNext={handleDetectType} 
       onCancel={() => handleClose()}
-      dataNode={detectedType ? { 
-        name: detectedType, 
-        subData: detectedSubData || undefined 
-      } : undefined}
     />;
   }
   if (step === 'loading') {
     return <WizardLoadingStep />;
-  }
-  if (step === 'confirm') {
-    return <WizardConfirmTypeStep 
-      detectedType={detectedType} 
-      detectTypeIcon={detectTypeIcon} 
-      detectedSubData={detectedSubData}
-      onCorrect={handleConfirmType} 
-      onWrong={() => setStep('input')} 
-      onCancel={() => handleClose()} 
-    />;
   }
   if (step === 'error') {
     return <WizardErrorStep errorMsg={errorMsg} onRetry={handleDetectType} onSupport={() => setStep('support')} onCancel={() => handleClose()} />;

@@ -8,14 +8,12 @@ router = APIRouter()
 @router.post("/step3")
 def step3(meaning: str = Body(...), desc: str = Body(...)):
     prompt = get_suggest_constraints_prompt(meaning, desc)
-    print("AI PROMPT ================")
-    print(prompt)
+    print("[AI PROMPT][constraints]", prompt)
     ai = call_groq([
         {"role": "system", "content": "Always reply in English."},
         {"role": "user", "content": prompt}
     ])
-    print("AI ANSWER ================")
-    print(ai)
+    print("[AI ANSWER][constraints]", ai)
     try:
         ai_obj = json.loads(ai)
         return {"ai": ai_obj}

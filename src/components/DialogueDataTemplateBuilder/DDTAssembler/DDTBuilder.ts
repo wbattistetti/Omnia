@@ -16,10 +16,12 @@ export function buildDDT(
   const translations: Record<string, string> = {};
   const mainData = buildMainDataNodeWithSubData(ddtId, dataNode, stepMessagesWithSubData, translations);
   const label = dataNode.label || ddtId;
-  return {
+  const assembledDDT = {
     id: ddtId,
     label,
     mainData,
     translations
   };
+  console.log('[DDTAssembler] Assembled DDT JSON:', assembledDDT);
+  return assembledDDT;
 }

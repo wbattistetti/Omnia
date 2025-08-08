@@ -1,0 +1,15 @@
+{
+  "label": "Birthdate",
+  "subData": [
+    { "label": "day" },
+    { "label": "month" },
+    { "label": "year" }
+  ],
+  "steps": {
+    "start": { "escalations": [] },
+    "noMatch": { "escalations": [] },
+    "confirmation": { "escalations": [] },
+    "success": { "escalations": [] }
+  }
+}
+

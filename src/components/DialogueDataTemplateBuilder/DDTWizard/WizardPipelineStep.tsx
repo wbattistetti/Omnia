@@ -9,11 +9,12 @@ import DataTypeLabel from './DataTypeLabel';
 import StepLabel from './StepLabel';
 import HourglassSpinner from './HourglassSpinner';
 import ProgressBar from '../../Common/ProgressBar';
+import StructurePreviewModal from './StructurePreviewModal';
 
 interface DataNode {
   name: string;
   type?: string;
-  subData?: string[];
+  subData?: any[];
 }
 
 interface Props {
@@ -25,20 +26,29 @@ interface Props {
   confirmedLabel?: string;
 }
 
+function normalizeStructure(node: any) {
+  if (!node) return null;
+  const out: any = { label: node.label || node.name || '', type: node.type };
+  if (Array.isArray(node.subData) && node.subData.length > 0) {
+    out.subData = node.subData.map((s: any) => normalizeStructure(s));
+  }
+  return out;
+}
+
 const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel }) => {
   const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType));
   const [finalDDT, setFinalDDT] = useState<any>(null);
   const [totalSteps, setTotalSteps] = useState(0);
   const [currentStep, setCurrentStep] = useState(1);
   const alreadyStartedRef = useRef(false);
+  const [showStructureModal, setShowStructureModal] = useState(false);
+  const [structurePreview, setStructurePreview] = useState<any>(null);
 
-  // Calcola il numero totale di step quando il componente si monta
   useEffect(() => {
     const total = calculateTotalSteps(dataNode);
     setTotalSteps(total);
   }, [dataNode]);
 
-  // Aggiorna lo step corrente quando cambia l'indice dello step nell'orchestrator
   useEffect(() => {
     setCurrentStep(orchestrator.state.currentStepIndex + 1);
   }, [orchestrator.state.currentStepIndex]);
@@ -51,17 +61,14 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   useEffect(() => {
   });
 
-  // Resetta il ref anti-rilancio ogni volta che cambia dataNode
   useEffect(() => {
     alreadyStartedRef.current = false;
   }, [dataNode]);
 
-  // Avvia pipeline ogni volta che cambia dataNode o currentStepIndex
   useEffect(() => {
     orchestrator.runNextStep();
   }, [dataNode, orchestrator.state.currentStepIndex]);
 
-  // Avanza step quando debugModal si chiude
   useEffect(() => {
     if (orchestrator.debugModal) {
       setTimeout(() => {
@@ -70,25 +77,29 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     }
   }, [orchestrator.debugModal]);
 
-  // Logga ogni avanzamento di step
+  // Phase 1: show structure preview when we have structure (result of suggestStructureAndConstraints)
   useEffect(() => {
-  }, [orchestrator.state.currentStepIndex]);
+    const structureResult = orchestrator.state.stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
+    const mainData = structureResult?.payload?.mainData || structureResult?.payload;
+    if (mainData && !showStructureModal && !finalDDT) {
+      const normalized = normalizeStructure(mainData);
+      setStructurePreview(normalized);
+      setShowStructureModal(true);
+    }
+  }, [orchestrator.state.stepResults, showStructureModal, finalDDT]);
 
-  // Quando pipeline finita, monta il DDT finale e chiama onComplete
+  // When pipeline done, assemble
   useEffect(() => {
     if (
       orchestrator.state.currentStepIndex >= orchestrator.state.steps.length &&
       !finalDDT
     ) {
-      // Patch: crea uno stepResult finto detectType con la label AI confermata
       let stepResults = orchestrator.state.stepResults;
       if (confirmedLabel) {
         const fakeDetectType = { stepKey: 'detectType', payload: { label: confirmedLabel, type: confirmedLabel } };
         stepResults = [fakeDetectType, ...orchestrator.state.stepResults];
       }
-      // Costruisci stepMessages con la nuova funzione
       const stepMessages = buildSteps(stepResults);
-      // Assembla il DDT finale passando solo stepResults (stepMessages è già usato internamente)
       const structureResult = stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
       const mainData = structureResult?.payload?.mainData || structureResult?.payload;
       if (mainData && Array.isArray(mainData.subData)) {
@@ -96,6 +107,10 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
         });
       }
       const ddtId = mainData?.name || dataNode.name || 'ddt_' + (dataNode?.name || 'unknown');
+      if (!mainData) {
+        console.error('[Wizard] Missing mainData; cannot assemble DDT. stepResults=', stepResults);
+        return;
+      }
       const final = buildDDT(ddtId, mainData, stepResults);
       setFinalDDT(final);
       if (onComplete) onComplete(final);
@@ -106,6 +121,11 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   const detectedType = orchestrator.state.detectedType;
   const mainData = orchestrator.state.mainData;
   const currentStepLabel = orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || '';
+
+  const handleCopyStructure = () => {
+    if (!structurePreview) return;
+    navigator.clipboard.writeText(JSON.stringify(structurePreview, null, 2));
+  };
 
   return (
     <div
@@ -119,6 +139,14 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
         boxShadow: '0 2px 12px rgba(162,28,175,0.08)'
       }}
     >
+      <StructurePreviewModal
+        open={showStructureModal}
+        title="Structure preview (no constraints)"
+        data={structurePreview}
+        onCopy={handleCopyStructure}
+        onClose={() => setShowStructureModal(false)}
+      />
+
       <div style={{ fontWeight: 600, fontSize: 20, color: '#fff', marginBottom: 24, textAlign: 'left', paddingLeft: 4 }}>
         {`Creating "${mainData?.label || detectedType || 'data'}" data dialog:`}
       </div>

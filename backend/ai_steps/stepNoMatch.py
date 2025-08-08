@@ -11,14 +11,12 @@ def step_no_match(body: dict = Body(...)):
     desc = body.get('desc', '')
     start_examples = body.get('start_examples', None)
     prompt = get_no_match_prompt(meaning, desc, start_examples)
-    print("AI PROMPT ================")
-    print(prompt)
+    print("[AI PROMPT][noMatch]", prompt)
     ai = call_groq([
         {"role": "system", "content": "Always reply in English."},
         {"role": "user", "content": prompt}
     ])
-    print("AI ANSWER ================")
-    print(ai)
+    print("[AI ANSWER][noMatch]", ai)
     try:
         ai_obj = json.loads(ai)
         return {"ai": ai_obj}

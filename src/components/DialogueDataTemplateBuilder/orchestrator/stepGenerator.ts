@@ -4,6 +4,9 @@ import enrichConstraints from './enrichConstraints';
 import generateScripts from './generateScripts';
 import batchMessages from './batchMessages';
 
+// Backend base URL
+const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+
 // Tipo base per input
 export interface DataNode {
   name: string;
@@ -45,7 +48,7 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
     data.subData.forEach((subData, index) => {
       // Use label, variable, or name for the subData identifier
       const subDataName = subData.label || subData.variable || subData.name || `subData_${index}`;
-      console.log('[DEBUG] Creating steps for subData:', subDataName, 'with data:', subData);
+      // console.log('[DEBUG] Creating steps for subData:', subDataName, 'with data:', subData);
       
       // Use the same endpoints as mainData for subData
       stepPlan.push(
@@ -109,19 +112,19 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
           if (stepDef.key === 'detectType') {
           body = JSON.stringify(data.name); // stringa pura
                       } else if (stepDef.subDataInfo) {
-            // Per i subData, mantieni il contesto ma specifica di generare domande concise
-            const mainDataName = data.name || data.label || "birthDate";
-            const subDataName = stepDef.subDataInfo.label || stepDef.subDataInfo.name;
+            // For subData, use main and sub labels explicitly, no hardcoded fallbacks
+            const mainDataName = data.label || data.name || '';
+            const subDataName = stepDef.subDataInfo.label || stepDef.subDataInfo.name || '';
             body = JSON.stringify({
-                meaning: `${subDataName} of ${mainDataName}`, // e.g., "Day of birthDate" - mantiene il contesto
-                desc: `Generate a very concise and direct question for ${subDataName} of ${mainDataName}. Use short, direct questions like "Which day?", "Which month?", "Which year?". Be extremely concise - no verbose phrases or repetition.`,
+                meaning: subDataName || mainDataName,
+                desc: `Generate a concise, direct message for ${subDataName || mainDataName}.`,
                 ...extraBody
             });
           } else {
-          body = JSON.stringify({ meaning: data.name || data.label || "birthDate", desc: '', ...extraBody });
+            body = JSON.stringify({ meaning: data.label || data.name || '', desc: '', ...extraBody });
           }
           try {
-          const res = await fetch(stepDef.endpoint, {
+          const res = await fetch(`${API_BASE}${stepDef.endpoint}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: body,

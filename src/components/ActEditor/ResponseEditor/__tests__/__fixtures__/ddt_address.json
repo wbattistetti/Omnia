@@ -1,0 +1,26 @@
+{
+  "mainData": [
+    {
+      "label": "Address",
+      "subData": [
+        { "label": "street" },
+        { "label": "city" },
+        { "label": "postal_code" },
+        { "label": "country" }
+      ],
+      "steps": [
+        { "type": "start", "escalations": [] },
+        { "type": "noInput", "escalations": [] },
+        { "type": "success", "escalations": [] }
+      ]
+    },
+    {
+      "label": "Contact",
+      "subData": [ { "label": "email" } ],
+      "messages": {
+        "success": { "escalations": [] }
+      }
+    }
+  ]
+}
+

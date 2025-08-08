@@ -35,9 +35,6 @@ export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMess
         const subDataName = stepTypeMatch[2].toLowerCase(); // Day -> day
         const index = stepTypeMatch[3];
         
-        console.log('[DEBUG] Processing subData messages for:', subDataName, 'stepType:', stepType);
-        console.log('[DEBUG] Payload:', JSON.stringify(result.payload, null, 2));
-        
         if (!subDataStepMessages[subDataName]) {
           subDataStepMessages[subDataName] = {};
         }
@@ -57,7 +54,6 @@ export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMess
             }
           }
         }
-        console.log('[DEBUG] Final subDataStepMessages for', subDataName, ':', JSON.stringify(subDataStepMessages[subDataName], null, 2));
       }
     } else {
       // Handle mainData steps

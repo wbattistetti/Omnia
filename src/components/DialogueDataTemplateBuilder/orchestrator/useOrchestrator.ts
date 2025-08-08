@@ -22,16 +22,17 @@ export function useOrchestrator(
 
   // Funzione per rigenerare gli step dopo che abbiamo la struttura con subData
   const regenerateStepsWithSubData = useCallback((structureData: DataNode) => {
-    console.log('[DEBUG] Regenerating steps with subData:', structureData);
-    const newSteps = customGenerateSteps ? customGenerateSteps(structureData) : generateSteps(structureData);
+    const enriched = {
+      ...structureData,
+      label: structureData?.label || (data as any)?.label || (data as any)?.name || ''
+    } as DataNode;
+    const newSteps = customGenerateSteps ? customGenerateSteps(enriched) : generateSteps(enriched);
     setSteps(newSteps);
     // Continue with the next step after regenerating
     setCurrentStepIndex(prev => {
-      console.log('[DEBUG] Continuing from step index:', prev);
       return prev; // Continue from current index
     });
-    console.log('[DEBUG] New steps count:', newSteps.length);
-  }, [customGenerateSteps]);
+  }, [customGenerateSteps, data]);
 
   // Avanza sequenzialmente
   const runNextStep = useCallback(async () => {
@@ -44,21 +45,18 @@ export function useOrchestrator(
         return;
       }
       
-      console.log(`[DEBUG] Executing step ${currentStepIndex}: ${step.key} (${step.type})`);
-      
       const result = await step.run();
       
       // Log results for subData steps
       if (step.type === 'subDataMessages' || step.type === 'subDataScripts') {
-        console.log(`[DEBUG] SubData step result for ${step.key}:`, result);
-        console.log(`[DEBUG] SubData payload content:`, JSON.stringify(result.payload, null, 2));
+        console.log(`SubData step result for ${step.key}:`, result);
+        console.log(`SubData payload content:`, JSON.stringify(result.payload, null, 2));
       }
       
       setStepResults(prev => [...prev, result]);
       
       // Se questo è il step suggestStructureAndConstraints, rigenera gli step con i subData
       if (step.key === 'suggestStructureAndConstraints' && result.payload?.mainData) {
-        console.log('[DEBUG] Structure step completed, regenerating steps with subData');
         regenerateStepsWithSubData(result.payload.mainData);
       }
       

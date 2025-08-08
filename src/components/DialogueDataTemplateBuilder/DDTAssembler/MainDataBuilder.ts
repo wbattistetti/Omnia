@@ -29,7 +29,6 @@ export function buildMainDataNodeWithSubData(
   let allStepTranslations: { key: string; value: string }[] = [];
   const steps: StepGroup[] = STANDARD_STEPS.map((stepType) => {
     const messagesArr = (stepMessagesWithSubData.mainData && stepMessagesWithSubData.mainData[stepType]) || [];
-    console.log('[DEBUG] buildStepGroup for', stepType, 'with messagesArr:', messagesArr);
     const step = buildStepGroup(stepType, messagesArr, ddtId, translations);
     return step;
   });
@@ -73,6 +72,5 @@ export function buildMainDataNodeWithSubData(
   mainData.id = dataNode.id || uuidv4();
   if (dataNode.variable) mainData.variable = dataNode.variable;
   // Final clean log for the full node (including subData)
-  console.log('[DDTAssembler] mainData node (final):', JSON.stringify(mainData, null, 2));
   return mainData;
 }
