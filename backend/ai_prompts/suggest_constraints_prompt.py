@@ -1,37 +1,43 @@
-def get_suggest_constraints_prompt(meaning, desc):
-    return f"""You are a data validation assistant.
+def get_suggest_constraints_prompt(schema_json: str):
+    return f"""
+You are a data validation designer.
 
-Given a data field meaning, suggest appropriate validation constraints for the field and, only when applicable, for its subfields.
+Task:
+- Receive a JSON schema tree describing dialogue data (object with "label" and an array "mains"). Each main has: label, type, optional icon, and optional subData (array of the same shape).
+- Return the SAME structure enriched with a constraints array on any node (main or subData) where appropriate.
 
-Rules:
-- Treat the provided meaning as the user-facing label of the main field.
-- Include subData ONLY if the meaning naturally implies a composite structure:
-  - If meaning is "address" (case-insensitive), use subData: ["street", "city", "postal_code", "country"].
-  - If meaning is "date" or "date of birth" (case-insensitive), use subData: ["Day", "Month", "Year"].
-  - Otherwise, do not invent subData unless it is clearly implied by the meaning.
-- Each subData item MUST include a "label" (English).
+Requirements:
+- Keep all provided fields (label, type, icon, subData) unchanged.
+- Add a "constraints" array where useful. Each constraint must be concise and self-explanatory.
+- Use these constraint kinds where applicable:
+  - required: boolean=true
+  - range: min, max (numbers or dates in ISO if needed)
+  - length: minLength, maxLength (strings)
+  - regex: pattern (strings)
+  - enum: values (array)
+  - format: one of email, phone, url, postal_code, country_code, etc.
+  - pastDate: boolean=true
+  - futureDate: boolean=true
+- For each constraint include:
+  - kind: the constraint kind
+  - title: a 1–2 word title (e.g., "Required", "1–31", "Email")
+  - payoff: a short explanatory sentence, user-friendly
+  - parameters as needed by kind (min, max, minLength, maxLength, pattern, values, format)
 
-For each field (main and subfields), suggest a list of constraints in this format:
-[
-  {{
-    "type": "required",
-    "label": "Required",
-    "description": "This field must be filled in.",
-    "payoff": "Ensures the user provides this value."
-  }},
-  ...
-]
+Important:
+- Do NOT include any "required" constraint. Assume required-ness is enforced externally.
 
-Respond ONLY with a JSON object in this exact format:
-{{
-  "mainData": {{
-    "label": "{meaning}",
-    "constraints": [ ... ],
-    "subData": [
-      {{ "label": "<subLabel>", "constraints": [ ... ] }}
-    ]
-  }}
-}}
+Guidance examples (do not hardcode; adapt to labels/types):
+- If a label implies a day of month → range 1–31
+- If a label implies a month number → range 1–12
+- If a label implies a year of birth → pastDate or a sensible year range (e.g., min 1900)
+- If a label implies postal code → format postal_code (country-independent)
+- If a label implies email → format email
+- If a label implies phone → format phone; country code can be separate as enum or format country_code
 
-Do NOT generate any id or GUID. Do NOT include explanations or comments outside the JSON. All messages and labels must be in English.
+Output:
+- Respond with JSON ONLY. Use the same root shape as input, with constraints arrays added.
+
+Input schema:
+{schema_json}
 """ 

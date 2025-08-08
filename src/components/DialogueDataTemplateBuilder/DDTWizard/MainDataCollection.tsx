@@ -6,6 +6,20 @@ export interface SchemaNode {
   type?: string;
   icon?: string;
   subData?: SchemaNode[];
+  constraints?: Constraint[];
+}
+
+export interface Constraint {
+  kind: 'required' | 'range' | 'length' | 'regex' | 'enum' | 'format' | 'pastDate' | 'futureDate';
+  title: string;
+  payoff: string;
+  min?: number | string;
+  max?: number | string;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  values?: Array<string | number>;
+  format?: string;
 }
 
 interface MainDataCollectionProps {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { SchemaNode } from './MainDataCollection';
-import { Pencil, Trash2, ChevronDown, ChevronRight, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle } from 'lucide-react';
+import { Pencil, Trash2, ChevronDown, ChevronRight, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Shield } from 'lucide-react';
 
 interface MainDataWizardProps {
   node: SchemaNode;
@@ -19,9 +19,17 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
   const [editingSubIdx, setEditingSubIdx] = useState<number | null>(null);
   const [hoverSubIdx, setHoverSubIdx] = useState<number | null>(null);
   const [subDraft, setSubDraft] = useState<string>('');
+  const [hoverMainConstraints, setHoverMainConstraints] = useState(false);
+  const [editingConstraint, setEditingConstraint] = useState<
+    | { scope: 'main'; idx: number }
+    | { scope: 'sub'; subIdx: number; idx: number }
+    | null
+  >(null);
+  const [constraintTitleDraft, setConstraintTitleDraft] = useState('');
+  const [constraintPayoffDraft, setConstraintPayoffDraft] = useState('');
 
   const renderIcon = (name?: string, size: number = 16) => {
-    const color = '#a78bfa';
+    const color = '#fb923c';
     switch ((name || '').trim()) {
       case 'User': return <User size={size} color={color} />;
       case 'MapPin': return <MapPin size={size} color={color} />;
@@ -68,8 +76,91 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
     setSubDraft('');
   };
 
+  const ensureMainConstraints = () => Array.isArray(node.constraints) ? node.constraints.slice() : [];
+  const ensureSubConstraints = (subIdx: number) => {
+    const sub = (node.subData || [])[subIdx];
+    const arr = sub && Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
+    return arr;
+  };
+
+  const addMainConstraint = () => {
+    const next = { ...node } as SchemaNode;
+    const list = ensureMainConstraints();
+    list.push({ kind: 'length', title: 'Rule', payoff: '' } as any);
+    next.constraints = list;
+    onChange(next);
+  };
+
+  const addSubConstraint = (subIdx: number) => {
+    const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
+    const sub = { ...(next.subData?.[subIdx] || {}) } as any;
+    const list = Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
+    list.push({ kind: 'length', title: 'Rule', payoff: '' } as any);
+    sub.constraints = list;
+    (next.subData as any)[subIdx] = sub;
+    onChange(next);
+  };
+
+  const startEditConstraint = (scope: 'main' | 'sub', idx: number, subIdx?: number) => {
+    if (scope === 'main') {
+      const c = ensureMainConstraints()[idx];
+      setConstraintTitleDraft(c?.title || '');
+      setConstraintPayoffDraft(c?.payoff || '');
+      setEditingConstraint({ scope: 'main', idx });
+    } else if (typeof subIdx === 'number') {
+      const c = ensureSubConstraints(subIdx)[idx];
+      setConstraintTitleDraft(c?.title || '');
+      setConstraintPayoffDraft(c?.payoff || '');
+      setEditingConstraint({ scope: 'sub', subIdx, idx });
+    }
+  };
+
+  const commitConstraint = () => {
+    if (!editingConstraint) return;
+    if (editingConstraint.scope === 'main') {
+      const list = ensureMainConstraints();
+      if (list[editingConstraint.idx]) {
+        list[editingConstraint.idx] = { ...list[editingConstraint.idx], title: constraintTitleDraft, payoff: constraintPayoffDraft } as any;
+        onChange({ ...node, constraints: list });
+      }
+    } else {
+      const { subIdx, idx } = editingConstraint as any;
+      const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
+      const sub = { ...(next.subData?.[subIdx] || {}) } as any;
+      const list = Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
+      if (list[idx]) list[idx] = { ...list[idx], title: constraintTitleDraft, payoff: constraintPayoffDraft } as any;
+      sub.constraints = list;
+      (next.subData as any)[subIdx] = sub;
+      onChange(next);
+    }
+    setEditingConstraint(null);
+    setConstraintTitleDraft('');
+    setConstraintPayoffDraft('');
+  };
+
+  const cancelConstraint = () => {
+    setEditingConstraint(null);
+    setConstraintTitleDraft('');
+    setConstraintPayoffDraft('');
+  };
+
+  const deleteConstraint = (scope: 'main' | 'sub', idx: number, subIdx?: number) => {
+    if (scope === 'main') {
+      const list = ensureMainConstraints();
+      const nextList = list.filter((_, i) => i !== idx);
+      onChange({ ...node, constraints: nextList });
+    } else if (typeof subIdx === 'number') {
+      const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
+      const sub = { ...(next.subData?.[subIdx] || {}) } as any;
+      const list = Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
+      sub.constraints = list.filter((_: any, i: number) => i !== idx);
+      (next.subData as any)[subIdx] = sub;
+      onChange(next);
+    }
+  };
+
   return (
-    <div style={{ border: '1px solid #4c1d95', borderRadius: 10, marginBottom: 10, background: '#0b1220' }}>
+    <div style={{ border: '1px solid #7c2d12', borderRadius: 10, marginBottom: 10, background: '#0b1220' }}>
       <div
         style={{ display: 'flex', alignItems: 'center', padding: 12 }}
         onMouseEnter={() => setHoverHeader(true)}
@@ -83,10 +174,10 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
               {hoverHeader && (
                 <>
                   <button title="Edit" onClick={() => { setIsEditingMain(true); setLabelDraft(node.label || ''); }} style={iconBtn}>
-                    <Pencil size={16} color="#a78bfa" />
+                    <Pencil size={16} color="#fb923c" />
                   </button>
                   <button title="Delete" onClick={onRemove} style={iconBtn}>
-                    <Trash2 size={16} color="#a78bfa" />
+                    <Trash2 size={16} color="#fb923c" />
                   </button>
                 </>
               )}
@@ -109,17 +200,54 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {hoverHeader && !isEditingMain && (
             <button title="Add Data" onClick={onAddSub} style={{ ...iconBtn, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={16} color="#a78bfa" />
-              <span style={{ color: '#a78bfa' }}>Add Data</span>
+              <Plus size={16} color="#fb923c" />
+              <span style={{ color: '#fb923c' }}>Add Data</span>
             </button>
           )}
           <button onClick={() => setOpen(o => !o)} style={iconBtn}>
-            {open ? <ChevronDown size={20} color="#a78bfa" /> : <ChevronRight size={20} color="#a78bfa" />}
+            {open ? <ChevronDown size={20} color="#fb923c" /> : <ChevronRight size={20} color="#fb923c" />}
           </button>
         </div>
       </div>
       {open && (
         <div style={{ padding: 12, paddingTop: 0 }}>
+          {/* Constraints for main node */}
+          <div
+            onMouseEnter={() => setHoverMainConstraints(true)}
+            onMouseLeave={() => setHoverMainConstraints(false)}
+          >
+            {hoverMainConstraints && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button title="Add constraint" onClick={addMainConstraint} style={{ ...iconBtn, color: '#fb923c' }}>+ Add constraint</button>
+              </div>
+            )}
+            {Array.isArray(node.constraints) && node.constraints.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                {node.constraints.map((c, idx) => (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0' }}>
+                    {editingConstraint && editingConstraint.scope === 'main' && editingConstraint.idx === idx ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input value={constraintTitleDraft} onChange={(e) => setConstraintTitleDraft(e.target.value)} style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', width: 160 }} />
+                        <input value={constraintPayoffDraft} onChange={(e) => setConstraintPayoffDraft(e.target.value)} style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', flex: 1 }} />
+                        <button title="Confirm" onClick={commitConstraint} style={iconBtn}><Check size={18} color="#22c55e" /></button>
+                        <button title="Cancel" onClick={cancelConstraint} style={iconBtn}><X size={18} color="#ef4444" /></button>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Shield size={16} color="#fb923c" fill="#fb923c" />
+                          <span style={{ fontWeight: 600, fontSize: 14, color: '#c7d2fe' }}>{c.title}</span>
+                          <button title="Edit" onClick={() => startEditConstraint('main', idx)} style={iconBtn}><Pencil size={14} color="#fb923c" /></button>
+                          <button title="Delete" onClick={() => deleteConstraint('main', idx)} style={iconBtn}><Trash2 size={14} color="#fb923c" /></button>
+                        </div>
+                        <div style={{ fontSize: 14, color: '#94a3b8' }}>{c.payoff}</div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           {Array.isArray(node.subData) && node.subData.length > 0 ? (
             node.subData.map((s, i) => (
               <div
@@ -141,20 +269,51 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
                     <button title="Cancel" onClick={cancelSub} style={iconBtn}><X size={18} color="#ef4444" /></button>
                   </div>
                 ) : (
-                  <>
-                    <span>{renderIcon(s.icon, 14)}</span>
-                    <span style={{ color: '#e2e8f0' }}>{s.label || 'Field'}</span>
-                    {hoverSubIdx === i && (
-                      <>
-                        <button title="Edit" onClick={() => startEditSub(i, s.label || '')} style={iconBtn}>
-                          <Pencil size={16} color="#a78bfa" />
-                        </button>
-                        <button title="Delete" onClick={() => onChange({ ...node, subData: node.subData!.filter((_, x) => x !== i) })} style={iconBtn}>
-                          <Trash2 size={16} color="#a78bfa" />
-                        </button>
-                      </>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>{renderIcon(s.icon, 14)}</span>
+                      <span style={{ color: '#e2e8f0' }}>{s.label || 'Field'}</span>
+                      {hoverSubIdx === i && (
+                        <button title="Add constraint" onClick={() => addSubConstraint(i)} style={{ ...iconBtn, color: '#fb923c', marginLeft: 8 }}>+ Add constraint</button>
+                      )}
+                      {hoverSubIdx === i && (
+                        <>
+                          <button title="Edit" onClick={() => startEditSub(i, s.label || '')} style={iconBtn}>
+                            <Pencil size={16} color="#fb923c" />
+                          </button>
+                          <button title="Delete" onClick={() => onChange({ ...node, subData: node.subData!.filter((_, x) => x !== i) })} style={iconBtn}>
+                            <Trash2 size={16} color="#fb923c" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {Array.isArray(s.constraints) && s.constraints.length > 0 && (
+                      <div style={{ marginLeft: 20 }}>
+                        {s.constraints.map((c, j) => (
+                          <div key={`c-${i}-${j}`} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0' }}>
+                            {editingConstraint && editingConstraint.scope === 'sub' && (editingConstraint as any).subIdx === i && editingConstraint.idx === j ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <input value={constraintTitleDraft} onChange={(e) => setConstraintTitleDraft(e.target.value)} style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', width: 160 }} />
+                                <input value={constraintPayoffDraft} onChange={(e) => setConstraintPayoffDraft(e.target.value)} style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', flex: 1 }} />
+                                <button title="Confirm" onClick={commitConstraint} style={iconBtn}><Check size={18} color="#22c55e" /></button>
+                                <button title="Cancel" onClick={cancelConstraint} style={iconBtn}><X size={18} color="#ef4444" /></button>
+                              </div>
+                            ) : (
+                              <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <Shield size={15} color="#fb923c" fill="#fb923c" />
+                              <span style={{ fontWeight: 600, fontSize: 14, color: '#c7d2fe' }}>{c.title}</span>
+                                  <button title="Edit" onClick={() => startEditConstraint('sub', j, i)} style={iconBtn}><Pencil size={14} color="#fb923c" /></button>
+                                  <button title="Delete" onClick={() => deleteConstraint('sub', j, i)} style={iconBtn}><Trash2 size={14} color="#fb923c" /></button>
+                                </div>
+                            <div style={{ fontSize: 14, color: '#94a3b8' }}>{c.payoff}</div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             ))

@@ -6,8 +6,10 @@ from call_groq import call_groq
 router = APIRouter()
 
 @router.post("/step3")
-def step3(meaning: str = Body(...), desc: str = Body(...)):
-    prompt = get_suggest_constraints_prompt(meaning, desc)
+def step3(schema: dict = Body(...)):
+    # Accept the full schema and ask AI to enrich it with constraints
+    schema_json = json.dumps(schema, ensure_ascii=False)
+    prompt = get_suggest_constraints_prompt(schema_json)
     print("[AI PROMPT][constraints]", prompt)
     ai = call_groq([
         {"role": "system", "content": "Always reply in English."},
@@ -15,7 +17,50 @@ def step3(meaning: str = Body(...), desc: str = Body(...)):
     ])
     print("[AI ANSWER][constraints]", ai)
     try:
+        # Try strict JSON parse first
         ai_obj = json.loads(ai)
-        return {"ai": ai_obj}
+        # Normalize to schema with mainData
+        if isinstance(ai_obj, dict):
+            if 'mains' in ai_obj and 'label' in ai_obj:
+                schema_norm = { 'label': ai_obj.get('label'), 'mainData': ai_obj.get('mains') }
+            elif 'mainData' in ai_obj and 'label' in ai_obj:
+                schema_norm = ai_obj
+            else:
+                # If AI returned only mains, wrap
+                mains = ai_obj.get('mains') or []
+                lbl = ai_obj.get('label') or 'Data'
+                schema_norm = { 'label': lbl, 'mainData': mains }
+            return {"ai": {"schema": schema_norm}}
+        return {"error": "Invalid AI constraints response"}
     except Exception as e:
-        return {"error": f"Failed to parse AI JSON: {str(e)}"} 
+        # Fallback: attempt to extract JSON object substring
+        try:
+            print("[AI PARSE][constraints] strict parse failed, attempting substring extraction")
+            if not ai or not isinstance(ai, str):
+                raise ValueError("Empty AI response")
+            start = ai.find('{')
+            end = ai.rfind('}')
+            if start == -1 or end == -1 or end <= start:
+                raise ValueError("No JSON object found")
+            snippet = ai[start:end+1]
+            ai_obj = json.loads(snippet)
+            if isinstance(ai_obj, dict):
+                if 'mains' in ai_obj and 'label' in ai_obj:
+                    schema_norm = { 'label': ai_obj.get('label'), 'mainData': ai_obj.get('mains') }
+                elif 'mainData' in ai_obj and 'label' in ai_obj:
+                    schema_norm = ai_obj
+                else:
+                    mains = ai_obj.get('mains') or []
+                    lbl = ai_obj.get('label') or 'Data'
+                    schema_norm = { 'label': lbl, 'mainData': mains }
+                return {"ai": {"schema": schema_norm}}
+            return {"error": "Invalid AI constraints response"}
+        except Exception as e2:
+            # Ultimate fallback: return the input schema (no constraints) so UI stays consistent
+            try:
+                orig = json.loads(schema_json)
+                fallback = { 'label': orig.get('label') or 'Data', 'mainData': orig.get('mains') or [] }
+                print("[AI PARSE][constraints] returning fallback schema without constraints")
+                return {"ai": {"schema": fallback}, "warning": f"Failed to parse AI JSON: {str(e2)}"}
+            except Exception:
+                return {"error": f"Failed to parse AI JSON: {str(e)}"}

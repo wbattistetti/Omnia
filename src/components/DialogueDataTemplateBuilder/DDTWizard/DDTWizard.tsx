@@ -50,14 +50,18 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const ai = result.ai || result;
       const schema = ai.schema;
       if (schema && Array.isArray(schema.mainData)) {
-        setDetectTypeIcon(ai.icon || null);
-        setSchemaRootLabel(schema.label || 'Data');
-        setSchemaMains((schema.mainData || []).map((m: any) => ({
+        const root = schema.label || 'Data';
+        const mains0: SchemaNode[] = (schema.mainData || []).map((m: any) => ({
           label: m.label || m.name || 'Field',
           type: m.type,
           icon: m.icon,
           subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type, icon: s.icon })) : [],
-        })));
+        }));
+        setDetectTypeIcon(ai.icon || null);
+        // Enrich constraints immediately, then show structure step
+        const enrichedRes = await enrichConstraintsFor(root, mains0);
+        setSchemaRootLabel((enrichedRes && enrichedRes.label) ? enrichedRes.label : root);
+        setSchemaMains((enrichedRes && enrichedRes.mains) ? enrichedRes.mains : mains0);
         setStep('structure');
         return;
       }
@@ -69,13 +73,56 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   };
 
   const handleStructureContinue = () => {
-    // For now, proceed with the first main only; future: iterate all mains
-    const first = schemaMains[0];
-    if (!first) return;
-    const sub = Array.isArray(first.subData) ? first.subData.map(s => s.label) : undefined;
-    setDataNode({ name: first.label, subData: sub });
-    dataNodeSet.current = true;
-    setStep('pipeline');
+    // Only fetch constraints and enrich the current structure view. Do not advance.
+    fetchConstraints();
+  };
+
+  const enrichConstraintsFor = async (rootLabelIn: string, mainsIn: SchemaNode[]) => {
+    try {
+      const schema = { label: rootLabelIn || 'Data', mains: mainsIn.map((m) => ({ label: m.label, type: m.type, icon: m.icon, subData: (m.subData || []).map(s => ({ label: s.label, type: s.type, icon: s.icon })) })) };
+      const res = await fetch(`${API_BASE}/step3`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(schema),
+      });
+      if (!res.ok) return;
+      const result = await res.json();
+      console.log('[constraints] raw result', result);
+      const enriched: any = (result && result.ai && result.ai.schema) ? result.ai.schema : {};
+      console.log('[constraints] enriched schema', enriched);
+      if (!!enriched && typeof enriched === 'object' && Array.isArray((enriched as any).mainData)) {
+        const norm = (v: any) => (v || '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+        const enrichedMap = new Map<string, any>();
+        for (const m of (enriched as any).mainData) enrichedMap.set(norm(m.label), m);
+        const nextMains = mainsIn.map((existing) => {
+          const em = enrichedMap.get(norm(existing.label));
+          let nextSub = existing.subData || [];
+          if (em && Array.isArray(em.subData) && nextSub.length > 0) {
+            const subMap = new Map<string, any>();
+            for (const s of em.subData) subMap.set(norm(s.label), s);
+            nextSub = nextSub.map((sub) => {
+              const es = subMap.get(norm(sub.label));
+              return { ...sub, constraints: es?.constraints || sub.constraints };
+            });
+          }
+          return { ...existing, constraints: em?.constraints || existing.constraints, subData: nextSub };
+        });
+        return { label: ((enriched as any).label || rootLabelIn) as string, mains: nextMains };
+      }
+      return { label: rootLabelIn, mains: mainsIn };
+    } catch (e) {
+      // ignore constraints errors for now
+      console.error('[constraints] error fetching constraints', e);
+      return { label: rootLabelIn, mains: mainsIn };
+    }
+  };
+
+  const fetchConstraints = async () => {
+    const enrichedRes = await enrichConstraintsFor(schemaRootLabel || 'Data', schemaMains);
+    if (enrichedRes) {
+      setSchemaRootLabel(enrichedRes.label);
+      setSchemaMains(enrichedRes.mains);
+    }
   };
 
   const handleAddMain = () => {
@@ -124,8 +171,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           onAddMain={handleAddMain}
         />
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button onClick={() => setStep('input')} style={{ background: 'transparent', color: '#a78bfa', border: '1px solid #4c1d95', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Back</button>
-          <button onClick={handleStructureContinue} style={{ background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Continue</button>
+          <button onClick={() => setStep('input')} style={{ background: 'transparent', color: '#fb923c', border: '1px solid #7c2d12', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Back</button>
+          <button onClick={handleStructureContinue} style={{ background: '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Suggest validation rules</button>
           <button onClick={() => handleClose()} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
         </div>
       </div>
