@@ -18,13 +18,29 @@ def step2(user_desc: str = Body(...)):
         ai_obj = json.loads(ai)
         # New schema-aware shape: { label, mains: [...] }
         if isinstance(ai_obj, dict) and 'mains' in ai_obj and 'label' in ai_obj:
+            # Preserve icons if present on mains and subData
+            mains = ai_obj.get('mains') or []
+            def norm_node(n):
+                return {
+                    'label': n.get('label'),
+                    'type': n.get('type'),
+                    'icon': n.get('icon'),
+                    'subData': [
+                        {
+                            'label': s.get('label'),
+                            'type': s.get('type'),
+                            'icon': s.get('icon'),
+                            'subData': s.get('subData') or []
+                        } for s in (n.get('subData') or [])
+                    ]
+                }
             schema = {
                 'label': ai_obj.get('label') or 'Data',
-                'mainData': ai_obj.get('mains') or []
+                'mainData': [norm_node(m) for m in mains]
             }
             normalized = {
                 'type': schema['label'],            # backward compatibility
-                'icon': 'HelpCircle',               # default icon if not provided
+                'icon': ai_obj.get('icon') or 'HelpCircle',
                 'schema': schema                    # normalized schema for frontend
             }
             return {"ai": normalized}

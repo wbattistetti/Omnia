@@ -4,6 +4,7 @@ import MainDataWizard from './MainDataWizard';
 export interface SchemaNode {
   label: string;
   type?: string;
+  icon?: string;
   subData?: SchemaNode[];
 }
 
@@ -29,7 +30,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps> = ({ rootLabel, main
     const next = mains.slice();
     const node = { ...(next[idx] || { label: '' }) } as SchemaNode;
     node.subData = Array.isArray(node.subData) ? node.subData.slice() : [];
-    node.subData.push({ label: 'New field', type: 'text' });
+    node.subData.push({ label: 'New field', type: 'text', icon: 'FileText' });
     next[idx] = node;
     onChangeMains(next);
   };

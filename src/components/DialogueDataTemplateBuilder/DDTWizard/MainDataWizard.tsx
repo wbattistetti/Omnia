@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { SchemaNode } from './MainDataCollection';
-import { Pencil, Trash2, ChevronDown, ChevronRight, Plus, Check, X } from 'lucide-react';
+import { Pencil, Trash2, ChevronDown, ChevronRight, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle } from 'lucide-react';
 
 interface MainDataWizardProps {
   node: SchemaNode;
@@ -19,6 +19,26 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
   const [editingSubIdx, setEditingSubIdx] = useState<number | null>(null);
   const [hoverSubIdx, setHoverSubIdx] = useState<number | null>(null);
   const [subDraft, setSubDraft] = useState<string>('');
+
+  const renderIcon = (name?: string, size: number = 16) => {
+    const color = '#a78bfa';
+    switch ((name || '').trim()) {
+      case 'User': return <User size={size} color={color} />;
+      case 'MapPin': return <MapPin size={size} color={color} />;
+      case 'Calendar': return <Calendar size={size} color={color} />;
+      case 'Type': return <TypeIcon size={size} color={color} />;
+      case 'Mail': return <Mail size={size} color={color} />;
+      case 'Phone': return <Phone size={size} color={color} />;
+      case 'Hash': return <Hash size={size} color={color} />;
+      case 'Globe': return <Globe size={size} color={color} />;
+      case 'Home': return <Home size={size} color={color} />;
+      case 'Building': return <Building size={size} color={color} />;
+      case 'HelpCircle': return <HelpCircle size={size} color={color} />;
+      case 'FileText':
+      default:
+        return <FileText size={size} color={color} />;
+    }
+  };
 
   const commitMain = () => {
     setIsEditingMain(false);
@@ -58,6 +78,7 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
           {!isEditingMain ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span>{renderIcon(node.icon, 16)}</span>
               <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{node.label || 'Field'}</span>
               {hoverHeader && (
                 <>
@@ -121,6 +142,7 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
                   </div>
                 ) : (
                   <>
+                    <span>{renderIcon(s.icon, 14)}</span>
                     <span style={{ color: '#e2e8f0' }}>{s.label || 'Field'}</span>
                     {hoverSubIdx === i && (
                       <>

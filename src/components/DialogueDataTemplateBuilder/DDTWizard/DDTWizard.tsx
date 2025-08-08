@@ -13,6 +13,7 @@ interface DataNode {
 }
 
 const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void }> = ({ onCancel, onComplete }) => {
+  const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
   const [step, setStep] = useState<string>('input');
   const [userDesc, setUserDesc] = useState('');
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
@@ -38,8 +39,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     setStep('loading');
     setErrorMsg(null);
-    try {
-      const res = await fetch('/step2', {
+      try {
+        const res = await fetch(`${API_BASE}/step2`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userDesc.trim()),
@@ -54,7 +55,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         setSchemaMains((schema.mainData || []).map((m: any) => ({
           label: m.label || m.name || 'Field',
           type: m.type,
-          subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type })) : [],
+          icon: m.icon,
+          subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type, icon: s.icon })) : [],
         })));
         setStep('structure');
         return;
