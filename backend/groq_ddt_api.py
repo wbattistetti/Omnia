@@ -5,6 +5,9 @@ import requests
 import json
 from ai_steps.step3_suggest_constraints import router as step3_router
 from ai_steps.step2_detect_type import router as step2_router
+from ai_steps.constraint_messages import router as constraint_messages_router
+from ai_steps.generate_validator import router as generate_validator_router
+from ai_steps.generate_tests import router as generate_tests_router
 from ai_steps.stepNoMatch import router as stepNoMatch_router
 from ai_steps.stepNoInput import router as stepNoInput_router
 from ai_steps.stepConfirmation import router as stepConfirmation_router
@@ -23,13 +26,16 @@ MEANINGS = [
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.include_router(step2_router)
 app.include_router(step3_router)
+app.include_router(constraint_messages_router)
+app.include_router(generate_validator_router)
+app.include_router(generate_tests_router)
 app.include_router(stepNoMatch_router)
 app.include_router(stepNoInput_router)
 app.include_router(stepConfirmation_router)

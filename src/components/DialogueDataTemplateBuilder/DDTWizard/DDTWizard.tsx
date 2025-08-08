@@ -5,6 +5,12 @@ import WizardPipelineStep from './WizardPipelineStep';
 import WizardErrorStep from './WizardErrorStep';
 import WizardSupportModal from './WizardSupportModal';
 import MainDataCollection, { SchemaNode } from './MainDataCollection';
+import { computeWorkPlan } from './workPlan';
+import { buildStepPlan } from './stepPlan';
+import { runPlanDry, runPlanCollect, PlanRunResult } from './planRunner';
+import { buildArtifactStore } from './artifactStore';
+import { assembleFinalDDT } from './assembleFinal';
+import ResponseEditor from '../../ActEditor/ResponseEditor';
 
 // Tipo per dataNode
 interface DataNode {
@@ -25,6 +31,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Schema editing state (from detect schema)
   const [schemaRootLabel, setSchemaRootLabel] = useState<string>('');
   const [schemaMains, setSchemaMains] = useState<SchemaNode[]>([]);
+  const [collectCount, setCollectCount] = useState<number | null>(null);
+  const [artifacts, setArtifacts] = useState<PlanRunResult[] | null>(null);
+  const [assembled, setAssembled] = useState<any | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
 
   // Memo per dataNode stabile
   const stableDataNode = useMemo(() => dataNode, [dataNode]);
@@ -162,6 +172,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Struttura: editor dei main data (primo step dopo detect)
   if (step === 'structure') {
+    const wp = computeWorkPlan(schemaMains, { stepsPerConstraint: 3 });
+    const preview = buildStepPlan(schemaMains);
     return (
       <div style={{ padding: 16 }}>
         <MainDataCollection
@@ -170,10 +182,79 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           onChangeMains={setSchemaMains}
           onAddMain={handleAddMain}
         />
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ color: '#94a3b8' }}>
+            Total steps: <span style={{ color: '#fb923c', fontWeight: 700 }}>{wp.total}</span> (data: {wp.numData}, constraints: {wp.numConstraints})
+          </div>
           <button onClick={() => setStep('input')} style={{ background: 'transparent', color: '#fb923c', border: '1px solid #7c2d12', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Back</button>
           <button onClick={handleStructureContinue} style={{ background: '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Suggest validation rules</button>
           <button onClick={() => handleClose()} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => runPlanDry(schemaMains)} style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Run plan (dry)</button>
+          <button onClick={async () => { const r = await runPlanCollect(schemaMains); setArtifacts(r); setCollectCount(r.length); console.log('[planRunner] collected', r); alert(`Collected ${r.length} step results. Check console.`); }} style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Run plan (collect)</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => {
+              try {
+                if (!artifacts) return;
+                const store = buildArtifactStore(artifacts);
+                const finalDDT = assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, store);
+                setAssembled(finalDDT);
+                console.log('[DDT Assembler] final', finalDDT);
+                alert('DDT assembled. Check console.');
+              } catch (e) {
+                console.error('Assemble error', e);
+                alert('Assemble error, see console');
+              }
+            }}
+            disabled={!artifacts}
+            style={{ background: artifacts ? '#fb923c' : '#334155', color: artifacts ? '#0b1220' : '#94a3b8', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: artifacts ? 'pointer' : 'not-allowed' }}
+          >
+            Assemble DDT
+          </button>
+          <button
+            onClick={() => setShowEditor(true)}
+            disabled={!assembled}
+            style={{ background: assembled ? '#fb923c' : '#334155', color: assembled ? '#0b1220' : '#94a3b8', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: assembled ? 'pointer' : 'not-allowed' }}
+          >
+            Open in Response Editor
+          </button>
+          <button
+            onClick={() => {
+              if (!assembled) return;
+              const save = (filename: string, data: any) => {
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+              };
+              save(`${(assembled.label || 'DDT').replace(/\s+/g, '_')}.json`, assembled);
+              save(`${(assembled.label || 'DDT').replace(/\s+/g, '_')}.translations.en.json`, assembled.translations?.en || {});
+            }}
+            disabled={!assembled}
+            style={{ background: assembled ? '#fb923c' : '#334155', color: assembled ? '#0b1220' : '#94a3b8', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: assembled ? 'pointer' : 'not-allowed' }}
+          >
+            Export JSON
+          </button>
+        </div>
+        {artifacts && (
+          <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12 }}>Artifacts ready for assemble.</div>
+        )}
+        {showEditor && assembled && (
+          <div style={{ marginTop: 12, border: '1px solid #475569', borderRadius: 8, overflow: 'hidden' }}>
+            <ResponseEditor ddt={assembled} />
+          </div>
+        )}
+        <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12 }}>
+          Preview sequence (first 20): {preview.slice(0, 20).map(p => `${p.path}·${p.type}`).join('  |  ')}
+          {collectCount !== null && (
+            <span style={{ marginLeft: 12 }}>Collected: <span style={{ color: '#fb923c' }}>{collectCount}</span></span>
+          )}
         </div>
       </div>
     );
