@@ -246,8 +246,38 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12 }}>Artifacts ready for assemble.</div>
         )}
         {showEditor && assembled && (
-          <div style={{ marginTop: 12, border: '1px solid #475569', borderRadius: 8, overflow: 'hidden' }}>
-            <ResponseEditor ddt={assembled} />
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(2,6,23,0.7)',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <div
+              style={{
+                width: '92%',
+                maxWidth: 1200,
+                maxHeight: '90vh',
+                background: '#0b1220',
+                border: '1px solid #475569',
+                borderRadius: 12,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid #334155', background: '#0f172a' }}>
+                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>Response Editor (preview)</div>
+                <button onClick={() => setShowEditor(false)} style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Close</button>
+              </div>
+              <div style={{ flex: 1, overflow: 'auto', background: '#0b1220' }}>
+                <ResponseEditor ddt={assembled} />
+              </div>
+            </div>
           </div>
         )}
         <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12 }}>

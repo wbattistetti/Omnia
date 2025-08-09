@@ -74,9 +74,10 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
           stepKeys={stepKeys}
           selectedStepKey={selectedStepKey}
           onSelectStep={setSelectedStepKey}
+          node={selectedNode}
         />
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', borderRadius: 16, margin: 16, boxShadow: '0 2px 8px #e0d7f7' }}>
-          <NodeViewer node={selectedNode} stepKey={selectedStepKey} />
+          <NodeViewer node={selectedNode} stepKey={selectedStepKey} translations={(ddt?.translations && (ddt.translations.en || ddt.translations)) || {}} />
         </div>
       </div>
     </div>

@@ -4,10 +4,32 @@ interface StepsStripProps {
   stepKeys: string[];
   selectedStepKey: string;
   onSelectStep: (stepKey: string) => void;
+  node?: any; // optional, used to label constraint steps with AI-provided titles
 }
 
-export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep }: StepsStripProps) {
+export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, node }: StepsStripProps) {
   if (!stepKeys.length) return null;
+
+  const baseLabels: Record<string, string> = {
+    start: 'Chiedo il dato',
+    noMatch: 'Non capisco',
+    noInput: 'Non sento',
+    confirmation: 'Devo confermare',
+    success: 'Ho capito!'
+  };
+
+  const getFriendlyLabel = (key: string): string => {
+    if (baseLabels[key]) return baseLabels[key];
+    const m = key.match(/^constraint\.(.+?)\.(r1|r2)$/);
+    if (m && node && Array.isArray(node.constraints)) {
+      const kind = m[1];
+      const r = m[2];
+      const c = node.constraints.find((x: any) => (x?.kind || '').toString() === kind);
+      if (c && c.title) return `rule: ${c.title} ${r}`;
+      if (c) return `rule: ${kind} ${r}`;
+    }
+    return key;
+  };
   return (
     <div style={{ display: 'flex', gap: 8, padding: '0 24px 8px 24px', overflowX: 'auto' }}>
       {stepKeys.map((key) => (
@@ -27,7 +49,7 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep }: 
             minWidth: 0,
           }}
         >
-          {key}
+          {getFriendlyLabel(key)}
         </button>
       ))}
     </div>
