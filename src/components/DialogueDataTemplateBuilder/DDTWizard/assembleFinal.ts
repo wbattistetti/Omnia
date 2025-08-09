@@ -37,9 +37,15 @@ function extractBasePromptKeys(stepPayload: any): Record<string, string> {
   return out;
 }
 
-export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore): AssembledDDT {
+type AssembleOptions = {
+  escalationCounts?: Partial<Record<'noMatch' | 'noInput' | 'confirmation', number>>;
+};
+
+export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): AssembledDDT {
   const ddtId = `${rootLabel || 'DDT'}_${uuidv4()}`;
   const translations: Translations = {};
+  const defaultEscalations = { noMatch: 3, noInput: 3, confirmation: 2 } as Record<string, number>;
+  const counts = { ...defaultEscalations, ...(options?.escalationCounts || {}) } as Record<string, number>;
 
   const assembleNode = (node: SchemaNode, nodePath: string[]): any => {
     const nodeId = uuidv4();
@@ -206,20 +212,19 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
       }
       assembled.messages[stepKey] = { textKey: defaultKey };
       const isAsk = ['text', 'email', 'number', 'date'].includes((node.type || '').toString());
+      const baseAction = {
+        actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
+        actionInstanceId: `a_${uuidv4()}`,
+        parameters: [{ parameterId: 'text', value: defaultKey }]
+      };
+      const numEsc = counts[stepKey] || 1;
+      const escalations = Array.from({ length: numEsc }).map(() => ({
+        escalationId: `e_${uuidv4()}`,
+        actions: [baseAction]
+      }));
       assembled.steps[stepKey] = {
         type: stepKey,
-        escalations: [
-          {
-            escalationId: `e_${uuidv4()}`,
-            actions: [
-              {
-                actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
-                actionInstanceId: `a_${uuidv4()}`,
-                parameters: [{ parameterId: 'text', value: defaultKey }]
-              }
-            ]
-          }
-        ]
+        escalations
       };
     }
 

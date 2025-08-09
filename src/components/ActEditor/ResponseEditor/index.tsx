@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import DDTHeader from './DDTHeader';
 import { Undo2, Redo2, Plus } from 'lucide-react';
 import StepsStrip from './StepsStrip';
-import NodeViewer from './NodeViewer';
+import StepEditor from './StepEditor';
 import {
   getMainDataList,
   getSubDataList,
@@ -14,7 +14,16 @@ import {
 } from './ddtSelectors';
 
 export default function ResponseEditor({ ddt }: { ddt: any }) {
-  const mainList = useMemo(() => getMainDataList(ddt), [ddt]);
+  // Local editable copies
+  const [localDDT, setLocalDDT] = useState<any>(ddt);
+  const [localTranslations, setLocalTranslations] = useState<any>((ddt?.translations && (ddt.translations.en || ddt.translations)) || {});
+
+  useEffect(() => {
+    setLocalDDT(ddt);
+    setLocalTranslations((ddt?.translations && (ddt.translations.en || ddt.translations)) || {});
+  }, [ddt]);
+
+  const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
   const [selectedMainIndex, setSelectedMainIndex] = useState(0);
   const [selectedSubIndex, setSelectedSubIndex] = useState<number | null>(null);
 
@@ -53,6 +62,34 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
     // stepKey sarà aggiornato dall'useEffect
   };
 
+  // Editing helpers
+  const updateSelectedNode = (updater: (node: any) => any) => {
+    setLocalDDT((prev: any) => {
+      if (!prev) return prev;
+      const copy = JSON.parse(JSON.stringify(prev));
+      const mains = getMainDataList(copy);
+      const main = mains[selectedMainIndex];
+      if (!main) return prev;
+      if (selectedSubIndex == null) {
+        const updated = updater(main) || main;
+        mains[selectedMainIndex] = updated;
+      } else {
+        const subList = getSubDataList(main);
+        const sub = subList[selectedSubIndex];
+        if (!sub) return prev;
+        const subIdx = (main.subData || []).findIndex((s: any) => s.label === sub.label);
+        const updated = updater(sub) || sub;
+        main.subData[subIdx] = updated;
+      }
+      copy.mainData = mains;
+      return copy;
+    });
+  };
+
+  const handleUpdateTranslation = (key: string, value: string) => {
+    setLocalTranslations((prev: any) => ({ ...prev, [key]: value }));
+  };
+
   // Layout
   return (
     <div style={{ display: 'flex', height: '100%', background: '#faf7ff' }}>
@@ -87,14 +124,36 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
             </button>
           </div>
         </div>
-        <StepsStrip
+          <StepsStrip
           stepKeys={stepKeys}
           selectedStepKey={selectedStepKey}
           onSelectStep={setSelectedStepKey}
           node={selectedNode}
         />
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', borderRadius: 16, margin: 16, boxShadow: '0 2px 8px #e0d7f7' }}>
-          <NodeViewer node={selectedNode} stepKey={selectedStepKey} translations={(ddt?.translations && (ddt.translations.en || ddt.translations)) || {}} />
+          <StepEditor
+            node={selectedNode}
+            stepKey={selectedStepKey}
+            translations={localTranslations}
+            onUpdateTranslation={handleUpdateTranslation}
+            onDeleteEscalation={(idx) => updateSelectedNode((node) => {
+              const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+              const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+              st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
+              next.steps[selectedStepKey] = st;
+              return next;
+            })}
+            onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
+              const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+              const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+              const esc = (st.escalations || [])[escIdx];
+              if (!esc) return next;
+              esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
+              st.escalations[escIdx] = esc;
+              next.steps[selectedStepKey] = st;
+              return next;
+            })}
+          />
         </div>
       </div>
     </div>
