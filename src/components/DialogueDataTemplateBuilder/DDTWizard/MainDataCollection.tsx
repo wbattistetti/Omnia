@@ -49,10 +49,11 @@ const MainDataCollection: React.FC<MainDataCollectionProps> = ({ rootLabel, main
     onChangeMains(next);
   };
 
+  const showRootLabel = mains.length > 1;
   return (
     <div style={{ background: '#0f172a', borderRadius: 12, padding: 16, color: '#e2e8f0', marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontWeight: 700 }}>{`Create a Dialogue for "${rootLabel}"`}</div>
+        <div style={{ fontWeight: 700 }}>{showRootLabel ? `Create a Dialogue for "${rootLabel}"` : 'Create a Dialogue for'}</div>
         <button onClick={onAddMain} style={{ background: '#7c3aed', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer' }}>Add main data</button>
       </div>
       <div>
