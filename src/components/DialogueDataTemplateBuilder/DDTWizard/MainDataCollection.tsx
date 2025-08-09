@@ -29,7 +29,7 @@ interface MainDataCollectionProps {
   onAddMain: () => void;
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps> = ({ rootLabel, mains, onChangeMains, onAddMain }) => {
+const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number> }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath }) => {
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
     next[idx] = nextNode;
@@ -56,6 +56,12 @@ const MainDataCollection: React.FC<MainDataCollectionProps> = ({ rootLabel, main
         <div style={{ fontWeight: 700 }}>{showRootLabel ? `Create a Dialogue for "${rootLabel}"` : 'Create a Dialogue for'}</div>
         <button onClick={onAddMain} style={{ background: '#7c3aed', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer' }}>Add main data</button>
       </div>
+      {mains.length > 1 && (
+        <div style={{ height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden', marginBottom: 10 }}>
+          {/* Root progress bar is passed via progressByPath under key '__root__' by parent */}
+          <div style={{ width: `${Math.round(((progressByPath as any)?.__root__ || 0) * 100)}%`, height: '100%', background: '#fb923c' }} />
+        </div>
+      )}
       <div>
         {mains.map((m, i) => (
           <MainDataWizard
@@ -64,6 +70,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps> = ({ rootLabel, main
             onChange={(n) => handleChangeAt(i, n)}
             onRemove={() => handleRemoveAt(i)}
             onAddSub={() => handleAddSubAt(i)}
+            progressByPath={progressByPath}
           />
         ))}
         {mains.length === 0 && (

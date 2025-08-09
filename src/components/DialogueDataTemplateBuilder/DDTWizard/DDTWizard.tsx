@@ -6,7 +6,8 @@ import WizardErrorStep from './WizardErrorStep';
 import WizardSupportModal from './WizardSupportModal';
 import MainDataCollection, { SchemaNode } from './MainDataCollection';
 import { computeWorkPlan } from './workPlan';
-import { runPlanCollect, PlanRunResult } from './planRunner';
+import { buildStepPlan } from './stepPlan';
+import { PlanRunResult } from './planRunner';
 import { buildArtifactStore } from './artifactStore';
 import { assembleFinalDDT } from './assembleFinal';
 import ResponseEditor from '../../ActEditor/ResponseEditor';
@@ -33,6 +34,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [, setArtifacts] = useState<PlanRunResult[] | null>(null);
   const [assembled, setAssembled] = useState<any | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progressByPath, setProgressByPath] = useState<Record<string, number>>({});
+  const [, setTotalByPath] = useState<Record<string, number>>({});
+  const [rootProgress, setRootProgress] = useState<number>(0);
 
   // Memo per dataNode stabile
   const stableDataNode = useMemo(() => dataNode, [dataNode]);
@@ -161,7 +166,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Struttura: editor dei main data (primo step dopo detect)
   if (step === 'structure') {
-    const wp = computeWorkPlan(schemaMains, { stepsPerConstraint: 3 });
+    computeWorkPlan(schemaMains, { stepsPerConstraint: 3 });
     return (
       <div style={{ padding: 16 }}>
         <MainDataCollection
@@ -169,6 +174,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           mains={schemaMains}
           onChangeMains={setSchemaMains}
           onAddMain={handleAddMain}
+          progressByPath={{ ...progressByPath, __root__: rootProgress }}
         />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -176,17 +182,90 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             <button onClick={() => handleClose()} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
             <button
               onClick={async () => {
-                // Continue: run plan collect, assemble, open editor (no alerts)
-                const r = await runPlanCollect(schemaMains);
-                setArtifacts(r);
-                const store = buildArtifactStore(r);
+                if (isProcessing) return;
+                setIsProcessing(true);
+                // Build plan and totals
+                const plan = buildStepPlan(schemaMains);
+                const total: Record<string, number> = {};
+                const done: Record<string, number> = {};
+                for (const s of plan) { total[s.path] = (total[s.path] || 0) + 1; }
+                setTotalByPath(total);
+                setProgressByPath({});
+
+                const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+                const results: PlanRunResult[] = [];
+
+                const callStep = async (step: any) => {
+                  // Resolve datum by path
+                  const parts = step.path.split('/');
+                  const norm = (s: string) => s.replace(/\//g, '-');
+                  const findDatum = () => {
+                    const main = schemaMains.find(m => norm(m.label) === parts[0]);
+                    if (!main) return null;
+                    if (parts.length === 1) return main;
+                    const sub = (main.subData || []).find(s => norm(s.label) === parts[1]);
+                    return sub || null;
+                  };
+                  const datum: any = findDatum();
+                  if (!datum) return;
+
+                  try {
+                    if (step.type === 'constraintMessages') {
+                      const body = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
+                      const res = await fetch(`${API_BASE}/api/constraintMessages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                      results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
+                    } else if (step.type === 'validator') {
+                      const body = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
+                      const res = await fetch(`${API_BASE}/api/validator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                      results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
+                    } else if (step.type === 'testset') {
+                      const datumBody = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
+                      const res = await fetch(`${API_BASE}/api/testset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ datum: datumBody, notes: [] }) });
+                      results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
+                    } else {
+                      const meaning = parts[parts.length - 1];
+                      let endpoint = '';
+                      switch (step.type) {
+                        case 'start': endpoint = '/api/startPrompt'; break;
+                        case 'noMatch': endpoint = '/api/stepNoMatch'; break;
+                        case 'noInput': endpoint = '/api/stepNoInput'; break;
+                        case 'confirmation': endpoint = '/api/stepConfirmation'; break;
+                        case 'success': endpoint = '/api/stepSuccess'; break;
+                      }
+                      if (endpoint) {
+                        const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ meaning, desc: '' }) });
+                        results.push({ step: { path: step.path, type: step.type }, payload: await res.json() });
+                      }
+                    }
+                  } finally {
+                    done[step.path] = (done[step.path] || 0) + 1;
+                    const nextProg: Record<string, number> = {};
+                    for (const p of Object.keys(total)) nextProg[p] = (done[p] || 0) / (total[p] || 1);
+                    setProgressByPath(nextProg);
+                    const sumDone = Object.values(done).reduce((a, b) => a + (b || 0), 0);
+                    const sumTotal = Object.values(total).reduce((a, b) => a + (b || 0), 0);
+                    setRootProgress(sumTotal ? sumDone / sumTotal : 0);
+                  }
+                };
+
+                for (const step of plan) {
+                  // sequential to animate progress
+                  /* eslint-disable no-await-in-loop */
+                  await callStep(step);
+                }
+
+                setIsProcessing(false);
+                setArtifacts(results);
+                const store = buildArtifactStore(results);
                 const finalDDT = assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, store);
                 setAssembled(finalDDT);
                 setShowEditor(true);
               }}
-              style={{ background: '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}
+              disabled={isProcessing}
+              style={{ background: isProcessing ? '#fbbf24' : '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: isProcessing ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              Continue
+              {isProcessing && (<span className="spinner" style={{ width: 14, height: 14, border: '2px solid #0b1220', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />)}
+              {isProcessing ? 'Processing…' : 'Continue'}
             </button>
           </div>
         </div>

@@ -11,7 +11,7 @@ interface MainDataWizardProps {
 
 const iconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' };
 
-const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemove, onAddSub }) => {
+const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<string, number> }> = ({ node, onChange, onRemove, onAddSub, progressByPath }) => {
   const [open, setOpen] = useState(false);
   const [isEditingMain, setIsEditingMain] = useState(false);
   const [labelDraft, setLabelDraft] = useState(node.label || '');
@@ -209,6 +209,19 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
           </button>
         </div>
       </div>
+      {/* main progress bar */}
+      {(() => {
+        const path = node.label;
+        const val = progressByPath ? progressByPath[path] : undefined;
+        if (typeof val === 'number') {
+          return (
+            <div style={{ height: 4, background: '#1f2937', borderRadius: 9999, overflow: 'hidden', margin: '0 12px' }}>
+              <div style={{ width: `${Math.round(val * 100)}%`, height: '100%', background: '#fb923c' }} />
+            </div>
+          );
+        }
+        return null;
+      })()}
       {open && (
         <div style={{ padding: 12, paddingTop: 0 }}>
           {/* Constraints for main node */}
@@ -287,6 +300,20 @@ const MainDataWizard: React.FC<MainDataWizardProps> = ({ node, onChange, onRemov
                         </>
                       )}
                     </div>
+                    {/* sub progress bar */}
+                    {(() => {
+                      const path = `${node.label}/${s.label}`;
+                      const val = progressByPath ? progressByPath[path] : undefined;
+                      if (typeof val === 'number') {
+                        return (
+                          <div style={{ height: 3, background: '#1f2937', borderRadius: 9999, overflow: 'hidden', marginLeft: 22, marginTop: 4 }}>
+                            <div style={{ width: `${Math.round(val * 100)}%`, height: '100%', background: '#fb923c' }} />
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
                     {Array.isArray(s.constraints) && s.constraints.length > 0 && (
                       <div style={{ marginLeft: 20 }}>
                         {s.constraints.map((c, j) => (
