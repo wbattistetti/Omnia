@@ -10,7 +10,7 @@ import { buildStepPlan } from './stepPlan';
 import { PlanRunResult } from './planRunner';
 import { buildArtifactStore } from './artifactStore';
 import { assembleFinalDDT } from './assembleFinal';
-import ResponseEditor from '../../ActEditor/ResponseEditor';
+// ResponseEditor will be opened by sidebar after onComplete
 
 // Tipo per dataNode
 interface DataNode {
@@ -31,9 +31,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Schema editing state (from detect schema)
   const [schemaRootLabel, setSchemaRootLabel] = useState<string>('');
   const [schemaMains, setSchemaMains] = useState<SchemaNode[]>([]);
-  const [, setArtifacts] = useState<PlanRunResult[] | null>(null);
-  const [assembled, setAssembled] = useState<any | null>(null);
-  const [showEditor, setShowEditor] = useState(false);
+  // removed local artifacts/editor state; we now rely on onComplete to open editor via sidebar
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressByPath, setProgressByPath] = useState<Record<string, number>>({});
   const [, setTotalByPath] = useState<Record<string, number>>({});
@@ -52,7 +50,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     setStep('loading');
     setErrorMsg(null);
-      try {
+    try {
         const res = await fetch(`${API_BASE}/step2`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -70,7 +68,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           icon: m.icon,
           subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type, icon: s.icon })) : [],
         }));
-        setDetectTypeIcon(ai.icon || null);
+      setDetectTypeIcon(ai.icon || null);
         // Enrich constraints immediately, then show structure step
         const enrichedRes = await enrichConstraintsFor(root, mains0);
         setSchemaRootLabel((enrichedRes && enrichedRes.label) ? enrichedRes.label : root);
@@ -255,11 +253,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                 }
 
                 setIsProcessing(false);
-                setArtifacts(results);
                 const store = buildArtifactStore(results);
                 const finalDDT = assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, store);
-                setAssembled(finalDDT);
-                setShowEditor(true);
+                // chiudi wizard e notifica il parent per aggiornare lista e aprire editor
+                if (onComplete) {
+                  onComplete(finalDDT);
+                }
+                setClosed(true);
               }}
               disabled={isProcessing}
               style={{ background: isProcessing ? '#fbbf24' : '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: isProcessing ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
@@ -269,41 +269,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             </button>
           </div>
         </div>
-        {showEditor && assembled && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(2,6,23,0.7)',
-              zIndex: 9999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <div
-              style={{
-                width: '92%',
-                maxWidth: 1200,
-                maxHeight: '90vh',
-                background: '#0b1220',
-                border: '1px solid #475569',
-                borderRadius: 12,
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid #334155', background: '#0f172a' }}>
-                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>Response Editor (preview)</div>
-                <button onClick={() => setShowEditor(false)} style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Close</button>
-              </div>
-              <div style={{ flex: 1, overflow: 'auto', background: '#0b1220' }}>
-                <ResponseEditor ddt={assembled} />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* editor modal removed: sidebar will open editor after onComplete */}
         {/* debug removed */}
       </div>
     );

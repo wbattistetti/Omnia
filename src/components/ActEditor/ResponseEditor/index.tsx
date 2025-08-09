@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Sidebar from './Sidebar';
 import DDTHeader from './DDTHeader';
+import { Undo2, Redo2, Plus } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import NodeViewer from './NodeViewer';
 import {
@@ -63,13 +64,29 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
         />
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <DDTHeader
-          main={mainList[selectedMainIndex]}
-          subList={getSubDataList(mainList[selectedMainIndex])}
-          selectedSubIndex={selectedSubIndex}
-          onSelectMain={handleSelectMainHeader}
-          onSelectSub={handleSelectSub}
-        />
+        {/* Header bar arancione con pill main/sub e comandi */}
+        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f59e0b1a', background: '#0b1220' }}>
+          <div style={{ flex: 1 }}>
+            <DDTHeader
+              main={mainList[selectedMainIndex]}
+              subList={getSubDataList(mainList[selectedMainIndex])}
+              selectedSubIndex={selectedSubIndex}
+              onSelectMain={handleSelectMainHeader}
+              onSelectSub={handleSelectSub}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button title="Undo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <Undo2 size={16} />
+            </button>
+            <button title="Redo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <Redo2 size={16} />
+            </button>
+            <button title="Add constraint" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <Plus size={16} /> <span>Add constraint</span>
+            </button>
+          </div>
+        </div>
         <StepsStrip
           stepKeys={stepKeys}
           selectedStepKey={selectedStepKey}
