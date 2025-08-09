@@ -36,6 +36,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [progressByPath, setProgressByPath] = useState<Record<string, number>>({});
   const [, setTotalByPath] = useState<Record<string, number>>({});
   const [rootProgress, setRootProgress] = useState<number>(0);
+  const [playChime, setPlayChime] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem('ddtWizard.playChime');
+      if (v === null) return true; // default true
+      return v === '1';
+    } catch {
+      return true;
+    }
+  });
 
   // Memo per dataNode stabile
   const stableDataNode = useMemo(() => dataNode, [dataNode]);
@@ -174,7 +183,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           onAddMain={handleAddMain}
           progressByPath={{ ...progressByPath, __root__: rootProgress }}
         />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#e2e8f0', opacity: 0.9, fontSize: 12 }}>
+            <input
+              type="checkbox"
+              checked={playChime}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setPlayChime(v);
+                try { localStorage.setItem('ddtWizard.playChime', v ? '1' : '0'); } catch {}
+              }}
+            />
+            <span>Play chime on completion</span>
+          </label>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => setStep('input')} style={{ background: 'transparent', color: '#fb923c', border: '1px solid #7c2d12', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Back</button>
             <button onClick={() => handleClose()} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
@@ -255,6 +276,25 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                 setIsProcessing(false);
                 const store = buildArtifactStore(results);
                 const finalDDT = assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, store);
+                // optional chime to signal completion
+                if (playChime) {
+                  try {
+                    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    o.type = 'sine';
+                    o.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+                    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+                    g.gain.exponentialRampToValueAtTime(0.2, audioCtx.currentTime + 0.01);
+                    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
+                    o.connect(g);
+                    g.connect(audioCtx.destination);
+                    o.start();
+                    o.stop(audioCtx.currentTime + 0.35);
+                  } catch (_) {
+                    // ignore audio errors (e.g., autoplay restrictions)
+                  }
+                }
                 // chiudi wizard e notifica il parent per aggiornare lista e aprire editor
                 if (onComplete) {
                   onComplete(finalDDT);

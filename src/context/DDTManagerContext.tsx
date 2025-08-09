@@ -1,16 +1,20 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { getAllDialogueTemplates } from '../services/ProjectDataService';
+import { getAllDialogueTemplates, getIDETranslations, getDataDialogueTranslations } from '../services/ProjectDataService';
 
 interface DDTManagerContextType {
   ddtList: any[];
   selectedDDT: any | null;
   isLoadingDDT: boolean;
   loadDDTError: string | null;
+  ideTranslations: Record<string, string>;
+  dataDialogueTranslations: Record<string, string>;
+  setDataDialogueTranslations: (t: Record<string, string>) => void;
   createDDT: (ddt: any) => void;
   openDDT: (ddt: any) => void;
   closeDDT: () => void;
   deleteDDT: (id: string) => void;
   loadDDT: () => Promise<void>;
+  updateTranslation: (key: string, value: string) => void;
 }
 
 const DDTManagerContext = createContext<DDTManagerContextType | null>(null);
@@ -32,10 +36,14 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
   const [isLoadingDDT, setIsLoadingDDT] = useState(false);
   const [loadDDTError, setLoadDDTError] = useState<string | null>(null);
+  const [ideTranslations, setIdeTranslations] = useState<Record<string, string>>({});
+  const [dataDialogueTranslations, setDataDialogueTranslations] = useState<Record<string, string>>({});
 
   const createDDT = (ddt: any) => {
-    setDDTList(prev => [...prev, ddt]);
-    setSelectedDDT(ddt);
+    // ensure has id for future lookups
+    const withId = ddt.id ? ddt : { ...ddt, id: ddt._id || `${(ddt.label || 'DDT').replace(/\s+/g, '_')}_${crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}` };
+    setDDTList(prev => [...prev, withId]);
+    setSelectedDDT(withId);
   };
 
   const openDDT = (ddt: any) => {
@@ -53,12 +61,38 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
     }
   };
 
+  // Aggiorna una traduzione per il DDT selezionato e sincronizza la lista
+  const updateTranslation = (key: string, value: string) => {
+    setSelectedDDT((prev: any) => {
+      if (!prev) return prev;
+      const prevTrans = (prev.translations && (prev.translations.en || prev.translations)) || {};
+      const nextTranslations = {
+        ...(prev.translations || {}),
+        en: { ...prevTrans, [key]: value }
+      };
+      const next = { ...prev, translations: nextTranslations };
+      setDDTList(list => list.map(d => (d.id === prev.id || d._id === prev._id ? next : d)));
+      return next;
+    });
+  };
+
   const loadDDT = async () => {
     setIsLoadingDDT(true);
     setLoadDDTError(null);
     try {
-      const ddtTemplates = await getAllDialogueTemplates();
+      const [ddtTemplates, ide, ddtTr] = await Promise.all([
+        getAllDialogueTemplates(),
+        getIDETranslations().catch(() => ({})),
+        getDataDialogueTranslations().catch(() => ({}))
+      ]);
       setDDTList(ddtTemplates);
+      setIdeTranslations(ide || {});
+      setDataDialogueTranslations(ddtTr || {});
+      try {
+        const ideCount = ide ? Object.keys(ide).length : 0;
+        const ddtCount = ddtTr ? Object.keys(ddtTr).length : 0;
+        console.log('[DDTManager] Translations loaded:', { ideCount, ddtCount });
+      } catch {}
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Errore nel caricamento DDT';
       setLoadDDTError(errorMessage);
@@ -78,11 +112,15 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
     selectedDDT,
     isLoadingDDT,
     loadDDTError,
+    ideTranslations,
+    dataDialogueTranslations,
+    setDataDialogueTranslations,
     createDDT,
     openDDT,
     closeDDT,
     deleteDDT,
-    loadDDT
+    loadDDT,
+    updateTranslation
   };
 
   return (

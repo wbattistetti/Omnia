@@ -207,15 +207,23 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     const baseSteps = ['start', 'noInput', 'noMatch', 'confirmation', 'success'] as const;
     for (const stepKey of baseSteps) {
       const defaultKey = `runtime.${ddtId}.${path}.${stepKey}.text`;
-      if (!translations[defaultKey]) {
+      // Prefer AI-provided key if present (ai.0). We already pushed translations for it above.
+      const ai0Key = `runtime.${ddtId}.${path}.${stepKey}.ai.0`;
+      const chosenKey = translations[ai0Key] ? ai0Key : defaultKey;
+      if (chosenKey === defaultKey && !translations[defaultKey]) {
         pushTranslation(translations, defaultKey, `${node.label} · ${stepKey}`);
       }
-      assembled.messages[stepKey] = { textKey: defaultKey };
+      // Debug to understand which key is used
+      try {
+        // eslint-disable-next-line no-console
+        console.log('[assembleFinalDDT] step', path, stepKey, 'key', chosenKey, 'hasAI', Boolean(translations[ai0Key]));
+      } catch {}
+      assembled.messages[stepKey] = { textKey: chosenKey };
       const isAsk = ['text', 'email', 'number', 'date'].includes((node.type || '').toString());
       const baseAction = {
         actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
         actionInstanceId: `a_${uuidv4()}`,
-        parameters: [{ parameterId: 'text', value: defaultKey }]
+        parameters: [{ parameterId: 'text', value: chosenKey }]
       };
       const numEsc = counts[stepKey] || 1;
       const escalations = Array.from({ length: numEsc }).map(() => ({

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
 import DDTHeader from './DDTHeader';
 import { Undo2, Redo2, Plus } from 'lucide-react';
@@ -16,12 +17,23 @@ import {
 export default function ResponseEditor({ ddt }: { ddt: any }) {
   // Local editable copies
   const [localDDT, setLocalDDT] = useState<any>(ddt);
-  const [localTranslations, setLocalTranslations] = useState<any>((ddt?.translations && (ddt.translations.en || ddt.translations)) || {});
+  const { updateTranslation, ideTranslations, dataDialogueTranslations, setDataDialogueTranslations } = useDDTManager();
+  const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
+  const [localTranslations, setLocalTranslations] = useState<any>({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
 
   useEffect(() => {
     setLocalDDT(ddt);
-    setLocalTranslations((ddt?.translations && (ddt.translations.en || ddt.translations)) || {});
-  }, [ddt]);
+    setLocalTranslations({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
+    try {
+      const counts = {
+        ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
+        data: dataDialogueTranslations ? Object.keys(dataDialogueTranslations).length : 0,
+        ddt: ddt?.translations?.en ? Object.keys(ddt.translations.en).length : (ddt?.translations ? Object.keys(ddt.translations).length : 0),
+        merged: localTranslations ? Object.keys(localTranslations).length : 0,
+      };
+      console.log('[ResponseEditor] Translation sources counts:', counts);
+    } catch {}
+  }, [ddt, mergedBase]);
 
   const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
   const [selectedMainIndex, setSelectedMainIndex] = useState(0);
@@ -88,6 +100,10 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
 
   const handleUpdateTranslation = (key: string, value: string) => {
     setLocalTranslations((prev: any) => ({ ...prev, [key]: value }));
+    // Propaga anche al DDT selezionato nel context per il salvataggio
+    updateTranslation(key, value);
+    // Aggiorna anche il dizionario dinamico globale così il rendering usa subito il testo
+    setDataDialogueTranslations({ ...dataDialogueTranslations, [key]: value });
   };
 
   // Layout

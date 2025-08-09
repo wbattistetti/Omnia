@@ -46,6 +46,14 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
   const title = meta?.label || stepKey;
 
   const model = React.useMemo(() => buildModel(node, stepKey, translations), [node, stepKey, translations]);
+  React.useEffect(() => {
+    if (!node || !stepKey) return;
+    try {
+      const sample = (model[0]?.actions?.[0]?.textKey) || (node?.messages?.[stepKey]?.textKey) || null;
+      const has = typeof sample === 'string' ? Boolean(translations[sample]) : null;
+      console.log('[StepEditor] stepKey', stepKey, 'sampleKey', sample, 'hasText', has);
+    } catch {}
+  }, [node, stepKey, model, translations]);
 
   // inline editing state for actions (by escalation index and action index)
   const [editing, setEditing] = React.useState<{ escIdx: number; actIdx: number; textKey: string; draft: string } | null>(null);
@@ -68,8 +76,8 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
         <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No escalation/actions for this step.</div>
       )}
       {model.map((esc, idx) => (
-          <div key={idx} style={{ border: `1px solid ${color}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: `${color}22`, color: color }}>
+        <div key={idx} style={{ border: `1px solid ${color}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: `${color}22`, color: color }}>
             <span style={{ fontWeight: 700 }}>{idx + 1}° recovery</span>
             {onDeleteEscalation && (
               <button onClick={() => onDeleteEscalation(idx)} title="Delete recovery" style={{ background: 'transparent', border: 'none', color: '#ef9a9a', cursor: 'pointer', lineHeight: 0 }}>
@@ -98,6 +106,9 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
                   ) : (
                     <>
                       <span style={{ color: '#e2e8f0' }}>{(typeof a.textKey === 'string' ? translations[a.textKey] : a.text) || ''}</span>
+                      {typeof a.textKey === 'string' && !translations[a.textKey] && (
+                        <span style={{ color: '#94a3b8', fontSize: 12, marginLeft: 6 }}>({a.textKey})</span>
+                      )}
                       {/* matita e cestino subito dopo la scritta */}
                       {typeof a.textKey === 'string' && onUpdateTranslation && (
                         <button title="Edit" onClick={() => setEditing({ escIdx: idx, actIdx: j, textKey: a.textKey!, draft: translations[a.textKey!] || '' })} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>

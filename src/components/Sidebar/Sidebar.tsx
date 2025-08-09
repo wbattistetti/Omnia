@@ -6,9 +6,10 @@ import DDTSection from './DDTSection';
 import { useSidebarState } from './SidebarState';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { useDDTManager } from '../../context/DDTManagerContext';
+import { saveDataDialogueTranslations } from '../../services/ProjectDataService';
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
-import { Bot, User, Database, GitBranch, CheckSquare, Layers, Loader, Save } from 'lucide-react';
+import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
 import ResponseEditor from '../ActEditor/ResponseEditor/index';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -30,7 +31,7 @@ const entityTypes: EntityType[] = [
 ];
 
 const Sidebar: React.FC = () => {
-  const { openAccordion, setOpenAccordion, toggleCollapse } = useSidebarState();
+  const { openAccordion, setOpenAccordion } = useSidebarState();
   const { data } = useProjectData();
   const {
     addCategory,
@@ -42,17 +43,28 @@ const Sidebar: React.FC = () => {
   } = useProjectDataUpdate();
 
   // Usa il nuovo hook per DDT
-  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, closeDDT } = useDDTManager();
+  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, closeDDT, dataDialogueTranslations } = useDDTManager();
 
   const [isSavingDDT, setIsSavingDDT] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Handler implementati usando il hook
   const handleAddDDT = (newDDT: any) => {
+    // Ensure new DDT is added and opened
     createDDT(newDDT);
+    // open editor explicitly as well, using the id assigned by context if present in list next tick
+    setTimeout(() => {
+      const id = (newDDT && (newDDT.id || newDDT._id)) ? (newDDT.id || newDDT._id) : undefined;
+      const candidate = id ? (ddtList.find(dt => (dt.id === id || dt._id === id)) || null) : null;
+      if (candidate) {
+        openDDT(candidate);
+      } else if (selectedDDT) {
+        openDDT(selectedDDT);
+      }
+    }, 0);
   };
 
-  const handleEditDDT = (id: string) => {
+  const handleEditDDT = (_id: string) => {
     // TODO: Implementare editing
   };
 
@@ -73,6 +85,20 @@ const Sidebar: React.FC = () => {
     setIsSavingDDT(true);
     setSaveError(null);
     try {
+      const startedAt = Date.now();
+      // 1) Save DataDialogueTranslations (merge existing dynamic translations with current DDT texts)
+      const mergedFromDDTs: Record<string, string> = (ddtList || []).reduce((acc: Record<string, string>, ddt: any) => {
+        const tr = (ddt?.translations && (ddt.translations.en || ddt.translations)) || {};
+        return { ...acc, ...tr };
+      }, {});
+      const translationsPayload = { ...(dataDialogueTranslations || {}), ...mergedFromDDTs };
+      try {
+        await saveDataDialogueTranslations(translationsPayload);
+      } catch (e) {
+        console.warn('[Sidebar] DataDialogueTranslations save failed, continuing with DDT save:', e);
+      }
+
+      // 2) Save DDTs
       const res = await fetch('http://localhost:3100/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,6 +106,11 @@ const Sidebar: React.FC = () => {
       });
       if (!res.ok) {
         throw new Error('Server error: unable to save DDT');
+      }
+      // ensure spinner is visible at least 600ms
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < 600) {
+        await new Promise(r => setTimeout(r, 600 - elapsed));
       }
       // TODO: Mostrare feedback di successo (toast/snackbar)
     } catch (err) {

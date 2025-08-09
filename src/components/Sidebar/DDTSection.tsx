@@ -26,10 +26,7 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
   const handleBuilderComplete = (newDDT: any) => {
     setShowDDTBuilder(false);
     onAdd(newDDT);
-    // Apri automaticamente il Response Editor del DDT appena creato
-    if (newDDT && newDDT.id) {
-      onOpenEditor(newDDT.id);
-    }
+    // Nota: l'apertura dell'editor è gestita da createDDT (seleziona subito il DDT)
   };
 
   const handleBuilderCancel = () => {
@@ -61,7 +58,16 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
             </button>
           )}
           <button title="Salva tutti i DDT" onClick={onSave} disabled={isSaving} style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 8 }}>
-            {isSaving ? <Loader className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+            {isSaving ? (
+              <svg width="20" height="20" viewBox="0 0 50 50" role="progressbar" aria-label="Saving">
+                <circle cx="25" cy="25" r="20" fill="none" stroke="#16a34a" strokeWidth="4" opacity="0.2" />
+                <path d="M25 5 A20 20 0 0 1 45 25" fill="none" stroke="#16a34a" strokeWidth="4">
+                  <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.8s" repeatCount="indefinite" />
+                </path>
+              </svg>
+            ) : (
+              <Save className="w-5 h-5" />
+            )}
           </button>
         </>
       }
@@ -79,7 +85,12 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
           <div style={{ maxHeight: 300, overflowY: 'auto', background: 'var(--sidebar-content-bg)' }}>
             {isLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, color: 'var(--sidebar-content-text)' }}>
-                <Loader className="w-5 h-5 animate-spin" style={{ marginRight: 8 }} />
+                <svg width="18" height="18" viewBox="0 0 50 50" role="progressbar" aria-label="Loading" style={{ marginRight: 8 }}>
+                  <circle cx="25" cy="25" r="20" fill="none" stroke="#a21caf" strokeWidth="4" opacity="0.2" />
+                  <path d="M25 5 A20 20 0 0 1 45 25" fill="none" stroke="#a21caf" strokeWidth="4">
+                    <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.8s" repeatCount="indefinite" />
+                  </path>
+                </svg>
                 <span>Caricamento DDT...</span>
               </div>
             ) : ddtList.length === 0 ? (

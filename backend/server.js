@@ -44,6 +44,72 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
   }
 });
 
+// IDE translations (static, read-only from client perspective)
+app.get('/api/factory/ide-translations', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('IDETranslations');
+    const docs = await coll.find({}).toArray();
+    const merged = {};
+    for (const d of docs) {
+      if (d && typeof d === 'object') {
+        const source = d.data || d.translations || {};
+        Object.assign(merged, source);
+      }
+    }
+    res.json(merged);
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
+// DataDialogue translations (dynamic, editable)
+app.get('/api/factory/data-dialogue-translations', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('DataDialogueTranslations');
+    const docs = await coll.find({}).toArray();
+    const merged = {};
+    for (const d of docs) {
+      if (d && typeof d === 'object') {
+        const source = d.data || d.translations || {};
+        Object.assign(merged, source);
+      }
+    }
+    res.json(merged);
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
+app.post('/api/factory/data-dialogue-translations', async (req, res) => {
+  const payload = req.body || {};
+  if (typeof payload !== 'object' || Array.isArray(payload)) {
+    return res.status(400).json({ error: 'Payload must be an object of translationKey: text' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('DataDialogueTranslations');
+    await coll.deleteMany({});
+    await coll.insertOne({ data: payload, updatedAt: new Date() });
+    res.json({ success: true, count: Object.keys(payload).length });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
 app.post('/api/factory/dialogue-templates', async (req, res) => {
   const client = new MongoClient(uri);
   try {

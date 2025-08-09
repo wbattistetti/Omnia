@@ -238,6 +238,33 @@ export async function getAllDialogueTemplates() {
   return res.json();
 }
 
+// Translations services (factory DB)
+export async function getIDETranslations() {
+  const res = await fetch('http://localhost:3100/api/factory/ide-translations');
+  if (!res.ok) throw new Error('Errore nel recupero di IDETranslations');
+  return res.json();
+}
+
+export async function getDataDialogueTranslations() {
+  const res = await fetch('http://localhost:3100/api/factory/data-dialogue-translations');
+  if (!res.ok) throw new Error('Errore nel recupero di DataDialogueTranslations');
+  return res.json();
+}
+
+export async function saveDataDialogueTranslations(payload: Record<string, string>) {
+  const res = await fetch('http://localhost:3100/api/factory/data-dialogue-translations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.status === 404) {
+    // Backend not ready for dynamic translations: no-op to allow saving DDTs
+    return { skipped: true };
+  }
+  if (!res.ok) throw new Error('Errore nel salvataggio di DataDialogueTranslations');
+  return res.json();
+}
+
 /**
  * Prepare intellisense data from project data
  */
