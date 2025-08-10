@@ -1,19 +1,19 @@
 import React from 'react';
-import { Trash2, Pencil, Check, X, MessageCircle, HelpCircle, FileText } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { stepMeta } from './ddtUtils';
 import ActionRowDnDWrapper from './ActionRowDnDWrapper';
 import ActionRow from './ActionRow';
+import getIconComponent from './icons';
 
 type Props = {
   node: any;
   stepKey: string;
   translations: Record<string, string>;
-  onUpdateTranslation?: (key: string, val: string) => void;
   onDeleteEscalation?: (idx: number) => void;
   onDeleteAction?: (escIdx: number, actionIdx: number) => void;
 };
 
-type EscalationModel = { actions: Array<{ actionId: string; text?: string; textKey?: string }> };
+type EscalationModel = { actions: Array<{ actionId: string; text?: string; textKey?: string; icon?: string; label?: string; color?: string }> };
 
 function buildModel(node: any, stepKey: string, translations: Record<string, string>): EscalationModel[] {
   // Real step present
@@ -41,11 +41,11 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   return [];
 }
 
-export default function StepEditor({ node, stepKey, translations, onUpdateTranslation, onDeleteEscalation, onDeleteAction }: Props) {
+export default function StepEditor({ node, stepKey, translations, onDeleteEscalation }: Props) {
   const meta = (stepMeta as any)[stepKey];
   const color = meta?.color || '#fb923c';
-  const icon = meta?.icon || null;
-  const title = meta?.label || stepKey;
+  // const icon = meta?.icon || null;
+  // const title = meta?.label || stepKey;
 
   const model = React.useMemo(() => buildModel(node, stepKey, translations), [node, stepKey, translations]);
   React.useEffect(() => {
@@ -77,14 +77,25 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
     });
   };
 
-  // inline editing state for actions (by escalation index and action index)
-  const [editing, setEditing] = React.useState<{ escIdx: number; actIdx: number; textKey: string; draft: string } | null>(null);
+  const getLabelString = (label: any) => {
+    if (typeof label === 'string') return label;
+    if (label && typeof label === 'object') return label.en || label.it || label.pt || Object.values(label)[0] || '';
+    return '';
+  };
 
-  const actionIcon = (actionId?: string) => {
-    const id = (actionId || '').toLowerCase();
-    if (id === 'saymessage') return <MessageCircle size={16} color={color} />;
-    if (id === 'askquestion') return <HelpCircle size={16} color={color} />;
-    return <FileText size={16} color={color} />;
+  // Funzione per inserire una nuova action da ActionViewer
+  const handleDropNewAction = (action: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => {
+    console.log('[DEBUG] handleDropNewAction action:', action);
+    setLocalModel(prev => {
+      const next = prev.map(esc => ({ ...esc, actions: [...esc.actions] }));
+      let actionId = action.actionId || action.icon || (typeof action.label === 'string' ? action.label.toLowerCase().replace(/\s+/g, '') : '');
+      // Copia sempre anche icon e label
+      const newAction = { ...action, actionId, icon: action.icon || action.iconName || actionId, label: getLabelString(action.label), color: action.color || '#a21caf' };
+      let insertIdx = to.actionIdx;
+      if (position === 'after') insertIdx++;
+      next[to.escalationIdx].actions.splice(insertIdx, 0, newAction);
+      return next;
+    });
   };
 
   return (
@@ -112,13 +123,16 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
                 actionIdx={j}
                 action={a}
                 onMoveAction={handleMoveAction}
+                onDropNewAction={handleDropNewAction}
               >
                 <ActionRow
-                  icon={actionIcon(a.actionId)}
+                  icon={getIconComponent(a.icon || a.actionId, a.color)}
                   text={typeof a.textKey === 'string' ? translations[a.textKey] : a.text || ''}
                   color={color}
                   draggable
                   selected={false}
+                  actionId={a.actionId}
+                  label={a.label || a.actionId}
                 />
               </ActionRowDnDWrapper>
             ))}

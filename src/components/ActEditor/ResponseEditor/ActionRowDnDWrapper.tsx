@@ -7,10 +7,12 @@ export interface ActionRowDnDWrapperProps {
   action: any;
   onMoveAction: (fromEscIdx: number, fromActIdx: number, toEscIdx: number, toActIdx: number, position: 'before' | 'after') => void;
   onDropAction?: (from: { escalationIdx: number; actionIdx: number; action: any }, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
+  onDropNewAction?: (action: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
   children: React.ReactNode;
 }
 
 export const DND_TYPE = 'ACTION_ROW';
+export const DND_TYPE_VIEWER = 'ACTION_VIEWER';
 
 const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
   escalationIdx,
@@ -18,6 +20,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
   action,
   onMoveAction,
   onDropAction,
+  onDropNewAction,
   children,
 }) => {
   const ref = React.useRef<HTMLDivElement>(null);
@@ -33,7 +36,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
   });
 
   const [{ isOver }, drop] = useDrop({
-    accept: DND_TYPE,
+    accept: [DND_TYPE, DND_TYPE_VIEWER],
     hover: (item: any, monitor) => {
       if (!ref.current) return;
       const hoverBoundingRect = ref.current.getBoundingClientRect();
@@ -42,18 +45,16 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
       if (!clientOffset) return;
       const hoverClientY = clientOffset.y - hoverBoundingRect.top;
       const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
-      // Regola UX: mostra preview solo se il drop cambierebbe la posizione
       let show = true;
-      if (item.escalationIdx === escalationIdx) {
-        if (item.actionIdx === actionIdx) {
-          // Stessa riga: mai preview
-          show = false;
-        } else if (position === 'before' && item.actionIdx === actionIdx - 1) {
-          // Bottom della riga sopra = top di questa: no preview
-          show = false;
-        } else if (position === 'after' && item.actionIdx === actionIdx + 1) {
-          // Top della riga sotto = bottom di questa: no preview
-          show = false;
+      if (item.type === DND_TYPE) {
+        if (item.escalationIdx === escalationIdx) {
+          if (item.actionIdx === actionIdx) {
+            show = false;
+          } else if (position === 'before' && item.actionIdx === actionIdx - 1) {
+            show = false;
+          } else if (position === 'after' && item.actionIdx === actionIdx + 1) {
+            show = false;
+          }
         }
       }
       setPreviewPosition(show ? position : undefined);
@@ -62,18 +63,24 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
     drop: (item: any, monitor) => {
       if (!ref.current) return;
       if (!canShowPreview || previewPosition === undefined) return;
-      if (item.escalationIdx === escalationIdx && item.actionIdx === actionIdx) return;
       const hoverBoundingRect = ref.current.getBoundingClientRect();
       const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
       const clientOffset = monitor.getClientOffset();
       if (!clientOffset) return;
       const hoverClientY = clientOffset.y - hoverBoundingRect.top;
       const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
-      if (onMoveAction) {
-        onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
-      }
-      if (onDropAction) {
-        onDropAction(item, { escalationIdx, actionIdx }, position);
+      if (item.type === DND_TYPE) {
+        if (item.escalationIdx === escalationIdx && item.actionIdx === actionIdx) return;
+        if (onMoveAction) {
+          onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
+        }
+        if (onDropAction) {
+          onDropAction(item, { escalationIdx, actionIdx }, position);
+        }
+      } else if (item.type === DND_TYPE_VIEWER) {
+        if (onDropNewAction) {
+          onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
+        }
       }
       setPreviewPosition(undefined);
       setCanShowPreview(false);

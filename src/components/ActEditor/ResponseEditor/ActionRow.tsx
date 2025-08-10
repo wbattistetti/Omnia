@@ -16,6 +16,7 @@ interface ActionRowProps {
   draggable?: boolean;
   selected?: boolean;
   dndPreview?: 'before' | 'after';
+  actionId?: string; // aggiungi actionId come prop opzionale
 }
 
 const ActionRow: React.FC<ActionRowProps> = ({ 
@@ -29,7 +30,8 @@ const ActionRow: React.FC<ActionRowProps> = ({
   stepType,
   draggable, 
   selected, 
-  dndPreview 
+  dndPreview,
+  actionId // aggiungi actionId come prop opzionale
 }) => {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
@@ -102,7 +104,10 @@ const ActionRow: React.FC<ActionRowProps> = ({
         onMouseLeave={() => setHovered(false)}
       >
       {icon && <span style={{ color, display: 'flex', alignItems: 'center' }}>{icon}</span>}
-      {label && <span style={{ fontWeight: 600, color, marginRight: 8 }}>{label}</span>}
+      {/* Etichetta per action custom */}
+      {actionId && actionId !== 'sayMessage' && actionId !== 'askQuestion' && label && (
+        <span style={{ background: '#222', color: '#fff', borderRadius: 8, padding: '2px 8px', fontSize: 12, marginRight: 6, fontWeight: 600 }}>{label}</span>
+      )}
       <span style={{ flex: 1, color: '#fff', fontSize: 15 }}>
         {editing ? (
           <input

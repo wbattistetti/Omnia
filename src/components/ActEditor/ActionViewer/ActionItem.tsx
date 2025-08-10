@@ -2,6 +2,7 @@
 import React from 'react';
 import styles from './ActionItem.module.css';
 import { useDrag } from 'react-dnd';
+import { DND_TYPE_VIEWER } from '../ResponseEditor/ActionRowDnDWrapper';
 
 const MIN_THUMBNAIL_WIDTH = 100;
 
@@ -37,8 +38,9 @@ interface ActionItemProps {
 
 const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, color, description, primaryValue, parameters }) => {
   const [{ isDragging }, dragRef] = useDrag({
-    type: 'ACTION',
+    type: DND_TYPE_VIEWER,
     item: {
+      type: DND_TYPE_VIEWER,
       action,
       label,
       icon: iconName,
