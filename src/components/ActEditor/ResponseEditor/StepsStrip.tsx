@@ -76,13 +76,13 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
               gap: 6,
               fontWeight: selected ? 700 : 500,
               background: selected ? hexToRgba(color, 0.18) : 'transparent',
-              color: selected ? '#0b1220' : color,
-              border: `1px solid ${color}`,
+              color: color,
+              border: selected ? `4px solid ${color}` : `1px solid ${color}`,
               borderRadius: 10,
               padding: '6px 12px',
               cursor: 'pointer',
               fontSize: 14,
-              transition: 'background 0.2s',
+              transition: 'background 0.2s, border 0.15s',
               minWidth: 0,
             }}
           >

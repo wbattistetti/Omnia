@@ -118,3 +118,4 @@ export function hasMultipleMains(ddt: any): boolean {
   return getMainDataList(ddt).length >= 2;
 }
 
+

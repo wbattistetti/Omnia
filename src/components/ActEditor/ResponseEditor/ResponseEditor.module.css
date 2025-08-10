@@ -34,4 +34,9 @@
 .stepTabActive {
   font-weight: 700;
   /* lo sfondo pastello viene già dal meta.bgActive inline */
+}
+
+.sidebarSelected {
+  border: 4px solid #fff !important;
+  font-weight: 700 !important;
 } 

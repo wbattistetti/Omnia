@@ -45,6 +45,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       return true;
     }
   });
+  const [selectedIdx, setSelectedIdx] = useState(0);
 
   // Memo per dataNode stabile
   const stableDataNode = useMemo(() => dataNode, [dataNode]);
@@ -182,15 +183,29 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Struttura: editor dei main data (primo step dopo detect)
   if (step === 'structure') {
     computeWorkPlan(schemaMains, { stepsPerConstraint: 3 });
+    // Gestione tastiera: up/down per selezione
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        setSelectedIdx((prev) => Math.min(schemaMains.length - 1, prev + 1));
+        e.preventDefault();
+      } else if (e.key === 'ArrowUp') {
+        setSelectedIdx((prev) => Math.max(0, prev - 1));
+        e.preventDefault();
+      }
+    };
     return (
       <div style={{ padding: 16 }}>
-        <MainDataCollection
-          rootLabel={schemaRootLabel || 'Data'}
-          mains={schemaMains}
-          onChangeMains={setSchemaMains}
-          onAddMain={handleAddMain}
-          progressByPath={{ ...progressByPath, __root__: rootProgress }}
-        />
+        <div tabIndex={0} onKeyDown={handleKeyDown} style={{ outline: 'none' }}>
+          <MainDataCollection
+            rootLabel={schemaRootLabel || 'Data'}
+            mains={schemaMains}
+            onChangeMains={setSchemaMains}
+            onAddMain={handleAddMain}
+            progressByPath={{ ...progressByPath, __root__: rootProgress }}
+            selectedIdx={selectedIdx}
+            onSelect={setSelectedIdx}
+          />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12 }}>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#e2e8f0', opacity: 0.9, fontSize: 12 }}>
             <input

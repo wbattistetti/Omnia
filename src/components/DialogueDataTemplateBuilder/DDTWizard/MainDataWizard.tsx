@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import type { SchemaNode } from './MainDataCollection';
-import { Pencil, Trash2, ChevronDown, ChevronRight, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Shield } from 'lucide-react';
+import { Pencil, Trash2, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Shield } from 'lucide-react';
 
 interface MainDataWizardProps {
   node: SchemaNode;
   onChange: (node: SchemaNode) => void;
   onRemove: () => void;
   onAddSub: () => void;
+  selected?: boolean;
 }
 
 const iconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' };
 
-const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<string, number> }> = ({ node, onChange, onRemove, onAddSub, progressByPath }) => {
-  const [open, setOpen] = useState(false);
+const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<string, number> }> = ({ node, onChange, onRemove, onAddSub, progressByPath, selected }) => {
+  // const [open, setOpen] = useState(false); // RIMOSSO
   const [isEditingMain, setIsEditingMain] = useState(false);
   const [labelDraft, setLabelDraft] = useState(node.label || '');
   const [hoverHeader, setHoverHeader] = useState(false);
@@ -159,8 +160,20 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
     }
   };
 
+  // open ora dipende da selected
+  const open = !!selected;
+
   return (
-    <div style={{ border: '1px solid #7c2d12', borderRadius: 10, marginBottom: 10, background: '#0b1220' }}>
+    <div
+      style={{
+        border: selected ? '4px solid #fff' : '1px solid #7c2d12',
+        borderRadius: 10,
+        marginBottom: 10,
+        background: '#0b1220',
+        boxSizing: 'border-box',
+        transition: 'border 0.15s',
+      }}
+    >
       <div
         style={{ display: 'flex', alignItems: 'center', padding: 12 }}
         onMouseEnter={() => setHoverHeader(true)}
@@ -204,9 +217,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
               <span style={{ color: '#fb923c' }}>Add Data</span>
             </button>
           )}
-          <button onClick={() => setOpen(o => !o)} style={iconBtn}>
-            {open ? <ChevronDown size={20} color="#fb923c" /> : <ChevronRight size={20} color="#fb923c" />}
-          </button>
+          {/* Il pulsante di espansione ora non serve più, tolto */}
         </div>
       </div>
       {/* main progress bar */}

@@ -1,18 +1,27 @@
 // Executive summary: Maps action names to Lucide icon components for use in the response tree.
 import React from 'react';
-import { MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Tag, Clock, ServerCog } from 'lucide-react';
+import { MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Tag, Clock, ServerCog, User, MapPin, Calendar, Type as TypeIcon, Phone, Hash, Globe, Home, Building, FileText } from 'lucide-react';
 
 const getIconComponent = (iconName: string) => {
   const iconMap: { [key: string]: React.ReactNode } = {
     // Nomi Lucide standard
     MessageCircle: <MessageCircle size={16} />,
     HelpCircle: <HelpCircle size={16} />,
+    User: <User size={16} />,
+    MapPin: <MapPin size={16} />,
+    Calendar: <Calendar size={16} />,
+    Type: <TypeIcon size={16} />,
     Headphones: <Headphones size={16} />,
     Shield: <Shield size={16} />,
     PhoneOff: <PhoneOff size={16} />,
     Database: <Database size={16} />,
     Mail: <Mail size={16} />,
     MessageSquare: <MessageSquare size={16} />,
+    Phone: <Phone size={16} />,
+    Hash: <Hash size={16} />,
+    Globe: <Globe size={16} />,
+    Home: <Home size={16} />,
+    Building: <Building size={16} />,
     Function: <Function size={16} />,
     Music: <Music size={16} />,
     Eraser: <Eraser size={16} />,
@@ -38,7 +47,7 @@ const getIconComponent = (iconName: string) => {
     'Registrar Rótulo': <Tag size={16} />,
     'Aguardando Agente': <Clock size={16} />
   };
-  return iconMap[iconName] || <MessageCircle size={16} />;
+  return iconMap[iconName] || <FileText size={16} />;
 };
 
 export default getIconComponent; 

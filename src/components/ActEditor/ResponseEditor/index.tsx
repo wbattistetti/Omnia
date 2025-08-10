@@ -1,21 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
-import DDTHeader from './DDTHeader';
-import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket } from 'lucide-react';
+import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
 import {
   getMainDataList,
   getSubDataList,
-  getNodeSteps,
-  getLabel,
-  hasMultipleMains,
-  findNode
+  getNodeSteps
 } from './ddtSelectors';
 
-export default function ResponseEditor({ ddt }: { ddt: any }) {
+export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: () => void }) {
   // Local editable copies
   const [localDDT, setLocalDDT] = useState<any>(ddt);
   const { updateTranslation, ideTranslations, dataDialogueTranslations, setDataDialogueTranslations } = useDDTManager();
@@ -26,7 +22,7 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
     setLocalDDT(ddt);
     setLocalTranslations({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
     setSelectedMainIndex(0);
-    setSelectedSubIndex(null);
+    setSelectedSubIndex(undefined);
     try {
       const counts = {
         ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
@@ -41,58 +37,51 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
   }, [ddt, mergedBase]);
 
   const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
-  // Detect aggregated view: many atomic mains (no subData) that should be shown as one main with sub pills
+  // Aggregated view: show a group header when there are multiple mains
   const isAggregatedAtomic = useMemo(() => (
-    Array.isArray(mainList) && mainList.length > 1 && mainList.every((m: any) => !Array.isArray(m?.subData) || (m.subData || []).length === 0)
+    Array.isArray(mainList) && mainList.length > 1
   ), [mainList]);
   const [selectedMainIndex, setSelectedMainIndex] = useState(0);
-  const [selectedSubIndex, setSelectedSubIndex] = useState<number | null>(null);
+  const [selectedSubIndex, setSelectedSubIndex] = useState<number | undefined>(undefined);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const [rightMode, setRightMode] = useState<RightPanelMode>(() => {
     try { return (localStorage.getItem('responseEditor.rightMode') as RightPanelMode) || 'actions'; } catch { return 'actions'; }
   });
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
   const [dragging, setDragging] = useState(false);
 
-  // Nodo selezionato: main o sub
+  // Nodo selezionato: sempre main/sub in base agli indici
   const selectedNode = useMemo(() => {
-    if (isAggregatedAtomic) {
-      // In aggregated atomic mode, treat mains as sub items of a synthetic aggregator
-      const index = selectedSubIndex ?? 0;
-      return mainList[index] || null;
-    }
     const main = mainList[selectedMainIndex];
     if (!main) return null;
     if (selectedSubIndex == null) return main;
     const subList = getSubDataList(main);
-    return subList[selectedSubIndex] || null;
-  }, [isAggregatedAtomic, mainList, selectedMainIndex, selectedSubIndex]);
+    return subList[selectedSubIndex] || main;
+  }, [mainList, selectedMainIndex, selectedSubIndex]);
 
   // Step keys per il nodo selezionato
   const stepKeys = useMemo(() => selectedNode ? getNodeSteps(selectedNode) : [], [selectedNode]);
-  const [selectedStepKey, setSelectedStepKey] = useState<string>(stepKeys[0] || '');
+  const [selectedStepKey, setSelectedStepKey] = useState<string>('');
 
-  // Aggiorna selectedStepKey quando cambia il nodo selezionato
+  // Mantieni lo step selezionato quando cambia il dato. Se lo step non esiste per il nuovo dato, fallback al primo disponibile.
   React.useEffect(() => {
-    setSelectedStepKey(stepKeys[0] || '');
-  }, [stepKeys]);
+    if (!stepKeys.length) { setSelectedStepKey(''); return; }
+    if (selectedStepKey && stepKeys.includes(selectedStepKey)) return;
+    setSelectedStepKey(stepKeys[0]);
+  }, [stepKeys, selectedStepKey]);
 
   // Callback per Sidebar
   const handleSelectMain = (idx: number) => {
     setSelectedMainIndex(idx);
-    setSelectedSubIndex(null);
+    setSelectedSubIndex(undefined);
+    setTimeout(() => { sidebarRef.current?.focus(); }, 0);
   };
 
   // Callback per Header
-  const handleSelectMainHeader = () => {
-    // Aggregated: selecting main pill has no direct node; default to first sub
-    if (isAggregatedAtomic) {
-      setSelectedSubIndex(0);
-    } else {
-      setSelectedSubIndex(null);
-    }
-  };
+  // removed unused header handler
   const handleSelectSub = (idx: number) => {
     setSelectedSubIndex(idx);
+    setTimeout(() => { sidebarRef.current?.focus(); }, 0);
   };
 
   // Editing helpers
@@ -152,99 +141,134 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
     try { localStorage.setItem('responseEditor.rightMode', m); } catch {}
   };
 
+  // Funzione per capire se c'è editing attivo (input, textarea, select)
+  function isEditingActive() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = (el as HTMLElement).tagName.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || (el as HTMLElement).isContentEditable;
+  }
+
+  // Handler tastiera globale per step navigation
+  const handleGlobalKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (sidebarRef.current && document.activeElement === sidebarRef.current && !isEditingActive()) {
+      if (e.key === 'ArrowRight') {
+        const idx = stepKeys.indexOf(selectedStepKey);
+        if (idx >= 0 && idx < stepKeys.length - 1) {
+          setSelectedStepKey(stepKeys[idx + 1]);
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      } else if (e.key === 'ArrowLeft') {
+        const idx = stepKeys.indexOf(selectedStepKey);
+        if (idx > 0) {
+          setSelectedStepKey(stepKeys[idx - 1]);
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    }
+  };
+
   // Layout
   return (
-    <div style={{ display: 'flex', height: '100%', background: '#faf7ff' }}>
-      {(!isAggregatedAtomic && hasMultipleMains(ddt)) && (
+    <div style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column' }} onKeyDown={handleGlobalKeyDown}>
+      {/* Header con sfondo arancione sopra sidebar e contenuto */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #22273a', background: '#fb923c', minHeight: 48 }}>
+        <div style={{ color: '#0b1220', fontSize: 18, fontWeight: 700 }}>Response Editor</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button title="Undo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#0b1220', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+            <Undo2 size={16} />
+          </button>
+          <button title="Redo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#0b1220', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+            <Redo2 size={16} />
+          </button>
+          <button title="Add constraint" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', color: '#fb923c', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+            <Plus size={16} /> <span>Add constraint</span>
+          </button>
+          <div style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
+            <button title="Actions" onClick={() => saveRightMode('actions')} style={{ background: rightMode==='actions' ? '#fff' : 'transparent', color: rightMode==='actions' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <Rocket size={16} />
+            </button>
+            <button title="Validator" onClick={() => saveRightMode('validator')} style={{ background: rightMode==='validator' ? '#fff' : 'transparent', color: rightMode==='validator' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <Code2 size={16} />
+            </button>
+            <button title="Test set" onClick={() => saveRightMode('testset')} style={{ background: rightMode==='testset' ? '#fff' : 'transparent', color: rightMode==='testset' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <FileText size={16} />
+            </button>
+            <button title="Chat" onClick={() => saveRightMode('chat')} style={{ background: rightMode==='chat' ? '#fff' : 'transparent', color: rightMode==='chat' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <MessageSquare size={16} />
+            </button>
+          </div>
+          <button title="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#0b1220', borderRadius: 8, padding: '6px', cursor: 'pointer', marginLeft: 12, fontSize: 20, lineHeight: 1 }}>
+            <X size={24} />
+          </button>
+        </div>
+      </div>
+      {/* Flex row: sidebar + contenuto */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {/* Always visible left navigation */}
         <Sidebar
+          ref={sidebarRef}
           mainList={mainList}
           selectedMainIndex={selectedMainIndex}
           onSelectMain={handleSelectMain}
+          selectedSubIndex={selectedSubIndex}
+          onSelectSub={handleSelectSub}
+          aggregated={isAggregatedAtomic}
+          rootLabel={localDDT?.label || 'Data'}
+          onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
         />
-      )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* Header bar arancione con pill main/sub e comandi */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid #fb923c22', background: '#111827' }}>
-          <div style={{ flex: 1 }}>
-            <DDTHeader
-              main={isAggregatedAtomic ? { label: ddt?.label || 'Data' } : mainList[selectedMainIndex]}
-              subList={isAggregatedAtomic ? mainList : getSubDataList(mainList[selectedMainIndex])}
-              selectedSubIndex={selectedSubIndex}
-              onSelectMain={handleSelectMainHeader}
-              onSelectSub={handleSelectSub}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button title="Undo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <Undo2 size={16} />
-            </button>
-            <button title="Redo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <Redo2 size={16} />
-            </button>
-            <button title="Add constraint" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <Plus size={16} /> <span>Add constraint</span>
-            </button>
-            {/* Right panel mode toolbar */}
-            <div style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
-              <button title="Actions" onClick={() => saveRightMode('actions')} style={{ background: rightMode==='actions' ? '#fb923c' : 'transparent', color: rightMode==='actions' ? '#0b1220' : '#fb923c', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                <Rocket size={16} />
-              </button>
-              <button title="Validator" onClick={() => saveRightMode('validator')} style={{ background: rightMode==='validator' ? '#fb923c' : 'transparent', color: rightMode==='validator' ? '#0b1220' : '#fb923c', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                <Code2 size={16} />
-              </button>
-              <button title="Test set" onClick={() => saveRightMode('testset')} style={{ background: rightMode==='testset' ? '#fb923c' : 'transparent', color: rightMode==='testset' ? '#0b1220' : '#fb923c', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                <FileText size={16} />
-              </button>
-              <button title="Chat" onClick={() => saveRightMode('chat')} style={{ background: rightMode==='chat' ? '#fb923c' : 'transparent', color: rightMode==='chat' ? '#0b1220' : '#fb923c', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                <MessageSquare size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          {/* Steps toolbar */}
+          <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
             <StepsStrip
-          stepKeys={stepKeys}
-          selectedStepKey={selectedStepKey}
-          onSelectStep={setSelectedStepKey}
-          node={selectedNode}
+              stepKeys={stepKeys}
+              selectedStepKey={selectedStepKey}
+              onSelectStep={setSelectedStepKey}
+              node={selectedNode}
             />
-            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', borderRadius: 16, margin: 16, boxShadow: '0 2px 8px #e0d7f7' }}>
-              <StepEditor
-                node={selectedNode}
-                stepKey={selectedStepKey}
-                translations={localTranslations}
-                onUpdateTranslation={handleUpdateTranslation}
-                onDeleteEscalation={(idx) => updateSelectedNode((node) => {
-                  const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                  const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                  st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
-                  next.steps[selectedStepKey] = st;
-                  return next;
-                })}
-                onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
-                  const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                  const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                  const esc = (st.escalations || [])[escIdx];
-                  if (!esc) return next;
-                  esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
-                  st.escalations[escIdx] = esc;
-                  next.steps[selectedStepKey] = st;
-                  return next;
-                })}
-              />
-            </div>
           </div>
-          <RightPanel
-            mode={rightMode}
-            width={rightWidth}
-            onWidthChange={setRightWidth}
-            onStartResize={() => setDragging(true)}
-            dragging={dragging}
-            ddt={localDDT}
-            translations={localTranslations}
-            selectedNode={selectedNode}
-          />
+          {/* Content */}
+          <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', borderRadius: 16, margin: 16, boxShadow: '0 2px 8px #e0d7f7' }}>
+                <StepEditor
+                  node={selectedNode}
+                  stepKey={selectedStepKey}
+                  translations={localTranslations}
+                  onUpdateTranslation={handleUpdateTranslation}
+                  onDeleteEscalation={(idx) => updateSelectedNode((node) => {
+                    const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                    const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                    st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
+                    next.steps[selectedStepKey] = st;
+                    return next;
+                  })}
+                  onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
+                    const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                    const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                    const esc = (st.escalations || [])[escIdx];
+                    if (!esc) return next;
+                    esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
+                    st.escalations[escIdx] = esc;
+                    next.steps[selectedStepKey] = st;
+                    return next;
+                  })}
+                />
+              </div>
+            </div>
+            <RightPanel
+              mode={rightMode}
+              width={rightWidth}
+              onWidthChange={setRightWidth}
+              onStartResize={() => setDragging(true)}
+              dragging={dragging}
+              ddt={localDDT}
+              translations={localTranslations}
+              selectedNode={selectedNode}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -27,9 +27,11 @@ interface MainDataCollectionProps {
   mains: SchemaNode[];
   onChangeMains: (next: SchemaNode[]) => void;
   onAddMain: () => void;
+  selectedIdx: number;
+  onSelect: (idx: number) => void;
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number> }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath }) => {
+const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number> }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, selectedIdx, onSelect }) => {
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
     next[idx] = nextNode;
@@ -64,14 +66,16 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
       )}
       <div>
         {mains.map((m, i) => (
-          <MainDataWizard
-            key={i}
-            node={m}
-            onChange={(n) => handleChangeAt(i, n)}
-            onRemove={() => handleRemoveAt(i)}
-            onAddSub={() => handleAddSubAt(i)}
-            progressByPath={progressByPath}
-          />
+          <div key={i} onClick={() => onSelect(i)}>
+            <MainDataWizard
+              node={m}
+              onChange={(n) => handleChangeAt(i, n)}
+              onRemove={() => handleRemoveAt(i)}
+              onAddSub={() => handleAddSubAt(i)}
+              progressByPath={progressByPath}
+              selected={selectedIdx === i}
+            />
+          </div>
         ))}
         {mains.length === 0 && (
           <div style={{ opacity: 0.8, fontStyle: 'italic', padding: 8 }}>No main data yet.</div>
