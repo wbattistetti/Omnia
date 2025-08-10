@@ -1,6 +1,8 @@
 import React from 'react';
 import { Trash2, Pencil, Check, X, MessageCircle, HelpCircle, FileText } from 'lucide-react';
 import { stepMeta } from './ddtUtils';
+import ActionRowDnDWrapper from './ActionRowDnDWrapper';
+import ActionRow from './ActionRow';
 
 type Props = {
   node: any;
@@ -55,6 +57,26 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
     } catch {}
   }, [node, stepKey, model, translations]);
 
+  // Stato locale per le escalation e azioni (per demo, in reale va gestito a livello superiore)
+  const [localModel, setLocalModel] = React.useState(model);
+  React.useEffect(() => { setLocalModel(model); }, [model]);
+
+  // Funzione per spostare una action
+  const handleMoveAction = (fromEscIdx: number, fromActIdx: number, toEscIdx: number, toActIdx: number, position: 'before' | 'after') => {
+    setLocalModel(prev => {
+      const next = prev.map(esc => ({ ...esc, actions: [...esc.actions] }));
+      const action = next[fromEscIdx].actions[fromActIdx];
+      // Rimuovi dalla posizione originale
+      next[fromEscIdx].actions.splice(fromActIdx, 1);
+      // Calcola nuova posizione
+      let insertIdx = toActIdx;
+      if (fromEscIdx === toEscIdx && fromActIdx < toActIdx) insertIdx--;
+      if (position === 'after') insertIdx++;
+      next[toEscIdx].actions.splice(insertIdx, 0, action);
+      return next;
+    });
+  };
+
   // inline editing state for actions (by escalation index and action index)
   const [editing, setEditing] = React.useState<{ escIdx: number; actIdx: number; textKey: string; draft: string } | null>(null);
 
@@ -69,10 +91,10 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
     <div style={{ padding: 16 }}>
       {/* Title removed to avoid redundancy with step tabs */}
       {/* Escalation boxes (singoli) */}
-      {model.length === 0 && (
+      {localModel.length === 0 && (
         <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No escalation/actions for this step.</div>
       )}
-      {model.map((esc, idx) => (
+      {localModel.map((esc, idx) => (
         <div key={idx} style={{ border: `1px solid ${color}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: `${color}22`, color: color }}>
             <span style={{ fontWeight: 700 }}>{idx + 1}° recovery</span>
@@ -84,42 +106,21 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
           </div>
           <div style={{ padding: 10 }}>
             {esc.actions.map((a, j) => (
-                <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 2px', marginBottom: 6 }}>
-                  <span>{actionIcon(a.actionId)}</span>
-                  {editing && editing.escIdx === idx && editing.actIdx === j ? (
-                    <>
-                      <input
-                        value={editing.draft}
-                        onChange={(e) => setEditing({ ...editing, draft: e.target.value })}
-                        style={{ flex: 1, background: '#0b1220', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}
-                      />
-                      <button title="Confirm" onClick={() => { if (onUpdateTranslation) onUpdateTranslation(editing.textKey, editing.draft); setEditing(null); }} style={{ background: 'transparent', border: 'none', color: '#22c55e', cursor: 'pointer' }}>
-                        <Check size={16} />
-                      </button>
-                      <button title="Cancel" onClick={() => setEditing(null)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                        <X size={16} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span style={{ color: '#e2e8f0' }}>{(typeof a.textKey === 'string' ? translations[a.textKey] : a.text) || ''}</span>
-                      {typeof a.textKey === 'string' && !translations[a.textKey] && (
-                        <span style={{ color: '#94a3b8', fontSize: 12, marginLeft: 6 }}>({a.textKey})</span>
-                      )}
-                      {/* matita e cestino subito dopo la scritta */}
-                      {typeof a.textKey === 'string' && onUpdateTranslation && (
-                        <button title="Edit" onClick={() => setEditing({ escIdx: idx, actIdx: j, textKey: a.textKey!, draft: translations[a.textKey!] || '' })} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
-                          <Pencil size={14} />
-                        </button>
-                      )}
-                      {onDeleteAction && (
-                        <button onClick={() => onDeleteAction(idx, j)} title="Delete action" style={{ background: 'transparent', border: 'none', color: '#ef9a9a', cursor: 'pointer', lineHeight: 0 }}>
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
+              <ActionRowDnDWrapper
+                key={j}
+                escalationIdx={idx}
+                actionIdx={j}
+                action={a}
+                onMoveAction={handleMoveAction}
+              >
+                <ActionRow
+                  icon={actionIcon(a.actionId)}
+                  text={typeof a.textKey === 'string' ? translations[a.textKey] : a.text || ''}
+                  color={color}
+                  draggable
+                  selected={false}
+                />
+              </ActionRowDnDWrapper>
             ))}
           </div>
         </div>
