@@ -1,5 +1,6 @@
 import React from 'react';
-import ResponseEditor from './ResponseEditor';
+// Use the NEW Response Editor (purple header) exported by index.tsx
+import ResponseEditor from './index';
 import ResizeHandle from '../../common/ResizeHandle';
 import { useResizablePanel } from '../../../hooks/useResizablePanel';
 
@@ -26,8 +27,8 @@ const ResizableResponseEditor: React.FC<ResizableResponseEditorProps> = ({
 
   return (
     <div
-      className="relative bg-white border-t border-gray-200"
-      style={{ ...style, minHeight: 200 }}
+      className="relative"
+      style={{ ...style, minHeight: 360, zIndex: 20, background: '#0b1220' }}
     >
       <ResizeHandle
         direction="vertical"

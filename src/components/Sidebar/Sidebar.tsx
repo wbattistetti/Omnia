@@ -10,7 +10,6 @@ import { saveDataDialogueTranslations } from '../../services/ProjectDataService'
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
-import ResponseEditor from '../ActEditor/ResponseEditor/index';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -43,7 +42,7 @@ const Sidebar: React.FC = () => {
   } = useProjectDataUpdate();
 
   // Usa il nuovo hook per DDT
-  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, closeDDT, dataDialogueTranslations } = useDDTManager();
+  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, dataDialogueTranslations } = useDDTManager();
 
   const [isSavingDDT, setIsSavingDDT] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -173,39 +172,7 @@ const Sidebar: React.FC = () => {
           />
         ))}
       </div>
-      {selectedDDT && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(30, 0, 60, 0.55)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <div style={{
-            background: '#181028',
-            borderRadius: 18,
-            boxShadow: '0 4px 32px #0008',
-            padding: 0,
-            minWidth: 700,
-            minHeight: 480,
-            maxWidth: '90vw',
-            maxHeight: '90vh',
-            display: 'flex',
-            flexDirection: 'column',
-            position: 'relative',
-          }}>
-            <button onClick={closeDDT} style={{ position: 'absolute', top: 12, right: 18, background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', zIndex: 2 }}>&times;</button>
-            <div style={{ flex: 1, minHeight: 0, minWidth: 0, padding: 0 }}>
-              <ResponseEditor ddt={selectedDDT} />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Editor docked gestito da AppContent */}
     </SidebarContainer>
   );
 };

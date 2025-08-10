@@ -41,6 +41,10 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
   }, [ddt, mergedBase]);
 
   const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
+  // Detect aggregated view: many atomic mains (no subData) that should be shown as one main with sub pills
+  const isAggregatedAtomic = useMemo(() => (
+    Array.isArray(mainList) && mainList.length > 1 && mainList.every((m: any) => !Array.isArray(m?.subData) || (m.subData || []).length === 0)
+  ), [mainList]);
   const [selectedMainIndex, setSelectedMainIndex] = useState(0);
   const [selectedSubIndex, setSelectedSubIndex] = useState<number | null>(null);
   const [rightMode, setRightMode] = useState<RightPanelMode>(() => {
@@ -51,12 +55,17 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
 
   // Nodo selezionato: main o sub
   const selectedNode = useMemo(() => {
+    if (isAggregatedAtomic) {
+      // In aggregated atomic mode, treat mains as sub items of a synthetic aggregator
+      const index = selectedSubIndex ?? 0;
+      return mainList[index] || null;
+    }
     const main = mainList[selectedMainIndex];
     if (!main) return null;
     if (selectedSubIndex == null) return main;
     const subList = getSubDataList(main);
     return subList[selectedSubIndex] || null;
-  }, [mainList, selectedMainIndex, selectedSubIndex]);
+  }, [isAggregatedAtomic, mainList, selectedMainIndex, selectedSubIndex]);
 
   // Step keys per il nodo selezionato
   const stepKeys = useMemo(() => selectedNode ? getNodeSteps(selectedNode) : [], [selectedNode]);
@@ -71,17 +80,19 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
   const handleSelectMain = (idx: number) => {
     setSelectedMainIndex(idx);
     setSelectedSubIndex(null);
-    // stepKey sarà aggiornato dall'useEffect
   };
 
   // Callback per Header
   const handleSelectMainHeader = () => {
-    setSelectedSubIndex(null);
-    // stepKey sarà aggiornato dall'useEffect
+    // Aggregated: selecting main pill has no direct node; default to first sub
+    if (isAggregatedAtomic) {
+      setSelectedSubIndex(0);
+    } else {
+      setSelectedSubIndex(null);
+    }
   };
   const handleSelectSub = (idx: number) => {
     setSelectedSubIndex(idx);
-    // stepKey sarà aggiornato dall'useEffect
   };
 
   // Editing helpers
@@ -144,7 +155,7 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
   // Layout
   return (
     <div style={{ display: 'flex', height: '100%', background: '#faf7ff' }}>
-      {hasMultipleMains(ddt) && (
+      {(!isAggregatedAtomic && hasMultipleMains(ddt)) && (
         <Sidebar
           mainList={mainList}
           selectedMainIndex={selectedMainIndex}
@@ -153,11 +164,11 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Header bar arancione con pill main/sub e comandi */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f59e0b1a', background: '#0b1220' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid #fb923c22', background: '#111827' }}>
           <div style={{ flex: 1 }}>
             <DDTHeader
-              main={mainList[selectedMainIndex]}
-              subList={getSubDataList(mainList[selectedMainIndex])}
+              main={isAggregatedAtomic ? { label: ddt?.label || 'Data' } : mainList[selectedMainIndex]}
+              subList={isAggregatedAtomic ? mainList : getSubDataList(mainList[selectedMainIndex])}
               selectedSubIndex={selectedSubIndex}
               onSelectMain={handleSelectMainHeader}
               onSelectSub={handleSelectSub}

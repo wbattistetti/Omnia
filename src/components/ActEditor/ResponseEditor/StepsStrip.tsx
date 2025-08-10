@@ -1,5 +1,6 @@
 import React from 'react';
 import { stepMeta } from './ddtUtils';
+import { Shield } from 'lucide-react';
 
 interface StepsStripProps {
   stepKeys: string[];
@@ -28,6 +29,7 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
 
   const iconForStep = (key: string): React.ReactNode => {
     if ((stepMeta as any)[key]?.icon) return (stepMeta as any)[key].icon;
+    if (/^constraint\./.test(key)) return <Shield size={14} />;
     return null;
   };
 
@@ -52,7 +54,15 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     return key;
   };
   return (
-    <div style={{ display: 'flex', gap: 8, padding: '0 24px 8px 24px', overflowX: 'auto' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 10,
+        rowGap: 10,
+        padding: '6px 16px 10px 16px'
+      }}
+    >
       {stepKeys.map((key) => {
         const color = colorForStep(key);
         const selected = selectedStepKey === key;
@@ -68,8 +78,8 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
               background: selected ? hexToRgba(color, 0.18) : 'transparent',
               color: selected ? '#0b1220' : color,
               border: `1px solid ${color}`,
-              borderRadius: 9999,
-              padding: '6px 14px',
+              borderRadius: 10,
+              padding: '6px 12px',
               cursor: 'pointer',
               fontSize: 14,
               transition: 'background 0.2s',

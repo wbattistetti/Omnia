@@ -67,10 +67,7 @@ export default function StepEditor({ node, stepKey, translations, onUpdateTransl
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span>{icon}</span>
-        <span style={{ fontWeight: 700, color }}>{title}</span>
-      </div>
+      {/* Title removed to avoid redundancy with step tabs */}
       {/* Escalation boxes (singoli) */}
       {model.length === 0 && (
         <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No escalation/actions for this step.</div>
