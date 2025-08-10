@@ -2,9 +2,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
 import DDTHeader from './DDTHeader';
-import { Undo2, Redo2, Plus } from 'lucide-react';
+import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
+import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
 import {
   getMainDataList,
   getSubDataList,
@@ -42,6 +43,11 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
   const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
   const [selectedMainIndex, setSelectedMainIndex] = useState(0);
   const [selectedSubIndex, setSelectedSubIndex] = useState<number | null>(null);
+  const [rightMode, setRightMode] = useState<RightPanelMode>(() => {
+    try { return (localStorage.getItem('responseEditor.rightMode') as RightPanelMode) || 'actions'; } catch { return 'actions'; }
+  });
+  const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
+  const [dragging, setDragging] = useState(false);
 
   // Nodo selezionato: main o sub
   const selectedNode = useMemo(() => {
@@ -110,6 +116,31 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
     setDataDialogueTranslations({ ...dataDialogueTranslations, [key]: value });
   };
 
+  // Splitter drag handlers
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      const total = window.innerWidth;
+      const leftMin = 320;
+      const minRight = 160;
+      const maxRight = Math.max(minRight, total - leftMin);
+      const newWidth = Math.max(minRight, Math.min(maxRight, total - e.clientX));
+      setRightWidth(newWidth);
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [dragging, setRightWidth]);
+
+  const saveRightMode = (m: RightPanelMode) => {
+    setRightMode(m);
+    try { localStorage.setItem('responseEditor.rightMode', m); } catch {}
+  };
+
   // Layout
   return (
     <div style={{ display: 'flex', height: '100%', background: '#faf7ff' }}>
@@ -142,37 +173,66 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
             <button title="Add constraint" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
               <Plus size={16} /> <span>Add constraint</span>
             </button>
+            {/* Right panel mode toolbar */}
+            <div style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
+              <button title="Actions" onClick={() => saveRightMode('actions')} style={{ background: rightMode==='actions' ? '#fb923c' : 'transparent', color: rightMode==='actions' ? '#0b1220' : '#fb923c', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                <Rocket size={16} />
+              </button>
+              <button title="Validator" onClick={() => saveRightMode('validator')} style={{ background: rightMode==='validator' ? '#fb923c' : 'transparent', color: rightMode==='validator' ? '#0b1220' : '#fb923c', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                <Code2 size={16} />
+              </button>
+              <button title="Test set" onClick={() => saveRightMode('testset')} style={{ background: rightMode==='testset' ? '#fb923c' : 'transparent', color: rightMode==='testset' ? '#0b1220' : '#fb923c', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                <FileText size={16} />
+              </button>
+              <button title="Chat" onClick={() => saveRightMode('chat')} style={{ background: rightMode==='chat' ? '#fb923c' : 'transparent', color: rightMode==='chat' ? '#0b1220' : '#fb923c', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                <MessageSquare size={16} />
+              </button>
+            </div>
           </div>
         </div>
-          <StepsStrip
+        <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <StepsStrip
           stepKeys={stepKeys}
           selectedStepKey={selectedStepKey}
           onSelectStep={setSelectedStepKey}
           node={selectedNode}
-        />
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', borderRadius: 16, margin: 16, boxShadow: '0 2px 8px #e0d7f7' }}>
-          <StepEditor
-            node={selectedNode}
-            stepKey={selectedStepKey}
+            />
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', borderRadius: 16, margin: 16, boxShadow: '0 2px 8px #e0d7f7' }}>
+              <StepEditor
+                node={selectedNode}
+                stepKey={selectedStepKey}
+                translations={localTranslations}
+                onUpdateTranslation={handleUpdateTranslation}
+                onDeleteEscalation={(idx) => updateSelectedNode((node) => {
+                  const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                  const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                  st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
+                  next.steps[selectedStepKey] = st;
+                  return next;
+                })}
+                onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
+                  const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                  const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                  const esc = (st.escalations || [])[escIdx];
+                  if (!esc) return next;
+                  esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
+                  st.escalations[escIdx] = esc;
+                  next.steps[selectedStepKey] = st;
+                  return next;
+                })}
+              />
+            </div>
+          </div>
+          <RightPanel
+            mode={rightMode}
+            width={rightWidth}
+            onWidthChange={setRightWidth}
+            onStartResize={() => setDragging(true)}
+            dragging={dragging}
+            ddt={localDDT}
             translations={localTranslations}
-            onUpdateTranslation={handleUpdateTranslation}
-            onDeleteEscalation={(idx) => updateSelectedNode((node) => {
-              const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-              const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-              st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
-              next.steps[selectedStepKey] = st;
-              return next;
-            })}
-            onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
-              const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-              const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-              const esc = (st.escalations || [])[escIdx];
-              if (!esc) return next;
-              esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
-              st.escalations[escIdx] = esc;
-              next.steps[selectedStepKey] = st;
-              return next;
-            })}
+            selectedNode={selectedNode}
           />
         </div>
       </div>
