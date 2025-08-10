@@ -80,8 +80,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       setDetectTypeIcon(ai.icon || null);
         // Enrich constraints immediately, then show structure step
         const enrichedRes = await enrichConstraintsFor(root, mains0);
-        setSchemaRootLabel((enrichedRes && enrichedRes.label) ? enrichedRes.label : root);
-        setSchemaMains((enrichedRes && enrichedRes.mains) ? enrichedRes.mains : mains0);
+        const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
+        let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
+        // If AI returned multiple atomic mains (no subData), wrap them into a single aggregator main using the root label
+        const allAtomic = Array.isArray(finalMains) && finalMains.length > 1 && finalMains.every((m: any) => !Array.isArray((m as any)?.subData) || (m as any).subData.length === 0);
+        if (allAtomic) {
+          finalMains = [{ label: finalRoot, type: 'object', icon: 'Folder', subData: finalMains }];
+          console.log('[DDTWizard] Wrapped atomic mains into aggregator:', finalRoot, 'count', finalMains[0].subData.length);
+        }
+        setSchemaRootLabel(finalRoot);
+        setSchemaMains(finalMains);
         setStep('structure');
         return;
       }

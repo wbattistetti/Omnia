@@ -24,6 +24,8 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
   useEffect(() => {
     setLocalDDT(ddt);
     setLocalTranslations({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
+    setSelectedMainIndex(0);
+    setSelectedSubIndex(null);
     try {
       const counts = {
         ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
@@ -32,6 +34,8 @@ export default function ResponseEditor({ ddt }: { ddt: any }) {
         merged: localTranslations ? Object.keys(localTranslations).length : 0,
       };
       console.log('[ResponseEditor] Translation sources counts:', counts);
+      const mains = getMainDataList(ddt) || [];
+      console.log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map(m => m?.label));
     } catch {}
   }, [ddt, mergedBase]);
 
