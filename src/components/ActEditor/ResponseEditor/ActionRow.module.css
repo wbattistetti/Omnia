@@ -1,3 +1,3 @@
 .row { display: flex; align-items: center; }
-.row:hover .action-row-actions { opacity: 1; pointer-events: auto; }
-.action-row-actions { opacity: 0; pointer-events: none; }
+.row:hover .actionRowActions { opacity: 1; pointer-events: auto; }
+.actionRowActions { opacity: 0; pointer-events: none; }

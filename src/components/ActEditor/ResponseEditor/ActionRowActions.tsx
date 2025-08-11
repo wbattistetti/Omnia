@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
+import styles from './ActionRow.module.css';
 
 interface ActionRowActionsProps {
   onEdit?: (() => void) | ((...args: any[]) => void);
@@ -11,7 +12,7 @@ interface ActionRowActionsProps {
 const ActionRowActions: React.FC<ActionRowActionsProps> = ({ onEdit, onDelete, color = '#94a3b8', style }) => {
   return (
     <span
-      className="action-row-actions"
+      className={styles.actionRowActions}
       style={{
         display: 'flex',
         alignItems: 'center',

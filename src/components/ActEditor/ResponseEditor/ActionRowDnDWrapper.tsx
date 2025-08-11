@@ -10,6 +10,7 @@ export interface ActionRowDnDWrapperProps {
   onDropAction?: (from: { escalationIdx: number; actionIdx: number; action: Action }, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
   onDropNewAction?: (action: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
   children: React.ReactNode;
+  allowViewerDrop?: boolean;
 }
 
 export const DND_TYPE = 'ACTION_ROW';
@@ -23,6 +24,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
   onDropAction,
   onDropNewAction,
   children,
+  allowViewerDrop = true,
 }) => {
   const ref = React.useRef<HTMLDivElement>(null);
   const [previewPosition, setPreviewPosition] = React.useState<'before' | 'after' | undefined>(undefined);
@@ -30,14 +32,16 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
 
   const [{ isDragging }, drag] = useDrag({
     type: DND_TYPE,
-    item: { escalationIdx, actionIdx, action },
+    item: { type: DND_TYPE, escalationIdx, actionIdx, action },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
   });
 
+  const accepts = React.useMemo(() => (allowViewerDrop ? [DND_TYPE, DND_TYPE_VIEWER] : [DND_TYPE]), [allowViewerDrop]);
+
   const [{ isOver }, drop] = useDrop({
-    accept: [DND_TYPE, DND_TYPE_VIEWER],
+    accept: accepts,
     hover: (item: any, monitor) => {
       if (!ref.current) return;
       const hoverBoundingRect = ref.current.getBoundingClientRect();
@@ -46,6 +50,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
       if (!clientOffset) return;
       const hoverClientY = clientOffset.y - hoverBoundingRect.top;
       const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
+
       let show = true;
       if (item.type === DND_TYPE) {
         if (item.escalationIdx === escalationIdx) {
@@ -57,9 +62,15 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
             show = false;
           }
         }
+      } else if (item.type === DND_TYPE_VIEWER) {
+        // sempre mostra preview per elemento nuovo
+        show = true;
       }
       setPreviewPosition(show ? position : undefined);
       setCanShowPreview(show);
+      if (show) {
+        console.log('[DnD hover]', item.type, '-> esc', escalationIdx, 'row', actionIdx, 'pos', position);
+      }
     },
     drop: (item: any, monitor) => {
       if (!ref.current) return;
@@ -70,11 +81,14 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
       if (!clientOffset) return;
       const hoverClientY = clientOffset.y - hoverBoundingRect.top;
       const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
+
       if (item.type === DND_TYPE) {
         if (item.escalationIdx === escalationIdx && item.actionIdx === actionIdx) return;
+        console.log('[DnD drop:move]', 'from', item.escalationIdx, item.actionIdx, 'to', escalationIdx, actionIdx, position);
         if (onMoveAction) onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
         if (onDropAction) onDropAction(item, { escalationIdx, actionIdx }, position);
-      } else if (item.type === DND_TYPE_VIEWER) {
+      } else if (allowViewerDrop && item.type === DND_TYPE_VIEWER) {
+        console.log('[DnD drop:new]', 'to', escalationIdx, actionIdx, position);
         if (onDropNewAction) onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
       }
       setPreviewPosition(undefined);

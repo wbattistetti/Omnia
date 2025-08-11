@@ -45,5 +45,17 @@ export default function useActionCommands(setLocalModel: React.Dispatch<React.Se
     });
   }, [setLocalModel]);
 
-  return { editAction, deleteAction, moveAction, dropFromViewer };
+  const appendAction = React.useCallback((escalationIdx: number, action: Action) => {
+    setLocalModel(prev => {
+      const next = prev.map(esc => ({ ...esc, actions: [...esc.actions] }));
+      if (!next[escalationIdx]) {
+        // crea escalation mancante
+        while (next.length <= escalationIdx) next.push({ actions: [] });
+      }
+      next[escalationIdx].actions.push(action);
+      return next;
+    });
+  }, [setLocalModel]);
+
+  return { editAction, deleteAction, moveAction, dropFromViewer, appendAction };
 }

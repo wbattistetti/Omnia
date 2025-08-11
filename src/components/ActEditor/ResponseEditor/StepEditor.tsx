@@ -6,6 +6,8 @@ import ActionRow from './ActionRow';
 import getIconComponent from './icons';
 import useActionCommands from './useActionCommands';
 import { ensureHexColor } from './utils/color';
+import CanvasDropWrapper from './CanvasDropWrapper';
+import PanelEmptyDropZone from './PanelEmptyDropZone';
 
 type Props = {
   node: any;
@@ -63,9 +65,14 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   const [localModel, setLocalModel] = React.useState(model);
   React.useEffect(() => { setLocalModel(model); }, [model]);
 
-  const { editAction, deleteAction, moveAction, dropFromViewer } = useActionCommands(setLocalModel);
+  const { editAction, deleteAction, moveAction, dropFromViewer, appendAction } = useActionCommands(setLocalModel);
 
   const getText = (a: any) => (typeof a.textKey === 'string' ? translations[a.textKey] : a.text || '');
+
+  const handleQuickAdd = () => {
+    // Azione base: sayMessage vuota
+    appendAction(0, { actionId: 'sayMessage', text: '' } as any);
+  };
 
   return (
     <div style={{ padding: 16 }}>
@@ -75,29 +82,32 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
         <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No escalation/actions for this step.</div>
       )}
       {['start', 'success'].includes(stepKey) ? (
-        // Per start/success mostra solo le action senza recovery box
-        localModel[0]?.actions?.map((a, j) => (
-          <ActionRowDnDWrapper
-            key={j}
-            escalationIdx={0}
-            actionIdx={j}
-            action={a}
-            onMoveAction={moveAction}
-            onDropNewAction={(action, to, pos) => dropFromViewer(action, to, pos)}
-          >
-            <ActionRow
-              icon={getIconComponent(a.icon || a.actionId, ensureHexColor(a.color))}
-              text={getText(a)}
-              color={color}
-              draggable
-              selected={false}
-              actionId={a.actionId}
-              label={a.label || a.actionId}
-              onEdit={(newText) => editAction(0, j, newText)}
-              onDelete={() => deleteAction(0, j)}
-            />
-          </ActionRowDnDWrapper>
-        ))
+        // Per start/success: canvas droppabile per append; i row wrapper non accettano drop dal viewer
+        <CanvasDropWrapper onDropAction={(action) => appendAction(0, action)} color={color}>
+          {localModel[0]?.actions?.map((a, j) => (
+            <ActionRowDnDWrapper
+              key={j}
+              escalationIdx={0}
+              actionIdx={j}
+              action={a}
+              onMoveAction={moveAction}
+              onDropNewAction={(action, to, pos) => dropFromViewer(action, to, pos)}
+              allowViewerDrop={true}
+            >
+              <ActionRow
+                icon={getIconComponent(a.icon || a.actionId, ensureHexColor(a.color))}
+                text={getText(a)}
+                color={color}
+                draggable
+                selected={false}
+                actionId={a.actionId}
+                label={a.label || a.actionId}
+                onEdit={(newText) => editAction(0, j, newText)}
+                onDelete={() => deleteAction(0, j)}
+              />
+            </ActionRowDnDWrapper>
+          ))}
+        </CanvasDropWrapper>
       ) : (
         localModel.map((esc, idx) => (
           <div key={idx} style={{ border: `1px solid ${color}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
@@ -110,28 +120,33 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
               )}
             </div>
             <div style={{ padding: 10 }}>
-              {esc.actions.map((a, j) => (
-                <ActionRowDnDWrapper
-                  key={j}
-                  escalationIdx={idx}
-                  actionIdx={j}
-                  action={a}
-                  onMoveAction={moveAction}
-                  onDropNewAction={(action, to, pos) => dropFromViewer(action, to, pos)}
-                >
-                  <ActionRow
-                    icon={getIconComponent(a.icon || a.actionId, ensureHexColor(a.color))}
-                    text={getText(a)}
-                    color={color}
-                    draggable
-                    selected={false}
-                    actionId={a.actionId}
-                    label={a.label || a.actionId}
-                    onEdit={(newText) => editAction(idx, j, newText)}
-                    onDelete={() => deleteAction(idx, j)}
-                  />
-                </ActionRowDnDWrapper>
-              ))}
+              {esc.actions.length === 0 ? (
+                <PanelEmptyDropZone color={color} onDropAction={(action) => appendAction(idx, action)} />
+              ) : (
+                esc.actions.map((a, j) => (
+                  <ActionRowDnDWrapper
+                    key={j}
+                    escalationIdx={idx}
+                    actionIdx={j}
+                    action={a}
+                    onMoveAction={moveAction}
+                    onDropNewAction={(action, to, pos) => dropFromViewer(action, to, pos)}
+                    allowViewerDrop={true}
+                  >
+                    <ActionRow
+                      icon={getIconComponent(a.icon || a.actionId, ensureHexColor(a.color))}
+                      text={getText(a)}
+                      color={color}
+                      draggable
+                      selected={false}
+                      actionId={a.actionId}
+                      label={a.label || a.actionId}
+                      onEdit={(newText) => editAction(idx, j, newText)}
+                      onDelete={() => deleteAction(idx, j)}
+                    />
+                  </ActionRowDnDWrapper>
+                ))
+              )}
             </div>
           </div>
         ))
