@@ -16,9 +16,20 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
   onClose 
 }) => {
   const [flowState, setFlowState] = useState<FlowState | null>(null);
-  const [engine] = useState(() => new ResponseFlowEngine(ddt, translations, selectedNode));
+  const [engine, setEngine] = useState(() => new ResponseFlowEngine(ddt, translations, selectedNode));
   const [showDebug, setShowDebug] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Rebuild engine only when DDT or translations change. Preserve chat on sidebar selection changes.
+    setEngine(new ResponseFlowEngine(ddt, translations, selectedNode));
+    setFlowState(null);
+  }, [ddt, translations]);
+
+  useEffect(() => {
+    // When only selectedNode changes, keep current conversation and just point the engine to the new node.
+    engine.setSelectedNode?.(selectedNode);
+  }, [selectedNode, engine]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,7 +50,6 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
 
   const handleUserInput = (input: string) => {
     if (!flowState) return;
-    
     const newState = engine.processUserInput(flowState, input);
     setFlowState(newState);
   };
@@ -96,8 +106,6 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
             )}
           </div>
         </div>
-        
-        {/* Status */}
         {flowState && (
           <div className="mt-2 text-xs text-gray-600">
             <div className="flex items-center gap-4">
@@ -126,48 +134,20 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
           <div className="text-center text-gray-500 mt-8">
             <Play size={48} className="mx-auto mb-4 text-gray-300" />
             <p className="text-lg font-medium">Ready to test dialogue flow</p>
-            <p className="text-sm mt-2 text-gray-400">
-              Press Start to begin simulation
-            </p>
-            <div className="mt-4 text-xs bg-gray-50 p-3 rounded border-l-4 border-gray-300">
-              <p className="font-medium text-gray-700 mb-1">Test commands:</p>
-              <p>• Empty Enter → triggers noInput escalation</p>
-              <p>• "xxxx" + Enter → triggers noMatch escalation</p>
-              <p>• Any other text → normal flow</p>
-            </div>
-            {showDebug && (
-              <div className="mt-4 text-xs bg-orange-50 p-3 rounded border-l-4 border-orange-300">
-                <p className="font-medium text-orange-700 mb-1">Debug info:</p>
-                <p>DDT ID: {ddt?.id || ddt?.label || 'Unknown'}</p>
-                <p>Has translations: {translations ? Object.keys(translations).length : 0} keys</p>
-                <p>Selected node: {selectedNode?.label || 'Main data'}</p>
-              </div>
-            )}
+            <p className="text-sm mt-2 text-gray-400">Press Start to begin simulation</p>
           </div>
         ) : (
           <>
-            {flowState.messages.map((message, index) => (
+            {flowState.messages.map((message) => (
               <div key={message.id}>
-                <div
-                  className={`flex ${message.type === 'bot' ? 'justify-start' : 'justify-end'} mb-3`}
-                >
-                  <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                      message.type === 'bot'
-                        ? getStepColor(message.stepType)
-                        : 'bg-purple-600 text-white'
-                    }`}
-                    style={{ minHeight: '40px' }}
-                  >
+                <div className={`flex ${message.type === 'bot' ? 'justify-start' : 'justify-end'} mb-3`}>
+                  <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.type === 'bot' ? getStepColor(message.stepType) : 'bg-purple-600 text-white'}`} style={{ minHeight: '40px' }}>
                     <div className="flex items-start gap-2">
                       {message.type === 'bot' && <Bot size={16} className="mt-1 flex-shrink-0" />}
                       <div className="flex-1">
                         <p className="text-sm">{message.text || '[NO TEXT]'}</p>
                         {message.stepType && (
-                          <span className="text-xs opacity-70 font-mono mt-1 block">
-                            {message.stepType}
-                            {message.escalationLevel && message.escalationLevel > 1 && ` #${message.escalationLevel}`}
-                          </span>
+                          <span className="text-xs opacity-70 font-mono mt-1 block">{message.stepType}{message.escalationLevel && message.escalationLevel > 1 && ` #${message.escalationLevel}`}</span>
                         )}
                       </div>
                     </div>
@@ -202,9 +182,7 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
       )}
 
       {flowState?.completed && (
-        <div className="p-4 bg-green-50 border-t text-center text-green-800">
-          🎉 Dialogue completed successfully!
-        </div>
+        <div className="p-4 bg-green-50 border-t text-center text-green-800">🎉 Dialogue completed successfully!</div>
       )}
     </div>
   );
