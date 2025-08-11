@@ -22,7 +22,6 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
 
   const colorForStep = (key: string): string => {
     if ((stepMeta as any)[key]?.color) return (stepMeta as any)[key].color;
-    // Virtual constraint steps: use orange
     if (/^constraint\./.test(key)) return '#fb923c';
     return '#7c3aed';
   };
@@ -31,14 +30,6 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     if ((stepMeta as any)[key]?.icon) return (stepMeta as any)[key].icon;
     if (/^constraint\./.test(key)) return <Shield size={14} />;
     return null;
-  };
-
-  const hexToRgba = (hex: string, alpha: number) => {
-    const m = hex.replace('#', '');
-    const r = parseInt(m.substring(0, 2), 16);
-    const g = parseInt(m.substring(2, 4), 16);
-    const b = parseInt(m.substring(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
   const getFriendlyLabel = (key: string): string => {
@@ -66,28 +57,31 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
       {stepKeys.map((key) => {
         const color = colorForStep(key);
         const selected = selectedStepKey === key;
+        const label = getFriendlyLabel(key);
         return (
           <button
             key={key}
+            type="button"
+            aria-label={`Step ${label}`}
             onClick={() => onSelectStep(key)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
               fontWeight: selected ? 700 : 500,
-              background: selected ? hexToRgba(color, 0.18) : 'transparent',
+              background: 'transparent',
               color: color,
               border: selected ? `4px solid ${color}` : `1px solid ${color}`,
               borderRadius: 10,
               padding: '6px 12px',
               cursor: 'pointer',
               fontSize: 14,
-              transition: 'background 0.2s, border 0.15s',
+              transition: 'border 0.15s',
               minWidth: 0,
             }}
           >
             <span>{iconForStep(key)}</span>
-            <span>{getFriendlyLabel(key)}</span>
+            <span>{label}</span>
           </button>
         );
       })}

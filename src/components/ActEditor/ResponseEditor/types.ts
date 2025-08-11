@@ -22,13 +22,36 @@ export interface TreeNodeProps {
   stepType?: string;
 }
 
-export interface Action {
-  id: string;
-  type: string;
+export const ICON_KEYS = [
+  'MessageCircle', 'HelpCircle', 'Headphones', 'Shield', 'PhoneOff', 'Database', 'Mail', 'MessageSquare',
+  'Function', 'Music', 'Eraser', 'ArrowRight', 'Tag', 'Clock', 'ServerCog', 'User', 'MapPin', 'Calendar',
+  'Type', 'Phone', 'Hash', 'Globe', 'Home', 'Building', 'FileText'
+] as const;
+
+export type IconKey = typeof ICON_KEYS[number] | string;
+
+export interface ActionBase {
+  actionId: string;
+  text?: string;
+  textKey?: string;
+  icon?: IconKey;
+  color?: string;
   label?: string;
-  text: string;
-  [key: string]: any;
 }
+
+export interface SayMessageAction extends ActionBase {
+  actionId: 'sayMessage';
+}
+
+export interface AskQuestionAction extends ActionBase {
+  actionId: 'askQuestion';
+}
+
+export interface CustomAction extends ActionBase {
+  actionId: string; // any other id
+}
+
+export type Action = SayMessageAction | AskQuestionAction | CustomAction;
 
 export interface Constraint {
   id: string;
@@ -42,6 +65,10 @@ export interface Parameter {
   name: string;
   value?: any;
   [key: string]: any;
+}
+
+export interface Escalation {
+  actions: Action[];
 }
 
 export interface TranslationsContextType {

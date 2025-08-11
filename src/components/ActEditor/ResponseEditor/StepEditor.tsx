@@ -4,6 +4,8 @@ import { stepMeta } from './ddtUtils';
 import ActionRowDnDWrapper from './ActionRowDnDWrapper';
 import ActionRow from './ActionRow';
 import getIconComponent from './icons';
+import useActionCommands from './useActionCommands';
+import { ensureHexColor } from './utils/color';
 
 type Props = {
   node: any;
@@ -61,42 +63,9 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   const [localModel, setLocalModel] = React.useState(model);
   React.useEffect(() => { setLocalModel(model); }, [model]);
 
-  // Funzione per spostare una action
-  const handleMoveAction = (fromEscIdx: number, fromActIdx: number, toEscIdx: number, toActIdx: number, position: 'before' | 'after') => {
-    setLocalModel(prev => {
-      const next = prev.map(esc => ({ ...esc, actions: [...esc.actions] }));
-      const action = next[fromEscIdx].actions[fromActIdx];
-      // Rimuovi dalla posizione originale
-      next[fromEscIdx].actions.splice(fromActIdx, 1);
-      // Calcola nuova posizione
-      let insertIdx = toActIdx;
-      if (fromEscIdx === toEscIdx && fromActIdx < toActIdx) insertIdx--;
-      if (position === 'after') insertIdx++;
-      next[toEscIdx].actions.splice(insertIdx, 0, action);
-      return next;
-    });
-  };
+  const { editAction, deleteAction, moveAction, dropFromViewer } = useActionCommands(setLocalModel);
 
-  const getLabelString = (label: any) => {
-    if (typeof label === 'string') return label;
-    if (label && typeof label === 'object') return label.en || label.it || label.pt || Object.values(label)[0] || '';
-    return '';
-  };
-
-  // Funzione per inserire una nuova action da ActionViewer
-  const handleDropNewAction = (action: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => {
-    console.log('[DEBUG] handleDropNewAction action:', action);
-    setLocalModel(prev => {
-      const next = prev.map(esc => ({ ...esc, actions: [...esc.actions] }));
-      let actionId = action.actionId || action.icon || (typeof action.label === 'string' ? action.label.toLowerCase().replace(/\s+/g, '') : '');
-      // Copia sempre anche icon e label
-      const newAction = { ...action, actionId, icon: action.icon || action.iconName || actionId, label: getLabelString(action.label), color: action.color || '#a21caf' };
-      let insertIdx = to.actionIdx;
-      if (position === 'after') insertIdx++;
-      next[to.escalationIdx].actions.splice(insertIdx, 0, newAction);
-      return next;
-    });
-  };
+  const getText = (a: any) => (typeof a.textKey === 'string' ? translations[a.textKey] : a.text || '');
 
   return (
     <div style={{ padding: 16 }}>
@@ -105,40 +74,68 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       {localModel.length === 0 && (
         <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No escalation/actions for this step.</div>
       )}
-      {localModel.map((esc, idx) => (
-        <div key={idx} style={{ border: `1px solid ${color}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: `${color}22`, color: color }}>
-            <span style={{ fontWeight: 700 }}>{idx + 1}° recovery</span>
-            {onDeleteEscalation && (
-              <button onClick={() => onDeleteEscalation(idx)} title="Delete recovery" style={{ background: 'transparent', border: 'none', color: '#ef9a9a', cursor: 'pointer', lineHeight: 0 }}>
-                <Trash2 size={14} />
-              </button>
-            )}
+      {['start', 'success'].includes(stepKey) ? (
+        // Per start/success mostra solo le action senza recovery box
+        localModel[0]?.actions?.map((a, j) => (
+          <ActionRowDnDWrapper
+            key={j}
+            escalationIdx={0}
+            actionIdx={j}
+            action={a}
+            onMoveAction={moveAction}
+            onDropNewAction={(action, to, pos) => dropFromViewer(action, to, pos)}
+          >
+            <ActionRow
+              icon={getIconComponent(a.icon || a.actionId, ensureHexColor(a.color))}
+              text={getText(a)}
+              color={color}
+              draggable
+              selected={false}
+              actionId={a.actionId}
+              label={a.label || a.actionId}
+              onEdit={(newText) => editAction(0, j, newText)}
+              onDelete={() => deleteAction(0, j)}
+            />
+          </ActionRowDnDWrapper>
+        ))
+      ) : (
+        localModel.map((esc, idx) => (
+          <div key={idx} style={{ border: `1px solid ${color}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: `${color}22`, color: color }}>
+              <span style={{ fontWeight: 700 }}>{idx + 1}° recovery</span>
+              {onDeleteEscalation && (
+                <button onClick={() => onDeleteEscalation(idx)} title="Delete recovery" style={{ background: 'transparent', border: 'none', color: '#ef9a9a', cursor: 'pointer', lineHeight: 0 }}>
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+            <div style={{ padding: 10 }}>
+              {esc.actions.map((a, j) => (
+                <ActionRowDnDWrapper
+                  key={j}
+                  escalationIdx={idx}
+                  actionIdx={j}
+                  action={a}
+                  onMoveAction={moveAction}
+                  onDropNewAction={(action, to, pos) => dropFromViewer(action, to, pos)}
+                >
+                  <ActionRow
+                    icon={getIconComponent(a.icon || a.actionId, ensureHexColor(a.color))}
+                    text={getText(a)}
+                    color={color}
+                    draggable
+                    selected={false}
+                    actionId={a.actionId}
+                    label={a.label || a.actionId}
+                    onEdit={(newText) => editAction(idx, j, newText)}
+                    onDelete={() => deleteAction(idx, j)}
+                  />
+                </ActionRowDnDWrapper>
+              ))}
+            </div>
           </div>
-          <div style={{ padding: 10 }}>
-            {esc.actions.map((a, j) => (
-              <ActionRowDnDWrapper
-                key={j}
-                escalationIdx={idx}
-                actionIdx={j}
-                action={a}
-                onMoveAction={handleMoveAction}
-                onDropNewAction={handleDropNewAction}
-              >
-                <ActionRow
-                  icon={getIconComponent(a.icon || a.actionId, a.color)}
-                  text={typeof a.textKey === 'string' ? translations[a.textKey] : a.text || ''}
-                  color={color}
-                  draggable
-                  selected={false}
-                  actionId={a.actionId}
-                  label={a.label || a.actionId}
-                />
-              </ActionRowDnDWrapper>
-            ))}
-          </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }

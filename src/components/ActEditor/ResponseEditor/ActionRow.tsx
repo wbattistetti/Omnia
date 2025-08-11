@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Trash2, Bot } from 'lucide-react';
-import SmartTooltip from '../../SmartTooltip';
-import { TooltipWrapper } from '../../TooltipWrapper';
-import AIActionPanel from './AIActionPanel';
+import { Check, X } from 'lucide-react';
+import ActionRowActions from './ActionRowActions';
+import ActionText from './ActionText';
+import styles from './ActionRow.module.css';
 
 interface ActionRowProps {
   icon?: React.ReactNode;
@@ -11,42 +11,34 @@ interface ActionRowProps {
   color?: string;
   onEdit?: (newText: string) => void;
   onDelete?: () => void;
-  onAIGenerate?: (exampleMessage: string, applyToAll: boolean) => void;
-  stepType?: string;
   draggable?: boolean;
   selected?: boolean;
   dndPreview?: 'before' | 'after';
-  actionId?: string; // aggiungi actionId come prop opzionale
+  actionId?: string;
+  isDragging?: boolean;
 }
 
-const ActionRow: React.FC<ActionRowProps> = ({ 
+function ActionRowInner({ 
   icon, 
   label, 
   text, 
   color = '#a21caf', 
   onEdit, 
-  onDelete, 
-  onAIGenerate,
-  stepType,
+  onDelete,
   draggable, 
   selected, 
   dndPreview,
-  actionId // aggiungi actionId come prop opzionale
-}) => {
+  actionId,
+  isDragging = false
+}: ActionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
-  const [hovered, setHovered] = useState(false);
-  const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleEdit = () => {
+    setEditValue(text);
     setEditing(true);
     setTimeout(() => inputRef.current?.focus(), 0);
-  };
-  const handleEditBlur = () => {
-    setEditing(false);
-    setEditValue(text); // Blur cancels edit
   };
   const handleEditKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -67,182 +59,76 @@ const ActionRow: React.FC<ActionRowProps> = ({
     setEditValue(text);
   };
 
-  const handleAIGenerate = async (exampleMessage: string, applyToAll: boolean) => {
-    if (onAIGenerate) {
-      setIsGenerating(true);
-      try {
-        await onAIGenerate(exampleMessage, applyToAll);
-        setAiPanelOpen(false);
-      } catch (error) {
-        console.error('AI generation failed:', error);
-      } finally {
-        setIsGenerating(false);
-      }
-    }
-  };
-
   return (
     <div>
       <div
+        className={styles.row}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
           background: selected ? '#ede9fe' : 'transparent',
           border: selected ? `2px solid ${color}` : 'none',
           borderRadius: 8,
           padding: '8px 0',
           marginBottom: 6,
           boxShadow: selected ? `0 2px 8px 0 ${color}22` : undefined,
-          cursor: draggable ? 'grab' : 'default',
+          cursor: isDragging ? 'grabbing' : (draggable ? 'grab' : 'default'),
           transition: 'background 0.15s, border 0.15s',
           position: 'relative',
           borderTop: dndPreview === 'before' ? '2px solid #2563eb' : undefined,
           borderBottom: dndPreview === 'after' ? '2px solid #2563eb' : undefined,
         }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
       >
-      {icon && <span style={{ color, display: 'flex', alignItems: 'center' }}>{icon}</span>}
-      {/* Etichetta per action custom */}
-      {actionId && actionId !== 'sayMessage' && actionId !== 'askQuestion' && label && (
-        <span style={{ background: '#222', color: '#fff', borderRadius: 8, padding: '2px 8px', fontSize: 12, marginRight: 6, fontWeight: 600 }}>{label}</span>
-      )}
-      <span style={{ flex: 1, color: '#fff', fontSize: 15 }}>
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={editValue}
-            onChange={e => setEditValue(e.target.value)}
-            onBlur={handleEditBlur}
-            onKeyDown={handleEditKeyDown}
-            style={{
-              fontWeight: 500,
-              fontSize: 15,
-              padding: '6px 10px',
-              border: '0.5px solid #bbb', // ultra-thin border all around
-              borderRadius: 6,
-              outline: 'none',
-              boxShadow: 'none',
-              minWidth: 80,
-              width: '100%',
-              boxSizing: 'border-box',
-              background: '#fff',
-              color: '#111',
-            }}
-          />
-        ) : (
-          text
+        {icon && <span style={{ color, display: 'flex', alignItems: 'center', marginRight: 8 }}>{icon}</span>}
+        {actionId && actionId !== 'sayMessage' && actionId !== 'askQuestion' && label && (
+          <span style={{ background: '#222', color: '#fff', borderRadius: 8, padding: '2px 8px', fontSize: 15, fontWeight: 500, marginRight: 8, display: 'inline-block' }}>{label}</span>
         )}
-      </span>
-      {/* Editing controls: show only when editing */}
-      {editing && (
-        <>
-          {/* Confirm (checkmark) */}
-          <TooltipWrapper tooltip={<SmartTooltip text="Conferma modifica" tutorId="action_confirm"><span /></SmartTooltip>}>
-            {(show, triggerProps) => (
-              <button
-                {...triggerProps}
-                onClick={handleEditConfirm}
-                style={{ background: 'none', border: 'none', color: '#22c55e', cursor: 'pointer', marginRight: 4, fontSize: 20, display: 'flex', alignItems: 'center', position: 'relative' }}
-                tabIndex={-1}
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 11 9 16 17 6" /></svg>
-              </button>
-            )}
-          </TooltipWrapper>
-          {/* Cancel (X) */}
-          <TooltipWrapper tooltip={<SmartTooltip text="Annulla modifica" tutorId="action_cancel"><span /></SmartTooltip>}>
-            {(show, triggerProps) => (
-              <button
-                {...triggerProps}
-                onClick={handleEditCancel}
-                style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', marginRight: 4, fontSize: 20, display: 'flex', alignItems: 'center', position: 'relative' }}
-                tabIndex={-1}
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="6" x2="14" y2="14" /><line x1="14" y1="6" x2="6" y2="14" /></svg>
-              </button>
-            )}
-          </TooltipWrapper>
-          {/* Delete (trash) */}
-          {onDelete && (
-            <TooltipWrapper tooltip={<SmartTooltip text="Elimina messaggio" tutorId="action_delete"><span /></SmartTooltip>}>
-              {(show, triggerProps) => (
-                <button
-                  {...triggerProps}
-                  onClick={onDelete}
-                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', position: 'relative' }}
-                  tabIndex={-1}
-                >
-                  <Trash2 size={18} />
-                </button>
-              )}
-            </TooltipWrapper>
-          )}
-        </>
-      )}
-      {/* Show pencil, AI, and trash on hover if not editing */}
-      {!editing && hovered && onEdit && (
-        <TooltipWrapper tooltip={<SmartTooltip text="Modifica messaggio" tutorId="action_edit"><span /></SmartTooltip>}>
-          {(show, triggerProps) => (
-            <button
-              {...triggerProps}
-              onClick={handleEdit}
-              style={{ background: 'none', border: 'none', color: color, cursor: 'pointer', marginRight: 6, fontSize: 18, display: 'flex', alignItems: 'center', position: 'relative' }}
-              tabIndex={-1}
-            >
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-            </button>
-          )}
-        </TooltipWrapper>
-      )}
-      {!editing && hovered && onAIGenerate && stepType && (
-        <TooltipWrapper tooltip={
-          <SmartTooltip text="AI-powered message refinement" tutorId="ai_refinement">
-            <span />
-          </SmartTooltip>
-        }>
-          {(show, triggerProps) => (
-            <button
-              {...triggerProps}
-              onClick={() => setAiPanelOpen(!aiPanelOpen)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#a21caf',
-                cursor: 'pointer',
-                marginRight: 6,
-                fontSize: 18,
-                display: 'flex',
-                alignItems: 'center',
-                position: 'relative'
-              }}
-              title="AI Refinement"
-            >
-              <Bot size={18} />
-            </button>
-          )}
-        </TooltipWrapper>
-      )}
-      {!editing && hovered && onDelete && (
-        <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center' }} title="Elimina messaggio" tabIndex={-1}>
-          <Trash2 size={18} />
-        </button>
-      )}
-      </div>
-      
-      {/* AI Panel */}
-      {aiPanelOpen && onAIGenerate && stepType && (
-        <AIActionPanel
-          currentMessage={text}
-          stepType={stepType}
-          onGenerate={handleAIGenerate}
-          onClose={() => setAiPanelOpen(false)}
-          isGenerating={isGenerating}
+        <ActionText
+          text={text}
+          editing={editing}
+          inputRef={inputRef}
+          editValue={editValue}
+          onChange={setEditValue}
+          onKeyDown={handleEditKeyDown}
         />
-      )}
+        {editing ? (
+          <>
+            <button
+              onClick={handleEditConfirm}
+              style={{ background: 'none', border: 'none', color: '#22c55e', cursor: 'pointer', marginRight: 6, fontSize: 18, display: 'flex', alignItems: 'center' }}
+              tabIndex={-1}
+              title="Conferma modifica"
+              aria-label="Conferma modifica"
+            >
+              <Check size={18} />
+            </button>
+            <button
+              onClick={handleEditCancel}
+              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center' }}
+              tabIndex={-1}
+              title="Annulla modifica"
+              aria-label="Annulla modifica"
+            >
+              <X size={18} />
+            </button>
+          </>
+        ) : (
+          <ActionRowActions
+            onEdit={handleEdit}
+            onDelete={onDelete}
+            color={'#94a3b8'}
+            style={{ marginLeft: 10 }}
+          />
+        )}
+      </div>
     </div>
   );
-};
+}
 
-export default ActionRow;
+const areEqual = (prev: ActionRowProps, next: ActionRowProps) => (
+  prev.text === next.text &&
+  prev.label === next.label &&
+  prev.selected === next.selected &&
+  prev.isDragging === next.isDragging &&
+  prev.actionId === next.actionId
+);
+
+export default React.memo(ActionRowInner, areEqual);

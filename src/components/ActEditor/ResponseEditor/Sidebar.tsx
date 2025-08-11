@@ -82,7 +82,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
     width: '100%',
     background: active ? bgActive : bgBase,
     color: textBase,
-    border: active ? '4px solid #fff!important' : `1px solid ${borderColor}`,
+    border: `1px solid ${borderColor}`,
     borderRadius: 10,
     padding: '8px 10px',
     cursor: 'pointer',
@@ -90,7 +90,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
     textAlign: 'left' as const,
     outline: 'none',
     outlineOffset: 0,
-    boxShadow: active ? '0 0 0 2px rgba(156,163,175,0.20) inset' : 'none',
+    boxShadow: 'none',
     fontWeight: active ? 700 : 400,
     transition: 'border 0.15s',
   });

@@ -1,12 +1,13 @@
 import React from 'react';
 import { useDrag, useDrop } from 'react-dnd';
+import { Action } from './types';
 
 export interface ActionRowDnDWrapperProps {
   escalationIdx: number;
   actionIdx: number;
-  action: any;
+  action: Action;
   onMoveAction: (fromEscIdx: number, fromActIdx: number, toEscIdx: number, toActIdx: number, position: 'before' | 'after') => void;
-  onDropAction?: (from: { escalationIdx: number; actionIdx: number; action: any }, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
+  onDropAction?: (from: { escalationIdx: number; actionIdx: number; action: Action }, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
   onDropNewAction?: (action: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
   children: React.ReactNode;
 }
@@ -71,16 +72,10 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
       const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
       if (item.type === DND_TYPE) {
         if (item.escalationIdx === escalationIdx && item.actionIdx === actionIdx) return;
-        if (onMoveAction) {
-          onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
-        }
-        if (onDropAction) {
-          onDropAction(item, { escalationIdx, actionIdx }, position);
-        }
+        if (onMoveAction) onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
+        if (onDropAction) onDropAction(item, { escalationIdx, actionIdx }, position);
       } else if (item.type === DND_TYPE_VIEWER) {
-        if (onDropNewAction) {
-          onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
-        }
+        if (onDropNewAction) onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
       }
       setPreviewPosition(undefined);
       setCanShowPreview(false);
@@ -95,7 +90,6 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
 
   return (
     <div ref={ref} style={{ opacity: isDragging ? 0.5 : 1, position: 'relative' }}>
-      {/* Preview line */}
       {isOver && previewPosition && canShowPreview && (
         <div
           style={{
