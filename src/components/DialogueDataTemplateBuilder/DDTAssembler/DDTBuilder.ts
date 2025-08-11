@@ -1,7 +1,5 @@
 // Moved from orchestrator/assembleFinalDDT.ts for modular DDTAssembler structure.
-import { v4 as uuidv4 } from 'uuid';
-import { buildStepGroup } from './StepBuilder';
-import { StepGroup, Escalation, Action, KNOWN_ACTIONS } from './types';
+import type { AssembledDDT, MainDataNode } from './currentDDT.types';
 import { buildMainDataNodeWithSubData } from './MainDataBuilder';
 import { StepResult } from '../orchestrator/types';
 import { buildStepsWithSubData } from './buildStepMessagesFromResults';
@@ -11,12 +9,17 @@ export function buildDDT(
   ddtId: string,
   dataNode: any,
   stepResults: StepResult[]
-) {
+) : AssembledDDT {
   const stepMessagesWithSubData = buildStepsWithSubData(stepResults);
   const translations: Record<string, string> = {};
-  const mainData = buildMainDataNodeWithSubData(ddtId, dataNode, stepMessagesWithSubData, translations);
+  const mainData: MainDataNode = buildMainDataNodeWithSubData(
+    ddtId,
+    dataNode,
+    stepMessagesWithSubData,
+    translations
+  ) as MainDataNode;
   const label = dataNode.label || ddtId;
-  const assembledDDT = {
+  const assembledDDT: AssembledDDT = {
     id: ddtId,
     label,
     mainData,
