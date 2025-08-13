@@ -5,6 +5,7 @@ import WizardPipelineStep from './WizardPipelineStep';
 import WizardErrorStep from './WizardErrorStep';
 import WizardSupportModal from './WizardSupportModal';
 import MainDataCollection, { SchemaNode } from './MainDataCollection';
+import V2TogglePanel from './V2TogglePanel';
 import { computeWorkPlan } from './workPlan';
 import { buildStepPlan } from './stepPlan';
 import { PlanRunResult } from './planRunner';
@@ -332,6 +333,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             </button>
           </div>
         </div>
+        <V2TogglePanel />
         {/* editor modal removed: sidebar will open editor after onComplete */}
         {/* debug removed */}
       </div>

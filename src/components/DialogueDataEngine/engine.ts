@@ -1,11 +1,12 @@
 import type { DDTTemplateV2, DDTNode } from './model/ddt.v2.types';
 import { buildPlan, isSaturated, nextMissingSub, applyComposite, setMemory, Memory } from './state';
-import { isYes, isNo } from './utils';
+import { isYes, isNo, extractImplicitCorrection, extractLastDate } from './utils';
 
 export type Mode =
   | 'CollectingMain'
   | 'CollectingSub'
   | 'ConfirmingMain'
+  | 'NotConfirmed'
   | 'SuccessMain'
   | 'Completed';
 
@@ -16,6 +17,7 @@ export interface SimulatorState {
   currentSubId?: string;
   memory: Memory;
   transcript: Array<{ from: 'bot' | 'user'; text: string; meta?: any }>;
+  counters: { notConfirmed: number };
 }
 
 export function initEngine(template: DDTTemplateV2): SimulatorState {
@@ -26,6 +28,7 @@ export function initEngine(template: DDTTemplateV2): SimulatorState {
     currentIndex: 0,
     memory: {},
     transcript: [],
+    counters: { notConfirmed: 0 },
   };
 }
 
@@ -48,8 +51,24 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
 
   // Handle by mode
   if (state.mode === 'CollectingMain') {
-    const applied = applyComposite(main.kind, input);
-    let mem = setMemory(state.memory, main.id, { ...(state.memory[main.id]?.value || {}), ...applied.variables }, false);
+    // Implicit correction: if input contains a correction, try to re-parse that
+    const corrected = extractImplicitCorrection(input) || extractLastDate(input) || input;
+    const applied = applyComposite(main.kind, corrected);
+    let mem = setMemory(
+      state.memory,
+      main.id,
+      { ...(state.memory[main.id]?.value || {}), ...applied.variables },
+      false
+    );
+    // Propagate composite parts into sub memory when available
+    if (Array.isArray(main.subs) && main.subs.length > 0) {
+      for (const sid of main.subs) {
+        const val = (applied.variables as any)[sid];
+        if (val !== undefined) {
+          mem = setMemory(mem, sid, val, false);
+        }
+      }
+    }
     const missing = nextMissingSub(main, mem);
     if (applied.complete && !missing) {
       return { ...state, memory: mem, mode: 'ConfirmingMain' };
@@ -62,7 +81,8 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
 
   if (state.mode === 'CollectingSub') {
     const sid = state.currentSubId!;
-    const mem = setMemory(state.memory, sid, input, false);
+    const corrected = extractImplicitCorrection(input) || input;
+    const mem = setMemory(state.memory, sid, corrected, false);
     const missing = nextMissingSub(main, mem);
     if (missing) return { ...state, memory: mem, currentSubId: missing };
     return { ...state, memory: mem, mode: 'ConfirmingMain', currentSubId: undefined };
@@ -74,11 +94,28 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
       return { ...advanceIndex(state), memory: mem, mode: 'SuccessMain' };
     }
     if (isNo(input)) {
-      // Minimal: go back to CollectingSub of first missing
-      const miss = nextMissingSub(main, state.memory) || (main.subs || [])[0];
-      return { ...state, mode: 'CollectingSub', currentSubId: miss };
+      // Enter NotConfirmed flow
+      return { ...state, mode: 'NotConfirmed', counters: { ...state.counters, notConfirmed: 1 } };
     }
     return state;
+  }
+
+  if (state.mode === 'NotConfirmed') {
+    // Support a simple command pattern: "choose:<subId>" to route to a specific sub
+    const trimmed = String(input || '').trim();
+    if (trimmed.startsWith('choose:')) {
+      const subId = trimmed.slice('choose:'.length);
+      if (subId) {
+        return { ...state, mode: 'CollectingSub', currentSubId: subId };
+      }
+    }
+    const nextCount = Math.min(3, state.counters.notConfirmed + 1);
+    // After 3 attempts, force collecting first missing sub (or first declared)
+    if (nextCount >= 3) {
+      const miss = nextMissingSub(main, state.memory) || (main.subs || [])[0];
+      return { ...state, mode: 'CollectingSub', currentSubId: miss, counters: { ...state.counters, notConfirmed: nextCount } };
+    }
+    return { ...state, counters: { ...state.counters, notConfirmed: nextCount } };
   }
 
   if (state.mode === 'SuccessMain') {

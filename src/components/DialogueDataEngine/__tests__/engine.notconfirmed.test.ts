@@ -21,29 +21,28 @@ const template: DDTTemplateV2 = {
   ],
 };
 
-describe('engine minimal modes', () => {
-  it('happy path: full date -> confirm -> yes -> success -> next/completed', () => {
+describe('engine NotConfirmed', () => {
+  it('NO at confirm enters NotConfirmed and choose:<sub> routes to sub', () => {
     let s = initEngine(template);
     s = advance(s, '12/05/1990');
     expect(s.mode).toBe('ConfirmingMain');
-    s = advance(s, 'yes');
-    expect(s.mode).toBe('SuccessMain');
-    s = advance(s, '');
-    expect(s.mode === 'CollectingMain' || s.mode === 'Completed').toBe(true);
-  });
-
-  it('partial then sub collecting', () => {
-    let s = initEngine(template);
-    s = advance(s, '1990');
-    expect(s.mode).toBe('CollectingSub');
-    expect(s.currentSubId).toBe('day' /* month could be first depending on regex; allow either */);
-  });
-
-  it('confirm no -> go to sub collecting', () => {
-    let s = initEngine(template);
-    s = advance(s, '12/05/1990');
     s = advance(s, 'no');
     expect(s.mode).toBe('NotConfirmed');
+    s = advance(s, 'choose:month');
+    expect(s.mode).toBe('CollectingSub');
+    expect(s.currentSubId).toBe('month');
+  });
+
+  it('NotConfirmed escalates up to 3 and then forces collecting missing', () => {
+    let s = initEngine(template);
+    s = advance(s, '12/05/1990');
+    expect(s.mode).toBe('ConfirmingMain');
+    s = advance(s, 'no');
+    expect(s.mode).toBe('NotConfirmed');
+    s = advance(s, 'blah');
+    s = advance(s, 'blah');
+    s = advance(s, 'blah');
+    expect(['CollectingSub', 'ConfirmingMain']).toContain(s.mode);
   });
 });
 

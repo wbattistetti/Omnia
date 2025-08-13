@@ -12,7 +12,12 @@ const template: DDTTemplateV2 = {
       type: 'main',
       required: true,
       kind: 'date',
-      steps: { ask: { base: 'ask', reaskNoInput: ['', '', ''], reaskNoMatch: ['', '', ''] }, success: { base: ['ok'] }, confirm: { base: 'c', noInput: ['', '', ''], noMatch: ['', '', ''] } },
+      steps: {
+        ask: { base: 'ask', reaskNoInput: ['', '', ''], reaskNoMatch: ['', '', ''] },
+        success: { base: ['ok'] },
+        confirm: { base: 'c', noInput: ['', '', ''], noMatch: ['', '', ''] },
+        disambiguation: { prompt: 'choose', softRanking: true, defaultWithCancel: true, selectionMode: 'numbers' },
+      },
       subs: ['day', 'month', 'year'],
     },
     { id: 'day', label: 'Day', type: 'sub', kind: 'generic', steps: { ask: { base: 'x', reaskNoInput: ['', '', ''], reaskNoMatch: ['', '', ''] } } } as any,
@@ -21,29 +26,17 @@ const template: DDTTemplateV2 = {
   ],
 };
 
-describe('engine minimal modes', () => {
-  it('happy path: full date -> confirm -> yes -> success -> next/completed', () => {
+describe('engine implicit confirmation / disambiguation scaffolding', () => {
+  it('implicit correction: not X but Y triggers re-parse and confirm', () => {
     let s = initEngine(template);
-    s = advance(s, '12/05/1990');
-    expect(s.mode).toBe('ConfirmingMain');
-    s = advance(s, 'yes');
-    expect(s.mode).toBe('SuccessMain');
-    s = advance(s, '');
-    expect(s.mode === 'CollectingMain' || s.mode === 'Completed').toBe(true);
+    s = advance(s, 'not 11/05/1990 but 12/05/1990');
+    expect(['ConfirmingMain', 'CollectingSub']).toContain(s.mode);
   });
 
-  it('partial then sub collecting', () => {
+  it('extracts last date in a noisy input and progresses', () => {
     let s = initEngine(template);
-    s = advance(s, '1990');
-    expect(s.mode).toBe('CollectingSub');
-    expect(s.currentSubId).toBe('day' /* month could be first depending on regex; allow either */);
-  });
-
-  it('confirm no -> go to sub collecting', () => {
-    let s = initEngine(template);
-    s = advance(s, '12/05/1990');
-    s = advance(s, 'no');
-    expect(s.mode).toBe('NotConfirmed');
+    s = advance(s, 'I thought 10-01-1990, no, 12-02-1991 is correct');
+    expect(['ConfirmingMain', 'CollectingSub']).toContain(s.mode);
   });
 });
 

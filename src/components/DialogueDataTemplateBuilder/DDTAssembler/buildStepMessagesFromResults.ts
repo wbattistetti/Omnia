@@ -44,7 +44,8 @@ export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMess
         if (Array.isArray(messages) && messages.length > 0) {
           // Map stepType to the correct key (e.g., startPrompt -> start)
           const mappedStepType = stepKeyMap[stepType];
-          if (mappedStepType) {
+          // For subData we explicitly skip confirmation/success groups
+          if (mappedStepType && mappedStepType !== 'confirmation' && mappedStepType !== 'success') {
             if (!subDataStepMessages[subDataName][mappedStepType]) {
               subDataStepMessages[subDataName][mappedStepType] = [];
             }

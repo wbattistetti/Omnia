@@ -22,7 +22,7 @@ const seg = (label?: string) => (label || '').split('/').join('-');
 
 export function buildStepPlan(mains: SchemaNode[]): StepPlanItem[] {
   const steps: StepPlanItem[] = [];
-  const addBase = (path: string) => {
+  const addBaseMain = (path: string) => {
     steps.push(
       { path, type: 'start' },
       { path, type: 'noMatch' },
@@ -32,9 +32,17 @@ export function buildStepPlan(mains: SchemaNode[]): StepPlanItem[] {
     );
   };
 
+  const addBaseSub = (path: string) => {
+    steps.push(
+      { path, type: 'start' },
+      { path, type: 'noMatch' },
+      { path, type: 'noInput' }
+    );
+  };
+
   for (const m of mains || []) {
     const mPath = seg(m.label);
-    addBase(mPath);
+    addBaseMain(mPath);
     for (const c of (m.constraints || []).filter(isCountableConstraint)) {
       steps.push(
         { path: mPath, type: 'constraintMessages', constraintKind: c.kind },
@@ -44,7 +52,7 @@ export function buildStepPlan(mains: SchemaNode[]): StepPlanItem[] {
     }
     for (const s of m.subData || []) {
       const sPath = `${seg(m.label)}/${seg(s.label)}`;
-      addBase(sPath);
+      addBaseSub(sPath);
       for (const c of (s.constraints || []).filter(isCountableConstraint)) {
         steps.push(
           { path: sPath, type: 'constraintMessages', constraintKind: c.kind },

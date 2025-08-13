@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { SchemaNode } from './MainDataCollection';
 import type { ArtifactStore } from './artifactStore';
+import { getAllV2Draft } from './V2DraftStore';
 
 export interface AssembledDDT {
   id: string;
@@ -51,10 +52,13 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     const nodeId = uuidv4();
     const path = pathFor(nodePath);
     const pathBucket = store.byPath[path];
+    const isSub = nodePath.length > 1;
 
     // Base prompts → add to translations (best-effort)
     if (pathBucket) {
-      const baseTypes: Array<keyof typeof pathBucket> = ['start', 'noMatch', 'noInput', 'confirmation', 'success'];
+      const baseTypes: Array<keyof typeof pathBucket> = isSub
+        ? ['start', 'noMatch', 'noInput']
+        : ['start', 'noMatch', 'noInput', 'confirmation', 'success'];
       for (const t of baseTypes) {
         const payload = (pathBucket as any)[t];
         if (payload) {
@@ -204,7 +208,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     }
 
     // Minimal base messages (ensure ResponseEditor displays steps)
-    const baseSteps = ['start', 'noInput', 'noMatch', 'confirmation', 'success'] as const;
+    const baseSteps = (isSub ? ['start', 'noInput', 'noMatch'] : ['start', 'noInput', 'noMatch', 'confirmation', 'success']) as const;
     for (const stepKey of baseSteps) {
       const defaultKey = `runtime.${ddtId}.${path}.${stepKey}.text`;
       // Prefer AI-provided key if present (ai.0). We already pushed translations for it above.
@@ -246,6 +250,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     label: rootLabel || 'Data',
     mainData: assembledMains,
     translations: { en: translations },
+    v2Draft: getAllV2Draft(),
   };
 }
 
