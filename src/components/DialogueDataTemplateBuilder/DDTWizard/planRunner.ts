@@ -46,6 +46,7 @@ export async function runPlanDry(mains: SchemaNode[]) {
           case 'noMatch': endpoint = '/api/stepNoMatch'; break;
           case 'noInput': endpoint = '/api/stepNoInput'; break;
           case 'confirmation': endpoint = '/api/stepConfirmation'; break;
+          case 'notConfirmed': endpoint = '/api/stepNotConfirmed'; break;
           case 'success': endpoint = '/api/stepSuccess'; break;
         }
         if (!endpoint) continue;

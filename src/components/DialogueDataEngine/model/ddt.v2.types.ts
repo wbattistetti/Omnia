@@ -73,6 +73,7 @@ export interface DDTNode {
   steps: StepMessages;
   subs?: string[];
   condition?: string;
+  synonyms?: string[];
 }
 
 export interface HumanLikeConfig {

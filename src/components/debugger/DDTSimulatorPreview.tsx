@@ -39,6 +39,7 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
   const { state, send, reset, setConfig } = useDDTSimulator(template, {
     typingIndicatorMs: 0,
     onLog: (e) => setLogs((l) => [...l, { ts: e.ts, kind: e.kind, message: e.message }]),
+    debug: true,
   });
   const [text, setText] = useState('');
   const [crumbs, setCrumbs] = useState<string[]>([]);

@@ -8,6 +8,12 @@ export interface Plan {
   byId: Record<string, DDTNode>;
 }
 
+function normalizeKey(s: string): string {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
 export function buildPlan(nodes: DDTNode[]): Plan {
   const byId: Record<string, DDTNode> = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const order: string[] = [];
@@ -21,6 +27,14 @@ export function buildPlan(nodes: DDTNode[]): Plan {
 }
 
 export function isSaturated(node: DDTNode, memory: Memory): boolean {
+  // If main has subs, require all subs to be present (independent of kind)
+  if (Array.isArray(node.subs) && node.subs.length > 0) {
+    for (const sid of node.subs) {
+      const m = memory[sid];
+      if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return false;
+    }
+    return true;
+  }
   const entry = memory[node.id];
   if (node.kind === 'date') {
     const v = entry?.value || {};
@@ -45,6 +59,46 @@ export interface CompositeApplyResult {
 }
 
 export function applyComposite(kind: Kind, input: string): CompositeApplyResult {
+  // Name: split into first/last
+  if (kind === 'name') {
+    const text = String(input || '').trim();
+    if (!text) return { variables: {}, complete: false, missing: ['firstname', 'lastname'] };
+    const tokens = text.split(/\s+/).filter(Boolean);
+    const vars: Record<string, any> = {};
+    if (tokens.length === 1) {
+      vars.firstname = tokens[0];
+      return { variables: vars, complete: false, missing: ['lastname'] };
+    }
+    vars.firstname = tokens[0];
+    vars.lastname = tokens[tokens.length - 1];
+    return { variables: vars, complete: true, missing: [] };
+  }
+
+  // Address: naïve extraction street/city/postal_code/country
+  if (kind === 'address') {
+    const text = String(input || '').trim();
+    if (!text) return { variables: {}, complete: false, missing: ['street', 'city', 'postal_code', 'country'] };
+    const vars: Record<string, any> = {};
+    // Postal code: 5 digits
+    const pc = text.match(/\b\d{5}\b/);
+    if (pc) vars.postal_code = pc[0];
+    // Country heuristic
+    const lower = text.toLowerCase();
+    if (/(italy|italia)/.test(lower)) vars.country = 'Italy';
+    // Street and city via comma split
+    if (text.includes(',')) {
+      const parts = text.split(',').map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 1) vars.street = parts[0];
+      if (parts.length >= 2) vars.city = parts[parts.length - 1];
+    } else {
+      // If contains digits, call it street; else city
+      if (/\d/.test(text)) vars.street = text; else vars.city = text;
+    }
+    const missing: string[] = [];
+    ['street', 'city', 'postal_code', 'country'].forEach((k) => { if (vars[k] == null) missing.push(k); });
+    return { variables: vars, complete: missing.length === 0, missing };
+  }
+
   if (kind === 'date') {
     const text = String(input || '').trim();
     if (!text) return { variables: {}, complete: false, missing: ['day', 'month', 'year'] };

@@ -1,4 +1,4 @@
-import React, { useRef, forwardRef } from 'react';
+import React, { forwardRef } from 'react';
 import { getLabel, getSubDataList } from './ddtSelectors';
 import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
@@ -8,20 +8,20 @@ interface SidebarProps {
   selectedMainIndex: number;
   onSelectMain: (idx: number) => void;
   selectedSubIndex?: number | null;
-  onSelectSub?: (idx: number) => void;
+  onSelectSub?: (idx: number | undefined) => void;
   aggregated?: boolean;
   rootLabel?: string;
   onSelectAggregator?: () => void;
+  onToggleSynonyms?: (mainIdx: number, subIdx?: number) => void;
 }
 
-const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator }, ref) {
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onToggleSynonyms }, ref) {
   if (!Array.isArray(mainList) || mainList.length === 0) return null;
   // Pastel/silver palette
   const borderColor = 'rgba(156,163,175,0.65)';
   const bgBase = 'rgba(156,163,175,0.10)';
   const bgActive = 'rgba(156,163,175,0.40)';
   const textBase = '#e5e7eb';
-  const textActive = '#0b1220';
 
   // selectedSubIndex: undefined o number
   const safeSelectedSubIndex = typeof selectedSubIndex === 'number' && !isNaN(selectedSubIndex) ? selectedSubIndex : undefined;
@@ -125,7 +125,12 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
               className={activeMain ? styles.sidebarSelected : ''}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{getLabel(main)}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{getLabel(main)}</span>
+              <button
+                title="Dizionario"
+                onClick={(e) => { e.stopPropagation(); onToggleSynonyms && onToggleSynonyms(idx, undefined); }}
+                style={{ border: '1px solid rgba(229,231,235,0.5)', background: 'transparent', color: '#e5e7eb', borderRadius: 8, padding: '4px 6px' }}
+              >📚</button>
             </button>
             {(selectedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 18, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -140,7 +145,12 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                       className={activeSub ? styles.sidebarSelected : ''}
                     >
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{getLabel(sub)}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{getLabel(sub)}</span>
+                      <button
+                        title="Dizionario"
+                        onClick={(e) => { e.stopPropagation(); onToggleSynonyms && onToggleSynonyms(idx, sidx); }}
+                        style={{ border: '1px solid rgba(229,231,235,0.5)', background: 'transparent', color: '#e5e7eb', borderRadius: 8, padding: '4px 6px' }}
+                      >📚</button>
                     </button>
                   );
                 })}

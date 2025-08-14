@@ -17,7 +17,8 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     noMatch: 'Non capisco',
     noInput: 'Non sento',
     confirmation: 'Devo confermare',
-    success: 'Ho capito!'
+    success: 'Ho capito!',
+    notConfirmed: 'Non Confermato'
   };
 
   const colorForStep = (key: string): string => {

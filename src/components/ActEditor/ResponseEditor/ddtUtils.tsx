@@ -58,4 +58,5 @@ export const stepMeta: Record<string, {
   confirmation: { icon: <CheckCircle2 size={17} />,      label: 'Devo confermare',     border: '#eab308', bg: 'rgba(234,179,8,0.08)', color: '#eab308', bgActive: 'rgba(234,179,8,0.18)' },
   success:      { icon: <CheckSquare size={17} />,       label: 'Ho capito!',           border: '#22c55e', bg: 'rgba(34,197,94,0.08)', color: '#22c55e', bgActive: 'rgba(34,197,94,0.18)' },
   notAcquired:  { icon: <AlertCircle size={17} />,       label: 'Dato non acquisito',  border: '#f59e42', bg: 'rgba(245,158,66,0.08)', color: '#f59e42', bgActive: 'rgba(245,158,66,0.18)' },
+  notConfirmed: { icon: <AlertCircle size={17} />,       label: 'Non Confermato',      border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
 }; 

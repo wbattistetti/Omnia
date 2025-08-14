@@ -18,6 +18,7 @@ export interface MainDataNode {
   condition?: string;
   steps: StepGroup[];
   subData?: MainDataNode[];
+  synonyms?: string[]; // embedded synonyms per node (main/sub)
   constraints?: any[]; // kept as any to avoid behavior changes
 }
 

@@ -5,6 +5,7 @@ export type PlanStepType =
   | 'noMatch'
   | 'noInput'
   | 'confirmation'
+  | 'notConfirmed'
   | 'success'
   | 'constraintMessages'
   | 'validator'
@@ -28,6 +29,7 @@ export function buildStepPlan(mains: SchemaNode[]): StepPlanItem[] {
       { path, type: 'noMatch' },
       { path, type: 'noInput' },
       { path, type: 'confirmation' },
+      { path, type: 'notConfirmed' },
       { path, type: 'success' }
     );
   };

@@ -31,6 +31,7 @@ const DEFAULT_STEP_ORDER = [
   'noMatch',
   'explicitConfirmation',
   'confirmation',
+  'notConfirmed',
   'success',
   'error',
 ];
@@ -117,5 +118,6 @@ export function getLabel(node: any): string {
 export function hasMultipleMains(ddt: any): boolean {
   return getMainDataList(ddt).length >= 2;
 }
+
 
 

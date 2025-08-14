@@ -46,6 +46,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
 }
 
 export default function StepEditor({ node, stepKey, translations, onDeleteEscalation }: Props) {
+  // No special-case: notConfirmed behaves like other steps (escalations UI)
   const meta = (stepMeta as any)[stepKey];
   const color = meta?.color || '#fb923c';
   // const icon = meta?.icon || null;

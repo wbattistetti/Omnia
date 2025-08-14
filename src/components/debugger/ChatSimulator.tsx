@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDDTManager } from '../../context/DDTManagerContext';
 import BubbleBot from './BubbleBot';
 import BubbleUser from './BubbleUser';
 import BubbleInput from './BubbleInput';
@@ -24,7 +25,8 @@ const ddt = {
 const ChatSimulator: React.FC = () => {
   const { state, sendInput, reset } = useSimulator(ddt);
   const [showDebug, setShowDebug] = useState(false);
-  const [useNewEngine, setUseNewEngine] = useState(false);
+  const [useNewEngine, setUseNewEngine] = useState(true);
+  const { selectedDDT } = useDDTManager();
   const [inputLoading, setInputLoading] = useState(false);
 
   // Handle sending user input asynchronously
@@ -46,7 +48,7 @@ const ChatSimulator: React.FC = () => {
         </button>
       </div>
       {useNewEngine ? (
-        <DDTSimulatorPreview />
+        <DDTSimulatorPreview currentDDT={selectedDDT as any} />
       ) : (
         <>
           <div className="chat-bubbles" style={{ minHeight: 200, border: '1px solid #eee', padding: 16, marginBottom: 8 }}>

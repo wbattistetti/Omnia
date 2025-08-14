@@ -2,6 +2,8 @@ import React from 'react';
 import ActionList from '../ActionViewer/ActionList';
 import { Plus } from 'lucide-react';
 import TreeView from './TreeView';
+import SynonymsEditor from './SynonymsEditor';
+import { BookMarked } from 'lucide-react';
 import styles from './ResponseEditor.module.css';
 import ConstraintWizard from '../../ConstraintGenerator/ConstraintWizard';
 import { createConstraint, updateConstraint, removeConstraint } from './constraintFactories';
@@ -41,9 +43,22 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
   const [showConstraintWizard, setShowConstraintWizard] = React.useState(false);
   const [rightWidth, setRightWidth] = React.useState(360); // 3 colonne (120*3)
   const [dragging, setDragging] = React.useState(false);
+  const [showSynonyms, setShowSynonyms] = React.useState(false);
+
+  const [localSynonyms, setLocalSynonyms] = React.useState<string[]>([]);
 
   // Log escalations for the selected step of the selected node
   const selectedNode = props.editorState.selectedNode;
+  // Attiva automaticamente il pannello dizionario se richiesto dalla sidebar
+  React.useEffect(() => {
+    try {
+      const flag = sessionStorage.getItem('responseEditor.showSynonyms');
+      if (flag === '1') {
+        setShowSynonyms(true);
+        sessionStorage.removeItem('responseEditor.showSynonyms');
+      }
+    } catch {}
+  }, []);
   const selectedStep = props.editorState.selectedStep;
   const step = selectedNode && selectedNode.steps ? selectedNode.steps.find((s: any) => s.type === selectedStep) : undefined;
   const escalations = step?.escalations || [];
@@ -104,6 +119,17 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
         onToggleSimulator={props.onToggleSimulator}
         showSimulator={props.showSimulator}
       />
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 12px' }}>
+        <button
+          title="Dizionario sinonimi"
+          onClick={() => setShowSynonyms(s => !s)}
+          style={{ marginLeft: 8, border: '1px solid #e5e7eb', background: showSynonyms ? '#eef2ff' : '#fff', color: '#111827', borderRadius: 8, padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          <BookMarked size={16} />
+          Dizionario
+        </button>
+      </div>
       
       <StepStrip
         steps={props.stepKeys}
@@ -127,23 +153,29 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
       <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
         <div style={{ flex: 1, minWidth: 320, padding: 16 }}>
           {/* Main content area */}
-          <TreeView
-            nodes={props.filteredNodes}
-            onDrop={props.handleDrop}
-            onRemove={props.removeNode}
-            onAddEscalation={props.handleAddEscalation}
-            onToggleInclude={(id: string) => {
-              // Trova il nodo corrente per ricavare lo stato attuale di included
-              const node = props.filteredNodes.find(n => n.id === id);
-              const currentIncluded = node && typeof node.included === 'boolean' ? node.included : true;
-              props.onToggleInclude(id, !currentIncluded);
-            }}
-            stepKey={props.editorState.selectedStep}
-            foreColor={props.stepMeta[props.editorState.selectedStep]?.color || '#ef4444'}
-            bgColor={props.stepMeta[props.editorState.selectedStep]?.bg || 'rgba(239,68,68,0.08)'}
-            onAIGenerate={props.onAIGenerate}
-            selectedStep={props.selectedStep}
-          />
+          {showSynonyms ? (
+            <SynonymsEditor
+              value={localSynonyms}
+              onChange={(next) => setLocalSynonyms(next)}
+            />
+          ) : (
+            <TreeView
+              nodes={props.filteredNodes}
+              onDrop={props.handleDrop}
+              onRemove={props.removeNode}
+              onAddEscalation={props.handleAddEscalation}
+              onToggleInclude={(id: string) => {
+                const node = props.filteredNodes.find(n => n.id === id);
+                const currentIncluded = node && typeof node.included === 'boolean' ? node.included : true;
+                props.onToggleInclude(id, !currentIncluded);
+              }}
+              stepKey={props.editorState.selectedStep}
+              foreColor={props.stepMeta[props.editorState.selectedStep]?.color || '#ef4444'}
+              bgColor={props.stepMeta[props.editorState.selectedStep]?.bg || 'rgba(239,68,68,0.08)'}
+              onAIGenerate={props.onAIGenerate}
+              selectedStep={props.selectedStep}
+            />
+          )}
           {/* Bottone aggiungi escalation in fondo se ci sono escalation visibili */}
           {props.handleAddEscalation && props.filteredNodes.some(n => n.type === 'escalation') && (
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>

@@ -17,40 +17,23 @@
 // Executive summary: Main entry point for the Response Editor component. Handles layout and orchestration of the response tree.
 import React, { useEffect } from 'react';
 import ResponseEditorUI from './ResponseEditorUI';
-import ActionItem from '../ActionViewer/ActionItem';
-import ActionList from '../ActionViewer/ActionList';
-import { Tag, MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Clock, ServerCog, Calendar, MapPin, FileText, PlayCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle, Plus } from 'lucide-react';
-import ToolbarButton from './ToolbarButton';
-import TreeView from './TreeView';
-import ResponseEditorToolbar from './ResponseEditorToolbar';
-import ResponseEditorSidebar from './ResponseEditorSidebar';
-import styles from './ResponseEditor.module.css';
+// import ActionItem from '../ActionViewer/ActionItem';
+// import ActionList from '../ActionViewer/ActionList';
+import { Mail, Calendar, MapPin, FileText, PlayCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle } from 'lucide-react';
+// import ToolbarButton from './ToolbarButton';
+// import TreeView from './TreeView';
+// import ResponseEditorToolbar from './ResponseEditorToolbar';
+// import ResponseEditorSidebar from './ResponseEditorSidebar';
+// import styles from './ResponseEditor.module.css';
 import { TreeNodeProps } from './types';
-import { useTreeNodes } from './useTreeNodes';
+// import { useTreeNodes } from './useTreeNodes';
 import { useRef, useCallback } from 'react';
-import { estraiNodiDaDDT, insertNodeAt, removeNodePure, addNode } from './treeFactories';
-import { estraiParametroPrincipale, estraiValoreTradotto, getTranslationText, ordinalIt, estraiLabelAzione } from './responseEditorHelpers';
-import { v4 as uuidv4 } from 'uuid';
+import { estraiNodiDaDDT, insertNodeAt } from './treeFactories';
+// import { estraiParametroPrincipale, estraiValoreTradotto, getTranslationText, ordinalIt, estraiLabelAzione } from './responseEditorHelpers';
+// import { v4 as uuidv4 } from 'uuid';
 import { createAction } from './actionFactories';
 import { createParameter } from './parameterFactories';
 import { useResponseEditorState } from './useResponseEditorState';
-
-const iconMap: Record<string, React.ReactNode> = {
-  MessageCircle: <MessageCircle size={24} />,  HelpCircle: <HelpCircle size={24} />,  Headphones: <Headphones size={24} />,  Shield: <Shield size={24} />,  PhoneOff: <PhoneOff size={24} />,  Database: <Database size={24} />,  Mail: <Mail size={24} />,  MessageSquare: <MessageSquare size={24} />,  Function: <Function size={24} />,  Music: <Music size={24} />,  Eraser: <Eraser size={24} />,  ArrowRight: <ArrowRight size={24} />,  Tag: <Tag size={24} />,  Clock: <Clock size={24} />,  ServerCog: <ServerCog size={24} />
-};
-
-const DEFAULT_LANG = 'it';
-
-const stepBg: Record<string, string> = {
-  normal: '#fff',
-  noMatch: '#ffeaea',
-  noInput: '#f5f6fa',
-};
-const stepIndent: Record<string, number> = {
-  normal: 0,
-  noMatch: 24,
-  noInput: 24,
-};
 
 interface ResponseEditorProps {
   ddt?: any;
@@ -77,13 +60,13 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     setShowSimulator(!showSimulator);
   };
 
-  const { selectedStep, actionCatalog, showLabel, activeDragAction, nodes } = state;
+  const { selectedStep, nodes } = state;
 
   const stepKeys = ddt && ddt.steps ? Object.keys(ddt.steps) : [];
   // --- HISTORY/UNDO/REDO ---
   const historyRef = useRef<any[]>([]); // Changed to any[] as per new state structure
   const indexRef = useRef(0);
-  const [_, forceUpdate] = React.useReducer(x => x + 1, 0); // forzare il rerender su undo/redo
+  // (rimosso forceUpdate inutilizzato)
 
   // Wrapper per dispatch che aggiorna la history
   const dispatchWithHistory = useCallback((action: any) => { // Changed to any as per new state structure
@@ -209,11 +192,12 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   // Mapping step -> icona, colore, label user-friendly
   const stepMeta: Record<string, { icon: JSX.Element; label: string; border: string; bg: string; color: string; bgActive: string }> = {
     start:        { icon: <PlayCircle size={17} />,        label: 'Chiedo il dato',      border: '#3b82f6', bg: 'rgba(59,130,246,0.08)', color: '#3b82f6', bgActive: 'rgba(59,130,246,0.18)' },
-    noMatch:      { icon: <HelpCircle size={17} />,        label: 'Non capisco',         border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
+    noMatch:      { icon: <AlertCircle size={17} />,        label: 'Non capisco',         border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
     noInput:      { icon: <MicOff size={17} />,            label: 'Non sento',           border: '#6b7280', bg: 'rgba(107,114,128,0.08)', color: '#6b7280', bgActive: 'rgba(107,114,128,0.18)' },
     confirmation: { icon: <CheckCircle2 size={17} />,      label: 'Devo confermare',     border: '#eab308', bg: 'rgba(234,179,8,0.08)', color: '#eab308', bgActive: 'rgba(234,179,8,0.18)' },
     success:      { icon: <CheckSquare size={17} />,       label: 'Ho capito!',           border: '#22c55e', bg: 'rgba(34,197,94,0.08)', color: '#22c55e', bgActive: 'rgba(34,197,94,0.18)' },
     notAcquired:  { icon: <AlertCircle size={17} />,       label: 'Dato non acquisito',  border: '#f59e42', bg: 'rgba(245,158,66,0.08)', color: '#f59e42', bgActive: 'rgba(245,158,66,0.18)' },
+    notConfirmed: { icon: <AlertCircle size={17} />,       label: 'Non confermato',      border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
   };
 
   // Funzioni di callback per la UI presentational
@@ -224,12 +208,12 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   const ddtType = ddt?.dataType?.type;
   const ddtLabel = ddt?.label || ddt?.name || '—';
 
-  // Estendi editorState con funzioni per la UI
+  // Estendi editorState con funzioni per la UI (versione semplificata qui)
   const editorStateForUI = {
     ...state,
     ddtType,
     ddtLabel,
-    ddt, // <-- aggiungo ddt esplicitamente per log
+    ddt,
     onStepChange,
     onShowLabelChange,
   };
@@ -264,14 +248,22 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     )
   } : ddt;
 
+  // Compute UI step keys and append V2 notConfirmed for main node if available
+  let uiStepKeys = ddtForUI?.steps ? Object.keys(ddtForUI.steps) : [];
+  const v2Main = ddt?.v2Draft?.['__main__'];
+  const hasNotConfirmedV2 = Boolean(v2Main?.notConfirmed?.prompts && v2Main.notConfirmed.prompts.length === 3);
+  const isMainSelected = selectedNodeIndex == null;
+  if (isMainSelected && hasNotConfirmedV2 && !uiStepKeys.includes('notConfirmed')) {
+    uiStepKeys = [...uiStepKeys, 'notConfirmed'];
+  }
+
   // Log selectedNodeIndex and selectedNode whenever they change
   useEffect(() => {
     const mainData = ddt?.mainData || {};
     const node = getNodeByIndex(mainData, selectedNodeIndex);
     if (node && node.steps) {
-      node.steps.forEach((step: any, idx: any) => {
-        if (step.escalations) {
-        }
+      node.steps.forEach((_step: any) => {
+        // noop
       });
     } else {
     }
@@ -297,7 +289,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       if (availableSteps.length > 0) {
         dispatchWithHistory({ type: 'SET_STEP', step: availableSteps[0] });
       } else {
-        dispatchWithHistory({ type: 'SET_STEP', step: '' });
+        dispatchWithHistory({ type: 'SET_STEP', step: '' as any });
       }
     }
     // Se lo step corrente è disponibile, mantienilo (non fare nulla)
@@ -336,7 +328,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     <ResponseEditorUI
       editorState={editorStateForUI}
       filteredNodes={filteredNodes}
-      stepKeys={ddtForUI?.steps ? Object.keys(ddtForUI.steps) : []}
+      stepKeys={uiStepKeys}
       stepMeta={stepMeta}
       handleDrop={handleDrop}
       removeNode={removeNode}
@@ -351,7 +343,7 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
       selectedNodeIndex={selectedNodeIndex}
       onSelectNode={handleSelectNode}
       onAIGenerate={handleAIGenerate}
-      selectedStep={selectedStep}
+      selectedStep={selectedStep || undefined}
       onToggleSimulator={handleToggleSimulator}
       showSimulator={showSimulator}
     />

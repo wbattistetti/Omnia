@@ -8,6 +8,7 @@ export interface AssembledDDT {
   label: string;
   mainData: any[];
   translations: { en: Record<string, string> };
+  v2Draft?: any;
 }
 
 type Translations = Record<string, string>;
@@ -45,7 +46,8 @@ type AssembleOptions = {
 export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): AssembledDDT {
   const ddtId = `${rootLabel || 'DDT'}_${uuidv4()}`;
   const translations: Translations = {};
-  const defaultEscalations = { noMatch: 3, noInput: 3, confirmation: 2 } as Record<string, number>;
+  // Limit AI-driven re-asks to max 2
+  const defaultEscalations = { noMatch: 2, noInput: 2, confirmation: 2 } as Record<string, number>;
   const counts = { ...defaultEscalations, ...(options?.escalationCounts || {}) } as Record<string, number>;
 
   const assembleNode = (node: SchemaNode, nodePath: string[]): any => {
@@ -80,6 +82,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
       subData: [] as any[],
       messages: {} as Record<string, any>,
       steps: {} as Record<string, any>,
+      synonyms: [node.label, (node.label || '').toLowerCase()].filter(Boolean),
     };
 
     // Constraints
@@ -208,7 +211,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     }
 
     // Minimal base messages (ensure ResponseEditor displays steps)
-    const baseSteps = (isSub ? ['start', 'noInput', 'noMatch'] : ['start', 'noInput', 'noMatch', 'confirmation', 'success']) as const;
+    const baseSteps = (isSub ? ['start', 'noInput', 'noMatch'] : ['start', 'noInput', 'noMatch', 'confirmation', 'notConfirmed', 'success']);
     for (const stepKey of baseSteps) {
       const defaultKey = `runtime.${ddtId}.${path}.${stepKey}.text`;
       // Prefer AI-provided key if present (ai.0). We already pushed translations for it above.
@@ -229,7 +232,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         actionInstanceId: `a_${uuidv4()}`,
         parameters: [{ parameterId: 'text', value: chosenKey }]
       };
-      const numEsc = counts[stepKey] || 1;
+      const numEsc = stepKey === 'notConfirmed' ? 2 : (counts[stepKey] || 1);
       const escalations = Array.from({ length: numEsc }).map(() => ({
         escalationId: `e_${uuidv4()}`,
         actions: [baseAction]

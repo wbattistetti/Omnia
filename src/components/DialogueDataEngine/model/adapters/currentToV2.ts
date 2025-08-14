@@ -18,42 +18,98 @@ function pad3(arr?: string[]): string[] {
   return a;
 }
 
-function mapNode(current: MainDataNode): DDTNode {
-  const baseAsk: StepAsk = {
-    base: 'ask.base',
-    reaskNoInput: pad3(['ask.noInput.1', 'ask.noInput.2', 'ask.noInput.3']),
-    reaskNoMatch: pad3(['ask.noMatch.1', 'ask.noMatch.2', 'ask.noMatch.3']),
+function getStepsArrayLocal(node: any): any[] {
+  if (!node || !node.steps) return [];
+  if (Array.isArray(node.steps)) return node.steps;
+  const map = node.steps as Record<string, any>;
+  return Object.keys(map).map((k) => {
+    const v = map[k];
+    if (Array.isArray(v?.escalations)) return { type: k, escalations: v.escalations };
+    if (Array.isArray(v)) return { type: k, escalations: [{ actions: v }] };
+    return { type: k, escalations: [] };
+  });
+}
+
+function getGroup(node: MainDataNode, type: string) {
+  const groups = getStepsArrayLocal(node);
+  return groups.find((g: any) => g?.type === type);
+}
+
+function extractEscalationKeys(group: any): string[] {
+  const list: string[] = [];
+  if (!group || !Array.isArray(group.escalations)) return list;
+  for (const esc of group.escalations) {
+    const actions = Array.isArray(esc?.actions) ? esc.actions : [];
+    const first = actions[0];
+    const params = Array.isArray(first?.parameters) ? first.parameters : [];
+    const textParam = params.find((p: any) => (p?.parameterId || p?.key) === 'text') || params[0];
+    const key = (textParam && typeof textParam.value === 'string') ? textParam.value : '';
+    list.push(key);
+  }
+  return list;
+}
+
+function extractSingleKey(group: any): string {
+  const keys = extractEscalationKeys(group);
+  return keys[0] || '';
+}
+
+function mapNode(current: MainDataNode, asType: 'main' | 'sub'): DDTNode {
+  const startG = getGroup(current, 'start');
+  const noInputG = getGroup(current, 'noInput');
+  const noMatchG = getGroup(current, 'noMatch');
+  const confirmG = getGroup(current, 'confirmation');
+  const successG = getGroup(current, 'success');
+
+  const ask: StepAsk = {
+    base: extractSingleKey(startG) || 'ask.base',
+    reaskNoInput: pad3(extractEscalationKeys(noInputG)),
+    reaskNoMatch: pad3(extractEscalationKeys(noMatchG)),
   };
 
-  const stepMessages: StepMessages = {
-    ask: baseAsk,
-    confirm: {
-      base: 'confirm.base',
-      paraphraseBefore: false,
-      noInput: pad3(['confirm.noInput.1', 'confirm.noInput.2', 'confirm.noInput.3']),
-      noMatch: pad3(['confirm.noMatch.1', 'confirm.noMatch.2', 'confirm.noMatch.3']),
-    },
-    success: { base: ['success.base.1'] },
+  const steps: StepMessages = {
+    ask,
   };
+
+  if (asType === 'main') {
+    (steps as StepMessages).confirm = {
+      base: extractSingleKey(confirmG) || 'confirm.base',
+      paraphraseBefore: false,
+      // For now reuse ask re-ask sequences if dedicated ones are not available
+      noInput: pad3(extractEscalationKeys(noInputG)),
+      noMatch: pad3(extractEscalationKeys(noMatchG)),
+    } as StepConfirm;
+    (steps as StepMessages).success = { base: pad3(extractEscalationKeys(successG)).filter(Boolean) } as StepSuccess;
+  } else {
+    (steps as StepMessages).success = { base: pad3(extractEscalationKeys(successG)).filter(Boolean) } as StepSuccess;
+  }
 
   return {
     id: current.id,
-    label: current.label || current.name || current.id,
-    type: 'main',
+    label: (current.label || current.name || current.id) as string,
+    type: asType,
     required: Boolean(current.required),
     kind: (current.type as any) || 'generic',
-    steps: stepMessages,
-    subs: (current.subData || []).map((s) => s.id),
+    steps,
+    subs: asType === 'main' ? (current.subData || []).map((s) => s.id) : undefined,
     condition: current.condition,
-  };
+    synonyms: (current as any).synonyms || undefined,
+  } as DDTNode;
 }
 
 export function adaptCurrentToV2(current: AssembledDDT): DDTTemplateV2 {
-  const main = current.mainData;
-  const nodes: DDTNode[] = [mapNode(main), ...(main.subData || []).map(mapNode)].map((n, idx) => ({
-    ...n,
-    type: idx === 0 ? 'main' : 'sub',
-  }));
+  const mains: any[] = Array.isArray((current as any).mainData)
+    ? ((current as any).mainData as any[])
+    : [ (current as any).mainData ];
+  const nodes: DDTNode[] = [];
+  for (const m of mains) {
+    if (!m) continue;
+    const mainNode = mapNode(m, 'main');
+    nodes.push(mainNode);
+    for (const s of (m.subData || [])) {
+      nodes.push(mapNode(s, 'sub'));
+    }
+  }
 
   return {
     schemaVersion: '2',

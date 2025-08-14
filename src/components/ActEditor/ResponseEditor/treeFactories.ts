@@ -48,36 +48,39 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
       });
     });
   } else {
-    // Vecchia struttura: steps come oggetto
-    for (const [stepKey, actions] of Object.entries(ddt.steps)) {
-      if (Array.isArray(actions)) {
+    // steps come oggetto: supporta due forme
+    for (const [stepKey, val] of Object.entries(ddt.steps)) {
+      // Forma A: azioni flat (legacy)
+      if (Array.isArray(val)) {
         let currentEscalationId: string | undefined = undefined;
         let escalationIdx = 0;
-        actions.forEach((action: any, idx: number) => {
+        val.forEach((action: any) => {
           if (action.type === 'escalation' && action.id) {
             currentEscalationId = action.id;
             escalationIdx++;
-            nodes.push({
-              id: action.id,
-              text: 'recovery',
-              type: 'escalation',
-              level: 0,
-              included: true,
-            });
+            nodes.push({ id: action.id, text: 'recovery', type: 'escalation', level: 0, included: true });
           } else if (action.actionInstanceId && currentEscalationId) {
             const actionInstanceId = action.actionInstanceId;
             const ddtId = ddt.id || ddt._id;
             const text = getTranslationText(translations, ddtId, stepKey, escalationIdx, actionInstanceId, lang);
-            if (text === '') {
-            }
-            nodes.push({
-              id: actionInstanceId,
-              text,
-              type: stepKey,
-              level: 1,
-              parentId: currentEscalationId,
-            });
+            nodes.push({ id: actionInstanceId, text, type: stepKey, level: 1, parentId: currentEscalationId });
           }
+        });
+        continue;
+      }
+      // Forma B: { type, escalations: [{ actions: [...] }] }
+      if (val && typeof val === 'object' && Array.isArray((val as any).escalations)) {
+        const escs = (val as any).escalations as any[];
+        escs.forEach((esc: any, idx: number) => {
+          const escId = esc.escalationId || `${stepKey}_${idx + 1}`;
+          nodes.push({ id: escId, text: 'recovery', type: 'escalation', level: 0, included: true });
+          (esc.actions || []).forEach((a: any) => {
+            const actionInstanceId = a.actionInstanceId || `${stepKey}_${idx + 1}_a`;
+            const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
+            const key = p?.value;
+            const text = (key && translations[key]) || '';
+            nodes.push({ id: actionInstanceId, text, type: stepKey, level: 1, parentId: escId });
+          });
         });
       }
     }

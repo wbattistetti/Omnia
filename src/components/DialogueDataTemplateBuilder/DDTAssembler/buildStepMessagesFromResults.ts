@@ -18,6 +18,7 @@ export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMess
     noMatchPrompts: 'noMatch',
     noInputPrompts: 'noInput',
     confirmationPrompts: 'confirmation',
+    notConfirmedPrompts: 'notConfirmed',
     successPrompts: 'success',
     // Add more mappings as needed
   };

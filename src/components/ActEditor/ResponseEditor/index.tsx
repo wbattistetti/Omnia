@@ -5,6 +5,7 @@ import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X } from 'l
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
+import SynonymsEditor from './SynonymsEditor';
 import {
   getMainDataList,
   getSubDataList,
@@ -49,6 +50,7 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
   });
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
   const [dragging, setDragging] = useState(false);
+  const [showSynonyms, setShowSynonyms] = useState(false);
 
   // Nodo selezionato: sempre main/sub in base agli indici
   const selectedNode = useMemo(() => {
@@ -61,6 +63,12 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
 
   // Step keys per il nodo selezionato
   const stepKeys = useMemo(() => selectedNode ? getNodeSteps(selectedNode) : [], [selectedNode]);
+  // Append V2 notConfirmed for main node if present
+  const uiStepKeys = useMemo(() => {
+    if (selectedSubIndex != null) return stepKeys;
+    if (!stepKeys.includes('notConfirmed')) return [...stepKeys, 'notConfirmed'];
+    return stepKeys;
+  }, [stepKeys, selectedSubIndex]);
   const [selectedStepKey, setSelectedStepKey] = useState<string>('');
 
   // Mantieni lo step selezionato quando cambia il dato. Se lo step non esiste per il nuovo dato, fallback al primo disponibile.
@@ -79,7 +87,7 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
 
   // Callback per Header
   // removed unused header handler
-  const handleSelectSub = (idx: number) => {
+  const handleSelectSub = (idx: number | undefined) => {
     setSelectedSubIndex(idx);
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
   };
@@ -218,12 +226,19 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
           aggregated={isAggregatedAtomic}
           rootLabel={localDDT?.label || 'Data'}
           onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
+          onToggleSynonyms={(mIdx, sIdx) => {
+            setRightMode('actions');
+            setSelectedMainIndex(mIdx);
+            setSelectedSubIndex(typeof sIdx === 'number' ? sIdx : undefined);
+            setShowSynonyms(true);
+            setTimeout(() => { sidebarRef.current?.focus(); }, 0);
+          }}
         />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Steps toolbar */}
           <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
             <StepsStrip
-              stepKeys={stepKeys}
+              stepKeys={uiStepKeys}
               selectedStepKey={selectedStepKey}
               onSelectStep={setSelectedStepKey}
               node={selectedNode}
@@ -233,29 +248,41 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
           <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', borderRadius: 16, margin: 16, boxShadow: '0 2px 8px #e0d7f7' }}>
-                <StepEditor
-                  node={selectedNode}
-                  stepKey={selectedStepKey}
-                  translations={localTranslations}
-                  onUpdateTranslation={handleUpdateTranslation}
-                  onDeleteEscalation={(idx) => updateSelectedNode((node) => {
-                    const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                    const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                    st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
-                    next.steps[selectedStepKey] = st;
-                    return next;
-                  })}
-                  onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
-                    const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                    const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                    const esc = (st.escalations || [])[escIdx];
-                    if (!esc) return next;
-                    esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
-                    st.escalations[escIdx] = esc;
-                    next.steps[selectedStepKey] = st;
-                    return next;
-                  })}
-                />
+                {showSynonyms ? (
+                  <div style={{ padding: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <h4 style={{ margin: 0 }}>Dizionario: {selectedNode?.label || ''}</h4>
+                      <button onClick={() => setShowSynonyms(false)} style={{ border: '1px solid #ddd', background: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>Chiudi</button>
+                    </div>
+                    <SynonymsEditor
+                      value={(selectedNode && Array.isArray((selectedNode as any).synonyms)) ? (selectedNode as any).synonyms : []}
+                      onChange={(list) => updateSelectedNode((node) => ({ ...(node || {}), synonyms: Array.isArray(list) ? list : [] }))}
+                    />
+                  </div>
+                ) : (
+                  <StepEditor
+                    node={selectedNode}
+                    stepKey={selectedStepKey}
+                    translations={localTranslations}
+                    onDeleteEscalation={(idx) => updateSelectedNode((node) => {
+                      const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                      const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                      st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
+                      next.steps[selectedStepKey] = st;
+                      return next;
+                    })}
+                    onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
+                      const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                      const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                      const esc = (st.escalations || [])[escIdx];
+                      if (!esc) return next;
+                      esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
+                      st.escalations[escIdx] = esc;
+                      next.steps[selectedStepKey] = st;
+                      return next;
+                    })}
+                  />
+                )}
               </div>
             </div>
             <RightPanel

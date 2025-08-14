@@ -13,6 +13,7 @@ from ai_steps.stepNoInput import router as stepNoInput_router
 from ai_steps.stepConfirmation import router as stepConfirmation_router
 from ai_steps.stepSuccess import router as stepSuccess_router
 from ai_steps.startPrompt import router as startPrompt_router
+from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
 
 GROQ_KEY = os.environ.get("Groq_key")
 IDE_LANGUE = os.environ.get("IdeLangue", "it")
@@ -31,6 +32,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Simple request/response logger
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    try:
+        print(f"[REQ] {request.method} {request.url.path}")
+    except Exception:
+        pass
+    response = await call_next(request)
+    try:
+        print(f"[RES] {response.status_code} {request.url.path}")
+    except Exception:
+        pass
+    return response
 app.include_router(step2_router)
 app.include_router(step3_router)
 app.include_router(constraint_messages_router)
@@ -41,6 +56,7 @@ app.include_router(stepNoInput_router)
 app.include_router(stepConfirmation_router)
 app.include_router(stepSuccess_router)
 app.include_router(startPrompt_router)
+app.include_router(stepNotConfirmed_router)
 
 def call_groq(messages):
     headers = {

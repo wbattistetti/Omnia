@@ -64,13 +64,17 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
     if (Array.isArray(main.subs) && main.subs.length > 0) {
       for (const sid of main.subs) {
         const val = (applied.variables as any)[sid];
-        if (val !== undefined) {
-          mem = setMemory(mem, sid, val, false);
+        // Also support matching by simplified sub id (e.g., firstname/lastname)
+        const alt = Object.entries(applied.variables as any).find(([k]) => k === sid || k.replace(/[^a-z0-9]+/g, '') === sid.replace(/[^a-z0-9]+/g, ''));
+        const chosen = val !== undefined ? val : (alt ? alt[1] : undefined);
+        if (chosen !== undefined) {
+          mem = setMemory(mem, sid, chosen, false);
         }
       }
     }
     const missing = nextMissingSub(main, mem);
-    if (applied.complete && !missing) {
+    const saturated = isSaturated(main, mem);
+    if (saturated && !missing) {
       return { ...state, memory: mem, mode: 'ConfirmingMain' };
     }
     if (missing) {
@@ -91,7 +95,9 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
   if (state.mode === 'ConfirmingMain') {
     if (isYes(input)) {
       const mem = setMemory(state.memory, main.id, state.memory[main.id]?.value, true);
-      return { ...advanceIndex(state), memory: mem, mode: 'SuccessMain' };
+      // Stay on current index to allow UI to render success for the correct main,
+      // then the engine will advance on the next tick/input from SuccessMain state.
+      return { ...state, memory: mem, mode: 'SuccessMain' };
     }
     if (isNo(input)) {
       // Enter NotConfirmed flow
