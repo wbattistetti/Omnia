@@ -23,6 +23,15 @@ export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookCon
     await new Promise((res) => setTimeout(res, delay));
     setState((prev) => {
       const next = advance(prev, input);
+      // Detailed memory debug (flattened) for inspection
+      if (cfgRef.current.debug) {
+        try {
+          const mainId = next.plan.order[next.currentIndex];
+          const flatten = (s: SimulatorState) => Object.fromEntries(Object.entries(s.memory || {}).map(([k, v]) => [k, v?.value]));
+          console.log('[DDE] memory:', flatten(next));
+          console.log('[DDE] main:', mainId, next.plan.byId[mainId]?.label);
+        } catch {}
+      }
       if (next.mode !== prev.mode) {
         cfgRef.current.onLog?.({ ts: Date.now(), kind: 'mode', message: `Mode -> ${next.mode}` });
         if (cfgRef.current.debug) {

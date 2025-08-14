@@ -38,7 +38,14 @@ function currentMain(state: SimulatorState): DDTNode | undefined {
 }
 
 function advanceIndex(state: SimulatorState): SimulatorState {
-  const nextIdx = state.currentIndex + 1;
+  // Advance to the next MAIN node, skipping any sub entries that may appear in the linear plan
+  let nextIdx = state.currentIndex + 1;
+  while (nextIdx < state.plan.order.length) {
+    const nextId = state.plan.order[nextIdx];
+    const nextNode = state.plan.byId[nextId];
+    if (nextNode && nextNode.type === 'main') break; // stop on next main
+    nextIdx += 1; // skip subs
+  }
   if (nextIdx >= state.plan.order.length) {
     return { ...state, mode: 'Completed', currentIndex: nextIdx };
   }
@@ -54,12 +61,34 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
     // Implicit correction: if input contains a correction, try to re-parse that
     const corrected = extractImplicitCorrection(input) || extractLastDate(input) || input;
     const applied = applyComposite(main.kind, corrected);
-    let mem = setMemory(
-      state.memory,
-      main.id,
-      { ...(state.memory[main.id]?.value || {}), ...applied.variables },
-      false
-    );
+    let mem = state.memory;
+    // For mains with subs, populate only subs here; compose main later from subs
+    if (Array.isArray(main.subs) && main.subs.length > 0) {
+      for (const sid of main.subs) {
+        const sub = state.plan.byId[sid];
+        const labelNorm = (sub?.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+        let v: any = undefined;
+        if (main.kind === 'name') {
+          if (labelNorm.includes('first')) v = (applied.variables as any).firstname;
+          else if (labelNorm.includes('last')) v = (applied.variables as any).lastname;
+        } else if (main.kind === 'date') {
+          if (labelNorm.includes('day')) v = (applied.variables as any).day;
+          else if (labelNorm.includes('month')) v = (applied.variables as any).month;
+          else if (labelNorm.includes('year')) v = (applied.variables as any).year;
+        } else if (main.kind === 'address') {
+          if (labelNorm.includes('street')) v = (applied.variables as any).street;
+          else if (labelNorm.includes('city')) v = (applied.variables as any).city;
+          else if (labelNorm.includes('postal') || labelNorm.includes('zip')) v = (applied.variables as any).postal_code;
+          else if (labelNorm.includes('country')) v = (applied.variables as any).country;
+        }
+        if (v !== undefined) {
+          mem = setMemory(mem, sid, v, false);
+        }
+      }
+    } else {
+      // Atomic mains: write value directly
+      mem = setMemory(state.memory, main.id, (applied.variables as any).value ?? corrected, false);
+    }
     // Propagate composite parts into sub memory when available
     if (Array.isArray(main.subs) && main.subs.length > 0) {
       for (const sid of main.subs) {
@@ -86,7 +115,18 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
   if (state.mode === 'CollectingSub') {
     const sid = state.currentSubId!;
     const corrected = extractImplicitCorrection(input) || input;
-    const mem = setMemory(state.memory, sid, corrected, false);
+    let mem = setMemory(state.memory, sid, corrected, false);
+    // Recompose main value from current sub values so main reflects subs
+    const composeFromSubs = (m: DDTNode, memory: Memory) => {
+      if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
+      const out: Record<string, any> = {};
+      for (const s of (m.subs || [])) {
+        const v = memory[s]?.value;
+        if (v !== undefined) out[s] = v;
+      }
+      return out;
+    };
+    mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
     const missing = nextMissingSub(main, mem);
     if (missing) return { ...state, memory: mem, currentSubId: missing };
     return { ...state, memory: mem, mode: 'ConfirmingMain', currentSubId: undefined };

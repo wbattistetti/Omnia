@@ -109,13 +109,27 @@ export function applyComposite(kind: Kind, input: string): CompositeApplyResult 
       const year = Number(m[3]);
       return { variables: { day, month, year }, complete: true, missing: [] };
     }
+    // Month names (en/it, with common abbreviations)
+    const MONTHS: Record<string, number> = {
+      january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
+      may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8, september: 9, sep: 9, sept: 9,
+      october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12,
+      gennaio: 1, gen: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, mag: 5,
+      giugno: 6, giu: 6, luglio: 7, lug: 7, agosto: 8, ago: 8, settembre: 9, set: 9,
+      ottobre: 10, ott: 10, novembre: 11, dicembre: 12, dic: 12,
+    };
+    const monthNameRegex = new RegExp(`\\b(${Object.keys(MONTHS).join('|')})\\b`, 'i');
+    const monthNameMatch = text.match(monthNameRegex);
+    const monthFromName = monthNameMatch ? MONTHS[monthNameMatch[1].toLowerCase()] : undefined;
     const yearMatch = text.match(/\b(\d{4})\b/);
-    const monthMatch = text.match(/\b(0?[1-9]|1[0-2])\b/);
+    const numericMonthMatch = text.match(/\b(0?[1-9]|1[0-2])\b/);
     const dayMatch = text.match(/\b(0?[1-9]|[12][0-9]|3[01])\b/);
     const vars: Record<string, any> = {};
     const missing: string[] = [];
     if (dayMatch) vars.day = Number(dayMatch[0]); else missing.push('day');
-    if (monthMatch) vars.month = Number(monthMatch[0]); else missing.push('month');
+    if (monthFromName) vars.month = monthFromName;
+    else if (numericMonthMatch) vars.month = Number(numericMonthMatch[0]);
+    else missing.push('month');
     if (yearMatch) vars.year = Number(yearMatch[0]); else missing.push('year');
     return { variables: vars, complete: missing.length === 0, missing };
   }

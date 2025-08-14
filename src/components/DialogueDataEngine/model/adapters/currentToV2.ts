@@ -84,12 +84,24 @@ function mapNode(current: MainDataNode, asType: 'main' | 'sub'): DDTNode {
     (steps as StepMessages).success = { base: pad3(extractEscalationKeys(successG)).filter(Boolean) } as StepSuccess;
   }
 
+  // Heuristic kind detection (improves composites: name/date/address)
+  const typeStr = String(current.type || '').toLowerCase();
+  const labelStr = String(current.label || current.name || '').toLowerCase();
+  const subLabels = (current.subData || []).map((s) => String(s.label || '').toLowerCase());
+  const looksLikeDate = typeStr === 'date' || subLabels.some(l => /\b(day|month|year)\b/.test(l)) || /birth|date/.test(labelStr);
+  const looksLikeName = subLabels.some(l => /first|last/.test(l)) || /name/.test(labelStr);
+  const looksLikeAddress = typeStr === 'address' || subLabels.some(l => /street|city|postal|zip|country|state|region/.test(l)) || /address/.test(labelStr);
+  const detectedKind = looksLikeDate ? 'date'
+    : looksLikeName ? 'name'
+    : looksLikeAddress ? 'address'
+    : (typeStr as any) || 'generic';
+
   return {
     id: current.id,
     label: (current.label || current.name || current.id) as string,
     type: asType,
     required: Boolean(current.required),
-    kind: (current.type as any) || 'generic',
+    kind: detectedKind as any,
     steps,
     subs: asType === 'main' ? (current.subData || []).map((s) => s.id) : undefined,
     condition: current.condition,
