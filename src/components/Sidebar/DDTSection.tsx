@@ -57,7 +57,17 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
               <Plus className="w-5 h-5" />
             </button>
           )}
-          <button title="Salva tutti i DDT" onClick={onSave} disabled={isSaving} style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 8 }}>
+          <button
+            title="Salva tutti i DDT"
+            onClick={async (e) => {
+              e.stopPropagation();
+              await onSave();
+              // Alla fine del salvataggio, chiudi l'accordion per mostrare la lista
+              setIsOpen(true);
+            }}
+            disabled={isSaving}
+            style={{ color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 8 }}
+          >
             {isSaving ? (
               <svg width="20" height="20" viewBox="0 0 50 50" role="progressbar" aria-label="Saving">
                 <circle cx="25" cy="25" r="20" fill="none" stroke="#16a34a" strokeWidth="4" opacity="0.2" />

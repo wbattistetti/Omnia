@@ -8,7 +8,9 @@ console.log('>>> SERVER.JS AVVIATO <<<');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Increase body size limits to allow large DDT payloads
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 const uri = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
 const dbFactory = 'factory';
@@ -36,6 +38,7 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     const ddt = await db.collection('DataDialogueTemplates').find({}).toArray();
+    try { console.log('>>> LOAD /api/factory/dialogue-templates count =', Array.isArray(ddt) ? ddt.length : 0); } catch {}
     res.json(ddt);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
@@ -111,6 +114,7 @@ app.post('/api/factory/data-dialogue-translations', async (req, res) => {
 });
 
 app.post('/api/factory/dialogue-templates', async (req, res) => {
+  try { console.log('>>> SAVE /api/factory/dialogue-templates size ~', Buffer.byteLength(JSON.stringify(req.body || {})), 'bytes'); } catch {}
   const client = new MongoClient(uri);
   try {
     await client.connect();

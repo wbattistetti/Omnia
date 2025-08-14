@@ -15,6 +15,7 @@ interface DDTManagerContextType {
   deleteDDT: (id: string) => void;
   loadDDT: () => Promise<void>;
   updateTranslation: (key: string, value: string) => void;
+  replaceSelectedDDT: (next: any) => void;
 }
 
 const DDTManagerContext = createContext<DDTManagerContextType | null>(null);
@@ -102,6 +103,12 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
     }
   };
 
+  const replaceSelectedDDT = (next: any) => {
+    if (!next) return;
+    setSelectedDDT(next);
+    setDDTList(list => list.map(d => (d.id === next.id || d._id === next._id ? next : d)));
+  };
+
   // Carica i DDT all'inizializzazione
   useEffect(() => {
     loadDDT();
@@ -120,7 +127,8 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
     closeDDT,
     deleteDDT,
     loadDDT,
-    updateTranslation
+    updateTranslation,
+    replaceSelectedDDT
   };
 
   return (

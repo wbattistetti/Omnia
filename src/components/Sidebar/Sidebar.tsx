@@ -42,7 +42,7 @@ const Sidebar: React.FC = () => {
   } = useProjectDataUpdate();
 
   // Usa il nuovo hook per DDT
-  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, dataDialogueTranslations } = useDDTManager();
+  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, dataDialogueTranslations, loadDDT } = useDDTManager();
 
   const [isSavingDDT, setIsSavingDDT] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -97,15 +97,24 @@ const Sidebar: React.FC = () => {
         console.warn('[Sidebar] DataDialogueTranslations save failed, continuing with DDT save:', e);
       }
 
-      // 2) Save DDTs
+      // 2) Save DDTs (strip heavy fields not needed by factory DB)
+      const payload = (ddtList || []).map((d: any) => {
+        const { translations, ...rest } = d || {};
+        return rest; // translations are saved separately
+      });
+      try {
+        const approxSize = new Blob([JSON.stringify(payload)]).size;
+        console.log('[Sidebar] DDT save payload size ~', approxSize, 'bytes');
+      } catch {}
       const res = await fetch('http://localhost:3100/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ddtList)
+        body: JSON.stringify(payload)
       });
       if (!res.ok) {
         throw new Error('Server error: unable to save DDT');
       }
+      // Nota: non ricarichiamo da backend per evitare flicker; la lista è già la sorgente del payload
       // ensure spinner is visible at least 600ms
       const elapsed = Date.now() - startedAt;
       if (elapsed < 600) {
