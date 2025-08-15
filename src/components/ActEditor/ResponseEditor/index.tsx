@@ -5,7 +5,8 @@ import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X } from 'l
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
-import SynonymsEditor from './SynonymsEditor';
+// import SynonymsEditor from './SynonymsEditor';
+import NLPExtractorProfileEditor from './NLPExtractorProfileEditor';
 import {
   getMainDataList,
   getSubDataList,
@@ -15,7 +16,7 @@ import {
 export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: () => void }) {
   // Local editable copies
   const [localDDT, setLocalDDT] = useState<any>(ddt);
-  const { updateTranslation, ideTranslations, dataDialogueTranslations, setDataDialogueTranslations } = useDDTManager();
+  const { ideTranslations, dataDialogueTranslations } = useDDTManager();
   const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
   const [localTranslations, setLocalTranslations] = useState<any>({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
 
@@ -116,13 +117,7 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
     });
   };
 
-  const handleUpdateTranslation = (key: string, value: string) => {
-    setLocalTranslations((prev: any) => ({ ...prev, [key]: value }));
-    // Propaga anche al DDT selezionato nel context per il salvataggio
-    updateTranslation(key, value);
-    // Aggiorna anche il dizionario dinamico globale così il rendering usa subito il testo
-    setDataDialogueTranslations({ ...dataDialogueTranslations, [key]: value });
-  };
+  // kept for future translation edits in StepEditor
 
   // Splitter drag handlers
   useEffect(() => {
@@ -225,25 +220,35 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
           onSelectSub={handleSelectSub}
           aggregated={isAggregatedAtomic}
           rootLabel={localDDT?.label || 'Data'}
+          showSynonyms={showSynonyms}
           onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
           onToggleSynonyms={(mIdx, sIdx) => {
+            const targetSub = (typeof sIdx === 'number' ? sIdx : undefined);
+            const sameTarget = selectedMainIndex === mIdx && selectedSubIndex === targetSub;
+            if (showSynonyms && sameTarget) {
+              setShowSynonyms(false);
+              setTimeout(() => { sidebarRef.current?.focus(); }, 0);
+              return;
+            }
             setRightMode('actions');
             setSelectedMainIndex(mIdx);
-            setSelectedSubIndex(typeof sIdx === 'number' ? sIdx : undefined);
+            setSelectedSubIndex(targetSub);
             setShowSynonyms(true);
             setTimeout(() => { sidebarRef.current?.focus(); }, 0);
           }}
         />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* Steps toolbar */}
-          <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
-            <StepsStrip
-              stepKeys={uiStepKeys}
-              selectedStepKey={selectedStepKey}
-              onSelectStep={setSelectedStepKey}
-              node={selectedNode}
-            />
-          </div>
+          {/* Steps toolbar hidden during NLP editor */}
+          {!showSynonyms && (
+            <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
+              <StepsStrip
+                stepKeys={uiStepKeys}
+                selectedStepKey={selectedStepKey}
+                onSelectStep={setSelectedStepKey}
+                node={selectedNode}
+              />
+            </div>
+          )}
           {/* Content */}
           <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -251,12 +256,17 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
                 {showSynonyms ? (
                   <div style={{ padding: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <h4 style={{ margin: 0 }}>Dizionario: {selectedNode?.label || ''}</h4>
+                      <h4 style={{ margin: 0 }}>NLP Extractor Profile: {selectedNode?.label || ''}</h4>
                       <button onClick={() => setShowSynonyms(false)} style={{ border: '1px solid #ddd', background: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>Chiudi</button>
                     </div>
-                    <SynonymsEditor
-                      value={(selectedNode && Array.isArray((selectedNode as any).synonyms)) ? (selectedNode as any).synonyms : []}
-                      onChange={(list) => updateSelectedNode((node) => ({ ...(node || {}), synonyms: Array.isArray(list) ? list : [] }))}
+                    <NLPExtractorProfileEditor
+                      node={selectedNode}
+                      locale={'it-IT'}
+                      onChange={(profile) => {
+                        updateSelectedNode((node) => ({ ...(node || {}), nlpProfile: profile }));
+                        // keep synonyms in node too for compatibility
+                        updateSelectedNode((node) => ({ ...(node || {}), synonyms: Array.isArray(profile.synonyms) ? profile.synonyms : [] }));
+                      }}
                     />
                   </div>
                 ) : (
@@ -285,16 +295,18 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
                 )}
               </div>
             </div>
-            <RightPanel
-              mode={rightMode}
-              width={rightWidth}
-              onWidthChange={setRightWidth}
-              onStartResize={() => setDragging(true)}
-              dragging={dragging}
-              ddt={localDDT}
-              translations={localTranslations}
-              selectedNode={selectedNode}
-            />
+            {!showSynonyms && (
+              <RightPanel
+                mode={rightMode}
+                width={rightWidth}
+                onWidthChange={setRightWidth}
+                onStartResize={() => setDragging(true)}
+                dragging={dragging}
+                ddt={localDDT}
+                translations={localTranslations}
+                selectedNode={selectedNode}
+              />
+            )}
           </div>
         </div>
       </div>

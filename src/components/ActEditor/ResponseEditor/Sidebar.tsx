@@ -1,4 +1,5 @@
 import React, { forwardRef } from 'react';
+import { BookOpen, X as CloseIcon } from 'lucide-react';
 import { getLabel, getSubDataList } from './ddtSelectors';
 import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
@@ -13,9 +14,10 @@ interface SidebarProps {
   rootLabel?: string;
   onSelectAggregator?: () => void;
   onToggleSynonyms?: (mainIdx: number, subIdx?: number) => void;
+  showSynonyms?: boolean;
 }
 
-const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onToggleSynonyms }, ref) {
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onToggleSynonyms, showSynonyms }, ref) {
   if (!Array.isArray(mainList) || mainList.length === 0) return null;
   // Pastel/silver palette
   const borderColor = 'rgba(156,163,175,0.65)';
@@ -127,10 +129,10 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{getLabel(main)}</span>
               <button
-                title="Dizionario"
+                title={showSynonyms && activeMain ? 'Chiudi profilo NLP' : 'Apri profilo NLP'}
                 onClick={(e) => { e.stopPropagation(); onToggleSynonyms && onToggleSynonyms(idx, undefined); }}
-                style={{ border: '1px solid rgba(229,231,235,0.5)', background: 'transparent', color: '#e5e7eb', borderRadius: 8, padding: '4px 6px' }}
-              >📚</button>
+                style={{ border: '1px solid rgba(229,231,235,0.5)', background: (showSynonyms && activeMain) ? '#ffffff' : 'transparent', color: (showSynonyms && activeMain) ? '#0b1220' : '#e5e7eb', borderRadius: 8, padding: '4px 6px', display: 'inline-flex', alignItems: 'center' }}
+              >{(showSynonyms && activeMain) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</button>
             </button>
             {(selectedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 18, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -147,10 +149,10 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{getLabel(sub)}</span>
                       <button
-                        title="Dizionario"
+                        title={showSynonyms && activeSub ? 'Chiudi profilo NLP' : 'Apri profilo NLP'}
                         onClick={(e) => { e.stopPropagation(); onToggleSynonyms && onToggleSynonyms(idx, sidx); }}
-                        style={{ border: '1px solid rgba(229,231,235,0.5)', background: 'transparent', color: '#e5e7eb', borderRadius: 8, padding: '4px 6px' }}
-                      >📚</button>
+                        style={{ border: '1px solid rgba(229,231,235,0.5)', background: (showSynonyms && activeSub) ? '#ffffff' : 'transparent', color: (showSynonyms && activeSub) ? '#0b1220' : '#e5e7eb', borderRadius: 8, padding: '4px 6px', display: 'inline-flex', alignItems: 'center' }}
+                      >{(showSynonyms && activeSub) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</button>
                     </button>
                   );
                 })}

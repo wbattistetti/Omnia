@@ -100,6 +100,8 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [draftText, setDraftText] = React.useState<string>('');
   const [inlineDraft, setInlineDraft] = React.useState<string>('');
+  const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const inlineInputRef = React.useRef<HTMLInputElement | null>(null);
   const lastBotIndex = React.useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       if (messages[i]?.type === 'bot') return i;
@@ -160,6 +162,16 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
     }
   }, [state]);
 
+  // Keep the inline input minimally in view when it exists
+  React.useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch {}
+    }, 0);
+    return () => clearTimeout(id);
+  }, [messages.length, lastBotIndex]);
+
   const handleSend = async (text: string) => {
     setMessages((prev) => [...prev, { id: String(Date.now()), type: 'user', text }]);
     await send(text);
@@ -181,7 +193,7 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
           Typing 150ms
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={scrollContainerRef}>
         {messages.map((m, idx) => (
           <React.Fragment key={m.id}>
             {m.type === 'bot' && idx === lastBotIndex ? (
@@ -260,6 +272,10 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
                   <input
                     type="text"
                     className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    ref={inlineInputRef}
+                    onFocus={() => {
+                      try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch {}
+                    }}
                     placeholder="Type response..."
                     value={inlineDraft}
                     onChange={(e) => setInlineDraft(e.target.value)}

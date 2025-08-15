@@ -100,6 +100,17 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
           mem = setMemory(mem, sid, chosen, false);
         }
       }
+      // Compose and store the main value from current sub values so confirmation can show it
+      const composeFromSubs = (m: DDTNode, memory: Memory) => {
+        if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
+        const out: Record<string, any> = {};
+        for (const s of (m.subs || [])) {
+          const v = memory[s]?.value;
+          if (v !== undefined) out[s] = v;
+        }
+        return out;
+      };
+      mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
     }
     const missing = nextMissingSub(main, mem);
     const saturated = isSaturated(main, mem);
