@@ -198,7 +198,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks,
         ...rest
       } = currentProject;
-      const response = await fetch('http://localhost:3100/projects', {
+      const response = await fetch('/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -227,7 +227,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const handleOpenProjectById = useCallback(async (id: string) => {
     if (!id) return;
     try {
-      const response = await fetch(`http://localhost:3100/projects/${id}`);
+      const response = await fetch(`/projects/${id}`);
       if (!response.ok) throw new Error('Errore nel caricamento');
       const project = await response.json();
       setCurrentProject(project); // carica TUTTI i dati, inclusi i dizionari
@@ -248,7 +248,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       return;
     }
     try {
-      const response = await fetch('http://localhost:3100/projects');
+      const response = await fetch('/projects');
       if (!response.ok) throw new Error('Errore nel recupero progetti');
       const projects = await response.json();
       if (!projects.length) {
@@ -319,7 +319,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             duplicateNameError={createError}
             onProjectNameChange={handleProjectNameChange}
             isLoading={isCreatingProject}
-            onFactoryTemplatesLoaded={setTranslationsForDDT}
+            onFactoryTemplatesLoaded={() => { /* templates loaded; proxied via 8000 now */ }}
           />
         </>
       )}

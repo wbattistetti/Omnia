@@ -1,19 +1,44 @@
-from fastapi import FastAPI, Body, Request
+from fastapi import FastAPI, Body, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import sys
 import requests
 import json
-from ai_steps.step3_suggest_constraints import router as step3_router
-from ai_steps.step2_detect_type import router as step2_router
-from ai_steps.constraint_messages import router as constraint_messages_router
-from ai_steps.generate_validator import router as generate_validator_router
-from ai_steps.generate_tests import router as generate_tests_router
-from ai_steps.stepNoMatch import router as stepNoMatch_router
-from ai_steps.stepNoInput import router as stepNoInput_router
-from ai_steps.stepConfirmation import router as stepConfirmation_router
-from ai_steps.stepSuccess import router as stepSuccess_router
-from ai_steps.startPrompt import router as startPrompt_router
-from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
+
+# Ensure this file's directory (backend/) is on sys.path so local imports work
+_CURR_DIR = os.path.dirname(__file__)
+if _CURR_DIR and _CURR_DIR not in sys.path:
+    sys.path.insert(0, _CURR_DIR)
+
+# Support running either from project root (package imports) or from backend/ (local imports)
+try:
+    from backend.ai_steps.step3_suggest_constraints import router as step3_router
+    from backend.ai_steps.step2_detect_type import router as step2_router
+    from backend.ai_steps.constraint_messages import router as constraint_messages_router
+    from backend.ai_steps.generate_validator import router as generate_validator_router
+    from backend.ai_steps.generate_tests import router as generate_tests_router
+    from backend.ai_steps.stepNoMatch import router as stepNoMatch_router
+    from backend.ai_steps.stepNoInput import router as stepNoInput_router
+    from backend.ai_steps.stepConfirmation import router as stepConfirmation_router
+    from backend.ai_steps.nlp_extract import router as nlp_extract_router
+    from backend.ner_spacy import router as ner_router
+    from backend.ai_steps.stepSuccess import router as stepSuccess_router
+    from backend.ai_steps.startPrompt import router as startPrompt_router
+    from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
+except Exception:
+    from ai_steps.step3_suggest_constraints import router as step3_router
+    from ai_steps.step2_detect_type import router as step2_router
+    from ai_steps.constraint_messages import router as constraint_messages_router
+    from ai_steps.generate_validator import router as generate_validator_router
+    from ai_steps.generate_tests import router as generate_tests_router
+    from ai_steps.stepNoMatch import router as stepNoMatch_router
+    from ai_steps.stepNoInput import router as stepNoInput_router
+    from ai_steps.stepConfirmation import router as stepConfirmation_router
+    from ai_steps.nlp_extract import router as nlp_extract_router
+    from ner_spacy import router as ner_router
+    from ai_steps.stepSuccess import router as stepSuccess_router
+    from ai_steps.startPrompt import router as startPrompt_router
+    from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
 
 GROQ_KEY = os.environ.get("Groq_key")
 IDE_LANGUE = os.environ.get("IdeLangue", "it")
@@ -57,6 +82,60 @@ app.include_router(stepConfirmation_router)
 app.include_router(stepSuccess_router)
 app.include_router(startPrompt_router)
 app.include_router(stepNotConfirmed_router)
+app.include_router(nlp_extract_router)
+app.include_router(ner_router)
+
+EXPRESS_BASE = "http://localhost:3100"
+
+# Simple reverse proxy to Express so the frontend can hit only port 8000
+async def _proxy_to_express(request: Request) -> Response:
+    method = request.method.upper()
+    query = ("?" + request.url.query) if request.url.query else ""
+    target_url = f"{EXPRESS_BASE}{request.url.path}{query}"
+
+    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+    body_bytes = await request.body()
+
+    try:
+        print(f"[PROXY→EXPRESS] {method} {target_url}")
+        if headers.get("content-type", "").startswith("application/json"):
+            try:
+                json_payload = await request.json()
+            except Exception:
+                json_payload = None
+            resp = requests.request(method, target_url, headers=headers, json=json_payload)
+        else:
+            resp = requests.request(method, target_url, headers=headers, data=body_bytes)
+    except Exception as e:
+        print(f"[PROXY ERROR] {method} {target_url} -> {e}")
+        return Response(content=str(e), status_code=502)
+
+    try:
+        print(f"[PROXY←EXPRESS] {resp.status_code} {method} {target_url}")
+    except Exception:
+        pass
+    return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
+
+# Proxy routes for Express endpoints
+@app.api_route("/api/factory/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_factory(full_path: str, request: Request):
+    return await _proxy_to_express(request)
+
+@app.api_route("/api/projects", methods=["GET", "POST"])
+async def proxy_projects_root(request: Request):
+    return await _proxy_to_express(request)
+
+@app.api_route("/api/projects/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_projects(full_path: str, request: Request):
+    return await _proxy_to_express(request)
+
+@app.api_route("/projects", methods=["GET", "POST"])
+async def proxy_projects_alias_root(request: Request):
+    return await _proxy_to_express(request)
+
+@app.api_route("/projects/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_projects_alias(full_path: str, request: Request):
+    return await _proxy_to_express(request)
 
 def call_groq(messages):
     headers = {

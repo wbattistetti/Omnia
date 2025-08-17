@@ -1,19 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, RotateCcw, Bot, Bug } from 'lucide-react';
 import { ResponseFlowEngine, FlowState } from './ResponseFlowEngine';
+import { usePanelZoom } from '../../../../hooks/usePanelZoom';
 
 interface ResponseSimulatorProps {
   ddt: any;
   translations?: any;
   selectedNode?: any;
-  onClose?: () => void;
 }
 
 const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({ 
   ddt, 
   translations, 
-  selectedNode, 
-  onClose 
+  selectedNode
 }) => {
   const [flowState, setFlowState] = useState<FlowState | null>(null);
   const [engine, setEngine] = useState(() => new ResponseFlowEngine(ddt, translations, selectedNode));
@@ -65,8 +64,11 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
     }
   };
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const { ref: zoomRef, zoomStyle } = usePanelZoom<HTMLDivElement>(rootRef);
+
   return (
-    <div className="h-full flex flex-col bg-white border-l">
+    <div ref={zoomRef as any} className="h-full flex flex-col bg-white border-l" style={{ ...zoomStyle }}>
       {/* Header */}
       <div className="border-b p-3 bg-gray-50">
         <div className="flex items-center justify-between">

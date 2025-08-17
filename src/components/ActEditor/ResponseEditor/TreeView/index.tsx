@@ -6,6 +6,7 @@ import CustomDragLayer from './CustomDragLayer';
 import DropPreview from './DropPreview';
 import { useTreeDragDrop } from './useTreeDragDrop';
 import { TreeViewProps } from './TreeViewTypes';
+import { usePanelZoom } from '../../../hooks/usePanelZoom';
 
 const TreeView: React.FC<TreeViewProps> = ({ 
   nodes, 
@@ -19,6 +20,7 @@ const TreeView: React.FC<TreeViewProps> = ({
 }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const { ref: zoomRef, zoomStyle } = usePanelZoom<HTMLDivElement>(containerRef);
 
   // Use the extracted drag & drop hook
   const {
@@ -36,14 +38,15 @@ const TreeView: React.FC<TreeViewProps> = ({
 
   return (
     <div
-      ref={node => { containerRef.current = node; }}
+      ref={zoomRef as any}
       className="h-full flex flex-col"
       style={{
         position: 'relative',
         minHeight: 200,
         border: isOver ? '2px solid #60a5fa' : '2px solid transparent',
         transition: 'border 0.2s',
-        background: isOver ? 'rgba(96,165,250,0.08)' : undefined
+        background: isOver ? 'rgba(96,165,250,0.08)' : undefined,
+        ...zoomStyle
       }}
     >
       <CustomDragLayer nodes={nodes} />

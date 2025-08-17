@@ -28,7 +28,7 @@ const ResizableResponseEditor: React.FC<ResizableResponseEditorProps> = ({
   return (
     <div
       className="relative"
-      style={{ ...style, minHeight: 360, zIndex: 20, background: '#0b1220' }}
+      style={{ ...style, minHeight: 360, zIndex: 20, background: '#0b1220', display: 'flex', flexDirection: 'column' }}
     >
       <ResizeHandle
         direction="vertical"
@@ -40,12 +40,14 @@ const ResizableResponseEditor: React.FC<ResizableResponseEditorProps> = ({
         persistKey="response-editor-height"
         inverted={true} // Per pannelli in basso che si espandono verso l'alto
       />
-      <ResponseEditor
-        ddt={ddt}
-        translations={translations}
-        lang={lang}
-        onClose={onClose}
-      />
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ResponseEditor
+          ddt={ddt}
+          translations={translations}
+          lang={lang}
+          onClose={onClose}
+        />
+      </div>
     </div>
   );
 };

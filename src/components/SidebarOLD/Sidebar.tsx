@@ -253,7 +253,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsSavingDDT(true);
     setSaveError(null);
     try {
-      const res = await fetch('http://localhost:3100/api/factory/dialogue-templates', {
+      const res = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dialogueTemplates)

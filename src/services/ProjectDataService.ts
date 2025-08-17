@@ -233,26 +233,26 @@ export const ProjectDataService = {
 };
 
 export async function getAllDialogueTemplates() {
-  const res = await fetch('http://localhost:3100/api/factory/dialogue-templates');
+  const res = await fetch('/api/factory/dialogue-templates');
   if (!res.ok) throw new Error('Errore nel recupero dei DataDialogueTemplates');
   return res.json();
 }
 
 // Translations services (factory DB)
 export async function getIDETranslations() {
-  const res = await fetch('http://localhost:3100/api/factory/ide-translations');
+  const res = await fetch('/api/factory/ide-translations');
   if (!res.ok) throw new Error('Errore nel recupero di IDETranslations');
   return res.json();
 }
 
 export async function getDataDialogueTranslations() {
-  const res = await fetch('http://localhost:3100/api/factory/data-dialogue-translations');
+  const res = await fetch('/api/factory/data-dialogue-translations');
   if (!res.ok) throw new Error('Errore nel recupero di DataDialogueTranslations');
   return res.json();
 }
 
 export async function saveDataDialogueTranslations(payload: Record<string, string>) {
-  const res = await fetch('http://localhost:3100/api/factory/data-dialogue-translations', {
+  const res = await fetch('/api/factory/data-dialogue-translations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)

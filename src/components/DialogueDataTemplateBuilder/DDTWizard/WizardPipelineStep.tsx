@@ -147,12 +147,13 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
         onClose={() => setShowStructureModal(false)}
       />
 
-      <div style={{ fontWeight: 600, fontSize: 20, color: '#fff', marginBottom: 24, textAlign: 'left', paddingLeft: 4 }}>
+      <div style={{ fontWeight: 600, fontSize: 20, color: '#fff', marginBottom: 12, textAlign: 'left', paddingLeft: 4 }}>
         {`Creating "${mainData?.label || detectedType || 'data'}" data dialog:`}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a21caf', fontWeight: 500, fontSize: 16, marginBottom: 8, paddingLeft: 4 }}>
-        <Hourglass size={20} color="#a21caf" />
-        <span>{currentStepLabel}</span>
+      {/* Blue processing label */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#0ea5e9', background: '#0ea5e933', border: '1px solid #0ea5e9', borderRadius: 8, padding: '6px 10px', marginBottom: 10, marginLeft: 4 }}>
+        <Hourglass size={18} color="#0ea5e9" />
+        <span style={{ fontWeight: 600 }}>{currentStepLabel}</span>
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 0 }}>
         <div style={{

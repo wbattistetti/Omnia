@@ -11,7 +11,18 @@ import { buildStepPlan } from './stepPlan';
 import { PlanRunResult } from './planRunner';
 import { buildArtifactStore } from './artifactStore';
 import { assembleFinalDDT } from './assembleFinal';
+import { Hourglass, Bell } from 'lucide-react';
 // ResponseEditor will be opened by sidebar after onComplete
+
+// Piccolo componente per i puntini animati
+const AnimatedDots: React.FC<{ intervalMs?: number }> = ({ intervalMs = 450 }) => {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setCount((c) => (c + 1) % 4), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return <span>{'.'.repeat(count)}</span>;
+};
 
 // Tipo per dataNode
 interface DataNode {
@@ -47,6 +58,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     }
   });
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [autoEditIndex, setAutoEditIndex] = useState<number | null>(null);
+  const [currentProcessingLabel, setCurrentProcessingLabel] = useState<string>('');
 
   // Memo per dataNode stabile
   const stableDataNode = useMemo(() => dataNode, [dataNode]);
@@ -147,7 +160,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // fetchConstraints no longer used in structure step
 
   const handleAddMain = () => {
-    setSchemaMains(prev => [...prev, { label: 'New main data', type: 'object', subData: [] }]);
+    setSchemaMains(prev => {
+      const next = [...prev, { label: '', type: 'object', subData: [] } as any];
+      // auto-select new and enable inline edit
+      setSelectedIdx(next.length - 1);
+      setAutoEditIndex(next.length - 1);
+      return next;
+    });
   };
 
   // Handler per chiusura (annulla o completamento)
@@ -205,21 +224,43 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             progressByPath={{ ...progressByPath, __root__: rootProgress }}
             selectedIdx={selectedIdx}
             onSelect={setSelectedIdx}
+            autoEditIndex={autoEditIndex}
           />
         </div>
+        {isProcessing && currentProcessingLabel && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 10 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#0ea5e9' }}>
+              <span style={{ display: 'inline-flex', animation: 'spin 1.2s linear infinite' }}>
+                <Hourglass size={16} color="#0ea5e9" />
+              </span>
+              <span style={{ fontWeight: 600 }}>{currentProcessingLabel}<AnimatedDots /></span>
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#e2e8f0', opacity: 0.9, fontSize: 12 }}>
-            <input
-              type="checkbox"
-              checked={playChime}
-              onChange={(e) => {
-                const v = e.target.checked;
-                setPlayChime(v);
-                try { localStorage.setItem('ddtWizard.playChime', v ? '1' : '0'); } catch {}
-              }}
-            />
-            <span>Play chime on completion</span>
-          </label>
+          <button
+            onClick={() => {
+              const v = !playChime;
+              setPlayChime(v);
+              try { localStorage.setItem('ddtWizard.playChime', v ? '1' : '0'); } catch {}
+            }}
+            title={playChime ? 'Disable chime on completion' : 'Enable chime on completion'}
+            aria-label="Toggle chime on completion"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              border: `1px solid ${playChime ? '#0ea5e9' : '#475569'}`,
+              color: playChime ? '#0ea5e9' : '#64748b',
+              background: 'transparent',
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+          >
+            <Bell size={16} color={playChime ? '#0ea5e9' : '#64748b'} />
+          </button>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => setStep('input')} style={{ background: 'transparent', color: '#fb923c', border: '1px solid #7c2d12', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Back</button>
             <button onClick={() => handleClose()} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
@@ -253,6 +294,23 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   if (!datum) return;
 
                   try {
+                    const prettyPath = step.path.replace(/-/g, ' ');
+                    const mapType = (t: string) => {
+                      switch (t) {
+                        case 'start': return 'creando gli start prompts';
+                        case 'noMatch': return 'creando i no match prompts';
+                        case 'noInput': return 'creando i no input prompts';
+                        case 'confirmation': return 'creando i confirmation prompts';
+                        case 'notConfirmed': return 'creando i not confirmed prompts';
+                        case 'success': return 'creando i success prompts';
+                        case 'constraintMessages': return 'creando i messaggi di violazione vincoli';
+                        case 'validator': return 'generando il validator';
+                        case 'testset': return 'generando il test set';
+                        default: return 'processing';
+                      }
+                    };
+                    const msg = `${mapType(step.type)} per ${prettyPath}`;
+                    setCurrentProcessingLabel(msg.charAt(0).toUpperCase() + msg.slice(1));
                     if (step.type === 'constraintMessages') {
                       const body = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
                       const res = await fetch(`${API_BASE}/api/constraintMessages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -281,6 +339,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       }
                     }
                   } finally {
+                    // Auto-select main in processing
+                    try {
+                      const mainLabel = parts[0];
+                      const idx = schemaMains.findIndex(m => norm(m.label) === mainLabel);
+                      if (idx !== -1) setSelectedIdx(idx);
+                    } catch {}
                     done[step.path] = (done[step.path] || 0) + 1;
                     const nextProg: Record<string, number> = {};
                     for (const p of Object.keys(total)) nextProg[p] = (done[p] || 0) / (total[p] || 1);
@@ -299,7 +363,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                 setIsProcessing(false);
                 const store = buildArtifactStore(results);
-                const finalDDT = assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, store);
+                const finalDDT = await assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, store);
                 // optional chime to signal completion
                 if (playChime) {
                   try {
@@ -328,8 +392,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               disabled={isProcessing}
               style={{ background: isProcessing ? '#fbbf24' : '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: isProcessing ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              {isProcessing && (<span className="spinner" style={{ width: 14, height: 14, border: '2px solid #0b1220', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />)}
-              {isProcessing ? 'Processing…' : 'Continue'}
+              {isProcessing ? (
+                <span
+                  style={{
+                    fontWeight: 700
+                  }}
+                >
+                  Processing…
+                </span>
+              ) : (
+                'Continue'
+              )}
             </button>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import { ProjectData } from '../types/project';
 
-const API = 'http://localhost:3100';
+const API = '';
 
 export const ProjectService = {
   async getRecentProjects(): Promise<ProjectData[]> {

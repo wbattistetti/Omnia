@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import SidebarContainer from './SidebarContainer';
 import SidebarHeader from './SidebarHeader';
 import EntityAccordion from './EntityAccordion';
@@ -10,6 +10,7 @@ import { saveDataDialogueTranslations } from '../../services/ProjectDataService'
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
+import { usePanelZoom } from '../../hooks/usePanelZoom';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -42,7 +43,7 @@ const Sidebar: React.FC = () => {
   } = useProjectDataUpdate();
 
   // Usa il nuovo hook per DDT
-  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, dataDialogueTranslations, loadDDT } = useDDTManager();
+  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, dataDialogueTranslations } = useDDTManager();
 
   const [isSavingDDT, setIsSavingDDT] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -106,7 +107,7 @@ const Sidebar: React.FC = () => {
         const approxSize = new Blob([JSON.stringify(payload)]).size;
         console.log('[Sidebar] DDT save payload size ~', approxSize, 'bytes');
       } catch {}
-      const res = await fetch('http://localhost:3100/api/factory/dialogue-templates', {
+      const res = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -149,10 +150,17 @@ const Sidebar: React.FC = () => {
 
   if (!data) return null;
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const { ref: zoomRef, zoomStyle } = usePanelZoom<HTMLDivElement>(scrollRef);
+
   return (
     <SidebarContainer>
       <SidebarHeader />
-      <div className="p-4 overflow-y-auto" style={{ flex: 1 }}>
+      <div
+        ref={zoomRef as any}
+        className="p-4 overflow-y-auto"
+        style={{ flex: 1, ...zoomStyle }}
+      >
         <DDTSection
           ddtList={ddtList}
           onAdd={handleAddDDT}

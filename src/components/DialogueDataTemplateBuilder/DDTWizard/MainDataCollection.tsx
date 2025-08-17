@@ -1,4 +1,5 @@
 import React from 'react';
+import { Folder, Plus } from 'lucide-react';
 import MainDataWizard from './MainDataWizard';
 
 export interface SchemaNode {
@@ -31,7 +32,7 @@ interface MainDataCollectionProps {
   onSelect: (idx: number) => void;
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number> }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, selectedIdx, onSelect }) => {
+const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, selectedIdx, onSelect, autoEditIndex }) => {
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
     next[idx] = nextNode;
@@ -42,26 +43,46 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
     next.splice(idx, 1);
     onChangeMains(next);
   };
-  const handleAddSubAt = (idx: number) => {
-    const next = mains.slice();
-    const node = { ...(next[idx] || { label: '' }) } as SchemaNode;
-    node.subData = Array.isArray(node.subData) ? node.subData.slice() : [];
-    node.subData.push({ label: 'New field', type: 'text', icon: 'FileText' });
-    next[idx] = node;
-    onChangeMains(next);
-  };
+  // handleAddSubAt removed (plus now inline in MainDataWizard)
 
-  const showRootLabel = mains.length > 1;
+  // const showRootLabel = mains.length > 1;
   return (
     <div style={{ background: '#0f172a', borderRadius: 12, padding: 16, color: '#e2e8f0', marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontWeight: 700 }}>{showRootLabel ? `Create a Dialogue for "${rootLabel}"` : 'Create a Dialogue for'}</div>
-        <button onClick={onAddMain} style={{ background: '#7c3aed', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer' }}>Add main data</button>
+        <div style={{ fontWeight: 700 }}>Create a dialogue for</div>
+        <button
+          onClick={onAddMain}
+          title="Add data"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'transparent',
+            border: '1px solid #7c3aed',
+            color: '#7c3aed',
+            padding: '6px 10px',
+            borderRadius: 999,
+            cursor: 'pointer'
+          }}
+        >
+          <Plus size={16} />
+          <span>Add data</span>
+        </button>
       </div>
       {mains.length > 1 && (
-        <div style={{ height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden', marginBottom: 10 }}>
-          {/* Root progress bar is passed via progressByPath under key '__root__' by parent */}
-          <div style={{ width: `${Math.round(((progressByPath as any)?.__root__ || 0) * 100)}%`, height: '100%', background: '#fb923c' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, whiteSpace: 'nowrap', fontSize: 16, padding: '4px 10px', borderRadius: 12, border: '1px solid #334155', background: '#1f2937', color: '#e2e8f0' }}>
+            <Folder size={18} color="#fb923c" />
+            {rootLabel}
+          </span>
+          {(((progressByPath as any)?.__root__ || 0) > 0) && (
+            <>
+              <div style={{ flex: 1, height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden', marginLeft: 8 }}>
+                <div style={{ width: `${Math.round(((progressByPath as any)?.__root__ || 0) * 100)}%`, height: '100%', background: '#fb923c' }} />
+              </div>
+              <span style={{ fontSize: 11, color: '#93c5fd', minWidth: 34, textAlign: 'left' }}>{Math.round((((progressByPath as any)?.__root__ || 0) * 100))}%</span>
+            </>
+          )}
         </div>
       )}
       <div>
@@ -71,9 +92,9 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
               node={m}
               onChange={(n) => handleChangeAt(i, n)}
               onRemove={() => handleRemoveAt(i)}
-              onAddSub={() => handleAddSubAt(i)}
               progressByPath={progressByPath}
               selected={selectedIdx === i}
+              autoEdit={autoEditIndex === i}
             />
           </div>
         ))}

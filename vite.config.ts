@@ -10,12 +10,16 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/step1': 'http://localhost:8000',
-      '/step2': 'http://localhost:8000',
-      '/step3': 'http://localhost:8000',
-      '/step3b': 'http://localhost:8000',
-      '/step4': 'http://localhost:8000',
-      '/api': 'http://localhost:8000',
+      // FastAPI endpoints
+      '/step1': { target: 'http://localhost:8000', changeOrigin: true },
+      '/step2': { target: 'http://localhost:8000', changeOrigin: true },
+      '/step3': { target: 'http://localhost:8000', changeOrigin: true },
+      '/step3b': { target: 'http://localhost:8000', changeOrigin: true },
+      '/step4': { target: 'http://localhost:8000', changeOrigin: true },
+
+      // FastAPI namespaced endpoints
+      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      '/projects': { target: 'http://localhost:8000', changeOrigin: true },
     }
   }
 });

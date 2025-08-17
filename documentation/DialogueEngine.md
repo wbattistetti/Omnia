@@ -207,3 +207,71 @@ Conclusione
 
 Il motore conversazionale DDT con debugger avanzato è progettato per supportare dialoghi complessi, validazioni, escalation condizionali e subdata, tutto in modo testabile, modulare e scalabile.
 Il useCaseGenerator.ts permette di creare automaticamente i principali scenari di test, sia statici sia condizionali, garantendo una copertura realistica e utile per QA e sviluppo.
+
+
+AGGIUNTO:
+Sì—la base è solida e scalabile. Orchestratore a flowchart + DDT per blocco + contesto globale + step NotConfirmed è l’impostazione giusta. Detto questo, ti evidenzio cosa va benissimo, dove rischi e cosa stringerei per farla davvero affidabile in produzione.
+
+Cosa è forte (tieni così)
+Separazione a 2 livelli (Flow Orchestrator vs DDT Engine): pulita, testabile.
+
+NotConfirmed come step autonomo: chiarisce UX e analytics.
+
+Mixed-initiative con GlobalContext e SlotRegistry: requisito chiave per casi reali.
+
+UI con editor step + pannello Human-Like + simulatore/debug: ottimo per iterare.
+
+Rischi/zone gialle (affrontale prima)
+Preemption “smart”: è utile ma può creare salti di contesto percepiti come “teletrasporti”.
+
+Default prudente: opportunistic + politePreempt=afterSuccess.
+
+Abilita smart solo se il blocco è in impasse (Ask L3 / NotConfirmed L2+).
+
+SatisfactionThreshold: definisci esattamente “saturo” (solo required? anche opzionali?) e documenta.
+
+Invariante: conferma una sola volta a livello main, mai conferme a cascata.
+
+Ambiguità differite: se accumuli tanti “da disambiguare dopo”, rischi valanga.
+
+Limita a N pendenti per tipo; quando attivi il blocco, risolvi prima di chiedere altro.
+
+Determinismo: human-like + varianti → rischio test flaky.
+
+Usa seed fisso in debug per varianti/timing; no prompt identico entro K turni.
+
+Constraint sandbox: esegui script in modo sicuro e con timeout; logga violazioni/ERROR distinti.
+
+Loop & rientri: con NotConfirmed + disambiguazione + preconfirm violation puoi ciclare.
+
+Metti cap chiari (L3) e vie d’uscita (skip/handoff) visibili in UI.
+
+Affinamenti consigliati (pochi ma chirurgici)
+Terna escalation distinta: noInput, noMatch, notConfirmed (già deciso: bene).
+
+Guard evaluator con helpers present(), ratio(), e priority sugli edge: evita scelte non deterministiche.
+
+Global Extractor minimale e sincrono (regex/kind-parser) → niente IA runtime; marca DeferredDisambiguation.
+
+Conflict policy: quando lo stesso input vale sia per blocco attivo sia per futuri, vince sempre il blocco attivo.
+
+Metriche: traccia tassi notConfirmed, path L1→L3, percentuale preemption, tempo per blocco. Servono per migliorare i testi, non solo per debug.
+
+UI: due aggiunte che aiutano subito
+Context Inspector con “progress donut” per blocco (% soddisfazione) e lista slot/fonte (DDT vs extractor).
+
+Input Router Debug: evidenzia cosa è stato consumato dal DDT vs catturato globalmente vs ignorato, con motivazione (“policy strict/opportunistic/smart”).
+
+Invarianti che ti tolgono problemi
+Un main si conferma una sola volta quando è saturo; i sub mai.
+
+NO in conferma → sempre NotConfirmed (mai tornare a Ask generico).
+
+Transcript mai resettato su cambio blocco.
+
+Nessun salto di blocco se ci sono disambiguazioni critiche ancora aperte relative al blocco attivo.
+
+Verdetto
+Impostazione buona e allineata a sistemi seri. Se metti in sicurezza i 5 punti gialli sopra e adotti gli invarianti, hai un motore realistico, testabile e “quasi umano” senza introdurre IA a runtime.
+
+Vuoi che trasformi questa review in una checklist “Done/Fail” da incollare in Cursor come acceptance criteria per il PR dell’orchestratore?

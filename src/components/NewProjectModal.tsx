@@ -45,7 +45,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
 
   useEffect(() => {
     if (isOpen) {
-      fetch('http://localhost:3100/projects')
+      fetch('/projects')
         .then(res => res.json())
         .then(data => setRecentProjects(data))
         .catch(() => setRecentProjects([]));
@@ -83,7 +83,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     if (created) {
       // Dopo la creazione, carica i DDT templates dalla factory
       if (onFactoryTemplatesLoaded) {
-        fetch('http://localhost:3100/api/factory/dialogue-templates')
+        fetch('/api/factory/dialogue-templates')
           .then(res => res.json())
           .then(data => {
             if (Array.isArray(data)) onFactoryTemplatesLoaded(data);

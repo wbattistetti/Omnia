@@ -97,23 +97,29 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
   const updateSelectedNode = (updater: (node: any) => any) => {
     setLocalDDT((prev: any) => {
       if (!prev) return prev;
-      const copy = JSON.parse(JSON.stringify(prev));
-      const mains = getMainDataList(copy);
+      const next = JSON.parse(JSON.stringify(prev));
+      const mains = getMainDataList(next);
       const main = mains[selectedMainIndex];
       if (!main) return prev;
       if (selectedSubIndex == null) {
+        const before = JSON.stringify(main);
         const updated = updater(main) || main;
+        const after = JSON.stringify(updated);
+        if (before === after) return prev; // no content change
         mains[selectedMainIndex] = updated;
       } else {
         const subList = getSubDataList(main);
         const sub = subList[selectedSubIndex];
         if (!sub) return prev;
         const subIdx = (main.subData || []).findIndex((s: any) => s.label === sub.label);
+        const before = JSON.stringify(main.subData[subIdx]);
         const updated = updater(sub) || sub;
+        const after = JSON.stringify(updated);
+        if (before === after) return prev; // no content change
         main.subData[subIdx] = updated;
       }
-      copy.mainData = mains;
-      return copy;
+      next.mainData = mains;
+      return next;
     });
   };
 
@@ -251,12 +257,13 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
           )}
           {/* Content */}
           <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fff', borderRadius: 16, margin: 16, boxShadow: '0 2px 8px #e0d7f7' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: '16px 16px 0 16px' }}>
+              <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 {showSynonyms ? (
                   <div style={{ padding: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <h4 style={{ margin: 0 }}>NLP Extractor Profile: {selectedNode?.label || ''}</h4>
+                      <h4 style={{ margin: 0 }}>Data Extractor: {selectedNode?.label || ''}</h4>
                       <button onClick={() => setShowSynonyms(false)} style={{ border: '1px solid #ddd', background: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>Chiudi</button>
                     </div>
                     <NLPExtractorProfileEditor
@@ -293,6 +300,7 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
                     })}
                   />
                 )}
+                </div>
               </div>
             </div>
             {!showSynonyms && (
