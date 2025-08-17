@@ -12,6 +12,7 @@ export interface HookConfig {
 export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookConfig) {
   const [state, setState] = useState<SimulatorState>(() => initEngine(template));
   const cfgRef = useRef<HookConfig>({ typingIndicatorMs: 0, ...(initialConfig || {}) });
+  const pendingBgRef = useRef<any | null>(null);
 
   const send = useCallback(async (input: string) => {
     cfgRef.current.onLog?.({ ts: Date.now(), kind: 'input', message: input });
@@ -37,6 +38,30 @@ export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookCon
         if (cfgRef.current.debug) {
           // eslint-disable-next-line no-console
           console.log('[DDE] mode:', next.mode);
+        }
+        // When entering ConfirmingMain, if there is residual text, launch background address parse
+        if (next.mode === 'ConfirmingMain') {
+          try {
+            const residual = ''; // placeholder: engine could expose residual; for now, skip
+            if (residual && residual.length > 12 && !pendingBgRef.current) {
+              pendingBgRef.current = true;
+              fetch('/api/parse-address', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: residual }),
+              })
+                .then((r) => r.json())
+                .then((data) => {
+                  if (data?.ok && data.address) {
+                    // Stash; application at next user commit would require a reducer or external handler.
+                    cfgRef.current.onLog?.({ ts: Date.now(), kind: 'bg', message: 'address parsed' });
+                  }
+                })
+                .finally(() => {
+                  pendingBgRef.current = null;
+                });
+            }
+          } catch {}
         }
       }
       if (next.currentSubId !== prev.currentSubId && next.currentSubId) {

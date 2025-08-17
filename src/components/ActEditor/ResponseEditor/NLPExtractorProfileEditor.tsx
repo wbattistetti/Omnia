@@ -468,11 +468,11 @@ export default function NLPExtractorProfileEditor({
           }
         }
         setRowResults(prev => {
-          const next = [...prev];
+      const next = [...prev];
           const base = ((next[idx] || {}) as any).spans || [];
           next[idx] = { ...(next[idx] || {}), llm: llmSummary, llmMs: Math.round(performance.now() - t0), llmRunning: false, spans: mergeSpans(base, llmSpans) } as any;
-          return next;
-        });
+      return next;
+    });
       } catch {
         update({ llm: '—', llmMs: Math.round(performance.now() - t0), llmRunning: false });
       }
@@ -555,13 +555,13 @@ export default function NLPExtractorProfileEditor({
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) minmax(140px, 200px) 1fr', alignItems: 'end', gap: 12 }}>
           {/* Kind stretto */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: 12, opacity: 0.8 }}>Kind</label>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, opacity: 0.8 }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: 12, opacity: 0.8 }}>Kind</label>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, opacity: 0.8 }}>
                 <input type="checkbox" checked={lockKind} onChange={(e) => { const v = e.target.checked; setLockKind(v); setKind(v ? 'auto' : inferredKind); }} /> Auto
-              </label>
-            </div>
+                  </label>
+                </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} ref={kindRef}>
               {lockKind ? (
                 <select value={'auto'} disabled style={{ flex: 1, padding: 6, border: '1px solid #ddd', borderRadius: 8, background: '#f3f4f6' }}>
@@ -582,9 +582,9 @@ export default function NLPExtractorProfileEditor({
                           <span style={{ textAlign: 'left' }}>{opt.label}</span>
                         </button>
                       ))}
-                    </div>
+              </div>
                   )}
-                </div>
+              </div>
               )}
             </div>
           </div>
@@ -618,7 +618,7 @@ export default function NLPExtractorProfileEditor({
                 <div>
                   <label style={{ fontSize: 12, opacity: 0.8, display: 'block', marginBottom: 4 }}>Waiting 2° escalation</label>
                   <input value={waitingEsc2} onChange={(e) => setWaitingEsc2(e.target.value)} title="Testo mostrato all'utente mentre si attende la 2ª escalation (passaggio a LLM)" style={{ width: '100%', padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6 }} />
-                </div>
+              </div>
               </div>
             </div>
           </div>

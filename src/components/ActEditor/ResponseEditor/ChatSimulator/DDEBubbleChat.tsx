@@ -102,6 +102,17 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
   const [inlineDraft, setInlineDraft] = React.useState<string>('');
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
   const inlineInputRef = React.useRef<HTMLInputElement | null>(null);
+  const ensureInlineFocus = React.useCallback((retries: number = 8) => {
+    const attempt = (i: number) => {
+      const el = inlineInputRef.current;
+      if (!el) return;
+      try { el.focus({ preventScroll: true } as any); } catch {}
+      if (document.activeElement !== el && i < retries) {
+        setTimeout(() => attempt(i + 1), 50);
+      }
+    };
+    requestAnimationFrame(() => attempt(0));
+  }, []);
   const lastBotIndex = React.useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       if (messages[i]?.type === 'bot') return i;
@@ -117,6 +128,18 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
     const legacyMain = (currentDDT as any)?.mainData;
     const legacySub = undefined;
     if (!main) return;
+    // If we are collecting a main but it is already saturated (all subs present), auto-advance to confirmation
+    if (state.mode === 'CollectingMain' && main && Array.isArray((main as any).subs) && (main as any).subs.length > 0) {
+      const allPresent = (main as any).subs.every((sid: string) => {
+        const m = (state as any)?.memory?.[sid];
+        return m && m.value !== undefined && m.value !== null && String(m.value).length > 0;
+      });
+      if (allPresent) {
+        void send('');
+        return;
+      }
+    }
+
     if (!messages.length) {
       const { text, key } = resolveAsk(main, undefined, translations, legacyDict, legacyMain, legacySub);
       // eslint-disable-next-line no-console
@@ -129,6 +152,17 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
     lastKeyRef.current = key;
     // Push appropriate bot message for new state
     if (state.mode === 'CollectingMain') {
+      // If already saturated, jump to confirmation without showing ask
+      if (main && Array.isArray((main as any).subs) && (main as any).subs.length > 0) {
+        const allPresent = (main as any).subs.every((sid: string) => {
+          const m = (state as any)?.memory?.[sid];
+          return m && m.value !== undefined && m.value !== null && String(m.value).length > 0;
+        });
+        if (allPresent) {
+          void send('');
+          return;
+        }
+      }
       const sub = undefined;
       const legacyMain = (currentDDT as any)?.mainData;
       const legacySub = undefined;
@@ -168,9 +202,11 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
       try {
         inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch {}
+      // After scroll, try to focus the inline input
+      try { ensureInlineFocus(); } catch {}
     }, 0);
     return () => clearTimeout(id);
-  }, [messages.length, lastBotIndex]);
+  }, [messages.length, lastBotIndex, ensureInlineFocus]);
 
   const handleSend = async (text: string) => {
     setMessages((prev) => [...prev, { id: String(Date.now()), type: 'user', text }]);
@@ -284,8 +320,11 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
                         const v = inlineDraft;
                         setInlineDraft('');
                         void handleSend(v);
+                        // After sending, keep focus for the next input
+                        setTimeout(() => ensureInlineFocus(), 0);
                       }
                     }}
+                    autoFocus
                   />
                 </div>
               </div>

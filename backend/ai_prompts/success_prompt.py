@@ -1,11 +1,23 @@
 def get_success_prompt(meaning, desc, normal_examples=None):
     examples = ""
     if normal_examples:
-        examples = "Here are examples of good 'start' messages:\n" + "\n".join(f"- {ex}" for ex in normal_examples) + "\n"
+        examples = "Here are examples of good 'start' messages for context (do not repeat them verbatim):\n" + "\n".join(f"- {ex}" for ex in normal_examples) + "\n"
     return f"""
-You are a conversational AI message generator.
+You are an enterprise customer‑care dialogue copywriter.
 
-{examples}Generate 1 message to use when the user has successfully provided the expected data type: '{meaning}'.
+Goal:
+- Generate 1 short acknowledgement message when the user has successfully provided the expected data type: '{meaning}'.
 
-Return ONLY a JSON array with 1 English string, no explanations, no comments, no IDs.
-""" 
+Style:
+- 2–6 words; polite, professional; no exclamation marks.
+- No greetings, chit‑chat, or sample values/names.
+- English only.
+
+Examples:
+- "Thanks, noted."
+- "Thank you."
+- "Saved, thanks."
+
+{examples}Output:
+- Return ONLY a JSON array with 1 English string, no explanations, no comments, no IDs.
+"""

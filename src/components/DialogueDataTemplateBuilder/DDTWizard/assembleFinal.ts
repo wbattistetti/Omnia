@@ -43,35 +43,14 @@ type AssembleOptions = {
   escalationCounts?: Partial<Record<'noMatch' | 'noInput' | 'confirmation', number>>;
 };
 
-async function aiDraftNlpProfile(input: { label: string; type?: string; kind?: string; constraints?: any[]; locale: string }): Promise<any | null> {
-  try {
-    const API_BASE = (import.meta as any)?.env?.VITE_AI_URL || '/api';
-    const API_KEY = (import.meta as any)?.env?.VITE_AI_KEY;
-    const res = await fetch(`${API_BASE}/ai/nlpProfileDraft`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}),
-        ...(API_KEY && !(import.meta as any)?.env?.VITE_USE_AUTH_HEADER ? { 'X-API-Key': API_KEY } : {}),
-      },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data || null;
-  } catch (_) {
-    return null;
-  }
-}
-
-export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): Promise<AssembledDDT> {
+export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): AssembledDDT {
   const ddtId = `${rootLabel || 'DDT'}_${uuidv4()}`;
   const translations: Translations = {};
   // Limit AI-driven re-asks to max 2
   const defaultEscalations = { noMatch: 2, noInput: 2, confirmation: 2 } as Record<string, number>;
   const counts = { ...defaultEscalations, ...(options?.escalationCounts || {}) } as Record<string, number>;
 
-  const assembleNode = async (node: SchemaNode, nodePath: string[]): Promise<any> => {
+  const assembleNode = (node: SchemaNode, nodePath: string[]): any => {
     const nodeId = uuidv4();
     const path = pathFor(nodePath);
     const pathBucket = store.byPath[path];
@@ -105,62 +84,6 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       steps: {} as Record<string, any>,
       synonyms: [node.label, (node.label || '').toLowerCase()].filter(Boolean),
     };
-
-    // Default NLP extractor profile (auto-derived)
-    // Infer kind from node.type/label
-    const typeStr = String((node as any)?.type || '').toLowerCase();
-    const labelStr = String(node?.label || '').toLowerCase();
-    let kind: string = (node as any)?.kind || typeStr || 'generic';
-    if (/date|dob|birth/.test(typeStr) || /date|dob|birth/.test(labelStr)) kind = 'date';
-    if (/email/.test(typeStr) || /email/.test(labelStr)) kind = 'email';
-    if (/phone|tel/.test(typeStr) || /phone|tel/.test(labelStr)) kind = 'phone';
-    if (/address/.test(typeStr) || /address/.test(labelStr)) kind = 'address';
-    if (/name/.test(typeStr) || /name/.test(labelStr)) kind = 'name';
-    const autoSynonyms = [node.label, (node.label || '').toLowerCase()].filter(Boolean);
-    const profile: any = {
-      slotId: nodeId,
-      locale: 'it-IT',
-      kind: String(kind),
-      synonyms: autoSynonyms,
-      minConfidence: 0.6,
-    };
-    // Simple regex suggestions from constraints
-    const nodeConstraints = (node as any)?.constraints || [];
-    const kinds = new Set<string>(String(kind).toLowerCase().split(','));
-    if (kinds.has('date')) {
-      profile.formatHints = ['dd/MM/yyyy', 'd/M/yyyy', 'd MMMM yyyy', 'd MMM yyyy'];
-      // regex/examples will be provided by AI only
-    }
-    const hasEmail = (nodeConstraints as any[]).some((c: any) => (c?.kind || '').toLowerCase() === 'email');
-    const hasPhone = (nodeConstraints as any[]).some((c: any) => (c?.kind || '').toLowerCase() === 'phone');
-    const hasZip = (nodeConstraints as any[]).some((c: any) => /(zip|cap|postal)/i.test(c?.kind || ''));
-    if (hasEmail) profile.regex = "^\\S+@\\S+\\.\\S+$";
-    if (hasPhone) profile.regex = profile.regex || "^\\+?\\d[\\d\\s-]{6,}$";
-    if (hasZip) profile.regex = profile.regex || "\\b\\d{5}\\b";
-    // Try generative AI draft profile and merge
-    const ai = await aiDraftNlpProfile({ label: node.label, type: (node as any)?.type, kind: String(kind), constraints: (node as any)?.constraints, locale: 'it-IT' });
-    if (ai && typeof ai === 'object') {
-      try {
-        if (Array.isArray(ai.synonyms)) {
-          const merged = [...profile.synonyms, ...ai.synonyms].filter(Boolean);
-          profile.synonyms = Array.from(new Set(merged));
-        }
-        if (Array.isArray(ai.examples) && ai.examples.length) profile.examples = ai.examples;
-        if (typeof ai.regex === 'string' && ai.regex.trim()) profile.regex = ai.regex.trim();
-        if (Array.isArray(ai.formatHints) && ai.formatHints.length) profile.formatHints = ai.formatHints;
-        if (typeof ai.minConfidence === 'number') profile.minConfidence = ai.minConfidence;
-        if (ai.postProcess) {
-          profile.postProcess = typeof ai.postProcess === 'string'
-            ? JSON.parse(ai.postProcess as string)
-            : ai.postProcess;
-        }
-        profile.source = 'ai';
-      } catch {
-        // ignore AI parsing issues
-      }
-    }
-
-    (assembled as any).nlpProfile = profile;
 
     // Constraints
     for (const c of node.constraints || []) {
@@ -284,7 +207,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
     // SubData
     for (const s of node.subData || []) {
-      assembled.subData.push(await assembleNode(s, [...nodePath, s.label]));
+      assembled.subData.push(assembleNode(s, [...nodePath, s.label]));
     }
 
     // Minimal base messages (ensure ResponseEditor displays steps)
@@ -323,10 +246,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     return assembled;
   };
 
-  const assembledMains = [] as any[];
-  for (const m of (mains || [])) {
-    assembledMains.push(await assembleNode(m, [m.label]));
-  }
+  const assembledMains = (mains || []).map(m => assembleNode(m, [m.label]));
 
   return {
     id: ddtId,

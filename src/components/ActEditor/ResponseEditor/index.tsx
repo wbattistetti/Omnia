@@ -243,6 +243,7 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
             setTimeout(() => { sidebarRef.current?.focus(); }, 0);
           }}
         />
+        <div style={{ width: 35 }} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Steps toolbar hidden during NLP editor */}
           {!showSynonyms && (

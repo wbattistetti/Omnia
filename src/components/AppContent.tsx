@@ -103,21 +103,21 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, []);
 
   // Carica progetti recenti (ultimi 10)
-  const fetchRecentProjects = async () => {
+  const fetchRecentProjects = React.useCallback(async () => {
     try {
       setRecentProjects(await ProjectService.getRecentProjects());
     } catch (e) {
       setRecentProjects([]);
     }
-  };
+  }, []);
   // Carica tutti i progetti
-  const fetchAllProjects = async () => {
+  const fetchAllProjects = React.useCallback(async () => {
     try {
       setAllProjects(await ProjectService.getAllProjects());
     } catch (e) {
       setAllProjects([]);
     }
-  };
+  }, []);
 
   const handleDeleteProject = useCallback(async (id: string) => {
     await ProjectService.deleteProject(id);

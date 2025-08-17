@@ -18,6 +18,34 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
   const [engine, setEngine] = useState(() => new ResponseFlowEngine(ddt, translations, selectedNode));
   const [showDebug, setShowDebug] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const logFocus = (where: string) => {
+    try {
+      const el = inputRef.current as any;
+      const active = (document as any).activeElement;
+      // eslint-disable-next-line no-console
+      console.debug('[ChatSimulator][focus]', where, {
+        hasEl: Boolean(el),
+        activeIsInput: active === el,
+        activeTag: active?.tagName,
+        waitingForInput: Boolean(flowState?.waitingForInput),
+        step: flowState?.currentStep,
+      });
+    } catch {}
+  };
+  const ensureFocus = React.useCallback((retries: number = 8) => {
+    const attempt = (i: number) => {
+      const el = inputRef.current;
+      if (!el) return;
+      try { el.focus({ preventScroll: true } as any); } catch {}
+      logFocus(`attempt#${i}`);
+      // If not focused yet, retry
+      if (document.activeElement !== el && i < retries) {
+        setTimeout(() => attempt(i + 1), 50);
+      }
+    };
+    requestAnimationFrame(() => attempt(0));
+  }, []);
 
   useEffect(() => {
     // Rebuild engine only when DDT or translations change. Preserve chat on sidebar selection changes.
@@ -41,6 +69,9 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
   const handleStart = () => {
     const initialState = engine.start();
     setFlowState(initialState);
+    // Ensure input is focused when the first prompt appears
+    logFocus('handleStart');
+    setTimeout(() => ensureFocus(), 0);
   };
 
   const handleReset = () => {
@@ -51,6 +82,9 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
     if (!flowState) return;
     const newState = engine.processUserInput(flowState, input);
     setFlowState(newState);
+    // Keep focus ready for the next prompt
+    logFocus('afterSend');
+    setTimeout(() => ensureFocus(), 0);
   };
 
   const getStepColor = (stepType?: string) => {
@@ -66,6 +100,14 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const { ref: zoomRef, zoomStyle } = usePanelZoom<HTMLDivElement>(rootRef);
+
+  // When the input box appears (waitingForInput), ensure it receives focus
+  useEffect(() => {
+    if (flowState && flowState.waitingForInput && !flowState.completed) {
+      logFocus('effect-waiting');
+      ensureFocus();
+    }
+  }, [flowState?.waitingForInput, flowState?.currentStep, flowState?.messages?.length, ensureFocus]);
 
   return (
     <div ref={zoomRef as any} className="h-full flex flex-col bg-white border-l" style={{ ...zoomStyle }}>
@@ -164,12 +206,14 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
 
       {/* Input Area */}
       {flowState && flowState.waitingForInput && !flowState.completed && (
-        <div className="border-t p-4 bg-gray-50">
+        <div className="border-t p-4 bg-gray-50" onMouseDown={() => ensureFocus()}>
           <div className="flex gap-2">
             <input
               type="text"
               placeholder="Type response or press Enter for noInput..."
               className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              ref={inputRef}
+              onFocus={() => logFocus('input-onFocus')}
               onKeyPress={(e) => {
                 if (e.key === 'Enter') {
                   const input = e.currentTarget.value;

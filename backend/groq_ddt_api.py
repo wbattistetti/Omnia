@@ -25,6 +25,7 @@ try:
     from backend.ai_steps.stepSuccess import router as stepSuccess_router
     from backend.ai_steps.startPrompt import router as startPrompt_router
     from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
+    from backend.ai_steps.parse_address import router as parse_address_router
 except Exception:
     from ai_steps.step3_suggest_constraints import router as step3_router
     from ai_steps.step2_detect_type import router as step2_router
@@ -39,6 +40,7 @@ except Exception:
     from ai_steps.stepSuccess import router as stepSuccess_router
     from ai_steps.startPrompt import router as startPrompt_router
     from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
+    from ai_steps.parse_address import router as parse_address_router
 
 GROQ_KEY = os.environ.get("Groq_key")
 IDE_LANGUE = os.environ.get("IdeLangue", "it")
@@ -58,16 +60,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Simple request/response logger
+# Simple request/response logger (silence noisy paths)
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    path = request.url.path
+    # Silence frequent frontend fetches/polling
+    if path.startswith("/projects"):
+        return await call_next(request)
     try:
-        print(f"[REQ] {request.method} {request.url.path}")
+        print(f"[REQ] {request.method} {path}")
     except Exception:
         pass
     response = await call_next(request)
     try:
-        print(f"[RES] {response.status_code} {request.url.path}")
+        print(f"[RES] {response.status_code} {path}")
     except Exception:
         pass
     return response
@@ -84,6 +90,7 @@ app.include_router(startPrompt_router)
 app.include_router(stepNotConfirmed_router)
 app.include_router(nlp_extract_router)
 app.include_router(ner_router)
+app.include_router(parse_address_router)
 
 EXPRESS_BASE = "http://localhost:3100"
 
@@ -292,12 +299,67 @@ def step3b(user_constraints: str = Body(...), meaning: str = Body(...), desc: st
 def step4(ddt_structure: dict = Body(...)):
     print("\nSTEP: /step4 – Generate DDT messages (generateMessages)")
     prompt = f"""
-You are a conversational AI message generator.
+You are an enterprise customer‑care dialogue copywriter.
+Generate user‑facing messages to collect the data described by the DDT structure.
 
-Given the following DDT structure (including main steps, constraints, and optional subfields), generate the user-facing English messages required to guide the user.
+Style and constraints:
+- One short sentence (about 4–12 words), polite and professional.
+- Neutral, conversational; no chit‑chat, no opinions, no humor.
+- NEVER ask about “favorite …” or “why”.
+- No emojis and no exclamation marks.
+- NEVER output example values or names (e.g., "Emily", "01/01/2000", "Main Street").
+- NEVER output greetings or generic help phrases (e.g., "How may I help you today").
+- Use the field label; if the field is composite, ask ONLY the missing part (e.g., Day, Month, Year).
+- Add compact format hints when useful: (DD/MM/YYYY), (YYYY), (email), (+country code).
+- English only.
 
-Return ONLY a flat JSON object with keys in this format:
-  "runtime.<DDT_ID>.<step>#<index>.<action>.text": "<English message>"
+Output format (JSON only, no comments):
+"runtime.<DDT_ID>.<step>#<index>.<action>.text": "<message>"
+
+Generation rules:
+- start: 1 message per field/subfield. Example: "What is your date of birth (DD/MM/YYYY)?"
+- noInput: 3 concise re-asks, slightly varied. Example: "Please provide the date of birth (DD/MM/YYYY)."
+- noMatch: 3 concise clarifications with hint. Example: "I couldn't parse that. Date of birth (DD/MM/YYYY)?"
+- confirmation: 2 short confirmations like "Is this correct: { '{input}' }?"
+- success: 1 short acknowledgement like "Thanks, noted."
+- For subData (e.g., date): ask targeted parts — "Day?", "Month?", "Year?" (or "Which year (YYYY)?").
+- For start, noInput, and noMatch: the text MUST directly ask for the value and MUST end with a question mark.
+- Only confirmation messages may include the { '{input}' } placeholder.
+
+Examples (short, agent-like):
+
+Full name
+- start: "What is your full name?"
+- sub First name: "First name?"
+- sub Last name: "Last name?"
+
+Date of birth
+- start: "What is your date of birth (DD/MM/YYYY)?"
+- missing Day: "Day?"
+- missing Month: "Month?"
+- missing Year: "Which year (YYYY)?"
+
+Home address (residence)
+- start: "What is your home address?"
+- part Street: "Street?"
+- part House number: "Number?"
+- part City: "City?"
+- part Postal code: "Postal code?"
+- part Country: "Country?"
+
+Email
+- start: "What is your email address?"
+
+Phone number
+- start: "What is your phone number (+country code)?"
+
+Re-ask variants (no input / no match)
+- "Sorry, could you repeat?"
+- "Please say it again."
+- "I didn’t catch that, repeat please?"
+
+Avoid examples like:
+- "What's your favorite year and why is it special?"
 
 Where:
 - <DDT_ID> is the unique ID of the DDT (use the value from the input).
@@ -305,13 +367,6 @@ Where:
 - <index> is the escalation index (starting from 1).
 - <action> is the action type (e.g., SayMessage, ConfirmInput), followed by a placeholder ID or suffix.
 - Example: "runtime.DDT_Birthdate.noMatch#1.SayMessage_1.text"
-
-Instructions:
-- Generate 1 message for start and success steps.
-- Generate 3 messages for each noMatch and noInput step (escalation levels 1–3).
-- Generate 2 messages for confirmation (escalation 1–2).
-- For each constraint, generate 2 messages (e.g., for required, range, regex).
-- If the DDT has subData, generate messages for each subfield's constraints.
 
 ⚠️ IMPORTANT:
 - DO NOT generate any IDs or GUIDs — use static suffixes like SayMessage_1.

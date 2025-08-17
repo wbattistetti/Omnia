@@ -1,5 +1,5 @@
 import React, { forwardRef } from 'react';
-import { BookOpen, X as CloseIcon } from 'lucide-react';
+import { BookOpen, X as CloseIcon, Check } from 'lucide-react';
 import { getLabel, getSubDataList } from './ddtSelectors';
 import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
@@ -24,6 +24,15 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   const bgBase = 'rgba(156,163,175,0.10)';
   const bgActive = 'rgba(156,163,175,0.40)';
   const textBase = '#e5e7eb';
+
+  // Include state for mains and subs (UI-only). Default: included (true)
+  const [includedMains, setIncludedMains] = React.useState<Record<number, boolean>>({});
+  const [includedSubs, setIncludedSubs] = React.useState<Record<string, boolean>>({});
+
+  const isMainIncluded = (idx: number) => includedMains[idx] !== false;
+  const isSubIncluded = (mIdx: number, sIdx: number) => includedSubs[`${mIdx}:${sIdx}`] !== false;
+  const toggleMainInclude = (idx: number, v: boolean) => setIncludedMains(prev => ({ ...prev, [idx]: v }));
+  const toggleSubInclude = (mIdx: number, sIdx: number, v: boolean) => setIncludedSubs(prev => ({ ...prev, [`${mIdx}:${sIdx}`]: v }));
 
   // selectedSubIndex: undefined o number
   const safeSelectedSubIndex = typeof selectedSubIndex === 'number' && !isNaN(selectedSubIndex) ? selectedSubIndex : undefined;
@@ -77,13 +86,14 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
     }
   };
 
-  const itemStyle = (active: boolean, isSub: boolean): React.CSSProperties => ({
+  const itemStyle = (active: boolean, isSub: boolean, disabled?: boolean): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     gap: 10,
-    width: '100%',
-    background: active ? bgActive : bgBase,
-    color: textBase,
+    width: 'fit-content',
+    whiteSpace: 'nowrap',
+    background: disabled ? 'rgba(75,85,99,0.25)' : (active ? bgActive : bgBase),
+    color: disabled ? '#9ca3af' : textBase,
     border: `1px solid ${borderColor}`,
     borderRadius: 10,
     padding: '8px 10px',
@@ -97,70 +107,130 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
     transition: 'border 0.15s',
   });
 
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const forwarded = ref as any;
+  React.useEffect(() => { if (forwarded) forwarded.current = containerRef.current; }, [forwarded]);
+  const [measuredW, setMeasuredW] = React.useState<number>(280);
+  React.useEffect(() => {
+    const measure = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const items = Array.from(el.querySelectorAll('.sb-item')) as HTMLElement[];
+      let maxWidth = 0;
+      for (const it of items) {
+        const w = it.scrollWidth;
+        if (w > maxWidth) maxWidth = w;
+      }
+      // Add a right-side gutter so the vertical border sits ~10px away from the rightmost node
+      const gutter = 45; // 35 + 10 extra pixels
+      const width = Math.ceil(maxWidth) + gutter;
+      const clamped = Math.min(Math.max(width, 200), 640);
+      setMeasuredW(clamped);
+    };
+    // measure after paint
+    const id = requestAnimationFrame(measure);
+    window.addEventListener('resize', measure);
+    return () => { cancelAnimationFrame(id); window.removeEventListener('resize', measure); };
+  }, [mainList]);
+
   return (
     <div
-      ref={ref}
+      ref={containerRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      style={{ width: 'max-content', minWidth: 260, maxWidth: 480, background: '#121621', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none', marginRight: 16 }}
+      style={{ width: measuredW, background: '#121621', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none' }}
     >
       {/* Aggregated group header */}
       {aggregated && (
         <button
           onClick={(e) => { (onSelectAggregator ? onSelectAggregator() : undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
           style={itemStyle(safeSelectedSubIndex === undefined, false)}
-          className={safeSelectedSubIndex === undefined ? styles.sidebarSelected : ''}
+          className={`sb-item ${safeSelectedSubIndex === undefined ? styles.sidebarSelected : ''}`}
         >
           <span style={{ marginRight: 6 }}>{getIconComponent('Folder')}</span>
-          <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>{rootLabel || 'Data'}</span>
+          <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{rootLabel || 'Data'}</span>
         </button>
       )}
       {mainList.map((main, idx) => {
         const activeMain = selectedMainIndex === idx && safeSelectedSubIndex === undefined;
+        const disabledMain = !isMainIncluded(idx);
         const Icon = getIconComponent(main?.icon || 'FileText');
         const subs = getSubDataList(main) || [];
         return (
           <div key={idx}>
             <button
               onClick={(e) => { onSelectMain(idx); onSelectSub && onSelectSub(undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
-              style={{ ...itemStyle(activeMain, false), ...(aggregated ? { marginLeft: 18 } : {}) }}
-              className={activeMain ? styles.sidebarSelected : ''}
+              style={{ ...itemStyle(activeMain, false, disabledMain), ...(aggregated ? { marginLeft: 18 } : {}) }}
+              className={`sb-item ${activeMain ? styles.sidebarSelected : ''}`}
             >
               {aggregated && (
-                <label title="Include main data" style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6 }} onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" defaultChecked data-kind="include-main" data-index={idx} />
-                </label>
+                <span
+                  role="checkbox"
+                  aria-checked={isMainIncluded(idx)}
+                  title="Include main data"
+                  onClick={(e) => { e.stopPropagation(); toggleMainInclude(idx, !isMainIncluded(idx)); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMainInclude(idx, !isMainIncluded(idx)); } }}
+                  style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6, cursor: 'pointer' }}
+                  tabIndex={0}
+                >
+                  {isMainIncluded(idx) ? (
+                    <Check size={14} color="#e5e7eb" />
+                  ) : (
+                    <span style={{ width: 14, height: 14, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
+                  )}
+                </span>
               )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{getLabel(main)}</span>
-              <button
+              <span style={{ whiteSpace: 'nowrap' }}>{getLabel(main)}</span>
+              <span
+                role="button"
+                tabIndex={0}
                 title={showSynonyms && activeMain ? 'Chiudi profilo NLP' : 'Apri profilo NLP'}
                 onClick={(e) => { e.stopPropagation(); onToggleSynonyms && onToggleSynonyms(idx, undefined); }}
-                style={{ border: '1px solid rgba(229,231,235,0.5)', background: (showSynonyms && activeMain) ? '#ffffff' : 'transparent', color: (showSynonyms && activeMain) ? '#0b1220' : '#e5e7eb', borderRadius: 8, padding: '4px 6px', display: 'inline-flex', alignItems: 'center' }}
-              >{(showSynonyms && activeMain) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</button>
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSynonyms && onToggleSynonyms(idx, undefined); } }}
+                style={{ border: '1px solid rgba(229,231,235,0.5)', background: (showSynonyms && activeMain) ? '#ffffff' : 'transparent', color: (showSynonyms && activeMain) ? '#0b1220' : '#e5e7eb', borderRadius: 8, padding: '4px 6px', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
+              >{(showSynonyms && activeMain) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</span>
             </button>
             {(selectedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subs.map((sub: any, sidx: number) => {
                   const activeSub = selectedMainIndex === idx && safeSelectedSubIndex === sidx;
+                  const disabledSub = disabledMain || !isSubIncluded(idx, sidx);
                   const SubIcon = getIconComponent(sub?.icon || 'FileText');
                   return (
                     <button
                       key={sidx}
                       onClick={(e) => { onSelectSub && onSelectSub(sidx); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
-                      style={itemStyle(activeSub, true)}
-                      className={activeSub ? styles.sidebarSelected : ''}
+                      style={itemStyle(activeSub, true, disabledSub)}
+                      className={`sb-item ${activeSub ? styles.sidebarSelected : ''}`}
                     >
-                      <label title="Include sub data" style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6 }} onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" defaultChecked data-kind="include-sub" data-main-index={idx} data-sub-index={sidx} />
-                      </label>
+                      <span
+                        role="checkbox"
+                        aria-checked={isSubIncluded(idx, sidx)}
+                        title="Include sub data"
+                        onClick={(e) => { e.stopPropagation(); toggleSubInclude(idx, sidx, !isSubIncluded(idx, sidx)); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSubInclude(idx, sidx, !isSubIncluded(idx, sidx)); } }}
+                        style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6, cursor: 'pointer' }}
+                        tabIndex={0}
+                      >
+                        {disabledMain ? (
+                          <Check size={14} color="#9ca3af" />
+                        ) : isSubIncluded(idx, sidx) ? (
+                          <Check size={14} color="#e5e7eb" />
+                        ) : (
+                          <span style={{ width: 14, height: 14, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
+                        )}
+                      </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{getLabel(sub)}</span>
-                      <button
+                      <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub)}</span>
+                      <span
+                        role="button"
+                        tabIndex={0}
                         title={showSynonyms && activeSub ? 'Chiudi profilo NLP' : 'Apri profilo NLP'}
                         onClick={(e) => { e.stopPropagation(); onToggleSynonyms && onToggleSynonyms(idx, sidx); }}
-                        style={{ border: '1px solid rgba(229,231,235,0.5)', background: (showSynonyms && activeSub) ? '#ffffff' : 'transparent', color: (showSynonyms && activeSub) ? '#0b1220' : '#e5e7eb', borderRadius: 8, padding: '4px 6px', display: 'inline-flex', alignItems: 'center' }}
-                      >{(showSynonyms && activeSub) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</button>
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSynonyms && onToggleSynonyms(idx, sidx); } }}
+                        style={{ border: '1px solid rgba(229,231,235,0.5)', background: (showSynonyms && activeSub) ? '#ffffff' : 'transparent', color: (showSynonyms && activeSub) ? '#0b1220' : '#e5e7eb', borderRadius: 8, padding: '4px 6px', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
+                      >{(showSynonyms && activeSub) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</span>
                     </button>
                   );
                 })}
