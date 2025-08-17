@@ -102,7 +102,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       ref={ref}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      style={{ width: 220, background: '#121621', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none' }}
+      style={{ width: 'max-content', minWidth: 260, maxWidth: 480, background: '#121621', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none', marginRight: 16 }}
     >
       {/* Aggregated group header */}
       {aggregated && (
@@ -123,9 +123,14 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
           <div key={idx}>
             <button
               onClick={(e) => { onSelectMain(idx); onSelectSub && onSelectSub(undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
-              style={itemStyle(activeMain, false)}
+              style={{ ...itemStyle(activeMain, false), ...(aggregated ? { marginLeft: 18 } : {}) }}
               className={activeMain ? styles.sidebarSelected : ''}
             >
+              {aggregated && (
+                <label title="Include main data" style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6 }} onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" defaultChecked data-kind="include-main" data-index={idx} />
+                </label>
+              )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{getLabel(main)}</span>
               <button
@@ -135,7 +140,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
               >{(showSynonyms && activeMain) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</button>
             </button>
             {(selectedMainIndex === idx && subs.length > 0) && (
-              <div style={{ marginLeft: 18, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subs.map((sub: any, sidx: number) => {
                   const activeSub = selectedMainIndex === idx && safeSelectedSubIndex === sidx;
                   const SubIcon = getIconComponent(sub?.icon || 'FileText');
@@ -146,6 +151,9 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                       style={itemStyle(activeSub, true)}
                       className={activeSub ? styles.sidebarSelected : ''}
                     >
+                      <label title="Include sub data" style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6 }} onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" defaultChecked data-kind="include-sub" data-main-index={idx} data-sub-index={sidx} />
+                      </label>
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{getLabel(sub)}</span>
                       <button
