@@ -7,9 +7,9 @@ import WizardSupportModal from './WizardSupportModal';
 import MainDataCollection, { SchemaNode } from './MainDataCollection';
 import V2TogglePanel from './V2TogglePanel';
 import { computeWorkPlan } from './workPlan';
-import { buildStepPlan } from './stepPlan';
+import { buildStepPlan, buildPartialPlanForChanges } from './stepPlan';
 import { PlanRunResult } from './planRunner';
-import { buildArtifactStore } from './artifactStore';
+import { buildArtifactStore, mergeArtifactStores, moveArtifactsPath } from './artifactStore';
 import { assembleFinalDDT } from './assembleFinal';
 import { Hourglass, Bell } from 'lucide-react';
 // ResponseEditor will be opened by sidebar after onComplete
@@ -30,9 +30,9 @@ interface DataNode {
   subData?: string[];
 }
 
-const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void }> = ({ onCancel, onComplete }) => {
+const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean }> = ({ onCancel, onComplete, initialDDT, startOnStructure }) => {
   const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
-  const [step, setStep] = useState<string>('input');
+  const [step, setStep] = useState<string>(startOnStructure ? 'structure' : 'input');
   const [userDesc, setUserDesc] = useState('');
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -41,8 +41,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // removed unused refs
 
   // Schema editing state (from detect schema)
-  const [schemaRootLabel, setSchemaRootLabel] = useState<string>('');
-  const [schemaMains, setSchemaMains] = useState<SchemaNode[]>([]);
+  const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialDDT?.label || '');
+  const [schemaMains, setSchemaMains] = useState<SchemaNode[]>(() => {
+    if (initialDDT?.mainData && Array.isArray(initialDDT.mainData)) {
+      return (initialDDT.mainData as any[]).map((m: any) => ({
+        label: m.label,
+        type: m.type,
+        icon: m.icon,
+        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label, type: s.type, icon: s.icon, constraints: s.constraints })) : [],
+        constraints: m.constraints
+      })) as any;
+    }
+    return [];
+  });
   // removed local artifacts/editor state; we now rely on onComplete to open editor via sidebar
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressByPath, setProgressByPath] = useState<Record<string, number>>({});
@@ -59,7 +70,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   });
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [autoEditIndex, setAutoEditIndex] = useState<number | null>(null);
+  const [changes, setChanges] = useState<Record<string, Set<string>>>({
+    mains: new Set(),
+    subs: new Set(),
+    constraints: new Set(),
+  });
   const [currentProcessingLabel, setCurrentProcessingLabel] = useState<string>('');
+  // Persisted artifacts across runs for incremental assemble
+  const [artifactStore, setArtifactStore] = useState<any | null>(null);
+  // Track pending renames to relocate artifacts keys between normalized paths
+  const [pendingRenames, setPendingRenames] = useState<Array<{ from: string; to: string }>>([]);
 
   // Memo per dataNode stabile
   const stableDataNode = useMemo(() => dataNode, [dataNode]);
@@ -165,8 +185,38 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       // auto-select new and enable inline edit
       setSelectedIdx(next.length - 1);
       setAutoEditIndex(next.length - 1);
+      // change tracking
+      try { setChanges(p => ({ ...p, mains: new Set([...p.mains, '']) })); } catch {}
       return next;
     });
+  };
+
+  const handleChangeEvent = (e: { type: string; path: string; payload?: any }) => {
+    setChanges(prev => {
+      const next = {
+        mains: new Set(prev.mains),
+        subs: new Set(prev.subs),
+        constraints: new Set(prev.constraints),
+      };
+      const addOnce = (set: Set<string>, v?: string) => { if (v && v.trim()) set.add(v); };
+      if (e.type.startsWith('sub.')) { addOnce(next.subs, e.path); addOnce(next.subs, e.payload?.oldPath); }
+      if (e.type.startsWith('constraint.')) { addOnce(next.constraints, e.path); }
+      if (e.type.startsWith('main.')) { addOnce(next.mains, e.path); addOnce(next.mains, e.payload?.oldPath); }
+      return next;
+    });
+    // If rename, record from/to normalized paths so we can move artifacts on refine
+    if (e.type === 'main.renamed') {
+      const from = (e.payload?.oldPath || '').replace(/\//g, '-');
+      const to = (e.path || '').replace(/\//g, '-');
+      if (from && to && from !== to) setPendingRenames(list => [...list, { from, to }]);
+    }
+    if (e.type === 'sub.renamed') {
+      const old = String(e.payload?.oldPath || '');
+      const neu = String(e.path || '');
+      const from = old.split('/').map(p => p.replace(/\//g, '-')).join('/');
+      const to = neu.split('/').map(p => p.replace(/\//g, '-')).join('/');
+      if (from && to && from !== to) setPendingRenames(list => [...list, { from, to }]);
+    }
   };
 
   // Handler per chiusura (annulla o completamento)
@@ -225,6 +275,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             selectedIdx={selectedIdx}
             onSelect={setSelectedIdx}
             autoEditIndex={autoEditIndex}
+            onChangeEvent={handleChangeEvent}
           />
         </div>
         {isProcessing && currentProcessingLabel && (
@@ -268,8 +319,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               onClick={async () => {
                 if (isProcessing) return;
                 setIsProcessing(true);
-                // Build plan and totals
-                const plan = buildStepPlan(schemaMains);
+                // Build plan and totals (switch a refine incrementale in base a changes)
+                const hasIncremental = changes.mains.size > 0 || changes.subs.size > 0 || changes.constraints.size > 0;
+                const plan = hasIncremental ? buildPartialPlanForChanges(schemaMains as any, changes as any) : buildStepPlan(schemaMains);
+                // Nota: per brevità qui non implemento buildPartialPlanForChanges; placeholder: quando hasIncremental sarà true, costruiremo solo gli step necessari
                 const total: Record<string, number> = {};
                 const done: Record<string, number> = {};
                 for (const s of plan) { total[s.path] = (total[s.path] || 0) + 1; }
@@ -362,8 +415,22 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                 }
 
                 setIsProcessing(false);
-                const store = buildArtifactStore(results);
-                const finalDDT = await assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, store);
+                // Build delta store and merge into persisted store
+                const deltaStore = buildArtifactStore(results);
+                let merged = mergeArtifactStores(artifactStore, deltaStore);
+                // Apply pending path moves due to rename events
+                if (pendingRenames.length > 0) {
+                  for (const { from, to } of pendingRenames) {
+                    merged = moveArtifactsPath(merged, from, to);
+                  }
+                }
+                setArtifactStore(merged);
+                // Clear processed changes and renames after incremental refine
+                if (hasIncremental) {
+                  setChanges({ mains: new Set(), subs: new Set(), constraints: new Set() });
+                  setPendingRenames([]);
+                }
+                const finalDDT = await assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, merged);
                 // optional chime to signal completion
                 if (playChime) {
                   try {
@@ -391,6 +458,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               }}
               disabled={isProcessing}
               style={{ background: isProcessing ? '#fbbf24' : '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: isProcessing ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              onMouseEnter={() => {/* could compute tooltip count here */}}
+              title={(changes.mains.size + changes.subs.size + changes.constraints.size) > 0 ? `Refine ${changes.mains.size + changes.subs.size + changes.constraints.size} items` : ''}
             >
               {isProcessing ? (
                 <span
@@ -401,7 +470,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   Processing…
                 </span>
               ) : (
-                'Continue'
+                (changes.mains.size > 0 || changes.subs.size > 0 || changes.constraints.size > 0) ? 'Refine' : 'Continue'
               )}
             </button>
           </div>

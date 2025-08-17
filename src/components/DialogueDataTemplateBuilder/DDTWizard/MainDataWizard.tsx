@@ -9,12 +9,16 @@ interface MainDataWizardProps {
   // onAddSub removed (plus now lives near the pencil)
   selected?: boolean;
   autoEdit?: boolean;
+  pathPrefix?: string;
+  onChangeEvent?: (e: { type: string; path: string; payload?: any }) => void;
+  onRequestOpen?: () => void;
 }
 
 const iconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' };
 
-const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<string, number> }> = ({ node, onChange, onRemove, progressByPath, selected, autoEdit }) => {
-  // const [open, setOpen] = useState(false); // RIMOSSO
+const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<string, number> }> = ({ node, onChange, onRemove, progressByPath, selected, autoEdit, pathPrefix = '', onChangeEvent, onRequestOpen }) => {
+  // Ensure open on demand (e.g., pencil click) in addition to selection
+  const [forceOpen, setForceOpen] = useState(false);
   const [isEditingMain, setIsEditingMain] = useState(!!autoEdit);
   const [labelDraft, setLabelDraft] = useState(autoEdit ? '' : (node.label || ''));
   const [hoverHeader, setHoverHeader] = useState(false);
@@ -55,7 +59,11 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
 
   const commitMain = () => {
     setIsEditingMain(false);
-    if ((node.label || '') !== labelDraft) onChange({ ...node, label: labelDraft });
+    if ((node.label || '') !== labelDraft) {
+      const old = node.label || '';
+      onChange({ ...node, label: labelDraft });
+      onChangeEvent?.({ type: 'main.renamed', path: labelDraft, payload: { oldPath: old } });
+    }
   };
 
   const cancelMain = () => {
@@ -70,10 +78,12 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
 
   const commitSub = (idx: number) => {
     const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
+    const old = String((next.subData![idx] as any)?.label || '');
     next.subData![idx] = { ...(next.subData![idx] || { label: '' }), label: subDraft } as SchemaNode;
     onChange(next);
     setEditingSubIdx(null);
     setSubDraft('');
+    if (old !== subDraft) onChangeEvent?.({ type: 'sub.renamed', path: `${pathPrefix}/${subDraft}`, payload: { oldPath: `${pathPrefix}/${old}` } });
   };
 
   const cancelSub = () => {
@@ -95,6 +105,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
     // enter inline edit on the newly added sub
     setEditingSubIdx((next.subData!.length - 1));
     setSubDraft('');
+    onChangeEvent?.({ type: 'sub.added', path: `${pathPrefix}/${(next.subData![next.subData!.length - 1] as any)?.label || 'sub'}` });
   };
 
   const addMainConstraint = () => {
@@ -108,6 +119,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
     setConstraintTitleDraft('');
     setConstraintPayoffDraft('');
     lastAddedConstraintRef.current = { scope: 'main', idx: newIdx };
+    onChangeEvent?.({ type: 'constraint.added', path: `${pathPrefix}::constraint#${newIdx}` });
   };
 
   const addSubConstraint = (subIdx: number) => {
@@ -123,6 +135,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
     setConstraintTitleDraft('');
     setConstraintPayoffDraft('');
     lastAddedConstraintRef.current = { scope: 'sub', subIdx, idx: newIdx };
+    onChangeEvent?.({ type: 'constraint.added', path: `${pathPrefix}/${(next.subData?.[subIdx] as any)?.label || 'sub'}::constraint#${newIdx}` });
   };
 
   const startEditConstraint = (scope: 'main' | 'sub', idx: number, subIdx?: number) => {
@@ -161,6 +174,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
     setConstraintTitleDraft('');
     setConstraintPayoffDraft('');
     lastAddedConstraintRef.current = null;
+    onChangeEvent?.({ type: 'constraint.updated', path: `${pathPrefix}` });
   };
 
   const cancelConstraint = () => {
@@ -172,6 +186,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
         const nextList = list.filter((_, i) => i !== a.idx);
         onChange({ ...node, constraints: nextList } as any);
         lastAddedConstraintRef.current = null;
+        onChangeEvent?.({ type: 'constraint.removed', path: `${pathPrefix}::constraint#${a.idx}` });
       } else if (a.scope === 'sub' && editingConstraint.scope === 'sub' && a.idx === editingConstraint.idx && a.subIdx === editingConstraint.subIdx) {
         const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as any;
         const sub = { ...(next.subData?.[a.subIdx!] || {}) };
@@ -180,6 +195,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
         next.subData[a.subIdx!] = sub;
         onChange(next);
         lastAddedConstraintRef.current = null;
+        onChangeEvent?.({ type: 'constraint.removed', path: `${pathPrefix}/${(sub as any)?.label || 'sub'}::constraint#${a.idx}` });
       }
     }
     setEditingConstraint(null);
@@ -203,7 +219,11 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
   };
 
   // open ora dipende da selected
-  const open = !!selected;
+  const open = !!selected || forceOpen;
+
+  React.useEffect(() => {
+    if (!selected) setForceOpen(false);
+  }, [selected]);
 
   return (
     <div
@@ -228,7 +248,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
               <span style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
               {hoverHeader && (
                 <>
-                  <button title="Edit" onClick={() => { setIsEditingMain(true); setLabelDraft(node.label || ''); }} style={iconBtn}>
+                  <button title="Edit" onClick={() => { setIsEditingMain(true); setLabelDraft(node.label || ''); setForceOpen(true); onRequestOpen?.(); }} style={iconBtn}>
                     <Pencil size={16} color="#fb923c" />
                   </button>
                   <button title="Add sub data" onClick={handleQuickAddSub} style={iconBtn}>

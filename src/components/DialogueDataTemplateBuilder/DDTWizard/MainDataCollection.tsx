@@ -32,7 +32,7 @@ interface MainDataCollectionProps {
   onSelect: (idx: number) => void;
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, selectedIdx, onSelect, autoEditIndex }) => {
+const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, selectedIdx, onSelect, autoEditIndex, onChangeEvent }) => {
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
     next[idx] = nextNode;
@@ -95,6 +95,9 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
               progressByPath={progressByPath}
               selected={selectedIdx === i}
               autoEdit={autoEditIndex === i}
+              pathPrefix={m.label}
+              onChangeEvent={onChangeEvent}
+              onRequestOpen={() => onSelect(i)}
             />
           </div>
         ))}

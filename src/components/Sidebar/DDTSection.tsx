@@ -89,6 +89,8 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
               <DDTBuilder
                 onComplete={handleBuilderComplete}
                 onCancel={handleBuilderCancel}
+                initialDDT={ddtList[0]}
+                startOnStructure={true}
               />
             </div>
           )}
@@ -112,7 +114,7 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
                 <div key={dt.id || idx} style={{ display: 'flex', alignItems: 'center', margin: 4, padding: 8, borderRadius: 8, border: '2px solid #a21caf', position: 'relative', background: 'var(--sidebar-content-bg)' }}>
                   <span style={{ marginRight: 10 }}>{getIconForType(dt.type, dt.label)}</span>
                   <span style={{ fontWeight: 700, color: 'var(--sidebar-content-text)', flex: 1, marginRight: 8 }}>{dt.label || dt.id || 'NO LABEL'}</span>
-                  <button title="Modifica label" style={{ background: 'none', border: 'none', marginLeft: 4, cursor: 'pointer', color: 'var(--sidebar-content-text)' }} onClick={() => onEdit(dt.id)}>
+                  <button title="Modifica struttura (apri il wizard)" style={{ background: 'none', border: 'none', marginLeft: 4, cursor: 'pointer', color: 'var(--sidebar-content-text)' }} onClick={(e) => { e.stopPropagation(); setShowDDTBuilder(true); }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a21caf" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
                   </button>
                   <button title="Apri/chiudi response editor" style={{ background: 'none', border: 'none', marginLeft: 4, cursor: 'pointer', color: 'var(--sidebar-content-text)' }} onClick={() => onOpenEditor(dt.id)}>
