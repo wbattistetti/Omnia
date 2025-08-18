@@ -16,7 +16,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
       border: '2px solid #a21caf',
       borderRadius: 16,
       padding: 24,
-      maxWidth: 480,
+      maxWidth: 720,
       margin: '32px auto',
       boxSizing: 'border-box',
     }}
@@ -55,11 +55,11 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
       }
     </div>
     
-    <input
-      type="text"
+    <textarea
       value={userDesc}
       onChange={e => setUserDesc(e.target.value)}
       placeholder="e.g., date of birth, email, phone number..."
+      rows={2}
       style={{
         fontSize: 17,
         padding: '10px 16px',
@@ -71,8 +71,11 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         background: '#23232b',
         color: '#fff',
         boxSizing: 'border-box',
+        resize: 'vertical',
+        whiteSpace: 'pre-wrap',
+        wordWrap: 'break-word',
       }}
-      onKeyDown={e => { if (e.key === 'Enter' && userDesc.trim()) onNext(); }}
+      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && userDesc.trim()) { e.preventDefault(); onNext(); } }}
       autoFocus
     />
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>

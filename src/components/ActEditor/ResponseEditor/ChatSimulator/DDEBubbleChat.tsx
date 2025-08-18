@@ -90,7 +90,9 @@ function resolveSuccess(node?: DDTNode, translations?: Record<string, string>, l
 
 export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT: AssembledDDT, translations?: Record<string, string> }) {
   const template: DDTTemplateV2 = React.useMemo(() => adaptCurrentToV2(currentDDT), [currentDDT]);
-  const { state, send, reset, setConfig } = useDDTSimulator(template, { typingIndicatorMs: 0, debug: true });
+  // Enable simulator debug logs only when explicitly toggled
+  const debugEnabled = (() => { try { return localStorage.getItem('debug.chatSimulator') === '1'; } catch { return false; } })();
+  const { state, send, reset, setConfig } = useDDTSimulator(template, { typingIndicatorMs: 0, debug: debugEnabled });
   const { updateTranslation } = useDDTManager();
 
   const [messages, setMessages] = React.useState<Message[]>([]);

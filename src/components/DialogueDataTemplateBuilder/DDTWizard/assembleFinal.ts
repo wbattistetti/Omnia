@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { SchemaNode } from './MainDataCollection';
+import { normalizeDDTMainNodes } from './normalizeKinds';
 import type { ArtifactStore } from './artifactStore';
 import { getAllV2Draft } from './V2DraftStore';
 
@@ -246,7 +247,9 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     return assembled;
   };
 
-  const assembledMains = (mains || []).map(m => assembleNode(m, [m.label]));
+  // Normalize kinds/subs deterministically so extractors work out of the box
+  const normalizedMains = normalizeDDTMainNodes(mains as any);
+  const assembledMains = (normalizedMains || []).map(m => assembleNode(m, [m.label]));
 
   return {
     id: ddtId,

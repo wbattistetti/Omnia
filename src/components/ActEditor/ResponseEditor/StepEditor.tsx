@@ -53,9 +53,11 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   // const title = meta?.label || stepKey;
 
   const model = React.useMemo(() => buildModel(node, stepKey, translations), [node, stepKey, translations]);
+  // Debug logging gated; enable via localStorage.setItem('debug.stepEditor','1')
   React.useEffect(() => {
     if (!node || !stepKey) return;
     try {
+      if (localStorage.getItem('debug.stepEditor') !== '1') return;
       const sample = (model[0]?.actions?.[0]?.textKey) || (node?.messages?.[stepKey]?.textKey) || null;
       const has = typeof sample === 'string' ? Boolean(translations[sample]) : null;
       console.log('[StepEditor] stepKey', stepKey, 'sampleKey', sample, 'hasText', has);
@@ -70,10 +72,10 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   const getText = (a: any) => (typeof a.textKey === 'string' ? translations[a.textKey] : a.text || '');
 
-  const handleQuickAdd = () => {
-    // Azione base: sayMessage vuota
-    appendAction(0, { actionId: 'sayMessage', text: '' } as any);
-  };
+  // const handleQuickAdd = () => {
+  //   // Azione base: sayMessage vuota
+  //   appendAction(0, { actionId: 'sayMessage', text: '' } as any);
+  // };
 
   return (
     <div style={{ padding: 16 }}>

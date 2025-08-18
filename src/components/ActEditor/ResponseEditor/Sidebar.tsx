@@ -15,9 +15,11 @@ interface SidebarProps {
   onSelectAggregator?: () => void;
   onToggleSynonyms?: (mainIdx: number, subIdx?: number) => void;
   showSynonyms?: boolean;
+  onChangeSubRequired?: (mainIdx: number, subIdx: number, required: boolean) => void;
 }
 
-const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onToggleSynonyms, showSynonyms }, ref) {
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onToggleSynonyms, showSynonyms, onChangeSubRequired }, ref) {
+  const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
   if (!Array.isArray(mainList) || mainList.length === 0) return null;
   // Pastel/silver palette
   const borderColor = 'rgba(156,163,175,0.65)';
@@ -27,12 +29,11 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
 
   // Include state for mains and subs (UI-only). Default: included (true)
   const [includedMains, setIncludedMains] = React.useState<Record<number, boolean>>({});
-  const [includedSubs, setIncludedSubs] = React.useState<Record<string, boolean>>({});
+  // removed legacy sub include state
 
   const isMainIncluded = (idx: number) => includedMains[idx] !== false;
-  const isSubIncluded = (mIdx: number, sIdx: number) => includedSubs[`${mIdx}:${sIdx}`] !== false;
   const toggleMainInclude = (idx: number, v: boolean) => setIncludedMains(prev => ({ ...prev, [idx]: v }));
-  const toggleSubInclude = (mIdx: number, sIdx: number, v: boolean) => setIncludedSubs(prev => ({ ...prev, [`${mIdx}:${sIdx}`]: v }));
+  
 
   // selectedSubIndex: undefined o number
   const safeSelectedSubIndex = typeof selectedSubIndex === 'number' && !isNaN(selectedSubIndex) ? selectedSubIndex : undefined;
@@ -194,28 +195,28 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
             {(selectedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subs.map((sub: any, sidx: number) => {
+                  const reqEffective = sub?.required !== false;
+                  try { dbg('[DDT][subRender]', { main: getLabel(main), label: getLabel(sub), requiredRaw: sub?.required, requiredEffective: reqEffective }); } catch {}
                   const activeSub = selectedMainIndex === idx && safeSelectedSubIndex === sidx;
-                  const disabledSub = disabledMain || !isSubIncluded(idx, sidx);
+                  const disabledSub = disabledMain;
                   const SubIcon = getIconComponent(sub?.icon || 'FileText');
                   return (
                     <button
                       key={sidx}
-                      onClick={(e) => { onSelectSub && onSelectSub(sidx); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
+                      onClick={(e) => { onSelectSub && onSelectSub(sidx); try { dbg('[DDT][subSelect]', { main: getLabel(main), label: getLabel(sub), requiredRaw: sub?.required, requiredEffective: sub?.required !== false }); } catch {} (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
                       style={itemStyle(activeSub, true, disabledSub)}
                       className={`sb-item ${activeSub ? styles.sidebarSelected : ''}`}
                     >
                       <span
                         role="checkbox"
-                        aria-checked={isSubIncluded(idx, sidx)}
-                        title="Include sub data"
-                        onClick={(e) => { e.stopPropagation(); toggleSubInclude(idx, sidx, !isSubIncluded(idx, sidx)); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSubInclude(idx, sidx, !isSubIncluded(idx, sidx)); } }}
+                        aria-checked={reqEffective}
+                        title={reqEffective ? 'Required' : 'Optional'}
+                        onClick={(e) => { e.stopPropagation(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); try { dbg('[DDT][subRequiredToggle][click]', { main: getLabel(main), label: getLabel(sub), nextRequired: next }); } catch {} }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); } }}
                         style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6, cursor: 'pointer' }}
                         tabIndex={0}
                       >
-                        {disabledMain ? (
-                          <Check size={14} color="#9ca3af" />
-                        ) : isSubIncluded(idx, sidx) ? (
+                        {reqEffective ? (
                           <Check size={14} color="#e5e7eb" />
                         ) : (
                           <span style={{ width: 14, height: 14, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />

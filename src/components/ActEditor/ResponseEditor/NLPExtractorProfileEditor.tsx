@@ -170,6 +170,100 @@ export default function NLPExtractorProfileEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Recommended defaults per kind
+  const recommendedForKind = React.useCallback((k: string) => {
+    const s = (k || '').toLowerCase();
+    if (s === 'phone') {
+      return {
+        synonyms: 'phone, telefono, cellulare, mobile, numero di telefono',
+        formats: 'E.164, +39 333 1234567',
+        examples: ['+39 333 1234567', '3331234567', '0039 333 1234567'],
+        min: 0.9,
+      };
+    }
+    if (s === 'email') {
+      return {
+        synonyms: 'email, e-mail, indirizzo email',
+        formats: 'local@domain.tld',
+        examples: ['mario.rossi@example.com'],
+        min: 0.9,
+      };
+    }
+    if (s === 'date') {
+      return {
+        synonyms: 'date of birth, data di nascita, dob, birth date',
+        formats: 'dd/MM/yyyy, d/M/yyyy, d MMMM yyyy, d MMM yyyy',
+        examples: ['16/12/1961', '16 dicembre 1961'],
+        min: 0.85,
+      };
+    }
+    if (s === 'name') {
+      return {
+        synonyms: 'full name, nome completo, name',
+        formats: '',
+        examples: ['Mario Rossi'],
+        min: 0.8,
+      };
+    }
+    if (s === 'address') {
+      return {
+        synonyms: 'address, indirizzo, via, civico, cap, città',
+        formats: 'street, house number, city, postal code, country',
+        examples: ['via Chiabrera 25, 15011 Acqui Terme, Italia'],
+        min: 0.8,
+      };
+    }
+    if (s === 'number') {
+      return {
+        synonyms: 'number, quantity, amount, numero',
+        formats: 'integer, decimal',
+        examples: ['42', '3.14'],
+        min: 0.8,
+      };
+    }
+    return { synonyms: '', formats: '', examples: [], min: 0.6 };
+  }, []);
+
+  // When Kind changes (by user), re-seed editor fields with recommended defaults for that kind
+  const prevKindRef = React.useRef<string>(initial.kind);
+  React.useEffect(() => {
+    if (kind && kind !== prevKindRef.current) {
+      const r = recommendedForKind(kind);
+      setSynonymsText(r.synonyms);
+      setFormatText(r.formats);
+      setExamplesList(r.examples);
+      setMinConf(r.min);
+      // reset regex and post process when kind switches category
+      setRegex('');
+      setPostProcessText('');
+    }
+    prevKindRef.current = kind;
+  }, [kind, recommendedForKind]);
+
+  // Ensure latest profile is flushed on unmount (e.g., when closing the panel quickly)
+  const profileRef = React.useRef<NLPProfile | null>(null);
+  React.useEffect(() => { profileRef.current = {
+    slotId: initial.slotId,
+    locale: initial.locale,
+    kind,
+    synonyms: fromCommaList(synonymsText),
+    regex: regex || undefined,
+    formatHints: fromCommaList(formatText) || undefined,
+    examples: examplesList.length ? examplesList : undefined,
+    minConfidence: minConf,
+    postProcess: tryParseJSON(postProcessText).value,
+    subSlots: Array.isArray((node as any)?.subData)
+      ? (node as any).subData.map((s: any) => ({ slotId: s?.id || String(s?.label || s?.name || '').toLowerCase().replace(/\s+/g, '_'), label: s?.label || s?.name || '' }))
+      : undefined,
+    waitingEsc1: waitingEsc1 || undefined,
+    waitingEsc2: waitingEsc2 || undefined,
+  }; }, [initial.slotId, initial.locale, kind, synonymsText, regex, formatText, examplesList, minConf, postProcessText, node, waitingEsc1, waitingEsc2]);
+  React.useEffect(() => {
+    return () => {
+      try { if (profileRef.current) onChange?.(profileRef.current); } catch {}
+    };
+  }, [onChange]);
+
   // Auto-run parsing when a new phrase is appended
   const prevExamplesCountRef = React.useRef<number>(examplesList.length);
   React.useEffect(() => {
@@ -181,9 +275,11 @@ export default function NLPExtractorProfileEditor({
     prevExamplesCountRef.current = examplesList.length;
   }, [examplesList.length]);
 
-  // Sync form when node changes
+  // Sync form when node changes (avoid depending on lockKind to prevent loops)
   React.useEffect(() => {
-    setKind(lockKind ? 'auto' : initial.kind);
+    // Default: Auto unchecked, use normalized node.kind directly
+    setLockKind(false);
+    setKind(initial.kind);
     setSynonymsText(toCommaList(initial.synonyms));
     setRegex(initial.regex || '');
     setFormatText(toCommaList(initial.formatHints));
@@ -191,12 +287,11 @@ export default function NLPExtractorProfileEditor({
     setMinConf(initial.minConfidence || 0.6);
     setPostProcessText(initial.postProcess ? JSON.stringify(initial.postProcess, null, 2) : '');
     setNewExample('');
-    setLockKind(initial.kind === inferredKind);
     setSelectedRow(null);
     setRowResults([]);
     setWaitingEsc1(initial.waitingEsc1 || '');
     setWaitingEsc2(initial.waitingEsc2 || '');
-  }, [initial.slotId, inferredKind, lockKind]);
+  }, [initial.slotId]);
 
   // Keep kind synced with inferred when locked
   React.useEffect(() => {

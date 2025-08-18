@@ -1,4 +1,5 @@
 import type { DDTTemplateV2, DDTNode } from './model/ddt.v2.types';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { buildPlan, isSaturated, nextMissingSub, applyComposite, setMemory, Memory } from './state';
 import { isYes, isNo, extractImplicitCorrection, extractLastDate } from './utils';
 
@@ -73,7 +74,7 @@ function advanceIndex(state: SimulatorState): SimulatorState {
       newState = { ...newState, memory: setMemory(state.memory, nextMain.id, composed, false) };
     }
   }
-  // Helpers that respect required=false on subs
+  // Helpers that respect only the 'required' flag on subs. Default is required=true when undefined.
   const requiredSubsOf = (node: DDTNode, byId: Record<string, DDTNode>): string[] => {
     const subs = (node.subs || []).filter((sid) => !!byId[sid]);
     return subs.filter((sid) => byId[sid].required !== false);
@@ -95,14 +96,24 @@ function advanceIndex(state: SimulatorState): SimulatorState {
     }
     return true;
   };
+  const labelOf = (sid?: string) => (sid ? String(newState.plan.byId[sid]?.label || sid) : '');
 
   // If the next main has required subs missing, immediately collect the first missing sub
   if (nextMain && Array.isArray((nextMain as any).subs) && (nextMain as any).subs.length > 0) {
     const missingSub = nextMissingRequired(nextMain as any, newState.plan.byId, newState.memory);
+    try {
+      const req = requiredSubsOf(nextMain as any, newState.plan.byId);
+      const miss = req.filter((sid) => {
+        const m = newState.memory[sid];
+        return !m || m.value === undefined || m.value === null || String(m.value).length === 0;
+      });
+      logMI('subsRequired', { main: nextMain?.label, required: req.map(labelOf), missing: miss.map(labelOf) });
+    } catch {}
     if (missingSub) {
-      logMI('advanceIndex', { nextIdx, nextMain: nextMain?.label, nextMode: 'CollectingSub', currentSubId: missingSub });
+      logMI('advanceIndex', { nextIdx, nextMain: nextMain?.label, nextMode: 'CollectingSub', currentSubId: missingSub, currentSubLabel: labelOf(missingSub) });
       return { ...newState, mode: 'CollectingSub', currentSubId: missingSub };
     }
+    // No fallback: if there are no required subs, we don't ask for optional ones automatically
   }
   const nextMode: Mode = (nextMain && isSaturatedRequired(nextMain as any, newState.plan.byId, newState.memory)) ? 'ConfirmingMain' : 'CollectingMain';
   logMI('advanceIndex', { nextIdx, nextMain: nextMain?.label, nextMode });
@@ -272,16 +283,34 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
     if (kind === 'phone') {
       const hit = detectPhoneSpan(residual);
       if (hit) {
-        logMI('hit', { kind, value: hit.value, span: hit.span, residualLen: residual.length });
+        // Normalize to E.164 when possible (Italian default)
+        let candidate = hit.value;
+        const only = candidate.replace(/[^\d+]/g, '');
+        let parsed = parsePhoneNumberFromString(only, 'IT');
+        if (!parsed && only.startsWith('00')) parsed = parsePhoneNumberFromString('+' + only.slice(2), 'IT');
+        if (!parsed && only.startsWith('39')) parsed = parsePhoneNumberFromString('+' + only, 'IT');
+        if (!parsed && !only.startsWith('+') && /^3\d{8,}$/.test(only)) parsed = parsePhoneNumberFromString('+39' + only, 'IT');
+        const normalized = parsed?.isValid() ? parsed.number : only;
+        logMI('phoneNormalize', { raw: hit.value, only, normalized, valid: parsed?.isValid?.() });
+        let wroteAny = false;
         for (const id of state.plan.order) {
           const n = state.plan.byId[id];
-          if (String(n?.kind).toLowerCase() === 'phone' && memory[id]?.value === undefined) {
-            memory = setMemory(memory, id, hit.value, false);
-            logMI('memWrite', { id, kind, value: hit.value });
+          const labelMatch = /phone|telefono|cellulare/i.test(String((n as any)?.label || ''));
+          const isPhoneNode = String(n?.kind).toLowerCase() === 'phone' || labelMatch;
+          const existing = memory[id]?.value;
+          const phoneLike = typeof existing === 'string' && /^\+?\d[\d\s\-]{6,}$/.test(existing);
+          const canWrite = existing === undefined || !phoneLike; // overwrite wrong type/object or non-phone text
+          if (isPhoneNode && canWrite) {
+            memory = setMemory(memory, id, normalized, false);
+            logMI('memWrite', { id, kind: 'phone', value: normalized, byLabel: labelMatch && String(n?.kind).toLowerCase() !== 'phone', overwrite: existing !== undefined });
             subtract(hit.span);
-            logMI('write', { kind, id, afterResidualLen: residual.length });
+            logMI('write', { kind: 'phone', id, afterResidualLen: residual.length });
+            wroteAny = true;
             break;
           }
+        }
+        if (!wroteAny) {
+          logMI('phoneNoTarget', { note: 'no phone-like node found to write' });
         }
       }
       return;
@@ -330,8 +359,8 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
               if (v && (memory[id]?.value === undefined)) { memory = setMemory(memory, id, v, false); logMI('memWrite', { id, kind: 'name', value: v }); wrote = true; }
             }
             if (wrote) {
-              subtract(hit.span);
-              logMI('write', { kind, id, afterResidualLen: residual.length });
+            subtract(hit.span);
+            logMI('write', { kind, id, afterResidualLen: residual.length });
             } else {
               logMI('skipSubtract', { kind, reason: 'name already present' });
             }
@@ -365,7 +394,20 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
   // Handle by mode
   if (state.mode === 'CollectingMain') {
     // First, attempt mixed-initiative extraction: target current kind, then others, subtracting matches
-    const extracted = extractOrdered(state, input, String(main.kind || '').toLowerCase());
+    // Fallback: if kind is mis-normalized, infer from label (phone/email/date/name)
+    const mainKind = String(main.kind || '').toLowerCase();
+    const labelStr = String((main as any)?.label || '').toLowerCase();
+    let primaryKind = mainKind;
+    if (!primaryKind || primaryKind === 'generic') {
+      if (/phone|telefono|cellulare/.test(labelStr)) primaryKind = 'phone';
+      else if (/email|e-?mail/.test(labelStr)) primaryKind = 'email';
+      else if (/date\s*of\s*birth|data\s*di\s*nascita|dob|birth/.test(labelStr)) primaryKind = 'date';
+      else if (/full\s*name|name|nome/.test(labelStr)) primaryKind = 'name';
+    }
+    // Guard against accidental address kind on phone label
+    if (primaryKind === 'address' && /phone|telefono|cellulare/.test(labelStr)) primaryKind = 'phone';
+    logMI('primaryKind', { mainKind, label: labelStr, chosen: primaryKind });
+    const extracted = extractOrdered(state, input, primaryKind);
     if (extracted.memory !== state.memory) {
       state = { ...state, memory: extracted.memory };
     }
@@ -399,9 +441,11 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
         }
       }
     } else {
-      // Atomic mains: write value directly
+      // Atomic mains: write value directly, but never overwrite a value already set by MI extraction with empty residual
       const nextVal = (variables as any).value ?? corrected;
-      if (mem[main.id]?.value === undefined && nextVal !== undefined) {
+      const hasExisting = mem[main.id]?.value !== undefined;
+      const isEmpty = nextVal === undefined || String(nextVal).trim().length === 0;
+      if (!hasExisting && !isEmpty) {
         mem = setMemory(state.memory, main.id, nextVal, false);
       }
     }
@@ -473,8 +517,19 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
       return out;
     };
     mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
-    const missing = nextMissingSub(main, mem);
-    if (missing) return { ...state, memory: mem, currentSubId: missing };
+    // Ask only required sub-fields next
+    const requiredIds = (main.subs || []).filter((s) => !!state.plan.byId[s] && state.plan.byId[s].required !== false);
+    const nextRequiredMissing = requiredIds.find((s) => {
+      const m = mem[s];
+      return !m || m.value === undefined || m.value === null || String(m.value).length === 0;
+    });
+    if (nextRequiredMissing) {
+      try {
+        const labels = requiredIds.map((s) => String(state.plan.byId[s]?.label || s));
+        logMI('collectingSub.next', { main: main.label, required: labels, next: String(state.plan.byId[nextRequiredMissing]?.label || nextRequiredMissing) });
+      } catch {}
+      return { ...state, memory: mem, currentSubId: nextRequiredMissing };
+    }
     return { ...state, memory: mem, mode: 'ConfirmingMain', currentSubId: undefined };
   }
 

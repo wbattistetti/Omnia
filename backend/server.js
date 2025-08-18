@@ -3,6 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ObjectId } = require('mongodb');
+const { runExtractor } = require('./extractionRegistry');
 
 console.log('>>> SERVER.JS AVVIATO <<<');
 
@@ -357,4 +358,25 @@ app.post('/api/generateConstraint', async (req, res) => {
 
 app.listen(3100, () => {
   console.log('Backend API pronta su http://localhost:3100');
+});
+
+// --- Extractor endpoints (centralized contracts) ---
+app.get('/api/extractors/bindings', async (req, res) => {
+  try {
+    // For now return global bindings are implicit; a real impl would read Mongo and merge scopes
+    res.json({ ok: true, strategy: 'global', note: 'Bindings are resolved server-side when running extractors' });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.post('/api/extractors/run', async (req, res) => {
+  const { kind, text, locale } = req.body || {};
+  if (!kind || typeof text !== 'string') return res.status(400).json({ ok: false, error: 'kind_and_text_required' });
+  try {
+    const out = await runExtractor(String(kind), String(text), locale || 'it');
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });

@@ -16,15 +16,29 @@ import {
 export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: () => void }) {
   // Local editable copies
   const [localDDT, setLocalDDT] = useState<any>(ddt);
-  const { ideTranslations, dataDialogueTranslations } = useDDTManager();
+  const { ideTranslations, dataDialogueTranslations, replaceSelectedDDT } = useDDTManager();
+  // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
+  const log = (...args: any[]) => {
+    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log(...args); } catch {}
+  };
   const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
   const [localTranslations, setLocalTranslations] = useState<any>({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
 
   useEffect(() => {
-    setLocalDDT(ddt);
-    setLocalTranslations({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
-    setSelectedMainIndex(0);
-    setSelectedSubIndex(undefined);
+    const prevId = (localDDT && (localDDT.id || localDDT._id)) as any;
+    const nextId = (ddt && (ddt.id || ddt._id)) as any;
+    const isSameDDT = prevId && nextId && prevId === nextId;
+    if (localDDT !== ddt) setLocalDDT(ddt);
+    const nextTranslations = { ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) };
+    setLocalTranslations((prev: any) => {
+      const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
+      return same ? prev : nextTranslations;
+    });
+    // Do NOT reset selection when the same DDT object is being updated or when only local edits occur
+    if (!isSameDDT && !localDDT) {
+      setSelectedMainIndex(0);
+      setSelectedSubIndex(undefined);
+    }
     try {
       const counts = {
         ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
@@ -32,11 +46,15 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
         ddt: ddt?.translations?.en ? Object.keys(ddt.translations.en).length : (ddt?.translations ? Object.keys(ddt.translations).length : 0),
         merged: localTranslations ? Object.keys(localTranslations).length : 0,
       };
-      console.log('[ResponseEditor] Translation sources counts:', counts);
+      log('[ResponseEditor] Translation sources counts:', counts);
+      log('[ResponseEditor][DDT load]', { prevId, nextId, isSameDDT, selectedMainIndex, selectedSubIndex });
       const mains = getMainDataList(ddt) || [];
-      console.log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map(m => m?.label));
+      log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map(m => m?.label));
     } catch {}
-  }, [ddt, mergedBase]);
+  // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
+  }, [ddt, mergedBase, localDDT?.id, localDDT?._id]);
+
+  // Note: do not persist on unmount to avoid re-opening the editor after close.
 
   const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
   // Aggregated view: show a group header when there are multiple mains
@@ -101,6 +119,7 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
       const mains = getMainDataList(next);
       const main = mains[selectedMainIndex];
       if (!main) return prev;
+      const beforeKind = selectedSubIndex == null ? main?.kind : getSubDataList(main)[selectedSubIndex]?.kind;
       if (selectedSubIndex == null) {
         const before = JSON.stringify(main);
         const updated = updater(main) || main;
@@ -119,6 +138,18 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
         main.subData[subIdx] = updated;
       }
       next.mainData = mains;
+      try {
+        const afterMain = mains[selectedMainIndex];
+        const afterKind = selectedSubIndex == null ? afterMain?.kind : getSubDataList(afterMain)[selectedSubIndex]?.kind;
+        log('[ResponseEditor][updateSelectedNode]', {
+          mainLabel: afterMain?.label,
+          selectedMainIndex,
+          selectedSubIndex,
+          beforeKind,
+          afterKind,
+        });
+      } catch {}
+      try { replaceSelectedDDT(next); } catch {}
       return next;
     });
   };
@@ -227,6 +258,29 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
           aggregated={isAggregatedAtomic}
           rootLabel={localDDT?.label || 'Data'}
           showSynonyms={showSynonyms}
+          onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
+            // Persist required flag on the exact sub (by indices), independent of current selection
+            setLocalDDT((prev: any) => {
+              if (!prev) return prev;
+              const next = JSON.parse(JSON.stringify(prev));
+              const mains = getMainDataList(next);
+              const main = mains[mIdx];
+              if (!main) return prev;
+              const subList = Array.isArray(main.subData) ? main.subData : [];
+              if (sIdx < 0 || sIdx >= subList.length) return prev;
+              subList[sIdx] = { ...subList[sIdx], required };
+              main.subData = subList;
+              mains[mIdx] = main;
+              next.mainData = mains;
+              try {
+                const subs = getSubDataList(main) || [];
+                const target = subs[sIdx];
+                if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
+              } catch {}
+              try { replaceSelectedDDT(next); } catch {}
+              return next;
+            });
+          }}
           onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
           onToggleSynonyms={(mIdx, sIdx) => {
             const targetSub = (typeof sIdx === 'number' ? sIdx : undefined);
@@ -271,9 +325,18 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
                       node={selectedNode}
                       locale={'it-IT'}
                       onChange={(profile) => {
-                        updateSelectedNode((node) => ({ ...(node || {}), nlpProfile: profile }));
-                        // keep synonyms in node too for compatibility
-                        updateSelectedNode((node) => ({ ...(node || {}), synonyms: Array.isArray(profile.synonyms) ? profile.synonyms : [] }));
+                        // Always log critical kind changes to diagnose persistence
+                        console.log('[KindChange][onChange]', {
+                          nodeLabel: (selectedNode as any)?.label,
+                          profileKind: profile?.kind,
+                          examples: (profile?.examples || []).length,
+                        });
+                        updateSelectedNode((node) => {
+                          const next: any = { ...(node || {}), nlpProfile: profile };
+                          if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }
+                          if (Array.isArray(profile.synonyms)) next.synonyms = profile.synonyms;
+                          return next;
+                        });
                       }}
                     />
                   </div>
