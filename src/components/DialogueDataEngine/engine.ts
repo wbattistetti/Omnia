@@ -36,7 +36,7 @@ export function initEngine(template: DDTTemplateV2): SimulatorState {
 const DEBUG_MI = true;
 function logMI(...args: any[]) {
   if (!DEBUG_MI) return;
-  try { console.debug('[MixedInit]', ...args); } catch {}
+  try { console.log('[MixedInit]', ...args); } catch {}
 }
 
 function currentMain(state: SimulatorState): DDTNode | undefined {
@@ -73,7 +73,38 @@ function advanceIndex(state: SimulatorState): SimulatorState {
       newState = { ...newState, memory: setMemory(state.memory, nextMain.id, composed, false) };
     }
   }
-  const nextMode: Mode = (nextMain && isSaturated(nextMain as any, newState.memory)) ? 'ConfirmingMain' : 'CollectingMain';
+  // Helpers that respect required=false on subs
+  const requiredSubsOf = (node: DDTNode, byId: Record<string, DDTNode>): string[] => {
+    const subs = (node.subs || []).filter((sid) => !!byId[sid]);
+    return subs.filter((sid) => byId[sid].required !== false);
+  };
+  const nextMissingRequired = (node: DDTNode, byId: Record<string, DDTNode>, memory: Memory): string | undefined => {
+    const subs = requiredSubsOf(node, byId);
+    for (const sid of subs) {
+      const m = memory[sid];
+      if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return sid;
+    }
+    return undefined;
+  };
+  const isSaturatedRequired = (node: DDTNode, byId: Record<string, DDTNode>, memory: Memory): boolean => {
+    const subs = requiredSubsOf(node, byId);
+    if (subs.length === 0) return isSaturated(node, memory);
+    for (const sid of subs) {
+      const m = memory[sid];
+      if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return false;
+    }
+    return true;
+  };
+
+  // If the next main has required subs missing, immediately collect the first missing sub
+  if (nextMain && Array.isArray((nextMain as any).subs) && (nextMain as any).subs.length > 0) {
+    const missingSub = nextMissingRequired(nextMain as any, newState.plan.byId, newState.memory);
+    if (missingSub) {
+      logMI('advanceIndex', { nextIdx, nextMain: nextMain?.label, nextMode: 'CollectingSub', currentSubId: missingSub });
+      return { ...newState, mode: 'CollectingSub', currentSubId: missingSub };
+    }
+  }
+  const nextMode: Mode = (nextMain && isSaturatedRequired(nextMain as any, newState.plan.byId, newState.memory)) ? 'ConfirmingMain' : 'CollectingMain';
   logMI('advanceIndex', { nextIdx, nextMain: nextMain?.label, nextMode });
   return { ...newState, mode: nextMode };
 }
@@ -88,7 +119,7 @@ const MONTH_WORDS = new Set([
   'gen','feb','mar','apr','mag','giu','lug','ago','sett','ott','nov','dic',
 ]);
 
-const NAME_STOPWORDS = new Set(['nato','nata','born','a','in','il','lo','la','le','del','della','dei','di','da','the','at','on']);
+const NAME_STOPWORDS = new Set(['nato','nata','born','a','in','il','lo','la','le','del','della','dei','di','da','the','at','on','mi','chiamo','nome','e','è','my','name','is','sono']);
 
 function isMonthWord(word: string): boolean {
   const w = word.normalize('NFKD').replace(/[^a-zA-Z]/g, '').toLowerCase();
@@ -124,8 +155,8 @@ function detectDateSpan(text: string): { day?: number; month?: number | string; 
     const year = parseInt(m1[3].length === 2 ? `19${m1[3]}` : m1[3], 10);
     return { day, month, year, span: [m1.index, m1.index + m1[0].length] };
   }
-  // "16 maggio 1980" (IT) or "16 may 1980"
-  const re2 = /(\b\d{1,2})\s+([A-Za-zÀ-ÿ]{3,})\s+(\d{2,4})\b/;
+  // "16 maggio 1980" (IT) or "16 may 1980" with optional filler (del/nel/anno)
+  const re2 = /(\b\d{1,2})\s+([A-Za-zÀ-ÿ]{3,})\s+(?:di|de|del|della|nel|nell'|anno\s*)?(\d{2,4})\b/i;
   const m2 = re2.exec(text);
   if (m2) {
     const day = parseInt(m2[1], 10);
@@ -137,23 +168,33 @@ function detectDateSpan(text: string): { day?: number; month?: number | string; 
 }
 
 function detectNameFrom(text: string): { firstname?: string; lastname?: string; span?: [number, number] } | undefined {
-  // Heuristic: capture a short leading run of probable name tokens, then stop on stopwords/months/digits
-  const words = text.split(/\s+/g);
+  const s = String(text || '');
+  // Pattern: "mi chiamo <first> <last>" or "il mio nome è <first> <last>"
+  const m = s.match(/(?:mi\s+chiamo|il\s+mio\s+nome\s+(?:e|è))\s+([A-Za-zÀ-ÿ'`-]+)(?:\s+([A-Za-zÀ-ÿ'`-]+))?/i);
+  if (m) {
+    const first = m[1];
+    const last = m[2];
+    const start = m.index ?? 0;
+    const nameStr = [first, last].filter(Boolean).join(' ');
+    const span: [number, number] = [s.indexOf(nameStr, start), (s.indexOf(nameStr, start) + nameStr.length)];
+    return { firstname: first, lastname: last, span };
+  }
+  // Fallback heuristic: capture a short run of probable name tokens, stop on stopwords/months/digits
+  const words = s.split(/\s+/g);
   const picked: string[] = [];
   const positions: Array<[number, number]> = [];
   let cursor = 0;
   for (const w of words) {
-    const start = text.indexOf(w, cursor);
+    const start = s.indexOf(w, cursor);
     cursor = start >= 0 ? start + w.length : cursor;
     const plain = w.replace(/[.,;:!?]/g, '');
     const lower = plain.toLowerCase();
     if (!plain) continue;
     if (/[0-9]/.test(plain) || isMonthWord(plain) || NAME_STOPWORDS.has(lower)) {
-      // stop scanning once we reach a structural token, to avoid swallowing locations or dates
+      if (picked.length === 0) continue; // skip introducers before name
       break;
     }
-    // prefer tokens that look like names (capitalized). If not capitalized, accept only if we have none yet
-    const isCap = plain[0] === plain[0]?.toUpperCase();
+    const isCap = /[A-ZÀ-Ý]/.test(plain[0] || '');
     if (!isCap && picked.length > 0) break;
     picked.push(plain);
     if (start >= 0) positions.push([start, start + w.length]);
@@ -198,11 +239,16 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
   // Then all remaining kinds (address/text/etc.), keeping 'name' to the very end
   const remaining = nonConstrained.filter((k) => k !== primaryKind);
   ordered = [...ordered, ...nameLast(remaining)];
+  // Safety: always attempt a name extraction pass at the very end
+  if (!ordered.includes('name')) ordered.push('name');
   logMI('order', { primaryKind, constrainedKinds, remaining, ordered });
 
   const subtract = (span?: [number, number]) => {
     if (!span) return;
+    const beforeLen = residual.length;
+    const sliced = residual.slice(span[0], span[1]);
     residual = residual.slice(0, span[0]) + ' ' + residual.slice(span[1]);
+    logMI('subtract', { removed: sliced, span, beforeLen, afterLen: residual.length, residual });
   };
 
   const applyToKind = (kind: string) => {
@@ -214,6 +260,7 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
           const n = state.plan.byId[id];
           if (String(n?.kind).toLowerCase() === 'email' && memory[id]?.value === undefined) {
             memory = setMemory(memory, id, hit.value, false);
+            logMI('memWrite', { id, kind, value: hit.value });
             subtract(hit.span);
             logMI('write', { kind, id, afterResidualLen: residual.length });
             break;
@@ -230,6 +277,7 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
           const n = state.plan.byId[id];
           if (String(n?.kind).toLowerCase() === 'phone' && memory[id]?.value === undefined) {
             memory = setMemory(memory, id, hit.value, false);
+            logMI('memWrite', { id, kind, value: hit.value });
             subtract(hit.span);
             logMI('write', { kind, id, afterResidualLen: residual.length });
             break;
@@ -249,9 +297,9 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
               for (const sid of n.subs) {
                 const sub = state.plan.byId[sid];
                 const norm = (sub?.label || '').toLowerCase();
-                if (norm.includes('day') && hit.day !== undefined) memory = setMemory(memory, sid, hit.day, false);
-                if (norm.includes('month') && hit.month !== undefined) memory = setMemory(memory, sid, hit.month as any, false);
-                if (norm.includes('year') && hit.year !== undefined) memory = setMemory(memory, sid, hit.year, false);
+                if (norm.includes('day') && hit.day !== undefined) { memory = setMemory(memory, sid, hit.day, false); logMI('memWrite', { id: sid, kind: 'date.day', value: hit.day }); }
+                if (norm.includes('month') && hit.month !== undefined) { memory = setMemory(memory, sid, hit.month as any, false); logMI('memWrite', { id: sid, kind: 'date.month', value: hit.month }); }
+                if (norm.includes('year') && hit.year !== undefined) { memory = setMemory(memory, sid, hit.year, false); logMI('memWrite', { id: sid, kind: 'date.year', value: hit.year }); }
               }
             }
             subtract(hit.span);
@@ -269,19 +317,24 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
         for (const id of state.plan.order) {
           const n = state.plan.byId[id];
           if (String(n?.kind).toLowerCase() === 'name') {
+            let wrote = false;
             if (Array.isArray(n.subs) && n.subs.length > 0) {
               for (const sid of n.subs) {
                 const sub = state.plan.byId[sid];
                 const norm = (sub?.label || '').toLowerCase();
-                if (norm.includes('first') && hit.firstname) memory = setMemory(memory, sid, hit.firstname, false);
-                if (norm.includes('last') && hit.lastname) memory = setMemory(memory, sid, hit.lastname, false);
+                if (norm.includes('first') && hit.firstname && (memory[sid]?.value === undefined)) { memory = setMemory(memory, sid, hit.firstname, false); logMI('memWrite', { id: sid, kind: 'name.first', value: hit.firstname }); wrote = true; }
+                if (norm.includes('last') && hit.lastname && (memory[sid]?.value === undefined)) { memory = setMemory(memory, sid, hit.lastname, false); logMI('memWrite', { id: sid, kind: 'name.last', value: hit.lastname }); wrote = true; }
               }
             } else {
               const v = [hit.firstname, hit.lastname].filter(Boolean).join(' ');
-              if (v) memory = setMemory(memory, id, v, false);
+              if (v && (memory[id]?.value === undefined)) { memory = setMemory(memory, id, v, false); logMI('memWrite', { id, kind: 'name', value: v }); wrote = true; }
             }
-            subtract(hit.span);
-            logMI('write', { kind, id, afterResidualLen: residual.length });
+            if (wrote) {
+              subtract(hit.span);
+              logMI('write', { kind, id, afterResidualLen: residual.length });
+            } else {
+              logMI('skipSubtract', { kind, reason: 'name already present' });
+            }
             break;
           }
         }
@@ -375,8 +428,27 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
       };
       mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
     }
-    const missing = nextMissingSub(main, mem);
-    const saturated = isSaturated(main, mem);
+    // Respect required=false on sub nodes
+    const requiredSubsOf = (node: DDTNode) => (node.subs || []).filter((sid) => !!state.plan.byId[sid]).filter((sid) => state.plan.byId[sid].required !== false);
+    const nextMissingRequired = (node: DDTNode, memory: Memory): string | undefined => {
+      for (const sid of requiredSubsOf(node)) {
+        const m = memory[sid];
+        if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return sid;
+      }
+      return undefined;
+    };
+    const isSaturatedRequired = (node: DDTNode, memory: Memory): boolean => {
+      const subs = requiredSubsOf(node);
+      if (subs.length === 0) return isSaturated(node, memory);
+      for (const sid of subs) {
+        const m = memory[sid];
+        if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return false;
+      }
+      return true;
+    };
+
+    const missing = nextMissingRequired(main, mem);
+    const saturated = isSaturatedRequired(main, mem);
     if (saturated && !missing) {
       return { ...state, memory: mem, mode: 'ConfirmingMain' };
     }

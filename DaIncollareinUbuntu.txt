@@ -1,0 +1,3 @@
+cd /mnt/c/CursorProjects/Omnia
+chmod +x dev.sh
+./dev.sh

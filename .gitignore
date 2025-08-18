@@ -23,3 +23,17 @@ dist-ssr
 *.sln
 *.sw?
 .env
+# Node
+node_modules/
+dist/
+coverage/
+*.log
+
+# Python
+.venv/
+**/__pycache__/
+**/*.pyc
+
+# Editor/varie
+.vscode/
+dev.sh.save*

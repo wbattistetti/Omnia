@@ -65,7 +65,9 @@ def api_parse_address(body: dict = Body(...)):
     if parse_address is not None:
         try:
             parts_list = parse_address(text)
-            parts = dict(parts_list)
+            # libpostal returns a list of tuples in the form (value, label)
+            # Convert to a dictionary mapping label -> value so downstream code can use semantic keys
+            parts = {label: value for (value, label) in parts_list}
             return {"ok": True, "address": normalize(parts)}
         except Exception as e:
             # fall back to heuristic

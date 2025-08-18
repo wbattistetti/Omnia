@@ -92,7 +92,8 @@ app.include_router(nlp_extract_router)
 app.include_router(ner_router)
 app.include_router(parse_address_router)
 
-EXPRESS_BASE = "http://localhost:3100"
+# Allow overriding Express base so WSL can reach Windows-hosted Express
+EXPRESS_BASE = os.environ.get("EXPRESS_BASE", "http://localhost:3100")
 
 # Simple reverse proxy to Express so the frontend can hit only port 8000
 async def _proxy_to_express(request: Request) -> Response:
