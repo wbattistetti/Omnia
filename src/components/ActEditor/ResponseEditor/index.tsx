@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
-import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X } from 'lucide-react';
+import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X, BookOpen } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
@@ -14,8 +14,29 @@ import {
 } from './ddtSelectors';
 
 export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: () => void }) {
-  // Local editable copies
-  const [localDDT, setLocalDDT] = useState<any>(ddt);
+  // Helper: enforce phone kind by label when missing/mis-set
+  const coercePhoneKind = (src: any) => {
+    if (!src) return src;
+    const clone = JSON.parse(JSON.stringify(src));
+    try {
+      const mains = Array.isArray(clone?.mainData) ? clone.mainData : [];
+      const before = mains.map((m: any) => ({ label: m?.label, kind: (m?.kind || '').toString(), manual: (m as any)?._kindManual }));
+      for (const m of mains) {
+        const label = String(m?.label || '').toLowerCase();
+        if (/phone|telephone|tel|cellulare|mobile/.test(label)) {
+          if ((m?.kind || '').toLowerCase() !== 'phone') {
+            m.kind = 'phone';
+            (m as any)._kindManual = 'phone';
+          }
+        }
+      }
+      const after = mains.map((m: any) => ({ label: m?.label, kind: (m?.kind || '').toString(), manual: (m as any)?._kindManual }));
+      try { console.log('[KindPersist][ResponseEditor][coercePhoneKind]', { before, after }); } catch {}
+    } catch {}
+    return clone;
+  };
+  // Local editable copies (initialize with coerced phone kind)
+  const [localDDT, setLocalDDT] = useState<any>(() => coercePhoneKind(ddt));
   const { ideTranslations, dataDialogueTranslations, replaceSelectedDDT } = useDDTManager();
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
@@ -28,7 +49,15 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
     const prevId = (localDDT && (localDDT.id || localDDT._id)) as any;
     const nextId = (ddt && (ddt.id || ddt._id)) as any;
     const isSameDDT = prevId && nextId && prevId === nextId;
-    if (localDDT !== ddt) setLocalDDT(ddt);
+    const coerced = coercePhoneKind(ddt);
+    if (localDDT !== coerced) {
+      try {
+        const mainsBefore = Array.isArray((localDDT || {}).mainData) ? (localDDT as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
+        const mainsAfter = Array.isArray((coerced || {}).mainData) ? (coerced as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
+        console.log('[KindPersist][ResponseEditor][loadDDT->setLocalDDT]', { mainsBefore, mainsAfter });
+      } catch {}
+      setLocalDDT(coerced);
+    }
     const nextTranslations = { ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) };
     setLocalTranslations((prev: any) => {
       const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
@@ -148,6 +177,10 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
           beforeKind,
           afterKind,
         });
+        try {
+          const mainsKinds = (getMainDataList(next) || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual }));
+          console.log('[KindPersist][ResponseEditor][updateSelectedNode->replaceSelectedDDT]', mainsKinds);
+        } catch {}
       } catch {}
       try { replaceSelectedDDT(next); } catch {}
       return next;
@@ -227,17 +260,24 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
             <Plus size={16} /> <span>Add constraint</span>
           </button>
           <div style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
-            <button title="Actions" onClick={() => saveRightMode('actions')} style={{ background: rightMode==='actions' ? '#fff' : 'transparent', color: rightMode==='actions' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+            <button title="Actions" onClick={() => { setShowSynonyms(false); saveRightMode('actions'); }} style={{ background: rightMode==='actions' ? '#fff' : 'transparent', color: rightMode==='actions' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
               <Rocket size={16} />
             </button>
-            <button title="Validator" onClick={() => saveRightMode('validator')} style={{ background: rightMode==='validator' ? '#fff' : 'transparent', color: rightMode==='validator' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+            <button title="Validator" onClick={() => { setShowSynonyms(false); saveRightMode('validator'); }} style={{ background: rightMode==='validator' ? '#fff' : 'transparent', color: rightMode==='validator' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
               <Code2 size={16} />
             </button>
-            <button title="Test set" onClick={() => saveRightMode('testset')} style={{ background: rightMode==='testset' ? '#fff' : 'transparent', color: rightMode==='testset' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+            <button title="Test set" onClick={() => { setShowSynonyms(false); saveRightMode('testset'); }} style={{ background: rightMode==='testset' ? '#fff' : 'transparent', color: rightMode==='testset' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
               <FileText size={16} />
             </button>
-            <button title="Chat" onClick={() => saveRightMode('chat')} style={{ background: rightMode==='chat' ? '#fff' : 'transparent', color: rightMode==='chat' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+            <button title="Chat" onClick={() => { setShowSynonyms(false); saveRightMode('chat'); }} style={{ background: rightMode==='chat' ? '#fff' : 'transparent', color: rightMode==='chat' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
               <MessageSquare size={16} />
+            </button>
+            <button
+              title={showSynonyms ? 'Close contract editor' : 'Open contract editor'}
+              onClick={() => setShowSynonyms(v => !v)}
+              style={{ background: showSynonyms ? '#fff' : 'transparent', color: showSynonyms ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
+            >
+              <BookOpen size={16} />
             </button>
           </div>
           <button title="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#0b1220', borderRadius: 8, padding: '6px', cursor: 'pointer', marginLeft: 12, fontSize: 20, lineHeight: 1 }}>
@@ -257,7 +297,6 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
           onSelectSub={handleSelectSub}
           aggregated={isAggregatedAtomic}
           rootLabel={localDDT?.label || 'Data'}
-          showSynonyms={showSynonyms}
           onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
             // Persist required flag on the exact sub (by indices), independent of current selection
             setLocalDDT((prev: any) => {
@@ -282,20 +321,6 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
             });
           }}
           onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
-          onToggleSynonyms={(mIdx, sIdx) => {
-            const targetSub = (typeof sIdx === 'number' ? sIdx : undefined);
-            const sameTarget = selectedMainIndex === mIdx && selectedSubIndex === targetSub;
-            if (showSynonyms && sameTarget) {
-              setShowSynonyms(false);
-              setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-              return;
-            }
-            setRightMode('actions');
-            setSelectedMainIndex(mIdx);
-            setSelectedSubIndex(targetSub);
-            setShowSynonyms(true);
-            setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-          }}
         />
         <div style={{ width: 35 }} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -317,9 +342,8 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
                 <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 {showSynonyms ? (
                   <div style={{ padding: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 }}>
                       <h4 style={{ margin: 0 }}>Data Extractor: {selectedNode?.label || ''}</h4>
-                      <button onClick={() => setShowSynonyms(false)} style={{ border: '1px solid #ddd', background: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>Chiudi</button>
                     </div>
                     <NLPExtractorProfileEditor
                       node={selectedNode}

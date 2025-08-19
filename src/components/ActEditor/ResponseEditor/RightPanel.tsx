@@ -104,7 +104,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
     e.preventDefault();
     onStartResize();
   };
-  const [useNewEngine, setUseNewEngine] = React.useState<boolean>(true);
+  const useNewEngine = true;
 
   return (
     <div style={{ display: 'flex', flex: 'none', minWidth: minWidth, width, maxWidth: width, borderLeft: '1px solid #e5e7eb', background: '#fafaff' }}>
@@ -125,20 +125,9 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
               <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
-              <button
-                onClick={() => setUseNewEngine(v => !v)}
-                style={{ background: '#fff', border: '1px solid #cbd5e1', color: '#0b1220', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}
-                title={useNewEngine ? 'Switch to legacy simulator' : 'Switch to new DialogueDataEngine'}
-              >
-                {useNewEngine ? 'Use Legacy Simulator' : 'Use new DialogueDataEngine'}
-              </button>
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-              {useNewEngine ? (
-                <DDEBubbleChat currentDDT={ddt} translations={translations} />
-              ) : (
-                <ResponseSimulator ddt={ddt} translations={translations} selectedNode={selectedNode} />
-              )}
+              <DDEBubbleChat currentDDT={ddt} translations={translations} />
             </div>
           </div>
         )}

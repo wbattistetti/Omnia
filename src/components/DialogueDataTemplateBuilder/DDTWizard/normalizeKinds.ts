@@ -38,7 +38,11 @@ export function normalizeDDTMainNodes(mains: Node[]): Node[] {
     let kind: any;
     if (manual) kind = manual;
     else if (existing && existing !== 'generic' && existing !== 'auto') kind = existing;
-    else kind = LABEL_TO_KIND.find(r => r.test(label))!.kind;
+    else {
+      const mapped = LABEL_TO_KIND.find(r => r.test(label));
+      kind = mapped ? mapped.kind : 'text';
+      if (/telephone|phone|telefono|cellulare/i.test(label)) kind = 'phone';
+    }
     try { // debug mapping
       // eslint-disable-next-line no-console
       console.log('[DDT normalizeKinds] map', { label, existing, existingType, kind });
@@ -61,7 +65,22 @@ export function normalizeDDTMainNodes(mains: Node[]): Node[] {
       upsertSub(out, 'Postal Code', 'text', true);
       upsertSub(out, 'Country', 'text', true);
       upsertSub(out, 'Region/State', 'text', true);
+    } else if (kind === 'phone') {
+      // Canonical phone structure: Number (required) + optional Prefix
+      upsertSub(out, 'Number', 'text', true);
+      upsertSub(out, 'Prefix', 'text', false);
     }
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[DDT normalizeKinds][result]', {
+        label,
+        chosenKind: out.kind,
+        manual: (main as any)?._kindManual || undefined,
+        existing,
+        existingType,
+        subs: (out.subData || []).map((s: any) => ({ label: s?.label, required: s?.required, type: s?.type })),
+      });
+    } catch {}
     return out;
   });
 }

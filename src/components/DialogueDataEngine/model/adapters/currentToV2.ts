@@ -91,12 +91,102 @@ function mapNode(current: MainDataNode, asType: 'main' | 'sub'): DDTNode {
   const subLabels = (current.subData || []).map((s) => String(s.label || '').toLowerCase());
   const looksLikeDate = typeStr === 'date' || subLabels.some(l => /\b(day|month|year)\b/.test(l)) || /birth|date/.test(labelStr);
   const looksLikeName = subLabels.some(l => /first|last/.test(l)) || /name/.test(labelStr);
+  const looksLikePhone = typeStr === 'phone' || /phone|telephone|tel|cellulare|mobile/.test(labelStr);
   const looksLikeAddress = typeStr === 'address' || subLabels.some(l => /street|city|postal|zip|country|state|region/.test(l)) || /address/.test(labelStr);
-  const detectedKind = explicitKind && explicitKind !== 'generic' && explicitKind !== 'auto' ? explicitKind
+
+  // Extra heuristics for SUB nodes: infer kind from label when parent type isn't available here
+  if (asType === 'sub') {
+    const lbl = labelStr;
+    if (/\b(day|month|year)\b/.test(lbl)) {
+      return {
+        id: current.id,
+        label: (current.label || current.name || current.id) as string,
+        type: asType,
+        required: (current as any)?.required !== false,
+        kind: 'date' as any,
+        steps,
+        condition: current.condition,
+        synonyms: (current as any).synonyms || undefined,
+      } as DDTNode;
+    }
+    if (/street|city|postal|zip|country|state|region|house\s*number/i.test(lbl)) {
+      return {
+        id: current.id,
+        label: (current.label || current.name || current.id) as string,
+        type: asType,
+        required: (current as any)?.required !== false,
+        kind: 'address' as any,
+        steps,
+        condition: current.condition,
+        synonyms: (current as any).synonyms || undefined,
+      } as DDTNode;
+    }
+    if (/first\s*name|last\s*name|surname|cognome|nome/i.test(lbl)) {
+      return {
+        id: current.id,
+        label: (current.label || current.name || current.id) as string,
+        type: asType,
+        required: (current as any)?.required !== false,
+        kind: 'name' as any,
+        steps,
+        condition: current.condition,
+        synonyms: (current as any).synonyms || undefined,
+      } as DDTNode;
+    }
+    if (/email|e-?mail/i.test(lbl)) {
+      return {
+        id: current.id,
+        label: (current.label || current.name || current.id) as string,
+        type: asType,
+        required: (current as any)?.required !== false,
+        kind: 'email' as any,
+        steps,
+        condition: current.condition,
+        synonyms: (current as any).synonyms || undefined,
+      } as DDTNode;
+    }
+    if (/phone|telefono|cellulare|cell/i.test(lbl)) {
+      return {
+        id: current.id,
+        label: (current.label || current.name || current.id) as string,
+        type: asType,
+        required: (current as any)?.required !== false,
+        kind: 'phone' as any,
+        steps,
+        condition: current.condition,
+        synonyms: (current as any).synonyms || undefined,
+      } as DDTNode;
+    }
+  }
+  // Guard: log and correct explicit kind if label clearly indicates phone
+  const explicitOrCorrected = ((): string | undefined => {
+    if (!explicitKind || explicitKind === 'generic' || explicitKind === 'auto') return undefined;
+    if (explicitKind === 'address' && looksLikePhone && !looksLikeAddress) {
+      try { console.log('[KindPersist][Adapter][correct explicit]', { label: current.label, from: explicitKind, to: 'phone' }); } catch {}
+      return 'phone';
+    }
+    return explicitKind;
+  })();
+
+  const detectedKind = explicitOrCorrected ? explicitOrCorrected
     : looksLikeDate ? 'date'
     : looksLikeName ? 'name'
+    : looksLikePhone ? 'phone'
     : looksLikeAddress ? 'address'
     : (typeStr as any) || 'generic';
+
+  try {
+    // eslint-disable-next-line no-console
+    console.log('[adaptCurrentToV2][mapNode]', {
+      asType,
+      label: current.label,
+      explicitKind,
+      detectedKind,
+      typeStr,
+      subLabels,
+      required: (current as any)?.required,
+    });
+  } catch {}
 
   return {
     id: current.id,

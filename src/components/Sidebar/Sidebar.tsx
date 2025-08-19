@@ -115,6 +115,7 @@ const Sidebar: React.FC = () => {
       if (!res.ok) {
         throw new Error('Server error: unable to save DDT');
       }
+      try { console.log('[KindPersist][Sidebar][saved payload mains]', payload.flatMap((d: any) => (d?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })))); } catch {}
       // Nota: non ricarichiamo da backend per evitare flicker; la lista è già la sorgente del payload
       // ensure spinner is visible at least 600ms
       const elapsed = Date.now() - startedAt;

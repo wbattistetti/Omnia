@@ -106,12 +106,21 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const schema = ai.schema;
       if (schema && Array.isArray(schema.mainData)) {
         const root = schema.label || 'Data';
-        const mains0: SchemaNode[] = (schema.mainData || []).map((m: any) => ({
-          label: m.label || m.name || 'Field',
-          type: m.type,
-          icon: m.icon,
-          subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type, icon: s.icon })) : [],
-        }));
+        const mains0: SchemaNode[] = (schema.mainData || []).map((m: any) => {
+          const label = m.label || m.name || 'Field';
+          let type = m.type;
+          // Canonicalize type at fallback: map Telephone/Phone to 'phone'
+          if (!type || type === 'object') {
+            const l = String(label).toLowerCase();
+            if (/phone|telephone|tel|cellulare|mobile/.test(l)) type = 'phone' as any;
+          }
+          return {
+            label,
+            type,
+            icon: m.icon,
+            subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type, icon: s.icon })) : [],
+          } as any;
+        });
       setDetectTypeIcon(ai.icon || null);
         // Enrich constraints immediately, then show structure step
         const enrichedRes = await enrichConstraintsFor(root, mains0);

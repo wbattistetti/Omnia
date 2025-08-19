@@ -235,7 +235,13 @@ export const ProjectDataService = {
 export async function getAllDialogueTemplates() {
   const res = await fetch('/api/factory/dialogue-templates');
   if (!res.ok) throw new Error('Errore nel recupero dei DataDialogueTemplates');
-  return res.json();
+  const data = await res.json();
+  try {
+    const snap = Array.isArray(data) ? data.map((d: any) => ({ label: d?.label, mains: (d?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) })) : [];
+    // eslint-disable-next-line no-console
+    console.log('[KindPersist][ProjectDataService][load templates]', snap);
+  } catch {}
+  return data;
 }
 
 // Translations services (factory DB)

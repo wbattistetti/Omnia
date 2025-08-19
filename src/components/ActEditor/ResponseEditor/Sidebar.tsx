@@ -1,5 +1,5 @@
 import React, { forwardRef } from 'react';
-import { BookOpen, X as CloseIcon, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { getLabel, getSubDataList } from './ddtSelectors';
 import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
@@ -13,18 +13,17 @@ interface SidebarProps {
   aggregated?: boolean;
   rootLabel?: string;
   onSelectAggregator?: () => void;
-  onToggleSynonyms?: (mainIdx: number, subIdx?: number) => void;
-  showSynonyms?: boolean;
   onChangeSubRequired?: (mainIdx: number, subIdx: number, required: boolean) => void;
 }
 
-const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onToggleSynonyms, showSynonyms, onChangeSubRequired }, ref) {
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onChangeSubRequired }, ref) {
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
   if (!Array.isArray(mainList) || mainList.length === 0) return null;
   // Pastel/silver palette
   const borderColor = 'rgba(156,163,175,0.65)';
   const bgBase = 'rgba(156,163,175,0.10)';
-  const bgActive = 'rgba(156,163,175,0.40)';
+  const bgActive = 'rgba(156,163,175,0.60)'; // più vivace
+  const bgGroup = 'rgba(156,163,175,0.25)'; // highlight gruppo
   const textBase = '#e5e7eb';
 
   // Include state for mains and subs (UI-only). Default: included (true)
@@ -153,7 +152,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         </button>
       )}
       {mainList.map((main, idx) => {
-        const activeMain = selectedMainIndex === idx && safeSelectedSubIndex === undefined;
+        const activeMain = selectedMainIndex === idx; // evidenzia anche quando è selezionato un sub
         const disabledMain = !isMainIncluded(idx);
         const Icon = getIconComponent(main?.icon || 'FileText');
         const subs = getSubDataList(main) || [];
@@ -183,14 +182,19 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
               )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
               <span style={{ whiteSpace: 'nowrap' }}>{getLabel(main)}</span>
-              <span
-                role="button"
-                tabIndex={0}
-                title={showSynonyms && activeMain ? 'Chiudi profilo NLP' : 'Apri profilo NLP'}
-                onClick={(e) => { e.stopPropagation(); onToggleSynonyms && onToggleSynonyms(idx, undefined); }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSynonyms && onToggleSynonyms(idx, undefined); } }}
-                style={{ border: '1px solid rgba(229,231,235,0.5)', background: (showSynonyms && activeMain) ? '#ffffff' : 'transparent', color: (showSynonyms && activeMain) ? '#0b1220' : '#e5e7eb', borderRadius: 8, padding: '4px 6px', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
-              >{(showSynonyms && activeMain) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</span>
+              {/* Chevron to expand/collapse sub list */}
+              {(subs.length > 0) && (
+                <button
+                  title={(selectedMainIndex === idx && selectedSubIndex == null) ? 'Collapse' : 'Expand'}
+                  onClick={(e) => { e.stopPropagation(); if (selectedMainIndex === idx && selectedSubIndex == null) { onSelectSub && onSelectSub(0); } else { onSelectMain(idx); onSelectSub && onSelectSub(undefined); } }}
+                  style={{ marginLeft: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: `rotate(${(selectedMainIndex === idx && selectedSubIndex == null) ? 90 : 0}deg)`, transition: 'transform 0.15s' }} aria-hidden>
+                    <polyline points="2,1 8,5 2,9" fill="none" stroke={borderColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+              {/* Removed per-node Contract button; controlled by global header */}
             </button>
             {(selectedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -204,7 +208,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                     <button
                       key={sidx}
                       onClick={(e) => { onSelectSub && onSelectSub(sidx); try { dbg('[DDT][subSelect]', { main: getLabel(main), label: getLabel(sub), requiredRaw: sub?.required, requiredEffective: sub?.required !== false }); } catch {} (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
-                      style={itemStyle(activeSub, true, disabledSub)}
+                      style={{ ...itemStyle(activeSub, true, disabledSub), ...(activeSub ? {} : { background: bgGroup }) }}
                       className={`sb-item ${activeSub ? styles.sidebarSelected : ''}`}
                     >
                       <span
@@ -224,14 +228,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
                       <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub)}</span>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        title={showSynonyms && activeSub ? 'Chiudi profilo NLP' : 'Apri profilo NLP'}
-                        onClick={(e) => { e.stopPropagation(); onToggleSynonyms && onToggleSynonyms(idx, sidx); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSynonyms && onToggleSynonyms(idx, sidx); } }}
-                        style={{ border: '1px solid rgba(229,231,235,0.5)', background: (showSynonyms && activeSub) ? '#ffffff' : 'transparent', color: (showSynonyms && activeSub) ? '#0b1220' : '#e5e7eb', borderRadius: 8, padding: '4px 6px', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
-                      >{(showSynonyms && activeSub) ? <CloseIcon size={14} /> : <BookOpen size={14} />}</span>
+                      {/* Removed per-sub Contract button; controlled by global header */}
                     </button>
                   );
                 })}

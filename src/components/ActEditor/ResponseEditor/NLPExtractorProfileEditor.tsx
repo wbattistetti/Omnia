@@ -68,10 +68,12 @@ export default function NLPExtractorProfileEditor({
 
   const initial: NLPProfile = React.useMemo(() => {
     const p = (node && (node as any).nlpProfile) || {};
+    try { console.log('[KindPersist][ProfileEditor][initial]', { nodeLabel: node?.label, nodeKind: node?.kind, manual: (node as any)?._kindManual, profileKind: p?.kind }); } catch {}
     return {
       slotId: (node?.id || node?._id || node?.label || 'slot') as string,
       locale,
-      kind: (node?.kind || p.kind || 'generic') as string,
+      // Pre-seed kind strictly from node.kind or inferred value; never force 'generic' here
+      kind: ((node?.kind && node.kind !== 'generic') ? node.kind : (p.kind && p.kind !== 'generic') ? p.kind : inferKindFromNode(node)) as string,
       synonyms: Array.isArray(p.synonyms)
         ? p.synonyms
         : Array.isArray((node as any)?.synonyms)
@@ -89,7 +91,8 @@ export default function NLPExtractorProfileEditor({
   }, [node, locale]);
 
   const inferredKind = React.useMemo(() => inferKindFromNode(node), [node]);
-  const [lockKind, setLockKind] = React.useState<boolean>(initial.kind === inferredKind);
+  // Default: Auto unchecked to avoid flipping kind -> 'auto' on mount
+  const [lockKind, setLockKind] = React.useState<boolean>(false);
   const [kind, setKind] = React.useState<string>(initial.kind);
   const KIND_OPTIONS = React.useMemo(() => {
     const iconColor = '#9ca3af';
@@ -229,6 +232,7 @@ export default function NLPExtractorProfileEditor({
   React.useEffect(() => {
     if (kind && kind !== prevKindRef.current) {
       const r = recommendedForKind(kind);
+      try { console.log('[KindPersist][ProfileEditor][kind change]', { from: prevKindRef.current, to: kind, nodeLabel: node?.label }); } catch {}
       setSynonymsText(r.synonyms);
       setFormatText(r.formats);
       setExamplesList(r.examples);
@@ -280,6 +284,7 @@ export default function NLPExtractorProfileEditor({
     // Default: Auto unchecked, use normalized node.kind directly
     setLockKind(false);
     setKind(initial.kind);
+    try { console.log('[KindPersist][ProfileEditor][sync from node]', { nodeLabel: node?.label, nodeKind: node?.kind, initialKind: initial.kind }); } catch {}
     setSynonymsText(toCommaList(initial.synonyms));
     setRegex(initial.regex || '');
     setFormatText(toCommaList(initial.formatHints));
@@ -293,9 +298,12 @@ export default function NLPExtractorProfileEditor({
     setWaitingEsc2(initial.waitingEsc2 || '');
   }, [initial.slotId]);
 
-  // Keep kind synced with inferred when locked
+  // Keep kind synced with inferred only when locked is enabled explicitly by user
   React.useEffect(() => {
-    if (lockKind) setKind('auto');
+    if (lockKind) {
+      setKind('auto');
+      try { console.log('[KindPersist][ProfileEditor][lockKind → auto]', { inferredKind, nodeLabel: node?.label }); } catch {}
+    }
   }, [lockKind, inferredKind]);
 
   const profile: NLPProfile = React.useMemo(() => {
@@ -311,10 +319,11 @@ export default function NLPExtractorProfileEditor({
           label: s?.label || s?.name || ''
         }))
       : undefined;
-    return {
+    const out = {
       slotId: initial.slotId,
       locale: initial.locale,
-      kind,
+      // Guard against writing back 'generic' over a known node.kind; keep 'auto' or the inferred kind
+      kind: (kind === 'generic' && (node?.kind && node.kind !== 'generic')) ? node.kind : kind,
       synonyms: syns,
       regex: regex || undefined,
       formatHints: formats.length ? formats : undefined,
@@ -325,6 +334,8 @@ export default function NLPExtractorProfileEditor({
       waitingEsc1: waitingEsc1 || undefined,
       waitingEsc2: waitingEsc2 || undefined,
     };
+    try { console.log('[KindPersist][ProfileEditor][profile memo]', { nodeLabel: node?.label, outKind: out.kind }); } catch {}
+    return out;
   }, [node, initial.slotId, initial.locale, kind, synonymsText, regex, formatText, examplesList, minConf, postProcessText, waitingEsc1, waitingEsc2]);
 
   const lastSentJsonRef = React.useRef<string>('');
@@ -332,7 +343,13 @@ export default function NLPExtractorProfileEditor({
     const json = JSON.stringify(profile);
     if (json !== lastSentJsonRef.current) {
       lastSentJsonRef.current = json;
-      onChange?.(profile);
+      // Prevent emitting a downgrade to generic; keep previous node.kind in that case
+      const safeProfile = { ...profile } as NLPProfile;
+      if (safeProfile.kind === 'generic' && (node?.kind && node.kind !== 'generic')) {
+        safeProfile.kind = node.kind;
+      }
+      try { console.log('[KindPersist][ProfileEditor][emit onChange]', { nodeLabel: node?.label, kind: safeProfile.kind }); } catch {}
+      onChange?.(safeProfile);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.synonyms, profile.regex, profile.kind, profile.formatHints, profile.examples, profile.minConfidence, profile.postProcess, profile.subSlots]);

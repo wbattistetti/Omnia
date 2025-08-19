@@ -43,11 +43,13 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   const createDDT = (ddt: any) => {
     // ensure has id for future lookups
     const withId = ddt.id ? ddt : { ...ddt, id: ddt._id || `${(ddt.label || 'DDT').replace(/\s+/g, '_')}_${crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}` };
+    try { console.log('[KindPersist][DDTManager][createDDT]', { label: withId?.label, mains: (withId?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
     setDDTList(prev => [...prev, withId]);
     setSelectedDDT(withId);
   };
 
   const openDDT = (ddt: any) => {
+    try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
     setSelectedDDT(ddt);
   };
 
@@ -105,6 +107,7 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
 
   const replaceSelectedDDT = (next: any) => {
     if (!next) return;
+    try { console.log('[KindPersist][DDTManager][replaceSelectedDDT]', { label: next?.label, mains: (next?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
     setSelectedDDT(next);
     setDDTList(list => list.map(d => (d.id === next.id || d._id === next._id ? next : d)));
   };

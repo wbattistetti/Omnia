@@ -98,8 +98,15 @@ function advanceIndex(state: SimulatorState): SimulatorState {
   };
   const labelOf = (sid?: string) => (sid ? String(newState.plan.byId[sid]?.label || sid) : '');
 
-  // If the next main has required subs missing, immediately collect the first missing sub
+  // If the next main has required subs missing, collect the first missing sub
+  // ONLY when at least one sub value is already present. If nothing is present yet,
+  // stay on the MAIN and use its prompts first.
   if (nextMain && Array.isArray((nextMain as any).subs) && (nextMain as any).subs.length > 0) {
+    const subsArr: string[] = (nextMain as any).subs.filter((sid: string) => !!newState.plan.byId[sid]);
+    const anyPresent = subsArr.some((sid) => {
+      const m = newState.memory[sid];
+      return m && m.value !== undefined && m.value !== null && String(m.value).length > 0;
+    });
     const missingSub = nextMissingRequired(nextMain as any, newState.plan.byId, newState.memory);
     try {
       const req = requiredSubsOf(nextMain as any, newState.plan.byId);
@@ -109,7 +116,7 @@ function advanceIndex(state: SimulatorState): SimulatorState {
       });
       logMI('subsRequired', { main: nextMain?.label, required: req.map(labelOf), missing: miss.map(labelOf) });
     } catch {}
-    if (missingSub) {
+    if (missingSub && anyPresent) {
       logMI('advanceIndex', { nextIdx, nextMain: nextMain?.label, nextMode: 'CollectingSub', currentSubId: missingSub, currentSubLabel: labelOf(missingSub) });
       return { ...newState, mode: 'CollectingSub', currentSubId: missingSub };
     }
@@ -250,6 +257,14 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
   // Then all remaining kinds (address/text/etc.), keeping 'name' to the very end
   const remaining = nonConstrained.filter((k) => k !== primaryKind);
   ordered = [...ordered, ...nameLast(remaining)];
+  // Ensure phone is attempted when the input looks like a phone number or the target is phone
+  try {
+    const hasPhoneAlready = ordered.includes('phone');
+    const phoneHit = detectPhoneSpan(residual);
+    if (!hasPhoneAlready && (primaryKind === 'phone' || !!phoneHit)) {
+      ordered = ['phone', ...ordered];
+    }
+  } catch {}
   // Safety: always attempt a name extraction pass at the very end
   if (!ordered.includes('name')) ordered.push('name');
   logMI('order', { primaryKind, constrainedKinds, remaining, ordered });
@@ -303,6 +318,27 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
           if (isPhoneNode && canWrite) {
             memory = setMemory(memory, id, normalized, false);
             logMI('memWrite', { id, kind: 'phone', value: normalized, byLabel: labelMatch && String(n?.kind).toLowerCase() !== 'phone', overwrite: existing !== undefined });
+            // Also populate canonical subs when present: Number (required) and optional Prefix
+            if (Array.isArray((n as any)?.subs) && (n as any).subs.length > 0) {
+              const cc = (parsed && (parsed as any).countryCallingCode) ? '+' + (parsed as any).countryCallingCode : (normalized.match(/^(\+\d{1,3})/)?.[1] || undefined);
+              for (const sid of (n as any).subs) {
+                const sub = state.plan.byId[sid];
+                const slabel = String((sub?.label || '')).toLowerCase();
+                const isNumberLabel = /number|telefono|phone\s*number/.test(slabel);
+                const isPrefixLabel = /prefix|prefisso|country\s*code|countrycode/.test(slabel);
+                if (isNumberLabel) {
+                  if (memory[sid]?.value === undefined) {
+                    memory = setMemory(memory, sid, normalized, false);
+                    logMI('memWrite', { id: sid, kind: 'phone.number', value: normalized, label: slabel });
+                  }
+                } else if (isPrefixLabel && cc) {
+                  if (memory[sid]?.value === undefined) {
+                    memory = setMemory(memory, sid, cc, false);
+                    logMI('memWrite', { id: sid, kind: 'phone.prefix', value: cc, label: slabel });
+                  }
+                }
+              }
+            }
             subtract(hit.span);
             logMI('write', { kind: 'phone', id, afterResidualLen: residual.length });
             wroteAny = true;

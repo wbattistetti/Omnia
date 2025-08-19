@@ -291,8 +291,20 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
           }
           return <div style={{ flex: 1 }} />;
         })()}
-        {/* Right-side actions: none (plus moved next to pencil) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }} />
+        {/* Right-side chevron to expand/collapse when there are subs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {Array.isArray(node.subData) && node.subData.length > 0 && (
+            <button
+              title={open ? 'Collapse' : 'Expand'}
+              onClick={() => { setForceOpen(!open); onRequestOpen?.(); }}
+              style={{ background: 'transparent', border: 'none', padding: 0, marginLeft: 6, cursor: 'pointer', lineHeight: 0 }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: `rotate(${open ? 90 : 0}deg)`, transition: 'transform 0.15s' }} aria-hidden>
+                <polyline points="2,1 8,5 2,9" fill="none" stroke="#334155" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
       {open && (
         <div style={{ padding: 12, paddingTop: 0 }}>
