@@ -39,6 +39,8 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
+  // Caret target when switching to edit, computed from click position on title
+  const wantedCaretRef = useRef<number | null>(null);
 
   // Inizia editing titolo
   const handleTitleEdit = () => {
@@ -49,6 +51,18 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
         const rect = titleInputRef.current.getBoundingClientRect();
         setIntellisensePosition({ x: rect.left, y: rect.bottom + 2 });
         // setShowIntellisense(true); // Disabilitato su richiesta
+        // Position caret based on previous click location on the static title
+        try {
+          const idx = wantedCaretRef.current;
+          if (typeof idx === 'number') {
+            const clamped = Math.max(0, Math.min(String(title).length, idx));
+            titleInputRef.current.setSelectionRange(clamped, clamped);
+          } else {
+            // default: place caret at end
+            const len = titleInputRef.current.value.length;
+            titleInputRef.current.setSelectionRange(len, len);
+          }
+        } catch {}
       }
     }, 0);
   };
@@ -158,7 +172,18 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
         ) : (
           <h3
             className="text-black text-[8px] font-semibold cursor-text hover:text-purple-300 transition-colors truncate"
-            onClick={handleTitleEdit}
+            onMouseDown={(e) => {
+              // Approximate caret index from click X over title width
+              try {
+                const el = e.currentTarget as HTMLElement;
+                const rect = el.getBoundingClientRect();
+                const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                const text = String(title);
+                const ratio = rect.width > 0 ? (x / rect.width) : 0;
+                wantedCaretRef.current = Math.round(ratio * text.length);
+              } catch { wantedCaretRef.current = null; }
+              handleTitleEdit();
+            }}
             title="Modifica titolo"
             style={{ display: 'inline-block' }}
           >

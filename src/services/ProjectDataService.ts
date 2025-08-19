@@ -60,7 +60,12 @@ const convertAgentActsToCategories = <T extends AgentActItem>(templateArray: any
       id: item.id || uuidv4(),
       name: item.label || item.shortLabel || item.name || 'Unnamed Item',
       description: item.description || item.label || item.shortLabel || item.name || '',
-      userActs: item.userActs
+      userActs: item.userActs,
+      // Preserve fields needed for UI badges/icons
+      type: item.type,
+      isInteractive: item.isInteractive,
+      data: item.data,
+      categoryType: 'agentActs'
     } as T);
   });
   return Object.values(categoriesMap);

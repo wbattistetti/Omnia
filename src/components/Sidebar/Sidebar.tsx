@@ -81,6 +81,34 @@ const Sidebar: React.FC = () => {
     }
   };
 
+  // Build from Agent Act helper: prefill wizard with the act label as description
+  const handleBuildFromItem = (item: any) => {
+    // Show DDT builder inline with initial DDT containing the label in root
+    try {
+      console.log('[DDT][BuildFromAct][emit]', {
+        label: item?.name || item?.label,
+        startOnStructure: false
+      });
+      // Open below DDT header (same behavior of '+')
+      const event: any = new CustomEvent('ddt:openBuilderBelowHeader', {
+        detail: {
+          initialDDT: { label: item?.name || item?.label || 'Data', mainData: [] },
+          startOnStructure: false,
+          prefillUserDesc: String(item?.name || item?.label || ''),
+        },
+        bubbles: true,
+      });
+      document.dispatchEvent(event);
+    } catch (e) {
+      console.error('[Sidebar] build-from-item error', e);
+    }
+  };
+
+  const hasDDTFor = (label: string) => {
+    const norm = (s: string) => (s || '').toLowerCase().trim();
+    return ddtList.some(dt => norm(dt?.label) === norm(label));
+  };
+
   const handleSaveDDT = async () => {
     setIsSavingDDT(true);
     setSaveError(null);
@@ -187,6 +215,9 @@ const Sidebar: React.FC = () => {
             onAddItem={(categoryId, name, desc) => addItem(type, categoryId, name, desc)}
             onDeleteItem={(categoryId, itemId) => deleteItem(type, categoryId, itemId)}
             onUpdateItem={(categoryId, itemId, updates) => updateItem(type, categoryId, itemId, updates)}
+            onBuildFromItem={type === 'agentActs' ? handleBuildFromItem : undefined}
+            hasDDTFor={type === 'agentActs' ? hasDDTFor : undefined}
+            onCreateDDT={type === 'agentActs' ? handleAddDDT : undefined}
           />
         ))}
       </div>

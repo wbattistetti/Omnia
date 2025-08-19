@@ -28,6 +28,25 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
     setShowDDTBuilder(true);
   };
 
+  // Allow external trigger to open wizard inline below the DDT header (plus button behavior)
+  React.useEffect(() => {
+    const openBelowHeader = (e: any) => {
+      const detail = e?.detail || {};
+      console.log('[DDT][Section][openBelowHeader event]', detail);
+      setBuilderStartOnStructure(Boolean(detail.startOnStructure));
+      setBuilderInitialDDT(detail.initialDDT || null);
+      setShowDDTBuilder(true);
+      if (typeof detail.prefillUserDesc === 'string') {
+        setTimeout(() => {
+          console.log('[DDT][Section][prefill emit below]', detail.prefillUserDesc);
+          document.dispatchEvent(new CustomEvent('ddtWizard:prefillDesc', { detail: { text: detail.prefillUserDesc } }));
+        }, 0);
+      }
+    };
+    document.addEventListener('ddt:openBuilderBelowHeader', openBelowHeader as any);
+    return () => { document.removeEventListener('ddt:openBuilderBelowHeader', openBelowHeader as any); };
+  }, []);
+
   const handleBuilderComplete = (newDDT: any) => {
     setShowDDTBuilder(false);
     onAdd(newDDT);
@@ -46,6 +65,27 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
     if (/address|location|place/i.test(label)) return <MapPin className="w-4 h-4 text-green-700" />;
     return <FileText className="w-4 h-4 text-fuchsia-700" />;
   };
+
+  // Listen to custom openBuilder events dispatched from siblings (e.g., Agent Acts items)
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const detail = e?.detail || {};
+      console.log('[DDT][Section][openBuilder event]', detail);
+      if (typeof detail.prefillUserDesc === 'string') {
+        // Start the wizard on input step, prefilled with description
+        setBuilderStartOnStructure(false);
+        setBuilderInitialDDT(detail.initialDDT || null);
+        setShowDDTBuilder(true);
+        // Hack: set textarea value after mount via event
+        setTimeout(() => {
+          console.log('[DDT][Section][prefill emit]', detail.prefillUserDesc);
+          document.dispatchEvent(new CustomEvent('ddtWizard:prefillDesc', { detail: { text: detail.prefillUserDesc } }));
+        }, 0);
+      }
+    };
+    document.addEventListener('ddt:openBuilder', handler as any);
+    return () => { document.removeEventListener('ddt:openBuilder', handler as any); };
+  }, []);
 
   return (
     <SidebarEntityAccordion
@@ -92,7 +132,7 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
       {isOpen && (
         <>
           {showDDTBuilder && (
-            <div style={{ background: 'var(--sidebar-content-bg)', borderBottom: '1px solid #e5e7eb', paddingBottom: 8, marginBottom: 8, borderRadius: 8, position: 'sticky', top: 0, zIndex: 2 }}>
+            <div data-ddt-section style={{ background: 'var(--sidebar-content-bg)', borderBottom: '1px solid #e5e7eb', paddingBottom: 8, marginBottom: 8, borderRadius: 8 }}>
               <DDTBuilder
                 onComplete={handleBuilderComplete}
                 onCancel={handleBuilderCancel}

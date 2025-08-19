@@ -32,6 +32,18 @@ interface DataNode {
 
 const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean }> = ({ onCancel, onComplete, initialDDT, startOnStructure }) => {
   const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+  // Ensure accent is inherited in nested components
+  React.useEffect(() => {
+    try {
+      const el = document.querySelector('[data-ddt-section]') as HTMLElement | null;
+      if (el) {
+        const accent = getComputedStyle(el).getPropertyValue('--ddt-accent');
+        if (accent) {
+          (document.body.style as any).setProperty('--ddt-accent', accent.trim());
+        }
+      }
+    } catch {}
+  }, []);
   const [step, setStep] = useState<string>(startOnStructure ? 'structure' : 'input');
   const [userDesc, setUserDesc] = useState('');
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);

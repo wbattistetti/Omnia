@@ -17,6 +17,9 @@ interface EntityAccordionProps {
   onAddItem: (categoryId: string, name: string, description?: string) => void;
   onDeleteItem: (categoryId: string, itemId: string) => void;
   onUpdateItem: (categoryId: string, itemId: string, updates: Partial<ProjectEntityItem>) => void;
+  onBuildFromItem?: (item: ProjectEntityItem) => void;
+  hasDDTFor?: (label: string) => boolean;
+  onCreateDDT?: (newDDT: any) => void;
 }
 
 const EntityAccordion: React.FC<EntityAccordionProps> = ({
@@ -32,6 +35,9 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
   onAddItem,
   onDeleteItem,
   onUpdateItem,
+  onBuildFromItem,
+  hasDDTFor,
+  onCreateDDT,
 }) => {
   const [adding, setAdding] = useState(false);
 
@@ -76,6 +82,8 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
           key={category.id}
           category={category}
           entityType={entityKey}
+          onBuildFromItem={onBuildFromItem}
+          hasDDTFor={hasDDTFor}
           onAddItem={name => onAddItem(category.id, name)}
           onDeleteCategory={() => onDeleteCategory(category.id)}
           onUpdateCategory={updates => onUpdateCategory(category.id, updates)}

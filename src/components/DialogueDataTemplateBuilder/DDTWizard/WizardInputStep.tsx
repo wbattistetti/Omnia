@@ -9,11 +9,26 @@ interface Props {
   dataNode?: { name?: string; subData?: string[] };
 }
 
-const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel, dataNode }) => (
+const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel, dataNode }) => {
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const text = e?.detail?.text || '';
+      console.log('[DDT][WizardInputStep][prefill received]', text);
+      try { setUserDesc(text); } catch {}
+      if (textareaRef.current) {
+        textareaRef.current.value = text;
+      }
+    };
+    document.addEventListener('ddtWizard:prefillDesc', handler as any);
+    return () => { document.removeEventListener('ddtWizard:prefillDesc', handler as any); };
+  }, [setUserDesc]);
+
+  return (
   <div
     style={{
       background: 'var(--sidebar-content-bg, #181825)',
-      border: '2px solid #a21caf',
+      border: '2px solid var(--ddt-accent, #a21caf)',
       borderRadius: 16,
       padding: 24,
       maxWidth: 720,
@@ -22,12 +37,12 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
     }}
   >
     <div style={{ textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
-      <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 8 }}>
-        Describe the data dialogue you want to create:
+      <div style={{ fontSize: 15, fontWeight: 500, color: '#cbd5e1', marginBottom: 8 }}>
+        Describe in detail the data or information the virtual agent must ask to the user:
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 0 }}>
-        {dataNode?.name && <Calendar size={22} style={{ color: '#a21caf' }} />}
-        <span style={{ fontSize: 20, fontWeight: 700, color: '#a21caf' }}>{dataNode?.name || ''}</span>
+        {dataNode?.name && <Calendar size={22} style={{ color: 'var(--ddt-accent, #a21caf)' }} />}
+        <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--ddt-accent, #a21caf)' }}>{dataNode?.name || ''}</span>
       </div>
       
       {/* Mostra i subData se presenti */}
@@ -35,11 +50,11 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         <div style={{ 
           marginTop: 8,
           padding: '6px 10px', 
-          backgroundColor: 'rgba(162,28,175,0.1)', 
+          backgroundColor: 'color-mix(in oklab, var(--ddt-accent, #a21caf) 15%, transparent)', 
           borderRadius: 6,
           fontSize: 14,
           color: '#e5e7eb',
-          border: '1px solid rgba(162,28,175,0.3)'
+          border: '1px solid color-mix(in oklab, var(--ddt-accent, #a21caf) 30%, transparent)'
         }}>
           <div style={{ fontWeight: 500 }}>
             Structure: ({dataNode.subData.join(', ')})
@@ -49,13 +64,11 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
     </div>
     
     <div style={{ marginBottom: 12, fontSize: 14, color: '#9ca3af' }}>
-      {dataNode?.name ? 
-        "Modify the description to change the data type or structure:" : 
-        "Describe the data you want to collect:"
-      }
+      {dataNode?.name ? "You can refine the description to change type or structure." : ''}
     </div>
     
     <textarea
+      ref={textareaRef}
       value={userDesc}
       onChange={e => setUserDesc(e.target.value)}
       placeholder="e.g., date of birth, email, phone number..."
@@ -65,7 +78,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         padding: '10px 16px',
         width: '100%',
         borderRadius: 8,
-        border: '2px solid #a21caf',
+        border: '2px solid var(--ddt-accent, #a21caf)',
         outline: 'none',
         marginBottom: 22,
         background: '#23232b',
@@ -82,13 +95,14 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
       <button
         onClick={onCancel}
         style={{
-          background: 'none',
-          color: '#a21caf',
-          border: 'none',
+          background: 'color-mix(in oklab, var(--ddt-accent, #a21caf) 18%, transparent)',
+          color: '#e2e8f0',
+          border: '1px solid var(--ddt-accent, #a21caf)',
+          borderRadius: 8,
           fontWeight: 600,
-          fontSize: 16,
+          fontSize: 14,
           cursor: 'pointer',
-          padding: '6px 18px',
+          padding: '6px 16px',
         }}
       >
         Annulla
@@ -97,12 +111,12 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         onClick={onNext}
         disabled={!userDesc.trim()}
         style={{
-          background: '#a21caf',
-          color: '#fff',
+          background: 'var(--ddt-accent, #a21caf)',
+          color: '#0b1220',
           border: 'none',
           borderRadius: 8,
           fontWeight: 600,
-          fontSize: 16,
+          fontSize: 14,
           cursor: userDesc.trim() ? 'pointer' : 'not-allowed',
           padding: '8px 28px',
           opacity: userDesc.trim() ? 1 : 0.6,
@@ -113,6 +127,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
       </button>
     </div>
   </div>
-);
+  );
+};
 
 export default WizardInputStep;

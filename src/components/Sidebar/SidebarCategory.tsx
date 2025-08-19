@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import ItemEditor from './ItemEditor';
 import DeleteConfirmation from './DeleteConfirmation';
 import SidebarItem from './SidebarItem';
 import { Pencil, Trash2 } from 'lucide-react';
-import { Category, ProjectEntityItem } from '../../types/project';
+import { Category, ProjectEntityItem, EntityType } from '../../types/project';
+import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
 
 interface SidebarCategoryProps {
   category: Category<ProjectEntityItem>;
@@ -12,6 +13,10 @@ interface SidebarCategoryProps {
   onUpdateCategory: (updates: Partial<Category<ProjectEntityItem>>) => void;
   onDeleteItem: (itemId: string) => void;
   onUpdateItem: (itemId: string, updates: Partial<ProjectEntityItem>) => void;
+  entityType?: EntityType;
+  onBuildFromItem?: (item: ProjectEntityItem) => void;
+  hasDDTFor?: (label: string) => boolean;
+  onCreateDDT?: (newDDT: any) => void;
 }
 
 const SidebarCategory: React.FC<SidebarCategoryProps> = ({
@@ -21,11 +26,39 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
   onAddItem,
   onDeleteItem,
   onUpdateItem,
+  entityType,
+  onBuildFromItem,
+  hasDDTFor,
+  onCreateDDT,
 }) => {
   const [editing, setEditing] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [adding, setAdding] = useState(false);
+  // Inline builder state for Agent Acts
+  const [inlineBuilderForId, setInlineBuilderForId] = useState<string | null>(null);
+  const [inlineInitialDDT, setInlineInitialDDT] = useState<any | null>(null);
+  const itemsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = itemsRef.current;
+    if (!el) return;
+    const handler = (ev: any) => {
+      if (entityType !== 'agentActs') return;
+      const d = ev?.detail || {};
+      if (!d.anchorId) return;
+      setInlineBuilderForId(d.anchorId);
+      setInlineInitialDDT(d.initialDDT || null);
+      // Fill wizard textarea
+      setTimeout(() => {
+        try {
+          document.dispatchEvent(new CustomEvent('ddtWizard:prefillDesc', { detail: { text: d.prefillUserDesc || '' } }));
+        } catch {}
+      }, 0);
+    };
+    el.addEventListener('agentAct:openInlineBuilder', handler as any);
+    return () => { el.removeEventListener('agentAct:openInlineBuilder', handler as any); };
+  }, [entityType]);
 
   return (
     <div className="mb-4 px-1 py-1 rounded">
@@ -98,10 +131,33 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
           />
         </div>
       )}
-      {/* Items */}
-      <div className="ml-4 mt-1">
+      {/* Items (listen for inline builder events here) */}
+      <div className="ml-4 mt-1" ref={itemsRef}>
         {category.items.map((item: ProjectEntityItem) => (
-          <SidebarItem key={item.id} item={item} onUpdate={(updates: Partial<ProjectEntityItem>) => onUpdateItem(item.id, updates)} onDelete={() => onDeleteItem(item.id)} />
+          <div
+            key={item.id}
+            style={{ ['--ddt-accent' as any]: (entityType === 'agentActs' ? (((item as any)?.isInteractive ?? Boolean((item as any)?.data?.type) ?? Boolean((item as any)?.userActs?.length)) ? '#38bdf8' : '#22c55e') : undefined) }}
+          >
+            <SidebarItem
+              item={item}
+              categoryType={entityType}
+              onBuildFromItem={onBuildFromItem}
+              hasDDTFor={hasDDTFor}
+              onCreateDDT={onCreateDDT}
+              onUpdate={(updates: Partial<ProjectEntityItem>) => onUpdateItem(item.id, updates)}
+              onDelete={() => onDeleteItem(item.id)}
+            />
+            {entityType === 'agentActs' && inlineBuilderForId === item.id && (
+              <div className="mt-2 mb-2" style={{ padding: 0 }}>
+                <DDTBuilder
+                  initialDDT={inlineInitialDDT || undefined}
+                  startOnStructure={false}
+                  onCancel={() => { setInlineBuilderForId(null); setInlineInitialDDT(null); }}
+                  onComplete={(newDDT: any) => { setInlineBuilderForId(null); setInlineInitialDDT(null); onCreateDDT && onCreateDDT(newDDT); }}
+                />
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </div>

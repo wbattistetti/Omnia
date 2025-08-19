@@ -746,7 +746,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onPaneClick={onPaneClick}
-        onPaneDoubleClick={onPaneDoubleClick}
         onMouseMove={handlePaneMouseMove}
         onEdgeClick={handleEdgeClick}
         onConnectStart={onConnectStart}

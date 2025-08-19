@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DockPanel } from './TestEngine/DockPanel';
 import { ChatPanel } from './TestEngine/ChatPanel';
-import { ProjectDataProvider, useProjectData } from '../context/ProjectDataContext';
+import { ProjectDataProvider } from '../context/ProjectDataContext';
 import { ProjectData } from '../types/project';
 import { AppContent } from './AppContent';
 import { ActionsCatalogProvider, useSetActionsCatalog } from '../context/ActionsCatalogContext';
@@ -20,9 +20,7 @@ function AppInner() {
   const [testPanelOpen, setTestPanelOpen] = useState(false);
   const [testNodeId, setTestNodeId] = useState<string | null>(null);
   const [testNodeRows, setTestNodeRows] = useState<any[]>([]); // nuovo stato
-  const { data: projectData } = useProjectData();
-  // Prendi tutti gli agentActs come flat array
-  const agentActs = projectData?.agentActs?.flatMap(cat => cat.items) || [];
+  // Note: avoid reading ProjectData context here to keep HMR boundaries stable
 
   // Stato chat spostato qui
   const [userReplies, setUserReplies] = useState<(string | undefined)[]>([]);
