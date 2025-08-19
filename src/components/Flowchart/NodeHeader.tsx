@@ -1,5 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
-import { Trash2, Edit3, Check, X } from 'lucide-react';
+import { Trash2, Edit3, Check, X, Anchor, Play } from 'lucide-react';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { createPortal } from 'react-dom';
 
@@ -90,9 +90,12 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
 
   return (
     <div 
-      className="flex items-center justify-between bg-gray-200 p-2 rounded-t-lg border-b border-slate-600"
+      className="relative flex items-center justify-between bg-gray-200 p-2 rounded-t-lg border-b border-slate-600"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onMouseDown={() => setIsHovered(false)}
+      onMouseUp={() => setIsHovered(true)}
+      style={{ cursor: isHovered ? 'grab' : 'default' }}
     >
       {/* Titolo + editing */}
       <div className="flex items-center min-w-0 flex-1" style={{ position: 'relative' }}>
@@ -106,7 +109,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
               onKeyDown={handleKeyDown}
               autoFocus
               className="min-w-0 bg-slate-600 text-white text-[8px] px-1.5 py-1 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 border-2 border-purple-400 nodrag"
-              style={{ width: '70%', maxWidth: '70%' }}
+              style={{ width: 'calc(100% - 56px)', maxWidth: 'calc(100% - 56px)' }}
               onFocus={() => {
                 if (titleInputRef.current) {
                   const rect = titleInputRef.current.getBoundingClientRect();
@@ -154,7 +157,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
           </div>
         ) : (
           <h3
-            className="text-black text-[8px] font-semibold cursor-pointer hover:text-purple-300 transition-colors truncate"
+            className="text-black text-[8px] font-semibold cursor-text hover:text-purple-300 transition-colors truncate"
             onClick={handleTitleEdit}
             title="Modifica titolo"
             style={{ display: 'inline-block' }}
@@ -162,6 +165,42 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
             {title}
           </h3>
         )}
+      </div>
+      {/* Icon bar: appare solo con hover e non in mousedown */}
+      {isHovered && (
+        <div
+          className="absolute right-0 flex items-center gap-2 z-20"
+          style={{ bottom: 'calc(100% + 5px)', background: 'transparent', border: 'none', boxShadow: 'none' }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          <button className="p-0" title="Edit" style={{ background: 'none', border: 'none' }}>
+            <Edit3 className="w-3 h-3 text-slate-500 hover:text-green-500" />
+          </button>
+          <button className="p-0" title="Delete" style={{ background: 'none', border: 'none' }}>
+            <Trash2 className="w-3 h-3 text-slate-500 hover:text-red-500" />
+          </button>
+          <button className="p-0" title="Play" style={{ background: 'none', border: 'none' }}>
+            <Play className="w-3 h-3 text-slate-500 hover:text-emerald-500" />
+          </button>
+        </div>
+      )}
+
+      {/* Anchor handle per drag "rigido" dell'intero cluster */}
+      <div title="Drag to move with descendants" className="rigid-anchor" style={{ cursor: 'grab' }}
+           onMouseDown={(e) => {
+             try {
+               (window as any).__flowDragMode = 'rigid';
+               console.log('[RigidDrag][anchor][down]');
+             } catch {}
+           }}
+           onMouseUp={() => {
+             try {
+               (window as any).__flowDragMode = undefined;
+               console.log('[RigidDrag][anchor][up]');
+             } catch {}
+           }}>
+        {isHovered && <Anchor className="w-3 h-3 text-slate-700" />}
       </div>
     </div>
   );

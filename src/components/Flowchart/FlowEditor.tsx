@@ -210,49 +210,81 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const NODE_WIDTH = 280; // px (tailwind w-70)
   const NODE_HEIGHT = 40; // px (min-h-[40px])
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [contentSize, setContentSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  // Calcola estensione contenuto per eventuali scrollbar
+  useEffect(() => {
+    const pad = 200; // padding intorno al contenuto
+    let minX = 0, minY = 0, maxX = 0, maxY = 0;
+    if (nodes.length > 0) {
+      minX = Math.min(...nodes.map(n => (n.position as any).x));
+      minY = Math.min(...nodes.map(n => (n.position as any).y));
+      maxX = Math.max(...nodes.map(n => (n.position as any).x + NODE_WIDTH));
+      const approxHeights = nodes.map(n => {
+        const rows = (n.data as any)?.rows;
+        const count = Array.isArray(rows) ? rows.length : 0;
+        return NODE_HEIGHT + (count * 24) + 40;
+      });
+      maxY = Math.max(...nodes.map((n, i) => (n.position as any).y + approxHeights[i]));
+    }
+    const w = Math.max(0, maxX - minX) + pad * 2;
+    const h = Math.max(0, maxY - minY) + pad * 2;
+    setContentSize({ w, h });
+  }, [nodes]);
+
+  const createNodeAt = useCallback((clientX: number, clientY: number) => {
+    try { console.log('[DC][createNodeAt][input]', { clientX, clientY }); } catch {}
+    const newNodeId = nodeIdCounter.toString();
+    let x = 0, y = 0;
+    if (reactFlowInstance) {
+      const pos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
+      try { console.log('[DC][screenToFlowPosition]', { pos }); } catch {}
+      x = pos.x - NODE_WIDTH / 2;
+      y = pos.y - NODE_HEIGHT / 2;
+    }
+    const node: Node<NodeData> = {
+      id: newNodeId,
+      type: 'custom',
+      position: { x, y },
+      data: {
+        title: 'Title missing...',
+        rows: [],
+        onDelete: () => deleteNodeWithLog(newNodeId),
+        onUpdate: (updates: any) => updateNode(newNodeId, updates),
+        hidden: true,
+        focusRowId: '1',
+      },
+    };
+    try { console.log('[DC][createNodeAt][add]', { id: newNodeId, x, y }); } catch {}
+    addNodeAtPosition(node, x, y);
+    requestAnimationFrame(() => {
+      try {
+        const el = document.querySelector(`.react-flow__node[data-id='${newNodeId}']`) as HTMLElement | null;
+        if (!el) { try { console.warn('[DC][mount] node element not found'); } catch {} return; }
+        if (!reactFlowInstance || !(reactFlowInstance as any).getViewport) { try { console.warn('[DC][mount] no reactFlowInstance viewport'); } catch {} return; }
+        const { zoom } = (reactFlowInstance as any).getViewport();
+        const rect = el.getBoundingClientRect();
+        const centerNowX = rect.left + rect.width / 2;
+        const centerNowY = rect.top + rect.height / 2;
+        const dxScreen = clientX - centerNowX;
+        const dyScreen = clientY - centerNowY;
+        const dxFlow = dxScreen / (zoom || 1);
+        const dyFlow = dyScreen / (zoom || 1);
+        try { console.log('[DC][recenter][step1]', { zoom, rect, centerNowX, centerNowY, dxScreen, dyScreen, dxFlow, dyFlow }); } catch {}
+        setNodes((nds) => nds.map(n => n.id === newNodeId ? { ...n, position: { x: (n.position as any).x + dxFlow, y: (n.position as any).y + dyFlow } } : n));
+        requestAnimationFrame(() => {
+          setNodes((nds) => nds.map(n => n.id === newNodeId ? { ...n, data: { ...(n.data as any), hidden: false } } : n));
+          try { console.log('[DC][recenter][step2][show]', { id: newNodeId }); } catch {}
+        });
+      } catch {}
+    });
+  }, [addNodeAtPosition, nodeIdCounter, reactFlowInstance, setNodes, deleteNodeWithLog, updateNode]);
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
-    setSelectedEdgeId(null); // Reset edge selezionata quando si clicca sul canvas
-    const currentTime = Date.now();
-    const timeDiff = currentTime - lastClickTime.current;
-    
-    // Double click detection (within 300ms)
-    if (timeDiff < 300) {
-      event.preventDefault();
-      const newNodeId = nodeIdCounter.toString();
-      let x = 0, y = 0;
-      if (reactFlowInstance) {
-        const viewport = document.querySelector('.react-flow') as HTMLElement;
-        let xScreen = 0, yScreen = 0;
-        if (viewport) {
-          const rect = viewport.getBoundingClientRect();
-          xScreen = rect.left + rect.width / 2;
-          yScreen = rect.top + 100;
-        }
-        if (reactFlowInstance.getViewport) {
-          const viewportObj = reactFlowInstance.getViewport();
-        }
-        // Usa screenToFlowPosition per convertire coordinate schermo in coordinate flow
-        const pos = reactFlowInstance.screenToFlowPosition({ x: xScreen, y: yScreen });
-        x = pos.x - NODE_WIDTH / 2;
-        y = pos.y;
-      }
-      const node: Node<NodeData> = {
-        id: newNodeId,
-        type: 'custom',
-        position: { x, y },
-        data: {
-          title: 'Title missing...',
-          rows: [],
-          onDelete: () => deleteNodeWithLog(newNodeId),
-          onUpdate: (updates: any) => updateNode(newNodeId, updates),
-        },
-      };
-      addNodeAtPosition(node, x, y);
-    }
-    
-    lastClickTime.current = currentTime;
-  }, [addNodeAtPosition, nodeIdCounter, deleteNodeWithLog, updateNode, reactFlowInstance, nodes]);
+    setSelectedEdgeId(null);
+  }, []);
+
+  // (rimosso onPaneDoubleClick: usiamo il doppio click sul wrapper)
 
   const onConnectStart = useCallback((event: any, { nodeId, handleId }: any) => {
     setSource(nodeId || '', handleId || undefined);
@@ -498,27 +530,213 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const onNodeDragStart = useCallback((event: any, node: Node) => {
     // Controlla se l'evento è iniziato da un elemento con classe 'nodrag'
     const target = event.target as Element;
+    const isAnchor = target && (target.classList.contains('rigid-anchor') || target.closest('.rigid-anchor'));
     if (target && (target.classList.contains('nodrag') || target.closest('.nodrag'))) {
       event.preventDefault();
       return false;
     }
+    // Prepara contesto per drag rigido SOLO se partito dall'ancora
+    if ((window as any).__flowDragMode === 'rigid' || isAnchor) {
+      const rootId = node.id;
+      // BFS su edges per raccogliere tutti i discendenti
+      const visited = new Set<string>();
+      const q: string[] = [rootId];
+      visited.add(rootId);
+      while (q.length) {
+        const cur = q.shift() as string;
+        edges.forEach(e => {
+          if (e.source === cur && !visited.has(e.target)) {
+            visited.add(e.target);
+            q.push(e.target);
+          }
+        });
+      }
+      // Mappa posizioni iniziali
+      const startPositions = new Map<string, { x: number; y: number }>();
+      nodes.forEach(n => {
+        if (visited.has(n.id)) startPositions.set(n.id, { x: (n.position as any).x, y: (n.position as any).y });
+      });
+      rigidDragCtxRef.current = {
+        rootId,
+        ids: visited,
+        startPositions,
+        rootStart: { x: (node.position as any).x, y: (node.position as any).y },
+        rootLast: { x: (node.position as any).x, y: (node.position as any).y },
+      };
+      try { console.log('[RigidDrag][start]', { rootId, ids: Array.from(visited), rootStart: { x: (node.position as any).x, y: (node.position as any).y }, fromAnchor: isAnchor }); } catch {}
+    } else {
+      rigidDragCtxRef.current = null;
+    }
   }, []);
+
+  // Rigid drag: se il drag parte con __flowDragMode = 'rigid', muovi anche i discendenti
+  const rigidDragCtxRef = useRef<null | { rootId: string; ids: Set<string>; startPositions: Map<string, {x:number;y:number}>; rootStart: {x:number;y:number}; rootLast: {x:number;y:number} }>(null);
+
+  const onNodeDrag = useCallback((event: any, draggedNode: Node) => {
+    if (!rigidDragCtxRef.current) return;
+    const ctx = rigidDragCtxRef.current;
+    if (draggedNode.id !== ctx.rootId) return; // gestiamo solo il root per coerenza delta
+    const curX = (draggedNode.position as any).x;
+    const curY = (draggedNode.position as any).y;
+    const incDx = curX - ctx.rootLast.x;
+    const incDy = curY - ctx.rootLast.y;
+    try { console.log('[RigidDrag][drag]', { rootId: ctx.rootId, incDx, incDy, count: ctx.ids.size }); } catch {}
+    if (incDx === 0 && incDy === 0) return;
+    setNodes((nds) => nds.map(n => {
+      if (!ctx.ids.has(n.id)) return n;
+      if (n.id === draggedNode.id) return draggedNode; // root già gestito da RF
+      const pos = n.position as any;
+      return { ...n, position: { x: pos.x + incDx, y: pos.y + incDy } } as any;
+    }));
+    ctx.rootLast = { x: curX, y: curY };
+  }, [setNodes]);
+
+  const onNodeDragStop = useCallback(() => {
+    try { (window as any).__flowDragMode = undefined; } catch {}
+    const ctx = rigidDragCtxRef.current;
+    if (ctx) {
+      try { console.log('[RigidDrag][stop]', { rootId: ctx.rootId }); } catch {}
+      // Applica l'offset finale anche se non sono arrivati tick drag
+      const rootNow = nodesRef.current.find(n => n.id === ctx.rootId);
+      if (rootNow) {
+        const finalDx = (rootNow.position as any).x - ctx.rootLast.x;
+        const finalDy = (rootNow.position as any).y - ctx.rootLast.y;
+        if (finalDx !== 0 || finalDy !== 0) {
+          setNodes(nds => nds.map(n => {
+            if (!ctx.ids.has(n.id)) return n;
+            if (n.id === ctx.rootId) return n;
+            const pos = n.position as any;
+            return { ...n, position: { x: pos.x + finalDx, y: pos.y + finalDy } } as any;
+          }));
+        }
+      }
+    }
+    rigidDragCtxRef.current = null;
+  }, [setNodes]);
+
+  // Wheel handler: zoom only when CTRL is pressed
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (!reactFlowInstance) return;
+    if (!e.ctrlKey) {
+      // Non zoomare senza CTRL; non chiamare preventDefault su passive listeners
+      return;
+    }
+    // Allow zoom when CTRL is pressed by manually adjusting viewport
+    const vp = (reactFlowInstance as any).getViewport ? (reactFlowInstance as any).getViewport() : { x: 0, y: 0, zoom: 1 };
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newZoom = Math.max(0.2, Math.min(4, vp.zoom * factor));
+    if ((reactFlowInstance as any).setViewport) {
+      (reactFlowInstance as any).setViewport({ x: vp.x, y: vp.y, zoom: newZoom }, { duration: 0 });
+    }
+  }, [reactFlowInstance]);
+
+  // Cursor tooltip follow mouse
+  const cursorTooltipRef = useRef<HTMLDivElement | null>(null);
+  const cursorIconRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = document.createElement('div');
+    el.style.position = 'fixed';
+    el.style.pointerEvents = 'none';
+    el.style.zIndex = '9999';
+    el.style.fontSize = '12px';
+    el.style.padding = '2px 6px';
+    el.style.border = '1px solid #eab308';
+    el.style.background = '#fef9c3';
+    el.style.color = '#0f172a';
+    el.style.borderRadius = '6px';
+    el.style.boxShadow = '0 2px 6px rgba(0,0,0,0.15)';
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    cursorTooltipRef.current = el;
+    const icon = document.createElement('div');
+    icon.style.position = 'fixed';
+    icon.style.pointerEvents = 'none';
+    icon.style.zIndex = '10000';
+    icon.style.width = '14px';
+    icon.style.height = '14px';
+    icon.style.borderRadius = '50%';
+    icon.style.background = '#0ea5e9';
+    icon.style.boxShadow = '0 0 0 2px #bae6fd';
+    icon.style.display = 'none';
+    document.body.appendChild(icon);
+    cursorIconRef.current = icon;
+    return () => {
+      if (cursorTooltipRef.current && cursorTooltipRef.current.parentNode) {
+        cursorTooltipRef.current.parentNode.removeChild(cursorTooltipRef.current);
+      }
+      if (cursorIconRef.current && cursorIconRef.current.parentNode) {
+        cursorIconRef.current.parentNode.removeChild(cursorIconRef.current);
+      }
+      cursorTooltipRef.current = null;
+      cursorIconRef.current = null;
+    };
+  }, []);
+
+  const setCursorTooltip = useCallback((text: string | null, x?: number, y?: number) => {
+    const el = cursorTooltipRef.current;
+    const icon = cursorIconRef.current;
+    if (!el) return;
+    if (!text) { el.style.display = 'none'; if (icon) icon.style.display = 'none'; return; }
+    el.textContent = text;
+    if (typeof x === 'number' && typeof y === 'number') {
+      el.style.left = `${x + 12}px`;
+      el.style.top = `${y + 12}px`;
+      if (icon) { icon.style.left = `${x + 2}px`; icon.style.top = `${y + 2}px`; }
+    }
+    el.style.display = 'block';
+    if (icon) icon.style.display = 'block';
+  }, []);
+
+  const handlePaneMouseMove = useCallback((e: React.MouseEvent) => {
+    if (nodes.length === 0) {
+      setCursorTooltip('Double-click to create a node', e.clientX, e.clientY);
+    } else {
+      setCursorTooltip(null);
+    }
+  }, [nodes.length, setCursorTooltip]);
+
+  // Fallback: doppio click catturato sul wrapper, valido anche sul primo load
+  const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const isPane = target?.classList?.contains('react-flow__pane') || !!target?.closest?.('.react-flow__pane');
+    if (!isPane) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const x = e.clientX;
+    const y = e.clientY;
+    try { console.log('[DC][wrapperDoubleClick]', { x, y, isPane }); } catch {}
+    createNodeAt(x, y);
+  }, [createNodeAt]);
+
+  // Inserter hover: custom cursor + label
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      const isInserter = el?.classList?.contains('row-inserter') || !!el?.closest?.('.row-inserter');
+      if (isInserter) {
+        setCursorTooltip('Click to insert here...', e.clientX, e.clientY);
+      }
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
+    return () => window.removeEventListener('mousemove', onMove as any);
+  }, [setCursorTooltip]);
 
   // Handler per selezione edge
   const handleEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
     setSelectedEdgeId(edge.id);
   }, []);
 
-  // Forza la viewport in alto dopo la creazione progetto/canvas vuoto
+  // Inizializza la viewport a zoom 1 solo al primissimo mount
+  const initializedRef = useRef(false);
   useEffect(() => {
-    if (reactFlowInstance && nodes.length === 0) {
-      const viewport = reactFlowInstance.getViewport ? reactFlowInstance.getViewport() : { zoom: 1 };
-      reactFlowInstance.setViewport({ x: 0, y: 0, zoom: viewport.zoom || 1 }, { duration: 0 });
+    if (reactFlowInstance && !initializedRef.current) {
+      try { (reactFlowInstance as any).setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 0 }); } catch {}
+      initializedRef.current = true;
     }
-  }, [reactFlowInstance, nodes.length]);
+  }, [reactFlowInstance]);
 
   return (
-    <div className="flex-1 h-full relative" ref={canvasRef}>
+    <div className="flex-1 h-full relative" ref={canvasRef} style={{ overflow: 'auto' }} onDoubleClick={handleCanvasDoubleClick}>
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
@@ -528,22 +746,33 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onPaneClick={onPaneClick}
+        onPaneDoubleClick={onPaneDoubleClick}
+        onMouseMove={handlePaneMouseMove}
         onEdgeClick={handleEdgeClick}
         onConnectStart={onConnectStart}
         onConnectEnd={onConnectEnd}
         onNodeDragStart={onNodeDragStart}
-        fitView
+        onNodeDrag={onNodeDrag}
+        onNodeDragStop={onNodeDragStop}
+        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
         maxZoom={4}
         className="bg-white"
-        style={{ backgroundColor: '#ffffff' }}
+        style={{ backgroundColor: '#ffffff', width: contentSize.w ? `${contentSize.w}px` : undefined, height: contentSize.h ? `${contentSize.h}px` : undefined }}
+        selectionOnDrag={true}
+        panOnDrag={[2]}
+        zoomOnScroll={false}
+        zoomOnPinch={false}
+        panOnScroll={false}
+        onWheel={handleWheel}
+        zoomOnDoubleClick={false}
       >
         <Controls className="bg-white shadow-lg border border-slate-200" />
         <Background 
           variant={BackgroundVariant.Dots}
-          gap={20}
-          size={2}
-          color="#e2e8f0"
-          style={{ backgroundColor: '#ffffff' }}
+          gap={22}
+          size={1.5}
+          color="#eef2f7" // puntini molto più sbiaditi
+          style={{ backgroundColor: '#ffffff', opacity: 0.6 }}
         />
         <svg style={{ height: 0 }}>
           <defs>
@@ -564,8 +793,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       
       {/* Messaggio istruzione in alto a sinistra, solo se canvas vuoto */}
       {nodes.length === 0 && (
-        <div className="absolute top-4 left-4 bg-slate-800 text-white px-4 py-2 rounded-lg text-base shadow-lg z-10 font-medium">
-          💡 Double-click sul canvas per creare un nodo
+        <div
+          className="pointer-events-none absolute z-10 text-[10px]"
+          style={{ position: 'fixed' as any }}
+        >
+          
         </div>
       )}
       

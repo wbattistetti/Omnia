@@ -69,6 +69,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           isEditing={isEditing}
           setIsEditing={setIsEditing}
           labelRef={labelRef}
+          onHoverChange={() => {}}
         />, 
         document.body
       )}

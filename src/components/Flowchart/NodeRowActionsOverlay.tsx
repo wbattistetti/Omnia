@@ -11,6 +11,7 @@ interface NodeRowActionsOverlayProps {
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
   labelRef: React.RefObject<HTMLSpanElement>;
+  onHoverChange?: (v: boolean) => void;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -22,7 +23,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   onDrag,
   isEditing,
   setIsEditing,
-  labelRef
+  labelRef,
+  onHoverChange
 }) => {
   if (!showIcons || !iconPos) return null;
   return (
@@ -34,17 +36,19 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         display: 'flex',
         gap: 4,
         zIndex: 1000,
-        background: '#fff',
-        borderRadius: 6,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-        padding: '2px 4px',
+        background: 'transparent',
+        borderRadius: 0,
+        boxShadow: 'none',
+        padding: 0,
         alignItems: 'center',
-        border: '1px solid #000',
+        border: 'none',
         height: labelRef.current ? `${labelRef.current.getBoundingClientRect().height}px` : '22px',
         minHeight: 0,
         marginLeft: 0
       }}
       className="flex items-center"
+      onMouseEnter={() => onHoverChange && onHoverChange(true)}
+      onMouseLeave={() => onHoverChange && onHoverChange(false)}
     >
       {/* Drag handle */}
       <span

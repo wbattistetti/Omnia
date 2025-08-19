@@ -26,6 +26,8 @@ export interface CustomNodeData {
   onDelete?: () => void;
   onUpdate?: (updates: any) => void;
   onPlayNode?: (nodeId: string) => void; // nuova prop opzionale
+  hidden?: boolean; // render invisibile finché non riposizionato
+  focusRowId?: string; // row da mettere in edit al mount
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
@@ -44,9 +46,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
   const [editingRowId, setEditingRowId] = useState<string | null>(isNewAndEmpty ? '1' : null);
+  const [editingBump, setEditingBump] = useState(0);
   // Wrapper per setEditingRowId con log
   const setEditingRowIdWithLog = (val: string | null) => {
+    try { console.log('[Focus][CustomNode] setEditingRowId', { nodeId: id, val }); } catch {}
     setEditingRowId(val);
+    // Bump per forzare un micro re-render della lista dopo focusRow
+    setEditingBump(prev => (prev + 1) % 1000);
   };
   // Rimuovi tutti i console.log relativi a editingRowId, prima riga, ecc.
 
@@ -87,6 +93,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     
     if (data.onUpdate) {
       data.onUpdate({ rows: updatedRows });
+    }
+    // Se non rimangono righe, cancella l'intero nodo (ESC su unica textbox vuota)
+    if (updatedRows.length === 0 && typeof data.onDelete === 'function') {
+      data.onDelete();
     }
   };
 
@@ -281,6 +291,21 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditingNode]);
 
+  // Se il nodo è nuovo/creato ora, entra in editing della prima riga
+  // Ritardo di 1 frame per evitare che il recenter rubi il focus
+  useEffect(() => {
+    const setAfterFrame = (val: string) => {
+      try {
+        requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => setEditingRowIdWithLog(val), 0)));
+      } catch {
+        setTimeout(() => setEditingRowIdWithLog(val), 0);
+      }
+    };
+    if (data.focusRowId) setAfterFrame(data.focusRowId);
+    else if (isNewAndEmpty) setAfterFrame('1');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Crea l'array di visualizzazione per il feedback visivo
   const displayRows = useMemo(() => {
     if (!drag.draggedRowId || drag.draggedRowOriginalIndex === null || drag.hoveredRowIndex === null) {
@@ -324,47 +349,27 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   }
 
   return (
-    <div className={`bg-white border-black rounded-lg shadow-xl w-70 min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}>
+    <div
+      className={`bg-white border-black rounded-lg shadow-xl w-70 min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
+      style={{ opacity: data.hidden ? 0 : 1 }}
+      tabIndex={-1}
+      onMouseDownCapture={(e) => {
+        if (!editingRowId) return;
+        const t = e.target as HTMLElement;
+        const isAnchor = t?.classList?.contains('rigid-anchor') || !!t?.closest?.('.rigid-anchor');
+        const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
+        // Blocca solo interazioni sull'input riga; consenti header e ancora (drag)
+        if (isInput && !isAnchor) { try { console.log('[Drag][block] input mousedown'); } catch {} e.stopPropagation(); e.preventDefault(); }
+      }}
+      onMouseUpCapture={(e) => {
+        if (!editingRowId) return;
+        const t = e.target as HTMLElement;
+        const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
+        if (isInput) { e.stopPropagation(); e.preventDefault(); }
+      }}
+      onFocusCapture={(e) => { /* no-op: lasciamo passare focus per drag header */ }}
+    >
       <div className="relative" onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)}>
-        {/* Toolbar overlay sopra il nodo, allineata a destra, staccata di 2px */}
-        {showActions && (
-          <div
-            className="absolute right-2 flex gap-2 items-center z-20 bg-white border border-gray-300 rounded-lg shadow px-1.5 py-0.5"
-            style={{ pointerEvents: 'auto', top: '-32px' }}
-          >
-            <button
-              onClick={() => setIsEditingNode(true)}
-              className="p-0 text-slate-500 hover:text-green-500 transition-colors bg-transparent border-none shadow-none"
-              title="Modifica titolo"
-              style={{ background: 'none', padding: 0, margin: 0 }}
-            >
-              <Edit3 className="w-3 h-3" style={{ width: 12, height: 12 }} />
-            </button>
-            <button
-              onClick={handleDeleteNode}
-              className="p-0 text-red-500 hover:text-red-700 transition-colors bg-transparent border-none shadow-none"
-              title="Elimina nodo"
-              style={{ background: 'none', padding: 0, margin: 0 }}
-            >
-              <Trash2 className="w-3 h-3" style={{ width: 12, height: 12 }} />
-            </button>
-            <button
-              onClick={() => data.onPlayNode && data.onPlayNode(id)}
-              className="p-0 text-blue-500 hover:text-blue-700 transition-colors bg-transparent border-none shadow-none"
-              title="Simula nodo"
-              style={{ background: 'none', fontSize: '12px', padding: 0, margin: 0 }}
-            >
-              ▶️
-            </button>
-          </div>
-        )}
-        {/* Buffer invisibile tra titolo e toolbar per tolleranza mouse */}
-        {showActions && (
-          <div
-            className="absolute right-2 z-10"
-            style={{ top: '-8px', height: '8px', width: '120px', pointerEvents: 'auto' }}
-          />
-        )}
         <NodeHeader
           title={nodeTitle}
           onDelete={handleDeleteNode}
@@ -377,6 +382,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         <NodeRowList
           rows={displayRows}
           editingRowId={editingRowId}
+          // bump per riallineare focus dopo recenter
+          key={`rows-${editingBump}`}
           hoveredInserter={hoveredInserter}
           setHoveredInserter={setHoveredInserter}
           handleInsertRow={handleInsertRow}

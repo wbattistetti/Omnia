@@ -3,11 +3,8 @@ import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
 import { GripVertical, Trash2, Edit3 } from 'lucide-react';
 import { SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
-import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
-import { LABEL_COLORS } from './labelColors';
 import { getLabelColor } from '../../utils/labelColor';
-import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
 import { useOverlayBuffer } from '../../hooks/useOverlayBuffer';
 import { NodeRowEditor } from './NodeRowEditor';
 import { NodeRowData } from '../../types/project';
@@ -90,13 +87,15 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     }
   }, [isEditing, nodeCanvasPosition, reactFlowInstance]);
 
-  // Calcola la posizione delle icone appena fuori dal bordo destro del nodo
+  // Calcola la posizione delle icone: appena FUORI dal bordo destro del nodo, all'altezza della label
   useEffect(() => {
     if (showIcons && labelRef.current) {
       const labelRect = labelRef.current.getBoundingClientRect();
+      const nodeEl = labelRef.current.closest('.react-flow__node') as HTMLElement | null;
+      const nodeRect = nodeEl ? nodeEl.getBoundingClientRect() : labelRect;
       setIconPos({
         top: labelRect.top,
-        left: labelRect.right + 4 // 4px fuori dal bordo destro
+        left: nodeRect.right + 6 // 6px fuori dal bordo destro del nodo
       });
     } else {
       setIconPos(null);
@@ -113,9 +112,15 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   }, [isEditing]);
 
   useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    if (isEditing) {
+      const attemptFocus = (i: number) => {
+        const el = inputRef.current || (document.querySelector('.node-row-input') as HTMLInputElement | null);
+        const exists = Boolean(el);
+        try { if (el) { el.focus(); el.select(); } } catch {}
+        try { console.log('[Focus][NodeRow] attempt', { exists, attempt: i, hasInputRef: Boolean(inputRef.current) }); } catch {}
+        if (!exists && i < 10) setTimeout(() => attemptFocus(i + 1), 25);
+      };
+      attemptFocus(0);
     }
   }, [isEditing]);
 
@@ -254,7 +259,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   let bgColor = '';
   let labelTextColor = '';
   if (row.categoryType && SIDEBAR_TYPE_COLORS[row.categoryType]) {
-    bgColor = SIDEBAR_TYPE_COLORS[row.categoryType].light;
+    const c = SIDEBAR_TYPE_COLORS[row.categoryType] as any;
+    bgColor = c.light || c.color || '#e2e8f0';
     labelTextColor = '#111';
   } else {
     if (typeof propBgColor === 'string') bgColor = propBgColor;
@@ -272,7 +278,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   });
 
   // Uso l'icona centralizzata
-  const Icon = row.categoryType ? SIDEBAR_TYPE_ICONS[row.categoryType] : null;
+  const Icon = row.categoryType ? (SIDEBAR_TYPE_ICONS as any)[row.categoryType] || null : null;
 
   return (
     <>
@@ -296,22 +302,22 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
       )}
       <div 
         ref={nodeContainerRef}
-        className={`node-row-outer flex items-center group transition-colors ${
-          isHoveredTarget ? 'ring-2 ring-red-400 ring-inset' : ''
-        } ${conditionalClasses}`}
-        style={{ ...conditionalStyles, background: included ? 'transparent' : '#f3f4f6', border: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}
+        className={`node-row-outer flex items-center group transition-colors ${conditionalClasses}`}
+        style={{ ...conditionalStyles, background: included ? 'transparent' : '#f3f4f6', border: 'none', outline: 'none', boxShadow: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto', width: '100%' }}
         onMouseEnter={() => setShowIcons(true)}
         onMouseLeave={() => setShowIcons(false)}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
       {isEditing ? (
-        <NodeRowEditor
-          value={currentText}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDownInternal}
-          inputRef={inputRef}
-          placeholder="Type what you need here..."
-        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <NodeRowEditor
+            value={currentText}
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDownInternal}
+            inputRef={inputRef}
+            placeholder="Type what you need here..."
+          />
+        </div>
       ) : (
           <NodeRowLabel
             row={row}
