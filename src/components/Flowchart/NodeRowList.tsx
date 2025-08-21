@@ -46,16 +46,29 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   draggedRowStyle,
   onEditingEnd
 }) => {
+  // Hide any visible inserter as soon as a textbox appears (editing mode)
+  React.useEffect(() => {
+    if (editingRowId !== null && hoveredInserter !== null) {
+      try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][autoHide:onEdit]', { editingRowId, hoveredInserter }); } catch {}
+      setHoveredInserter(null);
+    }
+  }, [editingRowId]);
   return (
     <>
       {rows.map((row, idx) => (
         <React.Fragment key={row.id}>
           {/* Inserter sopra la label */}
           <RowInserter
-            visible={hoveredInserter === idx && editingRowId === null}
+            visible={(() => { const v = (hoveredInserter === idx) && (editingRowId === null); try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][visible.compute]', { idx, hoveredInserter, editingRowId, visible: v }); } catch {} return v; })()}
             onInsert={() => handleInsertRow(idx)}
-            onMouseEnter={() => setHoveredInserter(idx)}
-            onMouseLeave={() => setHoveredInserter(null)}
+            onMouseEnter={() => {
+              try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][hover enter]', { idx, editingRowId }); } catch {}
+              setHoveredInserter(idx);
+            }}
+            onMouseLeave={() => {
+              try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][hover leave]', { idx, editingRowId }); } catch {}
+              setHoveredInserter(null);
+            }}
             index={idx}
           />
           <NodeRow
@@ -93,10 +106,16 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
       ))}
       {/* Inserter dopo l'ultima riga */}
       <RowInserter
-        visible={hoveredInserter === rows.length && editingRowId === null}
+        visible={(hoveredInserter === rows.length) && (editingRowId === null)}
         onInsert={() => handleInsertRow(rows.length)}
-        onMouseEnter={() => setHoveredInserter(rows.length)}
-        onMouseLeave={() => setHoveredInserter(null)}
+        onMouseEnter={() => {
+          try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][hover enter end]', { idx: rows.length, editingRowId }); } catch {}
+          setHoveredInserter(rows.length);
+        }}
+        onMouseLeave={() => {
+          try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][hover leave end]', { idx: rows.length, editingRowId }); } catch {}
+          setHoveredInserter(null);
+        }}
         index={rows.length}
       />
       {/* Renderizza la riga trascinata separatamente */}

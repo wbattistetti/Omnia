@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { PlusCircle } from 'lucide-react';
 
 interface RowInserterProps {
@@ -10,29 +10,40 @@ interface RowInserterProps {
 }
 
 export const RowInserter: React.FC<RowInserterProps> = ({ visible, onInsert, onMouseEnter, onMouseLeave, index }) => {
+  const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.inserter') === '1') console.log(...args); } catch {} };
+  // Enable debug flag automatically so user sees logs without manual setup
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('debug.inserter') !== '1') {
+        localStorage.setItem('debug.inserter', '1');
+        // eslint-disable-next-line no-console
+        console.log('[Inserter][debug] enabled');
+      }
+    } catch {}
+  }, []);
   return (
     <div
       className="row-inserter relative flex items-center justify-center"
-      style={{ height: 6, minHeight: 0, width: '100%', margin: 0, padding: 0, cursor: 'copy' }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      style={{ height: 8, minHeight: 0, width: '100%', margin: 0, padding: 0, cursor: 'copy' }}
+      onMouseEnter={() => { dbg('[Inserter][enter]', { index, visible }); onMouseEnter && onMouseEnter(); }}
+      onMouseLeave={() => { dbg('[Inserter][leave]', { index, visible }); onMouseLeave && onMouseLeave(); }}
       onClick={visible ? onInsert : undefined}
       data-idx={typeof index === 'number' ? index : undefined}
     >
-      {/* Rettangolo tratteggiato sottile quando visibile per indicare inserimento */}
+      {/* Unica linea tratteggiata nera quando visibile per indicare inserimento */}
       {visible && (
         <div
           style={{
             position: 'absolute',
-            top: 0,
-            left: 8,
-            right: 8,
-            height: 4,
-            borderTop: '1px dashed #64748b',
-            borderBottom: '1px dashed #64748b',
-            opacity: 0.9,
+            top: '50%',
+            left: 6,
+            right: 6,
+            height: 0,
+            borderTop: '2px dashed rgba(0,0,0,0.9)',
+            transform: 'translateY(-50%)',
+            opacity: 1,
             pointerEvents: 'none',
-            background: 'rgba(100,116,139,0.08)'
+            background: 'transparent'
           }}
         />
       )}

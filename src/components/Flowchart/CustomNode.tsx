@@ -454,7 +454,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onToggleEdit={() => setIsEditingNode(!isEditingNode)}
           onTitleUpdate={handleTitleUpdate}
           isEditing={isEditingNode}
-          hasUnchecked={nodeRows.some(r => r.text && r.text.trim().length > 0 && r.included === false)}
+          hasUnchecked={nodeRows.some(r => r.included === false)}
           hideUnchecked={(data as any)?.hideUncheckedRows === true}
           onToggleHideUnchecked={() => {
             if (typeof data.onUpdate === 'function') {
@@ -473,7 +473,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           setHoveredInserter={setHoveredInserter}
           handleInsertRow={handleInsertRow}
           nodeTitle={nodeTitle}
-          onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType)}
+          onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included })}
           onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, meta as any)}
           onDelete={(row) => handleDeleteRow(row.id)}
           onKeyDown={(e) => {/* logica keydown se serve */}}

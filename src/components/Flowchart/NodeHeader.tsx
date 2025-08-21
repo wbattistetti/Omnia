@@ -219,9 +219,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          <button className="p-0" title="Edit" style={{ background: 'none', border: 'none' }}>
-            <Edit3 className="w-3 h-3 text-slate-500 hover:text-green-500" />
-          </button>
+          {/* Toggle hide/show unchecked - placed to the LEFT of trash */}
           {hasUnchecked && (
             <button
               className="p-0"
@@ -236,6 +234,9 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
               )}
             </button>
           )}
+          <button className="p-0" title="Edit" style={{ background: 'none', border: 'none' }}>
+            <Edit3 className="w-3 h-3 text-slate-500 hover:text-green-500" />
+          </button>
           <button
             className="p-0"
             title="Delete"

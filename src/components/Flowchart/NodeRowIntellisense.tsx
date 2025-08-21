@@ -46,7 +46,7 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
           referenceElement={inputRef.current}
           onSelect={handleIntellisenseSelect}
           onClose={handleIntellisenseClose}
-          filterCategoryTypes={['agentActs']}
+          filterCategoryTypes={['agentActs', 'backendActions']}
         />
       </div>,
       document.body
