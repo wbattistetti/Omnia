@@ -27,6 +27,7 @@ export interface CustomNodeData {
   onPlayNode?: (nodeId: string) => void; // nuova prop opzionale
   hidden?: boolean; // render invisibile finché non riposizionato
   focusRowId?: string; // row da mettere in edit al mount
+  hideUncheckedRows?: boolean; // nasconde le righe non incluse
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
@@ -365,6 +366,23 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Canvas click: if there is a newly added empty row being edited, cancel and remove it
+  useEffect(() => {
+    const onCanvasClick = () => {
+      if (!editingRowId) return;
+      const row = nodeRows.find(r => r.id === editingRowId);
+      if (row && String(row.text || '').trim().length === 0) {
+        // remove the empty row being edited
+        const updated = nodeRows.filter(r => r.id !== editingRowId);
+        setNodeRows(updated);
+        setEditingRowIdWithLog(null);
+        if (data.onUpdate) data.onUpdate({ rows: updated });
+      }
+    };
+    window.addEventListener('flow:canvas:click', onCanvasClick as any);
+    return () => window.removeEventListener('flow:canvas:click', onCanvasClick as any);
+  }, [editingRowId, nodeRows, data]);
+
   // Crea l'array di visualizzazione per il feedback visivo
   const displayRows = useMemo(() => nodeRows, [nodeRows]);
 
@@ -436,11 +454,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onToggleEdit={() => setIsEditingNode(!isEditingNode)}
           onTitleUpdate={handleTitleUpdate}
           isEditing={isEditingNode}
+          hasUnchecked={nodeRows.some(r => r.text && r.text.trim().length > 0 && r.included === false)}
+          hideUnchecked={(data as any)?.hideUncheckedRows === true}
+          onToggleHideUnchecked={() => {
+            if (typeof data.onUpdate === 'function') {
+              data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+            }
+          }}
         />
       </div>
       <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }} ref={rowsContainerRef}>
         <NodeRowList
-          rows={displayRows}
+          rows={((data as any)?.hideUncheckedRows === true) ? displayRows.filter(r => r.included !== false) : displayRows}
           editingRowId={editingRowId}
           // bump per riallineare focus dopo recenter
           key={`rows-${editingBump}`}

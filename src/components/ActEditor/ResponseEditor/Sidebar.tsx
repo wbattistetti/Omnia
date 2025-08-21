@@ -26,21 +26,16 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   const bgGroup = 'rgba(156,163,175,0.25)'; // highlight gruppo
   const textBase = '#e5e7eb';
 
-  // Include state for mains and subs (UI-only). Default: included (true)
+  // Include state for mains (UI-only)
   const [includedMains, setIncludedMains] = React.useState<Record<number, boolean>>({});
-  // removed legacy sub include state
-
   const isMainIncluded = (idx: number) => includedMains[idx] !== false;
   const toggleMainInclude = (idx: number, v: boolean) => setIncludedMains(prev => ({ ...prev, [idx]: v }));
-  
 
-  // selectedSubIndex: undefined o number
   const safeSelectedSubIndex = typeof selectedSubIndex === 'number' && !isNaN(selectedSubIndex) ? selectedSubIndex : undefined;
 
-  // Navigazione tastiera naturale tra main e subdata
+  // Keyboard navigation between mains and subs
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     let handled = false;
-    // Costruisci la lista piatta degli item: [{type: 'main', idx}, {type: 'sub', mainIdx, subIdx}, ...]
     const flatList: Array<{ type: 'main' | 'sub'; mainIdx: number; subIdx?: number }> = [];
     mainList.forEach((main, mIdx) => {
       flatList.push({ type: 'main', mainIdx: mIdx });
@@ -49,7 +44,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         flatList.push({ type: 'sub', mainIdx: mIdx, subIdx: sIdx });
       });
     });
-    // Trova la posizione corrente
     let currentIdx = flatList.findIndex(item => {
       if (item.type === 'main') return selectedMainIndex === item.mainIdx && (safeSelectedSubIndex === undefined);
       if (item.type === 'sub') return selectedMainIndex === item.mainIdx && safeSelectedSubIndex === item.subIdx;
@@ -121,13 +115,11 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         const w = it.scrollWidth;
         if (w > maxWidth) maxWidth = w;
       }
-      // Add a right-side gutter so the vertical border sits ~10px away from the rightmost node
       const gutter = 45; // 35 + 10 extra pixels
       const width = Math.ceil(maxWidth) + gutter;
       const clamped = Math.min(Math.max(width, 200), 640);
       setMeasuredW(clamped);
     };
-    // measure after paint
     const id = requestAnimationFrame(measure);
     window.addEventListener('resize', measure);
     return () => { cancelAnimationFrame(id); window.removeEventListener('resize', measure); };
@@ -140,7 +132,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       onKeyDown={handleKeyDown}
       style={{ width: measuredW, background: '#121621', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none' }}
     >
-      {/* Aggregated group header */}
       {aggregated && (
         <button
           onClick={(e) => { (onSelectAggregator ? onSelectAggregator() : undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
@@ -152,7 +143,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         </button>
       )}
       {mainList.map((main, idx) => {
-        const activeMain = selectedMainIndex === idx; // evidenzia anche quando è selezionato un sub
+        const activeMain = selectedMainIndex === idx;
         const disabledMain = !isMainIncluded(idx);
         const Icon = getIconComponent(main?.icon || 'FileText');
         const subs = getSubDataList(main) || [];
@@ -182,32 +173,33 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
               )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
               <span style={{ whiteSpace: 'nowrap' }}>{getLabel(main)}</span>
-              {/* Chevron to expand/collapse sub list */}
               {(subs.length > 0) && (
-                <button
+                <span
+                  role="button"
+                  tabIndex={0}
                   title={(selectedMainIndex === idx && selectedSubIndex == null) ? 'Collapse' : 'Expand'}
                   onClick={(e) => { e.stopPropagation(); if (selectedMainIndex === idx && selectedSubIndex == null) { onSelectSub && onSelectSub(0); } else { onSelectMain(idx); onSelectSub && onSelectSub(undefined); } }}
-                  style={{ marginLeft: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); if (selectedMainIndex === idx && selectedSubIndex == null) { onSelectSub && onSelectSub(0); } else { onSelectMain(idx); onSelectSub && onSelectSub(undefined); } } }}
+                  style={{ marginLeft: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0, display: 'inline-flex' }}
                 >
                   <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: `rotate(${(selectedMainIndex === idx && selectedSubIndex == null) ? 90 : 0}deg)`, transition: 'transform 0.15s' }} aria-hidden>
                     <polyline points="2,1 8,5 2,9" fill="none" stroke={borderColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                </button>
+                </span>
               )}
-              {/* Removed per-node Contract button; controlled by global header */}
             </button>
             {(selectedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subs.map((sub: any, sidx: number) => {
                   const reqEffective = sub?.required !== false;
-                  try { dbg('[DDT][subRender]', { main: getLabel(main), label: getLabel(sub), requiredRaw: sub?.required, requiredEffective: reqEffective }); } catch {}
                   const activeSub = selectedMainIndex === idx && safeSelectedSubIndex === sidx;
-                  const disabledSub = disabledMain;
+                  // Grayscale when main is unchecked OR when this sub is unchecked (required=false)
+                  const disabledSub = (!isMainIncluded(idx)) || (!reqEffective);
                   const SubIcon = getIconComponent(sub?.icon || 'FileText');
                   return (
                     <button
                       key={sidx}
-                      onClick={(e) => { onSelectSub && onSelectSub(sidx); try { dbg('[DDT][subSelect]', { main: getLabel(main), label: getLabel(sub), requiredRaw: sub?.required, requiredEffective: sub?.required !== false }); } catch {} (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
+                      onClick={(e) => { onSelectSub && onSelectSub(sidx); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
                       style={{ ...itemStyle(activeSub, true, disabledSub), ...(activeSub ? {} : { background: bgGroup }) }}
                       className={`sb-item ${activeSub ? styles.sidebarSelected : ''}`}
                     >
@@ -215,7 +207,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                         role="checkbox"
                         aria-checked={reqEffective}
                         title={reqEffective ? 'Required' : 'Optional'}
-                        onClick={(e) => { e.stopPropagation(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); try { dbg('[DDT][subRequiredToggle][click]', { main: getLabel(main), label: getLabel(sub), nextRequired: next }); } catch {} }}
+                        onClick={(e) => { e.stopPropagation(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); } }}
                         style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6, cursor: 'pointer' }}
                         tabIndex={0}
@@ -228,7 +220,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
                       <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub)}</span>
-                      {/* Removed per-sub Contract button; controlled by global header */}
                     </button>
                   );
                 })}

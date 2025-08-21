@@ -1,8 +1,8 @@
-import { ProjectData, EntityType, Category, ProjectEntityItem, AgentActItem } from '../types/project';
+import { ProjectData, EntityType, Category, ProjectEntityItem, AgentActItem, FlowTask, FlowTaskPayloadNode, FlowTaskPayloadEdge } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
-import { LABEL_COLORS } from '../components/Flowchart/labelColors';
-import { getLabelColor } from '../utils/labelColor';
+// import { LABEL_COLORS } from '../components/Flowchart/labelColors';
+// import { getLabelColor } from '../utils/labelColor';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
 
 // Import template data
@@ -56,7 +56,7 @@ const convertAgentActsToCategories = <T extends AgentActItem>(templateArray: any
         items: []
       };
     }
-    categoriesMap[categoryKey].items.push({
+    categoriesMap[categoryKey].items.push(({
       id: item.id || uuidv4(),
       name: item.label || item.shortLabel || item.name || 'Unnamed Item',
       description: item.description || item.label || item.shortLabel || item.name || '',
@@ -66,7 +66,7 @@ const convertAgentActsToCategories = <T extends AgentActItem>(templateArray: any
       isInteractive: item.isInteractive,
       data: item.data,
       categoryType: 'agentActs'
-    } as T);
+    } as unknown) as T);
   });
   return Object.values(categoriesMap);
 };
@@ -98,9 +98,9 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
 };
 
 // Helper per accesso type-safe a ProjectData
-function getCategoriesByType(data: ProjectData, type: EntityType): Category[] {
-  return (data as ProjectData)[type] || [];
-}
+// function getCategoriesByType(data: ProjectData, type: EntityType): Category[] {
+//   return (data as ProjectData)[type] || [];
+// }
 
 export const ProjectDataService = {
   async initializeProjectData(templateName: string, language: string): Promise<void> {
@@ -188,6 +188,40 @@ export const ProjectDataService = {
         macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
       };
     }
+  },
+
+  // Create a FlowTask entity and return it
+  async addTask(name: string, description = '', payload: { nodes: FlowTaskPayloadNode[]; edges: FlowTaskPayloadEdge[] },
+                meta?: { nodeIds?: string[]; edgeIds?: string[]; entryEdges?: string[]; exitEdges?: string[]; bounds?: { x: number; y: number; w: number; h: number } }): Promise<FlowTask> {
+    const cat = findOrCreateTaskCategory('Tasks');
+    const task: FlowTask = {
+      id: uuidv4(),
+      name,
+      description,
+      nodeIds: meta?.nodeIds || [],
+      edgeIds: meta?.edgeIds || [],
+      entryEdges: meta?.entryEdges || [],
+      exitEdges: meta?.exitEdges || [],
+      bounds: meta?.bounds || { x: 0, y: 0, w: 0, h: 0 },
+      payload
+    };
+    (cat.items as any).push(task);
+    return task;
+  },
+
+  async updateTask(taskId: string, updates: Partial<FlowTask>): Promise<void> {
+    const cats = ensureTasksCategories();
+    for (const c of cats) {
+      const t = (c.items as any).find((it: any) => it.id === taskId);
+      if (t) { Object.assign(t, updates); return; }
+    }
+  },
+
+  async getTasks(): Promise<FlowTask[]> {
+    const out: FlowTask[] = [];
+    const cats = ensureTasksCategories();
+    for (const c of cats) out.push(...(c.items as any));
+    return out;
   },
 
   async loadProjectData(): Promise<ProjectData> {
@@ -313,6 +347,21 @@ export const ProjectDataService = {
     return { saved: count };
   }
 };
+
+// --- Task helpers ---
+function ensureTasksCategories(): Category[] {
+  if (!projectData.tasks) projectData.tasks = [] as any;
+  return projectData.tasks as unknown as Category[];
+}
+
+function findOrCreateTaskCategory(preferredName: string = 'Uncategorized'): Category {
+  const cats = ensureTasksCategories();
+  // If any category already exists, reuse the first one to avoid duplicate lists
+  if (cats.length > 0) return cats[0];
+  const created: Category = { id: uuidv4(), name: preferredName, items: [] };
+  cats.push(created);
+  return created;
+}
 
 export async function getAllDialogueTemplates() {
   const res = await fetch('/api/factory/dialogue-templates');

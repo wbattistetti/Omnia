@@ -12,7 +12,9 @@ import ReactFlow, {
   applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { CheckSquare } from 'lucide-react';
 import { CustomNode } from './CustomNode';
+import { TaskNode } from './TaskNode';
 import { EdgeConditionSelector } from './EdgeConditionSelector';
 import { v4 as uuidv4 } from 'uuid';
 import { CustomEdge } from './CustomEdge';
@@ -69,6 +71,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const lastClickTime = useRef(0);
   // Rimuovo tempEdgeIdState
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectionMenu, setSelectionMenu] = useState<{ show: boolean; x: number; y: number }>(() => ({ show: false, x: 0, y: 0 }));
 
   // Usa l'hook edge manager
   const { addEdge: addEdgeManaged, patchEdges, deleteEdge: deleteEdgeManaged } = useEdgeManager(setEdges);
@@ -270,6 +274,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
     setSelectedEdgeId(null);
+    try {
+      const ev = new CustomEvent('flow:canvas:click', { bubbles: true });
+      window.dispatchEvent(ev);
+    } catch {}
   }, []);
 
   // (rimosso onPaneDoubleClick: usiamo il doppio click sul wrapper)
@@ -737,7 +745,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [reactFlowInstance]);
 
   // Stabilizza nodeTypes/edgeTypes per evitare il warning RF#002 (HMR)
-  const nodeTypesMemo = React.useMemo(() => ({ custom: CustomNode }), []);
+  const nodeTypesMemo = React.useMemo(() => ({ custom: CustomNode, task: TaskNode }), []);
   const edgeTypesMemo = React.useMemo(() => ({ custom: CustomEdge }), []);
 
   return (
@@ -745,7 +753,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
-        onNodesChange={changes => setNodes(nds => applyNodeChanges(changes, nds))}
+        onNodesChange={changes => {
+          setNodes(nds => applyNodeChanges(changes, nds));
+          // Track selected node ids for grouping
+          try {
+            const selected = new Set<string>();
+            const draft = applyNodeChanges(changes, nodes);
+            draft.forEach(n => { if ((n as any).selected) selected.add(n.id); });
+            setSelectedNodeIds(Array.from(selected));
+          } catch {}
+        }}
         onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
         onConnect={onConnect}
         nodeTypes={nodeTypesMemo}
@@ -769,6 +786,21 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         panOnScroll={false}
         onWheel={handleWheel}
         zoomOnDoubleClick={false}
+        onMouseUp={(e) => {
+          // When user finishes a drag selection, open a contextual menu near the selection centroid
+          try {
+            if (!reactFlowInstance) return;
+            if (selectedNodeIds.length === 0) { setSelectionMenu({ show: false, x: 0, y: 0 }); return; }
+            // Use mouse release point relative to the FlowEditor container (account for scroll)
+            const host = canvasRef.current;
+            const rect = host ? host.getBoundingClientRect() : { left: 0, top: 0 } as any;
+            const scrollX = host ? host.scrollLeft : 0;
+            const scrollY = host ? host.scrollTop : 0;
+            const x = (e.clientX - rect.left) + scrollX;
+            const y = (e.clientY - rect.top) + scrollY;
+            setSelectionMenu({ show: true, x, y });
+          } catch {}
+        }}
       >
         <Controls className="bg-white shadow-lg border border-slate-200" />
         <Background 
@@ -782,18 +814,88 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           <defs>
             <marker
               id="arrowhead"
-              markerWidth="10"
-              markerHeight="10"
-              refX="10"
-              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              refX="6"
+              refY="3"
               orient="auto"
               markerUnits="strokeWidth"
             >
-              <path d="M0,0 L10,5 L0,10 Z" fill="#8b5cf6" />
+              <path d="M0,0 L6,3 L0,6 Z" fill="#8b5cf6" />
             </marker>
           </defs>
         </svg>
       </ReactFlow>
+
+      {/* Selection context mini menu at bottom-right of selection */}
+      {selectionMenu.show && selectedNodeIds.length >= 1 && (
+        <div className="absolute z-20 flex items-center gap-1" style={{ left: selectionMenu.x, top: selectionMenu.y, transform: 'translate(8px, 8px)' }}>
+          <button
+            className="px-2 py-1 text-xs rounded border bg-white border-slate-300 text-slate-700 shadow-sm"
+            onClick={() => {
+              try {
+                // Compute bounds and centroid
+                const sel = nodes.filter(n => selectedNodeIds.includes(n.id));
+                if (sel.length === 0) return;
+                const minX = Math.min(...sel.map(n => (n.position as any).x));
+                const minY = Math.min(...sel.map(n => (n.position as any).y));
+                const maxX = Math.max(...sel.map(n => (n.position as any).x));
+                const maxY = Math.max(...sel.map(n => (n.position as any).y));
+                const cx = (minX + maxX) / 2;
+                const cy = (minY + maxY) / 2;
+
+                // Harvest internal edges and external connections
+                const selSet = new Set(selectedNodeIds);
+                const internalEdges = edges.filter(e => selSet.has(e.source) && selSet.has(e.target));
+                const inEdges = edges.filter(e => !selSet.has(e.source) && selSet.has(e.target));
+                const outEdges = edges.filter(e => selSet.has(e.source) && !selSet.has(e.target));
+
+                // Build payload
+                const payloadNodes = sel.map(n => ({ id: n.id, position: n.position as any, data: { title: (n.data as any)?.title || 'Node', rows: (n.data as any)?.rows || [] } }));
+                const payloadEdges = internalEdges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle, label: (e as any).label || (e.data as any)?.label }));
+
+                // Create a task entity (in-memory)
+                // Lazy import to avoid cycle
+                import('../../services/ProjectDataService').then(async mod => {
+                  const task = await mod.ProjectDataService.addTask('Task', '', { nodes: payloadNodes as any, edges: payloadEdges as any }, {
+                    nodeIds: selectedNodeIds,
+                    edgeIds: internalEdges.map(e => e.id),
+                    entryEdges: inEdges.map(e => e.id),
+                    exitEdges: outEdges.map(e => e.id),
+                    bounds: { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+                  });
+
+                  // Remove internal nodes and edges, insert task node, rewire entry/exit
+                  setNodes(nds => {
+                    const filtered = nds.filter(n => !selSet.has(n.id));
+                    const newNode = { id: `task_${task.id}`, type: 'task' as const, position: { x: cx, y: cy }, data: { title: '', editOnMount: true, showGuide: true, onUpdate: (updates: any) => updateNode(`task_${task.id}`, updates) } };
+                    return [...filtered, newNode as any];
+                  });
+                  setEdges(eds => {
+                    let filtered = eds.filter(e => !internalEdges.some(i => i.id === e.id));
+                    // Rewire incoming -> task
+                    inEdges.forEach(e => {
+                      filtered = filtered.map(x => x.id === e.id ? { ...x, target: `task_${task.id}`, targetHandle: e.targetHandle } : x);
+                    });
+                    // Rewire outgoing <- task
+                    outEdges.forEach(e => {
+                      filtered = filtered.map(x => x.id === e.id ? { ...x, source: `task_${task.id}`, sourceHandle: e.sourceHandle } : x);
+                    });
+                    return filtered;
+                  });
+                  setSelectedNodeIds([]);
+                  setSelectionMenu({ show: false, x: 0, y: 0 });
+                });
+              } catch {}
+            }}
+          >
+            <span className="inline-flex items-center gap-1">
+              <CheckSquare className="w-3.5 h-3.5 text-orange-500" />
+              Create Task
+            </span>
+          </button>
+        </div>
+      )}
       
       {/* Messaggio istruzione in alto a sinistra, solo se canvas vuoto */}
       {nodes.length === 0 && (

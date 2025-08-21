@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Trash2, Edit3, Check, X, Anchor, Play } from 'lucide-react';
+import { Trash2, Edit3, Check, X, Anchor, Play, Eye, EyeOff } from 'lucide-react';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { createPortal } from 'react-dom';
 
@@ -19,13 +19,20 @@ export interface NodeHeaderProps {
   isEditing: boolean;
   onPlay?: () => void; // nuova prop opzionale
   alwaysShowTrash?: boolean;
+  startEditingTitle?: boolean; // se true, entra in editing al mount/prop change
+  leftIcon?: React.ReactNode;
+  bgClass?: string;
+  borderBottom?: boolean;
+  hasUnchecked?: boolean; // se esistono righe deselezionate
+  hideUnchecked?: boolean; // stato corrente: nascondi righe deselezionate
+  onToggleHideUnchecked?: () => void; // toggle
 }
 
 /**
  * Header del nodo: mostra titolo, azioni di editing e delete.
  */
 export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
-  const { title, onTitleUpdate } = props;
+  const { title, onTitleUpdate, startEditingTitle, leftIcon, bgClass, borderBottom, hasUnchecked, hideUnchecked, onToggleHideUnchecked } = props;
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
   const [isHovered, setIsHovered] = useState(false);
@@ -60,6 +67,14 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
       }
     }, 0);
   };
+
+  // Avvia editing al mount/prop change se richiesto
+  useEffect(() => {
+    if (startEditingTitle && !isEditingTitle) {
+      handleTitleEdit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startEditingTitle]);
 
   // Salva titolo
   const handleTitleSave = () => {
@@ -98,7 +113,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
 
   return (
     <div 
-      className="relative flex items-center justify-between bg-gray-200 p-2 rounded-t-lg border-b border-slate-600"
+      className={`relative flex items-center justify-between ${bgClass || 'bg-gray-200'} p-2 rounded-t-lg ${borderBottom === false ? '' : 'border-b border-slate-600'}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={(e) => {
         try {
@@ -117,6 +132,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
       <div className="flex items-center min-w-0 flex-1" style={{ position: 'relative' }}>
         {isEditingTitle ? (
           <div className="flex items-center min-w-0 flex-1">
+            {leftIcon && <span className="mr-1 flex-shrink-0">{leftIcon}</span>}
             <input
               ref={titleInputRef}
               type="text"
@@ -189,6 +205,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
             title="Modifica titolo"
             style={{ display: 'inline-block' }}
           >
+            {leftIcon && <span className="mr-1 align-middle inline-flex">{leftIcon}</span>}
             {title}
           </h3>
         )}
@@ -205,6 +222,20 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
           <button className="p-0" title="Edit" style={{ background: 'none', border: 'none' }}>
             <Edit3 className="w-3 h-3 text-slate-500 hover:text-green-500" />
           </button>
+          {hasUnchecked && (
+            <button
+              className="p-0"
+              title={hideUnchecked ? 'Show unchecked rows' : 'Hide unchecked rows'}
+              style={{ background: 'none', border: 'none' }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleHideUnchecked && onToggleHideUnchecked(); }}
+            >
+              {hideUnchecked ? (
+                <Eye className="w-3 h-3 text-slate-500 hover:text-slate-800" />
+              ) : (
+                <EyeOff className="w-3 h-3 text-slate-500 hover:text-slate-800" />
+              )}
+            </button>
+          )}
           <button
             className="p-0"
             title="Delete"

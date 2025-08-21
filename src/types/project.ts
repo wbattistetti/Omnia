@@ -63,3 +63,31 @@ export interface NodeRowData {
   textColor?: string;
   included?: boolean; // true se la row è inclusa nel flusso
 }
+
+// --- Flow Task model (for grouping nodes into a macro action) ---
+export interface FlowTaskPayloadNode {
+  id: string;
+  position: { x: number; y: number };
+  data: { title: string; rows: NodeRowData[] };
+}
+
+export interface FlowTaskPayloadEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  label?: string;
+}
+
+export interface FlowTask extends ProjectEntityItem {
+  nodeIds: string[];          // nodes included in the task (original ids)
+  edgeIds: string[];          // internal edges removed from canvas
+  entryEdges: string[];       // incoming from outside → inside
+  exitEdges: string[];        // outgoing from inside → outside
+  bounds: { x: number; y: number; w: number; h: number };
+  payload: {
+    nodes: FlowTaskPayloadNode[];
+    edges: FlowTaskPayloadEdge[];
+  };
+}
