@@ -218,6 +218,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             ...style,
             strokeDasharray: undefined,
             stroke: trashHovered ? '#dc2626' : (style.stroke || '#8b5cf6'),
+            strokeWidth: (hovered || props.selected) ? 3 : 1.5,
+            opacity: (hovered || props.selected) ? 0.95 : 0.85,
             transition: 'stroke 0.15s',
           }}
           className="react-flow__edge-path"
