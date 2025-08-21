@@ -55,3 +55,21 @@ export const SIDEBAR_TYPE_ICONS = {
   macrotasks: 'layers',
   ddt: 'puzzle',
 };
+
+// Centralized Lucide icon components for sidebar/icon reuse
+// Import kept here to ensure a single source of truth across Sidebar and Flowchart labels
+import { Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle } from 'lucide-react';
+
+export const SIDEBAR_ICON_COMPONENTS: Record<string, any> = {
+  bot: Bot,
+  user: User,
+  database: Database,
+  gitBranch: GitBranch,
+  checkSquare: CheckSquare,
+  layers: Layers,
+  puzzle: Puzzle,
+};
+
+export const getSidebarIconComponent = (iconKey?: string) => {
+  return iconKey ? (SIDEBAR_ICON_COMPONENTS[iconKey] || null) : null;
+};

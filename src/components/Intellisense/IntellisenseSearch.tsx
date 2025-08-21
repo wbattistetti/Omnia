@@ -4,6 +4,43 @@ import { IntellisenseItem, IntellisenseResult, IntellisenseSearchOptions } from 
 // Groq API configuration
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = 'llama3-70b-8192';
+const MAX_ITEMS_IN_PROMPT = 200; // hard cap to avoid 400 payload too large
+const MAX_FIELD_LEN = 120; // trim long descriptions
+
+// Simple multilingual concept dictionary (IT/EN) to bias selection
+const CONCEPT_SYNONYMS: Record<string, string[]> = {
+  name: ['name', 'full name', 'first name', 'last name', 'surname', 'nome', 'nominativo', 'cognome'],
+  email: ['email', 'e-mail', 'mail', 'posta', 'indirizzo email', 'address email'],
+  phone: ['phone', 'telephone', 'cell', 'mobile', 'numero', 'telefono', 'cellulare'],
+  address: ['address', 'indirizzo', 'via', 'civico', 'cap', 'postal code', 'postcode', 'city', 'città'],
+};
+
+function normalizeText(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ') 
+    .trim();
+}
+
+function detectConceptFrom(text: string): string | null {
+  const t = normalizeText(text);
+  let best: { concept: string | null; hits: number } = { concept: null, hits: 0 };
+  for (const [concept, words] of Object.entries(CONCEPT_SYNONYMS)) {
+    const hits = words.reduce((acc, w) => (t.includes(normalizeText(w)) ? acc + 1 : acc), 0);
+    if (hits > best.hits) best = { concept, hits };
+  }
+  return best.concept;
+}
+
+function conceptMatches(text: string, concept: string | null): boolean {
+  if (!concept) return true;
+  const t = normalizeText(text);
+  const words = CONCEPT_SYNONYMS[concept] || [];
+  return words.some(w => t.includes(normalizeText(w)));
+}
 
 // Default search configuration
 const DEFAULT_SEARCH_OPTIONS: IntellisenseSearchOptions = {
@@ -130,8 +167,9 @@ export function groupAndSortResults(results: IntellisenseResult[]): Map<string, 
  */
 function buildSemanticPrompt(items: IntellisenseItem[], query: string): string {
   const itemsList = items.map(item => {
-    const discursive = item.description || item.name;
-    return `- [${item.id}, "${item.name}", "${discursive}", "${item.description || ''}"]`;
+    const name = String(item.name || item.label || '').slice(0, MAX_FIELD_LEN).replace(/\n/g, ' ');
+    const discursive = String(item.description || item.shortLabel || name).slice(0, MAX_FIELD_LEN).replace(/\n/g, ' ');
+    return `- [${item.id}, "${name}", "${discursive}"]`;
   }).join('\n');
 
   return `You are an assistant that maps a user query to predefined system items.
@@ -158,8 +196,24 @@ async function callGroqAPI(prompt: string): Promise<any> {
   const apiKey = import.meta.env.VITE_GROQ_KEY;
   
   if (!apiKey) {
+    console.error('[Intellisense][Groq] Missing VITE_GROQ_KEY');
     throw new Error('Groq API key not found. Make sure VITE_GROQ_KEY is set in your environment variables');
   }
+
+  const body = {
+    model: GROQ_MODEL,
+    messages: [
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: 0.1,
+    max_tokens: 512,
+    response_format: { type: 'json_object' }
+  } as any;
+
+  try { console.log('[Intellisense][Groq][request]', { url: GROQ_API_URL, model: GROQ_MODEL, promptPreview: String(prompt).slice(0, 400) + (prompt.length > 400 ? '…' : '') }); } catch {}
 
   const response = await fetch(GROQ_API_URL, {
     method: 'POST',
@@ -167,24 +221,22 @@ async function callGroqAPI(prompt: string): Promise<any> {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.1,
-      max_tokens: 1000,
-    }),
+    body: JSON.stringify(body),
   });
+
+  const text = await response.text();
+  try { console.log('[Intellisense][Groq][response]', { status: response.status, statusText: response.statusText, textPreview: text.slice(0, 400) + (text.length > 400 ? '…' : '') }); } catch {}
 
   if (!response.ok) {
     throw new Error(`Groq API error: ${response.status} ${response.statusText}`);
   }
 
-  return response.json();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error('[Intellisense][Groq][parseError]', e);
+    throw e;
+  }
 }
 
 /**
@@ -192,8 +244,32 @@ async function callGroqAPI(prompt: string): Promise<any> {
  */
 export async function performSemanticSearch(query: string, allItems: IntellisenseItem[]): Promise<IntellisenseResult[]> {
   try {
+    // Lightweight prefilter to shrink payload drastically
+    const q = normalizeText(query);
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const haystack = (it: IntellisenseItem) => normalizeText(`${it.name||it.label||''} ${it.shortLabel||''} ${it.description||''}`);
+
+    const queryConcept = detectConceptFrom(q);
+    let candidates = allItems.filter(it => tokens.every(t => haystack(it).includes(t)));
+    if (candidates.length === 0) {
+      // fallback: any token
+      candidates = allItems.filter(it => tokens.some(t => haystack(it).includes(t)));
+    }
+    // bias by concept: keep only items matching the dominant concept if we have any
+    if (queryConcept) {
+      const conceptCandidates = candidates.filter(it => conceptMatches(haystack(it), queryConcept));
+      if (conceptCandidates.length > 0) candidates = conceptCandidates;
+    }
+    if (candidates.length === 0) {
+      candidates = allItems.slice(0, MAX_ITEMS_IN_PROMPT);
+    }
+    // hard cap and trim overly long fields
+    const capped = candidates.slice(0, MAX_ITEMS_IN_PROMPT);
+
+    try { console.log('[Intellisense][Groq][candidates]', { total: allItems.length, filtered: capped.length, query }); } catch {}
+
     // Build prompt for Groq
-    const prompt = buildSemanticPrompt(allItems, query);
+    const prompt = buildSemanticPrompt(capped, query);
     
     // Call Groq API
     const response = await callGroqAPI(prompt);
@@ -204,21 +280,27 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
       throw new Error('No content in Groq response');
     }
     
-    // Parse JSON response
-    let semanticMatches: Array<{ id: string; score: number }>;
+    // Parse JSON response (accept array or wrapped object)
+    let semanticMatches: Array<{ id: string; score: number }> | null = null;
     try {
-      semanticMatches = JSON.parse(content);
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        semanticMatches = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        const maybe = (parsed.matches || parsed.items || parsed.results || parsed.data);
+        if (Array.isArray(maybe)) {
+          semanticMatches = maybe;
+        }
+      }
     } catch (parseError) {
-      throw new Error('Invalid JSON response from Groq');
+      // fall through; will treat as invalid
     }
-    
-    // Validate response format
-    if (!Array.isArray(semanticMatches)) {
+    if (!semanticMatches) {
       throw new Error('Groq response is not an array');
     }
     
     // Map IDs to IntellisenseItems
-    const results: IntellisenseResult[] = [];
+    let results: IntellisenseResult[] = [];
     const itemsMap = new Map(allItems.map(item => [item.id, item]));
     
     for (const match of semanticMatches) {
@@ -232,10 +314,30 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
         }
       }
     }
-    
+
+    // Post-filter: if query has a concept and there are matches for it, drop conflicting concepts
+    if (queryConcept) {
+      const conceptMatchesOnly = results.filter(r => conceptMatches(`${(r.item as any).name || (r.item as any).label || ''} ${(r.item as any).description || ''}`, queryConcept));
+      if (conceptMatchesOnly.length > 0) results = conceptMatchesOnly;
+    }
+
+    // Hybrid re-ranking: add a simple lexical bonus
+    const tokenSet = new Set(tokens);
+    results = results
+      .map(r => {
+        const text = haystack(r.item as any);
+        const overlap = Array.from(tokenSet).reduce((acc, t) => (text.includes(t) ? acc + 1 : acc), 0);
+        const lexBonus = Math.min(1, overlap / Math.max(1, tokens.length));
+        const combined = 0.6 * (typeof r.score === 'number' ? r.score : 0) + 0.4 * lexBonus;
+        return { ...r, score: combined } as IntellisenseResult;
+      })
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+    try { console.log('[Intellisense][Groq][mappedResults]', { count: results.length, top: results.slice(0, 5).map(r => ({ id: r.item.id, name: (r.item as any).name || (r.item as any).label, score: r.score })) }); } catch {}
+
     return results;
     
   } catch (error) {
+    console.error('[Intellisense][Groq][error]', error);
     // Return empty results on error to not break the UI
     return [];
   }

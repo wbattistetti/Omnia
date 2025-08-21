@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
@@ -12,12 +12,12 @@ import { useEffect } from 'react';
 import { ProjectService } from '../services/ProjectService';
 import { ProjectData } from '../types/project';
 import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
-import ActEditor from './ActEditor';
-import { DockablePanelsHandle } from './DockablePanels';
-import DockablePanels from './DockablePanels';
+// import ActEditor from './ActEditor';
+// import { DockablePanelsHandle } from './DockablePanels';
+// import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
-import { useDDTContext, useSetDDTContext } from '../context/DDTContext';
+import { useDDTContext } from '../context/DDTContext';
 import { useDDTManager } from '../context/DDTManagerContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
@@ -49,10 +49,18 @@ export const AppContent: React.FC<AppContentProps> = ({
   setTestNodeId,
   onPlayNode
 }) => {
-  const { refreshData } = useProjectDataUpdate();
+  // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
+  let refreshData: () => Promise<void> = async () => {};
+  try {
+    const ctx = useProjectDataUpdate();
+    refreshData = ctx.refreshData;
+  } catch (e) {
+    // Provider not available yet; use no-op and rely on provider after mount
+    refreshData = async () => {};
+  }
   const ddtContext = useDDTContext();
   const getTranslationsForDDT = ddtContext.getTranslationsForDDT;
-  const setTranslationsForDDT = ddtContext.setTranslationsForDDT;
+  // const setTranslationsForDDT = ddtContext.setTranslationsForDDT;
 
   // Usa il nuovo hook per DDT
   const { selectedDDT, closeDDT } = useDDTManager();
@@ -61,9 +69,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [nodes, setNodes] = useState<Node<NodeData>[]>([]);
   const [edges, setEdges] = useState<Edge<EdgeData>[]>([]);
   // Stato per feedback salvataggio
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  // const [isSaving, setIsSaving] = useState(false);
+  // const [saveSuccess, setSaveSuccess] = useState(false);
+  // const [saveError, setSaveError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
 
@@ -75,8 +83,8 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
 
   // Stato per finestre editor DDT aperte (ora con react-mosaic)
-  const [mosaicNodes, setMosaicNodes] = useState<any>(null);
-  const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
+  // const [mosaicNodes, setMosaicNodes] = useState<any>(null);
+  // const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
 
   // Rimuovi questi stati che ora sono nel hook
   // const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
@@ -90,17 +98,17 @@ export const AppContent: React.FC<AppContentProps> = ({
   // const handleDeleteDDT = useCallback(...);
 
   // Pannello di test in alto a sinistra all'avvio
-  React.useEffect(() => {
-    if (dockablePanelsRef.current) {
-      dockablePanelsRef.current.openPanel({
-        id: 'test-panel',
-        title: 'Test Panel',
-        ddt: { label: 'Test Panel' },
-        translations: {},
-        lang: 'it'
-      });
-    }
-  }, []);
+  // React.useEffect(() => {
+  //   if (dockablePanelsRef.current) {
+  //     dockablePanelsRef.current.openPanel({
+  //       id: 'test-panel',
+  //       title: 'Test Panel',
+  //       ddt: { label: 'Test Panel' },
+  //       translations: {},
+  //       lang: 'it'
+  //     });
+  //   }
+  // }, []);
 
   // Carica progetti recenti (ultimi 10)
   const fetchRecentProjects = React.useCallback(async () => {
@@ -137,10 +145,10 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Callback per LandingPage
   const handleLandingNewProject = useCallback(() => setAppState('creatingProject'), [setAppState]);
-  const handleLandingLoadProject = useCallback(async () => { await fetchRecentProjects(); }, [fetchRecentProjects]);
-  const handleLandingShowAllProjects = useCallback(async () => { await fetchAllProjects(); setShowAllProjectsModal(true); }, [fetchAllProjects]);
+  // const handleLandingLoadProject = useCallback(async () => { await fetchRecentProjects(); }, [fetchRecentProjects]);
+  // const handleLandingShowAllProjects = useCallback(async () => { await fetchAllProjects(); setShowAllProjectsModal(true); }, [fetchAllProjects]);
 
-  const handleOpenNewProjectModal = useCallback(() => setAppState('creatingProject'), [setAppState]);
+  // const handleOpenNewProjectModal = useCallback(() => setAppState('creatingProject'), [setAppState]);
 
   const handleCreateProject = useCallback(async (projectInfo: ProjectInfo): Promise<boolean> => {
     setCreateError(null);
@@ -183,46 +191,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const handleCloseNewProjectModal = useCallback(() => setAppState('landing'), [setAppState]);
 
-  const handleSaveProject = useCallback(async () => {
-    if (!currentProject) return;
-    setIsSaving(true);
-    setSaveSuccess(false);
-    setSaveError(null);
-    try {
-      const {
-        agentActs,
-        userActs,
-        backendActions,
-        conditions,
-        tasks,
-        macrotasks,
-        ...rest
-      } = currentProject;
-      const response = await fetch('/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...rest,
-          agentActs,
-          userActs,
-          backendActions,
-          conditions,
-          tasks,
-          macrotasks,
-          nodes,
-          edges
-        }),
-      });
-      if (!response.ok) throw new Error('Errore nel salvataggio');
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (err) {
-      setSaveError('Salvataggio fallito');
-      setTimeout(() => setSaveError(null), 3000);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [currentProject, nodes, edges]);
+  // const handleSaveProject = useCallback(async () => { /* legacy save */ }, [currentProject, nodes, edges]);
 
   const handleOpenProjectById = useCallback(async (id: string) => {
     if (!id) return;
@@ -333,7 +302,17 @@ export const AppContent: React.FC<AppContentProps> = ({
             <Toolbar
               onNewProject={() => alert('Nuovo progetto')}
               onOpenProject={() => alert('Apri progetto')}
-              onSave={() => alert('Salva progetto')}
+              onSave={async () => {
+                try {
+                  const svc = await import('../services/ProjectDataService');
+                  const result = await (svc as any).ProjectDataService.saveAgentActsToFactory();
+                  console.log('[SaveProject] AgentActs saved:', result);
+                  alert('Progetto salvato (Agent Acts inclusi)');
+                } catch (e) {
+                  console.error('[SaveProject] error', e);
+                  alert('Errore nel salvataggio del progetto');
+                }
+              }}
               onRun={() => alert('Esegui')}
               onSettings={() => alert('Impostazioni')}
               projectName={currentProject?.name}

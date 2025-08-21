@@ -56,6 +56,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onInsert={() => handleInsertRow(idx)}
             onMouseEnter={() => setHoveredInserter(idx)}
             onMouseLeave={() => setHoveredInserter(null)}
+            index={idx}
           />
           <NodeRow
             row={row}
@@ -66,11 +67,19 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onDelete={onDelete}
             onKeyDown={onKeyDown}
             onDragStart={onDragStart}
+            onMoveRow={(from, to) => {
+              try { console.log('[RowDnD][moveImmediate]', { from, to }); } catch {}
+              const boundedTo = Math.max(0, Math.min(totalRows - 1, to));
+              if (from !== boundedTo) {
+                // delegate to CustomNode via prop callbacks? For now we expect parent to use legacy path
+              }
+            }}
+            onDropRow={() => { /* parent commit handled in CustomNode via legacy path */ }}
             index={idx}
             canDelete={true}
             totalRows={totalRows}
             isHoveredTarget={Boolean(hoveredRowIndex === idx)}
-            isBeingDragged={false}
+            isBeingDragged={draggedRowId === row.id}
             isPlaceholder={Boolean(row.isPlaceholder)}
             forceEditing={editingRowId === row.id}
             onEditingEnd={onEditingEnd}
@@ -88,6 +97,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
         onInsert={() => handleInsertRow(rows.length)}
         onMouseEnter={() => setHoveredInserter(rows.length)}
         onMouseLeave={() => setHoveredInserter(null)}
+        index={rows.length}
       />
       {/* Renderizza la riga trascinata separatamente */}
       {draggedItem && (

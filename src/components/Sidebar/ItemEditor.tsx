@@ -50,7 +50,19 @@ const ItemEditor: React.FC<ItemEditorProps> = ({
         value={inputValue}
         onChange={e => setInputValue(e.target.value)}
         onKeyDown={e => {
-          if (e.key === 'Enter') handleConfirm();
+          if (e.key === 'Enter') {
+            (async () => {
+              try {
+                const mod = await import('../../nlp/actInteractivity');
+                const inferred = mod.classifyActInteractivity(inputValue);
+                console.log('[Interactivity][enter]', { title: inputValue, inferred });
+              } catch (err) {
+                console.warn('[Interactivity][enter][error]', err);
+              } finally {
+                handleConfirm();
+              }
+            })();
+          }
           if (e.key === 'Escape') handleCancel();
         }}
         placeholder={placeholder}

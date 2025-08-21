@@ -115,6 +115,12 @@ function advanceIndex(state: SimulatorState): SimulatorState {
         return !m || m.value === undefined || m.value === null || String(m.value).length === 0;
       });
       logMI('subsRequired', { main: nextMain?.label, required: req.map(labelOf), missing: miss.map(labelOf) });
+      logMI('advanceIndex.check', {
+        main: nextMain?.label,
+        subs: subsArr.map(labelOf),
+        anyPresent,
+        missingSub: labelOf(missingSub),
+      });
     } catch {}
     if (missingSub && anyPresent) {
       logMI('advanceIndex', { nextIdx, nextMain: nextMain?.label, nextMode: 'CollectingSub', currentSubId: missingSub, currentSubLabel: labelOf(missingSub) });
@@ -182,13 +188,40 @@ function detectDateSpan(text: string): { day?: number; month?: number | string; 
     const year = parseInt(m2[3].length === 2 ? `19${m2[3]}` : m2[3], 10);
     return { day, month, year, span: [m2.index, m2.index + m2[0].length] };
   }
+  // Month name + year without day, e.g., "dicembre 1980", "a dicembre del 1980"
+  const monthAlt = Array.from(MONTH_WORDS).join('|');
+  const re3 = new RegExp(`(?:\\b|\\s)(${monthAlt})\\s+(?:di|de|del|della|nel|nell'|anno\\s*)?(\\d{2,4})\\b`, 'i');
+  const m3 = re3.exec(text);
+  if (m3) {
+    const month = m3[1];
+    const year = parseInt(m3[2].length === 2 ? `19${m3[2]}` : m3[2], 10);
+    return { month, year, span: [m3.index, m3.index + m3[0].length] };
+  }
+  // Numeric month/year like "12/1980"
+  const re4 = /(\b(0?[1-9]|1[0-2]))[\/\-](\d{2,4})\b/;
+  const m4 = re4.exec(text);
+  if (m4) {
+    const month = parseInt(m4[1], 10);
+    const year = parseInt(m4[3].length === 2 ? `19${m4[3]}` : m4[3], 10);
+    return { month, year, span: [m4.index, m4.index + m4[0].length] };
+  }
+  // Year only (with optional prepositions): "nel 1980", "in 1980", or just "1980"
+  const re5 = /(?:\b(?:nel|del|in|of)\s+)?((?:19|20)\d{2})\b/i;
+  const m5 = re5.exec(text);
+  if (m5) {
+    const yearStr = m5[1];
+    const year = parseInt(yearStr, 10);
+    const start = text.indexOf(yearStr, m5.index);
+    return { year, span: [start, start + yearStr.length] };
+  }
   return undefined;
 }
 
 function detectNameFrom(text: string): { firstname?: string; lastname?: string; span?: [number, number] } | undefined {
   const s = String(text || '');
   // Pattern: "mi chiamo <first> <last>" or "il mio nome è <first> <last>"
-  const m = s.match(/(?:mi\s+chiamo|il\s+mio\s+nome\s+(?:e|è))\s+([A-Za-zÀ-ÿ'`-]+)(?:\s+([A-Za-zÀ-ÿ'`-]+))?/i);
+  // Tolerate common typos like "mi chaimo" (ai vs ia)
+  const m = s.match(/(?:mi\s+ch(?:ia|ai)mo|il\s+mio\s+nome\s+(?:e|è))\s+([A-Za-zÀ-ÿ'`-]+)(?:\s+([A-Za-zÀ-ÿ'`-]+))?/i);
   if (m) {
     const first = m[1];
     const last = m[2];
@@ -449,6 +482,16 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
     }
     // Implicit correction: if input contains a correction, try to re-parse that
     const residual = extracted.residual ?? input;
+    try {
+      const mainLabel = String(main.label || main.id);
+      const presentSubs = (Array.isArray(main.subs) ? main.subs : [])
+        .filter((sid) => {
+          const m = state.memory[sid];
+          return m && m.value !== undefined && m.value !== null && String(m.value).length > 0;
+        })
+        .map((sid) => String(state.plan.byId[sid]?.label || sid));
+      logMI('postExtract', { main: mainLabel, residual, presentSubs });
+    } catch {}
     const corrected = extractImplicitCorrection(residual) || extractLastDate(residual) || residual;
     const applied = applyComposite(main.kind, corrected);
     const variables = applied.variables;
@@ -529,6 +572,10 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
 
     const missing = nextMissingRequired(main, mem);
     const saturated = isSaturatedRequired(main, mem);
+    try {
+      const missLabel = missing ? String(state.plan.byId[missing]?.label || missing) : undefined;
+      logMI('decision', { main: String(main.label || main.id), saturated, missing: missLabel, nextMode: saturated && !missing ? 'ConfirmingMain' : missing ? 'CollectingSub' : 'CollectingMain' });
+    } catch {}
     if (saturated && !missing) {
       return { ...state, memory: mem, mode: 'ConfirmingMain' };
     }
@@ -542,6 +589,9 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
     const sid = state.currentSubId!;
     const corrected = extractImplicitCorrection(input) || input;
     let mem = setMemory(state.memory, sid, corrected, false);
+    try {
+      logMI('subWrite', { main: String(currentMain(state)?.label || ''), sub: String(state.plan.byId[sid]?.label || sid), value: corrected });
+    } catch {}
     // Recompose main value from current sub values so main reflects subs
     const composeFromSubs = (m: DDTNode, memory: Memory) => {
       if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
@@ -566,6 +616,9 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
       } catch {}
       return { ...state, memory: mem, currentSubId: nextRequiredMissing };
     }
+    try {
+      logMI('collectingSub.done', { main: String(main.label || main.id) });
+    } catch {}
     return { ...state, memory: mem, mode: 'ConfirmingMain', currentSubId: undefined };
   }
 

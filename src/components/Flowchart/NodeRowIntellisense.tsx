@@ -7,7 +7,7 @@ interface NodeRowIntellisenseProps {
   isEditing: boolean;
   nodeOverlayPosition: { left: number; top: number } | null;
   intellisenseQuery: string;
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
   handleIntellisenseSelect: (item: any) => void;
   handleIntellisenseClose: () => void;
 }
@@ -46,7 +46,7 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
           referenceElement={inputRef.current}
           onSelect={handleIntellisenseSelect}
           onClose={handleIntellisenseClose}
-          filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
+          filterCategoryTypes={['agentActs']}
         />
       </div>,
       document.body

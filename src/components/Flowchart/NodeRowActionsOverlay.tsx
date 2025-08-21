@@ -1,5 +1,5 @@
 import React from 'react';
-import { GripVertical, Trash2, Edit3 } from 'lucide-react';
+import { GripVertical, Trash2, Edit3, Settings } from 'lucide-react';
 
 interface NodeRowActionsOverlayProps {
   iconPos: { top: number; left: number };
@@ -12,6 +12,9 @@ interface NodeRowActionsOverlayProps {
   setIsEditing: (v: boolean) => void;
   labelRef: React.RefObject<HTMLSpanElement>;
   onHoverChange?: (v: boolean) => void;
+  iconSize?: number;
+  hasDDT?: boolean;
+  gearColor?: string;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -24,14 +27,18 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   isEditing,
   setIsEditing,
   labelRef,
-  onHoverChange
+  onHoverChange,
+  iconSize,
+  hasDDT,
+  gearColor
 }) => {
   if (!showIcons || !iconPos) return null;
+  const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? Math.max(12, Math.min(20, Math.round(labelRef.current.getBoundingClientRect().height * 0.7))) : 14);
   return (
     <div
       style={{
         position: 'fixed',
-        top: iconPos.top,
+        top: iconPos.top + 3,
         left: iconPos.left,
         display: 'flex',
         gap: 4,
@@ -42,9 +49,10 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         padding: 0,
         alignItems: 'center',
         border: 'none',
-        height: labelRef.current ? `${labelRef.current.getBoundingClientRect().height}px` : '22px',
+        height: labelRef.current ? `${labelRef.current.getBoundingClientRect().height}px` : `${size + 8}px`,
         minHeight: 0,
-        marginLeft: 0
+        marginLeft: 0,
+        pointerEvents: 'auto'
       }}
       className="flex items-center"
       onMouseEnter={() => onHoverChange && onHoverChange(true)}
@@ -54,10 +62,13 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       <span
         className="cursor-grab nodrag"
         title="Trascina la riga"
-        style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 2 }}
-        onMouseDown={onDrag}
+        style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 2, userSelect: 'none' }}
+        draggable={false}
+        onDragStart={(e) => { e.preventDefault(); }}
+        onPointerDown={(e) => { try { console.log('[RowDrag][grip:down]'); } catch {} onDrag(e as any); }}
+        onMouseDown={(e) => { try { console.log('[RowDrag][grip:mouseDown]'); } catch {} onDrag(e); }}
       >
-        <GripVertical className="w-4 h-4 text-slate-400 hover:text-black transition-colors" />
+        <GripVertical className="text-slate-400 hover:text-black transition-colors" style={{ width: size, height: size }} />
       </span>
       {/* Matita (edit) */}
       <button 
@@ -66,8 +77,15 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         title="Edit row"
         style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
       >
-        <Edit3 className="w-4 h-4" />
+        <Edit3 style={{ width: size, height: size }} />
       </button>
+      {/* Gear (DDT) */}
+      <span
+        title={hasDDT ? 'Open DDT' : 'No DDT linked'}
+        style={{ display: 'flex', alignItems: 'center', padding: 2 }}
+      >
+        <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#64748b') : '#9ca3af' }} />
+      </span>
       {/* Cestino (delete) */}
       {canDelete && (
         <button 
@@ -76,7 +94,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           title="Delete row"
           style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
         >
-          <Trash2 className="w-4 h-4" />
+          <Trash2 style={{ width: size, height: size }} />
         </button>
       )}
     </div>

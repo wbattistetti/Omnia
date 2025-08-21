@@ -55,6 +55,9 @@ export interface NodeRowData {
   text: string;
   userActs?: string[];
   categoryType?: EntityType;
+  actId?: string;
+  factoryId?: string;
+  isInteractive?: boolean;
   isNew?: boolean;
   bgColor?: string;
   textColor?: string;

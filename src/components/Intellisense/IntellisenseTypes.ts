@@ -6,9 +6,14 @@ export interface IntellisenseItem {
   description: string;
   category: string;
   categoryType: 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'tasks' | 'macrotasks';
+  // Underlying entity identifiers
+  actId?: string; // original item.id
+  factoryId?: string; // optional backend _id
   icon?: React.ReactNode;
   iconComponent?: React.ComponentType<any>;
   color?: string;
+  // Flag to indicate interactive agent act (asks user). Mirrors sidebar data.
+  isInteractive?: boolean;
   userActs?: string[];
   uiColor?: string;
   bgColor?: string; // colore di sfondo personalizzato

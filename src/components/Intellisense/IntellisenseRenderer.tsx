@@ -95,19 +95,21 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
     );
   }
   
+  const smallSet = totalItems <= 2;
   return (
     <div 
       ref={containerRef}
-      className="overflow-auto"
+      className={smallSet ? '' : 'overflow-auto'}
       onScroll={handleScroll}
       style={{ 
-        maxHeight: layoutConfig.maxMenuHeight,
+        maxHeight: smallSet ? undefined : layoutConfig.maxMenuHeight,
         maxWidth: layoutConfig.maxMenuWidth,
-        height: Math.min(totalItems * ITEM_HEIGHT, layoutConfig.maxMenuHeight)
+        height: smallSet ? (totalItems * ITEM_HEIGHT) : Math.min(totalItems * ITEM_HEIGHT, layoutConfig.maxMenuHeight),
+        overflow: smallSet ? 'visible' : undefined
       }}
     >
-      {/* Spazio virtuale per il contenuto non visibile sopra */}
-      <div style={{ height: startIndex * ITEM_HEIGHT }} />
+      {/* Spazio virtuale sopra: disattivato per liste piccole */}
+      {!smallSet && <div style={{ height: startIndex * ITEM_HEIGHT }} />}
       
       {/* Renderizza solo gli item visibili */}
       {visibleResults.map((item, index) => {
@@ -124,8 +126,8 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
         );
       })}
       
-      {/* Spazio virtuale per il contenuto non visibile sotto */}
-      <div style={{ height: (totalItems - endIndex) * ITEM_HEIGHT }} />
+      {/* Spazio virtuale sotto: disattivato per liste piccole */}
+      {!smallSet && <div style={{ height: (totalItems - endIndex) * ITEM_HEIGHT }} />}
     </div>
   );
 };

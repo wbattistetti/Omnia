@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import SidebarContainer from './SidebarContainer';
 import SidebarHeader from './SidebarHeader';
 import EntityAccordion from './EntityAccordion';
-import DDTSection from './DDTSection';
 import { useSidebarState } from './SidebarState';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { useDDTManager } from '../../context/DDTManagerContext';
@@ -11,6 +10,7 @@ import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
 import { usePanelZoom } from '../../hooks/usePanelZoom';
+import { classifyActInteractivity } from '../../nlp/actInteractivity';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -43,43 +43,97 @@ const Sidebar: React.FC = () => {
   } = useProjectDataUpdate();
 
   // Usa il nuovo hook per DDT
-  const { ddtList, createDDT, openDDT, deleteDDT, isLoadingDDT, loadDDTError, selectedDDT, dataDialogueTranslations } = useDDTManager();
+  const { ddtList, openDDT, loadDDTError, selectedDDT } = useDDTManager();
 
-  const [isSavingDDT, setIsSavingDDT] = useState(false);
+  const [isSavingDDT] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Handler implementati usando il hook
-  const handleAddDDT = (newDDT: any) => {
-    // Ensure new DDT is added and opened
-    createDDT(newDDT);
-    // open editor explicitly as well, using the id assigned by context if present in list next tick
-    setTimeout(() => {
-      const id = (newDDT && (newDDT.id || newDDT._id)) ? (newDDT.id || newDDT._id) : undefined;
-      const candidate = id ? (ddtList.find(dt => (dt.id === id || dt._id === id)) || null) : null;
-      if (candidate) {
-        openDDT(candidate);
-      } else if (selectedDDT) {
-        openDDT(selectedDDT);
-      }
-    }, 0);
+  // Legacy DDT add flow no longer used (embedded now)
+
+  // When inline builder completes under an Agent Act, embed DDT into the act item and persist later
+  const handleCreateEmbeddedDDT = async (categoryId: string, itemId: string, newDDT: any) => {
+    // Find the act in local project data and embed
+    const category = (data?.agentActs || []).find((c: any) => c.id === categoryId);
+    const item = category?.items.find((i: any) => i.id === itemId);
+    if (!item) return;
+    const version = (item.ddt?.version || 0) + 1;
+    const snapshot = {
+      version,
+      status: 'draft',
+      labelKey: newDDT?.label || item.name,
+      mains: (newDDT?.mainData || []).map((m: any) => ({
+        labelKey: m?.label,
+        kind: m?.kind,
+        required: (m?.constraints || []).some((c: any) => c?.kind === 'required'),
+        constraints: m?.constraints || [],
+        messages: m?.messages || {},
+        steps: m?.steps || {},
+        subs: (m?.subData || []).map((s: any) => ({
+          labelKey: s?.label,
+          kind: s?.kind,
+          required: (s?.constraints || []).some((c: any) => c?.kind === 'required'),
+          constraints: s?.constraints || [],
+          messages: s?.messages || {},
+          steps: s?.steps || {},
+        })),
+      })),
+      translations: (newDDT?.translations && newDDT.translations.en) ? { en: newDDT.translations.en } : undefined,
+      builtAt: new Date().toISOString(),
+      checksum: (() => { try { return String(btoa(unescape(encodeURIComponent(JSON.stringify(newDDT.mainData||[]))))).slice(0,32); } catch { return String(version); } })(),
+      origin: { tool: 'wizard' }
+    } as any;
+    item.ddt = snapshot;
+    try { console.log('[AgentAct][embed.ddt]', { act: item.name, version }); } catch {}
+    // Persist via regular updateItem flow (will call Factory PUT best-effort)
+    try {
+      await updateItem('agentActs', categoryId, itemId, { ddt: snapshot } as any);
+    } catch (e) { console.warn('[Sidebar] persist embedded ddt failed', e); }
+
+    // Immediately open Response Editor from the freshly embedded snapshot
+    try {
+      const transient = {
+        id: `runtime.${item.id || item._id}.v${snapshot.version}`,
+        label: snapshot.labelKey || item.name,
+        mainData: (snapshot.mains || []).map((m: any) => ({
+          id: `${Math.random()}`,
+          label: m.labelKey,
+          type: m.kind,
+          subData: (m.subs || []).map((s: any) => ({ id: `${Math.random()}`, label: s.labelKey, type: s.kind, constraints: s.constraints || [], messages: s.messages || {}, steps: s.steps || {} })),
+          constraints: m.constraints || [],
+          messages: m.messages || {},
+          steps: m.steps || {},
+        })),
+        translations: snapshot.translations || { en: {} }
+      } as any;
+      openDDT(transient);
+    } catch (e) { console.error('[Sidebar] auto-open embedded DDT failed', e); }
   };
 
-  const handleEditDDT = (_id: string) => {
-    // TODO: Implementare editing
+  // Open Response Editor from embedded DDT snapshot on the act
+  const handleOpenEmbedded = (_categoryId: string, item: any) => {
+    const ddtSnap = item?.ddt;
+    if (!ddtSnap) return;
+    const transient = {
+      id: `runtime.${item.id || item._id}.v${ddtSnap.version}`,
+      label: ddtSnap.labelKey || item.name,
+      mainData: (ddtSnap.mains || []).map((m: any) => ({
+        id: `${Math.random()}`,
+        label: m.labelKey,
+        type: m.kind,
+        subData: (m.subs || []).map((s: any) => ({ id: `${Math.random()}`, label: s.labelKey, type: s.kind, constraints: s.constraints || [] })),
+        constraints: m.constraints || []
+      })),
+      translations: ddtSnap.translations || { en: {} }
+    } as any;
+    try { openDDT(transient); } catch (e) { console.error('[Sidebar] open embedded DDT failed', e); }
   };
 
-  const handleDeleteDDT = (id: string) => {
-    deleteDDT(id);
-  };
+  // const handleEditDDT = (_id: string) => {};
 
-  const handleOpenEditor = (id: string) => {
-    const ddt = ddtList.find(dt => dt.id === id || dt._id === id);
-    if (ddt) {
-      openDDT(ddt);
-    } else {
-      console.error('[Sidebar] DDT non trovato per ID:', id);
-    }
-  };
+  // const handleDeleteDDT = (id: string) => {};
+
+  // const handleOpenEditor = (id: string) => {};
 
   // Build from Agent Act helper: prefill wizard with the act label as description
   const handleBuildFromItem = (item: any) => {
@@ -157,7 +211,7 @@ const Sidebar: React.FC = () => {
       console.error('[Sidebar] Errore salvataggio DDT:', err);
       // TODO: Mostrare toast/alert con l'errore
     } finally {
-      setIsSavingDDT(false);
+      // setIsSavingDDT(false);
     }
   };
 
@@ -190,16 +244,7 @@ const Sidebar: React.FC = () => {
         className="p-4 overflow-y-auto"
         style={{ flex: 1, ...zoomStyle }}
       >
-        <DDTSection
-          ddtList={ddtList}
-          onAdd={handleAddDDT}
-          onEdit={handleEditDDT}
-          onDelete={handleDeleteDDT}
-          onOpenEditor={handleOpenEditor}
-          isSaving={isSavingDDT}
-          onSave={handleSaveDDT}
-          isLoading={isLoadingDDT}
-        />
+        {/* DDTSection removed per new embedded flow */}
         {entityTypes.map(type => (
           <EntityAccordion
             key={type}
@@ -212,12 +257,32 @@ const Sidebar: React.FC = () => {
             onAddCategory={name => addCategory(type, name)}
             onDeleteCategory={categoryId => deleteCategory(type, categoryId)}
             onUpdateCategory={(categoryId, updates) => updateCategory(type, categoryId, updates)}
-            onAddItem={(categoryId, name, desc) => addItem(type, categoryId, name, desc)}
+            onAddItem={async (categoryId, name, desc) => {
+              await addItem(type, categoryId, name, desc);
+              if (type === 'agentActs') {
+                try {
+                  const inferred = classifyActInteractivity(name);
+                  if (typeof inferred === 'boolean') {
+                    // find last item just added and update isInteractive
+                    const cat = (data?.agentActs || []).find((c: any) => c.id === categoryId);
+                    const last = cat?.items?.find((i: any) => (i?.name || '') === name);
+                    if (last) {
+                      await updateItem('agentActs', categoryId, last.id, { isInteractive: inferred } as any);
+                    }
+                  }
+                } catch {}
+              }
+            }}
             onDeleteItem={(categoryId, itemId) => deleteItem(type, categoryId, itemId)}
             onUpdateItem={(categoryId, itemId, updates) => updateItem(type, categoryId, itemId, updates)}
             onBuildFromItem={type === 'agentActs' ? handleBuildFromItem : undefined}
             hasDDTFor={type === 'agentActs' ? hasDDTFor : undefined}
-            onCreateDDT={type === 'agentActs' ? handleAddDDT : undefined}
+            onCreateDDT={type === 'agentActs' ? handleCreateEmbeddedDDT : undefined}
+            onOpenEmbedded={type === 'agentActs' ? (categoryId, itemId) => {
+              const category = (data?.agentActs || []).find((c: any) => c.id === categoryId);
+              const item = category?.items.find((i: any) => i.id === itemId);
+              if (item) handleOpenEmbedded(categoryId, item);
+            } : undefined}
           />
         ))}
       </div>

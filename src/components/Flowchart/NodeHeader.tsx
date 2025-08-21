@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Trash2, Edit3, Check, X, Anchor, Play } from 'lucide-react';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { createPortal } from 'react-dom';
@@ -24,21 +24,15 @@ export interface NodeHeaderProps {
 /**
  * Header del nodo: mostra titolo, azioni di editing e delete.
  */
-export const NodeHeader: React.FC<NodeHeaderProps> = ({ 
-  title, 
-  onDelete, 
-  onToggleEdit, 
-  onTitleUpdate,
-  isEditing,
-  onPlay,
-  alwaysShowTrash // aggiunto qui
-}) => {
+export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
+  const { title, onTitleUpdate } = props;
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
   const [isHovered, setIsHovered] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
+  const iconBarRef = useRef<HTMLDivElement>(null);
   // Caret target when switching to edit, computed from click position on title
   const wantedCaretRef = useRef<number | null>(null);
 
@@ -106,11 +100,19 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
     <div 
       className="relative flex items-center justify-between bg-gray-200 p-2 rounded-t-lg border-b border-slate-600"
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onMouseDown={() => setIsHovered(false)}
-      onMouseUp={() => setIsHovered(true)}
+      onMouseLeave={(e) => {
+        try {
+          const rtAny = e.relatedTarget as any;
+          const isNode = rtAny && typeof rtAny === 'object' && typeof rtAny.nodeType === 'number';
+          if (iconBarRef.current && isNode && iconBarRef.current.contains(rtAny as Node)) {
+            return;
+          }
+        } catch {}
+        setIsHovered(false);
+      }}
       style={{ cursor: isHovered ? 'grab' : 'default' }}
     >
+      {/* No transparent bridges: keep header clean for text events */}
       {/* Titolo + editing */}
       <div className="flex items-center min-w-0 flex-1" style={{ position: 'relative' }}>
         {isEditingTitle ? (
@@ -191,18 +193,34 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
           </h3>
         )}
       </div>
-      {/* Icon bar: appare solo con hover e non in mousedown */}
+      {/* Icon bar: appare solo con hover, posizionata FUORI dall'header (sopra, senza gap) */}
       {isHovered && (
         <div
           className="absolute right-0 flex items-center gap-2 z-20"
-          style={{ bottom: 'calc(100% + 5px)', background: 'transparent', border: 'none', boxShadow: 'none' }}
+          style={{ bottom: '100%', background: 'transparent', border: 'none', boxShadow: 'none', height: 16, alignItems: 'center' }}
+          ref={iconBarRef}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           <button className="p-0" title="Edit" style={{ background: 'none', border: 'none' }}>
             <Edit3 className="w-3 h-3 text-slate-500 hover:text-green-500" />
           </button>
-          <button className="p-0" title="Delete" style={{ background: 'none', border: 'none' }}>
+          <button
+            className="p-0"
+            title="Delete"
+            style={{ background: 'none', border: 'none' }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                // Cerca callback nel parent data/onDelete
+                const deleteEvent = new CustomEvent('flow:node:delete', { bubbles: true });
+                (e.currentTarget as HTMLElement).dispatchEvent(deleteEvent);
+              } catch {}
+              // Fallback: prova a invocare prop se disponibile (non visibile qui perché destrutturata)
+              try { (props as any)?.onDelete?.(); } catch {}
+            }}
+          >
             <Trash2 className="w-3 h-3 text-slate-500 hover:text-red-500" />
           </button>
           <button className="p-0" title="Play" style={{ background: 'none', border: 'none' }}>
@@ -213,16 +231,16 @@ export const NodeHeader: React.FC<NodeHeaderProps> = ({
 
       {/* Anchor handle per drag "rigido" dell'intero cluster */}
       <div title="Drag to move with descendants" className="rigid-anchor" style={{ cursor: 'grab' }}
-           onMouseDown={(e) => {
+           onMouseDown={() => {
              try {
                (window as any).__flowDragMode = 'rigid';
-               console.log('[RigidDrag][anchor][down]');
+               // gated logs removed
              } catch {}
            }}
            onMouseUp={() => {
              try {
                (window as any).__flowDragMode = undefined;
-               console.log('[RigidDrag][anchor][up]');
+               // gated logs removed
              } catch {}
            }}>
         {isHovered && <Anchor className="w-3 h-3 text-slate-700" />}

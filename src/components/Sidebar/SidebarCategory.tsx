@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import ItemEditor from './ItemEditor';
+import { classifyActInteractivity } from '../../nlp/actInteractivity';
 import DeleteConfirmation from './DeleteConfirmation';
 import SidebarItem from './SidebarItem';
 import { Pencil, Trash2 } from 'lucide-react';
@@ -16,7 +17,8 @@ interface SidebarCategoryProps {
   entityType?: EntityType;
   onBuildFromItem?: (item: ProjectEntityItem) => void;
   hasDDTFor?: (label: string) => boolean;
-  onCreateDDT?: (newDDT: any) => void;
+  onCreateDDT?: (itemId: string, newDDT: any) => void;
+  onOpenEmbedded?: (itemId: string) => void;
 }
 
 const SidebarCategory: React.FC<SidebarCategoryProps> = ({
@@ -30,6 +32,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
   onBuildFromItem,
   hasDDTFor,
   onCreateDDT,
+  onOpenEmbedded,
 }) => {
   const [editing, setEditing] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -94,7 +97,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
                 <button
                   className="p-1 text-red-500 hover:text-red-700"
                   title="Elimina categoria"
-                  onClick={() => setShowDelete(true)}
+                  onClick={(e) => { e.stopPropagation(); onDeleteCategory(); }}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -107,13 +110,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
                 </button>
               </span>
             )}
-            {showDelete && (
-              <DeleteConfirmation
-                onConfirm={onDeleteCategory}
-                triggerClass="hidden"
-                icon={null}
-              />
-            )}
+            {/* Immediate delete on click; no confirmation overlay */}
           </>
         )}
       </div>
@@ -123,7 +120,23 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
           <ItemEditor
             value=""
             onConfirm={(name) => {
-              onAddItem(name);
+              // Infer interactivity when creating a new Agent Act
+              if (entityType === 'agentActs') {
+                try {
+                  const inferred = classifyActInteractivity(name);
+                  if (typeof inferred === 'boolean') {
+                    onAddItem(name);
+                    // Immediately patch last added item interactivity
+                    // delegate to parent via onUpdateItem using the new item id is not trivial here; parent handles updates on next render
+                  } else {
+                    onAddItem(name);
+                  }
+                } catch {
+                  onAddItem(name);
+                }
+              } else {
+                onAddItem(name);
+              }
               setAdding(false);
             }}
             onCancel={() => setAdding(false)}
@@ -144,6 +157,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
               onBuildFromItem={onBuildFromItem}
               hasDDTFor={hasDDTFor}
               onCreateDDT={onCreateDDT}
+              onOpenEmbedded={() => onOpenEmbedded && onOpenEmbedded(item.id)}
               onUpdate={(updates: Partial<ProjectEntityItem>) => onUpdateItem(item.id, updates)}
               onDelete={() => onDeleteItem(item.id)}
             />
@@ -153,7 +167,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
                   initialDDT={inlineInitialDDT || undefined}
                   startOnStructure={false}
                   onCancel={() => { setInlineBuilderForId(null); setInlineInitialDDT(null); }}
-                  onComplete={(newDDT: any) => { setInlineBuilderForId(null); setInlineInitialDDT(null); onCreateDDT && onCreateDDT(newDDT); }}
+                  onComplete={(newDDT: any) => { setInlineBuilderForId(null); setInlineInitialDDT(null); onCreateDDT && onCreateDDT(item.id, newDDT); }}
                 />
               </div>
             )}

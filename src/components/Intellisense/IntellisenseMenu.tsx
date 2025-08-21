@@ -10,6 +10,7 @@ import { IntellisenseItem, IntellisenseResult, IntellisenseLayoutConfig } from '
 import { useProjectData } from '../../context/ProjectDataContext';
 import { prepareIntellisenseData } from '../../services/ProjectDataService';
 import { SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
+import { Bot, User, Database, CheckSquare } from 'lucide-react';
 
 const defaultLayoutConfig: IntellisenseLayoutConfig = {
   maxVisibleItems: 12,
@@ -47,6 +48,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [allIntellisenseItems, setAllIntellisenseItems] = useState<IntellisenseItem[]>([]);
+  const defaultCats = ['agentActs', 'userActs', 'backendActions', 'tasks'];
+  const [activeCats, setActiveCats] = useState<string[]>(filterCategoryTypes && filterCategoryTypes.length ? filterCategoryTypes : defaultCats);
 
   // LOG DATI INTELLISENSE
   useEffect(() => {
@@ -67,11 +70,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
       const viewportWidth = window.innerWidth;
       const menuWidth = 320;
       
-      // Calcola l'altezza stimata del menu basata sui risultati
-      const estimatedMenuHeight = Math.min(
-        totalItems * 70 + 60, // 70px per item + 60px per header e padding
-        defaultLayoutConfig.maxMenuHeight
-      );
+      // Altezza desiderata: più generosa per 1-2 risultati (per vedere payoff senza scroll)
+      const desiredHeight = totalItems <= 2
+        ? Math.min(defaultLayoutConfig.itemHeight * totalItems + 72, defaultLayoutConfig.maxMenuHeight)
+        : Math.min(totalItems * 70 + 60, defaultLayoutConfig.maxMenuHeight);
 
       // Calcola spazio disponibile sopra e sotto
       const spaceBelow = viewportHeight - rect.bottom - 10; // 10px di margine
@@ -80,13 +82,13 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
       let top;
       let maxHeight;
       
-      if (spaceBelow >= estimatedMenuHeight || spaceBelow >= spaceAbove) {
+      if (spaceBelow >= desiredHeight || spaceBelow >= spaceAbove) {
         // Posiziona sotto
         top = rect.bottom + 5;
-        maxHeight = Math.min(estimatedMenuHeight, spaceBelow - 5);
+        maxHeight = Math.min(desiredHeight, spaceBelow - 5);
       } else {
         // Posiziona sopra
-        maxHeight = Math.min(estimatedMenuHeight, spaceAbove - 5);
+        maxHeight = Math.min(desiredHeight, spaceAbove - 5);
         top = rect.top - maxHeight - 5;
       }
       
@@ -100,13 +102,17 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         left = viewportWidth - menuWidth - 10;
       }
 
+      const finalHeight = Math.min(maxHeight, desiredHeight);
+
       setMenuStyle({
         position: 'fixed',
         top: `${top}px`,
         left: `${left}px`,
         width: `${menuWidth}px`,
         maxHeight: `${maxHeight}px`,
-        overflowY: 'auto',
+        minHeight: `${finalHeight}px`,
+        height: totalItems <= 2 ? `${finalHeight}px` : undefined,
+        overflowY: totalItems <= 2 ? 'visible' : 'auto',
         zIndex: 9999
       });
     };
@@ -117,9 +123,17 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
 
+    // Also observe the reference element for size changes (e.g., textarea auto-grow)
+    let ro: ResizeObserver | null = null;
+    try {
+      ro = new ResizeObserver(() => updatePosition());
+      ro.observe(referenceElement);
+    } catch {}
+
     return () => {
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
+      try { ro && ro.disconnect(); } catch {}
     };
   }, [isOpen, referenceElement, totalItems]);
 
@@ -143,23 +157,29 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose, referenceElement]);
 
-  // Initialize fuzzy search when data is available
+  // Initialize / refresh fuzzy search when data or activeCats change
   useEffect(() => {
-    if (data && !isInitialized) {
-      let intellisenseData = prepareIntellisenseData(data); // categoryConfig non serve più
-      
-      // Filter by category types if specified
-      if (filterCategoryTypes && filterCategoryTypes.length > 0) {
-        intellisenseData = intellisenseData.filter(item => 
-          filterCategoryTypes.includes(item.categoryType)
-        );
-      }
-      
-      initializeFuzzySearch(intellisenseData);
-      setAllIntellisenseItems(intellisenseData);
-      setIsInitialized(true);
+    if (!data) return;
+    let intellisenseData = prepareIntellisenseData(data);
+    if (activeCats && activeCats.length > 0) {
+      intellisenseData = intellisenseData.filter(item => activeCats.includes(item.categoryType));
     }
-  }, [data, isInitialized, filterCategoryTypes]);
+    initializeFuzzySearch(intellisenseData);
+    setAllIntellisenseItems(intellisenseData);
+    setIsInitialized(true);
+    // Immediately compute results for current query so new items appear right away
+    if (!query.trim()) {
+      const allResults: IntellisenseResult[] = intellisenseData.map(item => ({ item } as IntellisenseResult));
+      setFuzzyResults(groupAndSortResults(allResults));
+      setSemanticResults([]);
+      setSelectedIndex(0);
+    } else {
+      const fres = performFuzzySearch(query, intellisenseData);
+      setFuzzyResults(groupAndSortResults(fres));
+      setSemanticResults([]);
+      setSelectedIndex(0);
+    }
+  }, [data, activeCats, query, isOpen]);
 
   // Perform search when query changes
   useEffect(() => {
@@ -305,31 +325,44 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         boxShadow: '0 4px 24px 0 rgba(30,41,59,0.10)',
         borderRadius: 12,
         padding: 0,
-        maxHeight: `${Math.min(totalItems, 8) * 56 + 48}px`, // 56px per item + header
-        overflowY: totalItems > 8 ? 'auto' : 'visible',
-        minHeight: 0,
+        // Lasciare max/min/overflow a menuStyle per usare il calcolo dinamico sopra
       }}
-      className="bg-white rounded-lg shadow-xl border border-gray-300 overflow-hidden"
+      className="bg-white rounded-lg shadow-xl border border-gray-300"
     >
-      {/* Search indicator */}
+      {/* Compact header: only category filter bar (no result/hints text) */}
       <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-white">
-            {isLoading ? (
-              <span className="flex items-center">
-                <div className="animate-spin w-3 h-3 border border-slate-400 border-t-transparent rounded-full mr-2"></div>
-                {totalItems === 0 ? 'Ricerca semantica in corso...' : 'Ricerca in corso...'}
-              </span>
-            ) : (
-              <span>
-                {totalItems} risultat{totalItems !== 1 ? 'i' : 'o'} per "{query}"
-                {semanticResults.length > 0 && <span className="ml-2 text-slate-300">(+ AI)</span>}
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-slate-400">
-            ↑↓ naviga • Enter {totalItems === 0 ? 'ricerca AI' : 'seleziona'} • Esc chiudi
-          </div>
+        {/* Category filter bar */}
+        <div className="mt-2 flex items-center gap-2">
+          {[
+            { key: 'agentActs', Icon: Bot, label: 'Agent' },
+            { key: 'userActs', Icon: User, label: 'User' },
+            { key: 'backendActions', Icon: Database, label: 'Backend' },
+            { key: 'tasks', Icon: CheckSquare, label: 'Tasks' },
+          ].map(({ key, Icon, label }) => {
+            const active = activeCats.includes(key);
+            return (
+              <button
+                key={key}
+                onClick={(e) => { e.stopPropagation(); setActiveCats(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]); }}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] border"
+                style={{
+                  background: active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)',
+                  color: '#e5e7eb',
+                  borderColor: active ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)'
+                }}
+                title={`Toggle ${label}`}
+              >
+                <Icon className="w-3 h-3" />
+                {label}
+              </button>
+            );
+          })}
+          {isLoading && (
+            <span className="ml-auto flex items-center text-[10px] text-slate-300">
+              <div className="animate-spin w-3 h-3 border border-slate-400 border-t-transparent rounded-full mr-2"></div>
+              AI…
+            </span>
+          )}
         </div>
       </div>
 

@@ -7,7 +7,6 @@ import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { NodeRowData, EntityType } from '../../types/project';
 import { PlusCircle, Edit3, Trash2 } from 'lucide-react';
-import { RowInserter } from './RowInserter';
 import { useNodeRowDrag } from '../../hooks/useNodeRowDrag';
 import { NodeRowList } from './NodeRowList';
 
@@ -31,7 +30,7 @@ export interface CustomNodeData {
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
-  id, 
+  id: _ignoredId, 
   data, 
   isConnectable, selected
 }) => {
@@ -39,9 +38,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [nodeTitle, setNodeTitle] = useState(data.title || 'New Node');
   // Se il nodo è nuovo e vuoto, crea subito una row vuota e metti in editing
   const isNewAndEmpty = !data.rows || data.rows.length === 0;
-  const initialRowId = isNewAndEmpty ? '1' : (data.rows && data.rows[0]?.id);
+  // const initialRowId = isNewAndEmpty ? '1' : (data.rows && data.rows[0]?.id);
   const [nodeRows, setNodeRows] = useState<NodeRowData[]>(
-    isNewAndEmpty ? [{ id: '1', text: '' }] : (data.rows || [])
+    isNewAndEmpty ? [{ id: '1', text: '', included: true }] : (data.rows || [])
   );
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
@@ -49,10 +48,14 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [editingBump, setEditingBump] = useState(0);
   // Wrapper per setEditingRowId con log
   const setEditingRowIdWithLog = (val: string | null) => {
-    try { console.log('[Focus][CustomNode] setEditingRowId', { nodeId: id, val }); } catch {}
-    setEditingRowId(val);
-    // Bump per forzare un micro re-render della lista dopo focusRow
-    setEditingBump(prev => (prev + 1) % 1000);
+    let changed = false;
+    setEditingRowId(prev => {
+      changed = prev !== val;
+      return changed ? val : prev;
+    });
+    if (changed) {
+      setEditingBump(prev => (prev + 1) % 1000);
+    }
   };
   // Rimuovi tutti i console.log relativi a editingRowId, prima riga, ecc.
 
@@ -63,13 +66,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [hasAddedNewRow, setHasAddedNewRow] = useState(false);
 
   // Riferimenti DOM per le righe
-  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  // const rowRefs = useRef(new Map<string, HTMLDivElement>());
 
   // Stato per gestire l'inserter hover
   const [hoveredInserter, setHoveredInserter] = useState<number | null>(null);
 
   // Inizio stato per overlay azioni
-  const [showActions, setShowActions] = useState(false);
+  // const [showActions, setShowActions] = useState(false);
 
   const handleDeleteNode = () => {
     if (data.onDelete) {
@@ -77,10 +80,28 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
   };
 
-  const handleUpdateRow = (rowId: string, newText: string, categoryType?: EntityType) => {
-    const updatedRows = nodeRows.map(row => 
-      row.id === rowId ? { ...row, text: newText, categoryType } : row
+  // Ref al contenitore delle righe per calcoli DnD locali
+  const rowsContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleUpdateRow = (rowId: string, newText: string, categoryType?: EntityType, meta?: Partial<NodeRowData>) => {
+    const prev = nodeRows;
+    const targetIndex = prev.findIndex(r => r.id === rowId);
+    const wasEmpty = targetIndex >= 0 ? !(prev[targetIndex].text || '').trim() : false;
+    const nowFilled = (newText || '').trim().length > 0;
+
+    let updatedRows = prev.map(row => 
+      row.id === rowId ? { ...row, ...(meta || {}), text: newText, categoryType: (meta && (meta as any).categoryType) ? (meta as any).categoryType : categoryType } : row
     );
+
+    // If user just filled the bottom-most row, append a new empty row and focus it
+    const isBottomRow = targetIndex === prev.length - 1;
+    if (isBottomRow && wasEmpty && nowFilled) {
+      const newRowId = (prev.length + 1).toString();
+      const extraRow: NodeRowData = { id: newRowId, text: '', included: true } as any;
+      updatedRows = [...updatedRows, extraRow];
+      setEditingRowIdWithLog(newRowId);
+    }
+
     setNodeRows(updatedRows);
     if (typeof data.onUpdate === 'function') {
       data.onUpdate({ rows: updatedRows });
@@ -103,7 +124,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const handleAddRow = (text: string) => {
     const newRow: NodeRowData = {
       id: (nodeRows.length + 1).toString(),
-      text: text
+      text: text,
+      included: true
     };
     const updatedRows = [...nodeRows, newRow];
     setNodeRows(updatedRows);
@@ -125,28 +147,29 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
   };
 
-  const handleIntellisenseSelect = (selectedText: string) => {
-    if (editingRowId) {
-      handleUpdateRow(editingRowId, selectedText);
-    }
-    setShowIntellisense(false);
-    setEditingRowIdWithLog(null);
-  };
+  // const handleIntellisenseSelect = (selectedText: string) => {
+  //   if (editingRowId) {
+  //     handleUpdateRow(editingRowId, selectedText);
+  //   }
+  //   setShowIntellisense(false);
+  //   setEditingRowIdWithLog(null);
+  // };
 
   const handleIntellisenseSelectItem = (item: IntellisenseItem) => {
     if (editingRowId) {
-      const updatedRows = nodeRows.map(row =>
-        row.id === editingRowId
-          ? { ...row, ...item, id: row.id }
-          : row
+      // Apply selection to the current row
+      const baseRows = nodeRows.map(row =>
+        row.id === editingRowId ? { ...row, ...item, id: row.id, categoryType: item.categoryType as any, userActs: item.userActs, isInteractive: item.isInteractive, actId: item.actId, factoryId: item.factoryId } : row
       );
-      setNodeRows(updatedRows);
-      if (data.onUpdate) {
-        data.onUpdate({ rows: updatedRows });
-      }
+      // Append a new empty row immediately after selection and focus it
+      const newRowId = (baseRows.length + 1).toString();
+      const nextRows = [...baseRows, { id: newRowId, text: '', included: true } as any];
+      setNodeRows(nextRows);
+      setEditingRowIdWithLog(newRowId);
+      if (data.onUpdate) data.onUpdate({ rows: nextRows });
     }
     setShowIntellisense(false);
-    setEditingRowIdWithLog(null);
+    // keep focus on the new empty row
   };
 
   const handleTitleUpdate = (newTitle: string) => {
@@ -161,10 +184,20 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const newRow: NodeRowData = {
       id: (nodeRows.length + 1).toString(),
       text: '',
-      isNew: true
+      isNew: true,
+      included: true
     };
     const updatedRows = [...nodeRows];
     updatedRows.splice(index, 0, newRow);
+    // If this is the very first row being added, also append a second empty row to help building
+    if (nodeRows.length === 0) {
+      const secondRow: NodeRowData = {
+        id: (parseInt(newRow.id, 10) + 1).toString(),
+        text: '',
+        included: true
+      } as any;
+      updatedRows.splice(index + 1, 0, secondRow);
+    }
     setNodeRows(updatedRows);
     setEditingRowIdWithLog(newRow.id);
     if (data.onUpdate) {
@@ -173,6 +206,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   };
 
   // Gestione del drag-and-drop
+  // Legacy drag start (kept temporarily). Prefer onMoveRow/onDropRow below.
   const handleRowDragStart = (id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => {
     drag.setDraggedRowId(id);
     drag.setDraggedRowOriginalIndex(index);
@@ -187,11 +221,28 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
 
-    document.addEventListener('mousemove', handleGlobalMouseMove);
-    document.addEventListener('mouseup', handleGlobalMouseUp);
+    try { console.log('[RowDnD][start]', { id, index, clientX, clientY, rect: { top: rect.top, left: rect.left, w: rect.width, h: rect.height } }); } catch {}
+
+    window.addEventListener('pointermove', handleGlobalMouseMove as any, { capture: true });
+    window.addEventListener('pointerup', handleGlobalMouseUp as any, { capture: true });
+    window.addEventListener('mousemove', handleGlobalMouseMove as any, { capture: true });
+    window.addEventListener('mouseup', handleGlobalMouseUp as any, { capture: true });
   };
 
-  const handleGlobalMouseMove = (event: MouseEvent) => {
+  // React-DnD-like simple move API used by NodeRow when dragging label
+  const handleMoveRow = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= nodeRows.length || toIndex >= nodeRows.length) return;
+    const updated = [...nodeRows];
+    const [row] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, row);
+    setNodeRows(updated);
+  };
+
+  const handleDropRow = () => {
+    if (data.onUpdate) data.onUpdate({ rows: nodeRows });
+  };
+
+  const handleGlobalMouseMove = (event: MouseEvent | PointerEvent) => {
     if (!drag.draggedRowId || !drag.draggedRowInitialRect || drag.draggedRowInitialClientY === null) return;
 
     drag.setDraggedRowCurrentClientX(event.clientX);
@@ -204,20 +255,15 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const currentDraggedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
 
     // Determina il nuovo indice di hover basandosi sulla posizione delle altre righe
+    // Determine hovered index using actual DOM positions of this node only
     let newHoveredIndex = drag.draggedRowOriginalIndex || 0;
-    const rowHeight = 40; // Altezza approssimativa di una riga + margini
-
-    for (let i = 0; i < nodeRows.length; i++) {
-      if (i === drag.draggedRowOriginalIndex) continue;
-      
-      const adjustedIndex = i > (drag.draggedRowOriginalIndex || 0) ? i - 1 : i;
-      const rowY = drag.draggedRowInitialRect.top + (adjustedIndex * rowHeight);
-      
-      if (currentDraggedY < rowY + rowHeight / 2) {
-        newHoveredIndex = i;
-        break;
-      }
-      newHoveredIndex = i + 1;
+    const scope = rowsContainerRef.current || document;
+    const elements = Array.from(scope.querySelectorAll('.node-row-outer')) as HTMLElement[];
+    const rects = elements.map((el, idx) => ({ idx: Number(el.dataset.index), top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }));
+    const centerY = event.clientY;
+    for (const r of rects) {
+      if (centerY < r.top + r.height / 2) { newHoveredIndex = r.idx; break; }
+      newHoveredIndex = r.idx + 1;
     }
 
     if (newHoveredIndex !== drag.hoveredRowIndex) {
@@ -229,20 +275,31 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const snapOffsetY = targetY - currentMouseBasedY;
       
       drag.setVisualSnapOffset({ x: 0, y: snapOffsetY });
+      try { console.log('[RowDnD][hover]', { draggedId: drag.draggedRowId, from: drag.draggedRowOriginalIndex, to: newHoveredIndex }); } catch {}
     }
   };
 
   const handleGlobalMouseUp = () => {
-    if (drag.draggedRowOriginalIndex !== null && drag.hoveredRowIndex !== null && drag.draggedRowOriginalIndex !== drag.hoveredRowIndex) {
+    const hasOriginal = drag.draggedRowOriginalIndex !== null;
+    let targetIndex = drag.hoveredRowIndex;
+    // Fallback: if no hovered index, infer from total delta in pixels
+    if (hasOriginal && (targetIndex === null || targetIndex === undefined)) {
+      const scope = rowsContainerRef.current || document;
+      const elements = Array.from(scope.querySelectorAll('.node-row-outer')) as HTMLElement[];
+      const rects = elements.map((el, idx) => ({ idx: Number(el.dataset.index), top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }));
+      const centerY = (drag.draggedRowCurrentClientY ?? drag.draggedRowInitialClientY) as number;
+      let inferred = drag.draggedRowOriginalIndex as number;
+      for (const r of rects) { if (centerY < r.top + r.height / 2) { inferred = r.idx; break; } inferred = r.idx + 1; }
+      targetIndex = Math.max(0, Math.min(nodeRows.length - 1, inferred));
+    }
+    if (hasOriginal && targetIndex !== null && (drag.draggedRowOriginalIndex as number) !== targetIndex) {
       const updatedRows = [...nodeRows];
-      const draggedRow = updatedRows[drag.draggedRowOriginalIndex];
-      updatedRows.splice(drag.draggedRowOriginalIndex, 1);
-      updatedRows.splice(drag.hoveredRowIndex, 0, draggedRow);
-      
+      const draggedRow = updatedRows[drag.draggedRowOriginalIndex as number];
+      updatedRows.splice(drag.draggedRowOriginalIndex as number, 1);
+      updatedRows.splice(targetIndex as number, 0, draggedRow);
+      try { console.log('[RowDnD][drop]', { id: drag.draggedRowId, from: drag.draggedRowOriginalIndex, to: targetIndex, order: updatedRows.map(r => r.id) }); } catch {}
       setNodeRows(updatedRows);
-      if (data.onUpdate) {
-        data.onUpdate({ rows: updatedRows });
-      }
+      if (data.onUpdate) data.onUpdate({ rows: updatedRows });
     }
 
     // Reset stati
@@ -259,8 +316,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
 
-    document.removeEventListener('mousemove', handleGlobalMouseMove);
-    document.removeEventListener('mouseup', handleGlobalMouseUp);
+    window.removeEventListener('pointermove', handleGlobalMouseMove as any);
+    window.removeEventListener('pointerup', handleGlobalMouseUp as any);
+    window.removeEventListener('mousemove', handleGlobalMouseMove as any);
+    window.removeEventListener('mouseup', handleGlobalMouseUp as any);
   };
 
   // Cleanup dei listener quando il componente si smonta
@@ -307,18 +366,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   }, []);
 
   // Crea l'array di visualizzazione per il feedback visivo
-  const displayRows = useMemo(() => {
-    if (!drag.draggedRowId || drag.draggedRowOriginalIndex === null || drag.hoveredRowIndex === null) {
-      return nodeRows;
-    }
-
-    const rows = [...nodeRows];
-    const draggedRow = rows[drag.draggedRowOriginalIndex];
-    rows.splice(drag.draggedRowOriginalIndex, 1);
-    rows.splice(drag.hoveredRowIndex, 0, { id: 'placeholder', text: '', isPlaceholder: true } as NodeRowData);
-    
-    return rows;
-  }, [nodeRows, drag.draggedRowId, drag.draggedRowOriginalIndex, drag.hoveredRowIndex]);
+  const displayRows = useMemo(() => nodeRows, [nodeRows]);
 
   // Trova la riga trascinata per il rendering separato
   const draggedItem = drag.draggedRowId ? nodeRows.find(row => row.id === drag.draggedRowId) : null;
@@ -348,10 +396,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     );
   }
 
+  // Do NOT auto-append an extra row at mount; start with a single textarea only.
+
   return (
     <div
-      className={`bg-white border-black rounded-lg shadow-xl w-70 min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
-      style={{ opacity: data.hidden ? 0 : 1 }}
+      className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
+      style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content' }}
       tabIndex={-1}
       onMouseDownCapture={(e) => {
         if (!editingRowId) return;
@@ -359,17 +409,27 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         const isAnchor = t?.classList?.contains('rigid-anchor') || !!t?.closest?.('.rigid-anchor');
         const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
         // Blocca solo interazioni sull'input riga; consenti header e ancora (drag)
-        if (isInput && !isAnchor) { try { console.log('[Drag][block] input mousedown'); } catch {} e.stopPropagation(); e.preventDefault(); }
+        if (isInput && !isAnchor) { e.stopPropagation(); }
       }}
       onMouseUpCapture={(e) => {
         if (!editingRowId) return;
         const t = e.target as HTMLElement;
         const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-        if (isInput) { e.stopPropagation(); e.preventDefault(); }
+        if (isInput) { e.stopPropagation(); }
       }}
       onFocusCapture={(e) => { /* no-op: lasciamo passare focus per drag header */ }}
     >
-      <div className="relative" onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)}>
+      <div
+        className="relative"
+        onClickCapture={(e) => {
+          // intercetta evento custom delete dall'header
+          if ((e as any).type === 'flow:node:delete') {
+            e.preventDefault();
+            e.stopPropagation();
+            handleDeleteNode();
+          }
+        }}
+      >
         <NodeHeader
           title={nodeTitle}
           onDelete={handleDeleteNode}
@@ -378,7 +438,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           isEditing={isEditingNode}
         />
       </div>
-      <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }}>
+      <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }} ref={rowsContainerRef}>
         <NodeRowList
           rows={displayRows}
           editingRowId={editingRowId}
@@ -389,7 +449,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           handleInsertRow={handleInsertRow}
           nodeTitle={nodeTitle}
           onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType)}
-          onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType as EntityType)}
+          onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, meta as any)}
           onDelete={(row) => handleDeleteRow(row.id)}
           onKeyDown={(e) => {/* logica keydown se serve */}}
           onDragStart={handleRowDragStart}
@@ -403,22 +463,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onEditingEnd={() => setEditingRowIdWithLog(null)}
         />
         {/* Renderizza la riga trascinata separatamente */}
-        {draggedItem && (
-          <NodeRow
-            key={`dragged-${draggedItem.id}`}
-            row={draggedItem}
-            nodeTitle={nodeTitle}
-            onUpdate={() => {}}
-            onUpdateWithCategory={() => {}}
-            onDelete={() => {}}
-            index={drag.draggedRowOriginalIndex || 0}
-            canDelete={nodeRows.length > 1}
-            totalRows={nodeRows.length}
-            isBeingDragged={true}
-            style={draggedRowStyle}
-            onEditingEnd={() => setEditingRowIdWithLog(null)}
-          />
-        )}
+        {/* Do not render an extra floating NodeRow; use ghost element only to avoid layout shift */}
       </div>
       <NodeHandles isConnectable={isConnectable} />
       {/* Mock Intellisense Menu */}

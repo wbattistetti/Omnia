@@ -138,17 +138,56 @@ export const ProjectDataService = {
       return;
     }
 
-    // Convert template data to internal format
-    projectData = {
-      name: '',
-      industry: '',
-      agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
-      userActs: convertTemplateDataToCategories(languageData.userActs),
-      backendActions: convertTemplateDataToCategories(languageData.backendActions),
-      conditions: convertTemplateDataToCategories(languageData.conditions),
-      tasks: convertTemplateDataToCategories(languageData.tasks),
-      macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
-    };
+    // Prefer loading Agent Acts from Factory DB if available; fallback to bundled JSON
+    try {
+      const actsRes = await fetch('/api/factory/agent-acts');
+      if (actsRes.ok) {
+        const factoryActs = await actsRes.json();
+        if (Array.isArray(factoryActs) && factoryActs.length > 0) {
+          const categoriesMap: Record<string, any> = {};
+          for (const act of (factoryActs || [])) {
+            const categoryName = act.category || 'Uncategorized';
+            const key = categoryName.replace(/\s+/g, '_').toLowerCase();
+            if (!categoriesMap[key]) categoriesMap[key] = { id: uuidv4(), name: categoryName, items: [] };
+            categoriesMap[key].items.push({
+              id: act._id || uuidv4(),
+              name: act.label || act.labelKey || 'Unnamed',
+              description: act.description || '',
+              isInteractive: act.isInteractive,
+              data: act.data,
+              ddt: act.ddt
+            });
+          }
+          projectData = {
+            name: '',
+            industry: '',
+            agentActs: Object.values(categoriesMap),
+            userActs: convertTemplateDataToCategories(languageData.userActs),
+            backendActions: convertTemplateDataToCategories(languageData.backendActions),
+            conditions: convertTemplateDataToCategories(languageData.conditions),
+            tasks: convertTemplateDataToCategories(languageData.tasks),
+            macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
+          };
+        } else {
+          // Empty DB → fallback to bundled JSON
+          throw new Error('factory acts empty');
+        }
+      } else {
+        throw new Error('factory acts not available');
+      }
+    } catch {
+      // Fallback to bundled JSON
+      projectData = {
+        name: '',
+        industry: '',
+        agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
+        userActs: convertTemplateDataToCategories(languageData.userActs),
+        backendActions: convertTemplateDataToCategories(languageData.backendActions),
+        conditions: convertTemplateDataToCategories(languageData.conditions),
+        tasks: convertTemplateDataToCategories(languageData.tasks),
+        macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
+      };
+    }
   },
 
   async loadProjectData(): Promise<ProjectData> {
@@ -220,6 +259,13 @@ export const ProjectDataService = {
     const item = category?.items.find((i: any) => i.id === itemId);
     if (item) {
       Object.assign(item, updates);
+      // If we updated an agent act with embedded DDT, try saving to factory DB (best-effort)
+      if (type === 'agentActs') {
+        try {
+          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, isInteractive: (item as any)?.isInteractive, data: (item as any)?.data, ddt: (item as any)?.ddt };
+          await fetch(`/api/factory/agent-acts/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        } catch (e) { console.warn('[ProjectDataService] save agent act failed', e); }
+      }
     }
   },
 
@@ -234,6 +280,37 @@ export const ProjectDataService = {
     } catch (error) {
       throw new Error('Invalid JSON data');
     }
+  },
+
+  /** Persist current in-memory AgentActs into Factory DB (idempotent upsert) */
+  async saveAgentActsToFactory(): Promise<{ saved: number }> {
+    const actsCategories: any[] = (projectData as any)?.agentActs || [];
+    let count = 0;
+    for (const cat of actsCategories) {
+      for (const item of (cat.items || [])) {
+        try {
+          const payload = {
+            _id: item._id || item.id,
+            type: 'agent_act',
+            label: item.name,
+            description: item.description || '',
+            category: cat.name,
+            isInteractive: item.isInteractive ?? false,
+            data: item.data || {},
+            ddt: item.ddt || null
+          };
+          const res = await fetch(`/api/factory/agent-acts/${encodeURIComponent(payload._id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) count += 1;
+        } catch (e) {
+          console.warn('[ProjectDataService] saveAgentActsToFactory failed for', item?.id, e);
+        }
+      }
+    }
+    return { saved: count };
   }
 };
 
@@ -295,6 +372,8 @@ export function prepareIntellisenseData(
       category.items.forEach((item: any) => {
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
+          actId: item.id,
+          factoryId: item._id,
           label: item.label || item.name || item.discursive || item.shortLabel || 'Unnamed',
           shortLabel: item.shortLabel || item.label || item.name || item.discursive || '',
           name: item.name || item.label || item.shortLabel || item.discursive || '',
@@ -303,6 +382,7 @@ export function prepareIntellisenseData(
           categoryType: typedEntityType,
           iconComponent: undefined, // solo riferimento al componente
           color,
+          isInteractive: item.isInteractive ?? Boolean(item.userActs && item.userActs.length),
           userActs: item.userActs,
           uiColor: undefined // o la tua logica per il colore di sfondo
         });

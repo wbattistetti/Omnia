@@ -272,7 +272,20 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
       return !/^[A-Za-zÀ-ÿ'\-]{2,}(\s+[A-Za-zÀ-ÿ'\-]{2,})+$/i.test(t);
     }
     if (k === 'address') {
-      // Require some letters and at least one space (heuristic). 'xxxx' or symbols-only -> invalid
+      const sub = String(subLabel || '').toLowerCase();
+      // House number / civico: accept 1-5 digits with optional trailing letter (e.g., 20, 20A)
+      if (/(number|house|civico|nr|n°|num)/.test(sub)) {
+        return !/^\d{1,5}[A-Za-z]?$/.test(t);
+      }
+      // Postal code / CAP: accept exactly 5 digits
+      if (/(postal|postcode|zip|cap)/.test(sub)) {
+        return !/^\d{5}$/.test(t);
+      }
+      // City / town / comune: must contain letters; allow spaces; reject digits-only
+      if (/(city|town|comune|città|citta)/.test(sub)) {
+        return !/[A-Za-zÀ-ÿ]{2,}/.test(t);
+      }
+      // Street / address: require some letters and at least one space (two tokens)
       const letters = /[A-Za-zÀ-ÿ]/.test(t);
       const hasWordBoundary = /\s/.test(t);
       return !(letters && hasWordBoundary);

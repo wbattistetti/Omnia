@@ -14,10 +14,78 @@ app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 const uri = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
+const fs = require('fs');
+const path = require('path');
 const dbFactory = 'factory';
 const dbProjects = 'Projects';
 
 // --- FACTORY ENDPOINTS ---
+// Agent Acts (embedded DDT 1:1)
+app.get('/api/factory/agent-acts', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('AgentActs');
+    let acts = await coll.find({}).toArray();
+    // Auto-seed on first call if empty
+    if (!Array.isArray(acts) || acts.length === 0) {
+      try {
+        const seedPath = path.resolve(__dirname, '../data/templates/utility_gas/agent_acts/en.json');
+        const raw = fs.readFileSync(seedPath, 'utf8');
+        const json = JSON.parse(raw);
+        const now = new Date().toISOString();
+        const docs = (json || []).map((it) => ({
+          _id: it.id || it._id,
+          type: 'agent_act',
+          label: it.label || it.name || 'Unnamed',
+          description: it.description || '',
+          category: it.category || 'Uncategorized',
+          tags: it.tags || [],
+          isInteractive: Boolean(it.isInteractive),
+          data: it.data || {},
+          ddt: null,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        if (docs.length > 0) {
+          await coll.insertMany(docs, { ordered: false });
+          acts = await coll.find({}).toArray();
+          console.log('>>> AgentActs seeded:', acts.length);
+        }
+      } catch (e) {
+        console.warn('Seed AgentActs failed:', e.message);
+      }
+    }
+    res.json(acts);
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
+app.put('/api/factory/agent-acts/:id', async (req, res) => {
+  const id = req.params.id;
+  const payload = req.body || {};
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    payload.updatedAt = new Date();
+    await db.collection('AgentActs').updateOne(
+      { _id: id },
+      { $set: payload, $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    );
+    const saved = await db.collection('AgentActs').findOne({ _id: id });
+    res.json(saved);
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
 
 app.get('/api/factory/actions', async (req, res) => {
   const client = new MongoClient(uri);

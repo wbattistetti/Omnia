@@ -3,22 +3,17 @@ import ReactFlow, {
   ReactFlowProvider,
   Controls,
   Background,
-  useNodesState,
-  useEdgesState,
-  addEdge,
   Connection,
   Node,
   Edge,
   BackgroundVariant,
   useReactFlow,
-  ReactFlowInstance,
   applyNodeChanges,
   applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { CustomNode } from './CustomNode';
 import { EdgeConditionSelector } from './EdgeConditionSelector';
-import { Plus } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { CustomEdge } from './CustomEdge';
 import { useEdgeManager, EdgeData } from '../../hooks/useEdgeManager';
@@ -28,16 +23,7 @@ import { useNodeManager, NodeData } from '../../hooks/useNodeManager';
 export type { NodeData } from '../../hooks/useNodeManager';
 export type { EdgeData } from '../../hooks/useEdgeManager';
 
-const nodeTypes = {
-  custom: CustomNode,
-};
-
-const edgeTypes = {
-  custom: CustomEdge,
-};
-
-const initialNodes: Node<NodeData>[] = [];
-const initialEdges: Edge<EdgeData>[] = [];
+// nodeTypes/edgeTypes memoized below
 
 interface FlowEditorProps {
   testPanelOpen: boolean;
@@ -127,6 +113,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         }
         openMenu(menuPos, params.source, params.sourceHandle);
       }
+      // Resetta subito dopo il tick per consentire onConnectEnd di capire se la connessione ha davvero aggiunto l'edge
+      setTimeout(() => { pendingEdgeIdRef.current = null; }, 0);
     },
     [addEdgeManaged, onDeleteEdge, openMenu],
   );
@@ -233,12 +221,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [nodes]);
 
   const createNodeAt = useCallback((clientX: number, clientY: number) => {
-    try { console.log('[DC][createNodeAt][input]', { clientX, clientY }); } catch {}
+    // debug logs removed
     const newNodeId = nodeIdCounter.toString();
     let x = 0, y = 0;
     if (reactFlowInstance) {
       const pos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
-      try { console.log('[DC][screenToFlowPosition]', { pos }); } catch {}
+      // debug logs removed
       x = pos.x - NODE_WIDTH / 2;
       y = pos.y - NODE_HEIGHT / 2;
     }
@@ -255,7 +243,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         focusRowId: '1',
       },
     };
-    try { console.log('[DC][createNodeAt][add]', { id: newNodeId, x, y }); } catch {}
+    // debug logs removed
     addNodeAtPosition(node, x, y);
     requestAnimationFrame(() => {
       try {
@@ -270,11 +258,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         const dyScreen = clientY - centerNowY;
         const dxFlow = dxScreen / (zoom || 1);
         const dyFlow = dyScreen / (zoom || 1);
-        try { console.log('[DC][recenter][step1]', { zoom, rect, centerNowX, centerNowY, dxScreen, dyScreen, dxFlow, dyFlow }); } catch {}
+        // debug logs removed
         setNodes((nds) => nds.map(n => n.id === newNodeId ? { ...n, position: { x: (n.position as any).x + dxFlow, y: (n.position as any).y + dyFlow } } : n));
         requestAnimationFrame(() => {
           setNodes((nds) => nds.map(n => n.id === newNodeId ? { ...n, data: { ...(n.data as any), hidden: false } } : n));
-          try { console.log('[DC][recenter][step2][show]', { id: newNodeId }); } catch {}
+          // debug logs removed
         });
       } catch {}
     });
@@ -297,6 +285,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }
 
   const onConnectEnd = useCallback((event: any) => {
+    // Se subito prima è stata creata una edge reale (onConnect), NON creare il collegamento flottante
+    if (pendingEdgeIdRef.current) {
+      return;
+    }
     // Prima di tutto, pulisci eventuali edge/nodi temporanei rimasti
     cleanupAllTempNodesAndEdges();
     const targetIsPane = event.target.classList.contains('react-flow__pane');
@@ -563,7 +555,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         rootStart: { x: (node.position as any).x, y: (node.position as any).y },
         rootLast: { x: (node.position as any).x, y: (node.position as any).y },
       };
-      try { console.log('[RigidDrag][start]', { rootId, ids: Array.from(visited), rootStart: { x: (node.position as any).x, y: (node.position as any).y }, fromAnchor: isAnchor }); } catch {}
+      // debug logs removed
     } else {
       rigidDragCtxRef.current = null;
     }
@@ -580,7 +572,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     const curY = (draggedNode.position as any).y;
     const incDx = curX - ctx.rootLast.x;
     const incDy = curY - ctx.rootLast.y;
-    try { console.log('[RigidDrag][drag]', { rootId: ctx.rootId, incDx, incDy, count: ctx.ids.size }); } catch {}
+    // debug logs removed
     if (incDx === 0 && incDy === 0) return;
     setNodes((nds) => nds.map(n => {
       if (!ctx.ids.has(n.id)) return n;
@@ -595,7 +587,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     try { (window as any).__flowDragMode = undefined; } catch {}
     const ctx = rigidDragCtxRef.current;
     if (ctx) {
-      try { console.log('[RigidDrag][stop]', { rootId: ctx.rootId }); } catch {}
+      // debug logs removed
       // Applica l'offset finale anche se non sono arrivati tick drag
       const rootNow = nodesRef.current.find(n => n.id === ctx.rootId);
       if (rootNow) {
@@ -621,12 +613,21 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       // Non zoomare senza CTRL; non chiamare preventDefault su passive listeners
       return;
     }
-    // Allow zoom when CTRL is pressed by manually adjusting viewport
+    // Zoom keeping the cursor screen point fixed
     const vp = (reactFlowInstance as any).getViewport ? (reactFlowInstance as any).getViewport() : { x: 0, y: 0, zoom: 1 };
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
     const newZoom = Math.max(0.2, Math.min(4, vp.zoom * factor));
+    // Convert screen point to flow coordinates before zoom
+    const rect = (document.querySelector('.react-flow') as HTMLElement)?.getBoundingClientRect();
+    const screenX = e.clientX - (rect ? rect.left : 0);
+    const screenY = e.clientY - (rect ? rect.top : 0);
+    const flowX = (screenX - vp.x) / vp.zoom;
+    const flowY = (screenY - vp.y) / vp.zoom;
+    // Compute new pan so the same flow point stays under cursor after zoom
+    const newX = screenX - flowX * newZoom;
+    const newY = screenY - flowY * newZoom;
     if ((reactFlowInstance as any).setViewport) {
-      (reactFlowInstance as any).setViewport({ x: vp.x, y: vp.y, zoom: newZoom }, { duration: 0 });
+      (reactFlowInstance as any).setViewport({ x: newX, y: newY, zoom: newZoom }, { duration: 0 });
     }
   }, [reactFlowInstance]);
 
@@ -704,7 +705,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     e.stopPropagation();
     const x = e.clientX;
     const y = e.clientY;
-    try { console.log('[DC][wrapperDoubleClick]', { x, y, isPane }); } catch {}
+    // debug logs removed
     createNodeAt(x, y);
   }, [createNodeAt]);
 
@@ -735,6 +736,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [reactFlowInstance]);
 
+  // Stabilizza nodeTypes/edgeTypes per evitare il warning RF#002 (HMR)
+  const nodeTypesMemo = React.useMemo(() => ({ custom: CustomNode }), []);
+  const edgeTypesMemo = React.useMemo(() => ({ custom: CustomEdge }), []);
+
   return (
     <div className="flex-1 h-full relative" ref={canvasRef} style={{ overflow: 'auto' }} onDoubleClick={handleCanvasDoubleClick}>
       <ReactFlow
@@ -743,8 +748,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         onNodesChange={changes => setNodes(nds => applyNodeChanges(changes, nds))}
         onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
         onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+        nodeTypes={nodeTypesMemo}
+        edgeTypes={edgeTypesMemo}
         onPaneClick={onPaneClick}
         onMouseMove={handlePaneMouseMove}
         onEdgeClick={handleEdgeClick}
