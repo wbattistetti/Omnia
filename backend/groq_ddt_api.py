@@ -328,14 +328,17 @@ def step3b(user_constraints: str = Body(...), meaning: str = Body(...), desc: st
 def step4(ddt_structure: dict = Body(...)):
 	print("\nSTEP: /step4 – Generate DDT messages (generateMessages)")
 	prompt = f"""
-You are an enterprise customer‑care dialogue copywriter.
-Generate user‑facing messages to collect the data described by the DDT structure.
+You are writing for a voice (phone) customer‑care agent.
+Generate the agent’s spoken messages to collect the data described by the DDT structure.
 
 Style and constraints:
-- One short sentence (about 4–12 words), polite and professional.
-- Neutral, conversational; no chit‑chat, no opinions, no humor.
+- One short sentence (about 4–12 words), natural, polite, human.
+- Phone conversation tone: concise, fluid, not robotic.
+- Prefer light contractions when natural (I'm, don't, can't).
+- Neutral and professional; no chit‑chat, no opinions, no humor.
 - NEVER ask about “favorite …” or “why”.
 - No emojis and no exclamation marks.
+- Do NOT use UI words like “click”, “type”, “enter”. Use “say/tell/give”.
 - NEVER output example values or names (e.g., "Emily", "01/01/2000", "Main Street").
 - NEVER output greetings or generic help phrases (e.g., "How may I help you today").
 - Use the field label; if the field is composite, ask ONLY the missing part (e.g., Day, Month, Year).
@@ -346,11 +349,11 @@ Output format (strict JSON only, no comments, no trailing commas):
 "runtime.<DDT_ID>.<step>#<index>.<action>.text": "<message>"
 
 Generation rules:
-- start: 1 message per field/subfield. Example: "What is your date of birth (DD/MM/YYYY)?"
-- noInput: 3 concise re-asks, slightly varied. Example: "Please provide the date of birth (DD/MM/YYYY)."
-- noMatch: 3 concise clarifications with hint. Example: "I couldn't parse that. Date of birth (DD/MM/YYYY)?"
+- start: 1 message per field/subfield. Example: "Please tell me your date of birth (DD/MM/YYYY)?"
+- noInput: 3 concise re‑asks with natural variations. Example: "Could you share the date of birth (DD/MM/YYYY)?"
+- noMatch: 3 concise clarifications with hint. Prefer voice phrasing like “I didn’t catch that” over “I couldn’t parse that”. Example: "I didn't catch that. Date of birth (DD/MM/YYYY)?"
 - confirmation: 2 short confirmations like "Is this correct: {{ '{input}' }}?"
-- success: 1 short acknowledgement like "Thanks, noted."
+- success: 1 short acknowledgement like "Thanks, got it."
 - For subData (e.g., date): ask targeted parts — "Day?", "Month?", "Year?" (or "Which year (YYYY)?").
 - For start, noInput, and noMatch: the text MUST directly ask for the value and MUST end with a question mark.
 - Only confirmation messages may include the {{ '{input}' }} placeholder.
@@ -365,7 +368,7 @@ Where:
 - <action> is the action type (e.g., SayMessage, ConfirmInput), followed by a placeholder ID or suffix.
 - Example: "runtime.DDT_Birthdate.noMatch#1.SayMessage_1.text"
 
-⚠️ IMPORTANT:
+IMPORTANT:
 - DO NOT generate any IDs or GUIDs — use static suffixes like SayMessage_1.
 - DO NOT include any explanation, markdown or comments, or text outside the JSON. If unsure, return an empty object.
 

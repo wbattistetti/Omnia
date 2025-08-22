@@ -15,6 +15,14 @@ import {
 } from './ddtSelectors';
 
 export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: () => void }) {
+  // Font zoom (Ctrl+wheel) like sidebar
+  const MIN_FONT_SIZE = 12;
+  const MAX_FONT_SIZE = 24;
+  const DEFAULT_FONT_SIZE = 16;
+  const [fontSize, setFontSize] = useState<number>(DEFAULT_FONT_SIZE);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fontScale = useMemo(() => Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, fontSize)) / DEFAULT_FONT_SIZE, [fontSize]);
+
   // Helper: enforce phone kind by label when missing/mis-set
   const coercePhoneKind = (src: any) => {
     if (!src) return src;
@@ -86,11 +94,11 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
     const nextMains = Array.isArray(next?.mainData) ? next.mainData : [];
     const mapByLabel = (arr: any[]) => {
       const m = new Map<string, any>();
-      arr.forEach((n) => { if (n?.label) m.set(String(n.label), n); });
+      arr.forEach((n: any) => { if (n?.label) m.set(String(n.label), n); });
       return m;
     };
     const prevMap = mapByLabel(prevMains);
-    const enrichedMains = nextMains.map((n) => {
+    const enrichedMains = nextMains.map((n: any) => {
       const prevNode = prevMap.get(String(n?.label));
       let merged = n;
       if (prevNode && !n?.steps && prevNode?.steps) merged = { ...n, steps: prevNode.steps };
@@ -142,7 +150,7 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
       log('[ResponseEditor] Translation sources counts:', counts);
       log('[ResponseEditor][DDT load]', { prevId, nextId, isSameDDT, selectedMainIndex, selectedSubIndex });
       const mains = getMainDataList(ddt) || [];
-      log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map(m => m?.label));
+      log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map((m: any) => m?.label));
     } catch {}
   // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
   }, [ddt, mergedBase, localDDT?.id, localDDT?._id]);
@@ -325,9 +333,36 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
     }
   };
 
+  const handleWheelFontZoom = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      setFontSize(prev => {
+        const next = prev + (e.deltaY < 0 ? 1 : -1);
+        return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, next));
+      });
+    }
+  };
+
+  // Attach non-passive wheel listener to block browser zoom and adjust only editor font
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    const onWheel = (ev: WheelEvent) => {
+      if (ev.ctrlKey) {
+        ev.preventDefault();
+        setFontSize(prev => {
+          const next = prev + (ev.deltaY < 0 ? 1 : -1);
+          return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, next));
+        });
+      }
+    };
+    node.addEventListener('wheel', onWheel, { passive: false } as any);
+    return () => node.removeEventListener('wheel', onWheel as any);
+  }, []);
+
   // Layout
   return (
-    <div style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column' }} onKeyDown={handleGlobalKeyDown}>
+    <div ref={rootRef} style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
       {/* Header con sfondo arancione sopra sidebar e contenuto */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #22273a', background: '#fb923c', minHeight: 48 }}>
         <div style={{ color: '#0b1220', fontSize: 18, fontWeight: 700 }}>Response Editor</div>
