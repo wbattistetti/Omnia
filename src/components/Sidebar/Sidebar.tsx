@@ -121,8 +121,10 @@ const Sidebar: React.FC = () => {
         id: `${Math.random()}`,
         label: m.labelKey,
         type: m.kind,
-        subData: (m.subs || []).map((s: any) => ({ id: `${Math.random()}`, label: s.labelKey, type: s.kind, constraints: s.constraints || [] })),
-        constraints: m.constraints || []
+        subData: (m.subs || []).map((s: any) => ({ id: `${Math.random()}`, label: s.labelKey, type: s.kind, constraints: s.constraints || [], messages: s.messages || {}, steps: s.steps || {} })),
+        constraints: m.constraints || [],
+        messages: m.messages || {},
+        steps: m.steps || {},
       })),
       translations: ddtSnap.translations || { en: {} }
     } as any;

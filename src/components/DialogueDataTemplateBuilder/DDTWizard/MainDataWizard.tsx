@@ -254,6 +254,9 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                   <button title="Add sub data" onClick={handleQuickAddSub} style={iconBtn}>
                     <Plus size={16} color="#fb923c" />
                   </button>
+                  <button title="Add constraint" onClick={addMainConstraint} style={iconBtn}>
+                    <Link size={14} color="#fb923c" />
+                  </button>
                   <button title="Delete" onClick={onRemove} style={iconBtn}>
                     <Trash2 size={16} color="#fb923c" />
                   </button>
@@ -313,13 +316,6 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
             onMouseEnter={() => setHoverMainConstraints(true)}
             onMouseLeave={() => setHoverMainConstraints(false)}
           >
-            {hoverMainConstraints && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button title="Add constraint" onClick={addMainConstraint} style={{ ...iconBtn, color: '#fb923c' }}>
-                  <Link size={14} color="#fb923c" />
-                </button>
-              </div>
-            )}
             {Array.isArray(node.constraints) && node.constraints.length > 0 && (
               <div style={{ marginBottom: 8 }}>
                 {node.constraints.map((c, idx) => (

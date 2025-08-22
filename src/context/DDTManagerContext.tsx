@@ -50,7 +50,64 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
 
   const openDDT = (ddt: any) => {
     try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
-    setSelectedDDT(ddt);
+    // Deep diagnostic: summarize incoming DDT to compare first vs second open
+    try {
+      const summarize = (x: any) => {
+        const mains: any[] = Array.isArray(x?.mainData) ? x.mainData : [];
+        return mains.map((m: any) => {
+          const steps = m?.steps;
+          const shape = steps ? (Array.isArray(steps) ? 'array' : 'object') : 'none';
+          const stepKeys = shape === 'object' ? Object.keys(steps || {}) : (shape === 'array' ? (steps as any[]).map((g:any)=>g?.type).filter(Boolean) : []);
+          const msgKeys = Object.keys(m?.messages || {});
+          const subs = Array.isArray(m?.subData) ? m.subData : [];
+          const subsSummary = subs.slice(0, 3).map((s: any) => {
+            const sSteps = s?.steps;
+            const sShape = sSteps ? (Array.isArray(sSteps) ? 'array' : 'object') : 'none';
+            const sStepKeys = sShape === 'object' ? Object.keys(sSteps || {}) : (sShape === 'array' ? (sSteps as any[]).map((g:any)=>g?.type).filter(Boolean) : []);
+            const sMsgKeys = Object.keys(s?.messages || {});
+            return { label: s?.label, shape: sShape, stepCount: sStepKeys.length, msgCount: sMsgKeys.length };
+          });
+          return { label: m?.label, shape, stepCount: stepKeys.length, msgCount: msgKeys.length, subs: subsSummary };
+        });
+      };
+      console.log('[RE][openDDT.summary]', summarize(ddt));
+    } catch {}
+    // Preserve steps if we already have an enriched copy of the same DDT in memory
+    const sameId = (a: any, b: any) => !!a && !!b && ((a.id && b.id && a.id === b.id) || (a._id && b._id && a._id === b._id));
+    const byLabel = (arr: any[]) => {
+      const m = new Map<string, any>();
+      (arr || []).forEach((n) => { if (n?.label) m.set(String(n.label), n); });
+      return m;
+    };
+    const mergeSteps = (base: any, enriched: any) => {
+      if (!base) return enriched;
+      const next = { ...enriched };
+      // Merge top-level steps if missing
+      if (!next.steps && base.steps) next.steps = base.steps;
+      const baseMains = Array.isArray(base?.mainData) ? base.mainData : [];
+      const nextMains = Array.isArray(next?.mainData) ? next.mainData : [];
+      const baseMap = byLabel(baseMains);
+      next.mainData = nextMains.map((n: any) => {
+        const prev = baseMap.get(String(n?.label));
+        const mergedTop = (!n?.steps && prev?.steps) ? { ...n, steps: prev.steps } : n;
+        const subs = Array.isArray(mergedTop?.subData) ? mergedTop.subData : [];
+        const prevSubs = Array.isArray(prev?.subData) ? prev.subData : [];
+        const prevSubsMap = byLabel(prevSubs);
+        const mergedSubs = subs.map((s: any) => {
+          const ps = prevSubsMap.get(String(s?.label));
+          return (!s?.steps && ps?.steps) ? { ...s, steps: ps.steps } : s;
+        });
+        return { ...mergedTop, subData: mergedSubs };
+      });
+      return next;
+    };
+    setSelectedDDT((prev) => {
+      const existing = ddtList.find((x) => sameId(x, ddt));
+      const merged = existing ? mergeSteps(existing, ddt) : ddt;
+      // keep list in sync with merged instance
+      setDDTList((list) => list.map((x) => (sameId(x, merged) ? merged : x)));
+      return merged;
+    });
   };
 
   const closeDDT = () => {

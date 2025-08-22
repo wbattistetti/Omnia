@@ -697,7 +697,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, []);
 
   const handlePaneMouseMove = useCallback((e: React.MouseEvent) => {
-    if (nodes.length === 0) {
+    const target = e.target as HTMLElement;
+    const isPane = target?.classList?.contains('react-flow__pane') || !!target?.closest?.('.react-flow__pane');
+    if (isPane && nodes.length === 0) {
       setCursorTooltip('Double-click to create a node', e.clientX, e.clientY);
     } else {
       setCursorTooltip(null);
@@ -724,6 +726,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       const isInserter = el?.classList?.contains('row-inserter') || !!el?.closest?.('.row-inserter');
       if (isInserter) {
         setCursorTooltip('Click to insert here...', e.clientX, e.clientY);
+      } else {
+        // Hide only if this effect showed the message
+        try {
+          const txt = cursorTooltipRef.current?.textContent || '';
+          if (txt === 'Click to insert here...') setCursorTooltip(null);
+        } catch {}
       }
     };
     window.addEventListener('mousemove', onMove, { passive: true });
@@ -749,7 +757,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const edgeTypesMemo = React.useMemo(() => ({ custom: CustomEdge }), []);
 
   return (
-    <div className="flex-1 h-full relative" ref={canvasRef} style={{ overflow: 'auto' }} onDoubleClick={handleCanvasDoubleClick}>
+    <div className="flex-1 h-full relative" ref={canvasRef} style={{ overflow: 'auto' }} onDoubleClick={handleCanvasDoubleClick} onMouseLeave={() => setCursorTooltip(null)}>
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}

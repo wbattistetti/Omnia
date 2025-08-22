@@ -304,10 +304,33 @@ export const AppContent: React.FC<AppContentProps> = ({
               onOpenProject={() => alert('Apri progetto')}
               onSave={async () => {
                 try {
+                  // Load current in-memory Agent Acts and send them all to backend for full replace
                   const svc = await import('../services/ProjectDataService');
-                  const result = await (svc as any).ProjectDataService.saveAgentActsToFactory();
-                  console.log('[SaveProject] AgentActs saved:', result);
-                  alert('Progetto salvato (Agent Acts inclusi)');
+                  const data = await (svc as any).ProjectDataService.loadProjectData();
+                  const cats = (data?.agentActs || []) as any[];
+                  const allActs: any[] = [];
+                  for (const c of cats) {
+                    for (const it of (c.items || [])) {
+                      allActs.push({
+                        _id: it._id || it.id,
+                        label: it.name,
+                        description: it.description || '',
+                        category: c.name,
+                        isInteractive: it.isInteractive ?? false,
+                        data: it.data || {},
+                        ddt: it.ddt || null
+                      });
+                    }
+                  }
+                  const res = await fetch('/api/factory/agent-acts/bulk-replace', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(allActs)
+                  });
+                  if (!res.ok) throw new Error('bulk replace failed');
+                  const result = await res.json();
+                  console.log('[SaveProject] AgentActs bulk replaced:', result);
+                  alert('Progetto salvato (Agent Acts sovrascritti)');
                 } catch (e) {
                   console.error('[SaveProject] error', e);
                   alert('Errore nel salvataggio del progetto');

@@ -1,5 +1,6 @@
 import React, { forwardRef } from 'react';
-import { Check } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Check, Plus, Pencil, Trash2 } from 'lucide-react';
 import { getLabel, getSubDataList } from './ddtSelectors';
 import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
@@ -14,9 +15,16 @@ interface SidebarProps {
   rootLabel?: string;
   onSelectAggregator?: () => void;
   onChangeSubRequired?: (mainIdx: number, subIdx: number, required: boolean) => void;
+  onReorderSub?: (mainIdx: number, fromIdx: number, toIdx: number) => void; // reorder only within same main
+  onAddMain?: (label: string) => void;
+  onRenameMain?: (mainIdx: number, label: string) => void;
+  onDeleteMain?: (mainIdx: number) => void;
+  onAddSub?: (mainIdx: number, label: string) => void;
+  onRenameSub?: (mainIdx: number, subIdx: number, label: string) => void;
+  onDeleteSub?: (mainIdx: number, subIdx: number) => void;
 }
 
-const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onChangeSubRequired }, ref) {
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onChangeSubRequired, onReorderSub, onAddMain, onRenameMain, onDeleteMain, onAddSub, onRenameSub, onDeleteSub }, ref) {
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
   if (!Array.isArray(mainList) || mainList.length === 0) return null;
   // Pastel/silver palette
@@ -102,9 +110,35 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   });
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const dragStateRef = React.useRef<{ mainIdx: number | null; fromIdx: number | null }>({ mainIdx: null, fromIdx: null });
   const forwarded = ref as any;
   React.useEffect(() => { if (forwarded) forwarded.current = containerRef.current; }, [forwarded]);
   const [measuredW, setMeasuredW] = React.useState<number>(280);
+  const [hoverRoot, setHoverRoot] = React.useState<boolean>(false);
+  const [hoverMainIdx, setHoverMainIdx] = React.useState<number | null>(null);
+  const [hoverSub, setHoverSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
+  const [addingMain, setAddingMain] = React.useState<boolean>(false);
+  const [addingSubFor, setAddingSubFor] = React.useState<number | null>(null);
+  const [draftLabel, setDraftLabel] = React.useState<string>('');
+  const [editingMainIdx, setEditingMainIdx] = React.useState<number | null>(null);
+  const [editingSub, setEditingSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
+  const [editDraft, setEditDraft] = React.useState<string>('');
+  const [overlay, setOverlay] = React.useState<null | { type: 'root' | 'main' | 'sub'; mainIdx?: number; subIdx?: number; top: number; left: number }>(null);
+  const hideTimerRef = React.useRef<number | null>(null);
+  const overlayHoverRef = React.useRef<boolean>(false);
+  const hoverRootRef = React.useRef<boolean>(false);
+  const hoverMainIdxRef = React.useRef<number | null>(null);
+  const hoverSubRef = React.useRef<{ mainIdx: number; subIdx: number } | null>(null);
+  React.useEffect(() => { hoverRootRef.current = hoverRoot; }, [hoverRoot]);
+  React.useEffect(() => { hoverMainIdxRef.current = hoverMainIdx; }, [hoverMainIdx]);
+  React.useEffect(() => { hoverSubRef.current = hoverSub; }, [hoverSub]);
+  const maybeHideOverlay = (delay: number = 320) => {
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = window.setTimeout(() => {
+      const stillHoveringItem = !!hoverRootRef.current || (hoverMainIdxRef.current !== null) || !!hoverSubRef.current;
+      if (!overlayHoverRef.current && !stillHoveringItem) setOverlay(null);
+    }, delay);
+  };
   React.useEffect(() => {
     const measure = () => {
       const el = containerRef.current;
@@ -130,17 +164,41 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       ref={containerRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      style={{ width: measuredW, background: '#121621', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none' }}
+      style={{ width: measuredW, background: '#121621', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none', position: 'relative' }}
     >
       {aggregated && (
         <button
           onClick={(e) => { (onSelectAggregator ? onSelectAggregator() : undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
           style={itemStyle(safeSelectedSubIndex === undefined, false)}
           className={`sb-item ${safeSelectedSubIndex === undefined ? styles.sidebarSelected : ''}`}
+          onMouseEnter={(ev) => {
+            setHoverRoot(true);
+            const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+            setOverlay({ type: 'root', left: rect.right + 6, top: rect.top + rect.height / 2 });
+          }}
+          onMouseLeave={() => {
+            setHoverRoot(false);
+            maybeHideOverlay(320);
+          }}
         >
           <span style={{ marginRight: 6 }}>{getIconComponent('Folder')}</span>
           <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{rootLabel || 'Data'}</span>
         </button>
+      )}
+      {addingMain && (
+        <div style={{ marginTop: 6 }}>
+          <input
+            autoFocus
+            value={draftLabel}
+            onChange={(e) => setDraftLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && draftLabel.trim()) { onAddMain && onAddMain(draftLabel.trim()); setAddingMain(false); setDraftLabel(''); }
+              if (e.key === 'Escape') { setAddingMain(false); setDraftLabel(''); }
+            }}
+            placeholder="New main data label…"
+            style={{ width: '90%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px', marginLeft: aggregated ? 18 : 0 }}
+          />
+        </div>
       )}
       {mainList.map((main, idx) => {
         const activeMain = selectedMainIndex === idx;
@@ -153,6 +211,15 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
               onClick={(e) => { onSelectMain(idx); onSelectSub && onSelectSub(undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
               style={{ ...itemStyle(activeMain, false, disabledMain), ...(aggregated ? { marginLeft: 18 } : {}) }}
               className={`sb-item ${activeMain ? styles.sidebarSelected : ''}`}
+              onMouseEnter={(ev) => {
+                setHoverMainIdx(idx);
+                const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                setOverlay({ type: 'main', mainIdx: idx, left: rect.right + 6, top: rect.top + rect.height / 2 });
+              }}
+              onMouseLeave={() => {
+                setHoverMainIdx(curr => (curr === idx ? null : curr));
+                maybeHideOverlay(320);
+              }}
             >
               {aggregated && (
                 <span
@@ -188,6 +255,21 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                 </span>
               )}
             </button>
+            {editingMainIdx === idx && (
+              <div style={{ marginLeft: 36, marginTop: 6 }}>
+                <input
+                  autoFocus
+                  value={editDraft}
+                  onChange={(e) => setEditDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (editDraft || '').trim()) { onRenameMain && onRenameMain(idx, (editDraft || '').trim()); setEditingMainIdx(null); setEditDraft(''); }
+                    if (e.key === 'Escape') { setEditingMainIdx(null); setEditDraft(''); }
+                  }}
+                  placeholder="Rename main…"
+                  style={{ width: '80%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px' }}
+                />
+              </div>
+            )}
             {(selectedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subs.map((sub: any, sidx: number) => {
@@ -199,8 +281,47 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                   return (
                     <button
                       key={sidx}
+                      draggable
+                      onDragStart={(e) => {
+                        dragStateRef.current = { mainIdx: idx, fromIdx: sidx };
+                        try { e.dataTransfer?.setData('text/plain', String(sidx)); e.dataTransfer.dropEffect = 'move'; e.dataTransfer.effectAllowed = 'move'; } catch {}
+                        try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.dragStart]', { main: getLabel(main), from: sidx }); } catch {}
+                      }}
+                      onDragEnter={(e) => {
+                        // same-main only
+                        if (dragStateRef.current.mainIdx === idx) {
+                          e.preventDefault();
+                        }
+                      }}
+                      onDragOver={(e) => {
+                        if (dragStateRef.current.mainIdx === idx) {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                        }
+                      }}
+                      onDrop={(e) => {
+                        const st = dragStateRef.current;
+                        if (st.mainIdx === idx && st.fromIdx !== null && typeof onReorderSub === 'function') {
+                          if (st.fromIdx !== sidx) {
+                            onReorderSub(idx, st.fromIdx, sidx);
+                            try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.drop]', { main: getLabel(main), from: st.fromIdx, to: sidx }); } catch {}
+                          }
+                        }
+                        dragStateRef.current = { mainIdx: null, fromIdx: null };
+                        try { e.preventDefault(); } catch {}
+                      }}
+                      onDragEnd={() => { dragStateRef.current = { mainIdx: null, fromIdx: null }; }}
                       onClick={(e) => { onSelectSub && onSelectSub(sidx); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
-                      style={{ ...itemStyle(activeSub, true, disabledSub), ...(activeSub ? {} : { background: bgGroup }) }}
+                      onMouseEnter={(ev) => {
+                        setHoverSub({ mainIdx: idx, subIdx: sidx });
+                        const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                        setOverlay({ type: 'sub', mainIdx: idx, subIdx: sidx, left: rect.right + 6, top: rect.top + rect.height / 2 });
+                      }}
+                      onMouseLeave={() => {
+                        setHoverSub(curr => (curr && curr.mainIdx === idx && curr.subIdx === sidx ? null : curr));
+                        maybeHideOverlay(320);
+                      }}
+                      style={{ ...itemStyle(activeSub, true, disabledSub), ...(activeSub ? {} : { background: bgGroup }), cursor: 'grab' }}
                       className={`sb-item ${activeSub ? styles.sidebarSelected : ''}`}
                     >
                       <span
@@ -223,11 +344,77 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                     </button>
                   );
                 })}
+                {addingSubFor === idx && (
+                  <div>
+                    <input
+                      autoFocus
+                      value={draftLabel}
+                      onChange={(e) => setDraftLabel(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && draftLabel.trim()) { onAddSub && onAddSub(idx, draftLabel.trim()); setAddingSubFor(null); setDraftLabel(''); }
+                        if (e.key === 'Escape') { setAddingSubFor(null); setDraftLabel(''); }
+                      }}
+                      placeholder="New sub-data label…"
+                      style={{ width: '80%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px' }}
+                    />
+                  </div>
+                )}
+                {editingSub && editingSub.mainIdx === idx && (
+                  <div>
+                    <input
+                      autoFocus
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (editDraft || '').trim()) { onRenameSub && onRenameSub(editingSub.mainIdx, editingSub.subIdx, (editDraft || '').trim()); setEditingSub(null); setEditDraft(''); }
+                        if (e.key === 'Escape') { setEditingSub(null); setEditDraft(''); }
+                      }}
+                      placeholder="Rename sub…"
+                      style={{ width: '80%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px' }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
         );
       })}
+      {/* floating overlay */}
+      {overlay && createPortal(
+        <div
+          onMouseEnter={() => { overlayHoverRef.current = true; if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current); }}
+          onMouseLeave={() => { overlayHoverRef.current = false; maybeHideOverlay(200); }}
+          style={{ position: 'fixed', top: overlay.top, left: overlay.left, transform: 'translateY(-50%)', zIndex: 9999, background: 'transparent', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+          {overlay.type === 'root' && (
+            <button title="Add main data" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { setAddingMain(true); setDraftLabel(''); setOverlay(null); }}>
+              <Plus size={14} color="#e5e7eb" />
+            </button>
+          )}
+          {overlay.type === 'main' && (
+            <>
+              <button title="Add sub-data" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setAddingSubFor(overlay.mainIdx); setDraftLabel(''); setOverlay(null); } }}>
+                <Plus size={14} color="#e5e7eb" />
+              </button>
+              <button title="Rename" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setEditingMainIdx(overlay.mainIdx); setEditDraft(getLabel(mainList[overlay.mainIdx])); setOverlay(null); } }}>
+                <Pencil size={14} color="#e5e7eb" />
+              </button>
+              <button title="Delete" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && onDeleteMain) { onDeleteMain(overlay.mainIdx); setOverlay(null); } }}>
+                <Trash2 size={14} color="#e5e7eb" />
+              </button>
+            </>
+          )}
+          {overlay.type === 'sub' && (
+            <>
+              <button title="Rename sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number') { setEditingSub({ mainIdx: overlay.mainIdx, subIdx: overlay.subIdx }); const sub = getSubDataList(mainList[overlay.mainIdx])[overlay.subIdx]; setEditDraft(getLabel(sub)); setOverlay(null); } }}>
+                <Pencil size={12} color="#e5e7eb" />
+              </button>
+              <button title="Delete sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number' && onDeleteSub) { onDeleteSub(overlay.mainIdx, overlay.subIdx); setOverlay(null); } }}>
+                <Trash2 size={12} color="#e5e7eb" />
+              </button>
+            </>
+          )}
+        </div>, document.body)}
     </div>
   );
 });

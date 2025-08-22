@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
-import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X, BookOpen } from 'lucide-react';
+import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X, BookOpen, ListChecks, Sparkles } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
 // import SynonymsEditor from './SynonymsEditor';
 import NLPExtractorProfileEditor from './NLPExtractorProfileEditor';
+import MessageReview from './MessageReview/MessageReview';
 import {
   getMainDataList,
   getSubDataList,
@@ -42,8 +43,69 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
   const log = (...args: any[]) => {
     try { if (localStorage.getItem('debug.responseEditor') === '1') console.log(...args); } catch {}
   };
+  // Ensure debug flag is set once to avoid asking again
+  useEffect(() => {
+    try { localStorage.setItem('debug.responseEditor', '1'); } catch {}
+    try { localStorage.setItem('debug.reopen', '1'); } catch {}
+  }, []);
   const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
   const [localTranslations, setLocalTranslations] = useState<any>({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
+
+  // --- Helpers: preserve/ensure steps on reopen (UI-only; no persistence) ---
+  function ensureStepsForNode(node: any): any {
+    if (!node) return node;
+    const steps = node.steps;
+    // If steps exist in either object or array form, leave unchanged
+    if (steps && (Array.isArray(steps) ? steps.length > 0 : Object.keys(steps || {}).length > 0)) return node;
+    const messages = node.messages || {};
+    const stepKeys = Object.keys(messages || {});
+    if (stepKeys.length === 0) return node;
+    // Build minimal steps object: one escalation with sayMessage(textKey)
+    const built: any = {};
+    for (const k of stepKeys) {
+      const textKey = messages[k]?.textKey;
+      built[k] = {
+        escalations: [
+          {
+            actions: [
+              {
+                actionId: 'sayMessage',
+                parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [],
+              }
+            ],
+          }
+        ],
+      };
+    }
+    return { ...node, steps: built };
+  }
+
+  function preserveStepsFromPrev(prev: any, next: any): any {
+    if (!prev || !next) return next;
+    const prevMains = Array.isArray(prev?.mainData) ? prev.mainData : [];
+    const nextMains = Array.isArray(next?.mainData) ? next.mainData : [];
+    const mapByLabel = (arr: any[]) => {
+      const m = new Map<string, any>();
+      arr.forEach((n) => { if (n?.label) m.set(String(n.label), n); });
+      return m;
+    };
+    const prevMap = mapByLabel(prevMains);
+    const enrichedMains = nextMains.map((n) => {
+      const prevNode = prevMap.get(String(n?.label));
+      let merged = n;
+      if (prevNode && !n?.steps && prevNode?.steps) merged = { ...n, steps: prevNode.steps };
+      const subs = Array.isArray(n?.subData) ? n.subData : [];
+      const prevSubs = Array.isArray(prevNode?.subData) ? prevNode.subData : [];
+      const prevSubsMap = mapByLabel(prevSubs);
+      const mergedSubs = subs.map((s: any) => {
+        const prevS = prevSubsMap.get(String(s?.label));
+        if (prevS && !s?.steps && prevS?.steps) return { ...ensureStepsForNode(s), steps: prevS.steps };
+        return ensureStepsForNode(s);
+      });
+      return { ...ensureStepsForNode(merged), subData: mergedSubs };
+    });
+    return { ...next, mainData: enrichedMains };
+  }
 
   useEffect(() => {
     const prevId = (localDDT && (localDDT.id || localDDT._id)) as any;
@@ -56,17 +118,19 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
         const mainsAfter = Array.isArray((coerced || {}).mainData) ? (coerced as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
         console.log('[KindPersist][ResponseEditor][loadDDT->setLocalDDT]', { mainsBefore, mainsAfter });
       } catch {}
-      setLocalDDT(coerced);
+      // Preserve steps from previous in-memory DDT when reopening same template; ensure steps from messages if missing
+      const enriched = preserveStepsFromPrev(localDDT, coerced);
+      setLocalDDT(enriched);
     }
     const nextTranslations = { ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) };
     setLocalTranslations((prev: any) => {
       const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
       return same ? prev : nextTranslations;
     });
-    // Do NOT reset selection when the same DDT object is being updated or when only local edits occur
-    if (!isSameDDT && !localDDT) {
-      setSelectedMainIndex(0);
-      setSelectedSubIndex(undefined);
+    // Reset selection when a different DDT is opened (new session)
+    if (!isSameDDT) {
+    setSelectedMainIndex(0);
+    setSelectedSubIndex(undefined);
     }
     try {
       const counts = {
@@ -123,8 +187,26 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
   React.useEffect(() => {
     if (!stepKeys.length) { setSelectedStepKey(''); return; }
     if (selectedStepKey && stepKeys.includes(selectedStepKey)) return;
-    setSelectedStepKey(stepKeys[0]);
+    // Prefer default 'start' if present, otherwise first available
+    const preferred = stepKeys.includes('start') ? 'start' : stepKeys[0];
+    setSelectedStepKey(preferred);
   }, [stepKeys, selectedStepKey]);
+
+  // Snapshot log su cambio selezione (abilita con localStorage.setItem('debug.reopen','1'))
+  React.useEffect(() => {
+    try {
+      if (localStorage.getItem('debug.reopen') === '1') {
+        const main = mainList[selectedMainIndex];
+        const sub = selectedSubIndex == null ? null : (getSubDataList(main) || [])[selectedSubIndex];
+        console.log('[RE][selection]', {
+          main: main?.label,
+          sub: sub?.label || null,
+          step: selectedStepKey,
+          availableSteps: stepKeys,
+        });
+      }
+    } catch {}
+  }, [mainList, selectedMainIndex, selectedSubIndex, selectedStepKey, stepKeys]);
 
   // Callback per Sidebar
   const handleSelectMain = (idx: number) => {
@@ -272,6 +354,12 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
             <button title="Chat" onClick={() => { setShowSynonyms(false); saveRightMode('chat'); }} style={{ background: rightMode==='chat' ? '#fff' : 'transparent', color: rightMode==='chat' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
               <MessageSquare size={16} />
             </button>
+            <button title="Message review: view and edit all step messages" onClick={() => { setShowSynonyms(false); saveRightMode('messageReview'); }} style={{ background: rightMode==='messageReview' ? '#fff' : 'transparent', color: rightMode==='messageReview' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <ListChecks size={16} />
+            </button>
+            <button title="Dialogue style presets" onClick={() => { setShowSynonyms(false); saveRightMode('styles'); }} style={{ background: rightMode==='styles' ? '#fff' : 'transparent', color: rightMode==='styles' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+              <Sparkles size={16} />
+            </button>
             <button
               title={showSynonyms ? 'Close contract editor' : 'Open contract editor'}
               onClick={() => setShowSynonyms(v => !v)}
@@ -320,12 +408,115 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
               return next;
             });
           }}
+          onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
+            setLocalDDT((prev: any) => {
+              if (!prev) return prev;
+              const next = JSON.parse(JSON.stringify(prev));
+              const mains = getMainDataList(next);
+              const main = mains[mIdx];
+              if (!main) return prev;
+              const subList = Array.isArray(main.subData) ? main.subData : [];
+              if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return prev;
+              const [moved] = subList.splice(fromIdx, 1);
+              subList.splice(toIdx, 0, moved);
+              main.subData = subList;
+              mains[mIdx] = main;
+              next.mainData = mains;
+              try { if (localStorage.getItem('debug.responseEditor')==='1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch {}
+              try { replaceSelectedDDT(next); } catch {}
+              return next;
+            });
+          }}
+          onAddMain={(label: string) => {
+            setLocalDDT((prev: any) => {
+              if (!prev) return prev;
+              const next = JSON.parse(JSON.stringify(prev));
+              const mains = getMainDataList(next);
+              mains.push({ label, subData: [] });
+              next.mainData = mains;
+              try { replaceSelectedDDT(next); } catch {}
+              return next;
+            });
+          }}
+          onRenameMain={(mIdx: number, label: string) => {
+            setLocalDDT((prev: any) => {
+              if (!prev) return prev;
+              const next = JSON.parse(JSON.stringify(prev));
+              const mains = getMainDataList(next);
+              if (!mains[mIdx]) return prev;
+              mains[mIdx].label = label;
+              next.mainData = mains;
+              try { replaceSelectedDDT(next); } catch {}
+              return next;
+            });
+          }}
+          onDeleteMain={(mIdx: number) => {
+            setLocalDDT((prev: any) => {
+              if (!prev) return prev;
+              const next = JSON.parse(JSON.stringify(prev));
+              const mains = getMainDataList(next);
+              if (mIdx < 0 || mIdx >= mains.length) return prev;
+              mains.splice(mIdx, 1);
+              next.mainData = mains;
+              try { replaceSelectedDDT(next); } catch {}
+              return next;
+            });
+          }}
+          onAddSub={(mIdx: number, label: string) => {
+            setLocalDDT((prev: any) => {
+              if (!prev) return prev;
+              const next = JSON.parse(JSON.stringify(prev));
+              const mains = getMainDataList(next);
+              const main = mains[mIdx];
+              if (!main) return prev;
+              const list = Array.isArray(main.subData) ? main.subData : [];
+              list.push({ label, required: true });
+              main.subData = list;
+              mains[mIdx] = main;
+              next.mainData = mains;
+              try { replaceSelectedDDT(next); } catch {}
+              return next;
+            });
+          }}
+          onRenameSub={(mIdx: number, sIdx: number, label: string) => {
+            setLocalDDT((prev: any) => {
+              if (!prev) return prev;
+              const next = JSON.parse(JSON.stringify(prev));
+              const mains = getMainDataList(next);
+              const main = mains[mIdx];
+              if (!main) return prev;
+              const list = Array.isArray(main.subData) ? main.subData : [];
+              if (sIdx < 0 || sIdx >= list.length) return prev;
+              list[sIdx] = { ...(list[sIdx] || {}), label };
+              main.subData = list;
+              mains[mIdx] = main;
+              next.mainData = mains;
+              try { replaceSelectedDDT(next); } catch {}
+              return next;
+            });
+          }}
+          onDeleteSub={(mIdx: number, sIdx: number) => {
+            setLocalDDT((prev: any) => {
+              if (!prev) return prev;
+              const next = JSON.parse(JSON.stringify(prev));
+              const mains = getMainDataList(next);
+              const main = mains[mIdx];
+              if (!main) return prev;
+              const list = Array.isArray(main.subData) ? main.subData : [];
+              if (sIdx < 0 || sIdx >= list.length) return prev;
+              list.splice(sIdx, 1);
+              main.subData = list;
+              mains[mIdx] = main;
+              next.mainData = mains;
+              try { replaceSelectedDDT(next); } catch {}
+              return next;
+            });
+          }}
           onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
         />
-        <div style={{ width: 35 }} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* Steps toolbar hidden during NLP editor */}
-          {!showSynonyms && (
+          {/* Steps toolbar hidden during NLP editor and message review */}
+          {!showSynonyms && rightMode !== 'messageReview' && (
             <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
               <StepsStrip
                 stepKeys={uiStepKeys}
@@ -365,6 +556,9 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
                     />
                   </div>
                 ) : (
+                  rightMode === 'messageReview' ? (
+                    <MessageReview ddt={localDDT} translations={localTranslations} />
+                ) : (
                   <StepEditor
                     node={selectedNode}
                     stepKey={selectedStepKey}
@@ -387,11 +581,12 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
                       return next;
                     })}
                   />
+                  )
                 )}
                 </div>
               </div>
             </div>
-            {!showSynonyms && (
+            {!showSynonyms && rightMode !== 'messageReview' && (
               <RightPanel
                 mode={rightMode}
                 width={rightWidth}

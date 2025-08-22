@@ -20,8 +20,16 @@ type Props = {
 type EscalationModel = { actions: Array<{ actionId: string; text?: string; textKey?: string; icon?: string; label?: string; color?: string }> };
 
 function buildModel(node: any, stepKey: string, translations: Record<string, string>): EscalationModel[] {
-  // Real step present
-  if (node?.steps && node.steps[stepKey] && Array.isArray(node.steps[stepKey].escalations)) {
+  try {
+    if (localStorage.getItem('debug.reopen') === '1') {
+      const shape = Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none');
+      const keys = node?.steps && !Array.isArray(node.steps) ? Object.keys(node.steps) : (Array.isArray(node?.steps) ? (node.steps as any[]).map((g:any)=>g?.type) : []);
+      // eslint-disable-next-line no-console
+      console.log('[RE][buildModel]', { nodeLabel: node?.label, stepKey, stepsShape: shape, keys });
+    }
+  } catch {}
+  // Case A: steps as object { start: { escalations: [...] } }
+  if (node?.steps && !Array.isArray(node.steps) && node.steps[stepKey] && Array.isArray(node.steps[stepKey].escalations)) {
     const escs = node.steps[stepKey].escalations as any[];
     return escs.map((esc) => ({
       actions: (esc.actions || []).map((a: any) => {
@@ -33,6 +41,21 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
     }));
   }
 
+  // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
+  if (Array.isArray(node?.steps)) {
+    const group = (node.steps as any[]).find((g: any) => (g?.type === stepKey));
+    if (group && Array.isArray(group.escalations)) {
+      return (group.escalations as any[]).map((esc: any) => ({
+        actions: (esc.actions || []).map((a: any) => {
+          const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
+          const textKey = p?.value;
+          const text = typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined;
+          return { actionId: a.actionId, text, textKey };
+        })
+      }));
+    }
+  }
+
   // Fallback synthetic step from messages
   const msg = node?.messages?.[stepKey];
   if (msg && typeof msg.textKey === 'string') {
@@ -42,6 +65,19 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
       { actions: [{ actionId: 'sayMessage', text, textKey }] }
     ];
   }
+  // Last‑resort: derive from translation keys (runtime.*) containing node label and stepKey
+  try {
+    const label = String(node?.label || '').trim();
+    const keys = Object.keys(translations || {});
+    const matches = keys.filter(k => (stepKey ? k.includes(`.${stepKey}.`) : false) && (label ? k.includes(label) : true));
+    if (matches.length > 0) {
+      return [
+        {
+          actions: matches.map(k => ({ actionId: 'sayMessage', text: translations[k] || k, textKey: k }))
+        }
+      ];
+    }
+  } catch {}
   return [];
 }
 

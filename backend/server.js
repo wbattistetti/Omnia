@@ -87,6 +87,41 @@ app.put('/api/factory/agent-acts/:id', async (req, res) => {
   }
 });
 
+// Bulk-replace Agent Acts: delete all then insert the provided list
+app.post('/api/factory/agent-acts/bulk-replace', async (req, res) => {
+  const payload = Array.isArray(req.body) ? req.body : [];
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('AgentActs');
+    await coll.deleteMany({});
+    let inserted = 0;
+    if (payload.length > 0) {
+      const docs = payload.map((it) => ({
+        _id: it._id || it.id,
+        type: 'agent_act',
+        label: it.label || it.name || 'Unnamed',
+        description: it.description || '',
+        category: it.category || 'Uncategorized',
+        tags: it.tags || [],
+        isInteractive: Boolean(it.isInteractive),
+        data: it.data || {},
+        ddt: it.ddt || null,
+        createdAt: it.createdAt || new Date(),
+        updatedAt: new Date(),
+      }));
+      const result = await coll.insertMany(docs, { ordered: false });
+      inserted = (result && result.insertedCount) || 0;
+    }
+    res.json({ success: true, inserted });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
 app.get('/api/factory/actions', async (req, res) => {
   const client = new MongoClient(uri);
   try {
