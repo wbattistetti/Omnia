@@ -1,4 +1,5 @@
 import React from 'react';
+import { Wrench } from 'lucide-react';
 import { useThemeManager } from '../../theme/ThemeManager';
 import { useThemeElement } from '../../theme/utils/elementRegistry';
 
@@ -59,6 +60,17 @@ export default function SidebarHeader() {
             </p>
           </div>
         </div>
+        <button
+          title="Backend Builder"
+          onClick={() => {
+            try {
+              document.dispatchEvent(new CustomEvent('backendBuilder:open'));
+            } catch {}
+          }}
+          className="p-2 text-gray-300 hover:text-white"
+        >
+          <Wrench className="w-5 h-5" />
+        </button>
       </div>
     </div>
   );

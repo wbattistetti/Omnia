@@ -93,6 +93,67 @@ app.include_router(nlp_extract_router)
 app.include_router(ner_router)
 app.include_router(parse_address_router)
 
+# --- Backend Builder: synthesize natural-language outline from chat ---
+@app.post("/api/builder/brief")
+def builder_brief(body: dict = Body(...)):
+    """
+    Body: { "messages": [{role,text}...], "context": "CONTESTO_STATO opzionale" }
+    Return: { ok: true, text: outline, delta: suggested_delta }
+    """
+    msgs = (body or {}).get("messages") or []
+    context = (body or {}).get("context") or ""
+    if not isinstance(msgs, list) or not msgs:
+        return {"error": "messages_required"}
+
+    convo = []
+    for m in msgs:
+        role = (m or {}).get("role") or "designer"
+        text = (m or {}).get("text") or ""
+        convo.append(f"[{role}] {text}")
+    convo_text = "\n".join(convo)[-6000:]
+
+    SYSTEM_RULES = f"""
+Sei un consulente backend. In questa fase lavori SOLO in linguaggio naturale ben formattato.
+Regole:
+- Spiega in modo chiaro e ordinato, con titoli in **grassetto** e elenchi numerati/puntati.
+- Riformula le richieste per conferma.
+- NIENTE codice e NIENTE JSON.
+- Evidenzia sempre: Obiettivo finale; Passi (fetch, normalizzazione, deduplica, filtri, aggregazione); Dubbi/Informazioni mancanti; Prossima azione proposta.
+Mantieni coerenza con il CONTESTO_STATO.
+Alla fine della risposta, aggiungi una sezione "Delta CONTESTO_STATO:" con 1-3 righe da aggiungere al contesto cumulato (solo testo, niente JSON/codice).
+"""
+
+    prompt = f"""
+{SYSTEM_RULES}
+
+CONTESTO_STATO attuale (se presente):
+{context}
+
+Conversazione (designer/IA):
+{convo_text}
+"""
+
+    ai = call_groq([
+        {"role": "system", "content": "Rispondi in italiano. Solo linguaggio naturale formattato. Nessun JSON/codice."},
+        {"role": "user", "content": prompt}
+    ])
+    raw = (ai or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-zA-Z]*\n", "", raw)
+        raw = re.sub(r"\n```\s*$", "", raw)
+    raw = re.sub(r"\r\n", "\n", raw)
+    raw = re.sub(r"\n{2,}(\d+\))", r"\n\n\1", raw)
+
+    # Extract delta section if present
+    delta = ""
+    m = re.search(r"Delta CONTESTO_STATO:\s*(.*)$", raw, flags=re.I | re.S)
+    if m:
+        delta = m.group(1).strip()
+        # Remove delta from main text
+        raw = raw[:m.start()].rstrip()
+
+    return {"ok": True, "text": raw, "delta": delta}
+
 # Allow overriding Express base so WSL can reach Windows-hosted Express
 EXPRESS_BASE = os.environ.get("EXPRESS_BASE", "http://localhost:3100")
 

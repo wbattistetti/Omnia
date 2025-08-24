@@ -16,6 +16,7 @@ import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
 // import { DockablePanelsHandle } from './DockablePanels';
 // import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
+import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import { useDDTContext } from '../context/DDTContext';
 import { useDDTManager } from '../context/DDTManagerContext';
@@ -74,6 +75,14 @@ export const AppContent: React.FC<AppContentProps> = ({
   // const [saveError, setSaveError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [showBackendBuilder, setShowBackendBuilder] = useState(false);
+
+  // Listen to Sidebar wrench
+  React.useEffect(() => {
+    const handler = () => setShowBackendBuilder(true);
+    document.addEventListener('backendBuilder:open', handler);
+    return () => document.removeEventListener('backendBuilder:open', handler);
+  }, []);
 
   // Stato per gestione progetti
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
@@ -337,10 +346,15 @@ export const AppContent: React.FC<AppContentProps> = ({
                 }
               }}
               onRun={() => alert('Esegui')}
-              onSettings={() => alert('Impostazioni')}
+              onSettings={() => setShowBackendBuilder(true)}
               projectName={currentProject?.name}
             />
-            <FlowEditor
+            {showBackendBuilder ? (
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
+              </div>
+            ) : (
+              <FlowEditor
               nodes={nodes}
               setNodes={setNodes}
               edges={edges}
@@ -352,7 +366,8 @@ export const AppContent: React.FC<AppContentProps> = ({
               setTestPanelOpen={setTestPanelOpen}
               testNodeId={testNodeId}
               setTestNodeId={setTestNodeId}
-            />
+              />
+            )}
             {selectedDDT && (
               (() => {
                 const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);
