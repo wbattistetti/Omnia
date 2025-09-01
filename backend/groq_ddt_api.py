@@ -154,6 +154,77 @@ Conversazione (designer/IA):
 
     return {"ok": True, "text": raw, "delta": delta}
 
+# --- NLP Tester: contract tuning from unmatched/false-acceptance ---
+@app.post("/api/nlp/tune-contract")
+def tune_contract(body: dict = Body(...)):
+    """
+    Body example:
+    {
+      "kind": "date",
+      "profile": {"synonyms":[], "formatHints":[], "regex":"", "postProcess":{}},
+      "errors": [
+         {"phrase":"...","key":"day","pred":"16","gt":"15","type":"false-accept"},
+         {"phrase":"...","key":"month","pred":null,"gt":"12","type":"unmatched"}
+      ],
+      "locale": "it-IT"
+    }
+    Returns: { "suggested": { regex?, synonyms?, formatHints?, postProcess? } }
+    """
+    kind = (body or {}).get("kind") or "generic"
+    profile = (body or {}).get("profile") or {}
+    errors = (body or {}).get("errors") or []
+    locale = (body or {}).get("locale") or "it-IT"
+
+    brief_errors = []
+    for e in errors:
+        brief_errors.append({
+            "k": e.get("key"),
+            "p": e.get("pred"),
+            "g": e.get("gt"),
+            "t": e.get("type"),
+            "x": (e.get("phrase") or "")[:140]
+        })
+
+    system = {
+        "role": "system",
+        "content": (
+            f"You are an NLP contract tuner for locale {locale}. "
+            "Given a kind and a profile (synonyms, formatHints, regex, postProcess), and a set of errors (false-accept, unmatched), "
+            "propose minimal, safe improvements to reduce false-accepts and unmatched without overfitting. "
+            "Return STRICT JSON only with a 'suggested' object that may contain any of: synonyms (array of strings), formatHints (array of strings), regex (string), postProcess (JSON). No narration."
+        )
+    }
+    user = {
+        "role": "user",
+        "content": json.dumps({
+            "kind": kind,
+            "profile": profile,
+            "errors": brief_errors
+        }, ensure_ascii=False)
+    }
+
+    try:
+        ai = call_groq([system, user])
+        text = (ai or "").strip()
+        try:
+            obj = json.loads(text)
+        except Exception:
+            m = re.search(r"\{[\s\S]*\}$", text)
+            obj = json.loads(m.group(0)) if m else {"suggested": {}}
+        suggested = (obj or {}).get("suggested") or {}
+        clean = {}
+        if isinstance(suggested.get("synonyms"), list):
+            clean["synonyms"] = [str(s) for s in suggested["synonyms"]][:50]
+        if isinstance(suggested.get("formatHints"), list):
+            clean["formatHints"] = [str(s) for s in suggested["formatHints"]][:50]
+        if isinstance(suggested.get("regex"), str):
+            clean["regex"] = suggested["regex"][:2000]
+        if isinstance(suggested.get("postProcess"), (dict, list, str, int, float, bool)):
+            clean["postProcess"] = suggested["postProcess"]
+        return {"ok": True, "suggested": clean}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 # Allow overriding Express base so WSL can reach Windows-hosted Express
 EXPRESS_BASE = os.environ.get("EXPRESS_BASE", "http://localhost:3100")
 

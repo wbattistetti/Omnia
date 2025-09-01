@@ -1,4 +1,4 @@
-const API = 'http://localhost:8000'; // Cambia se il backend è su un'altra porta
+const API = '';
 
 export async function ddtStep1() {
   const res = await fetch(`${API}/step1`, { method: 'POST' });

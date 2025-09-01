@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, HTTPException
 import json
 from ai_prompts.detect_type_prompt import get_detect_type_prompt
 from call_groq import call_groq
@@ -9,10 +9,14 @@ router = APIRouter()
 def step2(user_desc: str = Body(...)):
     prompt = get_detect_type_prompt(user_desc)
     print("[AI PROMPT][detectSchema]", prompt)
-    ai = call_groq([
-        {"role": "system", "content": "Always reply in English."},
-        {"role": "user", "content": prompt}
-    ])
+    try:
+        ai = call_groq([
+            {"role": "system", "content": "Always reply in English."},
+            {"role": "user", "content": prompt}
+        ])
+    except Exception as e:
+        print("[AI ERROR][detectSchema]", str(e))
+        raise HTTPException(status_code=502, detail=f"AI provider error: {str(e)}")
     print("[AI ANSWER][detectSchema]", ai)
     try:
         ai_obj = json.loads(ai)

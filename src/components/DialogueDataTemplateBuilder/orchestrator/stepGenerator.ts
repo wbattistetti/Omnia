@@ -5,7 +5,7 @@ import generateScripts from './generateScripts';
 import batchMessages from './batchMessages';
 
 // Backend base URL
-const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+const API_BASE = '';
 
 // Tipo base per input
 export interface DataNode {
@@ -124,7 +124,7 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
             body = JSON.stringify({ meaning: data.label || data.name || '', desc: '', ...extraBody });
           }
           try {
-          const res = await fetch(`${API_BASE}${stepDef.endpoint}`, {
+          const res = await fetch(`${stepDef.endpoint}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: body,

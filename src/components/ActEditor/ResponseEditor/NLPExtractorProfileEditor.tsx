@@ -5,7 +5,7 @@ import { nerExtract } from '../../../nlp/services/nerClient';
 import RegexEditor from './RegexEditor';
 import NLPCompactEditor from './NLPCompactEditor';
 import PostProcessEditor from './PostProcessEditor';
-import { Calendar, Mail, Phone, Hash, Globe, MapPin, User, FileText, CreditCard, CarFront as Car, Badge, Landmark, Type as TypeIcon, ChevronDown } from 'lucide-react';
+import { Calendar, Mail, Phone, Hash, Globe, MapPin, User, FileText, CreditCard, CarFront as Car, Badge, Landmark, Type as TypeIcon, ChevronDown, Plus, ChevronsRight, Wrench, BarChart2 } from 'lucide-react';
 
 export interface NLPProfile {
   slotId: string;
@@ -156,10 +156,21 @@ export default function NLPExtractorProfileEditor({
     confidence?: number;
     variables?: Record<string, any>;
   }>>([]);
+  // Inline editing state for Tester stacked values
+  const [editingCell, setEditingCell] = React.useState<{
+    row: number;
+    col: 'det' | 'ner' | 'llm';
+    key: string;
+  } | null>(null);
+  const [editingText, setEditingText] = React.useState<string>('');
+  const [cellOverrides, setCellOverrides] = React.useState<Record<string, string>>({});
   // Removed per-row bottom details panel state
   const [testing, setTesting] = React.useState<boolean>(false);
+  const [baselineStats, setBaselineStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
+  const [lastStats, setLastStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
+  const [reportOpen, setReportOpen] = React.useState<boolean>(false);
   const [jsonError, setJsonError] = React.useState<string | undefined>(undefined);
-  const [activeTab, setActiveTab] = React.useState<'regex' | 'nlp' | 'post' | null>('nlp');
+  const [activeTab, setActiveTab] = React.useState<'regex' | 'nlp' | 'post' | null>(null);
   const [endpointBase] = React.useState<string>(() => {
     try {
       const saved = typeof window !== 'undefined' ? localStorage.getItem('nlpEndpointBase') : null;
@@ -602,6 +613,12 @@ export default function NLPExtractorProfileEditor({
     for (let i = 0; i < examplesList.length; i += 1) {
       await runRowTest(i);
     }
+    // compute stats after run
+    try {
+      const stats = computeStatsFromResults();
+      setLastStats(stats);
+      if (!baselineStats) setBaselineStats(stats);
+    } catch {}
     setTesting(false);
   };
 
@@ -616,7 +633,7 @@ export default function NLPExtractorProfileEditor({
   };
 
   // Helpers to format summary into stacked key: value lines showing expected keys; missing keys grey, present black
-  const renderStackedSummary = (summary?: string) => {
+  const renderStackedSummary = (summary: string | undefined, rowIdx?: number, col?: 'det' | 'ner' | 'llm') => {
     const text = (summary || '—').toString();
     const kv: Record<string, string | undefined> = {};
     if (text !== '—') {
@@ -631,12 +648,142 @@ export default function NLPExtractorProfileEditor({
     return (
       <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
         {keys.map((k) => {
-          const present = typeof kv[k] !== 'undefined' && kv[k] !== '';
-          return <span key={k} style={{ color: present ? '#0b0f17' : '#9ca3af' }}>{k}: {present ? kv[k] : '—'}</span>;
+          const overrideKey = typeof rowIdx === 'number' && col ? `${rowIdx}:${col}:${k}` : '';
+          const overridden = overrideKey ? cellOverrides[overrideKey] : undefined;
+          const baseVal = kv[k];
+          const value = typeof overridden !== 'undefined' ? overridden : baseVal;
+          const present = typeof value !== 'undefined' && value !== '';
+          const isEditing = !!editingCell && editingCell.row === rowIdx && editingCell.col === col && editingCell.key === k;
+          return (
+            <span key={k} style={{ color: present ? '#0b0f17' : '#9ca3af', display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr)', alignItems: 'start', gap: 6 }}>
+              <span>{k}:</span>
+              {!isEditing ? (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (typeof rowIdx !== 'number' || !col) return;
+                    setEditingCell({ row: rowIdx, col, key: k });
+                    setEditingText(value || '');
+                  }}
+                  title="Clicca per modificare"
+                  style={{ cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', display: 'block', minWidth: 0, maxWidth: '100%' }}
+                >
+                  {present ? value : '—'}
+                </span>
+              ) : (
+                <span style={{ display: 'block', minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
+                <textarea
+                  defaultValue={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (typeof rowIdx === 'number' && col) {
+                        const k2 = `${rowIdx}:${col}:${k}`;
+                        setCellOverrides((prev) => ({ ...prev, [k2]: editingText }));
+                      }
+                      setEditingCell(null);
+                    } else if (e.key === 'Escape') {
+                      setEditingCell(null);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (typeof rowIdx === 'number' && col) {
+                      const k2 = `${rowIdx}:${col}:${k}`;
+                      setCellOverrides((prev) => ({ ...prev, [k2]: editingText }));
+                    }
+                    setEditingCell(null);
+                  }}
+                  ref={(el) => {
+                    if (!el) return;
+                    const resize = () => {
+                      // fixed, compact height (don't change row height)
+                      const cs = getComputedStyle(el);
+                      const lhStr = cs.lineHeight || '16px';
+                      const lh = parseFloat(lhStr) || 16;
+                      const baseH = Math.max(16, Math.ceil(lh));
+                      el.style.height = `${baseH}px`;
+                      // width autosize to content up to cell width (no column growth)
+                      const canvas = document.createElement('canvas');
+                      const ctx = canvas.getContext('2d');
+                      let w = 40; // min
+                      if (ctx) {
+                        const font = cs.font || `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+                        ctx.font = font;
+                        w = Math.ceil(ctx.measureText(el.value || '—').width) + 10; // padding
+                      }
+                      const parent = el.parentElement as HTMLElement | null;
+                      const max = parent ? parent.clientWidth : w;
+                      // enforce max and hide overflow
+                      el.style.maxWidth = `${max}px`;
+                      el.style.width = `${Math.min(w, max)}px`;
+                    };
+                    resize();
+                    el.focus();
+                    try { el.selectionStart = el.value.length; } catch {}
+                    el.addEventListener('input', resize);
+                    // Cleanup on detach
+                    setTimeout(() => { if (el) el.removeEventListener('input', resize); }, 0);
+                  }}
+                  style={{
+                    display: 'inline-block',
+                    width: 'auto',
+                    maxWidth: '100%',
+                    minWidth: 40,
+                    minHeight: 16,
+                    padding: '0 2px',
+                    borderRadius: 2,
+                    border: '1px solid #94a3b8',
+                    background: '#fff',
+                    color: '#111827',
+                    fontSize: 14,
+                    lineHeight: 1.1,
+                    resize: 'none',
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    wordBreak: 'keep-all',
+                    outline: 'none',
+                    boxShadow: 'none',
+                  }}
+                />
+                </span>
+              )}
+            </span>
+          );
         })}
       </div>
     );
   };
+
+  // Compute metrics based on ground truth (manual overrides in det col) vs predictions
+  function computeStatsFromResults() {
+    let matched = 0;
+    let falseAccept = 0;
+    let totalGt = 0;
+    (examplesList || []).forEach((_, rowIdx) => {
+      const rr: any = rowResults[rowIdx] || {};
+      const keys = expectedKeysForKind(kind);
+      const parseSummary = (text?: string) => {
+        const out: Record<string, string | undefined> = {};
+        const t = (text || '').toString();
+        if (!t || t === '—') return out;
+        t.split(',').forEach((p) => { const sp = p.split('='); const k = sp[0]?.trim(); const v = sp[1] != null ? String(sp[1]).trim() : undefined; if (k) out[k] = v; });
+        return out;
+      };
+      const det = parseSummary(rr.deterministic);
+      const ner = parseSummary(rr.ner);
+      const llm = parseSummary(rr.llm);
+      keys.forEach((kKey) => {
+        const gt = cellOverrides[`${rowIdx}:det:${kKey}`];
+        if (typeof gt === 'undefined') return; // only count when GT is given
+        totalGt += 1;
+        const pred = det[kKey] ?? ner[kKey] ?? llm[kKey];
+        if (!pred) return; // unmatched (counted implicitly via totalGt)
+        if (pred === gt) matched += 1; else falseAccept += 1;
+      });
+    });
+    return { matched, falseAccept, totalGt };
+  }
 
   // Unified color time bar with thresholds: >200ms yellow, >1000ms red
   const renderTimeBar = (ms?: number, maxMs?: number) => {
@@ -760,6 +907,7 @@ export default function NLPExtractorProfileEditor({
       {/* Tester full width */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Tester</div>
+          {/* Controls in one line: input fills, icons right */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
             <input
               value={newExample}
@@ -786,29 +934,105 @@ export default function NLPExtractorProfileEditor({
                 }
               }}
               placeholder="Aggiungi frase…"
-              style={{ flex: 1, padding: 10, border: '1px solid #ddd', borderRadius: 8 }}
+              style={{ flex: 1, padding: 10, border: '1px solid #4b5563', background: '#111827', color: '#e5e7eb', borderRadius: 8 }}
             />
-            <button onClick={() => {
-              const t = (newExample || '').trim();
-              if (!t) return;
-              const existIdx = examplesList.findIndex((p) => p === t);
-              if (existIdx !== -1) {
-                setSelectedRow(existIdx);
-                setTimeout(() => { void runRowTest(existIdx); }, 0);
-              } else {
-                const next = Array.from(new Set([...examplesList, t]));
-                setExamplesList(next);
-                const newIdx = next.length - 1;
-                setSelectedRow(newIdx);
-                setTimeout(() => { void runRowTest(newIdx); }, 0);
-              }
-              setNewExample('');
-            }} style={{ background: '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Aggiungi</button>
-            <button onClick={runAllRows} disabled={testing || examplesList.length === 0} style={{ background: testing ? '#fbbf24' : '#34d399', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: testing ? 'default' : 'pointer' }}>{testing ? 'Analizzo…' : 'Prova tutte'}</button>
+            <button title="Aggiungi" onClick={() => {
+                const t = (newExample || '').trim();
+                if (!t) return;
+                const existIdx = examplesList.findIndex((p) => p === t);
+                if (existIdx !== -1) {
+                  setSelectedRow(existIdx);
+                  setTimeout(() => { void runRowTest(existIdx); }, 0);
+                } else {
+                  const next = Array.from(new Set([...examplesList, t]));
+                  setExamplesList(next);
+                  const newIdx = next.length - 1;
+                  setSelectedRow(newIdx);
+                  setTimeout(() => { void runRowTest(newIdx); }, 0);
+                }
+                setNewExample('');
+              }} style={{ border: '1px solid #10b981', background: '#065f46', color: '#ecfdf5', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
+              <Plus size={14} />
+            </button>
+            <button onClick={runAllRows} disabled={testing || examplesList.length === 0} title="Prova tutte" style={{ border: '1px solid #22c55e', background: testing ? '#eab308' : '#14532d', color: '#dcfce7', borderRadius: 8, padding: '8px 10px', cursor: testing ? 'default' : 'pointer' }}>
+              <ChevronsRight size={16} />
+            </button>
+            {/* Tuning */}
+            <button
+              title="Tuning"
+              onClick={async () => {
+                const errors: Array<any> = [];
+                (examplesList || []).forEach((phrase, rowIdx) => {
+                  const rr = rowResults[rowIdx] || {} as any;
+                  const cols: Array<{ id: 'det'|'ner'|'llm'; src?: string }> = [
+                    { id: 'det', src: rr?.deterministic },
+                    { id: 'ner', src: rr?.ner },
+                    { id: 'llm', src: rr?.llm },
+                  ];
+                  const keys = expectedKeysForKind(kind);
+                  keys.forEach((kKey) => {
+                    const gt = cellOverrides[`${rowIdx}:det:${kKey}`];
+                    cols.forEach(({ id, src }) => {
+                      const predMap: Record<string,string|undefined> = {};
+                      const t = (src || '').toString();
+                      if (t && t !== '—') {
+                        t.split(',').forEach(part => { const sp = part.split('='); const kk = sp[0]?.trim(); const vv = sp[1] != null ? String(sp[1]).trim() : undefined; if (kk) predMap[kk] = vv; });
+                      }
+                      const pred = predMap[kKey];
+                      if ((gt && !pred) || (gt && pred && pred !== gt)) {
+                        errors.push({ phrase, key: kKey, pred: pred ?? null, gt, type: pred ? 'false-accept' : 'unmatched', engine: id });
+                      }
+                    });
+                  });
+                });
+                try {
+                  const res = await fetch('/api/nlp/tune-contract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, locale: initial.locale, profile: { synonyms: fromCommaList(synonymsText), formatHints: fromCommaList(formatText), regex: regex || undefined, postProcess: tryParseJSON(postProcessText).value }, errors }) });
+                  if (res.ok) {
+                    const obj = await res.json();
+                    const s = obj?.suggested || {};
+                    if (Array.isArray(s.synonyms)) setSynonymsText(toCommaList(s.synonyms));
+                    if (Array.isArray(s.formatHints)) setFormatText(toCommaList(s.formatHints));
+                    if (typeof s.regex === 'string') setRegex(String(s.regex));
+                    if (typeof s.postProcess !== 'undefined') setPostProcessText(typeof s.postProcess === 'string' ? s.postProcess : JSON.stringify(s.postProcess, null, 2));
+                    await runAllRows();
+                  }
+                } catch {}
+              }}
+              style={{ border: '1px solid #f59e0b', background: '#7c2d12', color: '#ffedd5', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
+              <Wrench size={16} />
+            </button>
+            {/* Report dropdown moved to the far right */}
+            <div style={{ position: 'relative' }}>
+              <button title="Report" onClick={() => setReportOpen(o => !o)} style={{ border: '1px solid #60a5fa', background: '#0c4a6e', color: '#dbeafe', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
+                <BarChart2 size={16} />
+              </button>
+              {reportOpen && (
+                <div style={{ position: 'absolute', right: 0, marginTop: 6, background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: 8, padding: 10, minWidth: 260, zIndex: 30 }}>
+                  {(() => {
+                    const base = baselineStats || { matched: 0, falseAccept: 0, totalGt: 0 };
+                    const last = lastStats || base;
+                    const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
+                    const gainedMatched = pct(last.matched, last.totalGt) - pct(base.matched, base.totalGt);
+                    const removedFA = pct(base.falseAccept, base.totalGt) - pct(last.falseAccept, last.totalGt);
+                    const stillUnmatch = Math.max(0, (last.totalGt - last.matched - last.falseAccept));
+                    const stillFA = last.falseAccept;
+                    const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
+                    return (
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        <div><strong>Gained Matched:</strong> {sign(gainedMatched)}%</div>
+                        <div><strong>Removed False acceptance:</strong> {sign(removedFA)}%</div>
+                        <div><strong>Still UnMatching:</strong> {stillUnmatch}</div>
+                        <div><strong>Still False acceptance:</strong> {stillFA} ({sign(pct(last.falseAccept, last.totalGt) - pct(base.falseAccept, base.totalGt))}%)</div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
           </div>
           {/* Grid */}
           <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
               <thead>
                 <tr style={{ background: '#f3f4f6' }}>
                   <th style={{ textAlign: 'left', padding: 8, fontSize: 15 }}>Frase</th>
@@ -829,7 +1053,7 @@ export default function NLPExtractorProfileEditor({
                   const maxMs = Math.max(rr.detMs || 0, rr.nerMs || 0, rr.llmMs || 0);
                   return (
                     <tr key={i} style={{ borderTop: '1px solid #e5e7eb', cursor: 'pointer', background: selectedRow===i ? '#fff7ed' : '#fff' }} onClick={() => { setSelectedRow(i); }}>
-                      <td style={{ padding: 8, fontSize: 15 }}>
+                      <td style={{ padding: 8, fontSize: 15, wordBreak: 'break-word' }}>
                         {leading}
                         {rr.spans && rr.spans.length ? (
                           <span>
@@ -852,20 +1076,20 @@ export default function NLPExtractorProfileEditor({
                           </span>
                         ) : ex}
                       </td>
-                      <td style={{ padding: 8, fontSize: 15, color: '#374151' }}>{(rr.regex || '—') + ms(rr.regexMs)}</td>
-                      <td style={{ padding: 8, fontSize: 15, color: '#374151' }}>
+                      <td style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'hidden' }}>{(rr.regex || '—') + ms(rr.regexMs)}</td>
+                      <td style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'hidden' }}>
                         {rr.detRunning && <span title="Deterministic" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                        {renderStackedSummary(rr.deterministic)}
+                        {renderStackedSummary(rr.deterministic, i, 'det')}
                         {renderTimeBar(rr.detMs, maxMs)}
                       </td>
-                      <td style={{ padding: 8, fontSize: 15, color: '#374151' }}>
+                      <td style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'hidden' }}>
                         {rr.nerRunning && <span title="NER" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #34d399', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                        {renderStackedSummary(rr.ner)}
+                        {renderStackedSummary(rr.ner, i, 'ner')}
                         {renderTimeBar(rr.nerMs, maxMs)}
                       </td>
-                      <td style={{ padding: 8, fontSize: 15, color: '#374151' }}>
+                      <td style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'hidden' }}>
                         {rr.llmRunning && <span title="LLM" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #fbbf24', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                        {renderStackedSummary(rr.llm)}
+                        {renderStackedSummary(rr.llm, i, 'llm')}
                         {renderTimeBar(rr.llmMs, maxMs)}
                       </td>
                     <td style={{ padding: 4, textAlign: 'center' }}>

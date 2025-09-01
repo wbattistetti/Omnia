@@ -31,7 +31,7 @@ interface DataNode {
 }
 
 const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean }> = ({ onCancel, onComplete, initialDDT, startOnStructure }) => {
-  const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+  const API_BASE = '';
   // Ensure accent is inherited in nested components
   React.useEffect(() => {
     try {
@@ -107,7 +107,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     setStep('loading');
     setErrorMsg(null);
     try {
-        const res = await fetch(`${API_BASE}/step2`, {
+        const res = await fetch(`/step2`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userDesc.trim()),
@@ -161,7 +161,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const enrichConstraintsFor = async (rootLabelIn: string, mainsIn: SchemaNode[]) => {
     try {
       const schema = { label: rootLabelIn || 'Data', mains: mainsIn.map((m) => ({ label: m.label, type: m.type, icon: m.icon, subData: (m.subData || []).map(s => ({ label: s.label, type: s.type, icon: s.icon })) })) };
-      const res = await fetch(`${API_BASE}/step3`, {
+      const res = await fetch(`/step3`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(schema),
@@ -350,7 +350,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                 setTotalByPath(total);
                 setProgressByPath({});
 
-                const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+                const API_BASE = '';
                 const results: PlanRunResult[] = [];
 
                 const callStep = async (step: any) => {
@@ -387,15 +387,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                     setCurrentProcessingLabel(msg.charAt(0).toUpperCase() + msg.slice(1));
                     if (step.type === 'constraintMessages') {
                       const body = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
-                      const res = await fetch(`${API_BASE}/api/constraintMessages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                      const res = await fetch(`/api/constraintMessages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                       results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
                     } else if (step.type === 'validator') {
                       const body = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
-                      const res = await fetch(`${API_BASE}/api/validator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                      const res = await fetch(`/api/validator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                       results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
                     } else if (step.type === 'testset') {
                       const datumBody = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
-                      const res = await fetch(`${API_BASE}/api/testset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ datum: datumBody, notes: [] }) });
+                      const res = await fetch(`/api/testset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ datum: datumBody, notes: [] }) });
                       results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
                     } else {
                       const meaning = parts[parts.length - 1];
@@ -408,7 +408,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                         case 'success': endpoint = '/api/stepSuccess'; break;
                       }
                       if (endpoint) {
-                        const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ meaning, desc: '' }) });
+                        const res = await fetch(`${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ meaning, desc: '' }) });
                         results.push({ step: { path: step.path, type: step.type }, payload: await res.json() });
                       }
                     }
