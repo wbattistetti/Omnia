@@ -155,7 +155,8 @@ export const ProjectDataService = {
               description: act.description || '',
               isInteractive: act.isInteractive,
               data: act.data,
-              ddt: act.ddt
+              ddt: act.ddt,
+              prompts: act.prompts || {}
             });
           }
           projectData = {
@@ -296,7 +297,7 @@ export const ProjectDataService = {
       // If we updated an agent act with embedded DDT, try saving to factory DB (best-effort)
       if (type === 'agentActs') {
         try {
-          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, isInteractive: (item as any)?.isInteractive, data: (item as any)?.data, ddt: (item as any)?.ddt };
+          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, isInteractive: (item as any)?.isInteractive, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} };
           await fetch(`/api/factory/agent-acts/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         } catch (e) { console.warn('[ProjectDataService] save agent act failed', e); }
       }

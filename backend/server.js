@@ -108,6 +108,7 @@ app.post('/api/factory/agent-acts/bulk-replace', async (req, res) => {
         isInteractive: Boolean(it.isInteractive),
         data: it.data || {},
         ddt: it.ddt || null,
+        prompts: it.prompts || {},
         createdAt: it.createdAt || new Date(),
         updatedAt: new Date(),
       }));

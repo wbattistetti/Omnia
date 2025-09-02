@@ -18,6 +18,7 @@ import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
 import { FlowEditor } from './Flowchart/FlowEditor';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
+import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
 import { useDDTContext } from '../context/DDTContext';
 import { useDDTManager } from '../context/DDTManagerContext';
 
@@ -65,6 +66,18 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Usa il nuovo hook per DDT
   const { selectedDDT, closeDDT } = useDDTManager();
+  const [nonInteractiveEditor, setNonInteractiveEditor] = useState<null | { title?: string; value: { template: string; vars?: string[]; samples?: Record<string,string> }; accentColor?: string }>(null);
+
+  // Listen to open event for non-interactive acts (open bottom panel like ResponseEditor)
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const d = (e && e.detail) || {};
+      // Expected: { title?: string, template?: string, accentColor?: string }
+      setNonInteractiveEditor({ title: d.title || 'Agent message', value: { template: d.template || '', samples: {}, vars: [] } as any, accentColor: d.accentColor });
+    };
+    document.addEventListener('nonInteractiveEditor:open', handler as any);
+    return () => document.removeEventListener('nonInteractiveEditor:open', handler as any);
+  }, []);
 
   // Stato globale per nodi e edge
   const [nodes, setNodes] = useState<Node<NodeData>[]>([]);
@@ -382,6 +395,34 @@ export const AppContent: React.FC<AppContentProps> = ({
                   />
                 );
               })()
+            )}
+            {!selectedDDT && nonInteractiveEditor && (
+              <ResizableNonInteractiveEditor
+                title={nonInteractiveEditor.title}
+                value={nonInteractiveEditor.value}
+                onChange={(next) => {
+                  // Only update local draft; persist on close
+                  setNonInteractiveEditor({ title: nonInteractiveEditor.title, value: next, accentColor: (nonInteractiveEditor as any).accentColor });
+                }}
+                onClose={async () => {
+                  try {
+                    const svc = await import('../services/ProjectDataService');
+                    const dataSvc: any = (svc as any).ProjectDataService;
+                    const projectData: any = await dataSvc.loadProjectData();
+                    const cats: any[] = (projectData?.agentActs || []) as any[];
+                    for (const c of cats) {
+                      const it = (c.items || []).find((i: any) => String(i?.name || '').trim() === String(nonInteractiveEditor?.title || '').trim());
+                      if (it) {
+                        const prompts = { ...(it.prompts || {}), informal: nonInteractiveEditor?.value?.template || '' };
+                        await dataSvc.updateItem('agentActs', c.id, it.id, { prompts } as any);
+                        break;
+                      }
+                    }
+                  } catch {}
+                  setNonInteractiveEditor(null);
+                }}
+                accentColor={(nonInteractiveEditor as any).accentColor}
+              />
             )}
           </div>
         </div>

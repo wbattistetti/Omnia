@@ -44,8 +44,9 @@ const Sidebar: React.FC = () => {
 
   // Usa il nuovo hook per DDT
   const { ddtList, openDDT, loadDDTError, selectedDDT } = useDDTManager();
+  const [search, setSearch] = useState('');
 
-  const [isSavingDDT] = useState(false);
+  const [isSavingDDT, setIsSavingDDT] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Handler implementati usando il hook
@@ -175,7 +176,7 @@ const Sidebar: React.FC = () => {
         const tr = (ddt?.translations && (ddt.translations.en || ddt.translations)) || {};
         return { ...acc, ...tr };
       }, {});
-      const translationsPayload = { ...(dataDialogueTranslations || {}), ...mergedFromDDTs };
+      const translationsPayload = { ...mergedFromDDTs };
       try {
         await saveDataDialogueTranslations(translationsPayload);
       } catch (e) {
@@ -213,7 +214,7 @@ const Sidebar: React.FC = () => {
       console.error('[Sidebar] Errore salvataggio DDT:', err);
       // TODO: Mostrare toast/alert con l'errore
     } finally {
-      // setIsSavingDDT(false);
+      setIsSavingDDT(false);
     }
   };
 
@@ -238,9 +239,43 @@ const Sidebar: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { ref: zoomRef, zoomStyle } = usePanelZoom<HTMLDivElement>(scrollRef);
 
+  // Filter helper: applies to all entity types; keeps category if any item or category matches
+  const filterCategories = React.useCallback((cats: any[], q: string) => {
+    if (!q) return cats;
+    const term = q.toLowerCase();
+    return (cats || []).map((cat: any) => {
+      const nameMatch = String(cat?.name || '').toLowerCase().includes(term);
+      const items = (cat?.items || []).filter((it: any) => String(it?.name || '').toLowerCase().includes(term));
+      if (nameMatch && items.length === 0) {
+        // if only category matches, keep original items
+        return { ...cat };
+      }
+      return { ...cat, items };
+    }).filter((c: any) => (c?.items || []).length > 0 || String(c?.name || '').toLowerCase().includes(term));
+  }, []);
+
+  const filteredData: any = React.useMemo(() => {
+    if (!data) return data;
+    if (!search.trim()) return data;
+    const next: any = { ...data };
+    for (const t of entityTypes) {
+      next[t] = filterCategories((data as any)[t] || [], search);
+    }
+    return next;
+  }, [data, search, filterCategories]);
+
   return (
     <SidebarContainer>
       <SidebarHeader />
+      {/* Search bar */}
+      <div className="px-4 py-2 border-b" style={{ background: 'var(--sidebar-content-bg)', borderBottom: '1px solid var(--sidebar-border)' }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cerca acts o backend calls..."
+          style={{ width: '100%', border: '1px solid #334155', borderRadius: 8, padding: '6px 10px', background: 'transparent', color: 'var(--sidebar-content-text)' }}
+        />
+      </div>
       <div
         ref={zoomRef as any}
         className="p-4 overflow-y-auto"
@@ -253,7 +288,7 @@ const Sidebar: React.FC = () => {
             entityKey={type}
             title={type.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
             icon={ICON_MAP[sidebarTheme[type].icon]}
-            data={data[type] || []}
+            data={(filteredData as any)[type] || []}
             isOpen={openAccordion === type}
             onToggle={() => setOpenAccordion(openAccordion === type ? '' : type)}
             onAddCategory={name => addCategory(type, name)}
