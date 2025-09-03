@@ -1,11 +1,17 @@
 import type { DDTNode, Kind } from './model/ddt.v2.types';
 
-export type MemoryEntry = { value: any; confirmed: boolean };
+export type Primitive = string | number | boolean | null | undefined | Date;
+export type MemoryValue = Primitive | Record<string, Primitive> | Array<Primitive>;
+export type MemoryEntry = { value: MemoryValue; confirmed: boolean };
 export type Memory = Record<string, MemoryEntry>;
+
+export interface PlanNodeMain extends DDTNode { type: 'main'; subs?: string[] }
+export interface PlanNodeSub extends DDTNode { type: 'sub' }
+export type PlanNode = PlanNodeMain | PlanNodeSub;
 
 export interface Plan {
   order: string[];
-  byId: Record<string, DDTNode>;
+  byId: Record<string, PlanNode>;
 }
 
 function normalizeKey(s: string): string {
@@ -15,7 +21,7 @@ function normalizeKey(s: string): string {
 }
 
 export function buildPlan(nodes: DDTNode[]): Plan {
-  const byId: Record<string, DDTNode> = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const byId: Record<string, PlanNode> = Object.fromEntries(nodes.map((n) => [n.id, n as PlanNode]));
   const order: string[] = [];
   const mains = nodes.filter((n) => n.type === 'main');
   for (const main of mains) {

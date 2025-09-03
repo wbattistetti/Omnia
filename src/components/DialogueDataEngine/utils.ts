@@ -23,6 +23,7 @@ export function extractImplicitCorrection(input: string): string | null {
   return null;
 }
 
+// Deprecated: use parsers/registry.ts (date)
 export function extractLastDate(input: string): string | null {
   const re = /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/g;
   let last: RegExpExecArray | null = null;

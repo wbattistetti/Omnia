@@ -1,8 +1,8 @@
 import React from 'react';
 import { IntellisenseItem as IntellisenseItemType, IntellisenseResult } from './IntellisenseTypes';
 import { highlightMatches } from './IntellisenseSearch';
-import { Circle } from 'lucide-react';
-import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
+import { Circle, Headphones, HelpCircle, Megaphone } from 'lucide-react';
+import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from '../Sidebar/sidebarTheme';
 
 interface IntellisenseItemProps {
   result: IntellisenseResult;
@@ -25,6 +25,16 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   const nameMatches = matches?.filter(match => match.key === 'name');
   const descriptionMatches = matches?.filter(match => match.key === 'description');
   
+  const iconKey = item.iconComponent ? undefined : SIDEBAR_TYPE_ICONS[item.categoryType as string];
+  const IconFromSidebar = iconKey ? SIDEBAR_ICON_COMPONENTS[iconKey] : null;
+  // Foreground color: use same logic as Sidebar items for Agent Acts
+  const sidebarAgentInteractive = '#38bdf8'; // sky-400 (SidebarItem)
+  const sidebarAgentEmissive = '#22c55e'; // emerald-500 (SidebarItem)
+  const baseColor = (item.categoryType === 'agentActs')
+    ? (item.isInteractive ? sidebarAgentInteractive : sidebarAgentEmissive)
+    : (SIDEBAR_TYPE_COLORS[item.categoryType as string]?.color);
+  const foreColor = item.textColor || item.color || baseColor || undefined;
+
   return (
     <div
       className={`
@@ -38,7 +48,18 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       {/* Icon */}
       <div className="mr-3 mt-0.5 flex-shrink-0">
         {item.iconComponent ? (
-          <item.iconComponent className="w-4 h-4" style={{ color: item.color || item.textColor || undefined }} />
+          <item.iconComponent className="w-4 h-4" style={{ color: foreColor }} />
+        ) : (item.categoryType === 'agentActs') ? (
+          item.isInteractive ? (
+            <span className="relative inline-flex items-center justify-center" style={{ width: 16, height: 16 }}>
+              <Headphones className="w-4 h-4" style={{ color: foreColor }} />
+              <HelpCircle className="w-2.5 h-2.5 absolute -right-1 -bottom-1" style={{ color: foreColor }} />
+            </span>
+          ) : (
+            <Megaphone className="w-4 h-4" style={{ color: foreColor }} />
+          )
+        ) : IconFromSidebar ? (
+          <IconFromSidebar className="w-4 h-4" style={{ color: foreColor || '#94a3b8' }} />
         ) : (
           <Circle className="w-4 h-4 text-gray-400" />
         )}
@@ -49,7 +70,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
         {/* Label principale con tooltip se description */}
         <div
           className="font-normal text-sm mb-1 whitespace-nowrap overflow-hidden text-ellipsis"
-          style={{ color: item.textColor || undefined }}
+          style={{ color: foreColor }}
           title={item.description && item.description.trim() !== '' ? item.description : undefined}
         >
           {highlightMatches(item.label || item.name, nameMatches)}

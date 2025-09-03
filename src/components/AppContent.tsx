@@ -19,6 +19,7 @@ import { FlowEditor } from './Flowchart/FlowEditor';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
+import FlowRunner from './debugger/FlowRunner';
 import { useDDTContext } from '../context/DDTContext';
 import { useDDTManager } from '../context/DDTManagerContext';
 
@@ -89,6 +90,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [showBackendBuilder, setShowBackendBuilder] = useState(false);
+  const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
 
   // Listen to Sidebar wrench
   React.useEffect(() => {
@@ -358,29 +360,34 @@ export const AppContent: React.FC<AppContentProps> = ({
                   alert('Errore nel salvataggio del progetto');
                 }
               }}
-              onRun={() => alert('Esegui')}
+              onRun={() => setShowGlobalDebugger(s => !s)}
               onSettings={() => setShowBackendBuilder(true)}
               projectName={currentProject?.name}
             />
-            {showBackendBuilder ? (
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
-              </div>
-            ) : (
-              <FlowEditor
-              nodes={nodes}
-              setNodes={setNodes}
-              edges={edges}
-              setEdges={setEdges}
-              currentProject={currentProject}
-              setCurrentProject={setCurrentProject}
-              onPlayNode={onPlayNode}
-              testPanelOpen={testPanelOpen}
-              setTestPanelOpen={setTestPanelOpen}
-              testNodeId={testNodeId}
-              setTestNodeId={setTestNodeId}
-              />
-            )}
+            <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? '1fr 380px' : '1fr' }}>
+              {showBackendBuilder ? (
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
+                </div>
+              ) : (
+                <FlowEditor
+                nodes={nodes}
+                setNodes={setNodes}
+                edges={edges}
+                setEdges={setEdges}
+                currentProject={currentProject}
+                setCurrentProject={setCurrentProject}
+                onPlayNode={onPlayNode}
+                testPanelOpen={testPanelOpen}
+                setTestPanelOpen={setTestPanelOpen}
+                testNodeId={testNodeId}
+                setTestNodeId={setTestNodeId}
+                />
+              )}
+              {showGlobalDebugger && (
+                <FlowRunner nodes={nodes} edges={edges} />
+              )}
+            </div>
             {selectedDDT && (
               (() => {
                 const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);

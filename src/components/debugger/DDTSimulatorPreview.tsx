@@ -39,45 +39,107 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
   const { state, send, reset, setConfig } = useDDTSimulator(template, {
     typingIndicatorMs: 0,
     onLog: (e) => setLogs((l) => [...l, { ts: e.ts, kind: e.kind, message: e.message }]),
-    debug: true,
+    debug: false,
   });
   const [text, setText] = useState('');
-  const [crumbs, setCrumbs] = useState<string[]>([]);
   const lastModeRef = useRef<string>('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [messages, setMessages] = useState<Array<{ from: 'bot' | 'user'; text: string }>>([]);
 
+  const translations = useMemo(() => ((currentDDT as any)?.translations && (((currentDDT as any).translations as any).en || (currentDDT as any).translations)) || {}, [currentDDT]);
+  const planById = useMemo<Record<string, any>>(() => {
+    const map: Record<string, any> = {};
+    try { (adaptCurrentToV2 as any); } catch {}
+    try {
+      const nodes = (adaptCurrentToV2(currentDDT as any).nodes || []) as any[];
+      for (const n of nodes) map[n.id] = n;
+    } catch {}
+    return map;
+  }, [currentDDT]);
+
+  const resolveTxt = (key?: string): string => {
+    if (!key) return '';
+    if (/\s/.test(key) && !/^[\w.-]+\.[\w.-]+/.test(key)) return key; // already plain text
+    const t = (translations as any)[key];
+    return typeof t === 'string' && t.trim() ? t : key;
+  };
+
+  // Seed first main ask if empty
   useEffect(() => {
+    if (messages.length > 0) return;
+    try {
+      const tpl = adaptCurrentToV2(currentDDT as any);
+      const firstMain = (tpl.nodes || []).find((n: any) => n?.type === 'main');
+      const ask = resolveTxt(firstMain?.steps?.ask?.base);
+      if (ask) setMessages([{ from: 'bot', text: ask }]);
+    } catch {}
+  }, [currentDDT, messages.length]);
+
+  // Append prompts based on engine transitions
+  const prevIndexRef = useRef<number>(-1);
+  const lastPromptKeyRef = useRef<string>('');
+  useEffect(() => {
+    // Track mode changes (no breadcrumbs UI)
     if (state.mode && state.mode !== lastModeRef.current) {
       lastModeRef.current = state.mode;
-      setCrumbs((c) => [...c, state.mode]);
-      setLogs((l) => [...l, { ts: Date.now(), kind: 'state', message: `Mode -> ${state.mode}` }]);
     }
-  }, [state.mode]);
+    const plan = state.plan;
+    const currentMainId = plan?.order?.[state.currentIndex];
+    // On main index change → ask next main
+    if (state.currentIndex !== prevIndexRef.current && currentMainId) {
+      prevIndexRef.current = state.currentIndex;
+      const mainAsk = resolveTxt(planById[currentMainId]?.steps?.ask?.base);
+      if (mainAsk) {
+        const key = `main:${currentMainId}:ask`;
+        if (lastPromptKeyRef.current !== key) {
+          setMessages((m) => [...m, { from: 'bot', text: mainAsk }]);
+          lastPromptKeyRef.current = key;
+        }
+      }
+    }
+    // When entering CollectingSub → ask sub
+    if (state.mode === 'CollectingSub' && state.currentSubId) {
+      const subAsk = resolveTxt(planById[state.currentSubId]?.steps?.ask?.base);
+      if (subAsk) {
+        const key = `sub:${state.currentSubId}:ask`;
+        if (lastPromptKeyRef.current !== key) {
+          setMessages((m) => [...m, { from: 'bot', text: subAsk }]);
+          lastPromptKeyRef.current = key;
+        }
+      }
+    }
+    // Confirming main
+    if (state.mode === 'ConfirmingMain' && currentMainId) {
+      const confirm = resolveTxt(planById[currentMainId]?.steps?.confirm?.base);
+      if (confirm) {
+        const key = `main:${currentMainId}:confirm`;
+        if (lastPromptKeyRef.current !== key) {
+          setMessages((m) => [...m, { from: 'bot', text: confirm }]);
+          lastPromptKeyRef.current = key;
+        }
+      }
+    }
+    // Success main → show success first message
+    if (state.mode === 'SuccessMain' && currentMainId) {
+      const successArr = planById[currentMainId]?.steps?.success?.base || [];
+      const success = Array.isArray(successArr) ? successArr[0] : undefined;
+      const msg = resolveTxt(success);
+      if (msg) {
+        const key = `main:${currentMainId}:success`;
+        if (lastPromptKeyRef.current !== key) {
+          setMessages((m) => [...m, { from: 'bot', text: msg }]);
+          lastPromptKeyRef.current = key;
+        }
+      }
+    }
+  }, [state, planById]);
 
   return (
-    <div style={{ border: '1px solid #eee', padding: 12, borderRadius: 8 }}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <button onClick={() => reset()}>Reset</button>
-        <button onClick={() => setConfig({ typingIndicatorMs: 150 })}>Typing: 150ms</button>
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <strong>Mode:</strong> {state.mode} | <strong>Index:</strong> {state.currentIndex}
-      </div>
-      <div aria-label="mode-lanes" style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-        {['CollectingMain','CollectingSub','ConfirmingMain','NotConfirmed','SuccessMain','Completed'].map(m => (
-          <span key={m} style={{
-            padding: '4px 8px',
-            borderRadius: 6,
-            border: '1px solid #ddd',
-            background: state.mode === m ? 'rgba(59,130,246,0.12)' : 'transparent'
-          }}>
-            {m}
-          </span>
-        ))}
-      </div>
-      <div aria-label="breadcrumbs" style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8, color: '#555' }}>
-        {crumbs.map((m, i) => (
-          <span key={`${m}-${i}`}>{m}{i < crumbs.length - 1 ? ' → ' : ''}</span>
+    <div style={{ border: '1px solid var(--sidebar-border, #334155)', padding: 8, borderRadius: 8 }}>
+      {/* Transcript */}
+      <div style={{ maxHeight: 180, overflowY: 'auto', marginBottom: 8 }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ marginBottom: 6, color: m.from === 'bot' ? '#e5e7eb' : '#93c5fd' }}>{m.text}</div>
         ))}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
@@ -85,14 +147,17 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
           aria-label="user-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Type here (e.g., 12/05/1990 or 'no' or 'choose:month')"
-          style={{ flex: 1, border: '1px solid #ccc', padding: 8, borderRadius: 6 }}
+          placeholder="Scrivi qui..."
+          style={{ flex: 1, border: '1px solid #334155', padding: 8, borderRadius: 6, background: 'transparent', color: 'var(--sidebar-content-text, #f1f5f9)' }}
         />
-        <button onClick={() => { setLogs((l) => [...l, { ts: Date.now(), kind: 'input', message: text }]); void send(text); setText(''); }}>Send</button>
+        <button onClick={() => { if (!text.trim()) return; setMessages(m => [...m, { from: 'user', text }]); setLogs((l) => [...l, { ts: Date.now(), kind: 'input', message: text }]); void send(text); setText(''); }} style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}>Invia</button>
       </div>
-      <div style={{ marginTop: 10 }}>
-        <DebugGroupedPanel logs={logs} />
-      </div>
+      {/* Optional debug log panel */}
+      {logs.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <DebugGroupedPanel logs={logs} />
+        </div>
+      )}
     </div>
   );
 }

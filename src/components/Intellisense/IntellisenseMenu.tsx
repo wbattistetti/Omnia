@@ -9,8 +9,7 @@ import {
 import { IntellisenseItem, IntellisenseResult, IntellisenseLayoutConfig } from './IntellisenseTypes';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { prepareIntellisenseData } from '../../services/ProjectDataService';
-import { SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
-import { Bot, User, Database, CheckSquare } from 'lucide-react';
+import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 
 const defaultLayoutConfig: IntellisenseLayoutConfig = {
   maxVisibleItems: 12,
@@ -334,12 +333,14 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         {/* Category filter bar */}
         <div className="mt-2 flex items-center gap-2">
           {[
-            { key: 'agentActs', Icon: Bot, label: 'Agent' },
-            { key: 'userActs', Icon: User, label: 'User' },
-            { key: 'backendActions', Icon: Database, label: 'Backend' },
-            { key: 'tasks', Icon: CheckSquare, label: 'Tasks' },
-          ].map(({ key, Icon, label }) => {
+            { key: 'agentActs', iconKey: SIDEBAR_TYPE_ICONS.agentActs, label: 'Agent' },
+            { key: 'userActs', iconKey: SIDEBAR_TYPE_ICONS.userActs, label: 'User' },
+            { key: 'backendActions', iconKey: SIDEBAR_TYPE_ICONS.backendActions, label: 'Backend' },
+            { key: 'tasks', iconKey: SIDEBAR_TYPE_ICONS.tasks, label: 'Tasks' },
+          ].map(({ key, iconKey, label }) => {
             const active = activeCats.includes(key);
+            const Icon = SIDEBAR_ICON_COMPONENTS[iconKey];
+            const col = (SIDEBAR_TYPE_COLORS as Record<string, { color: string }>)[key]?.color || '#e5e7eb';
             return (
               <button
                 key={key}
@@ -347,12 +348,12 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
                 className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] border"
                 style={{
                   background: active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)',
-                  color: '#e5e7eb',
+                  color: col,
                   borderColor: active ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)'
                 }}
                 title={`Toggle ${label}`}
               >
-                <Icon className="w-3 h-3" />
+                {Icon ? <Icon className="w-3 h-3" style={{ color: col }} /> : null}
                 {label}
               </button>
             );
@@ -372,8 +373,9 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         semanticResults={semanticResults}
         selectedIndex={selectedIndex}
         layoutConfig={defaultLayoutConfig}
+        categoryConfig={{}}
         onItemSelect={(result) => onSelect(result.item)}
-        onItemHover={(result) => setSelectedIndex(result.index)}
+        onItemHover={(index) => setSelectedIndex(index)}
       />
     </div>
   );

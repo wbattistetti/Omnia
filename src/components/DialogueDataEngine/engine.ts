@@ -2,6 +2,7 @@ import type { DDTTemplateV2, DDTNode } from './model/ddt.v2.types';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { buildPlan, isSaturated, nextMissingSub, applyComposite, setMemory, Memory } from './state';
 import { isYes, isNo, extractImplicitCorrection, extractLastDate } from './utils';
+import { getKind } from './parsers/registry';
 
 export type Mode =
   | 'CollectingMain'
@@ -33,11 +34,12 @@ export function initEngine(template: DDTTemplateV2): SimulatorState {
   };
 }
 
+import { getLogger } from './logger';
 // Debug helpers for mixed-initiative tracing
-const DEBUG_MI = true;
 function logMI(...args: any[]) {
-  if (!DEBUG_MI) return;
-  try { console.log('[MixedInit]', ...args); } catch {}
+  const logger = getLogger();
+  if (!logger.miEnabled) return;
+  try { logger.debug('[MixedInit]', ...args); } catch {}
 }
 
 function currentMain(state: SimulatorState): DDTNode | undefined {
@@ -312,7 +314,7 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
 
   const applyToKind = (kind: string) => {
     if (kind === 'email') {
-      const hit = detectEmailSpan(residual);
+      const hit = (getKind('email')?.detect(residual)) || detectEmailSpan(residual);
       if (hit) {
         logMI('hit', { kind, value: hit.value, span: hit.span, residualLen: residual.length });
         for (const id of state.plan.order) {
@@ -329,7 +331,7 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
       return;
     }
     if (kind === 'phone') {
-      const hit = detectPhoneSpan(residual);
+      const hit = (getKind('phone')?.detect(residual)) || detectPhoneSpan(residual);
       if (hit) {
         // Normalize to E.164 when possible (Italian default)
         let candidate = hit.value;
@@ -385,7 +387,8 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
       return;
     }
     if (kind === 'date') {
-      const hit = detectDateSpan(residual);
+      const det = (getKind('date')?.detect(residual));
+      const hit = det ? { day: (det as any).value?.day, month: (det as any).value?.month, year: (det as any).value?.year, span: (det as any).span } : detectDateSpan(residual);
       if (hit) {
         logMI('hit', { kind, value: { day: hit.day, month: hit.month, year: hit.year }, span: hit.span, residualLen: residual.length });
         for (const id of state.plan.order) {
@@ -409,7 +412,8 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
       return;
     }
     if (kind === 'name') {
-      const hit = detectNameFrom(residual);
+      const det = (getKind('name')?.detect(residual));
+      const hit = det ? { firstname: (det as any).value?.firstname, lastname: (det as any).value?.lastname, span: (det as any).span } : detectNameFrom(residual);
       if (hit && (hit.firstname || hit.lastname)) {
         logMI('hit', { kind, value: { firstname: hit.firstname, lastname: hit.lastname }, span: hit.span, residualLen: residual.length });
         for (const id of state.plan.order) {
@@ -492,7 +496,8 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
         .map((sid) => String(state.plan.byId[sid]?.label || sid));
       logMI('postExtract', { main: mainLabel, residual, presentSubs });
     } catch {}
-    const corrected = extractImplicitCorrection(residual) || extractLastDate(residual) || residual;
+    const dateDet = getKind('date')?.detect(residual);
+    const corrected = extractImplicitCorrection(residual) || dateDet?.value || extractLastDate(residual) || residual;
     const applied = applyComposite(main.kind, corrected);
     const variables = applied.variables;
     let mem = state.memory;

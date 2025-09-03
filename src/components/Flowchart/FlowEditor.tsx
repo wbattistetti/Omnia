@@ -758,6 +758,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   return (
     <div className="flex-1 h-full relative" ref={canvasRef} style={{ overflow: 'auto' }} onDoubleClick={handleCanvasDoubleClick} onMouseLeave={() => setCursorTooltip(null)}>
+      {/* Expose nodes/edges to GlobalDebuggerPanel (bridge) */}
+      {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; } catch {} return null; })()}
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
