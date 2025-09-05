@@ -123,6 +123,13 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           iconSize={iconSize}
           hasDDT={hasDDT}
           gearColor={gearColor || labelTextColor}
+          isCondition={String((row as any)?.categoryType || '').toLowerCase() === 'conditions'}
+          onWrenchClick={() => {
+            try {
+              const variables = (window as any).__omniaVars || {}; // fallback; ideal: pass from FlowRunner
+              document.dispatchEvent(new CustomEvent('conditionEditor:open', { detail: { variables } }));
+            } catch {}
+          }}
         />, 
         document.body
       )}

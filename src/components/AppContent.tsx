@@ -4,7 +4,7 @@ import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
 import Sidebar from './Sidebar/Sidebar';
 import { ProjectDataService } from '../services/ProjectDataService';
-import { useProjectDataUpdate } from '../context/ProjectDataContext';
+import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
 import { NodeData, EdgeData } from './Flowchart/FlowEditor';
 import { ProjectInfo } from '../types/project';
@@ -19,9 +19,11 @@ import { FlowEditor } from './Flowchart/FlowEditor';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
+import ConditionEditor from './conditions/ConditionEditor';
 import FlowRunner from './debugger/FlowRunner';
 import { useDDTContext } from '../context/DDTContext';
 import { useDDTManager } from '../context/DDTManagerContext';
+import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from './Sidebar/sidebarTheme';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -61,6 +63,11 @@ export const AppContent: React.FC<AppContentProps> = ({
     // Provider not available yet; use no-op and rely on provider after mount
     refreshData = async () => {};
   }
+  // Access full project data for static variables extraction
+  let projectData: any = null;
+  try {
+    projectData = useProjectData().data;
+  } catch {}
   const ddtContext = useDDTContext();
   const getTranslationsForDDT = ddtContext.getTranslationsForDDT;
   // const setTranslationsForDDT = ddtContext.setTranslationsForDDT;
@@ -91,6 +98,11 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [showBackendBuilder, setShowBackendBuilder] = useState(false);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
+  const [conditionEditorOpen, setConditionEditorOpen] = useState(false);
+  const [conditionVars, setConditionVars] = useState<Record<string, any>>({});
+  const [conditionScript, setConditionScript] = useState<string>('');
+  const [conditionVarsTree, setConditionVarsTree] = useState<any[]>([]);
+  const [conditionLabel, setConditionLabel] = useState<string>('Condition');
 
   // Listen to Sidebar wrench
   React.useEffect(() => {
@@ -98,6 +110,92 @@ export const AppContent: React.FC<AppContentProps> = ({
     document.addEventListener('backendBuilder:open', handler);
     return () => document.removeEventListener('backendBuilder:open', handler);
   }, []);
+
+  // Open ConditionEditor
+  React.useEffect(() => {
+    // Helper: build static variables from all Agent Acts' DDT structure
+    const buildStaticVars = (): Record<string, any> => {
+      const vars: Record<string, any> = {};
+      const data = projectData as any;
+      try {
+        const categories: any[] = (data?.agentActs || []) as any[];
+        for (const cat of categories) {
+          const items: any[] = (cat?.items || []) as any[];
+          for (const it of items) {
+            const actName: string = String(it?.name || it?.label || '').trim();
+            if (!actName) continue;
+            const ddt: any = it?.ddt;
+            if (!ddt) continue;
+            // Support assembled shape (mainData) and snapshot shape (mains)
+            const mains: any[] = Array.isArray(ddt?.mainData)
+              ? ddt.mainData
+              : (ddt?.mainData ? [ddt.mainData] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
+            for (const m of (mains || [])) {
+              const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
+              const mainKey = `${actName}.${mainLabel}`;
+              vars[mainKey] = vars[mainKey] ?? '';
+              const subsArr: any[] = Array.isArray(m?.subData) ? m.subData : (Array.isArray(m?.subs) ? m.subs : []);
+              for (const s of (subsArr || [])) {
+                const subLabel: string = String(s?.labelKey || s?.label || s?.name || 'Field').trim();
+                const subKey = `${actName}.${mainLabel}.${subLabel}`;
+                vars[subKey] = vars[subKey] ?? '';
+              }
+            }
+          }
+        }
+      } catch {}
+      return vars;
+    };
+
+    // Helper: build a hierarchical tree with icons/colors for Intellisense
+    const buildVarsTree = (): any[] => {
+      const acts: any[] = [];
+      const data = projectData as any;
+      try {
+        const categories: any[] = (data?.agentActs || []) as any[];
+        const actColor = (SIDEBAR_TYPE_COLORS as any)?.agentActs?.color || '#34d399';
+        const iconKey = (SIDEBAR_TYPE_ICONS as any)?.agentActs;
+        const Icon = (SIDEBAR_ICON_COMPONENTS as any)?.[iconKey];
+        for (const cat of categories) {
+          const items: any[] = (cat?.items || []) as any[];
+          for (const it of items) {
+            const actName: string = String(it?.name || it?.label || '').trim();
+            if (!actName) continue;
+            const ddt: any = it?.ddt;
+            if (!ddt) continue;
+            const mains: any[] = Array.isArray(ddt?.mainData)
+              ? ddt.mainData
+              : (ddt?.mainData ? [ddt.mainData] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
+            const mainsOut: any[] = [];
+            for (const m of (mains || [])) {
+              const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
+              const subsArr: any[] = Array.isArray(m?.subData) ? m.subData : (Array.isArray(m?.subs) ? m.subs : []);
+              const subsOut = (subsArr || []).map((s: any) => ({ label: String(s?.labelKey || s?.label || s?.name || 'Field').trim(), kind: String(s?.kind || s?.type || '') }));
+              mainsOut.push({ label: mainLabel, kind: String(m?.kind || m?.type || ''), subs: subsOut });
+            }
+            acts.push({ label: actName, color: actColor, Icon, mains: mainsOut });
+          }
+        }
+      } catch {}
+      return acts;
+    };
+
+    const handler = (e: any) => {
+      const d = (e && e.detail) || {};
+      const provided = d.variables || {};
+      const hasProvided = provided && Object.keys(provided).length > 0;
+      const staticVars = buildStaticVars();
+      const varsTree = buildVarsTree();
+      const finalVars = hasProvided ? provided : staticVars;
+      setConditionVars(finalVars);
+      setConditionVarsTree((d as any).variablesTree || varsTree);
+      setConditionScript(d.script || '');
+      setConditionLabel(d.label || d.name || 'Condition');
+      setConditionEditorOpen(true);
+    };
+    document.addEventListener('conditionEditor:open', handler as any);
+    return () => document.removeEventListener('conditionEditor:open', handler as any);
+  }, [projectData]);
 
   // Stato per gestione progetti
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
@@ -370,22 +468,72 @@ export const AppContent: React.FC<AppContentProps> = ({
                   <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
                 </div>
               ) : (
-                <FlowEditor
-                nodes={nodes}
-                setNodes={setNodes}
-                edges={edges}
-                setEdges={setEdges}
-                currentProject={currentProject}
-                setCurrentProject={setCurrentProject}
-                onPlayNode={onPlayNode}
-                testPanelOpen={testPanelOpen}
-                setTestPanelOpen={setTestPanelOpen}
-                testNodeId={testNodeId}
-                setTestNodeId={setTestNodeId}
-                />
+                <div style={{ position: 'relative' }}>
+                  <FlowEditor
+                  nodes={nodes}
+                  setNodes={setNodes}
+                  edges={edges}
+                  setEdges={setEdges}
+                  currentProject={currentProject}
+                  setCurrentProject={setCurrentProject}
+                  onPlayNode={onPlayNode}
+                  testPanelOpen={testPanelOpen}
+                  setTestPanelOpen={setTestPanelOpen}
+                  testNodeId={testNodeId}
+                  setTestNodeId={setTestNodeId}
+                  />
+                  {!showGlobalDebugger && (
+                    <ConditionEditor
+                      open={conditionEditorOpen}
+                      onClose={() => setConditionEditorOpen(false)}
+                      variables={conditionVars}
+                      initialScript={conditionScript}
+                      variablesTree={conditionVarsTree}
+                      label={conditionLabel}
+                      onRename={(next) => {
+                        setConditionLabel(next);
+                        try {
+                          const ev: any = new CustomEvent('conditionEditor:rename', { detail: { label: next }, bubbles: true });
+                          document.dispatchEvent(ev);
+                        } catch {}
+                      }}
+                      dockWithinParent
+                      onSave={(script) => {
+                        try {
+                          const ev: any = new CustomEvent('conditionEditor:save', { detail: { script }, bubbles: true });
+                          document.dispatchEvent(ev);
+                        } catch {}
+                      }}
+                    />
+                  )}
+                </div>
               )}
               {showGlobalDebugger && (
-                <FlowRunner nodes={nodes} edges={edges} />
+                <div style={{ position: 'relative' }}>
+                  <FlowRunner nodes={nodes} edges={edges} />
+                  <ConditionEditor
+                    open={conditionEditorOpen}
+                    onClose={() => setConditionEditorOpen(false)}
+                    variables={conditionVars}
+                    initialScript={conditionScript}
+                    variablesTree={conditionVarsTree}
+                    label={conditionLabel}
+                    onRename={(next) => {
+                      setConditionLabel(next);
+                      try {
+                        const ev: any = new CustomEvent('conditionEditor:rename', { detail: { label: next }, bubbles: true });
+                        document.dispatchEvent(ev);
+                      } catch {}
+                    }}
+                    dockWithinParent
+                    onSave={(script) => {
+                      try {
+                        const ev: any = new CustomEvent('conditionEditor:save', { detail: { script }, bubbles: true });
+                        document.dispatchEvent(ev);
+                      } catch {}
+                    }}
+                  />
+                </div>
               )}
             </div>
             {selectedDDT && (

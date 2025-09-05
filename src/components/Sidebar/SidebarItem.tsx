@@ -32,6 +32,10 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
   const iconColor = (hasEmbedded || (!interactive && hasMessage)) ? nameColor : '#94a3b8' /* slate-400 */;
   const leadingIconColor = iconColor; // same rule for left icon (headphones/megaphone)
 
+  // Condition helpers
+  const isCondition = categoryType === 'conditions' || (item as any)?.categoryType === 'conditions';
+  const hasConditionScript = Boolean((item as any)?.data && (item as any).data?.script);
+
   return (
     <div
       className="flex items-center gap-1 text-sm py-0.5 px-1 rounded min-h-[32px]"
@@ -81,6 +85,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
             {item.name}
           </span>
           <span className="flex items-center gap-1 ml-1" style={{ visibility: hovered ? 'visible' : 'hidden' }}>
+            {/* Pencil */}
             <button
               className="p-1 text-gray-400 hover:text-blue-400"
               title="Modifica"
@@ -88,6 +93,8 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
             >
               <Pencil className="w-4 h-4" />
             </button>
+
+            {/* Agent Acts gear/wrench */}
             {categoryType === 'agentActs' && (
               <button
                 className="p-1"
@@ -145,6 +152,27 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                     ))}
               </button>
             )}
+
+            {/* Conditions: wrench/gear + open ConditionEditor */}
+            {isCondition && (
+              <button
+                className="p-1 text-gray-400 hover:text-blue-400"
+                title={hasConditionScript ? 'Edit condition' : 'Create condition'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    const variables = (window as any).__omniaVars || {};
+                    const script = (item as any)?.data?.script || '';
+                    const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script }, bubbles: true });
+                    (e.currentTarget as any).dispatchEvent(ev);
+                  } catch {}
+                }}
+              >
+                {hasConditionScript ? <Settings className="w-4 h-4" /> : <Wrench className="w-4 h-4" />}
+              </button>
+            )}
+
+            {/* Trash */}
             <button
               className="p-1 text-red-500 hover:text-red-700"
               title="Elimina"

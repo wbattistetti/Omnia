@@ -1,5 +1,5 @@
 import React from 'react';
-import { GripVertical, Trash2, Edit3, Settings } from 'lucide-react';
+import { GripVertical, Trash2, Edit3, Settings, Wrench } from 'lucide-react';
 
 interface NodeRowActionsOverlayProps {
   iconPos: { top: number; left: number };
@@ -15,6 +15,8 @@ interface NodeRowActionsOverlayProps {
   iconSize?: number;
   hasDDT?: boolean;
   gearColor?: string;
+  isCondition?: boolean;
+  onWrenchClick?: () => void;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -30,7 +32,9 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   onHoverChange,
   iconSize,
   hasDDT,
-  gearColor
+  gearColor,
+  isCondition,
+  onWrenchClick
 }) => {
   if (!showIcons || !iconPos) return null;
   const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? Math.max(12, Math.min(20, Math.round(labelRef.current.getBoundingClientRect().height * 0.7))) : 14);
@@ -79,6 +83,17 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       >
         <Edit3 style={{ width: size, height: size }} />
       </button>
+      {/* Wrench (Condition) - subito dopo la matita se è una condition */}
+      {isCondition && (
+        <button
+          onClick={onWrenchClick}
+          className="text-slate-400 hover:text-black transition-colors"
+          title="Edit condition"
+          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
+        >
+          <Wrench style={{ width: size, height: size }} />
+        </button>
+      )}
       {/* Gear (DDT) */}
       <span
         title={hasDDT ? 'Open DDT' : 'No DDT linked'}

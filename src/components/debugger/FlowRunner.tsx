@@ -315,6 +315,11 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
     return map;
   }, [planById]);
 
+  // Expose variables globally for ConditionEditor and other panels
+  React.useEffect(() => {
+    try { (window as any).__omniaVars = { ...(variableStore || {}) }; } catch {}
+  }, [variableStore]);
+
   React.useEffect(() => {
     try { console.log('[FlowRunner] ddtActive', { ddtActive }); } catch {}
     if (ddtActive) {
