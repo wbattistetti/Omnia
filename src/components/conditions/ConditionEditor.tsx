@@ -1,7 +1,15 @@
 import React from 'react';
 import { getDDTIcon as getDDTIconFromRE } from '../ActEditor/ResponseEditor/ddtUtils';
+import { generateConditionWithAI, suggestConditionCases, suggestMinimalVars } from '../../services/ai/groq';
+import ConditionTester, { CaseRow } from './ConditionTester';
+import CodeEditor from '../CodeEditor/CodeEditor';
 import { X, Pencil, Check } from 'lucide-react';
 import { SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
+import { setupMonacoEnvironment } from '../../utils/monacoWorkerSetup';
+import VariablesPanel from './VariablesPanel';
+
+// Ensure Monaco workers configured once
+try { setupMonacoEnvironment(); } catch {}
 
 type VarsMap = Record<string, any>;
 
@@ -13,7 +21,6 @@ interface Props {
   open: boolean;
   onClose: () => void;
   variables: VarsMap; // full variables map; shown as list
-  onSave?: (script: string) => void;
   initialScript?: string;
   dockWithinParent?: boolean;
   variablesTree?: VarsTreeAct[];
@@ -25,75 +32,120 @@ const listKeys = (vars: VarsMap): string[] => {
   try { return Object.keys(vars || {}).sort(); } catch { return []; }
 };
 
-export default function ConditionEditor({ open, onClose, variables, onSave, initialScript, dockWithinParent, variablesTree, label, onRename }: Props) {
+export default function ConditionEditor({ open, onClose, variables, initialScript, dockWithinParent, variablesTree, label, onRename }: Props) {
   const [nl, setNl] = React.useState('');
   const [script, setScript] = React.useState(initialScript || 'return true;');
-  const [result, setResult] = React.useState<string>('');
   const [busy, setBusy] = React.useState(false);
+  const [aiQuestion, setAiQuestion] = React.useState<string>('');
+  const [mode, setMode] = React.useState<'ai' | 'code' | 'test'>('code');
+  const [showDescribe, setShowDescribe] = React.useState<boolean>(true);
+  const [showCode, setShowCode] = React.useState<boolean>(false);
+  const [showTester, setShowTester] = React.useState<boolean>(false);
+  const [hasCreated, setHasCreated] = React.useState<boolean>(false);
+  const monacoEditorRef = React.useRef<any>(null);
+  // clarification answer input will be handled inline; no separate state
   const varsKeys = React.useMemo(() => listKeys(variables), [variables]);
-  const [filter] = React.useState('');
-  const nlRef = React.useRef<HTMLTextAreaElement>(null); // legacy, not used anymore
+  // deprecated flat filter (kept for past API) — not used
   const nlCERef = React.useRef<HTMLDivElement>(null);
   const scriptRef = React.useRef<HTMLTextAreaElement>(null);
-  const [nlHeight] = React.useState<number>(40);
-  const nlCaretRef = React.useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const scriptCaretRef = React.useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isEditingTitle, setIsEditingTitle] = React.useState<boolean>(false);
   const [titleValue, setTitleValue] = React.useState<string>(label || 'Condition');
   React.useEffect(() => { setTitleValue(label || 'Condition'); }, [label]);
   const [headerHover, setHeaderHover] = React.useState<boolean>(false);
+  const [heightPx, setHeightPx] = React.useState<number>(320);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  // Panel widths (Chat, Variables, Tester have fixed px; Code flexes)
+  const [wDescribe, setWDescribe] = React.useState<number>(420);
+  const [wVars, setWVars] = React.useState<number>(280);
+  const [wTester, setWTester] = React.useState<number>(360);
+  const [testRows, setTestRows] = React.useState<CaseRow[]>([]);
+  const [pendingDupGroups, setPendingDupGroups] = React.useState<Array<{ tail: string; options: string[] }> | null>(null);
+  // Variable selection (checkboxes on the left)
+  const [selectedVars, setSelectedVars] = React.useState<string[]>([]);
+  const [showVariablesPanel, setShowVariablesPanel] = React.useState<boolean>(true);
+  const [testerHints, setTesterHints] = React.useState<{ hintTrue?: string; hintFalse?: string; labelTrue?: string; labelFalse?: string }>({});
+  // Unified font size across all subpanels; Ctrl+Wheel handled at container level
+  const [fontPx, setFontPx] = React.useState<number>(13);
+  const [chatHistory, setChatHistory] = React.useState<Array<{ role: 'assistant' | 'user'; content: string }>>([
+    { role: 'assistant', content: 'Which condition do you want?' }
+  ]);
+  const [chatInput, setChatInput] = React.useState<string>('');
 
-  // Ensure caret never stays inside a token; snap to the token's right boundary
-  const snapCaretOutsideTokens = React.useCallback((el: HTMLTextAreaElement | null) => {
-    if (!el) return;
-    const text = nl || '';
-    const s = el.selectionStart ?? 0;
-    const ranges: Array<{ start: number; end: number }> = [];
-    try {
-      const re = /\{[^}]+\}/g; let m: RegExpExecArray | null;
-      while ((m = re.exec(text)) !== null) {
-        const start = m.index;
-        const end = m.index + m[0].length; // index right after the closing brace
-        ranges.push({ start, end });
-      }
-    } catch {}
-    const inside = (pos: number) => ranges.find(r => pos > r.start && pos < r.end);
-    const atOpen = (pos: number) => ranges.find(r => pos === r.start);
-    const atClose = (pos: number) => ranges.find(r => pos === r.end);
-    // If inside token or exactly on '{', snap to nearest boundary (r.start or r.end)
-    const tok = inside(s) || atOpen(s);
-    if (tok) {
-      const mid = tok.start + Math.floor((tok.end - tok.start) / 2);
-      const target = s < mid ? tok.start : tok.end; // left half -> start, right half -> end
-      try { el.setSelectionRange(target, target); } catch {}
-      nlCaretRef.current = { start: target, end: target };
-      return;
-    }
-    // If click lands exactly on '}' → move one char to the right
-    const tokClose = atClose(s);
-    if (tokClose) { try { el.setSelectionRange(tokClose.end, tokClose.end); } catch {} nlCaretRef.current = { start: tokClose.end, end: tokClose.end }; }
-  }, [nl]);
+  // Reset transient UI state whenever the panel is opened
+  React.useEffect(() => {
+    if (!open) return;
+    setMode('ai');
+    setShowDescribe(true);
+    setShowCode(false);
+    setShowTester(false);
+    setChatHistory([{ role: 'assistant', content: 'Which condition do you want?' }]);
+    setChatInput('');
+    setAiQuestion('');
+    setShowVariablesPanel(false);
+    setSelectedVars([]);
+    setTesterHints({});
+    setTestRows([]);
+    setHeightPx(320);
+    setWDescribe(420);
+    setWVars(280);
+    setWTester(360);
+    setFontPx(13);
+  }, [open]);
 
-  const scheduleSnap = React.useCallback((el: HTMLTextAreaElement | null) => {
-    if (!el) return;
+  // Capture Ctrl+Wheel at window (capture phase) but scope it to ConditionEditor bounds
+  React.useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      const el = containerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const x = e.clientX;
+      const y = e.clientY;
+      const inside = x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      if (!inside) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setFontPx(prev => Math.min(24, Math.max(10, prev + (e.deltaY < 0 ? 1 : -1))));
+    };
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true } as any);
+    return () => window.removeEventListener('wheel', onWheel as any);
+  }, []);
+
+  const handleChatSend = React.useCallback(async () => {
+    const text = (chatInput || '').trim();
+    if (!text) return;
+    setChatInput('');
+    // Open variables panel and preselect all available by preference
+    setShowVariablesPanel(true);
     try {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          snapCaretOutsideTokens(el);
-        });
-      });
+      const flat = (variablesTree && variablesTree.length) ? (() => {
+        const out: string[] = [];
+        (variablesTree || []).forEach(a => { (a.mains || []).forEach(m => { out.push(`${a.label}.${m.label}`); (m.subs || []).forEach(s => out.push(`${a.label}.${m.label}.${s.label}`)); }); });
+        return out;
+      })() : (Object.keys(variables || {}) as string[]);
+      const sv = await suggestMinimalVars(text, flat);
+      const chosen = (sv.selected && sv.selected.length) ? sv.selected : flat;
+      setSelectedVars(chosen);
     } catch {
-      setTimeout(() => snapCaretOutsideTokens(el), 0);
+      setSelectedVars(Object.keys(variables || {}) as string[]);
     }
-  }, [snapCaretOutsideTokens]);
+    // Append user message then assistant guidance (English)
+    setChatHistory(h => [
+      ...h,
+      { role: 'user', content: text }
+    ]);
+  }, [chatInput, selectedVars, variables, variablesTree]);
+
+  // caret handling for contenteditable is done inline in handlers
 
   // Simple variables intellisense state
   const [showVarsMenu, setShowVarsMenu] = React.useState(false);
   const [varsMenuFilter, setVarsMenuFilter] = React.useState('');
-  const [varsMenuActiveField, setVarsMenuActiveField] = React.useState<'nl' | 'script' | null>(null);
-  const [varsMenuAnchor, setVarsMenuAnchor] = React.useState<HTMLElement | null>(null);
-  const [varsMenuPos, setVarsMenuPos] = React.useState<{ left: number; top: number } | null>(null);
-  const [varsMenuMaxH, setVarsMenuMaxH] = React.useState<number>(280);
+  const [varsMenuActiveField] = React.useState<'nl' | 'script' | null>(null);
+  const [varsMenuAnchor] = React.useState<HTMLElement | null>(null);
+  const [varsMenuPos] = React.useState<{ left: number; top: number } | null>(null);
+  const [varsMenuMaxH] = React.useState<number>(280);
   const varsMenuRef = React.useRef<HTMLDivElement>(null);
   const [varsMenuHover, setVarsMenuHover] = React.useState<boolean>(false);
   const [varsNavIndex, setVarsNavIndex] = React.useState<number>(0);
@@ -221,48 +273,240 @@ export default function ConditionEditor({ open, onClose, variables, onSave, init
 
   React.useEffect(() => { setScript(initialScript || 'return true;'); }, [initialScript]);
 
-  const filteredKeys = React.useMemo(() => {
-    const f = (filter || '').trim().toLowerCase();
-    if (!f) return varsKeys;
-    return varsKeys.filter(k => k.toLowerCase().includes(f));
-  }, [varsKeys, filter]);
+  // legacy filtered list removed (hierarchical tree used instead)
 
-  
+  // Flatten variables for AI prompt
+  const variablesFlat = React.useMemo(() => {
+    if (variablesTree && variablesTree.length) {
+      const out: string[] = [];
+      (variablesTree || []).forEach(a => {
+        (a.mains || []).forEach(m => {
+          out.push(`${a.label}.${m.label}`);
+          (m.subs || []).forEach(s => out.push(`${a.label}.${m.label}.${s.label}`));
+        });
+      });
+      return out;
+    }
+    return Object.keys(variables || {});
+  }, [variablesTree, variables]);
+
+  // Variables actually referenced inside the script via vars["..."]
+  const usedVarsInScript = React.useMemo(() => {
+    try {
+      // Match vars["..."] or vars['...'] or vars[`...`]
+      const re = /vars\[\s*(["'`])([^"'`]+)\1\s*\]/g;
+      const found = new Set<string>();
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(script)) !== null) {
+        const key = m[2];
+        // Do not filter by variablesFlat: always surface tokens actually used in the script
+        found.add(key);
+      }
+      return Array.from(found);
+    } catch {
+      return [];
+    }
+  }, [script, variablesFlat]);
+
+  const hasVarsInScript = React.useMemo(() => (usedVarsInScript.length > 0), [usedVarsInScript]);
+  const variablesUsedInScript = React.useMemo(() => (hasVarsInScript ? usedVarsInScript : variablesFlat), [hasVarsInScript, usedVarsInScript, variablesFlat]);
+
+  // Keep variables visible even after regenerate: union of used-in-script and user-selected
+  const variablesForPanel = React.useMemo(() => {
+    if (mode === 'ai' && !hasCreated) return selectedVars || [];
+    const set = new Set<string>();
+    (variablesUsedInScript || []).forEach(k => set.add(k));
+    (selectedVars || []).forEach(k => set.add(k));
+    return Array.from(set);
+  }, [mode, hasCreated, variablesUsedInScript, selectedVars]);
+
+  // Variables to show inside the tester: only CHECKED vars intersected with used-in-script.
+  const variablesForTester = React.useMemo(() => {
+    const usedArr = variablesUsedInScript || [];
+    const usedLc = new Set<string>(usedArr.map(s => String(s).toLowerCase()));
+    const selectedArr = selectedVars || [];
+    // case-insensitive intersection
+    const inter = selectedArr.filter(k => usedLc.has(String(k).toLowerCase()));
+    if (inter.length > 0) return inter;
+    // fallback: if user selected something, use it; else use used-in-script
+    return selectedArr.length > 0 ? selectedArr : usedArr;
+  }, [variablesUsedInScript, selectedVars]);
+
+  // Duplicate-variable preference (choose among same trailing label)
+  const [preferredVarByTail, setPreferredVarByTail] = React.useState<Record<string, string>>({});
+  const duplicateGroups = React.useMemo(() => {
+    const map: Record<string, string[]> = {};
+    variablesFlat.forEach(full => {
+      const tail = full.split('.').slice(-2).join('.') || full;
+      map[tail] = map[tail] ? [...map[tail], full] : [full];
+    });
+    const dups: Array<{ tail: string; options: string[] }> = [];
+    Object.keys(map).forEach(tail => { if ((map[tail] || []).length > 1) dups.push({ tail, options: map[tail] }); });
+    return dups;
+  }, [variablesFlat]);
+  const variablesFlatWithPreference = React.useMemo(() => {
+    if (duplicateGroups.length === 0) return variablesFlat;
+    const chosen = new Set<string>(variablesFlat);
+    duplicateGroups.forEach(g => {
+      const pref = preferredVarByTail[g.tail];
+      if (pref && g.options.includes(pref)) {
+        g.options.forEach(opt => { if (opt !== pref) chosen.delete(opt); });
+      }
+    });
+    return Array.from(chosen);
+  }, [variablesFlat, duplicateGroups, preferredVarByTail]);
+
+  // Keep selected vars in sync after script generation (defaults = vars used in script)
+  React.useEffect(() => {
+    if (!hasCreated || !hasVarsInScript) return;
+    try {
+      const defaults = variablesUsedInScript;
+      setSelectedVars(prev => (prev.length === 0 ? defaults : prev));
+    } catch {}
+  }, [hasCreated, hasVarsInScript, script]);
+
+  const userChangedSelection = React.useMemo(() => {
+    const a = [...(variablesUsedInScript || [])].sort().join('|');
+    const b = [...(selectedVars || [])].sort().join('|');
+    return hasCreated && a !== b;
+  }, [variablesUsedInScript, selectedVars, hasCreated]);
+
+  // helper to append text into NL was removed (not used)
+
+  // kept for legacy but unused now that code is always auto-formatted
 
   if (!open) return null;
 
   const containerStyle: React.CSSProperties = dockWithinParent
-    ? { position: 'absolute', left: 0, right: 0, bottom: 0, height: 320 }
-    : { position: 'fixed', left: 0, right: 0, bottom: 0, height: 320 };
+    ? { position: 'absolute', left: 0, right: 0, bottom: 0, height: heightPx, fontSize: fontPx }
+    : { position: 'fixed', left: 0, right: 0, bottom: 0, height: heightPx, fontSize: fontPx };
+
+  const onStartResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      try {
+        const parentBottom = dockWithinParent ? (containerRef.current?.parentElement?.getBoundingClientRect().bottom ?? window.innerHeight) : window.innerHeight;
+        const maxH = dockWithinParent ? ((containerRef.current?.parentElement?.getBoundingClientRect().height ?? window.innerHeight) - 40) : (window.innerHeight - 40);
+        const minH = 220;
+        const next = Math.max(minH, Math.min(maxH, parentBottom - ev.clientY));
+        setHeightPx(next);
+      } catch {}
+    };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor = ''; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'ns-resize';
+  };
 
   const generate = async () => {
-    if (!nl.trim()) return;
+    const userTranscript = (chatHistory || []).filter(m => m.role === 'user').map(m => m.content.trim()).filter(Boolean).join('\n');
+    const nlText = (mode === 'ai') ? (userTranscript || '') : serializeCE().trim();
+    if (!nlText) { setAiQuestion('Inserisci una descrizione in linguaggio naturale.'); return; }
+    if (!variablesFlatWithPreference || variablesFlatWithPreference.length === 0) {
+      setAiQuestion('Nessuna variabile disponibile: controlla la struttura DDT o le variabili di progetto.');
+      return;
+    }
+    // If there are duplicate groups relevant to this condition and no preference chosen yet, request a selection
+    const nlNorm = nlText.toLowerCase();
+    const relevant = duplicateGroups.filter(g => {
+      const tailText = g.tail.split('.').slice(-2).join(' ').toLowerCase();
+      return nlNorm.includes(tailText) || nlNorm.includes(g.tail.toLowerCase());
+    });
+    const missingChoice = relevant.filter(g => !preferredVarByTail[g.tail]);
+    if (relevant.length > 0 && missingChoice.length > 0) {
+      setPendingDupGroups(relevant);
+      setAiQuestion('Seleziona la variabile corretta per la condizione.');
+      return; // stop here; user will choose and cliccare Create di nuovo
+    } else {
+      setPendingDupGroups(null);
+    }
     setBusy(true);
     try {
-      // naive local generation placeholder; wire to backend AI later
-      const firstKey = varsKeys[0] || 'x';
-      let gen = 'try {\n';
-      if (/not\s+empty|exists/i.test(nl)) gen += `  return Boolean(vars["${firstKey}"]);\n`;
-      else if (/equals?/i.test(nl)) gen += `  return vars["${firstKey}"] === /* TODO value */ '';\n`;
-      else gen += '  return true;\n';
-      gen += '} catch { return false; }';
-      setScript(gen);
+      const varsForAI = (selectedVars && selectedVars.length > 0) ? selectedVars : variablesFlatWithPreference;
+      const varsList = (varsForAI || []).map(v => `- ${v}`).join('\n');
+      const guidance = `${nlText}\n\nConstraints:\n- Use EXACTLY these variable keys when reading input; do not invent or rename keys.\n${varsList}\n- Access variables strictly as vars["<key>"] (no dot access).\n- Return a boolean (predicate).\n\nPlease return well-formatted JavaScript for function main(ctx) with detailed inline comments explaining each step and rationale. Use clear variable names, add section headers, and ensure readability (one statement per line).`;
+      const out = await generateConditionWithAI(guidance, varsForAI);
+      const aiLabel = (out as any)?.label as string | undefined;
+      const aiScript = (out as any)?.script as string | undefined;
+      const question = (out as any)?.question as string | undefined;
+      if (question && !aiScript) {
+        setAiQuestion(question);
+        return;
+      }
+      setAiQuestion('');
+      if (!titleValue || titleValue === 'Condition') setTitleValue(aiLabel || 'Nuova condizione');
+      let nextScript = aiScript || 'try { return false; } catch { return false; }';
+      // Post-fix common alias mistakes (e.g., Act.DOB) by rewriting to the selected Date key when unique
+      try {
+        const all = varsForAI || [];
+        const dateCandidates = all.filter(k => /date of birth/i.test(k) || /\.Date$/.test(k));
+        if (dateCandidates.length === 1) {
+          const target = dateCandidates[0].replace(/"/g, ''); // guard
+          const patterns = [
+            /vars\[\s*(["'`])Act\.?DOB\1\s*\]/gi,
+            /vars\[\s*(["'`])DateOfBirth\1\s*\]/gi,
+            /vars\[\s*(["'`])DOB\1\s*\]/gi,
+            /vars\[\s*(["'`])Act\.?DateOfBirth\1\s*\]/gi
+          ];
+          patterns.forEach(re => { nextScript = nextScript.replace(re, `vars["${target}"]`); });
+        }
+      } catch {}
+      setScript(nextScript);
+      // Ensure CodeEditor receives the new script immediately even if Diff is empty
+      // by toggling showCode on and syncing initialCode via prop (handled by CodeEditor effect)
+      setShowCode(true);
+      setHasCreated(true);
+      // Open tester to the right as requested
+      setShowTester(true);
+      // Format after AI generates
+      setTimeout(() => { try { monacoEditorRef.current?.getAction('editor.action.formatDocument')?.run(); } catch {} }, 50);
+      // Ask backend to suggest example true/false cases
+      try {
+        const cases = await suggestConditionCases(nlText, varsForAI);
+        const rows: CaseRow[] = [];
+        const synth = (varsIn: Record<string, any> | undefined): Record<string, any> | undefined => {
+          if (!varsIn) return varsIn;
+          const out = { ...varsIn };
+          // If script uses a composite date like "...Date" but AI suggested Year/Month/Day, synth ISO date
+          variablesUsedInScript.forEach((k) => {
+            if (out[k]) return;
+            const base = k.endsWith('.Date') ? k.slice(0, -('.Date'.length)) : '';
+            if (!base) return;
+            const y = out[`${base}.Date.Year`] ?? out[`${base}.Year`];
+            const m = out[`${base}.Date.Month`] ?? out[`${base}.Month`];
+            const d = out[`${base}.Date.Day`] ?? out[`${base}.Day`];
+            if (y != null && m != null && d != null) {
+              const mm = String(m).padStart(2, '0');
+              const dd = String(d).padStart(2, '0');
+              out[k] = `${y}-${mm}-${dd}`;
+            }
+          });
+          return out;
+        };
+        if (cases.trueCase) rows.push({ id: String(Math.random()), label: 'true', vars: synth(cases.trueCase) || cases.trueCase });
+        if (cases.falseCase) rows.push({ id: String(Math.random()), label: 'false', vars: synth(cases.falseCase) || cases.falseCase });
+        if (rows.length) setTestRows(rows);
+        setTesterHints({ hintTrue: (cases as any).hintTrue, hintFalse: (cases as any).hintFalse, labelTrue: (cases as any).labelTrue, labelFalse: (cases as any).labelFalse });
+      } catch {}
+    } catch (e) {
+      try { console.error('[Condition][AI][error]', e); } catch {}
+      const msg = String((e as any)?.message || '').toLowerCase();
+      if (msg.includes('backend_error:')) {
+        setAiQuestion('Errore backend: ' + msg.replace('backend_error:', '').trim());
+      } else if (msg.includes('missing vite_groq_key')) {
+        setAiQuestion('AI non configurata: imposta VITE_GROQ_KEY (o VITE_GROQ_API_KEY) nel file .env.local e riavvia il dev server.');
+      } else if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('cors')) {
+        setAiQuestion('AI non raggiungibile (rete/CORS). Verifica connessione o proxy.');
+      } else {
+        setAiQuestion('Si è verificato un errore durante la generazione. Riprova.');
+      }
+      setScript('try { return false; } catch { return false; }');
     } finally {
       setBusy(false);
     }
   };
 
-  const test = () => {
-    try {
-      // Sandbox: expose variables as a single object "vars"
-      // eslint-disable-next-line no-new-func
-      const fn = new Function('vars', script);
-      const out = fn(variables || {});
-      setResult(String(Boolean(out)));
-    } catch (e: any) {
-      setResult('Error: ' + (e?.message || 'invalid script'));
-    }
-  };
+  // removed old single-result tester header (replaced by right panel)
 
   // Insert selected variable token at the caret for the active field
   const insertVariableToken = (varKey: string) => {
@@ -300,100 +544,6 @@ export default function ConditionEditor({ open, onClose, variables, onSave, init
     setShowVarsMenu(false);
   };
 
-  const openVarsMenuFor = (field: 'nl' | 'script', anchorEl: HTMLElement | null) => {
-    setVarsMenuActiveField(field);
-    setVarsMenuAnchor(anchorEl);
-    setVarsMenuFilter('');
-    setShowVarsMenu(true);
-    // Compute caret-based floating position
-    const ta = field === 'nl' ? (null as any) : (scriptRef.current as HTMLTextAreaElement | null);
-    const computeCaretViewportPosTextarea = (textarea: HTMLTextAreaElement | null): { left: number; top: number, caretRect?: DOMRect } | null => {
-      if (!textarea) return null;
-      try {
-        const style = window.getComputedStyle(textarea);
-        const div = document.createElement('div');
-        div.style.position = 'fixed';
-        div.style.visibility = 'hidden';
-        div.style.whiteSpace = 'pre-wrap';
-        div.style.wordWrap = 'break-word';
-        div.style.font = style.font;
-        div.style.padding = style.padding;
-        div.style.border = style.border;
-        div.style.letterSpacing = style.letterSpacing as string;
-        div.style.width = textarea.clientWidth + 'px';
-        const value = textarea.value;
-        const caretIndex = textarea.selectionStart || 0;
-        const before = value.substring(0, caretIndex).replace(/\n/g, '\n');
-        const textNode = document.createTextNode(before);
-        const marker = document.createElement('span');
-        marker.textContent = '\u200b';
-        div.appendChild(textNode);
-        div.appendChild(marker);
-        document.body.appendChild(div);
-        const taRect = textarea.getBoundingClientRect();
-        // Horizontal align to caret (approx), vertical anchored to caret baseline
-        const rect = marker.getBoundingClientRect();
-        const approxLeftWithin = Math.min(rect.left - div.getBoundingClientRect().left, textarea.clientWidth - 4);
-        const left = taRect.left + approxLeftWithin;
-        const top = rect.bottom + 6;
-        document.body.removeChild(div);
-        return { left, top, caretRect: rect };
-      } catch {
-        return null;
-      }
-    };
-    const computeCaretViewportPosCE = (root: HTMLElement | null): { left: number; top: number, caretRect?: DOMRect } | null => {
-      if (!root) return null;
-      try {
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return null;
-        const r = sel.getRangeAt(0).cloneRange();
-        r.collapse(true);
-        let rect = r.getBoundingClientRect();
-        if (!rect || rect.height === 0) {
-          const marker = document.createElement('span');
-          marker.textContent = '\u200b';
-          r.insertNode(marker);
-          rect = marker.getBoundingClientRect();
-          marker.parentNode && marker.parentNode.removeChild(marker);
-        }
-        return { left: rect.left, top: rect.bottom + 6, caretRect: rect };
-      } catch { return null; }
-    };
-    const caretPos = field === 'nl' ? computeCaretViewportPosCE(nlCERef.current as any) : computeCaretViewportPosTextarea(ta);
-    if (caretPos) {
-      const menuW = 360;
-      const margin = 10;
-      let left = caretPos.left;
-      const rect = caretPos.caretRect as DOMRect;
-      const availableBelow = window.innerHeight - (rect ? rect.bottom + 6 : caretPos.top) - margin;
-      const availableAbove = (rect ? rect.top : caretPos.top) - margin;
-      // Decide placement and max height
-      let top = caretPos.top;
-      let maxH = 280;
-      if (availableBelow >= 180) {
-        maxH = Math.min(280, availableBelow);
-        top = (rect ? rect.bottom + 6 : caretPos.top);
-      } else if (availableAbove >= 180) {
-        maxH = Math.min(280, availableAbove);
-        top = Math.max(margin, (rect ? rect.top : caretPos.top) - maxH - 6);
-      } else if (availableBelow >= availableAbove) {
-        maxH = Math.max(120, availableBelow);
-        top = (rect ? rect.bottom + 6 : caretPos.top);
-      } else {
-        maxH = Math.max(120, availableAbove);
-        top = Math.max(margin, (rect ? rect.top : caretPos.top) - maxH - 6);
-      }
-      if (left + menuW + margin > window.innerWidth) left = Math.max(margin, window.innerWidth - menuW - margin);
-      setVarsMenuPos({ left, top });
-      setVarsMenuMaxH(maxH);
-    } else {
-      setVarsMenuPos(null);
-      setVarsMenuMaxH(280);
-    }
-    // Focus filter input upon open via next tick handled in render
-  };
-
   const toggleAct = (label: string) => setExpandedActs(prev => ({ ...prev, [label]: !prev[label] }));
   const toggleMain = (actLabel: string, mainLabel: string) => {
     const key = `${actLabel}::${mainLabel}`;
@@ -419,20 +569,14 @@ export default function ConditionEditor({ open, onClose, variables, onSave, init
     return collect(root).replace(/\u00A0/g, ' ');
   };
 
-  const handleKeyDownForField = (e: React.KeyboardEvent<HTMLElement>, field: 'nl' | 'script') => {
-    if ((e.ctrlKey || e.metaKey) && (e.code === 'Space' || e.key === ' ')) {
-      e.preventDefault();
-      openVarsMenuFor(field, e.currentTarget as HTMLElement);
-    } else if (e.key === 'Escape' && showVarsMenu) {
-      e.preventDefault();
-      setShowVarsMenu(false);
-    }
-  };
+  // removed legacy handleKeyDownForField (monaco/contenteditable handle own shortcuts)
 
   const ConditionIcon = SIDEBAR_ICON_COMPONENTS[SIDEBAR_TYPE_ICONS.conditions];
 
   return (
-    <div style={{ ...containerStyle, background: 'var(--sidebar-bg, #0b1220)', display: 'grid', gridTemplateRows: 'auto 1fr', gap: 6, padding: 12, zIndex: 50 }}>
+    <div ref={containerRef} style={{ ...containerStyle, background: 'var(--sidebar-bg, #0b1220)', display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 6, padding: 12, zIndex: 50 }}>
+      {/* Top drag handle for vertical resize */}
+      <div onMouseDown={onStartResize} title="Drag to resize" style={{ cursor: 'ns-resize', height: 6, margin: '-12px -12px 6px -12px' }} />
       {/* Header with editable title and close */}
       <div
         onMouseEnter={() => setHeaderHover(true)}
@@ -478,114 +622,244 @@ export default function ConditionEditor({ open, onClose, variables, onSave, init
         </button>
       </div>
       {/* Controls + editor */}
-      <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', gap: 6 }}>
-        {/* Top controls: NL editor (contenteditable with chips) + Create/Save/Close */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, alignItems: 'center' }}>
-          <div style={{ position: 'relative' }}>
-            {!nl.trim() && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 8,
-                  top: 8,
-                  color: '#94a3b8',
-                  pointerEvents: 'none',
-                  fontSize: 14
-                }}
-              >
-                Describe in natural language when this condition should be true…
+      <div style={{ display: 'grid', gridTemplateRows: 'auto auto 1fr auto', gap: 6 }}>
+        {/* Toolbar */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            title="Describe in words which condition you need"
+            aria-pressed={showDescribe}
+            onClick={() => setShowDescribe(v => !v)}
+            style={{
+              border: '1px solid',
+              borderColor: showDescribe ? '#38bdf8' : '#334155',
+              borderRadius: 6,
+              padding: '6px 10px',
+              background: showDescribe ? 'rgba(56,189,248,0.15)' : 'transparent',
+              color: showDescribe ? '#e5e7eb' : '#cbd5e1',
+              fontWeight: showDescribe ? 700 : 500
+            }}
+          >Describe</button>
+          <button
+            title="Show and edit the coding of the condition"
+            aria-pressed={showCode}
+            onClick={() => setShowCode(v => !v)}
+            style={{
+              border: '1px solid',
+              borderColor: showCode ? '#38bdf8' : '#334155',
+              borderRadius: 6,
+              padding: '6px 10px',
+              background: showCode ? 'rgba(56,189,248,0.15)' : 'transparent',
+              color: showCode ? '#e5e7eb' : '#cbd5e1',
+              fontWeight: showCode ? 700 : 500
+            }}
+          >Code</button>
+          <button
+            title="Test if the condition works properly with sets of variable values"
+            aria-pressed={showTester}
+            onClick={() => setShowTester(v => !v)}
+            style={{
+              border: '1px solid',
+              borderColor: showTester ? '#38bdf8' : '#334155',
+              borderRadius: 6,
+              padding: '6px 10px',
+              background: showTester ? 'rgba(56,189,248,0.15)' : 'transparent',
+              color: showTester ? '#e5e7eb' : '#cbd5e1',
+              fontWeight: showTester ? 700 : 500
+            }}
+          >Test</button>
+          <div style={{ flex: 1 }} />
+          <button
+            title="Change the selection of the variables to consider"
+            aria-pressed={showVariablesPanel}
+            onClick={() => setShowVariablesPanel(v => !v)}
+            style={{
+              border: '1px solid',
+              borderColor: showVariablesPanel ? '#38bdf8' : '#334155',
+              borderRadius: 6,
+              padding: '6px 10px',
+              background: showVariablesPanel ? 'rgba(56,189,248,0.15)' : 'transparent',
+              color: showVariablesPanel ? '#e5e7eb' : '#cbd5e1',
+              fontWeight: showVariablesPanel ? 700 : 500
+            }}
+          >{showVariablesPanel ? 'Hide Variables' : 'Variables'}</button>
+          <button
+            title="Generate the condition code from the description and selected variables"
+            onClick={generate}
+            disabled={busy}
+            style={{
+              border: '1px solid #334155',
+              borderRadius: 6,
+              padding: '6px 10px',
+              background: busy ? 'rgba(148,163,184,0.15)' : 'transparent',
+              color: '#e5e7eb'
+            }}
+          >{mode==='ai' ? (busy ? 'Generating…' : (userChangedSelection ? 'Regenerate' : 'Generate')) : (busy ? 'Creating…' : (userChangedSelection ? 'Recreate' : 'Create'))}</button>
+        </div>
+        {/* Top controls removed in favor of Chat input; no duplicate textbox */}
+        <div />
+        {/* Duplicate variable preference selector (only when required) */}
+        {pendingDupGroups && pendingDupGroups.length > 0 && (
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', padding: '6px 8px', border: '1px dashed #334155', borderRadius: 6 }}>
+            {pendingDupGroups.map((g: { tail: string; options: string[] }) => (
+              <div key={g.tail} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: '#94a3b8', fontSize: 12 }}>{g.tail}:</span>
+                {g.options.map((opt: string) => (
+                  <label key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#e5e7eb', fontSize: 12 }}>
+                    <input
+                      type="radio"
+                      name={`dup-${g.tail}`}
+                      checked={(preferredVarByTail[g.tail] || g.options[0]) === opt}
+                      onChange={() => setPreferredVarByTail(prev => ({ ...prev, [g.tail]: opt }))}
+                    />
+                    {opt}
+                  </label>
+                ))}
               </div>
-            )}
+            ))}
+          </div>
+        )}
+        {/* Clarification banner (AI question) */}
+        {aiQuestion && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid #f59e0b', borderRadius: 6, background: 'rgba(245,158,11,0.08)', color: '#f59e0b', maxHeight: 120, overflowY: 'auto', wordBreak: 'break-word' }}>
+            <span style={{ fontWeight: 700 }}>AI:</span>
+            <span>{aiQuestion}</span>
+          </div>
+        )}
+        {/* Layout by mode */}
+        {(() => {
+          const columns: string[] = [];
+          const add = (w: string, addSplitter: boolean) => { columns.push(w); if (addSplitter) columns.push('4px'); };
+          const hasNextAfterDescribe = (!!showVariablesPanel) || (!!showCode) || (!!showTester);
+          const hasNextAfterVars = (!!showCode) || (!!showTester);
+          const hasNextAfterCode = (!!showTester);
+          if (showDescribe) add(`minmax(${Math.max(300, Math.floor(wDescribe))}px, 1fr)`, hasNextAfterDescribe);
+          if (showVariablesPanel) add(`${wVars}px`, hasNextAfterVars);
+          if (showCode) add('minmax(420px, 2fr)', hasNextAfterCode);
+          if (showTester) add(`${wTester}px`, false);
+          if (columns.length === 0) columns.push('1fr');
+          return (
+        <div style={{ display: 'grid', gridTemplateColumns: columns.join(' '), gap: 6, alignItems: 'stretch' }}>
+          {/* Describe panel */}
+          {showDescribe && (
+            <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220', display: 'grid', gridTemplateRows: '1fr auto' }}>
+              <div style={{ padding: 10, overflowY: 'auto' }}>
+                {chatHistory.map((m, i) => (
+                  <div key={i} style={{ marginBottom: 10, color: m.role==='assistant' ? '#93c5fd' : '#e5e7eb' }}>
+                    <b>{m.role==='assistant' ? 'Assistant' : 'You'}:</b> {m.content}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid #334155' }}>
+                <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Describe the condition…" style={{ flex: 1, padding: '6px 8px', border: '1px solid #334155', borderRadius: 6, background: 'transparent', color: '#e5e7eb' }} />
+                <button onClick={handleChatSend} style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}>Send</button>
+              </div>
+            </div>
+          )}
+          {/* splitter after Describe if next column exists (visual grip) */}
+          {showDescribe && (showVariablesPanel || showCode || showTester) && (
             <div
-              ref={nlCERef}
-              contentEditable
-              suppressContentEditableWarning
-              onKeyDown={(e) => {
-                handleKeyDownForField(e as any, 'nl');
-                // While Intellisense is open, route arrow/enter to it even if caret is in the editor
-                if (showVarsMenu && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter')) {
-                  try { console.log('[ConditionEditor][Intellisense][editor-key]', e.key); } catch {}
-                  e.preventDefault();
-                  navigateIntellisense(e.key as any);
-                  return;
-                }
-                // Block arrow/typing inside tokens
-                const sel = window.getSelection();
-                if (!sel) return;
-                const anchor = sel.anchorNode as Node | null;
-                const tokenEl = (anchor && (anchor.nodeType === 3 ? (anchor.parentElement as HTMLElement) : (anchor as HTMLElement)))?.closest?.('span[data-token]') as HTMLElement | null;
-                const printable = e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
-                if (tokenEl && printable) { e.preventDefault(); return; }
-                if (tokenEl && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-                  e.preventDefault();
-                  if (e.key === 'ArrowLeft') {
-                    const r = document.createRange(); r.setStartBefore(tokenEl); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
-                  } else {
-                    const r = document.createRange(); r.setStartAfter(tokenEl); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
-                  }
-                }
-                if ((e.key === 'Backspace' || e.key === 'Delete') && sel.isCollapsed) {
-                  const range = sel.getRangeAt(0);
-                  if (e.key === 'Backspace') {
-                    const prev = (range.startContainer as any).previousSibling || ((range.startContainer as any).parentElement && (range.startContainer as any).parentElement.previousSibling);
-                    const el = (prev as HTMLElement) && (prev as HTMLElement).nodeType === 1 ? (prev as HTMLElement) : null;
-                    if (el && el.matches && el.matches('span[data-token]')) {
-                      e.preventDefault();
-                      const r = document.createRange(); r.selectNode(el);
-                      sel.removeAllRanges(); sel.addRange(r);
-                      // eslint-disable-next-line deprecation/deprecation
-                      document.execCommand('delete');
-                      setNl(serializeCE());
-                    }
-                  } else {
-                    const next = (range.startContainer as any).nextSibling || ((range.startContainer as any).parentElement && (range.startContainer as any).parentElement.nextSibling);
-                    const el = (next as HTMLElement) && (next as HTMLElement).nodeType === 1 ? (next as HTMLElement) : null;
-                    if (el && el.matches && el.matches('span[data-token]')) {
-                      e.preventDefault();
-                      const r = document.createRange(); r.selectNode(el);
-                      sel.removeAllRanges(); sel.addRange(r);
-                      // eslint-disable-next-line deprecation/deprecation
-                      document.execCommand('delete');
-                      setNl(serializeCE());
-                    }
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const startX = e.clientX; const startW = wDescribe;
+                const onMove = (ev: MouseEvent) => {
+                  const dx = ev.clientX - startX; let nw = startW + dx;
+                  nw = Math.max(300, Math.min(640, nw)); setWDescribe(nw);
+                };
+                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor=''; };
+                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); document.body.style.cursor='col-resize';
+              }}
+              style={{ cursor: 'col-resize', width: 4, margin: '0 2px', background: 'rgba(148,163,184,0.25)', borderRadius: 2 }}
+            />
+          )}
+          {/* Variables panel (now before Code) */}
+          {showVariablesPanel ? (
+            <VariablesPanel
+              variables={variablesForPanel}
+              selected={selectedVars}
+              onChange={setSelectedVars}
+              onClose={() => setShowVariablesPanel(false)}
+            />
+          ) : null}
+          {/* splitter after Variables if next column exists */}
+          {showVariablesPanel && (showTester || showCode) && (
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const startX = e.clientX; const startW = wVars;
+                const onMove = (ev: MouseEvent) => {
+                  const dx = ev.clientX - startX; let nw = startW + dx;
+                  nw = Math.max(200, Math.min(420, nw)); setWVars(nw);
+                };
+                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor=''; };
+                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); document.body.style.cursor='col-resize';
+              }}
+              style={{ cursor: 'col-resize', width: 4, margin: '0 2px', background: 'rgba(148,163,184,0.25)', borderRadius: 2 }}
+            />
+          )}
+          {/* Generate button moved to toolbar; no extra column here */}
+          {/* Code panel (now after Variables) */}
+          {showCode && (
+          <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220' }}>
+            <CodeEditor
+              initialCode={script}
+              initialMode={'predicate'}
+              fontPx={fontPx}
+              ai={{
+                codeEditToPatch: async ({ instructions, execution }) => {
+                  try {
+                    const out = await generateConditionWithAI(instructions || serializeCE(), variablesUsedInScript);
+                    const newScript = (out as any)?.script || execution.code;
+                    const a = execution.code.replace(/\r/g, '');
+                    const b = String(newScript || '').replace(/\r/g, '');
+                    if (a === b) return '--- a/code\n+++ b/code\n';
+                    return `--- a/code\n+++ b/code\n@@ -1,1 +1,1 @@\n-${a}\n+${b}`;
+                  } catch {
+                    return '--- a/code\n+++ b/code\n';
                   }
                 }
               }}
-              onInput={() => { setNl(serializeCE()); }}
-              onPaste={(e) => { e.preventDefault(); const text = (e.clipboardData || (window as any).clipboardData).getData('text'); document.execCommand('insertText', false, text); }}
-              style={{ minHeight: 38, padding: 8, border: '1px solid #334155', borderRadius: 6, color: '#e5e7eb', outline: 'none', whiteSpace: 'pre-wrap' }}
+              tests={{
+                run: async () => ({ pass: 0, fail: 0, blocked: 0, ms: 0, results: [] })
+              }}
+              onPatchApplied={({ code }) => setScript(code)}
+              layout="compact"
             />
           </div>
-          <button disabled={busy} onClick={generate} title="create the script for the condition" style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}>Create</button>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => { onSave?.(script); onClose(); }} style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}>Save</button>
-            <button onClick={onClose} style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}>Close</button>
-          </div>
+          )}
+          {/* splitter after Code if tester exists (visual grip) */}
+          {showCode && showTester && (
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const startX = e.clientX; const startW = wTester;
+                const onMove = (ev: MouseEvent) => {
+                  const dx = startX - ev.clientX; // moving left grows tester, right shrinks
+                  let nw = startW + dx;
+                  nw = Math.max(260, Math.min(540, nw)); setWTester(nw);
+                };
+                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor=''; };
+                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); document.body.style.cursor='col-resize';
+              }}
+              style={{ cursor: 'col-resize', width: 4, margin: '0 2px', background: 'rgba(148,163,184,0.25)', borderRadius: 2 }}
+            />
+          )}
+          {/* Tester column when enabled */}
+          {showTester && (
+            <div>
+              <ConditionTester
+                script={script}
+                variablesList={variablesForTester}
+                initialCases={testRows}
+                onChange={setTestRows}
+                hintTrue={testerHints.hintTrue}
+                hintFalse={testerHints.hintFalse}
+                labelTrue={testerHints.labelTrue}
+                labelFalse={testerHints.labelFalse}
+              />
+            </div>
+          )}
         </div>
-        {/* Editor directly under NL field */}
-        <textarea
-          ref={scriptRef}
-          value={script}
-          onChange={e => setScript(e.target.value)}
-          onKeyDown={(e) => {
-            handleKeyDownForField(e as any, 'script');
-            if (showVarsMenu && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter')) {
-              try { console.log('[ConditionEditor][Intellisense][script-key]', e.key); } catch {}
-              e.preventDefault();
-              navigateIntellisense(e.key as any);
-            }
-          }}
-          placeholder="return true;"
-          style={{ width: '100%', height: '100%', padding: 8, border: '1px solid #334155', borderRadius: 6, background: 'transparent', color: '#e5e7eb', fontFamily: 'monospace' }}
-        />
-        {/* Bottom row: Test + info */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <button onClick={test} style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}>Test</button>
-            <span style={{ color: '#e5e7eb', fontSize: 12, marginLeft: 8 }}>Result: {result || '—'}</span>
-          </div>
-          <div style={{ color: '#94a3b8', fontSize: 12 }}>Script must return true/false.</div>
-        </div>
+        )})()}
       </div>
       {/* Variables Intellisense Menu */}
       {showVarsMenu && varsMenuAnchor && (

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Body, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import sys
@@ -46,7 +47,7 @@ except Exception:
 GROQ_KEY = os.environ.get("Groq_key")
 IDE_LANGUE = os.environ.get("IdeLangue", "it")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"  # PATCH: endpoint corretto
-MODEL = "llama3-70b-8192"
+MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-70b-instruct")
 
 MEANINGS = [
 	"date", "email", "phone", "address", "number", "text", "boolean"
@@ -92,6 +93,228 @@ app.include_router(stepNotConfirmed_router)
 app.include_router(nlp_extract_router)
 app.include_router(ner_router)
 app.include_router(parse_address_router)
+
+# --- Condition: suggest minimal variables ---
+@app.post("/api/conditions/suggest-vars")
+def suggest_vars(body: dict = Body(...)):
+    try:
+        nl = (body or {}).get("nl") or ""
+        variables = (body or {}).get("variables") or []
+    except Exception as e:
+        return JSONResponse({"error": f"bad_request: {e}"}, status_code=200)
+    try:
+        print("[SUGGEST_VARS][req]", {"nl_preview": (nl or "")[:160], "vars_count": len(variables)})
+    except Exception:
+        pass
+    if not isinstance(nl, str) or not nl.strip():
+        return {"error": "nl_required"}
+    if not isinstance(variables, list):
+        variables = []
+
+    system = (
+        "You help select the MINIMAL set of variables needed to evaluate a condition.\n"
+        "Rules:\n"
+        "- Consider only the provided dotted variable names.\n"
+        "- Prefer variables explicitly mentioned or implied by the user's description.\n"
+        "- If there are multiple granularities in a family (e.g., whole vs parts), select ONE coherent representation.\n"
+        "- Do NOT include unrelated variables.\n"
+        "Return STRICT JSON: {\"selected\": string[], \"rationale\": string }"
+    )
+    user = {
+        "role": "user",
+        "content": (
+            "Condition (natural language):\n" + nl + "\n\n" +
+            "Available variables (dotted):\n" + " | ".join([str(v) for v in variables]) + "\n\n" +
+            "Select only the variables strictly necessary."
+        )
+    }
+    try:
+        ai = call_groq_json([
+            {"role": "system", "content": system},
+            user,
+        ])
+        text = (ai or "{}").strip()
+        try:
+            print("[SUGGEST_VARS][ai_raw]", text[:300])
+        except Exception:
+            pass
+        obj = _safe_json_loads(text)
+        if obj is None:
+            return {"error": "parse_error", "raw": text[:400]}
+        # sanitize
+        selected = [s for s in (obj.get("selected") or []) if isinstance(s, str)]
+        rationale = obj.get("rationale") or ""
+        try:
+            print("[SUGGEST_VARS][selected]", selected, "rationale:", rationale[:160])
+        except Exception:
+            pass
+        return JSONResponse({"selected": selected, "rationale": rationale}, status_code=200)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=200)
+
+# --- Condition generation (backend-centralized Groq) ---
+@app.post("/api/conditions/generate")
+def generate_condition(body: dict = Body(...)):
+    nl = (body or {}).get("nl") or ""
+    variables = (body or {}).get("variables") or []
+    try:
+        print("[COND][req]", {"nl_preview": (nl or "")[:160], "vars": variables[:20]})
+    except Exception:
+        pass
+    if not isinstance(nl, str) or not nl.strip():
+        return {"error": "nl_required"}
+    if not isinstance(variables, list):
+        variables = []
+
+    SYSTEM = (
+        "You are an expert backend engineer. You generate concise labels and boolean JS.\n"
+        "Output policy:\n"
+        "- If description is sufficient, return JSON {\"label\":\"...\",\"script\":\"...\"}.\n"
+        "- If insufficient, return ONLY {\"question\":\"...\"}.\n"
+        "Script field REQUIREMENTS (critical): The value of 'script' MUST be a JSON string containing the JavaScript code. Do NOT return objects or functions in 'script'. Do NOT wrap in markdown fences. Example OK: {\"script\":\"try {\\n  return true;\\n} catch { return false; }\"}.\n"
+        "Script rules: single boolean return; use vars[\"...\"]; null/undefined checks; no logs.\n"
+        "Formatting: ALWAYS return multi-line, readable, well-indented JavaScript with line breaks; include 1-2 short inline comments for key steps."
+    )
+    GUIDELINES = (
+        "Guidelines by type: DOB/age: compute from date; >=18 true. Date compare: parse ISO; compare getTime(). "
+        "Email: robust regex; trim lowercase. Phone: strip non-digits; length>=9. Strings: trim; case-insensitive equals unless specified. "
+        "Numbers: Number(); guard NaN. Presence: Boolean(vars[\"...\"])."
+    )
+    examples = [
+        {
+            "role": "system",
+            "content": (
+                'Example: NL "utente maggiorenne"; vars include "Act.DOB" -> '
+                '{"label":"Utente maggiorenne","script":"try { const dob = vars[\\"Act.DOB\\"]; if (!dob) return false; const d = new Date(dob); if (isNaN(d.getTime())) return false; const now = new Date(); let age = now.getFullYear() - d.getFullYear(); const m = now.getMonth() - d.getMonth(); if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--; return age >= 18; } catch { return false; }"}'
+            )
+        }
+    ]
+    user = {
+        "role": "user",
+        "content": (
+            "Natural language description:\n" + nl + "\n\nAvailable variables (dotted):\n" + " | ".join([str(v) for v in variables]) + "\nReturn only JSON."
+        )
+    }
+    try:
+        ai = call_groq_json([
+            {"role": "system", "content": SYSTEM},
+            {"role": "system", "content": GUIDELINES},
+            *examples,
+            user,
+        ])
+        text = (ai or "{}").strip()
+        try:
+            print("[COND][ai][raw]", text[:400])
+        except Exception:
+            pass
+        obj = _safe_json_loads(text)
+        if obj is None:
+            return {"error": "parse_error", "raw": text[:400]}
+        # normalize 'script' to a string if AI emitted an object form under script
+        script_val = obj.get("script") if isinstance(obj, dict) else None
+        if isinstance(script_val, dict):
+            raw_failed = json.dumps(script_val)
+            m = re.search(r"function\s+main\s*\(ctx\)[\s\S]*?\}\s*$", raw_failed, flags=re.M)
+            if m:
+                obj["script"] = m.group(0)
+            else:
+                obj["script"] = "try { return false; } catch { return false; }"
+        # heuristic fallback: if no script or placeholder, synthesize adult check when DOB variable is present
+        try:
+            script_s = (obj.get("script") or "").strip() if isinstance(obj, dict) else ""
+            nl_lc = (nl or "").lower()
+            need_adult = any(k in nl_lc for k in ["maggiorenne", "adult", ">= 18", "18 anni", "18 years"]) or True
+            # choose DOB-like variable
+            dob_candidates = []
+            for v in (variables or []):
+                vs = str(v)
+                if re.search(r"date of birth|\bDOB\b", vs, flags=re.I) or vs.endswith(".Date"):
+                    dob_candidates.append(vs)
+            if (not script_s or script_s == "try { return false; } catch { return false; }") and dob_candidates:
+                key = dob_candidates[0]
+                script_tpl = (
+                    "try {\n"+
+                    f"  const dob = vars[\"{key}\"];\n"+
+                    "  if (!dob) return false;\n"+
+                    "  const d = new Date(dob);\n"+
+                    "  if (isNaN(d.getTime())) return false;\n"+
+                    "  const now = new Date();\n"+
+                    "  let age = now.getFullYear() - d.getFullYear();\n"+
+                    "  const m = now.getMonth() - d.getMonth();\n"+
+                    "  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;\n"+
+                    "  return age >= 18;\n"+
+                    "} catch { return false; }"
+                )
+                if isinstance(obj, dict):
+                    obj["script"] = script_tpl
+                    if not obj.get("label"):
+                        obj["label"] = "Utente maggiorenne"
+        except Exception:
+            pass
+        return obj
+    except Exception as e:
+        try:
+            print("[COND][error]", str(e))
+        except Exception:
+            pass
+        return {"error": str(e)}
+
+# --- Condition: suggest sample cases (true/false) ---
+@app.post("/api/conditions/suggest-cases")
+def suggest_condition_cases(body: dict = Body(...)):
+    nl = (body or {}).get("nl") or ""
+    variables = (body or {}).get("variables") or []
+    if not isinstance(nl, str) or not nl.strip():
+        return {"error": "nl_required"}
+    if not isinstance(variables, list):
+        variables = []
+
+    system = (
+        "You propose example variable assignments for a condition.\n"
+        "Return STRICT JSON only. No comments.\n"
+        "Always include two objects: trueCase and falseCase.\n"
+        "Each object maps dotted variable names to realistic, minimal sample values.\n"
+        "Additionally include two short English hints: hintTrue and hintFalse.\n"
+        "Each hint must tell the tester what to write, e.g., 'Write a date of birth that makes the user an adult (18+)'."
+    )
+    user = {
+        "role": "user",
+        "content": (
+            "Condition (natural language):\n" + nl + "\n\n"
+            "Available variables (dotted):\n" + " | ".join([str(v) for v in variables]) + "\n\n"
+            "Goal: propose one assignment that SHOULD make the condition evaluate to true (trueCase) and another that SHOULD make it evaluate to false (falseCase).\n"
+            "Also provide textual guidance in English: 'hintTrue' and 'hintFalse' (one short sentence each) explaining what value to write.\n"
+            "Respond ONLY with JSON: {\"trueCase\": {..}, \"falseCase\": {..}, \"hintTrue\": \"...\", \"hintFalse\": \"...\"}\n"
+        )
+    }
+    try:
+        ai = call_groq_json([
+            {"role": "system", "content": system},
+            user,
+        ])
+        text = (ai or "{}").strip()
+        obj = _safe_json_loads(text)
+        if obj is None:
+            return {"error": "parse_error", "raw": text[:400]}
+        # ensure labelTrue/labelFalse exist; add simple heuristics
+        if isinstance(obj, dict):
+            lt = obj.get("labelTrue")
+            lf = obj.get("labelFalse")
+            desc = (nl or "").lower()
+            if not lt or not isinstance(lt, str):
+                if "maggiorenne" in desc or "adult" in desc:
+                    lt = "Adult"
+                else:
+                    lt = ""
+            if not lf or not isinstance(lf, str):
+                if "maggiorenne" in desc or "adult" in desc:
+                    lf = "Minor"
+                else:
+                    lf = ""
+            obj["labelTrue"], obj["labelFalse"] = lt, lf
+        return obj
+    except Exception as e:
+        return {"error": str(e)}
 
 # --- Backend Builder: synthesize natural-language outline from chat ---
 @app.post("/api/builder/brief")
@@ -283,13 +506,101 @@ def call_groq(messages):
 		"Authorization": f"Bearer {GROQ_KEY}",
 		"Content-Type": "application/json"
 	}
-	data = {
-		"model": MODEL,
-		"messages": messages
+	# Build candidate model list: configured MODEL, env fallbacks, and a small built-in list
+	candidates_env = os.environ.get("GROQ_MODEL_FALLBACKS", "")
+	candidates = [m.strip() for m in candidates_env.split(",") if m.strip()]
+	builtins = ["llama-3.1-70b-instruct", "llama-3.1-8b-instant", "llama-3.1-405b-instruct"]
+	models_to_try = []
+	for m in [MODEL, *candidates, *builtins]:
+		if m and m not in models_to_try:
+			models_to_try.append(m)
+
+	last_error = None
+	for model in models_to_try:
+		data = {"model": model, "messages": messages}
+		resp = requests.post(GROQ_URL, headers=headers, json=data)
+		try:
+			print(f"[GROQ][REQ] model={model} url={GROQ_URL} messages={len(messages)}")
+			print(f"[GROQ][RES] status={resp.status_code} body_snippet={(resp.text or '')[:280]!r}")
+		except Exception:
+			pass
+		if resp.status_code >= 400:
+			txt = resp.text or ""
+			if "model" in txt.lower() and ("decommissioned" in txt.lower() or "invalid" in txt.lower()):
+				last_error = f"Groq API error {resp.status_code}: {txt}"
+				try: print("[GROQ][FALLBACK] switching model due to error -> trying next")
+				except Exception: pass
+				continue
+			raise requests.HTTPError(f"Groq API error {resp.status_code}: {txt}")
+		try:
+			j = resp.json()
+		except Exception:
+			raise requests.HTTPError(f"Groq API: invalid JSON response: {(resp.text or '')[:200]}")
+		return j.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+	raise requests.HTTPError(last_error or "Groq API: all model candidates failed")
+
+def call_groq_json(messages):
+	headers = {
+		"Authorization": f"Bearer {GROQ_KEY}",
+		"Content-Type": "application/json"
 	}
-	response = requests.post(GROQ_URL, headers=headers, json=data)
-	response.raise_for_status()
-	return response.json()["choices"][0]["message"]["content"]
+	candidates_env = os.environ.get("GROQ_MODEL_FALLBACKS", "")
+	candidates = [m.strip() for m in candidates_env.split(",") if m.strip()]
+	builtins = ["llama-3.1-70b-instruct", "llama-3.1-8b-instant"]
+	models_to_try = []
+	for m in [MODEL, *candidates, *builtins]:
+		if m and m not in models_to_try:
+			models_to_try.append(m)
+
+	last_error = None
+	for model in models_to_try:
+		data = {"model": model, "messages": messages, "response_format": {"type": "json_object"}}
+		resp = requests.post(GROQ_URL, headers=headers, json=data)
+		try:
+			print(f"[GROQ][REQ][json] model={model} messages={len(messages)}")
+			print(f"[GROQ][RES] status={resp.status_code} body_snippet={(resp.text or '')[:280]!r}")
+		except Exception:
+			pass
+		if resp.status_code >= 400:
+			# Attempt salvage if Groq returns a json_validate_failed with a failed_generation payload
+			try:
+				err = resp.json().get("error")
+			except Exception:
+				err = None
+			if err and isinstance(err, dict) and "failed_generation" in err:
+				raw_failed = err.get("failed_generation") or ""
+				try:
+					cleaned = _clean_json_like(raw_failed)
+					obj = _safe_json_loads(cleaned) or {}
+					label = obj.get("label") or "Condition"
+					script_val = obj.get("script")
+					script_str = None
+					if isinstance(script_val, str):
+						script_str = script_val
+					elif isinstance(script_val, dict):
+						m = re.search(r"function\s+main\s*\(ctx\)[\s\S]*?\}\s*$", raw_failed, flags=re.M)
+						if m:
+							script_str = m.group(0)
+					if not script_str:
+						m2 = re.search(r"try\s*\{[\s\S]*?\}\s*catch[\s\S]*?\}", raw_failed, flags=re.I)
+						script_str = m2.group(0) if m2 else "try { return false; } catch { return false; }"
+					salvage = {"label": label, "script": script_str}
+					return json.dumps(salvage)
+				except Exception:
+					pass
+			txt = resp.text or ""
+			if "model" in txt.lower() and ("decommissioned" in txt.lower() or "invalid" in txt.lower() or "not exist" in txt.lower()):
+				last_error = f"Groq API error {resp.status_code}: {txt}"
+				continue
+			raise requests.HTTPError(f"Groq API error {resp.status_code}: {txt}")
+		try:
+			j = resp.json()
+		except Exception:
+			raise requests.HTTPError(f"Groq API: invalid JSON response: {(resp.text or '')[:200]}")
+		return j.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+	raise requests.HTTPError(last_error or "Groq API: all model candidates failed")
 
 # Helpers: sanitize and safely parse JSON from AI
 
