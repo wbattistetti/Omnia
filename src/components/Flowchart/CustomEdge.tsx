@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { EdgeProps, getBezierPath } from 'reactflow';
-import { Pencil, Trash2, Link, Link2Off as LinkOff, Settings } from 'lucide-react';
+import { Pencil, Trash2, Link, Link2Off as LinkOff, Settings, Wrench } from 'lucide-react';
 import { normalizeMarkerEnd } from '../../utils/markerUtils';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { EdgeConditionSelector } from './EdgeConditionSelector';
@@ -404,6 +404,33 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
               >
                 <Pencil size={14 * zoom} />
               </button>
+              {!(props.data && (props.data as any).hasConditionScript) && (
+                <button
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#0ea5e9',
+                    width: 18 * zoom,
+                    height: 18 * zoom,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Apri Condition Editor"
+                  onClick={e => {
+                    e.stopPropagation();
+                    try {
+                      const variables = (window as any).__omniaVars || {};
+                      const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script: '', label: String(label || 'Condition'), name: String(label || 'Condition') }, bubbles: true });
+                      document.dispatchEvent(ev);
+                    } catch {}
+                  }}
+                >
+                  <Wrench size={14 * zoom} />
+                </button>
+              )}
               <button
                 style={{
                   background: 'none',
