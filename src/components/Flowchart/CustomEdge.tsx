@@ -81,7 +81,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Callback per selezione condizione
   const handleSelectCondition = (item: any) => {
     if (props.data && typeof props.data.onUpdate === 'function') {
-      props.data.onUpdate({ label: item.description || item.name || '' });
+      props.data.onUpdate({ label: item.description || item.name || '', data: { ...(props.data || {}), isElse: false } });
     }
     setShowConditionSelector(false);
   };
@@ -89,7 +89,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Callback per link non condizionato
   const handleSelectUnconditioned = () => {
     if (props.data && typeof props.data.onUpdate === 'function') {
-      props.data.onUpdate({ label: undefined });
+      props.data.onUpdate({ label: undefined, data: { ...(props.data || {}), isElse: false } });
     }
     setShowConditionSelector(false);
   };
@@ -255,6 +255,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             position={conditionSelectorPos}
             onSelectCondition={handleSelectCondition}
             onSelectUnconditioned={handleSelectUnconditioned}
+            onSelectElse={() => {
+              if (props.data && typeof props.data.onUpdate === 'function') {
+                props.data.onUpdate({ label: 'Else', data: { ...(props.data || {}), isElse: true } });
+              }
+              setShowConditionSelector(false);
+            }}
             onClose={handleCloseSelector}
           />,
           document.body
@@ -351,6 +357,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       </g>
       {label && createPortal(
         <div
+          title={props.data?.isElse ? 'Else: ramo di fallback quando le altre condizioni sono false' : undefined}
           onMouseEnter={() => setLabelHovered(true)}
           onMouseLeave={() => setLabelHovered(false)}
           style={{

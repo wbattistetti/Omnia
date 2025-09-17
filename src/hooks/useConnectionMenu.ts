@@ -20,7 +20,7 @@ export function useConnectionMenu() {
   }, []);
 
   const openMenu = useCallback((position, sourceNodeId, sourceHandleId) => {
-    setMenu({
+    const next = {
       ...connectionMenu,
       show: true,
       position,
@@ -30,11 +30,12 @@ export function useConnectionMenu() {
       targetHandleId: null,
       tempNodeId: null,
       tempEdgeId: null,
-    });
+    };
+    setMenu(next);
   }, [connectionMenu, setMenu]);
 
   const closeMenu = useCallback(() => {
-    setMenu({
+    const next = {
       ...connectionMenu,
       show: false,
       position: { x: 0, y: 0 },
@@ -44,23 +45,28 @@ export function useConnectionMenu() {
       targetHandleId: null,
       tempNodeId: null,
       tempEdgeId: null,
-    });
+    };
+    setMenu(next);
   }, [connectionMenu, setMenu]);
 
   const setSource = useCallback((sourceNodeId, sourceHandleId) => {
-    setMenu({ ...connectionMenu, sourceNodeId, sourceHandleId });
+    const next = { ...connectionMenu, sourceNodeId, sourceHandleId };
+    setMenu(next);
   }, [connectionMenu, setMenu]);
 
   const setTarget = useCallback((targetNodeId, targetHandleId) => {
-    setMenu({ ...connectionMenu, targetNodeId, targetHandleId });
+    const next = { ...connectionMenu, targetNodeId, targetHandleId };
+    setMenu(next);
   }, [connectionMenu, setMenu]);
 
   const setTemp = useCallback((tempNodeId, tempEdgeId) => {
-    setMenu({ ...connectionMenu, tempNodeId, tempEdgeId });
+    const next = { ...connectionMenu, tempNodeId, tempEdgeId };
+    setMenu(next);
   }, [connectionMenu, setMenu]);
 
   const setPosition = useCallback((position) => {
-    setMenu({ ...connectionMenu, position });
+    const next = { ...connectionMenu, position };
+    setMenu(next);
   }, [connectionMenu, setMenu]);
 
   return {

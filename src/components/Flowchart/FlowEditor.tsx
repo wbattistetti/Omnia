@@ -288,8 +288,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Rimuove TUTTI i nodi e edge temporanei
   function cleanupAllTempNodesAndEdges() {
-    // setNodes((nds) => nds.filter(n => !n.data?.isTemporary));
-    setEdges((eds) => removeAllTempEdges(eds, nodesRef.current));
+    const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
+    const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
+    setNodes((nds) => nds.filter((n: any) => n.id !== tempNodeId && !(n?.data?.isTemporary === true)));
+    setEdges((eds) => removeAllTempEdges(eds, nodesRef.current).filter(e => e.id !== tempEdgeId));
   }
 
   const onConnectEnd = useCallback((event: any) => {
@@ -922,6 +924,67 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           position={connectionMenu.position}
           onSelectCondition={handleSelectCondition}
           onSelectUnconditioned={handleSelectUnconditioned}
+          onSelectElse={() => {
+            if (pendingEdgeIdRef.current) {
+              setEdges((eds) => eds.map(e => e.id === pendingEdgeIdRef.current ? { ...e, label: 'Else', data: { ...(e.data||{}), isElse: true, onDeleteEdge } } : e));
+              setSelectedEdgeId(pendingEdgeIdRef.current);
+              pendingEdgeIdRef.current = null;
+              closeMenu();
+              return;
+            }
+            // Create a new node and connect with Else label (like handleSelectCondition)
+            const sourceNodeId = connectionMenuRef.current.sourceNodeId || undefined;
+            const sourceHandleId = connectionMenuRef.current.sourceHandleId || undefined;
+            if (!sourceNodeId) { try { console.warn('[FlowEditor][Else] missing sourceNodeId'); } catch {} return; }
+
+            const getTargetHandle = (sourceHandleId: string): string => {
+              switch (sourceHandleId) {
+                case 'bottom': return 'top-target';
+                case 'top': return 'bottom-target';
+                case 'left': return 'right-target';
+                case 'right': return 'left-target';
+                default: return 'top-target';
+              }
+            };
+
+            const newNodeId = nodeIdCounter.toString();
+            const position = reactFlowInstance.screenToFlowPosition({
+              x: connectionMenuRef.current.position.x - 140,
+              y: connectionMenuRef.current.position.y - 20
+            });
+            const newEdgeId = uuidv4();
+            const newNode: Node<NodeData> = {
+              id: newNodeId,
+              type: 'custom',
+              position,
+              data: { title: '', rows: [] }
+            } as any;
+            const newEdge = {
+              id: newEdgeId,
+              source: sourceNodeId,
+              sourceHandle: sourceHandleId,
+              target: newNodeId,
+              targetHandle: getTargetHandle(sourceHandleId as string),
+              style: { stroke: '#8b5cf6' },
+              label: 'Else',
+              type: 'custom',
+              data: { onDeleteEdge, isElse: true },
+              markerEnd: 'arrowhead',
+            } as Edge;
+            // Operazione atomica: rimuovi temporanei e aggiungi definitivi
+            setNodes((nds) => {
+              const filtered = connectionMenuRef.current.tempNodeId ? 
+                nds.filter(n => n.id !== connectionMenuRef.current.tempNodeId) : nds;
+              return [...filtered, newNode];
+            });
+            setEdges((eds) => {
+              const filtered = removeAllTempEdges(eds, nodesRef.current);
+              return [...filtered, newEdge];
+            });
+            setNodeIdCounter(prev => prev + 1);
+            setSelectedEdgeId(newEdgeId);
+            closeMenu();
+          }}
           onClose={handleConnectionMenuClose}
         />
       )}

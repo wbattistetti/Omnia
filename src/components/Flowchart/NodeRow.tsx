@@ -153,7 +153,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     }
   }, [isEditing]);
 
-  // Canvas click = ESC semantics: close intellisense if open, otherwise cancel editing
+  // Canvas click = ESC semantics: close intellisense if open, otherwise end editing without deleting
   useEffect(() => {
     const handleCanvasClick = () => {
       if (!isEditing) return;
@@ -162,11 +162,18 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
         setIntellisenseQuery('');
         return;
       }
-      handleCancel();
+      // End editing gracefully, keep the row/node even if empty
+      setCurrentText(row.text);
+      setIsEditing(false);
+      setShowIntellisense(false);
+      setIntellisenseQuery('');
+      if (typeof onEditingEnd === 'function') {
+        onEditingEnd();
+      }
     };
     window.addEventListener('flow:canvas:click', handleCanvasClick as any, { capture: false } as any);
     return () => window.removeEventListener('flow:canvas:click', handleCanvasClick as any);
-  }, [isEditing, showIntellisense]);
+  }, [isEditing, showIntellisense, row.text, onEditingEnd]);
 
   const handleSave = () => {
     onUpdate(row, currentText.trim() || row.text);
