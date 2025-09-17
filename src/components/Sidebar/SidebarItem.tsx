@@ -163,7 +163,8 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                   try {
                     const variables = (window as any).__omniaVars || {};
                     const script = (item as any)?.data?.script || '';
-                    const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script }, bubbles: true });
+                    const label = String((item as any)?.name || (item as any)?.label || 'Condition');
+                    const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label, name: label }, bubbles: true });
                     (e.currentTarget as any).dispatchEvent(ev);
                   } catch {}
                 }}

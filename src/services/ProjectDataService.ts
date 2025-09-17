@@ -272,7 +272,19 @@ export const ProjectDataService = {
       name, 
       description 
     };
-    category.items.push(newItem);
+    // Insert alphabetically (case-insensitive, locale-aware)
+    const items = category.items as any[];
+    const norm = (s: string) => (s || '').toLocaleLowerCase();
+    let inserted = false;
+    for (let i = 0; i < items.length; i++) {
+      const curr = String(items[i]?.name || items[i]?.label || '');
+      if (norm(name).localeCompare(norm(curr)) < 0) {
+        items.splice(i, 0, newItem);
+        inserted = true;
+        break;
+      }
+    }
+    if (!inserted) items.push(newItem);
     return newItem;
   },
 

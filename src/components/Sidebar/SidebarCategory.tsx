@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import ItemEditor from './ItemEditor';
 import { classifyActInteractivity } from '../../nlp/actInteractivity';
-import DeleteConfirmation from './DeleteConfirmation';
 import SidebarItem from './SidebarItem';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Category, ProjectEntityItem, EntityType } from '../../types/project';
@@ -35,13 +34,17 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
   onOpenEmbedded,
 }) => {
   const [editing, setEditing] = useState(false);
-  const [showDelete, setShowDelete] = useState(false);
+  // const [showDelete, setShowDelete] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [adding, setAdding] = useState(false);
   // Inline builder state for Agent Acts
   const [inlineBuilderForId, setInlineBuilderForId] = useState<string | null>(null);
   const [inlineInitialDDT, setInlineInitialDDT] = useState<any | null>(null);
   const itemsRef = useRef<HTMLDivElement | null>(null);
+
+  // Track last added item name to scroll/highlight after data refresh
+  const [lastAddedName, setLastAddedName] = useState<string | null>(null);
+  const highlightTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const el = itemsRef.current;
@@ -63,13 +66,21 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
     return () => { el.removeEventListener('agentAct:openInlineBuilder', handler as any); };
   }, [entityType]);
 
+  useEffect(() => {
+    return () => { if (highlightTimer.current) window.clearTimeout(highlightTimer.current); };
+  }, []);
+
+  // Compute sorted items every render to avoid stale memoization after in-place mutations
+  const norm = (s: string) => (s || '').toLocaleLowerCase();
+  const sortedItems = [...(category.items || [])].sort((a: any, b: any) => norm(a?.name || a?.label || '').localeCompare(norm(b?.name || b?.label || '')));
+
   return (
     <div className="mb-4 px-1 py-1 rounded">
       {/* Category row: only this div controls hover for icons */}
       <div
         className="flex items-center gap-1 min-h-[32px]"
         onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => { setHovered(false); setShowDelete(false); }}
+        onMouseLeave={() => { setHovered(false); /* setShowDelete(false); */ }}
       >
         {editing ? (
           <ItemEditor
@@ -120,23 +131,25 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
           <ItemEditor
             value=""
             onConfirm={(name) => {
+              const trimmed = String(name || '').trim();
+              if (!trimmed) { setAdding(false); return; }
               // Infer interactivity when creating a new Agent Act
               if (entityType === 'agentActs') {
                 try {
-                  const inferred = classifyActInteractivity(name);
+                  const inferred = classifyActInteractivity(trimmed);
                   if (typeof inferred === 'boolean') {
-                    onAddItem(name);
-                    // Immediately patch last added item interactivity
-                    // delegate to parent via onUpdateItem using the new item id is not trivial here; parent handles updates on next render
+                    onAddItem(trimmed);
                   } else {
-                    onAddItem(name);
+                    onAddItem(trimmed);
                   }
                 } catch {
-                  onAddItem(name);
+                  onAddItem(trimmed);
                 }
               } else {
-                onAddItem(name);
+                onAddItem(trimmed);
               }
+              // mark this name to highlight on next render; clear after element is detected
+              setLastAddedName(trimmed);
               setAdding(false);
             }}
             onCancel={() => setAdding(false)}
@@ -146,36 +159,46 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
       )}
       {/* Items (listen for inline builder events here) */}
       <div className="ml-4 mt-1" ref={itemsRef}>
-        {category.items.map((item: ProjectEntityItem) => (
-          <div
-            key={item.id}
-            style={{ ['--ddt-accent' as any]: (entityType === 'agentActs' ? (((item as any)?.isInteractive ?? Boolean((item as any)?.data?.type) ?? Boolean((item as any)?.userActs?.length)) ? '#38bdf8' : '#22c55e') : undefined) }}
-          >
-            <SidebarItem
-              item={item}
-              categoryType={entityType}
-              onBuildFromItem={onBuildFromItem}
-              hasDDTFor={hasDDTFor}
-              onCreateDDT={onCreateDDT}
-              onOpenEmbedded={() => onOpenEmbedded && onOpenEmbedded(item.id)}
-              onUpdate={(updates: Partial<ProjectEntityItem>) => onUpdateItem(item.id, updates)}
-              onDelete={() => onDeleteItem(item.id)}
-            />
-            {entityType === 'agentActs' && inlineBuilderForId === item.id && (
-              <div className="mt-2 mb-2" style={{ padding: 0 }}>
-                <DDTBuilder
-                  initialDDT={inlineInitialDDT || undefined}
-                  startOnStructure={false}
-                  onCancel={() => { setInlineBuilderForId(null); setInlineInitialDDT(null); }}
-                  onComplete={(newDDT: any) => { setInlineBuilderForId(null); setInlineInitialDDT(null); onCreateDDT && onCreateDDT(item.id, newDDT); }}
-                />
-              </div>
-            )}
-          </div>
-        ))}
+        {sortedItems.map((item: ProjectEntityItem) => {
+          const isNew = lastAddedName && String(item?.name || '').toLocaleLowerCase() === lastAddedName.toLocaleLowerCase();
+          return (
+            <div
+              key={item.id}
+              ref={(el) => {
+                if (el && isNew) {
+                  try { el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch {}
+                  if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+                  highlightTimer.current = window.setTimeout(() => setLastAddedName(null), 1600);
+                }
+              }}
+              style={{ ['--ddt-accent' as any]: (entityType === 'agentActs' ? (((item as any)?.isInteractive ?? Boolean((item as any)?.data?.type) ?? Boolean((item as any)?.userActs?.length)) ? '#38bdf8' : '#22c55e') : undefined), background: isNew ? 'rgba(99,102,241,0.18)' : undefined, border: isNew ? '1px solid rgba(99,102,241,0.55)' : undefined, borderRadius: isNew ? 6 : undefined }}
+            >
+              <SidebarItem
+                item={item}
+                categoryType={entityType}
+                onBuildFromItem={onBuildFromItem}
+                hasDDTFor={hasDDTFor}
+                onCreateDDT={onCreateDDT ? ((newDDT: any) => onCreateDDT(item.id, newDDT)) : undefined}
+                onOpenEmbedded={() => onOpenEmbedded && onOpenEmbedded(item.id)}
+                onUpdate={(updates: Partial<ProjectEntityItem>) => onUpdateItem(item.id, updates)}
+                onDelete={() => onDeleteItem(item.id)}
+              />
+              {entityType === 'agentActs' && inlineBuilderForId === item.id && (
+                <div className="mt-2 mb-2" style={{ padding: 0 }}>
+                  <DDTBuilder
+                    initialDDT={inlineInitialDDT || undefined}
+                    startOnStructure={false}
+                    onCancel={() => { setInlineBuilderForId(null); setInlineInitialDDT(null); }}
+                    onComplete={(newDDT: any) => { setInlineBuilderForId(null); setInlineInitialDDT(null); onCreateDDT && onCreateDDT(item.id, newDDT); }}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
-};
+}
 
 export default SidebarCategory;
