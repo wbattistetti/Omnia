@@ -1,11 +1,12 @@
+/* @refresh reload */
 import React from 'react';
-import { Pencil, Trash } from 'lucide-react';
+import { Trash, HelpCircle, Check, X as XIcon } from 'lucide-react';
 
 function stripCode(code: string): string {
   return (code || '')
     .replace(/\/\/.*$/gm, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '');
+    .replace(/(['"])?:?(?:\\.|(?!\1).)*\1/g, '');
 }
 
 export function extractKeys(code: string): string[] {
@@ -30,8 +31,12 @@ export default function ConditionTester({
   onChange,
   hintTrue,
   hintFalse,
-  labelTrue,
-  labelFalse,
+  title,
+  registerRun,
+  registerControls,
+  onRunResult,
+  onFailuresChange,
+  onRuntimeError,
 }: {
   script: string;
   variablesList: string[];
@@ -39,24 +44,36 @@ export default function ConditionTester({
   onChange?: (rows: CaseRow[]) => void;
   hintTrue?: string;
   hintFalse?: string;
-  labelTrue?: string;
-  labelFalse?: string;
+  title?: string;
+  registerRun?: (fn: () => void) => void;
+  registerControls?: (api: { run: () => void; addRow: () => void; getFailures: () => Array<any>; hasFailures: () => boolean; resetVisuals: () => void }) => void;
+  onRunResult?: (passedAll: boolean) => void;
+  onFailuresChange?: (hasFailures: boolean) => void;
+  onRuntimeError?: (payload?: { message?: string; line?: number; column?: number }) => void;
 }) {
   const [rows, setRows] = React.useState<CaseRow[]>(() => initialCases || []);
   const [resultMap, setResultMap] = React.useState<Record<string, boolean | string>>({});
   const [errorMap, setErrorMap] = React.useState<Record<string, string>>({});
   const [openTipRowId, setOpenTipRowId] = React.useState<string | null>(null);
-  const [labelTrueLocal, setLabelTrueLocal] = React.useState<string>(labelTrue || '');
-  const [labelFalseLocal, setLabelFalseLocal] = React.useState<string>(labelFalse || '');
-  const [editTrue, setEditTrue] = React.useState<boolean>(true);
-  const [editFalse, setEditFalse] = React.useState<boolean>(true);
-  const trueRef = React.useRef<HTMLInputElement>(null);
-  const falseRef = React.useRef<HTMLInputElement>(null);
-  const [hoverTrue, setHoverTrue] = React.useState<boolean>(false);
-  const [hoverFalse, setHoverFalse] = React.useState<boolean>(false);
   const [hoverRowId, setHoverRowId] = React.useState<string | null>(null);
-  const prevTrue = React.useRef<string>('');
-  const prevFalse = React.useRef<string>('');
+  const [showClassifyRowId, setShowClassifyRowId] = React.useState<string | null>(null);
+  const [notPassedReasonByRow, setNotPassedReasonByRow] = React.useState<Record<string, string>>({});
+  const reasonRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
+
+  const autoResize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  React.useEffect(() => {
+    Object.values(reasonRefs.current).forEach(autoResize);
+  }, [notPassedReasonByRow]);
+
+  React.useEffect(() => {
+    const has = Object.values(notPassedReasonByRow || {}).some(v => String(v || '').trim().length > 0);
+    try { onFailuresChange?.(has); } catch {}
+  }, [notPassedReasonByRow]);
 
   React.useEffect(() => {
     const onDocClick = () => setOpenTipRowId(null);
@@ -64,12 +81,7 @@ export default function ConditionTester({
     return () => document.removeEventListener('click', onDocClick);
   }, []);
 
-  // Sync local labels when props change (e.g., after AI response)
-  React.useEffect(() => {
-    try { console.log('[ConditionTester][labels][props->state]', { labelTrue, labelFalse }); } catch {}
-    if (typeof labelTrue === 'string' && labelTrue.trim()) { setLabelTrueLocal(labelTrue); setEditTrue(false); }
-    if (typeof labelFalse === 'string' && labelFalse.trim()) { setLabelFalseLocal(labelFalse); setEditFalse(false); }
-  }, [labelTrue, labelFalse]);
+  // Labels editing removed: we always display the condition title
 
   React.useEffect(() => { onChange?.(rows); }, [rows]);
 
@@ -88,6 +100,26 @@ export default function ConditionTester({
   const run = () => {
     const next: Record<string, boolean | string> = {};
     const nextErr: Record<string, string> = {};
+    let firstErrMsg: string | undefined = undefined;
+    let firstErrLine: number | undefined = undefined;
+    let firstErrCol: number | undefined = undefined;
+    const beforeScript = '"use strict";\nreturn (function(ctx){\n  var vars = ctx;\n  ';
+    const preludeLines = beforeScript.split('\n').length - 1; // lines before user script inside wrapper
+    const parseStack = (stack?: string) => {
+      if (!stack) return null;
+      const lines = String(stack).split('\n');
+      for (const ln of lines) {
+        const m = ln.match(/:(\d+):(\d+)\)?(?:\s|$)/);
+        if (m) {
+          const rawLine = parseInt(m[1], 10);
+          const rawCol = parseInt(m[2], 10);
+          if (Number.isFinite(rawLine) && Number.isFinite(rawCol)) {
+            return { line: Math.max(1, rawLine - preludeLines), column: Math.max(1, rawCol) };
+          }
+        }
+      }
+      return null;
+    };
     rows.forEach(r => {
       try {
         const wrapper = "\"use strict\";\nreturn (function(ctx){\n  var vars = ctx;\n  " + script + "\n  if (typeof main==='function') return !!main(ctx);\n  if (typeof evaluate==='function') return !!evaluate(ctx);\n  throw new Error('main(ctx) not found');\n});";
@@ -100,82 +132,73 @@ export default function ConditionTester({
       } catch (e: any) {
         next[r.id] = 'error';
         nextErr[r.id] = String(e?.message || e);
+        if (!firstErrMsg) {
+          firstErrMsg = nextErr[r.id];
+          const loc = parseStack(String(e?.stack || ''));
+          if (loc) { firstErrLine = loc.line; firstErrCol = loc.column; }
+        }
       }
     });
     setResultMap(next);
     setErrorMap(nextErr);
+    try {
+      // compute aggregate pass/fail
+      let allPass = true;
+      rows.forEach(r => {
+        const actual = next[r.id];
+        const expectedTrue = r.label === 'true';
+        const pass = (actual === true && expectedTrue) || (actual === false && !expectedTrue);
+        const isError = actual === 'error';
+        if (isError || !pass) allPass = false;
+      });
+      onRunResult?.(allPass);
+      onRuntimeError?.(firstErrMsg ? { message: firstErrMsg, line: firstErrLine, column: firstErrCol } : undefined);
+    } catch {}
   };
 
-  const startEditTrue = () => { prevTrue.current = labelTrueLocal; setEditTrue(true); setTimeout(() => trueRef.current?.focus(), 0); };
-  const startEditFalse = () => { prevFalse.current = labelFalseLocal; setEditFalse(true); setTimeout(() => falseRef.current?.focus(), 0); };
+  React.useEffect(() => {
+    if (typeof registerRun === 'function') registerRun(run);
+    // no cleanup needed; parent can overwrite on re-render
+  }, [registerRun, script, rows, variablesList]);
 
-  const renderTrueControl = () => {
-    if (editTrue || !labelTrueLocal.trim()) {
-      return (
-        <input
-          ref={trueRef}
-          value={labelTrueLocal}
-          onChange={e => setLabelTrueLocal(e.target.value)}
-          onBlur={() => { if (labelTrueLocal.trim()) setEditTrue(false); }}
-          onKeyDown={e => { if (e.key === 'Enter' && labelTrueLocal.trim()) setEditTrue(false); if (e.key === 'Escape') { setLabelTrueLocal(prevTrue.current); setEditTrue(false); } }}
-          placeholder="Label for TRUE"
-          style={{ width: 180, padding: '6px 8px', border: '1px solid #334155', borderRadius: 6, background: 'transparent', color: '#e5e7eb' }}
-        />
-      );
+  // Build failures list for repair (only classified as not passed)
+  const getFailures = React.useCallback(() => {
+    const list: Array<any> = [];
+    const keys = Object.keys(notPassedReasonByRow || {});
+    if (keys.length === 0) return list;
+    rows.forEach(r => {
+      const note = String(notPassedReasonByRow[r.id] || '').trim();
+      if (note.length > 0) {
+        const got = (resultMap[r.id] === true || resultMap[r.id] === false) ? resultMap[r.id] : null;
+        list.push({ input: { ...(r.vars || {}) }, expected: r.label === 'true', got, note });
+      }
+    });
+    return list;
+  }, [rows, resultMap, notPassedReasonByRow]);
+
+  const resetVisuals = React.useCallback(() => {
+    setResultMap({});
+    setErrorMap({});
+    setShowClassifyRowId(null);
+    setNotPassedReasonByRow({});
+  }, []);
+
+  // Expose controls to parent (Add test value + Run + Failures API)
+  React.useEffect(() => {
+    if (typeof registerControls === 'function') {
+      registerControls({ run, addRow: () => addRow('true'), getFailures, hasFailures: () => Object.keys(notPassedReasonByRow || {}).length > 0, resetVisuals });
     }
-    return (
-      <div onMouseEnter={() => setHoverTrue(true)} onMouseLeave={() => setHoverTrue(false)} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-        <button
-          onClick={() => addRow('true')}
-          title="Click to add a set"
-          style={{ border: '1px solid #166534', color: '#22c55e', borderRadius: 6, padding: '6px 10px' }}
-        >
-          {labelTrueLocal}
-        </button>
-        <button title="Edit label" onClick={startEditTrue} style={{ position: 'absolute', right: -6, top: -6, opacity: hoverTrue ? 1 : 0, transition: 'opacity 120ms', border: 'none', padding: 0, background: 'transparent', color: '#e5e7eb' }}>
-          <Pencil className="w-4 h-4" />
-        </button>
-      </div>
-    );
-  };
+  }, [registerControls, script, rows, variablesList, getFailures, notPassedReasonByRow]);
 
-  const renderFalseControl = () => {
-    if (editFalse || !labelFalseLocal.trim()) {
+  // Removed label controls
+
       return (
-        <input
-          ref={falseRef}
-          value={labelFalseLocal}
-          onChange={e => setLabelFalseLocal(e.target.value)}
-          onBlur={() => { if (labelFalseLocal.trim()) setEditFalse(false); }}
-          onKeyDown={e => { if (e.key === 'Enter' && labelFalseLocal.trim()) setEditFalse(false); if (e.key === 'Escape') { setLabelFalseLocal(prevFalse.current); setEditFalse(false); } }}
-          placeholder="Label for FALSE"
-          style={{ width: 180, padding: '6px 8px', border: '1px solid #334155', borderRadius: 6, background: 'transparent', color: '#e5e7eb' }}
-        />
-      );
-    }
-    return (
-      <div onMouseEnter={() => setHoverFalse(true)} onMouseLeave={() => setHoverFalse(false)} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-        <button
-          onClick={() => addRow('false')}
-          title="Click to add a set"
-          style={{ border: '1px solid #7f1d1d', color: '#ef4444', borderRadius: 6, padding: '6px 10px' }}
-        >
-          {labelFalseLocal}
-        </button>
-        <button title="Edit label" onClick={startEditFalse} style={{ position: 'absolute', right: -6, top: -6, opacity: hoverFalse ? 1 : 0, transition: 'opacity 120ms', border: 'none', padding: 0, background: 'transparent', color: '#e5e7eb' }}>
-          <Pencil className="w-4 h-4" />
-        </button>
+    <div style={{ position: 'relative', display: 'grid', gap: 8, padding: '0 8px 8px 8px' }}>
+      {/* Header: fixed tester title */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #334155', color: '#cbd5e1', fontWeight: 700 }}>
+        <span>Tester</span>
       </div>
-    );
-  };
 
-  return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        {renderTrueControl()}
-        {renderFalseControl()}
-        <button onClick={run} style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}>Run</button>
-      </div>
       {rows.length === 0 ? (
         <div style={{ color: '#64748b', fontSize: 12 }}>No test sets yet.</div>
       ) : (
@@ -192,53 +215,110 @@ export default function ConditionTester({
                   let bg = 'transparent';
                   let border = 'transparent';
                   let text = hasRun ? '#0b1220' : '#94a3b8';
-                  let title = '';
-                  if (isError) { bg = 'rgba(245,158,11,0.20)'; border = '#b45309'; title = errorMap[r.id] || 'error'; }
-                  else if (hasRun && pass) { bg = 'rgba(34,197,94,0.18)'; border = '#166534'; title = 'passed'; }
-                  else if (hasRun && !pass) { bg = 'rgba(239,68,68,0.18)'; border = '#7f1d1d'; title = 'not passed'; }
-                  const pillText = expectedTrue ? (labelTrueLocal?.trim() || 'TRUE') : (labelFalseLocal?.trim() || 'FALSE');
+                  let statusHint = '';
+                  if (isError) { bg = 'rgba(245,158,11,0.20)'; border = '#b45309'; statusHint = errorMap[r.id] || 'error'; }
+                  else if (hasRun && pass) { bg = 'rgba(34,197,94,0.18)'; border = '#166534'; statusHint = 'passed'; }
+                  else if (hasRun && !pass) { bg = 'rgba(239,68,68,0.18)'; border = '#7f1d1d'; statusHint = 'not passed'; }
+                  const pillText = (typeof title === 'string' && title.trim()) ? title : 'Italiano';
                   return (
                     <>
-                      <span title={title} style={{ padding: '2px 8px', borderRadius: 6, background: bg, border: `1px solid ${border}`, color: text, fontWeight: 700 }}>
+                      <span title={statusHint} style={{ padding: '2px 8px', borderRadius: 6, background: bg, border: `1px solid ${border}`, color: text, fontWeight: 700 }}>
                         {pillText}
                       </span>
-                      <button title="Remove this set" onClick={() => removeRow(r.id)} style={{ marginLeft: 6, opacity: hoverRowId === r.id ? 1 : 0, transition: 'opacity 120ms', border: 'none', padding: 0, background: 'transparent', color: '#ef4444' }}>
-                        <Trash className="w-3 h-3" />
-                      </button>
+                      {/* trash moved to classify toolbar */}
                     </>
                   );
                 })()}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, variablesList.length)}, minmax(160px, 1fr))`, gap: 6 }}>
-                {variablesList.map(k => {
-                  const rowHint = r.label === 'true' ? hintTrue : hintFalse;
-                  return (
-                    <div key={`${r.id}-${k}`} style={{ position: 'relative' }}>
-                      <input
-                        placeholder={k}
-                        value={String(r.vars[k] ?? '')}
-                        onChange={e => setVar(r.id, k, e.target.value)}
-                        style={{ width: '100%', padding: '6px 28px 6px 8px', border: '1px solid #334155', borderRadius: 6, background: 'transparent', color: '#e5e7eb' }}
-                      />
-                      {rowHint ? (
-                        <span
-                          title={rowHint}
-                          onClick={(e) => { e.stopPropagation(); setOpenTipRowId(prev => prev === r.id ? null : r.id); }}
-                          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex', width: 16, height: 16, borderRadius: '50%', border: '1px solid #475569', color: '#94a3b8', alignItems: 'center', justifyContent: 'center', fontSize: 11, cursor: 'pointer', background: 'transparent' }}
-                        >
-                          ?
-                        </span>
-                      ) : null}
-                      {rowHint && openTipRowId === r.id ? (
-                        <div style={{ position: 'absolute', right: 28, top: '50%', transform: 'translateY(-50%)', background: '#0f172a', border: '1px solid #334155', color: '#e5e7eb', padding: '6px 8px', borderRadius: 6, fontSize: 12, maxWidth: 280, boxShadow: '0 8px 24px rgba(2,6,23,0.5)', zIndex: 20 }}>
-                          {rowHint}
+              {(() => {
+                const reasonVal = notPassedReasonByRow[r.id] || '';
+                const hasReason = reasonVal.trim().length > 0 || notPassedReasonByRow[r.id] !== undefined;
+                const InputsGrid = (
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, variablesList.length)}, minmax(160px, 1fr))`, gap: 6, paddingRight: 28, position: 'relative' }}>
+                    {variablesList.map(k => {
+                      const rowHint = r.label === 'true' ? hintTrue : hintFalse;
+                      const leaf = String(k).split('.').pop() || String(k);
+                      return (
+                        <div key={`${r.id}-${k}`} style={{ position: 'relative' }}>
+                          <input
+                            placeholder={leaf}
+                            title={k}
+                            value={String(r.vars[k] ?? '')}
+                            onChange={e => setVar(r.id, k, e.target.value)}
+                            style={{ width: '100%', padding: '6px 28px 6px 8px', border: '1px solid #334155', borderRadius: 6, background: 'transparent', color: '#e5e7eb' }}
+                          />
+                          {rowHint ? (
+                            <span
+                              title={rowHint}
+                              onClick={(e) => { e.stopPropagation(); setOpenTipRowId(prev => prev === r.id ? null : r.id); }}
+                              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex', width: 16, height: 16, borderRadius: '50%', border: '1px solid #475569', color: '#94a3b8', alignItems: 'center', justifyContent: 'center', fontSize: 11, cursor: 'pointer', background: 'transparent' }}
+                            >
+                              ?
+                            </span>
+                          ) : null}
+                          {rowHint && openTipRowId === r.id ? (
+                            <div style={{ position: 'absolute', right: 28, top: '50%', transform: 'translateY(-50%)', background: '#0f172a', border: '1px solid #334155', color: '#e5e7eb', padding: '6px 8px', borderRadius: 6, fontSize: 12, maxWidth: 280, boxShadow: '0 8px 24px rgba(2,6,23,0.5)', zIndex: 20 }}>
+                              {rowHint}
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
+                      );
+                    })}
+                    {/* Help icon to open classify toolbar for this row */}
+                    <button
+                      title="Classify the test result"
+                      onClick={() => setShowClassifyRowId(prev => prev === r.id ? null : r.id)}
+                      style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                    </button>
+
+                    {showClassifyRowId === r.id && (
+                      <div
+                        style={{ position: 'absolute', right: 26, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 6, background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: 6, boxShadow: '0 8px 24px rgba(2,6,23,0.5)', zIndex: 30 }}
+                      >
+                        <button title="passed" style={{ border: '1px solid #166534', color: '#22c55e', background: 'transparent', padding: 6, borderRadius: 6 }} onClick={() => setShowClassifyRowId(null)}>
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button title="not passed" style={{ border: '1px solid #7f1d1d', color: '#ef4444', background: 'transparent', padding: 6, borderRadius: 6 }} onClick={() => { setNotPassedReasonByRow(prev => ({ ...prev, [r.id]: prev[r.id] || '' })); setShowClassifyRowId(null); }}>
+                          <XIcon className="w-4 h-4" />
+                        </button>
+                        <button title="remove" style={{ border: '1px solid #475569', color: '#cbd5e1', background: 'transparent', padding: 6, borderRadius: 6 }} onClick={() => { setShowClassifyRowId(null); removeRow(r.id); }}>
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+
+                if (hasReason) {
+                  return (
+                    <div style={{ gridColumn: '2 / 3' }}>
+                      <div style={{ background: 'rgba(239,68,68,0.14)', border: '1px solid #7f1d1d', borderRadius: 8, padding: 8 }}>
+                        {InputsGrid}
+                        <textarea
+                          ref={(el) => { reasonRefs.current[r.id] = el; autoResize(el); }}
+                          placeholder="Reason why this result is considered not valid"
+                          value={reasonVal}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setNotPassedReasonByRow(prev => {
+                              const next = { ...(prev || {}) } as Record<string, string>;
+                              if (String(v).trim().length === 0) { delete next[r.id]; }
+                              else { next[r.id] = v; }
+                              return next;
+                            });
+                          }}
+                          onInput={(e) => autoResize(e.currentTarget)}
+                          rows={2}
+                          style={{ width: '100%', marginTop: 8, padding: '8px 10px', border: '1px solid #7f1d1d', borderRadius: 6, background: 'transparent', color: '#e5e7eb', resize: 'none', overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                        />
+                      </div>
                     </div>
                   );
-                })}
-              </div>
-              {/* result column removed; visual status is on the label pill */}
+                }
+                return InputsGrid;
+              })()}
             </div>
           ))}
         </div>

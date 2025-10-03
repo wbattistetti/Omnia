@@ -5,7 +5,7 @@ import { hashString } from './utils/hash';
 import EditorPanel from './EditorPanel';
 import DiffPanel from './DiffPanel';
 
-export default function CodeEditor({ initialCode = '', initialMode = 'predicate', initialSuite, ai, tests, onPatchApplied, layout = 'full', fontPx }: CodeEditorProps) {
+export default function CodeEditor({ initialCode = '', initialMode = 'predicate', initialSuite, ai, tests, onPatchApplied, onCodeChange, layout = 'full', fontPx, initialVars }: CodeEditorProps) {
   const [mode, setMode] = React.useState<ExecMode>(initialMode);
   const [code, setCode] = React.useState<string>(initialCode);
   const [diff, setDiff] = React.useState<string>('');
@@ -13,10 +13,32 @@ export default function CodeEditor({ initialCode = '', initialMode = 'predicate'
   const [testing, setTesting] = React.useState(false);
   const [fontSize, setFontSize] = React.useState<number>(fontPx ?? 13);
 
+  // derive varKeys from initialVars
+  const varKeys = React.useMemo(() => (initialVars || []).map(v => v.key).filter(Boolean), [initialVars]);
+
+  const handleEditorChange = React.useCallback((v: string) => {
+    setCode(v);
+    try { onCodeChange?.(v); } catch {}
+  }, [onCodeChange]);
+
   // keep internal code in sync when parent changes initialCode (e.g., AI generate)
+  // but avoid clobbering Monaco's injected template when initialCode is empty
   React.useEffect(() => {
-    setCode(initialCode);
-    setSuite(s => ({ ...s, codeHash: hashString(initialCode) }));
+    try {
+      const next = initialCode;
+      const isEmptyProp = typeof next === 'string' && next.length === 0;
+      // If prop is empty and we already have some code (e.g., Monaco template), do not overwrite
+      if (isEmptyProp && (typeof code === 'string') && code.length > 0) return;
+      if (next !== code) {
+        setCode(next);
+        setSuite(s => ({ ...s, codeHash: hashString(next) }));
+      }
+    } catch {
+      if (initialCode !== code) {
+        setCode(initialCode);
+        setSuite(s => ({ ...s, codeHash: hashString(initialCode) }));
+      }
+    }
   }, [initialCode]);
 
   // Follow external font size if provided by parent (ConditionEditor)
@@ -33,6 +55,7 @@ export default function CodeEditor({ initialCode = '', initialMode = 'predicate'
     setCode(patched);
     setDiff('');
     onPatchApplied?.({ code: patched, diff, chunksApplied: applied });
+    try { onCodeChange?.(patched); } catch {}
     setSuite(s => ({ ...s, codeHash: hashString(patched) }));
   };
 
@@ -53,7 +76,7 @@ export default function CodeEditor({ initialCode = '', initialMode = 'predicate'
             {diff && hunksCount > 0 ? (
               <DiffPanel code={code} diff={diff} onApply={applyPatch} />
             ) : (
-              <EditorPanel code={code} onChange={setCode} fontSize={fontSize} />
+              <EditorPanel code={code} onChange={handleEditorChange} fontSize={fontSize} varKeys={varKeys} />
             )}
           </div>
           <div className="lg:col-span-1 p-2 border-l border-slate-700">
@@ -79,7 +102,7 @@ export default function CodeEditor({ initialCode = '', initialMode = 'predicate'
           {diff && hunksCount > 0 ? (
             <DiffPanel code={code} diff={diff} onApply={applyPatch} />
           ) : (
-            <EditorPanel code={code} onChange={setCode} fontSize={fontSize} />
+            <EditorPanel code={code} onChange={handleEditorChange} fontSize={fontSize} varKeys={varKeys} />
           )}
         </div>
       )}

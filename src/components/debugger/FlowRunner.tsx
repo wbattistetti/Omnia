@@ -503,7 +503,23 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
   }, [chat]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr', gap: 8, height: '100%', overflowY: 'auto' }}>
+    <div style={{ display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 8, height: '100%', overflowY: 'auto' }}>
+      {/* Header bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--sidebar-content-bg, #18181b)', border: '1px solid var(--sidebar-border, #334155)', borderRadius: 8, padding: '6px 10px' }}>
+        <span style={{ fontWeight: 700, color: 'var(--sidebar-content-text, #f1f5f9)' }}>Debugger</span>
+        <button
+          onClick={() => {
+            try {
+              const ev: any = new CustomEvent('debugger:close', { bubbles: true });
+              document.dispatchEvent(ev);
+            } catch {}
+          }}
+          title="Chiudi"
+          style={{ background: 'transparent', border: '1px solid var(--sidebar-border, #334155)', borderRadius: 6, padding: '4px 8px', color: 'var(--sidebar-content-text, #f1f5f9)' }}
+        >
+          ×
+        </button>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button onClick={isRunning ? stop : start} style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: isRunning ? '#7f1d1d' : '#065f46', color: '#fff' }}>{isRunning ? 'Stop' : 'Start'}</button>
       </div>

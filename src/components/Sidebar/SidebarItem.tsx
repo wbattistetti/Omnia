@@ -81,6 +81,33 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
             className="truncate"
             style={{ color: nameColor, opacity: hasEmbedded ? 1 : 0.6 }}
             title={isAgentAct ? (interactive ? 'Interactive act (expects input)' : 'Emissive act (informative)') : undefined}
+            role={isCondition ? 'button' : undefined}
+            tabIndex={isCondition ? 0 : undefined}
+            onClick={(e) => {
+              if (!isCondition) return;
+              e.stopPropagation();
+              try {
+                const variables = (window as any).__omniaVars || {};
+                const script = (item as any)?.data?.script || '';
+                const label = String((item as any)?.name || (item as any)?.label || 'Condition');
+                const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label, name: label }, bubbles: true });
+                (e.currentTarget as any).dispatchEvent(ev);
+              } catch {}
+            }}
+            onKeyDown={(e) => {
+              if (!isCondition) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  const variables = (window as any).__omniaVars || {};
+                  const script = (item as any)?.data?.script || '';
+                  const label = String((item as any)?.name || (item as any)?.label || 'Condition');
+                  const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label, name: label }, bubbles: true });
+                  (e.currentTarget as any).dispatchEvent(ev);
+                } catch {}
+              }
+            }}
           >
             {item.name}
           </span>

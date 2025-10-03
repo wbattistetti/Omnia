@@ -61,6 +61,89 @@ app.add_middleware(
 	allow_methods=["*"],
 	allow_headers=["*"],
 )
+# --- Lint endpoint for editor diagnostics ---
+@app.post("/api/conditions/lint")
+def lint_condition(body: dict = Body(...)):
+    try:
+        code = (body or {}).get("code") or ""
+        inputs = (body or {}).get("inputs") or []
+        if not isinstance(code, str):
+            return {"findings": [{"severity": "error", "message": "code must be string", "startLine": 1, "startCol": 1, "endLine": 1, "endCol": 1, "rule": "bad-request"}]}
+
+        def compute_line_starts(txt: str):
+            starts = [0]
+            for i, ch in enumerate(txt):
+                if ch == "\n":
+                    starts.append(i + 1)
+            return starts
+
+        def idx_to_pos(idx: int, starts):
+            lo, hi = 0, len(starts) - 1
+            while lo <= hi:
+                mid = (lo + hi) >> 1
+                if starts[mid] <= idx:
+                    lo = mid + 1
+                else:
+                    hi = mid - 1
+            line_start = starts[max(0, hi)]
+            line = max(1, hi + 1)
+            col = max(1, (idx - line_start) + 1)
+            return line, col
+
+        starts = compute_line_starts(code)
+        findings = []
+
+        # No module syntax
+        for m in re.finditer(r"\b(import|export)\b", code):
+            s, e = m.start(), m.end()
+            sl, sc = idx_to_pos(s, starts)
+            el, ec = idx_to_pos(e, starts)
+            findings.append({
+                "severity": "error",
+                "message": "Module syntax is not supported in this runtime (no import/export).",
+                "startLine": sl, "startCol": sc, "endLine": el, "endCol": ec,
+                "rule": "no-module-syntax",
+            })
+
+        # Hint unsafe date
+        for m in re.finditer(r"new\s+Date\s*\(", code):
+            s, e = m.start(), m.end()
+            sl, sc = idx_to_pos(s, starts)
+            el, ec = idx_to_pos(e, starts)
+            findings.append({
+                "severity": "warning",
+                "message": "Use of new Date(...): verify timezone/locale or parse explicitly.",
+                "startLine": sl, "startCol": sc, "endLine": el, "endCol": ec,
+                "rule": "no-unsafe-date",
+            })
+
+        # Info local getters
+        for m in re.finditer(r"\.(getFullYear|getMonth|getDate|getHours|getMinutes|getSeconds|getDay)\s*\(", code):
+            s, e = m.start(1), m.end(1)
+            sl, sc = idx_to_pos(s, starts)
+            el, ec = idx_to_pos(e, starts)
+            findings.append({
+                "severity": "info",
+                "message": f'Local date getter "{m.group(1)}": prefer UTC when relevant.',
+                "startLine": sl, "startCol": sc, "endLine": el, "endCol": ec,
+                "rule": "no-local-date-getters",
+            })
+
+        # Unused inputs
+        if isinstance(inputs, list):
+            for name in inputs:
+                pat = re.compile(rf"\b{re.escape(str(name))}\b")
+                if not pat.search(code):
+                    findings.append({
+                        "severity": "warning",
+                        "message": f'Input "{name}" not used in code.',
+                        "startLine": 1, "startCol": 1, "endLine": 1, "endCol": 1,
+                        "rule": "unused-input",
+                    })
+
+        return {"findings": findings}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # Simple request/response logger (silence noisy paths)
 @app.middleware("http")
@@ -128,8 +211,16 @@ def suggest_vars(body: dict = Body(...)):
             "Select only the variables strictly necessary."
         )
     }
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
     try:
-        ai = call_groq_json([
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai_json as _call_json
+            except Exception:
+                from call_openai import call_openai_json as _call_json
+        else:
+            _call_json = call_groq_json
+        ai = _call_json([
             {"role": "system", "content": system},
             user,
         ])
@@ -166,37 +257,80 @@ def generate_condition(body: dict = Body(...)):
     if not isinstance(variables, list):
         variables = []
 
+    # System prompt aligned to runtime, key binding, self-check, and strict JSON output
     SYSTEM = (
-        "You are an expert backend engineer. You generate concise labels and boolean JS.\n"
-        "Output policy:\n"
-        "- If description is sufficient, return JSON {\"label\":\"...\",\"script\":\"...\"}.\n"
-        "- If insufficient, return ONLY {\"question\":\"...\"}.\n"
-        "Script field REQUIREMENTS (critical): The value of 'script' MUST be a JSON string containing the JavaScript code. Do NOT return objects or functions in 'script'. Do NOT wrap in markdown fences. Example OK: {\"script\":\"try {\\n  return true;\\n} catch { return false; }\"}.\n"
-        "Script rules: single boolean return; use vars[\"...\"]; null/undefined checks; no logs.\n"
-        "Formatting: ALWAYS return multi-line, readable, well-indented JavaScript with line breaks; include 1-2 short inline comments for key steps."
+        "You generate safe JavaScript from natural language or pseudocode for our Condition DSL.\n"
+        "RUNTIME_MODE=module\n"
+        "ACCESSOR_ROOT=ctx\n"
+        "Hard rules:\n"
+        "- Use only ACCESSOR_ROOT[\"<exact dotted key>\"] (case-sensitive).\n"
+        "- If the input contains ACCESSOR_ROOT[\"...\"], those are the only allowed keys.\n"
+        "- Only use keys listed in Available variables. Do NOT invent/rename keys.\n"
+        "- Code must be pure: no side-effects, no console, no I/O, no globals, no comments.\n"
+        "- Use UTC date API only: getUTCFullYear, getUTCMonth, getUTCDate (never local getters).\n"
+        "- function main(ctx) must always return a boolean; on any exception return false (wrap with try/catch).\n"
+        "- Label must be concise (<= 40 chars) and in the user's NL language.\n"
+        "- CONDITION.inputs must equal exactly the set of keys accessed via ACCESSOR_ROOT[\"...\"] in the code.\n"
+        "- Do not use eval, new Function, setTimeout, setInterval.\n"
+        "- Capture current time once (const now=new Date()) and reuse it (avoid multiple new Date() calls).\n"
+        "- Only call Date.parse after verifying the input matches the ISO regex shown in parseDate; otherwise return null.\n"
+        "- Before responding, SELF-CHECK that: (a) CONDITION.inputs contains the same key(s); and (b) the code uses ACCESSOR_ROOT[\"...\"] for each key. If the check fails → return only {\"question\":\"Key mismatch. Confirm the exact dotted key.\"}.\n"
+        "- EXTRA SELF-CHECK: if the code contains prohibited patterns like new Date(\"dd/mm/yyyy\") or other non-deterministic date parsing, return only {\"question\":\"Bad date parsing: use parseDate.\"}.\n"
+        "- EXTRA SELF-CHECK: if the script uses getFullYear|getMonth|getDate (non-UTC) → return only {\"question\":\"Use UTC date API (getUTC*).\"}.\n"
+        "- EXTRA SELF-CHECK: if Date.parse( appears without an ISO regex test → return only {\"question\":\"Bad date parsing: ISO only.\"}.\n"
+        "- EXTRA SELF-CHECK: if const CONDITION= or function main(ctx) is missing → return only {\"question\":\"Missing CONDITION or main(ctx).\"}.\n"
+        "- EXTRA SELF-CHECK: if main(ctx) does not return a boolean on all paths → return only {\"question\":\"main(ctx) must return a boolean.\"}.\n"
+        "- EXTRA SELF-CHECK: if the set of inputs differs from the set of ACCESSOR_ROOT[\"...\"] keys used → return only {\"question\":\"Key set mismatch between inputs and code.\"}.\n"
+        "- If the description is insufficient or ambiguous (operator/threshold/unit/variable), return only {\"question\":\"...\"}.\n\n"
+        "Output (strict):\n"
+        "Return ONLY JSON: {\"label\":\"...\",\"script\":\"...\"} or {\"question\":\"...\"}. No extra text.\n\n"
+        "Runtime profile (module):\n"
+        "Emit a complete module: const CONDITION={label:\"<auto>\",type:\"predicate\",inputs:[\"<key(s)>\"]}; function main(ctx){...} // returns boolean; read via ctx[\"<key>\"].\n"
     )
+
+    # ensure a blank line before Guidelines in the composed prompt
+    
     GUIDELINES = (
-        "Guidelines by type: DOB/age: compute from date; >=18 true. Date compare: parse ISO; compare getTime(). "
-        "Email: robust regex; trim lowercase. Phone: strip non-digits; length>=9. Strings: trim; case-insensitive equals unless specified. "
-        "Numbers: Number(); guard NaN. Presence: Boolean(vars[\"...\"])."
     )
+
+    GUIDELINES = (
+        "Guidelines by type: "
+        "Dates & durations: Never use new Date(non-ISO). Use parseDate (below) for dd/mm/yyyy, yyyy-mm-dd, Date, timestamp. Now/today = current UTC. Support differences in years|days|hours. For age, compute UTC age. For \"Now - <date> > N years\": if <date> is a Date of Birth, compute age in UTC; otherwise compute calendar-year difference with month/day correction. If unclear, ask a question. "
+        "Email: trim+lowercase; regex ^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$. "
+        "Phone: keep leading +, strip non-digits; length>=9. "
+        "Strings: trim and collapse whitespace; case-insensitive unless specified. "
+        "Numbers: Number(...), require Number.isFinite. "
+        "Mini-DSL: AGE(ACCESSOR_ROOT[\"<key>\"]) >= N ; Now - ACCESSOR_ROOT[\"<dateKey>\"] > N years|days|hours ; ACCESSOR_ROOT[\"<dateA>\"] before|after (ACCESSOR_ROOT[\"<dateB>\"]|Now) ; is valid email/phone ; ACCESSOR_ROOT[\"<strKey>\"] contains|equals \"<text>\" (case-insensitive by default).\n"
+        "Helper (copy verbatim when dates are involved):\n"
+        "function parseDate(v){ if(v instanceof Date&&!Number.isNaN(v.valueOf()))return v; if(typeof v===\"number\"&&Number.isFinite(v))return new Date(v); if(typeof v===\"string\"){ const s=v.trim(); let m=s.match(/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{2,4})$/); if(m){ let d=parseInt(m[1],10),mo=parseInt(m[2],10)-1,y=parseInt(m[3],10); if(y<100)y+=2000; const dt=new Date(Date.UTC(y,mo,d)); return (dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d)?dt:null; } m=s.match(/^(\\d{4})[\\/-](\\d{1,2})[\\/-](\\d{1,2})$/); if(m){ const y=parseInt(m[1],10),mo=parseInt(m[2],10)-1,d=parseInt(m[3],10); const dt=new Date(Date.UTC(y,mo,d)); return (dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d)?dt:null; } const iso=/^\\d{4}-\\d{2}-\\d{2}(?:[T\\s]\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+\\-]\\d{2}:\\d{2})?)?$/; if(iso.test(s)){ const tt=Date.parse(s); if(!Number.isNaN(tt)) return new Date(tt); } } return null; }"
+    )
+
     examples = [
         {
             "role": "system",
             "content": (
-                'Example: NL "utente maggiorenne"; vars include "Act.DOB" -> '
-                '{"label":"Utente maggiorenne","script":"try { const dob = vars[\\"Act.DOB\\"]; if (!dob) return false; const d = new Date(dob); if (isNaN(d.getTime())) return false; const now = new Date(); let age = now.getFullYear() - d.getFullYear(); const m = now.getMonth() - d.getMonth(); if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--; return age >= 18; } catch { return false; }"}'
+                'Example (age >= 18): NL "utente maggiorenne"; Vars include "agents asks for personal data.Date of Birth" -> '
+                '{"label":"Utente maggiorenne","script":"const CONDITION={label:\"Utente maggiorenne\",type:\"predicate\",inputs:[\"agents asks for personal data.Date of Birth\"]};function main(ctx){const k=\"agents asks for personal data.Date of Birth\";if(!ctx||!Object.prototype.hasOwnProperty.call(ctx,k))return false;const d=parseDate(ctx[k]);if(!d)return false;const t=new Date();let a=t.getUTCFullYear()-d.getUTCFullYear();const m=t.getUTCMonth()-d.getUTCMonth();if(m<0||(m===0&&t.getUTCDate()<d.getUTCDate()))a--;return a>=18;}function parseDate(v){if(v instanceof Date&&!Number.isNaN(v.valueOf()))return v;if(typeof v===\\\"number\\\"&&Number.isFinite(v))return new Date(v);if(typeof v===\\\"string\\\"){const s=v.trim();let m=s.match(/^(\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{2,4})$/);if(m){let d=parseInt(m[1],10),mo=parseInt(m[2],10)-1,y=parseInt(m[3],10);if(y<100)y+=2000;const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}m=s.match(/^(\\\\d{4})[\\\\\/\\\\\-](\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{1,2})$/);if(m){const y=parseInt(m[1],10),mo=parseInt(m[2],10)-1,d=parseInt(m[3],10);const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}const tt=Date.parse(s);if(!Number.isNaN(tt))return new Date(tt);}return null;}"}'
             )
         }
     ]
+
     user = {
         "role": "user",
         "content": (
-            "Natural language description:\n" + nl + "\n\nAvailable variables (dotted):\n" + " | ".join([str(v) for v in variables]) + "\nReturn only JSON."
+            "Natural language description:\n" + nl + "\n\nAvailable variables (dotted, exact):\n" + " | ".join([str(v) for v in variables]) + "\nReturn only JSON."
         )
     }
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
     try:
-        ai = call_groq_json([
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai_json as _call_json
+            except Exception:
+                from call_openai import call_openai_json as _call_json
+        else:
+            _call_json = call_groq_json
+        ai = _call_json([
             {"role": "system", "content": SYSTEM},
             {"role": "system", "content": GUIDELINES},
             *examples,
@@ -219,12 +353,32 @@ def generate_condition(body: dict = Body(...)):
                 obj["script"] = m.group(0)
             else:
                 obj["script"] = "try { return false; } catch { return false; }"
-        # heuristic fallback: if no script or placeholder, synthesize adult check when DOB variable is present
+
+        # Guardrail: quick validation of script vs keys and date parsing
+        try:
+            script_s = (obj.get("script") or "") if isinstance(obj, dict) else ""
+            if isinstance(script_s, str) and script_s:
+                # exact key presence in inputs and usage
+                for k in (variables or []):
+                    if isinstance(k, str):
+                        if (f'inputs:["{k}"]' not in script_s) and (f'inputs: ["{k}"]' not in script_s):
+                            return {"question": "Key mismatch. Confirm the exact dotted key."}
+                        if f'["{k}"]' not in script_s:
+                            return {"question": "Key mismatch. Confirm the exact dotted key."}
+                # forbid new Date('dd/mm/yyyy') and similar non-ISO
+                if re.search(r"new\s+Date\(\s*['\"`](?!\d{4}-\d{2}-\d{2})", script_s):
+                    return {"question": "Bad date parsing: use parseDate."}
+                # must contain a boolean return in main
+                if not re.search(r"return\s+(true|false|!|\(|[a-zA-Z_])", script_s):
+                    return {"question": "The script must return a boolean predicate."}
+        except Exception:
+            pass
+
+        # heuristic fallback remains unchanged
         try:
             script_s = (obj.get("script") or "").strip() if isinstance(obj, dict) else ""
             nl_lc = (nl or "").lower()
             need_adult = any(k in nl_lc for k in ["maggiorenne", "adult", ">= 18", "18 anni", "18 years"]) or True
-            # choose DOB-like variable
             dob_candidates = []
             for v in (variables or []):
                 vs = str(v)
@@ -234,7 +388,7 @@ def generate_condition(body: dict = Body(...)):
                 key = dob_candidates[0]
                 script_tpl = (
                     "try {\n"+
-                    f"  const dob = vars[\"{key}\"];\n"+
+                    f"  var vars = ctx;\n  const dob = vars[\"{key}\"];\n"+
                     "  if (!dob) return false;\n"+
                     "  const d = new Date(dob);\n"+
                     "  if (isNaN(d.getTime())) return false;\n"+
@@ -255,6 +409,86 @@ def generate_condition(body: dict = Body(...)):
     except Exception as e:
         try:
             print("[COND][error]", str(e))
+        except Exception:
+            pass
+        return {"error": str(e)}
+
+# --- Condition: repair an existing module using failures ---
+@app.post("/api/conditions/repair")
+def repair_condition(body: dict = Body(...)):
+    script = (body or {}).get("script") or ""
+    failures = (body or {}).get("failures") or []
+    return_mode = ((body or {}).get("return") or "module").lower()  # "module" | "diff"
+    variables = (body or {}).get("variables") or []
+    if not isinstance(script, str) or not script.strip():
+        return {"error": "script_required"}
+    if not isinstance(failures, list):
+        failures = []
+
+    system = (
+        "You are an expert backend engineer for our Condition DSL. Fix the given JavaScript module so that it satisfies the failures and rules below.\n"
+        "Constraints (must-haves):\n"
+        "- Keep the same runtime: RUNTIME_MODE=module, ACCESSOR_ROOT=ctx.\n"
+        "- Preserve the exact input key(s) and CONDITION.inputs.\n"
+        "- Code must be pure: no console, no I/O, no globals, no comments.\n"
+        "- Use UTC getters (getUTCFullYear/getUTCMonth/getUTCDate), capture const now=new Date() once and reuse it.\n"
+        "- Parse dates deterministically with parseDate (supports dd/mm/yyyy, yyyy-mm-dd, Date, timestamp in milliseconds, strict ISO fallback only); never new Date(non-ISO).\n"
+        "- main(ctx) must return a boolean on all paths (try/catch { return false } allowed).\n"
+        "- Return only the full corrected JS module (no explanations).\n"
+    )
+
+    # Normalize failures pretty JSON
+    try:
+        failures_json = json.dumps(failures, ensure_ascii=False)
+    except Exception:
+        failures_json = "[]"
+
+    user = {
+        "role": "user",
+        "content": (
+            "Current code (buggy):\n\n" + script + "\n\n" +
+            "Observed failures (input → expected → got) [JSON list]:\n" + failures_json + "\n\n" +
+            "Hard rules to apply while fixing:\n"
+            "- Keep CONDITION.inputs exactly as-is.\n"
+            "- Use parseDate helper as described (dd/mm/yyyy, yyyy-mm-dd, Date, timestamp in ms, ISO-only fallback).\n"
+            "- Age check is age >= 18 (UTC).\n"
+            "- No local date getters; Date.parse only after ISO regex test.\n\n"
+            "Task:\nFix the module so that all the above cases pass and the rules are respected.\n"
+            "Output only the corrected JavaScript module."
+        )
+    }
+
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
+    try:
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai as _call_text
+            except Exception:
+                from call_openai import call_openai as _call_text
+        else:
+            try:
+                from backend.call_groq import call_groq_text as _call_text
+            except Exception:
+                from call_groq import call_groq_text as _call_text
+        resp = _call_text([
+            {"role": "system", "content": system},
+            user,
+        ])
+        corrected = (resp or "").strip()
+        # Basic guardrails: ensure module shape
+        if "const CONDITION" not in corrected or "function main(ctx)" not in corrected:
+            return {"error": "missing_structure", "raw": corrected[:400]}
+        if re.search(r"\bgetFullYear\(|\bgetMonth\(|\bgetDate\(", corrected):
+            return {"error": "non_utc_getters"}
+        if re.search(r"new\s+Function|\beval\(|setTimeout\(|setInterval\(", corrected):
+            return {"error": "forbidden_apis"}
+        # ISO-only Date.parse use (quick heuristic)
+        if "Date.parse(" in corrected and "-" not in corrected.split("Date.parse(")[1].split(")")[0]:
+            return {"error": "bad_date_parse"}
+        return {"script": corrected}
+    except Exception as e:
+        try:
+            print("[COND][repair][error]", str(e))
         except Exception:
             pass
         return {"error": str(e)}
@@ -287,8 +521,16 @@ def suggest_condition_cases(body: dict = Body(...)):
             "Respond ONLY with JSON: {\"trueCase\": {..}, \"falseCase\": {..}, \"hintTrue\": \"...\", \"hintFalse\": \"...\"}\n"
         )
     }
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
     try:
-        ai = call_groq_json([
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai_json as _call_json
+            except Exception:
+                from call_openai import call_openai_json as _call_json
+        else:
+            _call_json = call_groq_json
+        ai = _call_json([
             {"role": "system", "content": system},
             user,
         ])
@@ -315,6 +557,303 @@ def suggest_condition_cases(body: dict = Body(...)):
         return obj
     except Exception as e:
         return {"error": str(e)}
+
+# --- Condition: normalize pseudo-code using chat + current code ---
+@app.post("/api/conditions/normalize")
+def normalize_pseudocode(body: dict = Body(...)):
+    """Turn informal/pseudo code + chat intent + current code into clean JS for main(ctx).
+
+    Body: {
+      chat: [{role:'user'|'assistant', content:string}] | undefined,
+      pseudo: string,
+      currentCode: string,
+      variables: string[],
+      mode: 'predicate'|'value'|'object'|'enum'
+    }
+    Return: { script?: string, error?: string }
+    """
+    try:
+        chat = (body or {}).get("chat") or []
+        pseudo = (body or {}).get("pseudo") or ""
+        current = (body or {}).get("currentCode") or ""
+        variables = (body or {}).get("variables") or []
+        mode = (body or {}).get("mode") or "predicate"
+        desired_label = (body or {}).get("label") or "Condition"
+    except Exception as e:
+        return JSONResponse({"error": f"bad_request: {e}"}, status_code=200)
+
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
+
+    # Build transcript string (clip to reasonable size)
+    transcript_lines = []
+    try:
+        for m in chat:
+            r = str((m or {}).get("role") or "user")
+            c = str((m or {}).get("content") or "")
+            transcript_lines.append(f"[{r}] {c}")
+    except Exception:
+        pass
+    transcript = "\n".join(transcript_lines)[-6000:]
+
+    # Try lightweight heuristic for simple patterns like:
+    # if vars["A.B"] = "X" then return "Y" else return "Z"
+    try:
+        text = f"{pseudo} {current}".strip()
+        # extract first vars["..."] occurrence and the compared literal
+        m_cmp = re.search(r"vars\s*\[\s*([\"\'])(.+?)\1\s*\]\s*[=]{1,3}\s*([\"\'])(.+?)\3", text, flags=re.I)
+        # extract two return literals (order: then/else). Accept 'ritorna', 'return', 'allora', 'else/altrimenti'
+        returns = re.findall(r"(?:return|ritorna)\s*([\"\'])(.+?)\1", text, flags=re.I)
+        if m_cmp and returns:
+            try:
+                print("[NORMALIZE][heuristic][match]", {"key": m_cmp.group(2), "then": returns[0][1], "else": (returns[1][1] if len(returns)>1 else None)})
+                sys.stdout.flush()
+            except Exception:
+                pass
+            key = m_cmp.group(2)
+            val = m_cmp.group(4)
+            then_val = returns[0][1]
+            else_val = (returns[1][1] if len(returns) > 1 else ("" if mode == "value" else "false"))
+            # If outputs look boolean-like, coerce to boolean mode
+            def _is_bool_like(s):
+                return str(s).strip().lower() in ["true", "false", "vero", "falso"]
+            if _is_bool_like(then_val) and _is_bool_like(else_val):
+                script = (
+                    "try {\n"
+                    "  var vars = ctx;\n"
+                    f"  const v = vars[\"{key}\"];\n"
+                    f"  return String(v) === \"{val}\" ? {str(then_val).lower() in ['true','vero']} : {str(else_val).lower() in ['true','vero']};\n"
+                    "} catch { return false; }\n"
+                )
+            else:
+                # value/enum style: return strings
+                script = (
+                    "try {\n"
+                    "  var vars = ctx;\n"
+                    f"  const v = vars[\"{key}\"];\n"
+                    f"  return String(v) === \"{val}\" ? \"{then_val}\" : \"{else_val}\";\n"
+                    "} catch { return \"" + else_val + "\"; }\n"
+                )
+            return JSONResponse({"script": script}, status_code=200)
+    except Exception:
+        pass
+
+    # STRICT_MINIMAL system prompt
+    system = (
+        "You are a code generator that converts human pseudo-code into executable JavaScript predicate conditions.\n\n"
+        "Goal:\n"
+        "Follow the user's pseudo-code exactly. If incomplete, add only the minimal, deterministic assumptions required to produce a valid predicate. Never add extra signals, heuristics, or additional variables beyond what the pseudo-code implies.\n\n"
+        "Hard requirements:\n"
+        "- Produce ONE code block of valid JavaScript, and nothing else\n"
+        "- No logs, no comments, no explanations\n"
+        "- Output only one top-level constant `CONDITION` and one function `main(ctx)`\n"
+        "- `main(ctx)` must return a boolean\n"
+        "- Safe failure: if the variable key is missing from `ctx` or invalid, return false\n"
+        "- Case-insensitive string comparison; compare only the first token unless a full-string match is explicitly requested\n\n"
+        "STRICT_MINIMAL policy:\n"
+        "1) Priority: Explicit pseudo-code > Allowed variables list > Defaults.\n"
+        "2) If the pseudo-code names an explicit key (quoted or code-like), use exactly that key and only the stated operations. Do NOT substitute or add any other variable or signal.\n"
+        "3) If the pseudo-code lacks a key, infer exactly ONE key from the Allowed list by best semantic match; if tie, pick the first deterministically.\n"
+        "4) If the operator is unstated, default to equality under the default comparison rule (case-insensitive, first token).\n"
+        "5) If the pseudo-code asks for a full-string/\"exact\" match, do NOT split to first token; compare the entire trimmed string case-insensitively.\n"
+        "6) If the comparison value is missing, return false (do not invent values).\n"
+        "7) For numbers: parse with `Number(...)`; if `NaN`, return false. No range inference unless written.\n"
+        "8) Use only variables listed in `CONDITION.inputs`. Do not read any other `ctx` keys.\n"
+        "9) Do not add proxies (e.g., timezone, phone prefix, IP country) or regexes unless explicitly requested.\n"
+        "10) Determinism: produce identical output for identical inputs.\n\n"
+        "Shape (must match exactly):\n"
+        "const CONDITION = { label: \"<label>\", type: \"predicate\", inputs: [\"<varKey>\" /* or multiple only if explicitly required */] };\n"
+        "function main(ctx){ /* boolean */ }\n"
+    )
+    # Prepare user message (template-aware: parse Name/When true/Variables)
+    brief = "\n".join([l for l in transcript.splitlines() if l.strip()])[:800]
+    label_value = str(desired_label or "Condition")
+
+    # Parse structured pseudo if present
+    def _parse_template(text: str):
+        name = None
+        when_true = None
+        vars_list: list[str] = []
+        lines = (text or "").splitlines()
+        mode_vars = False
+        for raw in lines:
+            ln = raw.strip()
+            if not ln:
+                continue
+            k = ln.lower()
+            if ln.lower().startswith("name:"):
+                name = ln.split(":", 1)[1].strip() or None
+                mode_vars = False
+                continue
+            if k.startswith("when true:"):
+                when_true = ln.split(":", 1)[1].strip() or None
+                mode_vars = False
+                continue
+            if k.startswith("variables:"):
+                mode_vars = True
+                tail = ln.split(":", 1)[1].strip()
+                if tail and not tail.lower().startswith("scegli"):
+                    # support comma-separated on same line
+                    parts = [p.strip(" -\t") for p in tail.split(",") if p.strip()]
+                    vars_list.extend(parts)
+                continue
+            if mode_vars:
+                if ln.startswith("-"):
+                    v = ln.lstrip("- ").strip()
+                    if v and not v.lower().startswith("scegli"):
+                        vars_list.append(v)
+                else:
+                    # stop vars block on first non-bullet line
+                    mode_vars = False
+        return name, when_true, vars_list
+
+    p_name, p_when, p_vars = _parse_template(str(pseudo))
+    if p_name:
+        label_value = p_name
+    pseudo_for_model = (p_when or str(pseudo).strip())
+
+    # Decide allowed variables: prefer parsed list if provided
+    allowed_vars = [str(v) for v in (p_vars if p_vars else (variables or []))]
+    # If pseudo contains an explicit allowed key in quotes, restrict allowed list to that key
+    explicit_key = None
+    try:
+        for v in allowed_vars:
+            v_esc = re.escape(v)
+            if re.search(rf"[\"\']{v_esc}[\"\']", pseudo_for_model):
+                explicit_key = v
+                break
+    except Exception:
+        explicit_key = None
+    if explicit_key:
+        allowed_list_str = "- " + explicit_key
+        allowed_vars = [explicit_key]
+    else:
+        allowed_list_str = "\n".join([f"- {v}" for v in allowed_vars])
+
+    # User message following STRICT_MINIMAL policy
+    user_content = (
+        "You are a code generator. Interpret natural language pseudo-code and map it to the most appropriate variable from the list below, following STRICT_MINIMAL policy.\n\n"
+        "If the variable is not explicitly quoted in the pseudo-code, infer exactly ONE semantically appropriate key from the Allowed list (tie-break: the first).\n\n"
+        "Compare strings case-insensitively and only on the first token unless a full-string match is explicitly stated.\n\n"
+        "---\n\n"
+        "Pseudo-code:\n" + str(pseudo_for_model) + "\n\n"
+        "Allowed variables:\n" + allowed_list_str + "\n\n"
+        "Condition label (optional; defaults to your condition title):\n" + str(label_value or "") + "\n"
+    )
+    # Few-shot examples (STRICT_MINIMAL; no helpers; one JS block each)
+    few_shots = (
+        "EXAMPLE A — explicit complex key (STRICT_MINIMAL; default first-token)\n"
+        "User pseudo-code:\ntrue if \"Agent asks for user's name.Name\" equals \"mario\" (case-insensitive; compare first token); else false\nLabel:\nItaliano\n\n"
+        "Allowed variable keys include:\n- Agent asks for user's name.Name\n\n"
+        "Output:\nconst CONDITION = { label: \"Italiano\", type: \"predicate\", inputs: [\"Agent asks for user's name.Name\"] };\n"
+        "function main(ctx){\n  const k = \"Agent asks for user's name.Name\";\n  if (!Object.prototype.hasOwnProperty.call(ctx,k)) return false;\n  const v = String(ctx[k]).trim();\n  if (v === \"\") return false;\n  const first = (v.split(/\\s+/)[0] || \"\").toLowerCase();\n  return first === \"mario\";\n}\n\n"
+        "EXAMPLE B — numeric range (predicate)\n"
+        "User pseudo-code:\ntrue if 18 ≤ User.Age < 65 else false\nLabel:\nAdulto\n\n"
+        "Allowed variable keys include:\n- User.Age\n\n"
+        "Output:\nconst CONDITION = { label: \"Adulto\", type: \"predicate\", inputs: [\"User.Age\"] };\n"
+        "function main(ctx){\n  const k = \"User.Age\";\n  if (!Object.prototype.hasOwnProperty.call(ctx,k)) return false;\n  const x = Number(ctx[k]);\n  if (!Number.isFinite(x)) return false;\n  return x >= 18 && x < 65;\n}\n\n"
+        "EXAMPLE C — full-string match explicitly requested (do NOT split)\n"
+        "User pseudo-code:\ntrue if full string of \"User.Country\" equals \"Italia\" (case-insensitive); else false\nLabel:\nPaeseItalia\n\n"
+        "Allowed variable keys include:\n- User.Country\n\n"
+        "Output:\nconst CONDITION = { label: \"PaeseItalia\", type: \"predicate\", inputs: [\"User.Country\"] };\n"
+        "function main(ctx){\n  const k = \"User.Country\";\n  if (!Object.prototype.hasOwnProperty.call(ctx,k)) return false;\n  const v = String(ctx[k]).trim().toLowerCase();\n  if (v === \"\") return false;\n  return v === \"italia\";\n}\n\n"
+        "EXAMPLE D — incomplete pseudo: missing key (choose ONE from Allowed, deterministically)\n"
+        "User pseudo-code:\ntrue if name equals \"mario\"\nLabel:\nItaliano\n\n"
+        "Allowed variable keys include:\n- User.FirstName\n- Agent asks for user's name.Name\n\n"
+        "Output:\nconst CONDITION = { label: \"Italiano\", type: \"predicate\", inputs: [\"User.FirstName\"] };\n"
+        "function main(ctx){\n  const k = \"User.FirstName\";\n  if (!Object.prototype.hasOwnProperty.call(ctx,k)) return false;\n  const v = String(ctx[k]).trim();\n  if (v === \"\") return false;\n  const first = (v.split(/\\s+/)[0] || \"\").toLowerCase();\n  return first === \"mario\";\n}\n"
+    )
+    try:
+        # Ask for plain text (function only) and extract deterministically
+        try:
+            print("[NORMALIZE][provider]", provider)
+            print(f"[NORMALIZE][prompt][lens] system={len(system or '')} few_shots={len(few_shots or '')} user={len(user_content or '')}")
+            print("[NORMALIZE][prompt][system]\n" + (system or ""))
+            print("[NORMALIZE][prompt][few_shots]\n" + (few_shots or ""))
+            print("[NORMALIZE][prompt][user]\n" + (user_content or ""))
+        except Exception:
+            pass
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai as _call_ai
+            except Exception:
+                from call_openai import call_openai as _call_ai
+        else:
+            _call_ai = call_groq
+        ai = _call_ai([
+            {"role": "system", "content": system},
+            {"role": "system", "content": few_shots},
+            {"role": "user", "content": user_content},
+        ])
+        text = (ai or "").strip()
+        try:
+            print("[NORMALIZE][ai_raw]", text[:600])
+        except Exception:
+            pass
+        # Extract code block (if fenced)
+        code = text
+        mfence = re.search(r"```(?:js|javascript)?\n([\s\S]*?)\n```", text, flags=re.I)
+        if mfence:
+            code = mfence.group(1)
+
+        # Extract CONDITION and main(ctx)
+        mcond = re.search(r"const\s+CONDITION\s*=\s*\{[\s\S]*?\};", code, flags=re.M)
+        mfun = re.search(r"function\s+main\s*\(\s*ctx\s*\)\s*\{[\s\S]*?\}\s*", code, flags=re.M)
+        parts = []
+        if mcond:
+            parts.append(mcond.group(0).strip())
+        if mfun:
+            parts.append(mfun.group(0).strip())
+
+        script = "\n".join(parts).strip()
+
+        # Post-generation validator: label and inputs vs actually used keys
+        try:
+            lbl_m = re.search(r"const\s+CONDITION\s*=\s*\{[\s\S]*?label\s*:\s*\"([^\"]+)\"", script)
+            inputs_m = re.search(r"inputs\s*:\s*\[([\s\S]*?)\]", script)
+            used_keys = set(re.findall(r"getVar\(ctx,\s*[\"\']([^\"\']+)[\"\']\)", script))
+            declared = set()
+            if inputs_m:
+                declared = set([s.strip().strip('"\'') for s in re.findall(r"[\"\']([^\"\']+)[\"\']", inputs_m.group(1))])
+            lbl_ok = (lbl_m and lbl_m.group(1) == label_value)
+            inputs_ok = (declared == used_keys and all((k in allowed_vars) for k in declared))
+            # If invalid, we can append a nudge to the user prompt next run; for now just log
+            if not (lbl_ok and inputs_ok):
+                try:
+                    print('[NORMALIZE][validator]', {'label_ok': lbl_ok, 'inputs_ok': inputs_ok, 'declared': list(declared), 'used': list(used_keys)})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Add helpers only if referenced and not already defined
+        def _need(name: str) -> bool:
+            return (name+"(") in code and (f"function {name}(" not in code)
+
+        helpers = []
+        if _need("getVar"):
+            helpers.append("function getVar(ctx, key){ return Object.prototype.hasOwnProperty.call(ctx,key) ? ctx[key] : undefined; }")
+        if _need("s"):
+            helpers.append("function s(v){ return (v==null? '' : String(v)).trim(); }")
+        if _need("n"):
+            helpers.append("function n(v){ const x = Number(v); return Number.isFinite(x) ? x : NaN; }")
+
+        if script:
+            if helpers:
+                script = "\n".join(helpers) + "\n" + script
+            return JSONResponse({"script": script}, status_code=200)
+        # fallback default
+        # Fallback: minimal CONDITION + main(ctx) false
+        script = (
+            "const CONDITION = { label: \"Condition\", type: \"predicate\", inputs: [] };\n"
+            "function main(ctx){ return false; }\n"
+        )
+        return JSONResponse({"script": script}, status_code=200)
+    except Exception as e:
+        try:
+            print("[NORMALIZE][error]", e)
+        except Exception:
+            pass
+        return JSONResponse({"error": "normalize_failed"}, status_code=200)
 
 # --- Backend Builder: synthesize natural-language outline from chat ---
 @app.post("/api/builder/brief")
@@ -772,16 +1311,16 @@ def step4(ddt_structure: dict = Body(...)):
 	print("\nSTEP: /step4 – Generate DDT messages (generateMessages)")
 	prompt = f"""
 You are writing for a voice (phone) customer‑care agent.
-Generate the agent’s spoken messages to collect the data described by the DDT structure.
+Generate the agent's spoken messages to collect the data described by the DDT structure.
 
 Style and constraints:
 - One short sentence (about 4–12 words), natural, polite, human.
 - Phone conversation tone: concise, fluid, not robotic.
 - Prefer light contractions when natural (I'm, don't, can't).
 - Neutral and professional; no chit‑chat, no opinions, no humor.
-- NEVER ask about “favorite …” or “why”.
+- NEVER ask about "favorite …" or "why".
 - No emojis and no exclamation marks.
-- Do NOT use UI words like “click”, “type”, “enter”. Use “say/tell/give”.
+- Do NOT use UI words like "click", "type", "enter". Use "say/tell/give".
 - NEVER output example values or names (e.g., "Emily", "01/01/2000", "Main Street").
 - NEVER output greetings or generic help phrases (e.g., "How may I help you today").
 - Use the field label; if the field is composite, ask ONLY the missing part (e.g., Day, Month, Year).
@@ -794,7 +1333,7 @@ Output format (strict JSON only, no comments, no trailing commas):
 Generation rules:
 - start: 1 message per field/subfield. Example: "Please tell me your date of birth (DD/MM/YYYY)?"
 - noInput: 3 concise re‑asks with natural variations. Example: "Could you share the date of birth (DD/MM/YYYY)?"
-- noMatch: 3 concise clarifications with hint. Prefer voice phrasing like “I didn’t catch that” over “I couldn’t parse that”. Example: "I didn't catch that. Date of birth (DD/MM/YYYY)?"
+- noMatch: 3 concise clarifications with hint. Prefer voice phrasing like "I didn't catch that" over "I couldn't parse that". Example: "I didn't catch that. Date of birth (DD/MM/YYYY)?"
 - confirmation: 2 short confirmations like "Is this correct: {{ '{input}' }}?"
 - success: 1 short acknowledgement like "Thanks, got it."
 - For subData (e.g., date): ask targeted parts — "Day?", "Month?", "Year?" (or "Which year (YYYY)?").

@@ -490,6 +490,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                       initialScript={conditionScript}
                       variablesTree={conditionVarsTree}
                       label={conditionLabel}
+                      dockWithinParent={true}
                       onRename={(next) => {
                         setConditionLabel(next);
                         try {
@@ -497,7 +498,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                           document.dispatchEvent(ev);
                         } catch {}
                       }}
-                      dockWithinParent
                       onSave={(script) => {
                         try {
                           const ev: any = new CustomEvent('conditionEditor:save', { detail: { script }, bubbles: true });
@@ -518,6 +518,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                     initialScript={conditionScript}
                     variablesTree={conditionVarsTree}
                     label={conditionLabel}
+                    dockWithinParent={true}
                     onRename={(next) => {
                       setConditionLabel(next);
                       try {
@@ -525,7 +526,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                         document.dispatchEvent(ev);
                       } catch {}
                     }}
-                    dockWithinParent
                     onSave={(script) => {
                       try {
                         const ev: any = new CustomEvent('conditionEditor:save', { detail: { script }, bubbles: true });

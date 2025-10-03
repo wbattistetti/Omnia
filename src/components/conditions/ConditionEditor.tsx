@@ -1,12 +1,15 @@
 import React from 'react';
 import { getDDTIcon as getDDTIconFromRE } from '../ActEditor/ResponseEditor/ddtUtils';
-import { generateConditionWithAI, suggestConditionCases, suggestMinimalVars } from '../../services/ai/groq';
+import { generateConditionWithAI, suggestConditionCases, normalizePseudoCode, repairCondition } from '../../services/ai/groq';
 import ConditionTester, { CaseRow } from './ConditionTester';
 import CodeEditor from '../CodeEditor/CodeEditor';
-import { X, Pencil, Check } from 'lucide-react';
+import * as monacoNS from 'monaco-editor';
+import { setMonacoMarkers, clearMonacoMarkers } from '../../utils/monacoMarkers';
+import { X, Pencil, Check, Code2, FlaskConical, ListChecks, Loader2 } from 'lucide-react';
 import { SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
 import { setupMonacoEnvironment } from '../../utils/monacoWorkerSetup';
 import VariablesPanel from './VariablesPanel';
+// SmartTooltip is used only in the tester's toolbar (right panel)
 
 // Ensure Monaco workers configured once
 try { setupMonacoEnvironment(); } catch {}
@@ -32,17 +35,31 @@ const listKeys = (vars: VarsMap): string[] => {
   try { return Object.keys(vars || {}).sort(); } catch { return []; }
 };
 
+// No local template; EditorPanel injects the scaffold
+
 export default function ConditionEditor({ open, onClose, variables, initialScript, dockWithinParent, variablesTree, label, onRename }: Props) {
   const [nl, setNl] = React.useState('');
-  const [script, setScript] = React.useState(initialScript || 'return true;');
+  const DEFAULT_CODE = [
+    '// Describe below, in detail, when the condition should be TRUE.',
+    '// You can write pseudo-code or a plain natural-language description.',
+    '// Right-click to view and insert the available variables the code must use.',
+    '//',
+    '// Example of pseudo-code for the condition "USER MUST BE ADULT":',
+    '// PSEUDO-CODE:',
+    '// Now - vars["Agent asks for user\'s name.DateOfBirth"] > 18 years',
+    ''
+  ].join('\n');
+  const [script, setScript] = React.useState(initialScript || '');
   const [busy, setBusy] = React.useState(false);
   const [aiQuestion, setAiQuestion] = React.useState<string>('');
-  const [mode, setMode] = React.useState<'ai' | 'code' | 'test'>('code');
-  const [showDescribe, setShowDescribe] = React.useState<boolean>(true);
-  const [showCode, setShowCode] = React.useState<boolean>(false);
+  // describe/chat removed
+  const [showCode, setShowCode] = React.useState<boolean>(true);
   const [showTester, setShowTester] = React.useState<boolean>(false);
   const [hasCreated, setHasCreated] = React.useState<boolean>(false);
   const monacoEditorRef = React.useRef<any>(null);
+  const monacoInstanceRef = React.useRef<typeof monacoNS | null>(null);
+  React.useEffect(() => { try { monacoInstanceRef.current = (window as any).monaco || null; } catch {} }, []);
+  const [runtimeErrorMsg, setRuntimeErrorMsg] = React.useState<string | null>(null);
   // clarification answer input will be handled inline; no separate state
   const varsKeys = React.useMemo(() => listKeys(variables), [variables]);
   // deprecated flat filter (kept for past API) — not used
@@ -53,45 +70,79 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   const [titleValue, setTitleValue] = React.useState<string>(label || 'Condition');
   React.useEffect(() => { setTitleValue(label || 'Condition'); }, [label]);
   const [headerHover, setHeaderHover] = React.useState<boolean>(false);
-  const [heightPx, setHeightPx] = React.useState<number>(320);
+  const titleInputRef = React.useRef<HTMLInputElement>(null);
+  const titleMeasureRef = React.useRef<HTMLSpanElement>(null);
+  const [titleInputPx, setTitleInputPx] = React.useState<number>(200);
+  const measureTitleWidth = React.useCallback((text: string) => {
+    try {
+      const el = titleMeasureRef.current;
+      if (!el) return 200;
+      el.textContent = text || '';
+      const w = Math.ceil(el.offsetWidth || 0);
+      return Math.max(160, Math.min(720, w + 24));
+    } catch { return 200; }
+  }, []);
+  React.useEffect(() => {
+    if (!isEditingTitle) return;
+    setTitleInputPx(measureTitleWidth(titleValue));
+  }, [isEditingTitle, titleValue, measureTitleWidth]);
+  const [heightPx, setHeightPx] = React.useState<number>(480);
   const containerRef = React.useRef<HTMLDivElement>(null);
   // Panel widths (Chat, Variables, Tester have fixed px; Code flexes)
-  const [wDescribe, setWDescribe] = React.useState<number>(420);
   const [wVars, setWVars] = React.useState<number>(280);
   const [wTester, setWTester] = React.useState<number>(360);
   const [testRows, setTestRows] = React.useState<CaseRow[]>([]);
   const [pendingDupGroups, setPendingDupGroups] = React.useState<Array<{ tail: string; options: string[] }> | null>(null);
   // Variable selection (checkboxes on the left)
   const [selectedVars, setSelectedVars] = React.useState<string[]>([]);
-  const [showVariablesPanel, setShowVariablesPanel] = React.useState<boolean>(true);
+  const [showVariablesPanel, setShowVariablesPanel] = React.useState<boolean>(false);
   const [testerHints, setTesterHints] = React.useState<{ hintTrue?: string; hintFalse?: string; labelTrue?: string; labelFalse?: string }>({});
+  // Tester toolbar moved to main toolbar; own run/add controls here
   // Unified font size across all subpanels; Ctrl+Wheel handled at container level
   const [fontPx, setFontPx] = React.useState<number>(13);
-  const [chatHistory, setChatHistory] = React.useState<Array<{ role: 'assistant' | 'user'; content: string }>>([
-    { role: 'assistant', content: 'Which condition do you want?' }
-  ]);
-  const [chatInput, setChatInput] = React.useState<string>('');
+  // chat removed
+  const [provider, setProvider] = React.useState<'openai'|'groq'>((() => {
+    try { return ((localStorage.getItem('omnia.aiProvider') || 'openai') as any); } catch { return 'openai' as const; }
+  })());
+  React.useEffect(() => {
+    try { (window as any).__AI_PROVIDER = provider; localStorage.setItem('omnia.aiProvider', provider); } catch {}
+  }, [provider]);
+
+  const normalizeCode = React.useCallback((txt: string) => {
+    try { return String(txt || '').replace(/\r/g, '').trim(); } catch { return ''; }
+  }, []);
 
   // Reset transient UI state whenever the panel is opened
   React.useEffect(() => {
     if (!open) return;
-    setMode('ai');
-    setShowDescribe(true);
-    setShowCode(false);
+    setShowCode(true);
     setShowTester(false);
-    setChatHistory([{ role: 'assistant', content: 'Which condition do you want?' }]);
-    setChatInput('');
+    // chat removed
     setAiQuestion('');
     setShowVariablesPanel(false);
     setSelectedVars([]);
     setTesterHints({});
     setTestRows([]);
-    setHeightPx(320);
-    setWDescribe(420);
+    setHasFailures(false);
+    try { getFailuresRef.current = () => []; hasFailuresRef.current = () => false; resetTesterVisualsRef.current = () => {}; } catch {}
+    // Reset script to template or provided initialScript when opening a new condition
+    const base = (initialScript && initialScript.trim()) ? initialScript : DEFAULT_CODE;
+    setScript(base);
+    const created = !!(initialScript && initialScript.trim());
+    setHasCreated(created);
+    setLastAcceptedScript(created ? String(initialScript) : '');
+    setTesterAllPass(null);
+    setHeightPx(480);
     setWVars(280);
     setWTester(360);
     setFontPx(13);
+    // no local tester toolbar state
   }, [open]);
+
+  // Ensure tester cannot be opened before code exists
+  React.useEffect(() => {
+    if (!hasCreated && showTester) setShowTester(false);
+  }, [hasCreated]);
 
   // Capture Ctrl+Wheel at window (capture phase) but scope it to ConditionEditor bounds
   React.useEffect(() => {
@@ -112,30 +163,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return () => window.removeEventListener('wheel', onWheel as any);
   }, []);
 
-  const handleChatSend = React.useCallback(async () => {
-    const text = (chatInput || '').trim();
-    if (!text) return;
-    setChatInput('');
-    // Open variables panel and preselect all available by preference
-    setShowVariablesPanel(true);
-    try {
-      const flat = (variablesTree && variablesTree.length) ? (() => {
-        const out: string[] = [];
-        (variablesTree || []).forEach(a => { (a.mains || []).forEach(m => { out.push(`${a.label}.${m.label}`); (m.subs || []).forEach(s => out.push(`${a.label}.${m.label}.${s.label}`)); }); });
-        return out;
-      })() : (Object.keys(variables || {}) as string[]);
-      const sv = await suggestMinimalVars(text, flat);
-      const chosen = (sv.selected && sv.selected.length) ? sv.selected : flat;
-      setSelectedVars(chosen);
-    } catch {
-      setSelectedVars(Object.keys(variables || {}) as string[]);
-    }
-    // Append user message then assistant guidance (English)
-    setChatHistory(h => [
-      ...h,
-      { role: 'user', content: text }
-    ]);
-  }, [chatInput, selectedVars, variables, variablesTree]);
+  // chat removed
 
   // caret handling for contenteditable is done inline in handlers
 
@@ -271,7 +299,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return () => document.removeEventListener('keydown', onKey);
   }, [showVarsMenu, varsMenuHover]);
 
-  React.useEffect(() => { setScript(initialScript || 'return true;'); }, [initialScript]);
+  React.useEffect(() => { setScript((initialScript && initialScript.trim()) ? initialScript : DEFAULT_CODE); }, [initialScript]);
 
   // legacy filtered list removed (hierarchical tree used instead)
 
@@ -290,47 +318,102 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return Object.keys(variables || {});
   }, [variablesTree, variables]);
 
-  // Variables actually referenced inside the script via vars["..."]
+  // Variables actually referenced inside the script (robust multi-source detection)
   const usedVarsInScript = React.useMemo(() => {
     try {
-      // Match vars["..."] or vars['...'] or vars[`...`]
-      const re = /vars\[\s*(["'`])([^"'`]+)\1\s*\]/g;
-      const found = new Set<string>();
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(script)) !== null) {
-        const key = m[2];
-        // Do not filter by variablesFlat: always surface tokens actually used in the script
-        found.add(key);
-      }
-      return Array.from(found);
+      const source = String(script || '');
+
+      // 1) CONDITION.inputs (priority — if present, we will return ONLY these later)
+      const inputs: string[] = [];
+      try {
+        const inputsBlockMatch = source.match(/CONDITION[\s\S]*?inputs\s*:\s*\[([\s\S]*?)\]/m);
+        if (inputsBlockMatch) {
+          const block = inputsBlockMatch[1] || '';
+          const singleQuoted = Array.from(block.matchAll(/'([^']+)'/g)).map(m => m[1]);
+          const doubleQuoted = Array.from(block.matchAll(/"([^"]+)"/g)).map(m => m[1]);
+          const backticked = Array.from(block.matchAll(/`([^`]+)`/g)).map(m => m[1]);
+          const ordered: string[] = [];
+          const once = new Set<string>();
+          [...singleQuoted, ...doubleQuoted, ...backticked].forEach(k => { if (!once.has(k)) { once.add(k); ordered.push(k); } });
+          inputs.push(...ordered);
+        }
+      } catch {}
+
+      // 2) Other reads — union of explicit patterns
+      const reads = new Set<string>();
+
+      // 2a) getVar(ctx, "...")
+      try {
+        const re = /getVar\s*\(\s*ctx\s*,\s*(["'`])([^"'`]+)\1\s*\)/g;
+        let mm: RegExpExecArray | null;
+        while ((mm = re.exec(source)) !== null) reads.add(mm[2]);
+      } catch {}
+
+      // 2b) ctx["..."] direct
+      try {
+        const re = /ctx\s*\[\s*(["'`])([^"'`]+)\1\s*\]/g;
+        let mm: RegExpExecArray | null;
+        while ((mm = re.exec(source)) !== null) reads.add(mm[2]);
+      } catch {}
+
+      // 2c) const k = "..." ; then ctx[k] (1-step constant propagation)
+      try {
+        const constMap = new Map<string, string>();
+        const constDeclRe = /const\s+([A-Za-z_$][\w$]*)\s*=\s*(["'`])([^"'`]+)\2\s*;?/g;
+        let mm: RegExpExecArray | null;
+        while ((mm = constDeclRe.exec(source)) !== null) {
+          constMap.set(mm[1], mm[3]);
+        }
+        if (constMap.size > 0) {
+          const ctxIdRe = /ctx\s*\[\s*([A-Za-z_$][\w$]*)\s*\]/g;
+          let m2: RegExpExecArray | null;
+          while ((m2 = ctxIdRe.exec(source)) !== null) {
+            const idName = m2[1];
+            const value = constMap.get(idName);
+            if (value) reads.add(value);
+          }
+        }
+      } catch {}
+
+      // 2d) legacy vars["..."]
+      try {
+        const re = /vars\s*\[\s*(["'`])([^"'`]+)\1\s*\]/g;
+        let mm: RegExpExecArray | null;
+        while ((mm = re.exec(source)) !== null) reads.add(mm[2]);
+      } catch {}
+
+      // Return priority set: CONDITION.inputs if present, else union reads
+      if (inputs.length > 0) return inputs;
+      return Array.from(reads);
     } catch {
       return [];
     }
-  }, [script, variablesFlat]);
+  }, [script]);
 
   const hasVarsInScript = React.useMemo(() => (usedVarsInScript.length > 0), [usedVarsInScript]);
   const variablesUsedInScript = React.useMemo(() => (hasVarsInScript ? usedVarsInScript : variablesFlat), [hasVarsInScript, usedVarsInScript, variablesFlat]);
 
   // Keep variables visible even after regenerate: union of used-in-script and user-selected
   const variablesForPanel = React.useMemo(() => {
-    if (mode === 'ai' && !hasCreated) return selectedVars || [];
     const set = new Set<string>();
     (variablesUsedInScript || []).forEach(k => set.add(k));
     (selectedVars || []).forEach(k => set.add(k));
     return Array.from(set);
-  }, [mode, hasCreated, variablesUsedInScript, selectedVars]);
+  }, [hasCreated, variablesUsedInScript, selectedVars]);
 
-  // Variables to show inside the tester: only CHECKED vars intersected with used-in-script.
+  // Variables to show inside the tester: strictly and only those actually read by the code
+  // Deduplicate case-insensitively to avoid duplicates with different casing
   const variablesForTester = React.useMemo(() => {
-    const usedArr = variablesUsedInScript || [];
-    const usedLc = new Set<string>(usedArr.map(s => String(s).toLowerCase()));
-    const selectedArr = selectedVars || [];
-    // case-insensitive intersection
-    const inter = selectedArr.filter(k => usedLc.has(String(k).toLowerCase()));
-    if (inter.length > 0) return inter;
-    // fallback: if user selected something, use it; else use used-in-script
-    return selectedArr.length > 0 ? selectedArr : usedArr;
-  }, [variablesUsedInScript, selectedVars]);
+    const usedArr = (variablesUsedInScript || []).filter(Boolean);
+    const seen = new Set<string>();
+    const out: string[] = [];
+    usedArr.forEach((k) => {
+      const lc = String(k).toLowerCase();
+      if (!seen.has(lc)) { seen.add(lc); out.push(k); }
+    });
+    // If multiple remain but the script logically handles a single input, prefer the first
+    return out.length > 1 ? [out[0]] : out;
+  }, [variablesUsedInScript]);
 
   // Duplicate-variable preference (choose among same trailing label)
   const [preferredVarByTail, setPreferredVarByTail] = React.useState<Record<string, string>>({});
@@ -365,15 +448,43 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     } catch {}
   }, [hasCreated, hasVarsInScript, script]);
 
-  const userChangedSelection = React.useMemo(() => {
-    const a = [...(variablesUsedInScript || [])].sort().join('|');
-    const b = [...(selectedVars || [])].sort().join('|');
-    return hasCreated && a !== b;
-  }, [variablesUsedInScript, selectedVars, hasCreated]);
+  // const userChangedSelection = React.useMemo(() => {
+  //   const a = [...(variablesUsedInScript || [])].sort().join('|');
+  //   const b = [...(selectedVars || [])].sort().join('|');
+  //   return hasCreated && a !== b;
+  // }, [variablesUsedInScript, selectedVars, hasCreated]);
 
   // helper to append text into NL was removed (not used)
 
   // kept for legacy but unused now that code is always auto-formatted
+
+  // Expose available variable keys globally for editor completion
+  React.useEffect(() => {
+    try {
+      const keys = Array.from(new Set((variablesFlat || []).concat(variablesForPanel || [])));
+      (window as any).__omniaVarKeys = keys;
+    } catch {}
+  }, [variablesFlat, variablesForPanel]);
+
+  // Sync toolbar labels from tester hints when provided
+  // tester owns labels; nothing to sync here
+
+  // Tester control wiring (declared BEFORE any early return to keep hook order stable)
+  const testerRunRef = React.useRef<() => void>(() => {});
+  const [testerAllPass, setTesterAllPass] = React.useState<boolean | null>(null);
+  const handleAddTestLine = React.useRef<() => void>(() => {});
+  const getFailuresRef = React.useRef<() => Array<any>>(() => []);
+  const hasFailuresRef = React.useRef<() => boolean>(() => false);
+  const resetTesterVisualsRef = React.useRef<() => void>(() => {});
+  const resetTesterVisuals = React.useCallback(() => {
+    setTesterAllPass(null);
+    // Clear any previous not-passed comments by resetting test rows labels only
+    setTestRows(prev => prev.map(r => ({ ...r })));
+  }, []);
+  const [hasFailures, setHasFailures] = React.useState<boolean>(false);
+  const [lastAcceptedScript, setLastAcceptedScript] = React.useState<string>('');
+
+  // No animated text; only a spinner and color change while busy
 
   if (!open) return null;
 
@@ -398,16 +509,65 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     document.body.style.cursor = 'ns-resize';
   };
 
+  const modify = async () => {
+    setBusy(true);
+    try {
+      const norm = await normalizePseudoCode({
+        chat: [] as any,
+        pseudo: script || '',
+        currentCode: lastAcceptedScript || '',
+        variables: variablesFlatWithPreference,
+        mode: 'predicate',
+        provider: (window as any).__AI_PROVIDER || undefined,
+        label: titleValue
+      });
+      const candidate = (norm as any)?.script;
+      if (candidate && typeof candidate === 'string' && candidate.trim()) {
+        setScript(candidate);
+        setHasCreated(true);
+        setLastAcceptedScript(candidate);
+        setShowTester(true);
+        setAiQuestion('');
+        return;
+      }
+    } catch (e) {
+      try { console.error('[Condition][AI][modify][error]', e); } catch {}
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const generate = async () => {
-    const userTranscript = (chatHistory || []).filter(m => m.role === 'user').map(m => m.content.trim()).filter(Boolean).join('\n');
-    const nlText = (mode === 'ai') ? (userTranscript || '') : serializeCE().trim();
+    const nlText = script;
     if (!nlText) { setAiQuestion('Inserisci una descrizione in linguaggio naturale.'); return; }
     if (!variablesFlatWithPreference || variablesFlatWithPreference.length === 0) {
       setAiQuestion('Nessuna variabile disponibile: controlla la struttura DDT o le variabili di progetto.');
       return;
     }
+    // Parse simplified Italian template with comments and quoted label
+    const parseTemplate = (txt: string): { label?: string; when?: string; vars?: string[] } => {
+      const src = String(txt || '');
+      // label: first quoted line after the first comment
+      const mLabel = src.match(/^[ \t]*\/\/\s*Puoi cambiare[^\n]*\n[ \t]*"([^"]*)"/m);
+      const label = mLabel ? mLabel[1].trim() : undefined;
+      // when: text between the second and third comment blocks
+      const mWhen = src.match(/\/\/\s*Descrivi[^\n]*\n([\s\S]*?)\n\/\/\s*Indica\s*o\s*descrivi/i);
+      const when = mWhen ? mWhen[1].trim() : undefined;
+      return { label, when, vars: undefined };
+    };
+    const parsed = parseTemplate(nlText);
+    if (!parsed.when) {
+      // If user wrote any non-empty line after the second comment, still proceed using entire editor content as pseudo
+      const hasAnyContent = /\S/.test(nlText.replace(/^\s*\/\/[^\n]*$/gm, ''));
+      if (!hasAnyContent) {
+        setAiQuestion('Compila la sezione sotto: "Descrivi qui sotto in modo dettagliato quando la condizione è true".');
+        return;
+      }
+      parsed.when = nlText.trim();
+    }
+    if (parsed.label && parsed.label !== titleValue) setTitleValue(parsed.label);
     // If there are duplicate groups relevant to this condition and no preference chosen yet, request a selection
-    const nlNorm = nlText.toLowerCase();
+    const nlNorm = parsed.when.toLowerCase();
     const relevant = duplicateGroups.filter(g => {
       const tailText = g.tail.split('.').slice(-2).join(' ').toLowerCase();
       return nlNorm.includes(tailText) || nlNorm.includes(g.tail.toLowerCase());
@@ -422,6 +582,32 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     }
     setBusy(true);
     try {
+      // 1) Try normalize pseudo+chat+current code into clean JS
+      try {
+        const allowedVars = (parsed.vars && parsed.vars.length > 0) ? parsed.vars : ((selectedVars && selectedVars.length > 0) ? selectedVars : variablesFlatWithPreference);
+        try { console.log('[Normalize][req]', { provider: (window as any).__AI_PROVIDER || 'openai', label: parsed.label || titleValue, nl: parsed.when, vars: allowedVars }); } catch {}
+        const norm = await normalizePseudoCode({
+          chat: [] as any,
+          pseudo: parsed.when || '',
+          currentCode: '',
+          variables: allowedVars,
+          mode: 'predicate',
+          provider: (window as any).__AI_PROVIDER || undefined,
+          label: parsed.label || titleValue
+        });
+        const candidate = (norm as any)?.script;
+        if (candidate && typeof candidate === 'string' && candidate.trim()) {
+          setScript(candidate);
+          setShowCode(true);
+          setHasCreated(true);
+          setLastAcceptedScript(candidate);
+          setShowTester(true);
+          setAiQuestion('');
+          return; // success path
+        }
+      } catch {}
+
+      // 2) Fallback to previous condition generator
       const varsForAI = (selectedVars && selectedVars.length > 0) ? selectedVars : variablesFlatWithPreference;
       const varsList = (varsForAI || []).map(v => `- ${v}`).join('\n');
       const guidance = `${nlText}\n\nConstraints:\n- Use EXACTLY these variable keys when reading input; do not invent or rename keys.\n${varsList}\n- Access variables strictly as vars["<key>"] (no dot access).\n- Return a boolean (predicate).\n\nPlease return well-formatted JavaScript for function main(ctx) with detailed inline comments explaining each step and rationale. Use clear variable names, add section headers, and ensure readability (one statement per line).`;
@@ -456,6 +642,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       // by toggling showCode on and syncing initialCode via prop (handled by CodeEditor effect)
       setShowCode(true);
       setHasCreated(true);
+      setLastAcceptedScript(nextScript);
       // Open tester to the right as requested
       setShowTester(true);
       // Format after AI generates
@@ -574,7 +761,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   const ConditionIcon = SIDEBAR_ICON_COMPONENTS[SIDEBAR_TYPE_ICONS.conditions];
 
   return (
-    <div ref={containerRef} style={{ ...containerStyle, background: 'var(--sidebar-bg, #0b1220)', display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 6, padding: 12, zIndex: 50 }}>
+    <div ref={containerRef} style={{ ...containerStyle, background: 'var(--sidebar-bg, #0b1220)', display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 6, padding: 12, zIndex: 1000 }}>
       {/* Top drag handle for vertical resize */}
       <div onMouseDown={onStartResize} title="Drag to resize" style={{ cursor: 'ns-resize', height: 6, margin: '-12px -12px 6px -12px' }} />
       {/* Header with editable title and close */}
@@ -595,10 +782,15 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input
+                ref={titleInputRef}
                 value={titleValue}
                 onChange={(e) => setTitleValue(e.target.value)}
                 autoFocus
-                style={{ padding: '4px 6px', border: '1px solid #0b1220', borderRadius: 6, background: 'transparent', color: '#0b1220' }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); setIsEditingTitle(false); onRename?.(titleValue.trim() || 'Condition'); }
+                  else if (e.key === 'Escape') { e.preventDefault(); setIsEditingTitle(false); setTitleValue(label || 'Condition'); }
+                }}
+                style={{ width: titleInputPx, padding: '4px 6px', border: '1px solid #0b1220', borderRadius: 6, background: 'transparent', color: '#0b1220' }}
               />
               <button
                 title="Confirm"
@@ -621,82 +813,10 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
           <X className="w-4 h-4" />
         </button>
       </div>
+      {/* hidden measurer for title autosize */}
+      <span ref={titleMeasureRef} style={{ position: 'absolute', visibility: 'hidden', whiteSpace: 'pre', fontWeight: 700, fontFamily: 'inherit', fontSize: '14px', padding: '4px 6px', border: '1px solid transparent' }} />
       {/* Controls + editor */}
-      <div style={{ display: 'grid', gridTemplateRows: 'auto auto 1fr auto', gap: 6 }}>
-        {/* Toolbar */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            title="Describe in words which condition you need"
-            aria-pressed={showDescribe}
-            onClick={() => setShowDescribe(v => !v)}
-            style={{
-              border: '1px solid',
-              borderColor: showDescribe ? '#38bdf8' : '#334155',
-              borderRadius: 6,
-              padding: '6px 10px',
-              background: showDescribe ? 'rgba(56,189,248,0.15)' : 'transparent',
-              color: showDescribe ? '#e5e7eb' : '#cbd5e1',
-              fontWeight: showDescribe ? 700 : 500
-            }}
-          >Describe</button>
-          <button
-            title="Show and edit the coding of the condition"
-            aria-pressed={showCode}
-            onClick={() => setShowCode(v => !v)}
-            style={{
-              border: '1px solid',
-              borderColor: showCode ? '#38bdf8' : '#334155',
-              borderRadius: 6,
-              padding: '6px 10px',
-              background: showCode ? 'rgba(56,189,248,0.15)' : 'transparent',
-              color: showCode ? '#e5e7eb' : '#cbd5e1',
-              fontWeight: showCode ? 700 : 500
-            }}
-          >Code</button>
-          <button
-            title="Test if the condition works properly with sets of variable values"
-            aria-pressed={showTester}
-            onClick={() => setShowTester(v => !v)}
-            style={{
-              border: '1px solid',
-              borderColor: showTester ? '#38bdf8' : '#334155',
-              borderRadius: 6,
-              padding: '6px 10px',
-              background: showTester ? 'rgba(56,189,248,0.15)' : 'transparent',
-              color: showTester ? '#e5e7eb' : '#cbd5e1',
-              fontWeight: showTester ? 700 : 500
-            }}
-          >Test</button>
-          <div style={{ flex: 1 }} />
-          <button
-            title="Change the selection of the variables to consider"
-            aria-pressed={showVariablesPanel}
-            onClick={() => setShowVariablesPanel(v => !v)}
-            style={{
-              border: '1px solid',
-              borderColor: showVariablesPanel ? '#38bdf8' : '#334155',
-              borderRadius: 6,
-              padding: '6px 10px',
-              background: showVariablesPanel ? 'rgba(56,189,248,0.15)' : 'transparent',
-              color: showVariablesPanel ? '#e5e7eb' : '#cbd5e1',
-              fontWeight: showVariablesPanel ? 700 : 500
-            }}
-          >{showVariablesPanel ? 'Hide Variables' : 'Variables'}</button>
-          <button
-            title="Generate the condition code from the description and selected variables"
-            onClick={generate}
-            disabled={busy}
-            style={{
-              border: '1px solid #334155',
-              borderRadius: 6,
-              padding: '6px 10px',
-              background: busy ? 'rgba(148,163,184,0.15)' : 'transparent',
-              color: '#e5e7eb'
-            }}
-          >{mode==='ai' ? (busy ? 'Generating…' : (userChangedSelection ? 'Regenerate' : 'Generate')) : (busy ? 'Creating…' : (userChangedSelection ? 'Recreate' : 'Create'))}</button>
-        </div>
-        {/* Top controls removed in favor of Chat input; no duplicate textbox */}
-        <div />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
         {/* Duplicate variable preference selector (only when required) */}
         {pendingDupGroups && pendingDupGroups.length > 0 && (
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', padding: '6px 8px', border: '1px dashed #334155', borderRadius: 6 }}>
@@ -720,57 +840,47 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         )}
         {/* Clarification banner (AI question) */}
         {aiQuestion && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid #f59e0b', borderRadius: 6, background: 'rgba(245,158,11,0.08)', color: '#f59e0b', maxHeight: 120, overflowY: 'auto', wordBreak: 'break-word' }}>
-            <span style={{ fontWeight: 700 }}>AI:</span>
-            <span>{aiQuestion}</span>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              padding: '8px 10px',
+              border: '1px solid #f59e0b',
+              borderRadius: 6,
+              background: 'rgba(245,158,11,0.08)',
+              color: '#f59e0b',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              flex: '0 0 auto',
+              overflow: 'hidden'
+            }}
+          >
+            <span style={{ fontWeight: 700, flex: '0 0 auto' }}>AI:</span>
+            <span style={{ flex: '1 1 auto' }}>{aiQuestion}</span>
+          </div>
+        )}
+        {/* Runtime error banner (set from tester) */}
+        {runtimeErrorMsg && (
+          <div style={{ padding: '6px 10px', border: '1px solid #7f1d1d', borderRadius: 6, background: 'rgba(239,68,68,0.10)', color: '#ef4444' }}>
+            {runtimeErrorMsg}
           </div>
         )}
         {/* Layout by mode */}
         {(() => {
           const columns: string[] = [];
           const add = (w: string, addSplitter: boolean) => { columns.push(w); if (addSplitter) columns.push('4px'); };
-          const hasNextAfterDescribe = (!!showVariablesPanel) || (!!showCode) || (!!showTester);
+          // describe removed; compute columns for remaining panels
           const hasNextAfterVars = (!!showCode) || (!!showTester);
           const hasNextAfterCode = (!!showTester);
-          if (showDescribe) add(`minmax(${Math.max(300, Math.floor(wDescribe))}px, 1fr)`, hasNextAfterDescribe);
+          // Describe column removed
           if (showVariablesPanel) add(`${wVars}px`, hasNextAfterVars);
           if (showCode) add('minmax(420px, 2fr)', hasNextAfterCode);
           if (showTester) add(`${wTester}px`, false);
           if (columns.length === 0) columns.push('1fr');
           return (
-        <div style={{ display: 'grid', gridTemplateColumns: columns.join(' '), gap: 6, alignItems: 'stretch' }}>
-          {/* Describe panel */}
-          {showDescribe && (
-            <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220', display: 'grid', gridTemplateRows: '1fr auto' }}>
-              <div style={{ padding: 10, overflowY: 'auto' }}>
-                {chatHistory.map((m, i) => (
-                  <div key={i} style={{ marginBottom: 10, color: m.role==='assistant' ? '#93c5fd' : '#e5e7eb' }}>
-                    <b>{m.role==='assistant' ? 'Assistant' : 'You'}:</b> {m.content}
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 6, padding: 10, borderTop: '1px solid #334155' }}>
-                <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Describe the condition…" style={{ flex: 1, padding: '6px 8px', border: '1px solid #334155', borderRadius: 6, background: 'transparent', color: '#e5e7eb' }} />
-                <button onClick={handleChatSend} style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px' }}>Send</button>
-              </div>
-            </div>
-          )}
-          {/* splitter after Describe if next column exists (visual grip) */}
-          {showDescribe && (showVariablesPanel || showCode || showTester) && (
-            <div
-              onMouseDown={(e) => {
-                e.preventDefault();
-                const startX = e.clientX; const startW = wDescribe;
-                const onMove = (ev: MouseEvent) => {
-                  const dx = ev.clientX - startX; let nw = startW + dx;
-                  nw = Math.max(300, Math.min(640, nw)); setWDescribe(nw);
-                };
-                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor=''; };
-                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); document.body.style.cursor='col-resize';
-              }}
-              style={{ cursor: 'col-resize', width: 4, margin: '0 2px', background: 'rgba(148,163,184,0.25)', borderRadius: 2 }}
-            />
-          )}
+        <div style={{ display: 'grid', gridTemplateColumns: columns.join(' '), gap: 6, alignItems: 'stretch', flex: '1 1 auto', minHeight: 0 }}>
+          {/* Describe panel removed */}
           {/* Variables panel (now before Code) */}
           {showVariablesPanel ? (
             <VariablesPanel
@@ -797,13 +907,137 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
             />
           )}
           {/* Generate button moved to toolbar; no extra column here */}
-          {/* Code panel (now after Variables) */}
+          {/* Code panel with its own toolbar aligned to top */}
           {showCode && (
-          <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220' }}>
+          <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220', display: 'grid', gridTemplateRows: 'auto 1fr' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid #334155' }}>
+              {(() => {
+                const isScaffold = normalizeCode(script) === normalizeCode(DEFAULT_CODE);
+                const isEmpty = normalizeCode(script).length === 0;
+                const isBase = isEmpty || isScaffold;
+                const canCreate = !hasCreated && !isBase;
+                const canModify = hasCreated && String(script || '') !== String(lastAcceptedScript || '');
+                const showMain = hasFailures || canCreate || canModify;
+                if (!showMain) return null;
+                const label = hasFailures ? 'Fix code' : (canModify ? 'Modify code' : 'Create code');
+                const busyLabel = hasFailures ? 'Fixing code...' : (canModify ? 'Modifying code...' : 'Creating code...');
+                const titleText = hasFailures ? 'Fix code using your classified failures' : (canModify ? 'Modify the code based on your edits' : 'Generate code from your description');
+                return (
+              <button
+                    title={titleText}
+                    onClick={async () => {
+                      if (hasFailures) {
+                        setBusy(true);
+                        try {
+                          const failures = getFailuresRef.current?.() || [];
+                          const resp = await repairCondition(script, failures, variablesForTester, (window as any).__AI_PROVIDER || undefined);
+                          if (resp?.script && typeof resp.script === 'string') {
+                            setScript(resp.script);
+                            setLastAcceptedScript(resp.script);
+                            resetTesterVisuals();
+                            resetTesterVisualsRef.current?.();
+                            setTesterAllPass(null);
+                            setHasFailures(false);
+                          } else {
+                            const err = (resp as any)?.error || 'repair_failed';
+                            setAiQuestion('Repair failed: ' + String(err));
+                          }
+                        } catch {}
+                        finally { setBusy(false); }
+                        return;
+                      }
+                      if (canModify) { await modify(); return; }
+                      if (canCreate) { await generate(); return; }
+                    }}
+                disabled={busy}
+                    style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: busy ? 'rgba(148,163,184,0.10)' : 'transparent', color: busy ? '#b45309' : '#e5e7eb', fontWeight: 700, minWidth: 160, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  >
+                    {busy ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>{busyLabel}</span>
+                      </>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Code2 className="w-4 h-4" /> {label}</span>
+                    )}
+                  </button>
+                );
+              })()}
+              <button
+                title="Change the selection of the variables to consider"
+                aria-pressed={showVariablesPanel}
+                onClick={() => setShowVariablesPanel(v => !v)}
+                style={{ border: '1px solid', borderColor: showVariablesPanel ? '#38bdf8' : '#334155', borderRadius: 6, padding: '6px 10px', background: showVariablesPanel ? 'rgba(56,189,248,0.15)' : 'transparent', color: showVariablesPanel ? '#e5e7eb' : '#cbd5e1', fontWeight: showVariablesPanel ? 700 : 500 }}
+              ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><ListChecks className="w-4 h-4" /> {showVariablesPanel ? 'Hide variables' : 'Show variables'}</span></button>
+              {hasCreated && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: 4, border: showTester ? '1px solid #38bdf8' : 'none', borderRadius: 8 }}>
+              <button
+                title="Open/close the test panel"
+                aria-pressed={showTester}
+                onClick={() => setShowTester(v => !v)}
+                style={{ border: '1px solid', borderColor: showTester ? '#38bdf8' : '#334155', borderRadius: 6, padding: '6px 10px', background: showTester ? 'rgba(56,189,248,0.15)' : 'transparent', color: showTester ? '#e5e7eb' : '#cbd5e1', fontWeight: showTester ? 700 : 500 }}
+              ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><FlaskConical className="w-4 h-4" /> Test Code</span></button>
+                  {showTester && (
+                    <>
+                      <button
+                        title="Add test value"
+                        onClick={() => { try { handleAddTestLine.current?.(); } catch {} }}
+                        style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: 'transparent', color: '#e5e7eb' }}
+                      >Add test value</button>
+                      <button
+                        title="Run tests"
+                        onClick={async () => { try { setBusy(true); await Promise.resolve(testerRunRef.current?.()); } finally { setBusy(false); } }}
+                        style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: testerAllPass == null ? 'transparent' : (testerAllPass ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'), color: testerAllPass == null ? '#e5e7eb' : (testerAllPass ? '#22c55e' : '#ef4444'), fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      >{busy ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Running...</span></>) : 'Run'}</button>
+                      <button
+                        title="Repair code using observed failures"
+                        onClick={async () => {
+                          try {
+                            const failures = (testRows || []).map(r => ({ input: r.vars, expected: r.label === 'true', got: null, note: '' }));
+                            const resp = await repairCondition(script, failures, variablesForTester, (window as any).__AI_PROVIDER || undefined);
+                            if (resp?.script && typeof resp.script === 'string') {
+                              setScript(resp.script);
+                              resetTesterVisuals();
+                            }
+                          } catch {}
+                        }}
+                        style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: 'transparent', color: '#e5e7eb' }}
+                      >Repair</button>
+                    </>
+                  )}
+                </div>
+              )}
+              <div style={{ flex: 1 }} />
+              <div title="AI provider" style={{ display:'inline-flex', alignItems:'center', gap:6, color:'#cbd5e1' }}>
+                <span style={{ fontSize:12, color:'#94a3b8' }}>AI:</span>
+                <select
+                  value={provider}
+                  onChange={(e) => setProvider((e.target.value as any) || 'openai')}
+                  style={{ background:'transparent', color:'#e5e7eb', border:'1px solid #334155', borderRadius:6, padding:'4px 6px' }}
+                >
+                  <option value="openai">OpenAI</option>
+                  <option value="groq">Llama (Groq)</option>
+                </select>
+              </div>
+            </div>
             <CodeEditor
               initialCode={script}
               initialMode={'predicate'}
               fontPx={fontPx}
+              initialVars={(variablesFlat || []).map(k => ({ key: k, type: 'string', description: k, sensitivity: 'public' })) as any}
+              onCodeChange={(code) => {
+                // Keep banner hidden when user is writing; only show when Generate validates
+                setAiQuestion('');
+                setScript(code);
+                // Request lint markers optionally here in the future
+                // clear runtime markers on edit
+                try {
+                  const ed = monacoEditorRef.current?.editor || monacoEditorRef.current;
+                  const monaco = monacoInstanceRef.current;
+                  if (ed && monaco) clearMonacoMarkers(ed, monaco as any, 'conditions-runtime');
+                  setRuntimeErrorMsg(null);
+                } catch {}
+              }}
               ai={{
                 codeEditToPatch: async ({ instructions, execution }) => {
                   try {
@@ -845,7 +1079,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
           )}
           {/* Tester column when enabled */}
           {showTester && (
-            <div>
+            <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220' }}>
               <ConditionTester
                 script={script}
                 variablesList={variablesForTester}
@@ -853,8 +1087,27 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                 onChange={setTestRows}
                 hintTrue={testerHints.hintTrue}
                 hintFalse={testerHints.hintFalse}
-                labelTrue={testerHints.labelTrue}
-                labelFalse={testerHints.labelFalse}
+                title={titleValue}
+                registerRun={(fn) => { testerRunRef.current = fn; }}
+                registerControls={(api) => { handleAddTestLine.current = api.addRow; testerRunRef.current = api.run; getFailuresRef.current = api.getFailures; hasFailuresRef.current = api.hasFailures; resetTesterVisualsRef.current = api.resetVisuals; }}
+                onRunResult={(pass) => setTesterAllPass(pass)}
+              onFailuresChange={(flag) => setHasFailures(flag)}
+              onRuntimeError={(payload) => {
+                try {
+                  const ed = monacoEditorRef.current?.editor || monacoEditorRef.current;
+                  const monaco = monacoInstanceRef.current;
+                  if (ed && monaco) {
+                    const markers = payload && payload.message ? [{
+                      severity: (monacoNS as any).MarkerSeverity.Error,
+                      message: `[runtime] ${payload.message}`,
+                      startLineNumber: Math.max(1, payload.line || 1), startColumn: Math.max(1, payload.column || 1),
+                      endLineNumber: Math.max(1, payload.line || 1), endColumn: Math.max(1, (payload.column || 1) + 1),
+                    }] : [];
+                    setMonacoMarkers(ed, monaco as any, markers as any, 'conditions-runtime');
+                  }
+                } catch {}
+                setRuntimeErrorMsg(payload?.message || null);
+              }}
               />
             </div>
           )}

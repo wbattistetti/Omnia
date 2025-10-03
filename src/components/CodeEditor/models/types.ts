@@ -90,6 +90,7 @@ export interface CodeEditorProps {
   };
   tests: { run: (req: RunTestsReq) => Promise<RunTestsResp> };
   onPatchApplied?: (evt: { code: string; diff: string; chunksApplied: number }) => void;
+  onCodeChange?: (code: string) => void;
   onRequestAuth?: (keys: string[]) => Promise<Authorization>;
   onSave?: (code: string) => Promise<void>;
 }

@@ -26,7 +26,7 @@ export async function generateConditionWithAI(nl: string, variables: string[]): 
     const res = await fetch('/api/conditions/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nl, variables })
+      body: JSON.stringify({ nl, variables, provider: (window as any).__AI_PROVIDER || undefined })
     });
     const text = await res.text();
     try { console.log('[ConditionAI][res][backend]', { status: res.status, statusText: res.statusText, textPreview: text.slice(0, 300) }); } catch {}
@@ -48,45 +48,41 @@ export async function generateConditionWithAI(nl: string, variables: string[]): 
   const apiKey = (env.VITE_GROQ_KEY as string | undefined) || (env.VITE_GROQ_API_KEY as string | undefined);
   if (!apiKey) throw new Error('Missing VITE_GROQ_KEY');
 
-  // Build general, type-aware prompt with clarification protocol
+  // Build module-level prompt aligned to runtime (CONDITION + main(ctx), read from ctx[...])
   const sys = [
-    'You are an expert backend engineer. You write boolean condition code and propose concise labels.',
-    'Input: a natural-language description of a condition and the list of available variables (dotted names).',
-    'Output policy:',
-    '- If the description is sufficient, return JSON {"label":"...","script":"..."}.',
-    '- If it is not sufficient, return ONLY {"question":"..."} asking one clear follow-up.',
-    '- Never include comments or console.log in the script.',
-    '- The script must be a single, safe JavaScript function body that returns true/false when executed, and only reference variables through vars["..."]',
-    '- Always add null/undefined/format checks before using values.',
+    'You are an expert backend engineer for our Condition DSL.',
+    'Produce a complete JavaScript module that our runner executes as-is.',
+    'Requirements:',
+    'Define const CONDITION = { label: "<auto>", type: "predicate", inputs: ["<exact dotted key(s)>"] }.',
+    'Define function main(ctx){ ... } that returns a boolean.',
+    'Read inputs only from ctx["<exact dotted key>"] (case-sensitive, exactly as provided).',
+    'Include any helper functions inline. No comments, no console.log, no external libs.',
+    'Always guard null/undefined/format before using values.',
+    'If the NL description is insufficient, return only {"question":"..."}.',
   ].join('\n');
 
   const guidelines = [
     'Guidelines by data type:',
-    '- Date of Birth / age checks: compute age from date; true if age >= 18 (or other threshold). Handle parse errors and missing values by returning false.',
-    '- Date comparisons: parse both dates (ISO preferred); compare getTime(); return boolean.',
-    '- Email validity: basic robust regex; lowercase trim; return boolean.',
-    '- Phone number validity: strip non-digits; check min length (>= 9) and optionally leading +; return boolean.',
-    '- Strings: use trim(); contains/equals checks should be case-insensitive unless stated otherwise.',
-    '- Numbers: coerce with Number(); guard against NaN.',
-    '- Generic presence: return Boolean(vars["..."]) with appropriate type guard.',
-    'Variable access: always use vars["Act.Main[.Sub]"] exactly as provided in the variables list.',
+    '- Date of Birth / age: parse explicitly; support dd/mm/yyyy and yyyy-mm-dd, Date instances and timestamps; invalid/missing ⇒ false; compute age in UTC and compare to threshold (default 18).',
+    '- Date comparisons: parse both, compare getTime().',
+    '- Email: basic robust regex; lowercase trim.',
+    '- Phone: strip non-digits; length ≥ 9; optional leading +.',
+    '- Strings: trim; case-insensitive unless stated otherwise.',
+    '- Numbers: coerce with Number(); guard NaN.',
+    '- Access variables strictly via ctx["Act.Main[.Sub]"] using the exact dotted keys provided.',
   ].join('\n');
 
   const examples = [
-    'Example 1:',
-    'NL: "l\'utente è maggiorenne"; Variables include "Agent asks for personal data.Date of Birth"',
-    '{"label":"Utente maggiorenne","script":"try { const dob = vars[\"Agent asks for personal data.Date of Birth\"]; if (!dob) return false; const d = new Date(dob); if (isNaN(d.getTime())) return false; const now = new Date(); let age = now.getFullYear() - d.getFullYear(); const m = now.getMonth() - d.getMonth(); if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--; return age >= 18; } catch { return false; }"}',
-    '',
-    'Example 2:',
-    'NL: "email valida"; Variables include "Agent asks...Email"',
-    '{"label":"Email valida","script":"try { const v = (vars[\"Agent asks...Email\"] || \"\").toString().trim().toLowerCase(); if (!v) return false; const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; return re.test(v); } catch { return false; }"}',
+    'Example (age >= 18):',
+    'NL: "utente maggiorenne"; Variables include "agents asks for personal data.Date of Birth"',
+    '{"label":"Utente maggiorenne","script":"const CONDITION={label:\"Utente maggiorenne\",type:\"predicate\",inputs:[\"agents asks for personal data.Date of Birth\"]};function main(ctx){const k=\"agents asks for personal data.Date of Birth\";if(!ctx||!Object.prototype.hasOwnProperty.call(ctx,k))return false;const d=parseDate(ctx[k]);if(!d)return false;const t=new Date();let a=t.getUTCFullYear()-d.getUTCFullYear();const m=t.getUTCMonth()-d.getUTCMonth();if(m<0||(m===0&&t.getUTCDate()<d.getUTCDate()))a--;return a>=18;}function parseDate(v){if(v instanceof Date&&!Number.isNaN(v.valueOf()))return v;if(typeof v===\"number\"&&Number.isFinite(v))return new Date(v);if(typeof v===\"string\"){const s=v.trim();let m=s.match(/^(\\d{1,2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{2,4})$/);if(m){let d=parseInt(m[1],10),mo=parseInt(m[2],10)-1,y=parseInt(m[3],10);if(y<100)y+=2000;const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}m=s.match(/^(\\d{4})[\\/\\-](\\d{1,2})[\\/\\-](\\d{1,2})$/);if(m){const y=parseInt(m[1],10),mo=parseInt(m[2],10)-1,d=parseInt(m[3],10);const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}const tt=Date.parse(s);if(!Number.isNaN(tt))return new Date(tt);}return null;}"}',
   ].join('\n');
 
   const user = [
     'Natural language description:',
     nl,
     '',
-    'Available variables (dotted):',
+    'Available variables (dotted, exact):',
     variables.join(' | '),
     '',
     'Return only JSON per the Output policy.',
@@ -122,12 +118,12 @@ export async function generateConditionWithAI(nl: string, variables: string[]): 
   }
 }
 
-export async function suggestConditionCases(nl: string, variables: string[]): Promise<SuggestedCases> {
+export async function suggestConditionCases(nl: string, variables: string[], provider?: 'groq'|'openai'): Promise<SuggestedCases> {
   try {
     const res = await fetch('/api/conditions/suggest-cases', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nl, variables })
+      body: JSON.stringify({ nl, variables, provider: provider ?? ((window as any).__AI_PROVIDER || undefined) })
     });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
@@ -139,12 +135,12 @@ export async function suggestConditionCases(nl: string, variables: string[]): Pr
   }
 }
 
-export async function suggestMinimalVars(nl: string, variables: string[]): Promise<SuggestedVars> {
+export async function suggestMinimalVars(nl: string, variables: string[], provider?: 'groq'|'openai'): Promise<SuggestedVars> {
   try {
     const res = await fetch('/api/conditions/suggest-vars', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nl, variables })
+      body: JSON.stringify({ nl, variables, provider: provider ?? ((window as any).__AI_PROVIDER || undefined) })
     });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
@@ -153,5 +149,54 @@ export async function suggestMinimalVars(nl: string, variables: string[]): Promi
   } catch (e) {
     try { console.warn('[ConditionAI][suggestVars][error]', e); } catch {}
     return { selected: [] };
+  }
+}
+
+export async function repairCondition(script: string, failures: Array<any>, variables?: string[], provider?: 'groq'|'openai'):
+  Promise<{ script?: string; error?: string; raw?: string }>
+{
+  try {
+    const res = await fetch('/api/conditions/repair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script, failures, variables: variables || [], provider: provider ?? ((window as any).__AI_PROVIDER || undefined) })
+    });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+    if (res.ok && !data.error) return data as { script: string };
+    return { error: String(data?.error || res.statusText || 'backend_error'), raw: text.slice(0, 400) };
+  } catch (e: any) {
+    return { error: String(e?.message || e) };
+  }
+}
+
+export async function normalizePseudoCode(req: {
+  chat: Array<{ role: 'user' | 'assistant'; content: string }>;
+  pseudo: string;
+  currentCode: string;
+  variables: string[];
+  mode?: 'predicate' | 'value' | 'object' | 'enum';
+  provider?: 'groq' | 'openai';
+  label?: string;
+}): Promise<{ script?: string; error?: string }> {
+  try {
+    const res = await fetch('/api/conditions/normalize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat: req.chat || [],
+        pseudo: req.pseudo || '',
+        currentCode: req.currentCode || '',
+        variables: req.variables || [],
+        mode: req.mode || 'predicate',
+        provider: req.provider || undefined,
+        label: req.label || undefined
+      })
+    });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
+    return data;
+  } catch {
+    return { error: 'network' };
   }
 }

@@ -154,9 +154,9 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
       </div>
       {/* Optional debug log panel */}
       {logs.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          <DebugGroupedPanel logs={logs} />
-        </div>
+      <div style={{ marginTop: 10 }}>
+        <DebugGroupedPanel logs={logs} />
+      </div>
       )}
     </div>
   );
