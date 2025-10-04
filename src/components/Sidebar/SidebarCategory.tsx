@@ -171,7 +171,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
                   highlightTimer.current = window.setTimeout(() => setLastAddedName(null), 1600);
                 }
               }}
-              style={{ ['--ddt-accent' as any]: (entityType === 'agentActs' ? (((item as any)?.isInteractive ?? Boolean((item as any)?.data?.type) ?? Boolean((item as any)?.userActs?.length)) ? '#38bdf8' : '#22c55e') : undefined), background: isNew ? 'rgba(99,102,241,0.18)' : undefined, border: isNew ? '1px solid rgba(99,102,241,0.55)' : undefined, borderRadius: isNew ? 6 : undefined }}
+              style={{ ['--ddt-accent' as any]: (entityType === 'agentActs' ? (((item as any)?.mode === 'DataRequest') ? '#3b82f6' : ((item as any)?.mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')) : undefined), background: isNew ? 'rgba(99,102,241,0.18)' : undefined, border: isNew ? '1px solid rgba(99,102,241,0.55)' : undefined, borderRadius: isNew ? 6 : undefined }}
             >
               <SidebarItem
                 item={item}

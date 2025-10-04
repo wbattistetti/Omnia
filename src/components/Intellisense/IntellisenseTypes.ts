@@ -12,8 +12,8 @@ export interface IntellisenseItem {
   icon?: React.ReactNode;
   iconComponent?: React.ComponentType<any>;
   color?: string;
-  // Flag to indicate interactive agent act (asks user). Mirrors sidebar data.
-  isInteractive?: boolean;
+  // Interaction mode for agent acts (used for icons/colors)
+  mode?: 'DataRequest' | 'DataConfirmation' | 'Message';
   userActs?: string[];
   uiColor?: string;
   bgColor?: string; // colore di sfondo personalizzato

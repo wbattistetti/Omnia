@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ProjectEntityItem, EntityType } from '../../types/project';
-import { Megaphone, Headphones, HelpCircle } from 'lucide-react';
+import { Megaphone, Ear, CheckCircle2 } from 'lucide-react';
 import ItemEditor from './ItemEditor';
 import { classifyActInteractivity } from '../../nlp/actInteractivity';
 // import DeleteConfirmation from './DeleteConfirmation';
@@ -23,13 +23,27 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
   const [hovered, setHovered] = useState(false);
 
   const isAgentAct = categoryType === 'agentActs' || (item as any)?.type === 'agent_act' || (item as any)?.categoryType === 'agentActs';
-  const interactive = isAgentAct ? ((item as any)?.isInteractive ?? Boolean((item as any)?.data?.type) ?? Boolean((item as any)?.userActs?.length)) : false;
-  const nameColor = isAgentAct ? (interactive ? '#38bdf8' /* sky-400 */ : '#22c55e' /* emerald-500 */) : 'var(--sidebar-content-text)';
+  const mode: 'DataRequest' | 'DataConfirmation' | 'Message' = (isAgentAct ? ((item as any)?.mode || 'Message') : 'Message');
+  const isInteractive = mode === 'DataRequest' || mode === 'DataConfirmation'; // Keep for backward compatibility
+  const nameColor = isAgentAct
+    ? (mode === 'DataRequest' ? '#3b82f6' : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')
+    : 'var(--sidebar-content-text)';
+  
+  // Debug log for specific items
+  if (isAgentAct && (item.name?.includes('asks for user') || item.name?.includes('asks for customer'))) {
+    console.log('>>> [SidebarItem] Debug:', {
+      name: item.name,
+      mode: mode,
+      nameColor: nameColor,
+      itemMode: (item as any)?.mode,
+      categoryType: categoryType
+    });
+  }
   // Expose the accent for nested wizard via CSS var
   const accentStyle: React.CSSProperties = isAgentAct ? { ['--ddt-accent' as any]: nameColor } : {};
   const hasEmbedded = Boolean((item as any)?.ddt);
   const hasMessage = Boolean(((item as any)?.prompts && (((item as any)?.prompts?.informal || (item as any)?.prompts?.formal || '').trim().length > 0)));
-  const iconColor = (hasEmbedded || (!interactive && hasMessage)) ? nameColor : '#94a3b8' /* slate-400 */;
+  const iconColor = isAgentAct ? nameColor : ((hasEmbedded || (!isInteractive && hasMessage)) ? nameColor : '#94a3b8' /* slate-400 */);
   const leadingIconColor = iconColor; // same rule for left icon (headphones/megaphone)
 
   // Condition helpers
@@ -47,15 +61,8 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
         <ItemEditor
           value={item.name}
           onConfirm={(name) => {
-            // Infer interactivity by simple rules when creating/editing agent acts
             let updates: any = { name };
-            try {
-              if (isAgentAct) {
-                const inferred = classifyActInteractivity(name);
-                console.log('[Interactivity][infer][onConfirm]', { title: name, inferred });
-                if (typeof inferred === 'boolean') updates.isInteractive = inferred;
-              }
-            } catch {}
+            try { /* optional mode inference here */ } catch {}
             onUpdate(updates);
             setEditing(false);
           }}
@@ -66,12 +73,11 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
         <>
           {/* Leading icon for Agent Acts */}
           {isAgentAct && (
-            <span className="inline-flex items-center justify-center mr-1" title={interactive ? 'Agent asks (expects input)' : 'Agent informs'} style={{ color: leadingIconColor }}>
-              {interactive ? (
-                <span className="relative inline-flex items-center justify-center" style={{ width: 16, height: 16 }}>
-                  <Headphones className="w-4 h-4" style={{ color: leadingIconColor }} />
-                  <HelpCircle className="w-2.5 h-2.5 absolute -right-1 -bottom-1" style={{ color: leadingIconColor }} />
-                </span>
+            <span className="inline-flex items-center justify-center mr-1" title={mode} style={{ color: leadingIconColor }}>
+              {mode === 'DataRequest' ? (
+                <Ear className="w-4 h-4" style={{ color: leadingIconColor }} />
+              ) : mode === 'DataConfirmation' ? (
+                <CheckCircle2 className="w-4 h-4" style={{ color: leadingIconColor }} />
               ) : (
                 <Megaphone className="w-4 h-4" style={{ color: leadingIconColor }} />
               )}
@@ -80,7 +86,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
           <span
             className="truncate"
             style={{ color: nameColor, opacity: hasEmbedded ? 1 : 0.6 }}
-            title={isAgentAct ? (interactive ? 'Interactive act (expects input)' : 'Emissive act (informative)') : undefined}
+            title={isAgentAct ? mode : undefined}
             role={isCondition ? 'button' : undefined}
             tabIndex={isCondition ? 0 : undefined}
             onClick={(e) => {
@@ -125,7 +131,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
             {categoryType === 'agentActs' && (
               <button
                 className="p-1"
-                title={interactive
+                title={isInteractive
                   ? ((hasEmbedded || (hasDDTFor && hasDDTFor(item.name))) ? 'Edit DDT (already built)' : 'Build DDT from this act')
                   : (hasMessage ? 'Edit message' : 'Add message')}
                 onClick={(e) => {
@@ -135,7 +141,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                     console.log('[DDT][BuildFromAct][click]', { name: item?.name, exists, isAgentAct });
                   } catch {}
                   const act = item as any;
-                  const interactiveAct = interactive; // precomputed above
+                  const interactiveAct = isInteractive; // precomputed above
                   if (interactiveAct) {
                     if (hasEmbedded && onOpenEmbedded) {
                       onOpenEmbedded(item);
@@ -166,7 +172,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                 type="button"
                 style={{ color: iconColor }}
               >
-                {interactive
+                {isInteractive
                   ? ((hasEmbedded || (hasDDTFor && hasDDTFor(item.name))) ? (
                       <Settings className="w-4 h-4" />
                     ) : (

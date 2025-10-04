@@ -170,7 +170,8 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
 
   const actIsInteractive = React.useCallback((row: any) => {
     const it = resolveAct(row);
-    return Boolean(it?.ddt || it?.isInteractive);
+    const mode = it?.mode || (row as any)?.mode;
+    return Boolean(it?.ddt || (mode && ['DataRequest', 'DataConfirmation'].includes(mode)));
   }, [resolveAct]);
 
   const actMessage = React.useCallback((row: any) => {

@@ -10,7 +10,10 @@ try:
     from backend.ner_spacy import router as ner_router
 except Exception:
     from ner_spacy import router as ner_router
-from backend.ai_steps.nlp_extract import router as nlp_extract_router
+try:
+    from backend.ai_steps.nlp_extract import router as nlp_extract_router
+except Exception:
+    from ai_steps.nlp_extract import router as nlp_extract_router
 
 app = FastAPI()
 app.include_router(ner_router)

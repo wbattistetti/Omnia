@@ -19,6 +19,30 @@ const path = require('path');
 const dbFactory = 'factory';
 const dbProjects = 'Projects';
 
+// Helper functions for mode/isInteractive migration
+function deriveModeFromDoc(doc) {
+  if (doc.mode) {
+    console.log(`>>> deriveModeFromDoc: ${doc._id} has existing mode: ${doc.mode}`);
+    return doc.mode;
+  }
+  if (doc.isInteractive === true) {
+    console.log(`>>> deriveModeFromDoc: ${doc._id} isInteractive=true -> DataRequest`);
+    return 'DataRequest';
+  }
+  if (doc.isInteractive === false) {
+    console.log(`>>> deriveModeFromDoc: ${doc._id} isInteractive=false -> Message`);
+    return 'Message';
+  }
+  console.log(`>>> deriveModeFromDoc: ${doc._id} fallback -> Message`);
+  return 'Message'; // fallback
+}
+
+function deriveIsInteractiveFromMode(mode) {
+  const result = mode === 'DataRequest' || mode === 'DataConfirmation';
+  console.log(`>>> deriveIsInteractiveFromMode: ${mode} -> ${result}`);
+  return result;
+}
+
 // --- FACTORY ENDPOINTS ---
 // Agent Acts (embedded DDT 1:1)
 app.get('/api/factory/agent-acts', async (req, res) => {
@@ -57,7 +81,36 @@ app.get('/api/factory/agent-acts', async (req, res) => {
         console.warn('Seed AgentActs failed:', e.message);
       }
     }
-    res.json(acts);
+    // Normalize returned objects with mode and isInteractive
+    console.log('>>> GET /api/factory/agent-acts - Raw acts count:', acts.length);
+    if (acts.length > 0) {
+    console.log('>>> First act sample:', JSON.stringify({
+      _id: acts[0]._id,
+      label: acts[0].label,
+      mode: acts[0].mode
+    }, null, 2));
+    }
+    
+    const normalizedActs = acts.map(act => {
+      const derivedMode = deriveModeFromDoc(act);
+      const derivedIsInteractive = deriveIsInteractiveFromMode(derivedMode);
+      return {
+        ...act,
+        mode: derivedMode,
+        isInteractive: derivedIsInteractive
+      };
+    });
+    
+    console.log('>>> Normalized acts count:', normalizedActs.length);
+    if (normalizedActs.length > 0) {
+    console.log('>>> First normalized act sample:', JSON.stringify({
+      _id: normalizedActs[0]._id,
+      label: normalizedActs[0].label,
+      mode: normalizedActs[0].mode
+    }, null, 2));
+    }
+    
+    res.json(normalizedActs);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
   } finally {

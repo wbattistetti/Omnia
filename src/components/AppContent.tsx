@@ -438,7 +438,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                         label: it.name,
                         description: it.description || '',
                         category: c.name,
-                        isInteractive: it.isInteractive ?? false,
+                        mode: it.mode ?? 'Message',
+                        shortLabel: it.shortLabel,
                         data: it.data || {},
                         ddt: it.ddt || null
                       });

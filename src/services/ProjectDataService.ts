@@ -63,7 +63,8 @@ const convertAgentActsToCategories = <T extends AgentActItem>(templateArray: any
       userActs: item.userActs,
       // Preserve fields needed for UI badges/icons
       type: item.type,
-      isInteractive: item.isInteractive,
+      mode: item.mode || 'Message',
+      shortLabel: item.shortLabel,
       data: item.data,
       categoryType: 'agentActs'
     } as unknown) as T);
@@ -140,24 +141,46 @@ export const ProjectDataService = {
 
     // Prefer loading Agent Acts from Factory DB if available; fallback to bundled JSON
     try {
+      console.log('>>> [ProjectDataService] Fetching agent acts from backend...');
       const actsRes = await fetch('/api/factory/agent-acts');
+      console.log('>>> [ProjectDataService] Response status:', actsRes.status, actsRes.ok);
       if (actsRes.ok) {
         const factoryActs = await actsRes.json();
+        console.log('>>> [ProjectDataService] Received acts count:', factoryActs?.length);
         if (Array.isArray(factoryActs) && factoryActs.length > 0) {
+        console.log('>>> [ProjectDataService] First act sample:', JSON.stringify({
+          _id: factoryActs[0]._id,
+          label: factoryActs[0].label,
+          mode: factoryActs[0].mode
+        }, null, 2));
           const categoriesMap: Record<string, any> = {};
           for (const act of (factoryActs || [])) {
             const categoryName = act.category || 'Uncategorized';
             const key = categoryName.replace(/\s+/g, '_').toLowerCase();
             if (!categoriesMap[key]) categoriesMap[key] = { id: uuidv4(), name: categoryName, items: [] };
-            categoriesMap[key].items.push({
+            const item = {
               id: act._id || uuidv4(),
               name: act.label || act.labelKey || 'Unnamed',
               description: act.description || '',
-              isInteractive: act.isInteractive,
+              mode: act.mode || 'Message',
+              shortLabel: act.shortLabel,
               data: act.data,
               ddt: act.ddt,
               prompts: act.prompts || {}
-            });
+            };
+            if (act._id === 'AA002' || act._id === 'AA003') {
+              console.log('>>> [ProjectDataService] Processing act:', JSON.stringify({
+                _id: act._id,
+                label: act.label,
+                mode: act.mode
+              }, null, 2));
+              console.log('>>> [ProjectDataService] Created item:', JSON.stringify({
+                id: item.id,
+                name: item.name,
+                mode: item.mode
+              }, null, 2));
+            }
+            categoriesMap[key].items.push(item);
           }
           projectData = {
             name: '',
@@ -309,7 +332,7 @@ export const ProjectDataService = {
       // If we updated an agent act with embedded DDT, try saving to factory DB (best-effort)
       if (type === 'agentActs') {
         try {
-          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, isInteractive: (item as any)?.isInteractive, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} };
+          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, mode: (item as any)?.mode || 'Message', shortLabel: (item as any)?.shortLabel, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} };
           await fetch(`/api/factory/agent-acts/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         } catch (e) { console.warn('[ProjectDataService] save agent act failed', e); }
       }
@@ -342,7 +365,8 @@ export const ProjectDataService = {
             label: item.name,
             description: item.description || '',
             category: cat.name,
-            isInteractive: item.isInteractive ?? false,
+            mode: item.mode || 'Message',
+            shortLabel: item.shortLabel,
             data: item.data || {},
             ddt: item.ddt || null
           };
@@ -444,7 +468,7 @@ export function prepareIntellisenseData(
           categoryType: typedEntityType,
           iconComponent: undefined, // solo riferimento al componente
           color,
-          isInteractive: item.isInteractive ?? Boolean(item.userActs && item.userActs.length),
+          mode: (item as any)?.mode || 'Message',
           userActs: item.userActs,
           uiColor: undefined // o la tua logica per il colore di sfondo
         });

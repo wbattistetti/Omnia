@@ -160,7 +160,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     if (editingRowId) {
       // Apply selection to the current row
       const baseRows = nodeRows.map(row =>
-        row.id === editingRowId ? { ...row, ...item, id: row.id, categoryType: item.categoryType as any, userActs: item.userActs, isInteractive: item.isInteractive, actId: item.actId, factoryId: item.factoryId } : row
+        row.id === editingRowId ? { ...row, ...item, id: row.id, categoryType: item.categoryType as any, userActs: item.userActs, mode: item.mode, actId: item.actId, factoryId: item.factoryId } : row
       );
       // Append a new empty row immediately after selection and focus it
       const newRowId = (baseRows.length + 1).toString();

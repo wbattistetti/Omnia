@@ -57,7 +57,10 @@ export interface NodeRowData {
   categoryType?: EntityType;
   actId?: string;
   factoryId?: string;
-  isInteractive?: boolean;
+  // Interaction mode for the agent act row
+  mode: 'DataRequest' | 'DataConfirmation' | 'Message';
+  // Optional compact label for chips (fallback to name/text when absent)
+  shortLabel?: string;
   isNew?: boolean;
   bgColor?: string;
   textColor?: string;

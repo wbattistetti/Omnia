@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
-import { Headphones, Megaphone } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone } from 'lucide-react';
 import { SIDEBAR_TYPE_ICONS, getSidebarIconComponent } from '../Sidebar/sidebarTheme';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { getLabelColor } from '../../utils/labelColor';
@@ -251,7 +251,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     // Auto-save the selection with category type
     if (onUpdateWithCategory) {
       // pass meta with identifiers and flags so parent can persist them
-      (onUpdateWithCategory as any)(row, item.name, item.categoryType, { actId: item.actId, factoryId: item.factoryId, isInteractive: item.isInteractive, userActs: item.userActs, categoryType: item.categoryType });
+      (onUpdateWithCategory as any)(row, item.name, item.categoryType, { actId: item.actId, factoryId: item.factoryId, mode: item.mode, userActs: item.userActs, categoryType: item.categoryType });
     } else {
       onUpdate(row, item.name);
     }
@@ -377,8 +377,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   // Icona e colore coerenti con la sidebar
   const { data: projectData } = useProjectData();
   let resolvedCategoryType: string | undefined = (row as any).categoryType;
-  let resolvedInteractive: boolean | undefined = (row as any).isInteractive;
-  if ((!resolvedCategoryType || resolvedInteractive === undefined) && (row as any).actId && projectData) {
+  // No longer need resolvedInteractive since we use mode directly
+  if (!resolvedCategoryType && (row as any).actId && projectData) {
     try {
       const actsCats = (projectData as any).agentActs || [];
       // cerca item per id
@@ -386,7 +386,6 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
         const found = (cat.items || []).find((it: any) => it.id === (row as any).actId || it._id === (row as any).factoryId);
         if (found) {
           resolvedCategoryType = 'agentActs';
-          resolvedInteractive = found.isInteractive ?? Boolean(found.userActs && found.userActs.length);
           break;
         }
       }
@@ -394,14 +393,23 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   }
 
   const isAgentAct = resolvedCategoryType === 'agentActs';
-  const interactive = isAgentAct ? Boolean(resolvedInteractive ?? (row.userActs && row.userActs.length)) : false;
+  
+  // Get mode from row or find in projectData
+  let mode = (row as any).mode;
+  if (isAgentAct && !mode && row.actId) {
+    const found = projectData?.agentActs?.find((act: any) => act.id === row.actId);
+    mode = found?.mode ?? 'Message';
+  }
+  if (isAgentAct && !mode) {
+    mode = 'Message'; // fallback
+  }
 
   // logs removed
   let Icon: React.ComponentType<any> | null = null;
 
   if (isAgentAct) {
-    Icon = interactive ? Headphones : Megaphone;
-    labelTextColor = interactive ? '#38bdf8' /* sky-400 */ : '#22c55e' /* emerald-500 */;
+    Icon = mode === 'DataRequest' ? Ear : mode === 'DataConfirmation' ? CheckCircle2 : Megaphone;
+    labelTextColor = mode === 'DataRequest' ? '#3b82f6' : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e';
   } else {
     const c = row.categoryType ? (SIDEBAR_TYPE_COLORS as any)[row.categoryType] : null;
     labelTextColor = (c && (c.color || '#111')) || (typeof propTextColor === 'string' ? propTextColor : '');

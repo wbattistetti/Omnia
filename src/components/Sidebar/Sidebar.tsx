@@ -300,11 +300,12 @@ const Sidebar: React.FC = () => {
                 try {
                   const inferred = classifyActInteractivity(name);
                   if (typeof inferred === 'boolean') {
-                    // find last item just added and update isInteractive
+                    // find last item just added and update mode
                     const cat = (data?.agentActs || []).find((c: any) => c.id === categoryId);
                     const last = cat?.items?.find((i: any) => (i?.name || '') === name);
                     if (last) {
-                      await updateItem('agentActs', categoryId, last.id, { isInteractive: inferred } as any);
+                      const mode = inferred ? 'DataRequest' : 'Message';
+                      await updateItem('agentActs', categoryId, last.id, { mode } as any);
                     }
                   }
                 } catch {}

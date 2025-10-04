@@ -17,9 +17,12 @@ export default defineConfig({
       '/step3b': { target: 'http://localhost:8000', changeOrigin: true },
       '/step4': { target: 'http://localhost:8000', changeOrigin: true },
 
-      // FastAPI namespaced endpoints
+      // Node.js backend endpoints (MongoDB)
+      '/api/factory': { target: 'http://localhost:3100', changeOrigin: true },
+      '/projects': { target: 'http://localhost:3100', changeOrigin: true },
+
+      // FastAPI namespaced endpoints (other /api routes)
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
-      '/projects': { target: 'http://localhost:8000', changeOrigin: true },
     }
   }
 });

@@ -1,7 +1,7 @@
 import React from 'react';
 import { IntellisenseItem as IntellisenseItemType, IntellisenseResult } from './IntellisenseTypes';
 import { highlightMatches } from './IntellisenseSearch';
-import { Circle, Headphones, HelpCircle, Megaphone } from 'lucide-react';
+import { Circle, Ear, CheckCircle2, Megaphone } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from '../Sidebar/sidebarTheme';
 
 interface IntellisenseItemProps {
@@ -28,12 +28,25 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   const iconKey = item.iconComponent ? undefined : SIDEBAR_TYPE_ICONS[item.categoryType as string];
   const IconFromSidebar = iconKey ? SIDEBAR_ICON_COMPONENTS[iconKey] : null;
   // Foreground color: use same logic as Sidebar items for Agent Acts
-  const sidebarAgentInteractive = '#38bdf8'; // sky-400 (SidebarItem)
-  const sidebarAgentEmissive = '#22c55e'; // emerald-500 (SidebarItem)
   const baseColor = (item.categoryType === 'agentActs')
-    ? (item.isInteractive ? sidebarAgentInteractive : sidebarAgentEmissive)
+    ? ((item as any)?.mode === 'DataRequest' ? '#3b82f6' : ((item as any)?.mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e'))
     : (SIDEBAR_TYPE_COLORS[item.categoryType as string]?.color);
-  const foreColor = item.textColor || item.color || baseColor || undefined;
+  const foreColor = (item.categoryType === 'agentActs') 
+    ? (baseColor || item.textColor || item.color || undefined)
+    : (item.textColor || item.color || baseColor || undefined);
+  
+  // Debug log for specific items
+  if (item.categoryType === 'agentActs' && (item.label?.includes('asks for user') || item.label?.includes('asks for customer'))) {
+    console.log('>>> [IntellisenseItem] Debug:', {
+      label: item.label,
+      mode: (item as any)?.mode,
+      baseColor: baseColor,
+      foreColor: foreColor,
+      itemTextColor: item.textColor,
+      itemColor: item.color,
+      categoryType: item.categoryType
+    });
+  }
 
   return (
     <div
@@ -50,11 +63,10 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
         {item.iconComponent ? (
           <item.iconComponent className="w-4 h-4" style={{ color: foreColor }} />
         ) : (item.categoryType === 'agentActs') ? (
-          item.isInteractive ? (
-            <span className="relative inline-flex items-center justify-center" style={{ width: 16, height: 16 }}>
-              <Headphones className="w-4 h-4" style={{ color: foreColor }} />
-              <HelpCircle className="w-2.5 h-2.5 absolute -right-1 -bottom-1" style={{ color: foreColor }} />
-            </span>
+          ((item as any)?.mode === 'DataRequest') ? (
+            <Ear className="w-4 h-4" style={{ color: foreColor }} />
+          ) : ((item as any)?.mode === 'DataConfirmation') ? (
+            <CheckCircle2 className="w-4 h-4" style={{ color: foreColor }} />
           ) : (
             <Megaphone className="w-4 h-4" style={{ color: foreColor }} />
           )
