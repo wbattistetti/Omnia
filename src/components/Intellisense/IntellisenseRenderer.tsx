@@ -13,12 +13,13 @@ interface IntellisenseRendererProps {
   categoryConfig: Record<string, { title: string; icon: React.ReactNode; color: string }>;
   onItemSelect: (result: IntellisenseResult) => void;
   onItemHover: (index: number) => void;
-  onCreateNew?: (name: string) => void;
-  onCreateAgentAct?: (name: string) => void;
-  onCreateBackendCall?: (name: string) => void;
-  onCreateTask?: (name: string) => void;
+  onCreateNew?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateBackendCall?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateTask?: (name: string, scope?: 'global' | 'industry') => void;
   query?: string;
   filterCategoryTypes?: string[];
+  projectIndustry?: string;
 }
 
 // Configurazione per la virtualizzazione
@@ -39,12 +40,13 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   onCreateBackendCall,
   onCreateTask,
   query = '',
-  filterCategoryTypes = []
+  filterCategoryTypes = [],
+  projectIndustry = 'utility-gas'
 }) => {
   // Debug logging removed to prevent excessive console output
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const [showCreateDropdown, setShowCreateDropdown] = useState(false);
+  const [showCreateDropdown, setShowCreateDropdown] = useState<'global' | 'industry' | false>(false);
   
   // Aggiungi uno stato per distinguere tra selezione da tastiera e da mouse
   const lastInputType = useRef<'keyboard' | 'mouse'>('keyboard');
@@ -107,73 +109,186 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
     
     return (
       <div className="p-4 text-gray-500">
-        <div className="flex items-center justify-between">
-          <div className="text-center flex-1">
-            <div className="text-sm text-slate-400">Nessun risultato trovato</div>
-            <div className="text-xs mt-1 text-slate-500">Prova con altre parole chiave o premi Enter per la ricerca semantica</div>
+        {/* Messaggio "Nessun risultato trovato" - sopra e a tutta larghezza */}
+        <div className="text-center">
+          <div className="text-sm text-slate-400">No results found.</div>
+          <div className="text-xs mt-1 text-slate-500">
+            Try with other words or press enter for search.
           </div>
+          <div className="text-xs mt-2 text-slate-500">
+            Or add <span className="font-bold text-white">"{query.trim()}"</span> to library:
+          </div>
+          
+          {/* Pulsanti Create - dentro il messaggio */}
           {query.trim() && (
-            <div className="ml-4 relative">
+            <div className="flex justify-center mt-3">
               {isForNodes ? (
-                // Dropdown per nodi
-                <div className="relative">
-                  <button
-                    onClick={() => setShowCreateDropdown(!showCreateDropdown)}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-                    title="Crea nuovo elemento"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Create
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-                  
-                  {showCreateDropdown && (
-                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
+                // Toolbar con due pulsanti per nodi
+                <div className="flex flex-col gap-1">
+                  <div className="flex gap-2">
+                    {/* Global */}
+                    <div className="relative">
                       <button
-                        onClick={() => {
-                          console.log('🎯 Create Agent Act clicked with query:', query.trim());
-                          onCreateAgentAct?.(query.trim());
-                          setShowCreateDropdown(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                        onClick={() => setShowCreateDropdown('global')}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors whitespace-nowrap"
+                        title="Crea elemento globale (cross-industry)"
                       >
-                        <Bot className="w-3 h-3 text-green-500" />
-                        Agent Act
+                        <Plus className="w-3 h-3" />
+                        Global
+                        <ChevronDown className="w-3 h-3" />
                       </button>
-                      <button
-                        onClick={() => {
-                          onCreateBackendCall?.(query.trim());
-                          setShowCreateDropdown(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                      >
-                        <Database className="w-3 h-3 text-blue-500" />
-                        Backend Call
-                      </button>
-                      <button
-                        onClick={() => {
-                          onCreateTask?.(query.trim());
-                          setShowCreateDropdown(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                      >
-                        <CheckSquare className="w-3 h-3 text-orange-500" />
-                        Task
-                      </button>
+                      
+                      {showCreateDropdown === 'global' && (
+                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
+                          <button
+                            onClick={() => {
+                              console.log('🎯 Create Global Agent Act clicked with query:', query.trim());
+                              onCreateAgentAct?.(query.trim(), 'global');
+                              setShowCreateDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                          >
+                            <Bot className="w-3 h-3 text-green-500" />
+                            Agent Act
+                          </button>
+                          <button
+                            onClick={() => {
+                              onCreateBackendCall?.(query.trim(), 'global');
+                              setShowCreateDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                          >
+                            <Database className="w-3 h-3 text-blue-500" />
+                            Backend Call
+                          </button>
+                          <button
+                            onClick={() => {
+                              onCreateTask?.(query.trim(), 'global');
+                              setShowCreateDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                          >
+                            <CheckSquare className="w-3 h-3 text-orange-500" />
+                            Task
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    {/* Industry */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowCreateDropdown('industry')}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors whitespace-nowrap"
+                        title={`Crea elemento per ${projectIndustry}`}
+                      >
+                        <Plus className="w-3 h-3" />
+                        {projectIndustry}
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                      
+                      {showCreateDropdown === 'industry' && (
+                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
+                          <button
+                            onClick={() => {
+                              console.log('🎯 Create Industry Agent Act clicked with query:', query.trim());
+                              onCreateAgentAct?.(query.trim(), 'industry');
+                              setShowCreateDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                          >
+                            <Bot className="w-3 h-3 text-green-500" />
+                            Agent Act
+                          </button>
+                          <button
+                            onClick={() => {
+                              onCreateBackendCall?.(query.trim(), 'industry');
+                              setShowCreateDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                          >
+                            <Database className="w-3 h-3 text-blue-500" />
+                            Backend Call
+                          </button>
+                          <button
+                            onClick={() => {
+                              onCreateTask?.(query.trim(), 'industry');
+                              setShowCreateDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                          >
+                            <CheckSquare className="w-3 h-3 text-orange-500" />
+                            Task
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : (
-                // Pulsante singolo per condizioni
+                // Toolbar con due pulsanti per condizioni
                 onCreateNew && (
-                  <button
-                    onClick={() => onCreateNew(query.trim())}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-                    title={`Crea nuova condizione: "${query.trim()}"`}
-                  >
-                    <Plus className="w-3 h-3" />
-                    Crea "{query.trim()}"
-                  </button>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex gap-2">
+                      {/* Global Condition */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowCreateDropdown('global')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors whitespace-nowrap"
+                          title="Crea condizione globale (cross-industry)"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Global
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                        
+                        {showCreateDropdown === 'global' && (
+                          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
+                            <button
+                              onClick={() => {
+                                console.log('🎯 Create Global Condition clicked with query:', query.trim());
+                                onCreateNew?.(query.trim(), 'global');
+                                setShowCreateDropdown(false);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                            >
+                              <CheckSquare className="w-3 h-3 text-green-500" />
+                              Condition
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Industry Condition */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowCreateDropdown('industry')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors whitespace-nowrap"
+                          title={`Crea condizione per ${projectIndustry}`}
+                        >
+                          <Plus className="w-3 h-3" />
+                          {projectIndustry}
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                        
+                        {showCreateDropdown === 'industry' && (
+                          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
+                            <button
+                              onClick={() => {
+                                console.log('🎯 Create Industry Condition clicked with query:', query.trim());
+                                onCreateNew?.(query.trim(), 'industry');
+                                setShowCreateDropdown(false);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                            >
+                              <CheckSquare className="w-3 h-3 text-blue-500" />
+                              Condition
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )
               )}
             </div>

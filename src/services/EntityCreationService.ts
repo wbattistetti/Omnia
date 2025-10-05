@@ -1,5 +1,6 @@
 import { ProjectDataService } from './ProjectDataService';
 import { classifyActMode } from '../nlp/actInteractivity';
+import { classifyScopeFromLabel, Scope, Industry } from './ScopeClassificationService';
 
 export interface EntityCreationConfig {
   entityType: 'agentActs' | 'backendActions' | 'tasks';
@@ -23,6 +24,8 @@ export interface EntityCreationOptions {
   projectData: any;
   addCategory: (entityType: string, name: string) => Promise<void>;
   updateItem: (entityType: string, categoryId: string, itemId: string, updates: any) => Promise<void>;
+  projectIndustry?: Industry;
+  scope?: 'global' | 'industry';
 }
 
 const ENTITY_CONFIGS: Record<string, EntityCreationConfig> = {
@@ -62,7 +65,36 @@ export class EntityCreationService {
     try {
       console.log(`🎯 Creating ${entityType} with name:`, options.name);
 
-      // 1. Trova o crea la categoria
+      // 1. Determina lo scope (utente o automatico)
+      let finalScope: Scope;
+      let finalIndustry: Industry | undefined;
+      
+      if (options.scope) {
+        // Scope fornito dall'utente
+        finalScope = options.scope;
+        finalIndustry = options.scope === 'industry' ? (options.projectIndustry || 'utility-gas') : undefined;
+        console.log(`🎯 User-specified scope:`, { scope: finalScope, industry: finalIndustry });
+      } else {
+        // Classificazione automatica
+        const scopeGuess = classifyScopeFromLabel(options.name, options.projectIndustry);
+        finalScope = scopeGuess.scope;
+        finalIndustry = scopeGuess.industry;
+        console.log(`🎯 Auto-classified scope:`, scopeGuess);
+      }
+
+      // 2. Salva nella collezione specifica
+      const factoryItem = await this.createFactoryItem(
+        entityType,
+        options.name,
+        { scope: finalScope, industry: finalIndustry, confidence: 1.0 },
+        options.projectIndustry
+      );
+
+      if (!factoryItem) {
+        throw new Error(`Failed to create factory item for ${entityType}`);
+      }
+
+      // 3. Trova o crea la categoria nel progetto locale
       const categoryId = await this.ensureCategoryExists(
         entityType,
         options.projectData,
@@ -73,7 +105,7 @@ export class EntityCreationService {
         throw new Error(`Failed to create or find category for ${entityType}`);
       }
 
-      // 2. Crea l'elemento
+      // 4. Crea l'elemento nel progetto locale
       const newItem = await ProjectDataService.addItem(
         config.entityType,
         categoryId,
@@ -81,29 +113,38 @@ export class EntityCreationService {
         ''
       );
 
-      // 3. Aggiorna l'elemento con metadati specifici (solo per agentActs)
+      // 5. Aggiorna l'elemento con metadati specifici
+      const updates: any = {
+        factoryId: factoryItem._id,
+        scope: finalScope,
+        industry: finalIndustry,
+        status: 'published',
+        version: '1.0.0'
+      };
+
       if (entityType === 'agentActs') {
-        const mode = classifyActMode(options.name);
-        await options.updateItem(config.entityType, categoryId, newItem.id, { mode });
+        updates.mode = classifyActMode(options.name);
       }
 
-      // 4. Crea l'oggetto per la riga del nodo
+      await options.updateItem(config.entityType, categoryId, newItem.id, updates);
+
+      // 6. Crea l'oggetto per la riga del nodo
       const rowItem: CreatedEntity = {
         id: newItem.id,
         name: options.name,
         categoryType: config.entityType,
         actId: newItem.id,
-        factoryId: newItem.id,
+        factoryId: factoryItem._id,
         ...(entityType === 'agentActs' && { mode: classifyActMode(options.name) })
       };
 
-      // 5. Aggiorna la riga del nodo se il callback è fornito
+      // 7. Aggiorna la riga del nodo se il callback è fornito
       if (options.onRowUpdate) {
         console.log('🎯 Updating node row with:', rowItem);
         options.onRowUpdate(rowItem);
       }
 
-      // 6. Gestisci eventi UI
+      // 8. Gestisci eventi UI
       await this.handleUIEvents(config, options.name);
 
       return rowItem;
@@ -111,6 +152,84 @@ export class EntityCreationService {
       console.error(`Error creating ${entityType}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Crea un elemento nella collezione factory specifica
+   */
+  private static async createFactoryItem(
+    entityType: keyof typeof ENTITY_CONFIGS,
+    name: string,
+    scopeGuess: { scope: Scope; industry?: Industry; confidence: number },
+    projectIndustry?: Industry
+  ): Promise<any> {
+    const config = ENTITY_CONFIGS[entityType];
+    
+    // Mappa i tipi di entità agli endpoint
+    const endpointMap: { [key: string]: string } = {
+      'agentActs': '/api/factory/agent-acts',
+      'backendActions': '/api/factory/backend-calls',
+      'tasks': '/api/factory/tasks'
+    };
+
+    const endpoint = endpointMap[entityType];
+    if (!endpoint) {
+      throw new Error(`Unknown endpoint for entity: ${entityType}`);
+    }
+
+    // Determina scope e industry finali
+    const finalScope = scopeGuess.scope;
+    const finalIndustry = scopeGuess.scope === 'industry' 
+      ? (scopeGuess.industry || projectIndustry || 'utility-gas')
+      : undefined;
+
+    const factoryItem = {
+      label: name,
+      name: name,
+      description: '',
+      scope: finalScope,
+      ...(finalIndustry && { industry: finalIndustry }),
+      status: 'published',
+      version: '1.0.0',
+      category: 'Default',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(entityType === 'agentActs' && { 
+        mode: classifyActMode(name),
+        data: {},
+        prompts: {}
+      })
+    };
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(factoryItem)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create factory item: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating factory item:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Genera una chiave univoca per l'elemento del catalog
+   */
+  private static generateKey(name: string, type: string): string {
+    const cleanName = name
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .replace(/\s+/g, '_')
+      .toUpperCase();
+    
+    const timestamp = Date.now().toString().slice(-6);
+    return `${type.toUpperCase()}_${cleanName}_${timestamp}`;
   }
 
   /**

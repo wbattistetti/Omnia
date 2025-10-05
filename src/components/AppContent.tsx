@@ -284,7 +284,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         return false;
       }
       // Inizializza i dati di progetto dai template
-      await ProjectDataService.initializeProjectData(projectInfo.template, projectInfo.language);
+      await ProjectDataService.initializeProjectData(projectInfo.template, projectInfo.language, projectInfo.industry);
       const templateDicts = await ProjectDataService.loadProjectData();
       // Crea il nuovo progetto con info base e dizionari copiati
       const newProject: ProjectData & ProjectInfo = {

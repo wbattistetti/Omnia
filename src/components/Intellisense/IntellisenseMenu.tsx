@@ -27,10 +27,10 @@ interface IntellisenseMenuProps {
   onSelect: (item: IntellisenseItem) => void;
   onClose: () => void;
   filterCategoryTypes?: string[];
-  onCreateNew?: (name: string) => void;
-  onCreateAgentAct?: (name: string) => void;
-  onCreateBackendCall?: (name: string) => void;
-  onCreateTask?: (name: string) => void;
+  onCreateNew?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateBackendCall?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateTask?: (name: string, scope?: 'global' | 'industry') => void;
 }
 
 export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
@@ -79,9 +79,12 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
       const menuWidth = 320;
       
       // Altezza desiderata: più generosa per 1-2 risultati (per vedere payoff senza scroll)
-      const desiredHeight = totalItems <= 2
-        ? Math.min(defaultLayoutConfig.itemHeight * totalItems + 72, defaultLayoutConfig.maxMenuHeight)
-        : Math.min(totalItems * 70 + 60, defaultLayoutConfig.maxMenuHeight);
+      // Se non ci sono risultati ma c'è una query, calcola l'altezza per messaggio + pulsanti + 5px sotto
+      const desiredHeight = totalItems === 0 && query.trim()
+        ? 140 // Altezza precisa: 16px padding top + 60px messaggio + 40px pulsanti + 19px padding bottom (5px sotto i pulsanti)
+        : totalItems <= 2
+          ? Math.min(defaultLayoutConfig.itemHeight * totalItems + 72, defaultLayoutConfig.maxMenuHeight)
+          : Math.min(totalItems * 70 + 60, defaultLayoutConfig.maxMenuHeight);
 
       // Calcola spazio disponibile sopra e sotto
       const spaceBelow = viewportHeight - rect.bottom - 10; // 10px di margine
@@ -338,9 +341,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
       className="bg-white rounded-lg shadow-xl border border-gray-300"
     >
       {/* Compact header: only category filter bar (no result/hints text) */}
-      <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">
-        {/* Category filter bar */}
-        <div className="mt-2 flex items-center gap-2">
+      {totalItems > 0 && (
+        <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">
+          {/* Category filter bar */}
+          <div className="mt-2 flex items-center gap-2">
           {[
             { key: 'agentActs', iconKey: SIDEBAR_TYPE_ICONS.agentActs, label: 'Agent' },
             { key: 'userActs', iconKey: SIDEBAR_TYPE_ICONS.userActs, label: 'User' },
@@ -374,7 +378,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
             </span>
           )}
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Results */}
       <IntellisenseRenderer
@@ -391,6 +396,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         onCreateTask={onCreateTask}
         query={query}
         filterCategoryTypes={filterCategoryTypes}
+        projectIndustry={data?.industry}
       />
     </div>
   );

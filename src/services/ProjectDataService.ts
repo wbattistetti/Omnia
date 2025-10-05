@@ -104,15 +104,97 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
 // }
 
 export const ProjectDataService = {
-  async initializeProjectData(templateName: string, language: string): Promise<void> {
+  async initializeProjectData(templateName: string, language: string, projectIndustry?: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 100));
     
+    // Try to load from separate collections with scope filtering first
+    try {
+      console.log('>>> [ProjectDataService] Loading from separate collections with scope filtering...');
+      
+      const industry = projectIndustry || templateName;
+      const scopeQuery = {
+        industry: industry,
+        scope: ['global', 'industry']
+      };
+      
+      // Load from each collection separately
+      const [agentActsRes, backendCallsRes, conditionsRes, tasksRes, macroTasksRes] = await Promise.all([
+        fetch('/api/factory/agent-acts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(scopeQuery)
+        }),
+        fetch('/api/factory/backend-calls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(scopeQuery)
+        }),
+        fetch('/api/factory/conditions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(scopeQuery)
+        }),
+        fetch('/api/factory/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(scopeQuery)
+        }),
+        fetch('/api/factory/macro-tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(scopeQuery)
+        })
+      ]);
+      
+      const [agentActs, backendCalls, conditions, tasks, macroTasks] = await Promise.all([
+        agentActsRes.ok ? agentActsRes.json() : [],
+        backendCallsRes.ok ? backendCallsRes.json() : [],
+        conditionsRes.ok ? conditionsRes.json() : [],
+        tasksRes.ok ? tasksRes.json() : [],
+        macroTasksRes.ok ? macroTasksRes.json() : []
+      ]);
+      
+      const totalItems = agentActs.length + backendCalls.length + conditions.length + tasks.length + macroTasks.length;
+      console.log('>>> [ProjectDataService] Received items:', {
+        agentActs: agentActs.length,
+        backendCalls: backendCalls.length,
+        conditions: conditions.length,
+        tasks: tasks.length,
+        macroTasks: macroTasks.length,
+        total: totalItems
+      });
+      
+      if (totalItems > 0) {
+        // Convert to categories format
+        const groupedData = {
+          agentActs: this.convertToCategories(agentActs, 'agentActs'),
+          userActs: [], // Will be loaded from legacy system
+          backendActions: this.convertToCategories(backendCalls, 'backendActions'),
+          conditions: this.convertToCategories(conditions, 'conditions'),
+          tasks: this.convertToCategories(tasks, 'tasks'),
+          macrotasks: this.convertToCategories(macroTasks, 'macrotasks')
+        };
+        
+        projectData = {
+          name: '',
+          industry: industry,
+          ...groupedData
+        };
+        
+        console.log('>>> [ProjectDataService] Successfully loaded from separate collections');
+        return;
+      }
+    } catch (error) {
+      console.warn('>>> [ProjectDataService] Separate collections system not available, falling back to legacy system:', error);
+    }
+    
+    // Fallback to legacy template system
     const template = templateData[templateName as keyof typeof templateData];
     if (!template) {
       console.warn(`Template ${templateName} not found, using empty data`);
       projectData = {
         name: '',
-        industry: '',
+        industry: projectIndustry || templateName,
         agentActs: [],
         userActs: [],
         backendActions: [],
@@ -128,7 +210,7 @@ export const ProjectDataService = {
       console.warn(`Language ${language} not found for template ${templateName}, using empty data`);
       projectData = {
         name: '',
-        industry: '',
+        industry: projectIndustry || templateName,
         agentActs: [],
         userActs: [],
         backendActions: [],
@@ -139,79 +221,123 @@ export const ProjectDataService = {
       return;
     }
 
-    // Prefer loading Agent Acts from Factory DB if available; fallback to bundled JSON
-    try {
-      console.log('>>> [ProjectDataService] Fetching agent acts from backend...');
-      const actsRes = await fetch('/api/factory/agent-acts');
-      console.log('>>> [ProjectDataService] Response status:', actsRes.status, actsRes.ok);
-      if (actsRes.ok) {
-        const factoryActs = await actsRes.json();
-        console.log('>>> [ProjectDataService] Received acts count:', factoryActs?.length);
-        if (Array.isArray(factoryActs) && factoryActs.length > 0) {
-        console.log('>>> [ProjectDataService] First act sample:', JSON.stringify({
-          _id: factoryActs[0]._id,
-          label: factoryActs[0].label,
-          mode: factoryActs[0].mode
-        }, null, 2));
-          const categoriesMap: Record<string, any> = {};
-          for (const act of (factoryActs || [])) {
-            const categoryName = act.category || 'Uncategorized';
-            const key = categoryName.replace(/\s+/g, '_').toLowerCase();
-            if (!categoriesMap[key]) categoriesMap[key] = { id: uuidv4(), name: categoryName, items: [] };
-            const item = {
-              id: act._id || uuidv4(),
-              name: act.label || act.labelKey || 'Unnamed',
-              description: act.description || '',
-              mode: act.mode || 'Message',
-              shortLabel: act.shortLabel,
-              data: act.data,
-              ddt: act.ddt,
-              prompts: act.prompts || {}
-            };
-            if (act._id === 'AA002' || act._id === 'AA003') {
-              console.log('>>> [ProjectDataService] Processing act:', JSON.stringify({
-                _id: act._id,
-                label: act.label,
-                mode: act.mode
-              }, null, 2));
-              console.log('>>> [ProjectDataService] Created item:', JSON.stringify({
-                id: item.id,
-                name: item.name,
-                mode: item.mode
-              }, null, 2));
-            }
-            categoriesMap[key].items.push(item);
-          }
-          projectData = {
-            name: '',
-            industry: '',
-            agentActs: Object.values(categoriesMap),
-            userActs: convertTemplateDataToCategories(languageData.userActs),
-            backendActions: convertTemplateDataToCategories(languageData.backendActions),
-            conditions: convertTemplateDataToCategories(languageData.conditions),
-            tasks: convertTemplateDataToCategories(languageData.tasks),
-            macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
+    // Legacy fallback to bundled JSON
+    projectData = {
+      name: '',
+      industry: projectIndustry || templateName,
+      agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
+      userActs: convertTemplateDataToCategories(languageData.userActs),
+      backendActions: convertTemplateDataToCategories(languageData.backendActions),
+      conditions: convertTemplateDataToCategories(languageData.conditions),
+      tasks: convertTemplateDataToCategories(languageData.tasks),
+      macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
+    };
+  },
+
+  // Helper method to group catalog items by type
+  groupCatalogItemsByType(catalogItems: any[]): { [key: string]: Category[] } {
+    const result = {
+      agentActs: [] as Category[],
+      userActs: [] as Category[],
+      backendActions: [] as Category[],
+      conditions: [] as Category[],
+      tasks: [] as Category[],
+      macrotasks: [] as Category[]
+    };
+
+    // Group items by type
+    const itemsByType: { [key: string]: any[] } = {};
+    catalogItems.forEach(item => {
+      const type = item.type;
+      if (!itemsByType[type]) itemsByType[type] = [];
+      itemsByType[type].push(item);
+    });
+
+    // Convert each type to categories
+    Object.entries(itemsByType).forEach(([type, items]) => {
+      const categoriesMap: { [key: string]: Category } = {};
+      
+      items.forEach(item => {
+        const categoryName = item.category || 'Uncategorized';
+        const key = categoryName.replace(/\s+/g, '_').toLowerCase();
+        
+        if (!categoriesMap[key]) {
+          categoriesMap[key] = {
+            id: uuidv4(),
+            name: categoryName,
+            items: []
           };
-        } else {
-          // Empty DB → fallback to bundled JSON
-          throw new Error('factory acts empty');
         }
-      } else {
-        throw new Error('factory acts not available');
+
+        const convertedItem = {
+          id: item._id || uuidv4(),
+          name: item.name?.it || item.name?.en || item.label || 'Unnamed',
+          description: item.description?.it || item.description?.en || item.description || '',
+          mode: item.mode || 'Message',
+          shortLabel: item.shortLabel,
+          data: item.data,
+          ddt: item.ddt,
+          prompts: item.prompts || {},
+          scope: item.scope,
+          industry: item.industry,
+          status: item.status,
+          version: item.version,
+          tags: item.tags || []
+        };
+
+        categoriesMap[key].items.push(convertedItem);
+      });
+
+      // Map type to result key
+      const resultKey = this.mapCatalogTypeToResultKey(type);
+      if (resultKey && result[resultKey as keyof typeof result]) {
+        (result[resultKey as keyof typeof result] as Category[]) = Object.values(categoriesMap);
       }
-    } catch {
-      // Fallback to bundled JSON
-      projectData = {
-        name: '',
-        industry: '',
-        agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
-        userActs: convertTemplateDataToCategories(languageData.userActs),
-        backendActions: convertTemplateDataToCategories(languageData.backendActions),
-        conditions: convertTemplateDataToCategories(languageData.conditions),
-        tasks: convertTemplateDataToCategories(languageData.tasks),
-        macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
-      };
+    });
+
+    return result;
+  },
+
+  // Helper method to convert items to categories format
+  convertToCategories(items: any[], entityType: string): Category[] {
+    if (!Array.isArray(items) || items.length === 0) {
+      return [];
     }
+
+    const categoriesMap: { [key: string]: Category } = {};
+    
+    items.forEach((item: any) => {
+      const categoryName = item.category || 'Uncategorized';
+      const key = categoryName.replace(/\s+/g, '_').toLowerCase();
+      
+      if (!categoriesMap[key]) {
+        categoriesMap[key] = {
+          id: uuidv4(),
+          name: categoryName,
+          items: []
+        };
+      }
+
+      const convertedItem = {
+        id: item._id || uuidv4(),
+        name: item.name || item.label || 'Unnamed',
+        description: item.description || '',
+        mode: item.mode || 'Message',
+        shortLabel: item.shortLabel,
+        data: item.data,
+        ddt: item.ddt,
+        prompts: item.prompts || {},
+        scope: item.scope,
+        industry: item.industry,
+        status: item.status,
+        version: item.version,
+        tags: item.tags || []
+      };
+
+      categoriesMap[key].items.push(convertedItem);
+    });
+
+    return Object.values(categoriesMap);
   },
 
   // Create a FlowTask entity and return it
@@ -283,7 +409,7 @@ export const ProjectDataService = {
     }
   },
 
-  async addItem(type: EntityType, categoryId: string, name: string, description = ''): Promise<ProjectEntityItem> {
+  async addItem(type: EntityType, categoryId: string, name: string, description = '', scope?: 'global' | 'industry'): Promise<ProjectEntityItem> {
     await new Promise(resolve => setTimeout(resolve, 50));
     const arr = (projectData as ProjectData)[type];
     if (!arr) throw new Error(`Entity type ${type} is not defined in projectData`);

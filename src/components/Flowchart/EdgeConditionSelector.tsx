@@ -17,7 +17,7 @@ export interface EdgeConditionSelectorProps {
   onSelectUnconditioned: () => void;
   onSelectElse?: () => void;
   onClose: () => void;
-  onCreateCondition?: (name: string) => void;
+  onCreateCondition?: (name: string, scope?: 'global' | 'industry') => void;
 }
 
 /**
@@ -88,9 +88,9 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   };
 
   // Gestione creazione nuova condizione
-  const handleCreateCondition = (name: string) => {
+  const handleCreateCondition = (name: string, scope?: 'global' | 'industry') => {
     if (onCreateCondition) {
-      onCreateCondition(name);
+      onCreateCondition(name, scope);
       setShowIntellisense(false);
     }
   };

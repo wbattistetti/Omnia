@@ -26,6 +26,10 @@ import { ProjectDataService } from '../../services/ProjectDataService';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 
 export type { NodeData } from '../../hooks/useNodeManager';
+
+// Definizione stabile di nodeTypes e edgeTypes per evitare warning React Flow
+const nodeTypes = { custom: CustomNode, task: TaskNode };
+const edgeTypes = { custom: CustomEdge };
 export type { EdgeData } from '../../hooks/useEdgeManager';
 
 // nodeTypes/edgeTypes memoized below
@@ -144,15 +148,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     deleteNode(id);
   }, [deleteNode]);
 
-  // Hook centralizzato per la creazione di entità
-  const { createAgentAct, createBackendCall, createTask } = useEntityCreation();
-  
   // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
   const { addItem, addCategory } = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
+  
+  // Hook centralizzato per la creazione di entità (solo se il context è pronto)
+  const entityCreation = useEntityCreation();
+  const { createAgentAct, createBackendCall, createTask } = entityCreation;
 
   // Gestione creazione nuova condizione
-  const handleCreateCondition = useCallback(async (name: string) => {
+  const handleCreateCondition = useCallback(async (name: string, scope?: 'global' | 'industry') => {
     try {
       let categoryId = '';
       const conditions = (projectData as any)?.conditions || [];
@@ -175,7 +180,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         document.dispatchEvent(sidebarEvent);
 
         // Aggiungi la nuova condizione
-        await addItem('conditions', categoryId, name, '');
+        await addItem('conditions', categoryId, name, '', scope);
 
         // Evidenzia la condizione appena creata nel sidebar
         setTimeout(() => {
@@ -889,8 +894,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [reactFlowInstance]);
 
   // Stabilizza nodeTypes/edgeTypes per evitare il warning RF#002 (HMR)
-  const nodeTypesMemo = React.useMemo(() => ({ custom: CustomNode, task: TaskNode }), []);
-  const edgeTypesMemo = React.useMemo(() => ({ custom: CustomEdge }), []);
+  // Spostati fuori dal componente per evitare ricreazioni durante HMR
 
   return (
     <div className="flex-1 h-full relative" ref={canvasRef} style={{ overflow: 'auto' }} onDoubleClick={handleCanvasDoubleClick} onMouseLeave={() => setCursorTooltip(null)}>
@@ -911,8 +915,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         }}
         onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
         onConnect={onConnect}
-        nodeTypes={nodeTypesMemo}
-        edgeTypes={edgeTypesMemo}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onPaneClick={onPaneClick}
         onMouseMove={handlePaneMouseMove}
         onEdgeClick={handleEdgeClick}

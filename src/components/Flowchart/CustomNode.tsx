@@ -28,9 +28,9 @@ export interface CustomNodeData {
   hidden?: boolean; // render invisibile finché non riposizionato
   focusRowId?: string; // row da mettere in edit al mount
   hideUncheckedRows?: boolean; // nasconde le righe non incluse
-  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void) => void;
-  onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
-  onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
+  onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
+  onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 

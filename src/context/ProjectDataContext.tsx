@@ -13,7 +13,7 @@ interface ProjectDataUpdateContextType {
   addCategory: (type: EntityType, name: string) => Promise<void>;
   deleteCategory: (type: EntityType, categoryId: string) => Promise<void>;
   updateCategory: (type: EntityType, categoryId: string, updates: Partial<Category>) => Promise<void>;
-  addItem: (type: EntityType, categoryId: string, name: string, description?: string) => Promise<void>;
+  addItem: (type: EntityType, categoryId: string, name: string, description?: string, scope?: 'global' | 'industry') => Promise<void>;
   deleteItem: (type: EntityType, categoryId: string, itemId: string) => Promise<void>;
   updateItem: (type: EntityType, categoryId: string, itemId: string, updates: Partial<ProjectEntityItem>) => Promise<void>;
 }
@@ -53,7 +53,18 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
       const projectData = await ProjectDataService.loadProjectData();
       setData(projectData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load project data');
+      console.warn('Failed to load project data:', err);
+      // Inizializza con dati vuoti se non c'è un progetto corrente
+      setData({
+        name: '',
+        industry: '',
+        agentActs: [],
+        userActs: [],
+        backendActions: [],
+        tasks: [],
+        conditions: [],
+        macroTasks: []
+      });
     } finally {
       setLoading(false);
     }
@@ -94,9 +105,9 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     }
   };
 
-  const addItem = async (type: EntityType, categoryId: string, name: string, description = '') => {
+  const addItem = async (type: EntityType, categoryId: string, name: string, description = '', scope?: 'global' | 'industry') => {
     try {
-      await ProjectDataService.addItem(type, categoryId, name, description);
+      await ProjectDataService.addItem(type, categoryId, name, description, scope);
       await refreshData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add item');

@@ -118,6 +118,303 @@ app.get('/api/factory/agent-acts', async (req, res) => {
   }
 });
 
+// Agent Acts - POST (with scope filtering)
+app.post('/api/factory/agent-acts', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('AgentActs');
+    
+    const { industry, scope } = req.body;
+    
+    // Build query based on scope filtering
+    const query = {};
+    
+    if (scope && Array.isArray(scope)) {
+      const scopeConditions = [];
+      
+      if (scope.includes('global')) {
+        scopeConditions.push({ scope: 'global' });
+      }
+      
+      if (scope.includes('industry') && industry) {
+        scopeConditions.push({ 
+          scope: 'industry', 
+          industry: industry 
+        });
+      }
+      
+      if (scopeConditions.length > 0) {
+        query.$or = scopeConditions;
+      }
+    }
+    
+    console.log('>>> AgentActs query:', JSON.stringify(query, null, 2));
+    
+    const docs = await coll.find(query).toArray();
+    console.log(`>>> Found ${docs.length} AgentActs with scope filtering`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching agent acts with scope filtering:', error);
+    res.status(500).json({ error: 'Failed to fetch agent acts' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Backend Calls - GET (legacy)
+app.get('/api/factory/backend-calls', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('BackendCalls');
+    const docs = await coll.find({}).toArray();
+    console.log(`>>> Found ${docs.length} BackendCalls`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching backend calls:', error);
+    res.status(500).json({ error: 'Failed to fetch backend calls' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Backend Calls - POST (with scope filtering)
+app.post('/api/factory/backend-calls', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('BackendCalls');
+    
+    const { industry, scope } = req.body;
+    
+    // Build query based on scope filtering
+    const query = {};
+    
+    if (scope && Array.isArray(scope)) {
+      const scopeConditions = [];
+      
+      if (scope.includes('global')) {
+        scopeConditions.push({ scope: 'global' });
+      }
+      
+      if (scope.includes('industry') && industry) {
+        scopeConditions.push({ 
+          scope: 'industry', 
+          industry: industry 
+        });
+      }
+      
+      if (scopeConditions.length > 0) {
+        query.$or = scopeConditions;
+      }
+    }
+    
+    console.log('>>> BackendCalls query:', JSON.stringify(query, null, 2));
+    
+    const docs = await coll.find(query).toArray();
+    console.log(`>>> Found ${docs.length} BackendCalls with scope filtering`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching backend calls with scope filtering:', error);
+    res.status(500).json({ error: 'Failed to fetch backend calls' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Conditions - GET (legacy)
+app.get('/api/factory/conditions', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('Conditions');
+    const docs = await coll.find({}).toArray();
+    console.log(`>>> Found ${docs.length} Conditions`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching conditions:', error);
+    res.status(500).json({ error: 'Failed to fetch conditions' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Conditions - POST (with scope filtering)
+app.post('/api/factory/conditions', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('Conditions');
+    
+    const { industry, scope } = req.body;
+    
+    // Build query based on scope filtering
+    const query = {};
+    
+    if (scope && Array.isArray(scope)) {
+      const scopeConditions = [];
+      
+      if (scope.includes('global')) {
+        scopeConditions.push({ scope: 'global' });
+      }
+      
+      if (scope.includes('industry') && industry) {
+        scopeConditions.push({ 
+          scope: 'industry', 
+          industry: industry 
+        });
+      }
+      
+      if (scopeConditions.length > 0) {
+        query.$or = scopeConditions;
+      }
+    }
+    
+    console.log('>>> Conditions query:', JSON.stringify(query, null, 2));
+    
+    const docs = await coll.find(query).toArray();
+    console.log(`>>> Found ${docs.length} Conditions with scope filtering`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching conditions with scope filtering:', error);
+    res.status(500).json({ error: 'Failed to fetch conditions' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Tasks - GET (legacy)
+app.get('/api/factory/tasks', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('Tasks');
+    const docs = await coll.find({}).toArray();
+    console.log(`>>> Found ${docs.length} Tasks`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Tasks - POST (with scope filtering)
+app.post('/api/factory/tasks', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('Tasks');
+    
+    const { industry, scope } = req.body;
+    
+    // Build query based on scope filtering
+    const query = {};
+    
+    if (scope && Array.isArray(scope)) {
+      const scopeConditions = [];
+      
+      if (scope.includes('global')) {
+        scopeConditions.push({ scope: 'global' });
+      }
+      
+      if (scope.includes('industry') && industry) {
+        scopeConditions.push({ 
+          scope: 'industry', 
+          industry: industry 
+        });
+      }
+      
+      if (scopeConditions.length > 0) {
+        query.$or = scopeConditions;
+      }
+    }
+    
+    console.log('>>> Tasks query:', JSON.stringify(query, null, 2));
+    
+    const docs = await coll.find(query).toArray();
+    console.log(`>>> Found ${docs.length} Tasks with scope filtering`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching tasks with scope filtering:', error);
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Macro Tasks - GET (legacy)
+app.get('/api/factory/macro-tasks', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('MacroTasks');
+    const docs = await coll.find({}).toArray();
+    console.log(`>>> Found ${docs.length} MacroTasks`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching macro tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch macro tasks' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Macro Tasks - POST (with scope filtering)
+app.post('/api/factory/macro-tasks', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('MacroTasks');
+    
+    const { industry, scope } = req.body;
+    
+    // Build query based on scope filtering
+    const query = {};
+    
+    if (scope && Array.isArray(scope)) {
+      const scopeConditions = [];
+      
+      if (scope.includes('global')) {
+        scopeConditions.push({ scope: 'global' });
+      }
+      
+      if (scope.includes('industry') && industry) {
+        scopeConditions.push({ 
+          scope: 'industry', 
+          industry: industry 
+        });
+      }
+      
+      if (scopeConditions.length > 0) {
+        query.$or = scopeConditions;
+      }
+    }
+    
+    console.log('>>> MacroTasks query:', JSON.stringify(query, null, 2));
+    
+    const docs = await coll.find(query).toArray();
+    console.log(`>>> Found ${docs.length} MacroTasks with scope filtering`);
+    res.json(docs);
+  } catch (error) {
+    console.error('Error fetching macro tasks with scope filtering:', error);
+    res.status(500).json({ error: 'Failed to fetch macro tasks' });
+  } finally {
+    await client.close();
+  }
+});
+
 app.put('/api/factory/agent-acts/:id', async (req, res) => {
   const id = req.params.id;
   const payload = req.body || {};
