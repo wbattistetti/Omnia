@@ -105,10 +105,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
               else if (type === 'bottom') setHoveredInserter(i + 1);
             }}
             onMouseLeave={() => setHoveredInserter(null)}
-            onCreateAgentAct={(() => {
-              console.log('🎯 NodeRowList passing onCreateAgentAct:', !!onCreateAgentAct);
-              return onCreateAgentAct;
-            })()}
+            onCreateAgentAct={onCreateAgentAct}
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
           />

@@ -10,14 +10,12 @@ interface RowInserterProps {
 }
 
 export const RowInserter: React.FC<RowInserterProps> = ({ visible, onInsert, onMouseEnter, onMouseLeave, index }) => {
-  const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.inserter') === '1') console.log(...args); } catch {} };
-  // Debug logging disabled to prevent excessive console output
   return (
     <div
       className="row-inserter relative flex items-center justify-center"
       style={{ height: 8, minHeight: 0, width: '100%', margin: 0, padding: 0, cursor: 'copy' }}
-      onMouseEnter={() => { dbg('[Inserter][enter]', { index, visible }); onMouseEnter && onMouseEnter(); }}
-      onMouseLeave={() => { dbg('[Inserter][leave]', { index, visible }); onMouseLeave && onMouseLeave(); }}
+      onMouseEnter={() => onMouseEnter && onMouseEnter()}
+      onMouseLeave={() => onMouseLeave && onMouseLeave()}
       onClick={visible ? onInsert : undefined}
       data-idx={typeof index === 'number' ? index : undefined}
     >

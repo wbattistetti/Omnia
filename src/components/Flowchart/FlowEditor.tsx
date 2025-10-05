@@ -23,7 +23,7 @@ import { useConnectionMenu } from '../../hooks/useConnectionMenu';
 import { useNodeManager, NodeData } from '../../hooks/useNodeManager';
 import { useProjectDataUpdate, useProjectData } from '../../context/ProjectDataContext';
 import { ProjectDataService } from '../../services/ProjectDataService';
-import { classifyActMode } from '../../nlp/actInteractivity';
+import { useEntityCreation } from '../../hooks/useEntityCreation';
 
 export type { NodeData } from '../../hooks/useNodeManager';
 export type { EdgeData } from '../../hooks/useEdgeManager';
@@ -144,184 +144,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     deleteNode(id);
   }, [deleteNode]);
 
-  // Aggiungi gli hook per ProjectData
-  const { addItem, addCategory, updateItem } = useProjectDataUpdate();
+  // Hook centralizzato per la creazione di entità
+  const { createAgentAct, createBackendCall, createTask } = useEntityCreation();
+  
+  // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
+  const { addItem, addCategory } = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
-
-  // Gestione creazione Agent Act con analisi automatica del mode
-  const handleCreateAgentAct = useCallback(async (name: string, onRowUpdate?: (item: any) => void) => {
-    console.log('🎯 handleCreateAgentAct chiamata con:', { name, onRowUpdate: !!onRowUpdate });
-    try {
-      // Analizza automaticamente il mode dalla descrizione
-      const mode = classifyActMode(name);
-      console.log('🎯 Mode analizzato:', mode);
-      
-      // Trova la prima categoria di agentActs disponibile
-      const agentActs = (projectData as any)?.agentActs || [];
-      let categoryId = '';
-      
-      if (agentActs.length > 0) {
-        categoryId = agentActs[0].id;
-      } else {
-        // Se non ci sono categorie, crea una categoria di default
-        await addCategory('agentActs', 'Default Agent Acts');
-        const updatedData = await ProjectDataService.loadProjectData();
-        const updatedAgentActs = (updatedData as any)?.agentActs || [];
-        categoryId = updatedAgentActs[0]?.id || '';
-      }
-      
-      if (categoryId) {
-        // Apri il pannello agentActs nel sidebar
-        const sidebarEvent: any = new CustomEvent('sidebar:openAccordion', { 
-          detail: { entityType: 'agentActs' }, 
-          bubbles: true 
-        });
-        document.dispatchEvent(sidebarEvent);
-        
-        // Aggiungi il nuovo agent act
-        const newItem = await ProjectDataService.addItem('agentActs', categoryId, name, '');
-        
-        // Aggiorna l'item con il mode analizzato
-        await updateItem('agentActs', categoryId, newItem.id, { mode } as any);
-        
-        // Crea l'oggetto item per la riga del nodo
-        const rowItem = {
-          id: newItem.id,
-          name: name,
-          categoryType: 'agentActs',
-          mode: mode,
-          actId: newItem.id,
-          factoryId: newItem.id
-        };
-        
-        // Aggiorna la riga del nodo se il callback è fornito
-        if (onRowUpdate) {
-          console.log('🎯 Aggiornando riga del nodo con:', rowItem);
-          onRowUpdate(rowItem);
-        }
-        
-        // Evidenzia l'agent act appena creato nel sidebar
-        setTimeout(() => {
-          const highlightEvent: any = new CustomEvent('sidebar:highlightItem', { 
-            detail: { 
-              entityType: 'agentActs', 
-              itemName: name 
-            }, 
-            bubbles: true 
-          });
-          document.dispatchEvent(highlightEvent);
-        }, 100);
-        
-        // Apri il DDT Editor
-        setTimeout(() => {
-          const variables = (window as any).__omniaVars || {};
-          const ev: any = new CustomEvent('ddtEditor:open', { 
-            detail: { 
-              variables,
-              name: name,
-              type: 'agentAct'
-            }, 
-            bubbles: true 
-          });
-          document.dispatchEvent(ev);
-        }, 200);
-      }
-    } catch (error) {
-      console.error('Errore nella creazione dell\'agent act:', error);
-    }
-  }, [projectData, addCategory, updateItem]);
-
-  // Gestione creazione Backend Call
-  const handleCreateBackendCall = useCallback(async (name: string, onRowUpdate?: (item: any) => void) => {
-    try {
-      const backendActions = (projectData as any)?.backendActions || [];
-      let categoryId = '';
-      
-      if (backendActions.length > 0) {
-        categoryId = backendActions[0].id;
-      } else {
-        await addCategory('backendActions', 'Default Backend Actions');
-        const updatedData = await ProjectDataService.loadProjectData();
-        const updatedBackendActions = (updatedData as any)?.backendActions || [];
-        categoryId = updatedBackendActions[0]?.id || '';
-      }
-      
-      if (categoryId) {
-        document.dispatchEvent(new CustomEvent('sidebar:openAccordion', { detail: { entityType: 'backendActions' }, bubbles: true }));
-        const newItem = await ProjectDataService.addItem('backendActions', categoryId, name, '');
-        
-        // Crea l'oggetto item per la riga del nodo
-        const rowItem = {
-          id: newItem.id,
-          name: name,
-          categoryType: 'backendActions',
-          actId: newItem.id,
-          factoryId: newItem.id
-        };
-        
-        // Aggiorna la riga del nodo se il callback è fornito
-        if (onRowUpdate) {
-          onRowUpdate(rowItem);
-        }
-        
-        setTimeout(() => {
-          document.dispatchEvent(new CustomEvent('sidebar:highlightItem', { detail: { entityType: 'backendActions', itemName: name }, bubbles: true }));
-        }, 100);
-        setTimeout(() => {
-          const variables = (window as any).__omniaVars || {};
-          document.dispatchEvent(new CustomEvent('ddtEditor:open', { detail: { variables, name: name, type: 'backendAction' }, bubbles: true }));
-        }, 200);
-      }
-    } catch (error) {
-      console.error('Errore nella creazione della backend action:', error);
-    }
-  }, [projectData, addCategory]);
-
-  // Gestione creazione Task
-  const handleCreateTask = useCallback(async (name: string, onRowUpdate?: (item: any) => void) => {
-    try {
-      const tasks = (projectData as any)?.tasks || [];
-      let categoryId = '';
-      
-      if (tasks.length > 0) {
-        categoryId = tasks[0].id;
-      } else {
-        await addCategory('tasks', 'Default Tasks');
-        const updatedData = await ProjectDataService.loadProjectData();
-        const updatedTasks = (updatedData as any)?.tasks || [];
-        categoryId = updatedTasks[0]?.id || '';
-      }
-      
-      if (categoryId) {
-        document.dispatchEvent(new CustomEvent('sidebar:openAccordion', { detail: { entityType: 'tasks' }, bubbles: true }));
-        const newItem = await ProjectDataService.addItem('tasks', categoryId, name, '');
-        
-        // Crea l'oggetto item per la riga del nodo
-        const rowItem = {
-          id: newItem.id,
-          name: name,
-          categoryType: 'tasks',
-          actId: newItem.id,
-          factoryId: newItem.id
-        };
-        
-        // Aggiorna la riga del nodo se il callback è fornito
-        if (onRowUpdate) {
-          onRowUpdate(rowItem);
-        }
-        
-        setTimeout(() => {
-          document.dispatchEvent(new CustomEvent('sidebar:highlightItem', { detail: { entityType: 'tasks', itemName: name }, bubbles: true }));
-        }, 100);
-        setTimeout(() => {
-          const variables = (window as any).__omniaVars || {};
-          document.dispatchEvent(new CustomEvent('ddtEditor:open', { detail: { variables, name: name, type: 'task' }, bubbles: true }));
-        }, 200);
-      }
-    } catch (error) {
-      console.error('Errore nella creazione del task:', error);
-    }
-  }, [projectData, addCategory]);
 
   // Gestione creazione nuova condizione
   const handleCreateCondition = useCallback(async (name: string) => {
@@ -402,9 +230,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             rows: [],
             onDelete: () => deleteNodeWithLog(newNodeId),
             onUpdate: (updates: any) => updateNode(newNodeId, updates),
-            onCreateAgentAct: handleCreateAgentAct,
-            onCreateBackendCall: handleCreateBackendCall,
-            onCreateTask: handleCreateTask,
+            onCreateAgentAct: createAgentAct,
+            onCreateBackendCall: createBackendCall,
+            onCreateTask: createTask,
           },
         };
         const targetHandle = getTargetHandle(connectionMenuRef.current.sourceHandleId || '');
@@ -439,7 +267,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     } catch (error) {
       console.error('Errore nella creazione della condizione:', error);
     }
-  }, [projectData, addItem, addCategory, closeMenu, nodeIdCounter, reactFlowInstance, connectionMenuRef, deleteNodeWithLog, updateNode, onDeleteEdge, setNodes, setEdges, nodesRef, setNodeIdCounter, handleCreateAgentAct, handleCreateBackendCall, handleCreateTask]);
+  }, [projectData, addItem, addCategory, closeMenu, nodeIdCounter, reactFlowInstance, connectionMenuRef, deleteNodeWithLog, updateNode, onDeleteEdge, setNodes, setEdges, nodesRef, setNodeIdCounter, createAgentAct, createBackendCall, createTask]);
 
   // Patch all edges after mount
   React.useEffect(() => {
@@ -448,28 +276,24 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Update existing nodes with callbacks and onPlayNode
   React.useEffect(() => {
-    console.log('🎯 FlowEditor useEffect - funzioni di creazione:', {
-      handleCreateAgentAct: !!handleCreateAgentAct,
-      handleCreateBackendCall: !!handleCreateBackendCall,
-      handleCreateTask: !!handleCreateTask
-    });
-    console.log('🎯 FlowEditor useEffect - nodes count:', nodes.length);
-    setNodes((nds) => {
-      console.log('🎯 FlowEditor updating nodes with onCreateAgentAct:', !!handleCreateAgentAct);
-      return nds.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          onDelete: () => deleteNodeWithLog(node.id),
-          onUpdate: (updates: any) => updateNode(node.id, updates),
-          onPlayNode: onPlayNode ? () => onPlayNode(node.id, node.data.rows) : undefined,
-          onCreateAgentAct: handleCreateAgentAct,
-          onCreateBackendCall: handleCreateBackendCall,
-          onCreateTask: handleCreateTask,
-        },
-      }));
-    });
-  }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode, handleCreateAgentAct, handleCreateBackendCall, handleCreateTask]);
+    // Solo aggiorna se ci sono nodi da aggiornare
+    if (nodes.length > 0) {
+      setNodes((nds) => {
+        return nds.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            onDelete: () => deleteNodeWithLog(node.id),
+            onUpdate: (updates: any) => updateNode(node.id, updates),
+            onPlayNode: onPlayNode ? () => onPlayNode(node.id, node.data.rows) : undefined,
+            onCreateAgentAct: createAgentAct,
+            onCreateBackendCall: createBackendCall,
+            onCreateTask: createTask,
+          },
+        }));
+      });
+    }
+  }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode, createAgentAct, createBackendCall, createTask, nodes.length]);
 
   // Aggiorna edges con onUpdate per ogni edge custom
   useEffect(() => {

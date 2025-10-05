@@ -31,32 +31,36 @@ export function classifyActMode(title?: string): 'DataRequest' | 'DataConfirmati
   if (!t.trim()) return 'Message';
 
   // DataConfirmation cues - agent confirms/verifies user data
-  const confirmationRe = /(confirm(s|ed|ing)?|verify(ing|ies|ied)?|check(s|ed|ing)?|validate(s|d|ing)?|check.*correct|verify.*correct|conferma|verifica|controlla|valida)/i;
+  const confirmationRe = /(confirm(s|ed|ing)?|verify(ing|ies|ied)?|check(s|ed|ing)?|validate(s|d|ing)?|check.*correct|verify.*correct|conferma|verifica|controlla|valida|ask.*confirm|ask.*verification|ask.*check|request.*confirm|request.*verification|request.*check)/i;
   
-  // DataRequest cues - agent asks for user data
-  const requestRe = /(ask(s)?.*for|request(s|ed)?|require(s|d)?|collect(s|ed)?|prompt(s|ed)?|solicit(s|ed)?|chiede.*per|richiede|domanda.*per|raccoglie|sollecita|pregunta.*por|solicita|pide.*por)/i;
+  // DataRequest cues - agent asks for user data (più robusto)
+  const requestRe = /(ask(s)?.*for|request(s|ed)?|require(s|d)?|collect(s|ed)?|prompt(s|ed)?|solicit(s|ed)?|chiede.*per|richiede|domanda.*per|raccoglie|sollecita|pregunta.*por|solicita|pide.*por|get(s|ting)?|need(s|ing)?|obtain(s|ing)?|acquire(s|ing)?|gather(s|ing)?|fetch(es|ing)?)/i;
   
   // Message cues - agent provides information
   const messageRe = /(say(s|ing)?|inform(s|ed|ing)?|notify(ing|ies|ied)?|communicat(e|es|ed|ing)|announce(s|d|ing)?|explain(s|ed)?|dice|informa|notifica|comunica|annuncia|spiega)/i;
 
   const hasConfirmation = confirmationRe.test(t);
   
-  // Robust regex for DataRequest patterns
+  // Semplice e robusto: cerca parole chiave + qualsiasi cosa dopo, ma escludi confirmation
   const hasRequest = requestRe.test(t) || 
-    // Pattern "ask" + oggetto diretto
-    /\b(ask|asks)\b.*\b(name|nome|email|phone|telefono|address|indirizzo|data|info|information|informazioni|details|dettagli|contact|contatto|personal|personali|user|utente|customer|cliente|parent|genitore|client|cliente)\b/i.test(t) ||
-    // Pattern "ask for" + oggetto
-    /\b(ask|asks)\s+for\b.*\b(name|nome|email|phone|telefono|address|indirizzo|data|info|information|informazioni|details|dettagli|contact|contatto|personal|personali|user|utente|customer|cliente|parent|genitore|client|cliente)\b/i.test(t) ||
-    // Pattern "get" + oggetto
-    /\b(get|gets|getting)\b.*\b(name|nome|email|phone|telefono|address|indirizzo|data|info|information|informazioni|details|dettagli|contact|contatto|personal|personali|user|utente|customer|cliente|parent|genitore|client|cliente)\b/i.test(t) ||
-    // Pattern "collect" + oggetto
-    /\b(collect|collects|collecting)\b.*\b(data|info|information|informazioni|details|dettagli|contact|contatto|personal|personali)\b/i.test(t) ||
-    // Pattern "request" + oggetto
-    /\b(request|requests|requesting)\b.*\b(data|info|information|informazioni|details|dettagli|contact|contatto|personal|personali|name|nome|email|phone|telefono|address|indirizzo)\b/i.test(t) ||
-    // Pattern "need" + oggetto
-    /\b(need|needs|needing)\b.*\b(name|nome|email|phone|telefono|address|indirizzo|data|info|information|informazioni|details|dettagli|contact|contatto|personal|personali|user|utente|customer|cliente|parent|genitore|client|cliente)\b/i.test(t) ||
-    // Pattern "require" + oggetto  
-    /\b(require|requires|requiring)\b.*\b(name|nome|email|phone|telefono|address|indirizzo|data|info|information|informazioni|details|dettagli|contact|contatto|personal|personali|user|utente|customer|cliente|parent|genitore|client|cliente)\b/i.test(t);
+    // Pattern "ask" + qualsiasi cosa (ma non "ask confirmation")
+    (/\b(ask|asks)\b.*\w+/i.test(t) && !/\b(ask|asks)\b.*\b(confirm|confirmation|verify|verification|check|validate|validation)\b/i.test(t)) ||
+    // Pattern "ask for" + qualsiasi cosa (ma non "ask for confirmation")
+    (/\b(ask|asks)\s+for\b.*\w+/i.test(t) && !/\b(ask|asks)\s+for\b.*\b(confirm|confirmation|verify|verification|check|validate|validation)\b/i.test(t)) ||
+    // Pattern "solicit" + qualsiasi cosa
+    /\b(solicit|solicits|soliciting)\b.*\w+/i.test(t) ||
+    // Pattern "request" + qualsiasi cosa (ma non "request confirmation")
+    (/\b(request|requests|requesting)\b.*\w+/i.test(t) && !/\b(request|requests|requesting)\b.*\b(confirm|confirmation|verify|verification|check|validate|validation)\b/i.test(t)) ||
+    // Pattern "get" + qualsiasi cosa
+    /\b(get|gets|getting)\b.*\w+/i.test(t) ||
+    // Pattern "collect" + qualsiasi cosa
+    /\b(collect|collects|collecting)\b.*\w+/i.test(t) ||
+    // Pattern "need" + qualsiasi cosa
+    /\b(need|needs|needing)\b.*\w+/i.test(t) ||
+    // Pattern "require" + qualsiasi cosa
+    /\b(require|requires|requiring)\b.*\w+/i.test(t) ||
+    // Pattern "prompt" + qualsiasi cosa
+    /\b(prompt|prompts|prompting)\b.*\w+/i.test(t);
     
   const hasMessage = messageRe.test(t);
 

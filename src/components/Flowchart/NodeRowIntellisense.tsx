@@ -27,10 +27,6 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
   onCreateBackendCall,
   onCreateTask
 }) => {
-  // Debug log only once when component mounts
-  React.useEffect(() => {
-    console.log('🎯 NodeRowIntellisense mounted with onCreateAgentAct:', !!onCreateAgentAct);
-  }, []);
 
   // Crea callback per aggiornare la riga corrente
   const createRowUpdateCallback = (item: any) => {
