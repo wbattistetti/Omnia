@@ -23,6 +23,9 @@ interface NodeRowListProps {
   draggedItem: NodeRowData | null;
   draggedRowStyle: React.CSSProperties;
   onEditingEnd?: () => void;
+  onCreateAgentAct?: (name: string) => void;
+  onCreateBackendCall?: (name: string) => void;
+  onCreateTask?: (name: string) => void;
 }
 
 export const NodeRowList: React.FC<NodeRowListProps> = ({
@@ -44,7 +47,10 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   draggedRowOriginalIndex,
   draggedItem,
   draggedRowStyle,
-  onEditingEnd
+  onEditingEnd,
+  onCreateAgentAct,
+  onCreateBackendCall,
+  onCreateTask
 }) => {
   // Hide any visible inserter as soon as a textbox appears (editing mode)
   React.useEffect(() => {
@@ -101,6 +107,9 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
               else if (type === 'bottom') setHoveredInserter(i + 1);
             }}
             onMouseLeave={() => setHoveredInserter(null)}
+            onCreateAgentAct={onCreateAgentAct}
+            onCreateBackendCall={onCreateBackendCall}
+            onCreateTask={onCreateTask}
           />
         </React.Fragment>
       ))}
@@ -136,6 +145,9 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
           isBeingDragged={true}
           style={draggedRowStyle}
           forceEditing={false}
+          onCreateAgentAct={onCreateAgentAct}
+          onCreateBackendCall={onCreateBackendCall}
+          onCreateTask={onCreateTask}
         />
       )}
     </>

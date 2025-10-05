@@ -234,6 +234,40 @@ const Sidebar: React.FC = () => {
     }
   }, [loadDDTError]);
 
+  // Listener per aprire accordion e evidenziare elementi
+  useEffect(() => {
+    const handleOpenAccordion = (e: any) => {
+      const entityType = e?.detail?.entityType;
+      if (entityType && entityTypes.includes(entityType)) {
+        setOpenAccordion(entityType);
+      }
+    };
+
+    const handleHighlightItem = (e: any) => {
+      const { entityType, itemName } = e?.detail || {};
+      if (entityType && itemName) {
+        // Trova la categoria e imposta lastAddedName per evidenziare
+        const category = (data as any)?.[entityType]?.[0];
+        if (category) {
+          // Emetti evento per evidenziare l'elemento nella categoria
+          const highlightEvent = new CustomEvent('sidebar:setLastAddedName', {
+            detail: { categoryId: category.id, itemName },
+            bubbles: true
+          });
+          document.dispatchEvent(highlightEvent);
+        }
+      }
+    };
+
+    document.addEventListener('sidebar:openAccordion', handleOpenAccordion);
+    document.addEventListener('sidebar:highlightItem', handleHighlightItem);
+
+    return () => {
+      document.removeEventListener('sidebar:openAccordion', handleOpenAccordion);
+      document.removeEventListener('sidebar:highlightItem', handleHighlightItem);
+    };
+  }, [data, setOpenAccordion]);
+
   if (!data) return null;
 
   const scrollRef = useRef<HTMLDivElement | null>(null);

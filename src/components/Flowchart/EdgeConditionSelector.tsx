@@ -17,6 +17,7 @@ export interface EdgeConditionSelectorProps {
   onSelectUnconditioned: () => void;
   onSelectElse?: () => void;
   onClose: () => void;
+  onCreateCondition?: (name: string) => void;
 }
 
 /**
@@ -27,7 +28,8 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   onSelectCondition,
   onSelectUnconditioned,
   onSelectElse,
-  onClose
+  onClose,
+  onCreateCondition
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [showIntellisense, setShowIntellisense] = useState(false);
@@ -83,6 +85,14 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
 
   const handleIntellisenseClose = () => {
     setShowIntellisense(false);
+  };
+
+  // Gestione creazione nuova condizione
+  const handleCreateCondition = (name: string) => {
+    if (onCreateCondition) {
+      onCreateCondition(name);
+      setShowIntellisense(false);
+    }
   };
 
   // Click su collegamento senza condizione
@@ -149,6 +159,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
           onSelect={handleIntellisenseSelect}
           onClose={handleIntellisenseClose}
           filterCategoryTypes={['conditions']}
+          onCreateNew={handleCreateCondition}
         />
       )}
     </div>

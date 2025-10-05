@@ -6,6 +6,8 @@ import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { EdgeConditionSelector } from './EdgeConditionSelector';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
+import { useProjectDataUpdate, useProjectData } from '../../context/ProjectDataContext';
+import { ProjectDataService } from '../../services/ProjectDataService';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -25,6 +27,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     onDeleteEdge,
     data,
   } = props;
+
+  const { addItem, addCategory } = useProjectDataUpdate();
+  const { data: projectData } = useProjectData();
 
   const [hovered, setHovered] = useState(false);
   const [showConditionIntellisense, setShowConditionIntellisense] = useState(false);
@@ -97,6 +102,70 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Callback per chiusura
   const handleCloseSelector = () => {
     setShowConditionSelector(false);
+  };
+
+  // Gestione creazione nuova condizione
+  const handleCreateCondition = async (name: string) => {
+    try {
+      // Trova la prima categoria di condizioni disponibile
+      const conditions = (projectData as any)?.conditions || [];
+      let categoryId = '';
+      
+      if (conditions.length > 0) {
+        categoryId = conditions[0].id;
+      } else {
+        // Se non ci sono categorie, crea una categoria di default
+        await addCategory('conditions', 'Default Conditions');
+        // Ricarica i dati per ottenere l'ID della nuova categoria
+        const updatedData = await ProjectDataService.loadProjectData();
+        const updatedConditions = (updatedData as any)?.conditions || [];
+        categoryId = updatedConditions[0]?.id || '';
+      }
+      
+      if (categoryId) {
+        // Apri il pannello conditions nel sidebar
+        const sidebarEvent: any = new CustomEvent('sidebar:openAccordion', { 
+          detail: { entityType: 'conditions' }, 
+          bubbles: true 
+        });
+        document.dispatchEvent(sidebarEvent);
+        
+        // Aggiungi la nuova condizione
+        await addItem('conditions', categoryId, name, '');
+        
+        // Evidenzia la condizione appena creata nel sidebar
+        setTimeout(() => {
+          const highlightEvent: any = new CustomEvent('sidebar:highlightItem', { 
+            detail: { 
+              entityType: 'conditions', 
+              itemName: name 
+            }, 
+            bubbles: true 
+          });
+          document.dispatchEvent(highlightEvent);
+        }, 100);
+        
+        // Apri il ConditionEditor
+        setTimeout(() => {
+          const variables = (window as any).__omniaVars || {};
+          const ev: any = new CustomEvent('conditionEditor:open', { 
+            detail: { 
+              variables, 
+              script: '', 
+              label: name, 
+              name: name 
+            }, 
+            bubbles: true 
+          });
+          document.dispatchEvent(ev);
+        }, 200);
+        
+        // Chiudi il selector
+        setShowConditionSelector(false);
+      }
+    } catch (error) {
+      console.error('Errore nella creazione della condizione:', error);
+    }
   };
 
   const edgePath = getBezierPath({
@@ -262,6 +331,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
               setShowConditionSelector(false);
             }}
             onClose={handleCloseSelector}
+            onCreateCondition={handleCreateCondition}
           />,
           document.body
         )}

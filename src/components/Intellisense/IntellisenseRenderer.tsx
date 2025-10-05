@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { IntellisenseResult, IntellisenseLayoutConfig } from './IntellisenseTypes';
 import { IntellisenseItem } from './IntellisenseItem';
 import { IntellisenseCategoryHeader } from './IntellisenseCategoryHeader';
+import { Plus, Bot, Database, CheckSquare, ChevronDown } from 'lucide-react';
 
 interface IntellisenseRendererProps {
   fuzzyResults: Map<string, IntellisenseResult[]>;
@@ -12,6 +13,12 @@ interface IntellisenseRendererProps {
   categoryConfig: Record<string, { title: string; icon: React.ReactNode; color: string }>;
   onItemSelect: (result: IntellisenseResult) => void;
   onItemHover: (index: number) => void;
+  onCreateNew?: (name: string) => void;
+  onCreateAgentAct?: (name: string) => void;
+  onCreateBackendCall?: (name: string) => void;
+  onCreateTask?: (name: string) => void;
+  query?: string;
+  filterCategoryTypes?: string[];
 }
 
 // Configurazione per la virtualizzazione
@@ -26,10 +33,17 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   layoutConfig,
   categoryConfig,
   onItemSelect,
-  onItemHover
+  onItemHover,
+  onCreateNew,
+  onCreateAgentAct,
+  onCreateBackendCall,
+  onCreateTask,
+  query = '',
+  filterCategoryTypes = []
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [showCreateDropdown, setShowCreateDropdown] = useState(false);
   
   // Aggiungi uno stato per distinguere tra selezione da tastiera e da mouse
   const lastInputType = useRef<'keyboard' | 'mouse'>('keyboard');
@@ -87,10 +101,82 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   };
   
   if (allResults.length === 0) {
+    // Determina se è per nodi (agentActs/backendActions) o per condizioni
+    const isForNodes = filterCategoryTypes.includes('agentActs') || filterCategoryTypes.includes('backendActions');
+    
     return (
-      <div className="p-4 text-center text-gray-500">
-        <div className="text-sm text-slate-400">Nessun risultato trovato</div>
-        <div className="text-xs mt-1 text-slate-500">Prova con altre parole chiave o premi Enter per la ricerca semantica</div>
+      <div className="p-4 text-gray-500">
+        <div className="flex items-center justify-between">
+          <div className="text-center flex-1">
+            <div className="text-sm text-slate-400">Nessun risultato trovato</div>
+            <div className="text-xs mt-1 text-slate-500">Prova con altre parole chiave o premi Enter per la ricerca semantica</div>
+          </div>
+          {query.trim() && (
+            <div className="ml-4 relative">
+              {isForNodes ? (
+                // Dropdown per nodi
+                <div className="relative">
+                  <button
+                    onClick={() => setShowCreateDropdown(!showCreateDropdown)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                    title="Crea nuovo elemento"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Create
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                  
+                  {showCreateDropdown && (
+                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
+                      <button
+                        onClick={() => {
+                          onCreateAgentAct?.(query.trim());
+                          setShowCreateDropdown(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                      >
+                        <Bot className="w-3 h-3 text-green-500" />
+                        Agent Act
+                      </button>
+                      <button
+                        onClick={() => {
+                          onCreateBackendCall?.(query.trim());
+                          setShowCreateDropdown(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                      >
+                        <Database className="w-3 h-3 text-blue-500" />
+                        Backend Call
+                      </button>
+                      <button
+                        onClick={() => {
+                          onCreateTask?.(query.trim());
+                          setShowCreateDropdown(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
+                      >
+                        <CheckSquare className="w-3 h-3 text-orange-500" />
+                        Task
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Pulsante singolo per condizioni
+                onCreateNew && (
+                  <button
+                    onClick={() => onCreateNew(query.trim())}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                    title={`Crea nuova condizione: "${query.trim()}"`}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Crea "{query.trim()}"
+                  </button>
+                )
+              )}
+            </div>
+          )}
+        </div>
       </div>
     );
   }

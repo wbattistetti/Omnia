@@ -70,6 +70,21 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
     return () => { if (highlightTimer.current) window.clearTimeout(highlightTimer.current); };
   }, []);
 
+  // Listener per evidenziare elementi da eventi esterni
+  useEffect(() => {
+    const handleSetLastAddedName = (e: any) => {
+      const { categoryId, itemName } = e?.detail || {};
+      if (categoryId === category.id && itemName) {
+        setLastAddedName(itemName);
+      }
+    };
+
+    document.addEventListener('sidebar:setLastAddedName', handleSetLastAddedName);
+    return () => {
+      document.removeEventListener('sidebar:setLastAddedName', handleSetLastAddedName);
+    };
+  }, [category.id]);
+
   // Compute sorted items every render to avoid stale memoization after in-place mutations
   const norm = (s: string) => (s || '').toLocaleLowerCase();
   const sortedItems = [...(category.items || [])].sort((a: any, b: any) => norm(a?.name || a?.label || '').localeCompare(norm(b?.name || b?.label || '')));

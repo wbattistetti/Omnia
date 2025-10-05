@@ -27,6 +27,10 @@ interface IntellisenseMenuProps {
   onSelect: (item: IntellisenseItem) => void;
   onClose: () => void;
   filterCategoryTypes?: string[];
+  onCreateNew?: (name: string) => void;
+  onCreateAgentAct?: (name: string) => void;
+  onCreateBackendCall?: (name: string) => void;
+  onCreateTask?: (name: string) => void;
 }
 
 export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
@@ -36,7 +40,11 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   referenceElement,
   onSelect,
   onClose,
-  filterCategoryTypes
+  filterCategoryTypes,
+  onCreateNew,
+  onCreateAgentAct,
+  onCreateBackendCall,
+  onCreateTask
 }) => {
   const { data } = useProjectData();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -376,6 +384,12 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         categoryConfig={{}}
         onItemSelect={(result) => onSelect(result.item)}
         onItemHover={(index) => setSelectedIndex(index)}
+        onCreateNew={onCreateNew}
+        onCreateAgentAct={onCreateAgentAct}
+        onCreateBackendCall={onCreateBackendCall}
+        onCreateTask={onCreateTask}
+        query={query}
+        filterCategoryTypes={filterCategoryTypes}
       />
     </div>
   );

@@ -38,7 +38,10 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   onMouseMove,
   bgColor: propBgColor,
   textColor: propTextColor,
-  onEditingEnd
+  onEditingEnd,
+  onCreateAgentAct,
+  onCreateBackendCall,
+  onCreateTask
   },
   ref
 ) => {
@@ -528,6 +531,9 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
         inputRef={inputRef}
         handleIntellisenseSelect={handleIntellisenseSelect}
         handleIntellisenseClose={handleIntellisenseClose}
+        onCreateAgentAct={onCreateAgentAct}
+        onCreateBackendCall={onCreateBackendCall}
+        onCreateTask={onCreateTask}
       />
     </>
   );

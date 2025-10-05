@@ -28,6 +28,9 @@ export interface CustomNodeData {
   hidden?: boolean; // render invisibile finché non riposizionato
   focusRowId?: string; // row da mettere in edit al mount
   hideUncheckedRows?: boolean; // nasconde le righe non incluse
+  onCreateAgentAct?: (name: string) => void;
+  onCreateBackendCall?: (name: string) => void;
+  onCreateTask?: (name: string) => void;
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
@@ -480,6 +483,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onDragStart={handleRowDragStart}
           canDelete={(row) => nodeRows.length > 1}
           totalRows={nodeRows.length}
+          onCreateAgentAct={data.onCreateAgentAct}
+          onCreateBackendCall={data.onCreateBackendCall}
+          onCreateTask={data.onCreateTask}
           hoveredRowIndex={drag.hoveredRowIndex}
           draggedRowId={drag.draggedRowId}
           draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
