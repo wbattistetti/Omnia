@@ -41,6 +41,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   query = '',
   filterCategoryTypes = []
 }) => {
+  // Debug logging removed to prevent excessive console output
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
@@ -130,6 +131,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                     <div className="absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
                       <button
                         onClick={() => {
+                          console.log('🎯 Create Agent Act clicked with query:', query.trim());
                           onCreateAgentAct?.(query.trim());
                           setShowCreateDropdown(false);
                         }}

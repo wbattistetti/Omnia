@@ -28,9 +28,9 @@ export interface CustomNodeData {
   hidden?: boolean; // render invisibile finché non riposizionato
   focusRowId?: string; // row da mettere in edit al mount
   hideUncheckedRows?: boolean; // nasconde le righe non incluse
-  onCreateAgentAct?: (name: string) => void;
-  onCreateBackendCall?: (name: string) => void;
-  onCreateTask?: (name: string) => void;
+  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
@@ -38,6 +38,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   data, 
   isConnectable, selected
 }) => {
+  // Debug log to see what's in the node data
+  React.useEffect(() => {
+    console.log('🎯 CustomNode mounted with data.onCreateAgentAct:', !!data.onCreateAgentAct);
+  }, [data.onCreateAgentAct]);
   const [isEditingNode, setIsEditingNode] = useState(false);
   const [nodeTitle, setNodeTitle] = useState(data.title || 'New Node');
   // Se il nodo è nuovo e vuoto, crea subito una row vuota e metti in editing
@@ -483,7 +487,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onDragStart={handleRowDragStart}
           canDelete={(row) => nodeRows.length > 1}
           totalRows={nodeRows.length}
-          onCreateAgentAct={data.onCreateAgentAct}
+          onCreateAgentAct={(() => {
+            console.log('🎯 CustomNode passing onCreateAgentAct:', !!data.onCreateAgentAct);
+            return data.onCreateAgentAct;
+          })()}
           onCreateBackendCall={data.onCreateBackendCall}
           onCreateTask={data.onCreateTask}
           hoveredRowIndex={drag.hoveredRowIndex}

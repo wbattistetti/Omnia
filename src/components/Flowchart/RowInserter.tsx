@@ -11,16 +11,7 @@ interface RowInserterProps {
 
 export const RowInserter: React.FC<RowInserterProps> = ({ visible, onInsert, onMouseEnter, onMouseLeave, index }) => {
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.inserter') === '1') console.log(...args); } catch {} };
-  // Enable debug flag automatically so user sees logs without manual setup
-  useEffect(() => {
-    try {
-      if (localStorage.getItem('debug.inserter') !== '1') {
-        localStorage.setItem('debug.inserter', '1');
-        // eslint-disable-next-line no-console
-        console.log('[Inserter][debug] enabled');
-      }
-    } catch {}
-  }, []);
+  // Debug logging disabled to prevent excessive console output
   return (
     <div
       className="row-inserter relative flex items-center justify-center"

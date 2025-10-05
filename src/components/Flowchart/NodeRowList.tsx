@@ -23,9 +23,9 @@ interface NodeRowListProps {
   draggedItem: NodeRowData | null;
   draggedRowStyle: React.CSSProperties;
   onEditingEnd?: () => void;
-  onCreateAgentAct?: (name: string) => void;
-  onCreateBackendCall?: (name: string) => void;
-  onCreateTask?: (name: string) => void;
+  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
 }
 
 export const NodeRowList: React.FC<NodeRowListProps> = ({
@@ -65,14 +65,12 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
         <React.Fragment key={row.id}>
           {/* Inserter sopra la label */}
           <RowInserter
-            visible={(() => { const v = (hoveredInserter === idx) && (editingRowId === null); try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][visible.compute]', { idx, hoveredInserter, editingRowId, visible: v }); } catch {} return v; })()}
+            visible={(hoveredInserter === idx) && (editingRowId === null)}
             onInsert={() => handleInsertRow(idx)}
             onMouseEnter={() => {
-              try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][hover enter]', { idx, editingRowId }); } catch {}
               setHoveredInserter(idx);
             }}
             onMouseLeave={() => {
-              try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][hover leave]', { idx, editingRowId }); } catch {}
               setHoveredInserter(null);
             }}
             index={idx}
@@ -107,7 +105,10 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
               else if (type === 'bottom') setHoveredInserter(i + 1);
             }}
             onMouseLeave={() => setHoveredInserter(null)}
-            onCreateAgentAct={onCreateAgentAct}
+            onCreateAgentAct={(() => {
+              console.log('🎯 NodeRowList passing onCreateAgentAct:', !!onCreateAgentAct);
+              return onCreateAgentAct;
+            })()}
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
           />
@@ -118,11 +119,9 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
         visible={(hoveredInserter === rows.length) && (editingRowId === null)}
         onInsert={() => handleInsertRow(rows.length)}
         onMouseEnter={() => {
-          try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][hover enter end]', { idx: rows.length, editingRowId }); } catch {}
           setHoveredInserter(rows.length);
         }}
         onMouseLeave={() => {
-          try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][hover leave end]', { idx: rows.length, editingRowId }); } catch {}
           setHoveredInserter(null);
         }}
         index={rows.length}

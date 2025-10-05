@@ -46,6 +46,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   onCreateBackendCall,
   onCreateTask
 }) => {
+  // Debug logging removed to prevent excessive console output
   const { data } = useProjectData();
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});

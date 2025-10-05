@@ -35,18 +35,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
     ? (baseColor || item.textColor || item.color || undefined)
     : (item.textColor || item.color || baseColor || undefined);
   
-  // Debug log for specific items
-  if (item.categoryType === 'agentActs' && (item.label?.includes('asks for user') || item.label?.includes('asks for customer'))) {
-    console.log('>>> [IntellisenseItem] Debug:', {
-      label: item.label,
-      mode: (item as any)?.mode,
-      baseColor: baseColor,
-      foreColor: foreColor,
-      itemTextColor: item.textColor,
-      itemColor: item.color,
-      categoryType: item.categoryType
-    });
-  }
+  // Debug logging removed to prevent excessive console output
 
   return (
     <div

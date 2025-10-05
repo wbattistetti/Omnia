@@ -27,6 +27,11 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
   onCreateBackendCall,
   onCreateTask
 }) => {
+  // Debug log only once when component mounts
+  React.useEffect(() => {
+    console.log('🎯 NodeRowIntellisense mounted with onCreateAgentAct:', !!onCreateAgentAct);
+  }, []);
+
   // Crea callback per aggiornare la riga corrente
   const createRowUpdateCallback = (item: any) => {
     handleIntellisenseSelect(item);
@@ -59,7 +64,9 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
             onSelect={handleIntellisenseSelect}
             onClose={handleIntellisenseClose}
             filterCategoryTypes={['agentActs', 'backendActions', 'tasks']}
-            onCreateAgentAct={onCreateAgentAct ? (name: string) => onCreateAgentAct(name, createRowUpdateCallback) : undefined}
+            onCreateAgentAct={onCreateAgentAct ? (name: string) => {
+              return onCreateAgentAct(name, createRowUpdateCallback);
+            } : undefined}
             onCreateBackendCall={onCreateBackendCall ? (name: string) => onCreateBackendCall(name, createRowUpdateCallback) : undefined}
             onCreateTask={onCreateTask ? (name: string) => onCreateTask(name, createRowUpdateCallback) : undefined}
           />

@@ -150,9 +150,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Gestione creazione Agent Act con analisi automatica del mode
   const handleCreateAgentAct = useCallback(async (name: string, onRowUpdate?: (item: any) => void) => {
+    console.log('🎯 handleCreateAgentAct chiamata con:', { name, onRowUpdate: !!onRowUpdate });
     try {
       // Analizza automaticamente il mode dalla descrizione
       const mode = classifyActMode(name);
+      console.log('🎯 Mode analizzato:', mode);
       
       // Trova la prima categoria di agentActs disponibile
       const agentActs = (projectData as any)?.agentActs || [];
@@ -194,6 +196,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         
         // Aggiorna la riga del nodo se il callback è fornito
         if (onRowUpdate) {
+          console.log('🎯 Aggiornando riga del nodo con:', rowItem);
           onRowUpdate(rowItem);
         }
         
@@ -445,8 +448,15 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Update existing nodes with callbacks and onPlayNode
   React.useEffect(() => {
-    setNodes((nds) =>
-      nds.map((node) => ({
+    console.log('🎯 FlowEditor useEffect - funzioni di creazione:', {
+      handleCreateAgentAct: !!handleCreateAgentAct,
+      handleCreateBackendCall: !!handleCreateBackendCall,
+      handleCreateTask: !!handleCreateTask
+    });
+    console.log('🎯 FlowEditor useEffect - nodes count:', nodes.length);
+    setNodes((nds) => {
+      console.log('🎯 FlowEditor updating nodes with onCreateAgentAct:', !!handleCreateAgentAct);
+      return nds.map((node) => ({
         ...node,
         data: {
           ...node.data,
@@ -457,8 +467,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           onCreateBackendCall: handleCreateBackendCall,
           onCreateTask: handleCreateTask,
         },
-      }))
-    );
+      }));
+    });
   }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode, handleCreateAgentAct, handleCreateBackendCall, handleCreateTask]);
 
   // Aggiorna edges con onUpdate per ogni edge custom

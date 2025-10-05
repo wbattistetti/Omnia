@@ -29,16 +29,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
     ? (mode === 'DataRequest' ? '#3b82f6' : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')
     : 'var(--sidebar-content-text)';
   
-  // Debug log for specific items
-  if (isAgentAct && (item.name?.includes('asks for user') || item.name?.includes('asks for customer'))) {
-    console.log('>>> [SidebarItem] Debug:', {
-      name: item.name,
-      mode: mode,
-      nameColor: nameColor,
-      itemMode: (item as any)?.mode,
-      categoryType: categoryType
-    });
-  }
+  // Debug logging removed to prevent excessive console output
   // Expose the accent for nested wizard via CSS var
   const accentStyle: React.CSSProperties = isAgentAct ? { ['--ddt-accent' as any]: nameColor } : {};
   const hasEmbedded = Boolean((item as any)?.ddt);
