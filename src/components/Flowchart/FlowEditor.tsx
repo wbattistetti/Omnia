@@ -364,12 +364,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [nodes]);
 
   const createNodeAt = useCallback((clientX: number, clientY: number) => {
-    // debug logs removed
+    console.log('🆕 [CreateNode] Creating node at:', { clientX, clientY });
     const newNodeId = nodeIdCounter.toString();
     let x = 0, y = 0;
     if (reactFlowInstance) {
       const pos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
-      // debug logs removed
       x = pos.x - NODE_WIDTH / 2;
       y = pos.y - NODE_HEIGHT / 2;
     }
@@ -386,7 +385,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         focusRowId: '1',
       },
     };
-    // debug logs removed
+    console.log('🆕 [CreateNode] Node created:', newNodeId, { position: { x, y }, focusRowId: '1' });
     addNodeAtPosition(node, x, y);
     requestAnimationFrame(() => {
       try {

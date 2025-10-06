@@ -48,10 +48,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   );
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
-  const [editingRowId, setEditingRowId] = useState<string | null>(isNewAndEmpty ? '1' : null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingBump, setEditingBump] = useState(0);
   // Wrapper per setEditingRowId con log
   const setEditingRowIdWithLog = (val: string | null) => {
+    console.log('🎯 [Focus] setEditingRowIdWithLog:', { from: editingRowId, to: val, isNewAndEmpty, focusRowId: data.focusRowId });
     let changed = false;
     setEditingRowId(prev => {
       changed = prev !== val;
@@ -235,7 +236,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
 
-    try { console.log('[RowDnD][start]', { id, index, clientX, clientY, rect: { top: rect.top, left: rect.left, w: rect.width, h: rect.height } }); } catch {}
+    // Log rimosso
 
     window.addEventListener('pointermove', handleGlobalMouseMove as any, { capture: true });
     window.addEventListener('pointerup', handleGlobalMouseUp as any, { capture: true });
@@ -290,7 +291,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const snapOffsetY = targetY - currentMouseBasedY;
       
       drag.setVisualSnapOffset({ x: 0, y: snapOffsetY });
-      try { console.log('[RowDnD][hover]', { draggedId: drag.draggedRowId, from: drag.draggedRowOriginalIndex, to: newHoveredIndex }); } catch {}
+      // Log rimosso
     }
   };
 
@@ -312,7 +313,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const draggedRow = updatedRows[drag.draggedRowOriginalIndex as number];
       updatedRows.splice(drag.draggedRowOriginalIndex as number, 1);
       updatedRows.splice(targetIndex as number, 0, draggedRow);
-      try { console.log('[RowDnD][drop]', { id: drag.draggedRowId, from: drag.draggedRowOriginalIndex, to: targetIndex, order: updatedRows.map(r => r.id) }); } catch {}
+      // Log rimosso
       setNodeRows(updatedRows);
       if (data.onUpdate) data.onUpdate({ rows: updatedRows });
     }
@@ -365,20 +366,23 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditingNode]);
 
-  // Se il nodo è nuovo/creato ora, entra in editing della prima riga
-  // Ritardo di 1 frame per evitare che il recenter rubi il focus
+  // Focus management: se il nodo è nuovo o ha focusRowId, metti in editing
   useEffect(() => {
-    const setAfterFrame = (val: string) => {
-      try {
-        requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => setEditingRowIdWithLog(val), 0)));
-      } catch {
-        setTimeout(() => setEditingRowIdWithLog(val), 0);
-      }
-    };
-    if (data.focusRowId) setAfterFrame(data.focusRowId);
-    else if (isNewAndEmpty) setAfterFrame('1');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    console.log('🎯 [Focus] useEffect triggered:', { 
+      focusRowId: data.focusRowId, 
+      isNewAndEmpty, 
+      currentEditingRowId: editingRowId 
+    });
+    
+    if (data.focusRowId && editingRowId !== data.focusRowId) {
+      console.log('🎯 [Focus] Setting editingRowId from focusRowId:', data.focusRowId);
+      setEditingRowIdWithLog(data.focusRowId);
+    }
+    else if (isNewAndEmpty && !data.focusRowId && editingRowId !== '1') {
+      console.log('🎯 [Focus] Setting editingRowId to 1 for new empty node');
+      setEditingRowIdWithLog('1');
+    }
+  }, [data.focusRowId, isNewAndEmpty]);
 
   // Canvas click: if there is a newly added empty row being edited, cancel and remove it
   useEffect(() => {
