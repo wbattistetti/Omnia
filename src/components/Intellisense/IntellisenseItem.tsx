@@ -3,6 +3,7 @@ import { IntellisenseItem as IntellisenseItemType, IntellisenseResult } from './
 import { highlightMatches } from './IntellisenseSearch';
 import { Circle, Ear, CheckCircle2, Megaphone } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from '../Sidebar/sidebarTheme';
+import { getAgentActIconColor } from '../../utils/agentActIconColor';
 
 interface IntellisenseItemProps {
   result: IntellisenseResult;
@@ -27,9 +28,9 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   
   const iconKey = item.iconComponent ? undefined : SIDEBAR_TYPE_ICONS[item.categoryType as string];
   const IconFromSidebar = iconKey ? SIDEBAR_ICON_COMPONENTS[iconKey] : null;
-  // Foreground color: use same logic as Sidebar items for Agent Acts
+  // Foreground color: use getAgentActIconColor for Agent Acts with mode="DataRequest"
   const baseColor = (item.categoryType === 'agentActs')
-    ? ((item as any)?.mode === 'DataRequest' ? '#3b82f6' : ((item as any)?.mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e'))
+    ? ((item as any)?.mode === 'DataRequest' ? getAgentActIconColor(item as any) : ((item as any)?.mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e'))
     : (SIDEBAR_TYPE_COLORS[item.categoryType as string]?.color);
   const foreColor = (item.categoryType === 'agentActs') 
     ? (baseColor || item.textColor || item.color || undefined)

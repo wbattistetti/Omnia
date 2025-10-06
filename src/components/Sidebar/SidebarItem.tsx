@@ -5,6 +5,7 @@ import ItemEditor from './ItemEditor';
 import { classifyActInteractivity } from '../../nlp/actInteractivity';
 // import DeleteConfirmation from './DeleteConfirmation';
 import { Pencil, Trash2, Wrench, Settings } from 'lucide-react';
+import { getAgentActIconColor } from '../../utils/agentActIconColor';
 
 interface SidebarItemProps {
   item: ProjectEntityItem;
@@ -26,7 +27,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
   const mode: 'DataRequest' | 'DataConfirmation' | 'Message' = (isAgentAct ? ((item as any)?.mode || 'Message') : 'Message');
   const isInteractive = mode === 'DataRequest' || mode === 'DataConfirmation'; // Keep for backward compatibility
   const nameColor = isAgentAct
-    ? (mode === 'DataRequest' ? '#3b82f6' : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')
+    ? (mode === 'DataRequest' ? getAgentActIconColor(item as any) : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')
     : 'var(--sidebar-content-text)';
   
   // Debug logging removed to prevent excessive console output

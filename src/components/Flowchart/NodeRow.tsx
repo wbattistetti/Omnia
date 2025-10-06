@@ -12,6 +12,7 @@ import { NodeRowProps } from '../../types/NodeRowTypes';
 import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
+import { getAgentActIconColor } from '../../utils/agentActIconColor';
 
 export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   {
@@ -412,7 +413,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
 
   if (isAgentAct) {
     Icon = mode === 'DataRequest' ? Ear : mode === 'DataConfirmation' ? CheckCircle2 : Megaphone;
-    labelTextColor = mode === 'DataRequest' ? '#3b82f6' : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e';
+    // Usa getAgentActIconColor per determinare il colore basato su DDT e test
+    labelTextColor = getAgentActIconColor(row as any);
   } else {
     const c = row.categoryType ? (SIDEBAR_TYPE_COLORS as any)[row.categoryType] : null;
     labelTextColor = (c && (c.color || '#111')) || (typeof propTextColor === 'string' ? propTextColor : '');
