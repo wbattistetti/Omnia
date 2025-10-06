@@ -412,11 +412,42 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
     setSelectedEdgeId(null);
+    
+    // Controlla se ci sono nodi con zero righe stabilizzate (vuoti) in editing
+    console.log('🔍 [CanvasClick] Checking nodes:', nodes.length);
+    nodes.forEach(node => {
+      const nodeData = node.data as any;
+      const rows = nodeData?.rows || [];
+      const editingRowId = nodeData?.editingRowId;
+      const focusRowId = nodeData?.focusRowId;
+      
+      console.log('🔍 [CanvasClick] Node:', node.id, {
+        editingRowId,
+        focusRowId,
+        rowsLength: rows.length,
+        rows: rows
+      });
+      
+      // Se il nodo ha zero righe stabilizzate (vuoto) e è in editing, cancellalo
+      if (rows.length === 0 && (editingRowId || focusRowId)) {
+        console.log('🗑️ [CanvasClick] Deleting empty node:', node.id);
+        deleteNodeWithLog(node.id);
+      }
+      // Se il nodo ha una sola riga vuota in editing, cancellalo
+      else if (rows.length === 1 && editingRowId) {
+        const singleRow = rows[0];
+        if (!singleRow.text || !singleRow.text.trim()) {
+          console.log('🗑️ [CanvasClick] Deleting node with single empty row:', node.id);
+          deleteNodeWithLog(node.id);
+        }
+      }
+    });
+    
     try {
       const ev = new CustomEvent('flow:canvas:click', { bubbles: true });
       window.dispatchEvent(ev);
     } catch {}
-  }, []);
+  }, [nodes, deleteNodeWithLog]);
 
   // (rimosso onPaneDoubleClick: usiamo il doppio click sul wrapper)
 
