@@ -28,9 +28,9 @@ export interface CustomNodeData {
   hidden?: boolean; // render invisibile finché non riposizionato
   focusRowId?: string; // row da mettere in edit al mount
   hideUncheckedRows?: boolean; // nasconde le righe non incluse
-  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
-  onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
-  onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
+  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
 
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
@@ -488,7 +488,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           handleInsertRow={handleInsertRow}
           nodeTitle={nodeTitle}
           onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included })}
-          onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, meta as any)}
+          onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included })}
           onDelete={(row) => handleDeleteRow(row.id)}
           onKeyDown={(e) => {/* logica keydown se serve */}}
           onDragStart={handleRowDragStart}

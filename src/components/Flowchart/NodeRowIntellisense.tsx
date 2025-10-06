@@ -10,9 +10,9 @@ interface NodeRowIntellisenseProps {
   inputRef: React.RefObject<HTMLTextAreaElement>;
   handleIntellisenseSelect: (item: any) => void;
   handleIntellisenseClose: () => void;
-  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
-  onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
-  onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => void;
+  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
 
 export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
@@ -52,11 +52,11 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
             onSelect={handleIntellisenseSelect}
             onClose={handleIntellisenseClose}
             filterCategoryTypes={['agentActs', 'backendActions', 'tasks']}
-            onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry') => {
-              return onCreateAgentAct(name, createRowUpdateCallback, scope);
+            onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
+              return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);
             } : undefined}
-            onCreateBackendCall={onCreateBackendCall ? (name: string, scope?: 'global' | 'industry') => onCreateBackendCall(name, createRowUpdateCallback, scope) : undefined}
-            onCreateTask={onCreateTask ? (name: string, scope?: 'global' | 'industry') => onCreateTask(name, createRowUpdateCallback, scope) : undefined}
+            onCreateBackendCall={onCreateBackendCall ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateBackendCall(name, createRowUpdateCallback, scope, categoryName) : undefined}
+            onCreateTask={onCreateTask ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateTask(name, createRowUpdateCallback, scope, categoryName) : undefined}
           />
         </div>,
         document.body

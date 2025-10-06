@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { IntellisenseResult, IntellisenseLayoutConfig } from './IntellisenseTypes';
 import { IntellisenseItem } from './IntellisenseItem';
 import { IntellisenseCategoryHeader } from './IntellisenseCategoryHeader';
+import { CreateButtons } from './CreateButtons';
 import { Plus, Bot, Database, CheckSquare, ChevronDown, Loader2 } from 'lucide-react';
 
 interface IntellisenseRendererProps {
@@ -14,12 +15,13 @@ interface IntellisenseRendererProps {
   onItemSelect: (result: IntellisenseResult) => void;
   onItemHover: (index: number) => void;
   onCreateNew?: (name: string, scope?: 'global' | 'industry') => void;
-  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry') => void;
-  onCreateBackendCall?: (name: string, scope?: 'global' | 'industry') => void;
-  onCreateTask?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateBackendCall?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateTask?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   query?: string;
   filterCategoryTypes?: string[];
   projectIndustry?: string;
+  projectData?: any;
 }
 
 // Configurazione per la virtualizzazione
@@ -41,64 +43,118 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   onCreateTask,
   query = '',
   filterCategoryTypes = [],
-  projectIndustry = 'utility-gas'
+  projectIndustry = 'utility-gas',
+  projectData
 }) => {
   // Debug logging removed to prevent excessive console output
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const [showCreateDropdown, setShowCreateDropdown] = useState<'global' | 'industry' | false>(false);
   const [isCreating, setIsCreating] = useState(false);
   const [creatingScope, setCreatingScope] = useState<'global' | 'industry' | null>(null);
+  const [showCategorySelector, setShowCategorySelector] = useState<'global' | 'industry' | false>(false);
+  const [showCategoryInput, setShowCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   
   // Aggiungi uno stato per distinguere tra selezione da tastiera e da mouse
   const lastInputType = useRef<'keyboard' | 'mouse'>('keyboard');
 
+  // Funzione per ottenere le categorie esistenti
+  const getExistingCategories = (): string[] => {
+    if (!projectData?.agentActs) return [];
+    return projectData.agentActs.map((cat: any) => cat.name).filter(Boolean);
+  };
+
+  // Funzioni per gestire la selezione categoria
+  const handleCategorySelect = (categoryName: string, scope: 'global' | 'industry') => {
+    handleCreateAgentAct(query.trim(), scope, categoryName);
+  };
+
+  const handleCreateNewCategory = (scope: 'global' | 'industry') => {
+    if (newCategoryName.trim()) {
+      handleCreateAgentAct(query.trim(), scope, newCategoryName.trim());
+    }
+  };
+
+  const handleCategoryInputKeyDown = (e: React.KeyboardEvent, scope: 'global' | 'industry') => {
+    if (e.key === 'Enter') {
+      handleCreateNewCategory(scope);
+    } else if (e.key === 'Escape') {
+      setShowCategoryInput(false);
+      setNewCategoryName('');
+    }
+  };
+
+  // Funzione generica per gestire la selezione delle entità
+  const handleEntitySelect = (entityType: string, scope: 'global' | 'industry') => {
+    switch (entityType) {
+      case 'agentAct':
+        handleCreateAgentAct(query.trim(), scope);
+        break;
+      case 'backendCall':
+        handleCreateBackendCall(query.trim(), scope);
+        break;
+      case 'task':
+        handleCreateTask(query.trim(), scope);
+        break;
+      default:
+        console.error(`Unknown entity type: ${entityType}`);
+    }
+  };
+
   // Funzioni wrapper per gestire il loading durante la creazione
-  const handleCreateAgentAct = async (name: string, scope: 'global' | 'industry') => {
+  const handleCreateAgentAct = (name: string, scope: 'global' | 'industry', categoryName?: string) => {
     setIsCreating(true);
     setCreatingScope(scope);
     try {
-      await onCreateAgentAct?.(name, scope);
+      onCreateAgentAct?.(name, scope, categoryName);
     } finally {
-      setIsCreating(false);
-      setCreatingScope(null);
-      setShowCreateDropdown(false);
+      // Reset immediato per creazione sincrona
+      setTimeout(() => {
+        setIsCreating(false);
+        setCreatingScope(null);
+        setShowCategorySelector(false);
+        setShowCategoryInput(false);
+        setNewCategoryName('');
+      }, 100); // Piccolo delay per mostrare lo spinner
     }
   };
 
-  const handleCreateBackendCall = async (name: string, scope: 'global' | 'industry') => {
+  const handleCreateBackendCall = (name: string, scope: 'global' | 'industry') => {
     setIsCreating(true);
     setCreatingScope(scope);
     try {
-      await onCreateBackendCall?.(name, scope);
+      onCreateBackendCall?.(name, scope);
     } finally {
-      setIsCreating(false);
-      setCreatingScope(null);
-      setShowCreateDropdown(false);
+      setTimeout(() => {
+        setIsCreating(false);
+        setCreatingScope(null);
+      }, 100);
     }
   };
 
-  const handleCreateTask = async (name: string, scope: 'global' | 'industry') => {
+  const handleCreateTask = (name: string, scope: 'global' | 'industry') => {
     setIsCreating(true);
     setCreatingScope(scope);
     try {
-      await onCreateTask?.(name, scope);
+      onCreateTask?.(name, scope);
     } finally {
-      setIsCreating(false);
-      setCreatingScope(null);
-      setShowCreateDropdown(false);
+      setTimeout(() => {
+        setIsCreating(false);
+        setCreatingScope(null);
+      }, 100);
     }
   };
 
-  const handleCreateNew = async (name: string, scope: 'global' | 'industry') => {
+  const handleCreateNew = (name: string, scope: 'global' | 'industry') => {
     setIsCreating(true);
     setCreatingScope(scope);
     try {
-      await onCreateNew?.(name, scope);
+      onCreateNew?.(name, scope);
     } finally {
-      setIsCreating(false);
-      setCreatingScope(null);
-      setShowCreateDropdown(false);
+      setTimeout(() => {
+        setIsCreating(false);
+        setCreatingScope(null);
+      }, 100);
     }
   };
 
@@ -155,8 +211,9 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   };
   
   if (allResults.length === 0) {
-    // Determina se è per nodi (agentActs/backendActions) o per condizioni
+    // Determina il contesto basato sui tipi di categoria
     const isForNodes = filterCategoryTypes.includes('agentActs') || filterCategoryTypes.includes('backendActions');
+    const context = isForNodes ? 'nodes' : 'conditions';
     
     return (
       <div className="p-4 text-gray-500">
@@ -173,189 +230,32 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
           {/* Pulsanti Create - dentro il messaggio */}
           {query.trim() && (
             <div className="flex justify-center mt-3">
-              {isForNodes ? (
-                // Toolbar con due pulsanti per nodi
-                <div className="flex flex-col gap-1">
-                  <div className="flex gap-2">
-                    {/* Global */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowCreateDropdown('global')}
-                        className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors whitespace-nowrap"
-                        title="Crea elemento globale (cross-industry)"
-                      >
-                        {isCreating && creatingScope === 'global' ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Plus className="w-3 h-3" />
-                        )}
-                        Global
-                        <ChevronDown className="w-3 h-3" />
-                      </button>
-                      
-                      {showCreateDropdown === 'global' && (
-                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
-                          <button
-                            onClick={() => {
-                              console.log('🎯 Create Global Agent Act clicked with query:', query.trim());
-                              handleCreateAgentAct(query.trim(), 'global');
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                          >
-                            <Bot className="w-3 h-3 text-green-500" />
-                            Agent Act
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleCreateBackendCall(query.trim(), 'global');
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                          >
-                            <Database className="w-3 h-3 text-blue-500" />
-                            Backend Call
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleCreateTask(query.trim(), 'global');
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                          >
-                            <CheckSquare className="w-3 h-3 text-orange-500" />
-                            Task
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Industry */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowCreateDropdown('industry')}
-                        className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors whitespace-nowrap"
-                        title={`Crea elemento per ${projectIndustry}`}
-                      >
-                        {isCreating && creatingScope === 'industry' ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Plus className="w-3 h-3" />
-                        )}
-                        {projectIndustry}
-                        <ChevronDown className="w-3 h-3" />
-                      </button>
-                      
-                      {showCreateDropdown === 'industry' && (
-                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
-                          <button
-                            onClick={() => {
-                              console.log('🎯 Create Industry Agent Act clicked with query:', query.trim());
-                              handleCreateAgentAct(query.trim(), 'industry');
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                          >
-                            <Bot className="w-3 h-3 text-green-500" />
-                            Agent Act
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleCreateBackendCall(query.trim(), 'industry');
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                          >
-                            <Database className="w-3 h-3 text-blue-500" />
-                            Backend Call
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleCreateTask(query.trim(), 'industry');
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                          >
-                            <CheckSquare className="w-3 h-3 text-orange-500" />
-                            Task
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                // Toolbar con due pulsanti per condizioni
-                onCreateNew && (
-                  <div className="flex flex-col gap-1">
-                    <div className="flex gap-2">
-                      {/* Global Condition */}
-                      <div className="relative">
-                        <button
-                          onClick={() => setShowCreateDropdown('global')}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors whitespace-nowrap"
-                          title="Crea condizione globale (cross-industry)"
-                        >
-                          {isCreating && creatingScope === 'global' ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Plus className="w-3 h-3" />
-                          )}
-                          Global
-                          <ChevronDown className="w-3 h-3" />
-                        </button>
-                        
-                        {showCreateDropdown === 'global' && (
-                          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
-                            <button
-                              onClick={() => {
-                                console.log('🎯 Create Global Condition clicked with query:', query.trim());
-                                handleCreateNew(query.trim(), 'global');
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                            >
-                              <CheckSquare className="w-3 h-3 text-green-500" />
-                              Condition
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Industry Condition */}
-                      <div className="relative">
-                        <button
-                          onClick={() => setShowCreateDropdown('industry')}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors whitespace-nowrap"
-                          title={`Crea condizione per ${projectIndustry}`}
-                        >
-                          {isCreating && creatingScope === 'industry' ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Plus className="w-3 h-3" />
-                          )}
-                          {projectIndustry}
-                          <ChevronDown className="w-3 h-3" />
-                        </button>
-                        
-                        {showCreateDropdown === 'industry' && (
-                          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-[160px]">
-                            <button
-                              onClick={() => {
-                                console.log('🎯 Create Industry Condition clicked with query:', query.trim());
-                                handleCreateNew(query.trim(), 'industry');
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
-                            >
-                              <CheckSquare className="w-3 h-3 text-blue-500" />
-                              Condition
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              )}
+              <CreateButtons
+                context={context}
+                query={query}
+                projectIndustry={projectIndustry}
+                isCreating={isCreating}
+                creatingScope={creatingScope}
+                onEntitySelect={handleEntitySelect}
+                showCategorySelector={showCategorySelector}
+                onCategorySelectorShow={setShowCategorySelector}
+                onCreateNew={onCreateNew}
+                // Props per il selettore categoria
+                existingCategories={getExistingCategories()}
+                onCategorySelect={handleCategorySelect}
+                showCategoryInput={showCategoryInput}
+                newCategoryName={newCategoryName}
+                onNewCategoryNameChange={setNewCategoryName}
+                onCreateNewCategory={handleCreateNewCategory}
+                onCategoryInputKeyDown={handleCategoryInputKeyDown}
+              />
             </div>
           )}
         </div>
       </div>
     );
   }
+
   
   const smallSet = totalItems <= 2;
   return (

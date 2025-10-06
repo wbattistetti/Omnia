@@ -1,11 +1,12 @@
 import { useCallback } from 'react';
 import { EntityCreationService, EntityCreationOptions } from '../services/EntityCreationService';
-import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
+import { useProjectData } from '../context/ProjectDataContext';
+import { useProjectDataUpdate } from '../context/ProjectDataContext';
 
 export interface UseEntityCreationReturn {
-  createAgentAct: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => Promise<void>;
-  createBackendCall: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => Promise<void>;
-  createTask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => Promise<void>;
+  createAgentAct: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  createBackendCall: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  createTask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
 
 /**
@@ -16,55 +17,63 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
   const projectDataContext = useProjectData();
   const projectDataUpdateContext = useProjectDataUpdate();
   
-  // Controlla se i context sono disponibili
+  // Controlla se il context è disponibile
   if (!projectDataContext || !projectDataUpdateContext) {
     throw new Error('useEntityCreation must be used within ProjectDataProvider');
   }
   
   const { data: projectData } = projectDataContext;
-  const { addCategory, updateItem } = projectDataUpdateContext;
+  const { refreshData } = projectDataUpdateContext;
 
-  const createEntity = useCallback(async (
+  const createEntity = useCallback((
     entityType: 'agentActs' | 'backendActions' | 'tasks',
     name: string,
     onRowUpdate?: (item: any) => void,
-    scope?: 'global' | 'industry'
+    scope?: 'global' | 'industry',
+    categoryName?: string
   ) => {
     const options: EntityCreationOptions = {
       name,
       onRowUpdate,
       projectData,
-      addCategory,
-      updateItem,
       projectIndustry: projectData?.industry as any,
-      scope
+      scope,
+      categoryName
     };
 
+    let result;
     switch (entityType) {
       case 'agentActs':
-        await EntityCreationService.createAgentAct(options);
+        result = EntityCreationService.createAgentAct(options);
         break;
       case 'backendActions':
-        await EntityCreationService.createBackendCall(options);
+        result = EntityCreationService.createBackendCall(options);
         break;
       case 'tasks':
-        await EntityCreationService.createTask(options);
+        result = EntityCreationService.createTask(options);
         break;
       default:
         console.error(`Unknown entity type: ${entityType}`);
+        return;
     }
-  }, [projectData, addCategory, updateItem]);
 
-  const createAgentAct = useCallback(async (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => {
-    await createEntity('agentActs', name, onRowUpdate, scope);
+    // Aggiorna il context per riflettere le modifiche nel sidebar
+    if (result) {
+      console.log('🔄 Refreshing project data after entity creation');
+      refreshData();
+    }
+  }, [projectData, refreshData]);
+
+  const createAgentAct = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
+    createEntity('agentActs', name, onRowUpdate, scope, categoryName);
   }, [createEntity]);
 
-  const createBackendCall = useCallback(async (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => {
-    await createEntity('backendActions', name, onRowUpdate, scope);
+  const createBackendCall = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
+    createEntity('backendActions', name, onRowUpdate, scope, categoryName);
   }, [createEntity]);
 
-  const createTask = useCallback(async (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry') => {
-    await createEntity('tasks', name, onRowUpdate, scope);
+  const createTask = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
+    createEntity('tasks', name, onRowUpdate, scope, categoryName);
   }, [createEntity]);
 
   return {

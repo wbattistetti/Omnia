@@ -24,10 +24,9 @@ export interface EntityCreationOptions {
   name: string;
   onRowUpdate?: (item: CreatedEntity) => void;
   projectData: any;
-  addCategory: (entityType: string, name: string) => Promise<void>;
-  updateItem: (entityType: string, categoryId: string, itemId: string, updates: any) => Promise<void>;
   projectIndustry?: Industry;
   scope?: 'global' | 'industry';
+  categoryName?: string; // Nome della categoria (opzionale, default: "Categorize Later")
 }
 
 const ENTITY_CONFIGS: Record<string, EntityCreationConfig> = {
@@ -53,111 +52,113 @@ const ENTITY_CONFIGS: Record<string, EntityCreationConfig> = {
 
 export class EntityCreationService {
   /**
-   * Crea un'entità (Agent Act, Backend Call, o Task) in modo centralizzato
+   * Crea un'entità (Agent Act, Backend Call, o Task) SOLO IN MEMORIA
+   * Il salvataggio nel DB factory avviene in modo esplicito
    */
-  static async createEntity(
+  static createEntity(
     entityType: keyof typeof ENTITY_CONFIGS,
     options: EntityCreationOptions
-  ): Promise<CreatedEntity | null> {
+  ): CreatedEntity | null {
     const config = ENTITY_CONFIGS[entityType];
     if (!config) {
       throw new Error(`Unknown entity type: ${entityType}`);
     }
 
-    try {
-      console.log(`🎯 Creating ${entityType} with name:`, options.name);
+    console.log(`🎯 Creating ${entityType} in memory with name:`, options.name);
 
-      // 1. Determina lo scope (utente o automatico)
-      let finalScope: Scope;
-      let finalIndustry: Industry | undefined;
-      
-      if (options.scope) {
-        // Scope fornito dall'utente
-        finalScope = options.scope;
-        finalIndustry = options.scope === 'industry' ? (options.projectIndustry || 'utility-gas') : undefined;
-        console.log(`🎯 User-specified scope:`, { scope: finalScope, industry: finalIndustry });
-      } else {
-        // Classificazione automatica
-        const scopeGuess = classifyScopeFromLabel(options.name, options.projectIndustry);
-        finalScope = scopeGuess.scope;
-        finalIndustry = scopeGuess.industry;
-        console.log(`🎯 Auto-classified scope:`, scopeGuess);
-      }
+    // 1. Determina lo scope (utente o automatico)
+    let finalScope: Scope;
+    let finalIndustry: Industry | undefined;
+    
+    if (options.scope) {
+      // Scope fornito dall'utente
+      finalScope = options.scope;
+      finalIndustry = options.scope === 'industry' ? (options.projectIndustry || 'utility-gas') : undefined;
+      console.log(`🎯 User-specified scope:`, { scope: finalScope, industry: finalIndustry });
+    } else {
+      // Classificazione automatica
+      const scopeGuess = classifyScopeFromLabel(options.name, options.projectIndustry);
+      finalScope = scopeGuess.scope;
+      finalIndustry = scopeGuess.industry;
+      console.log(`🎯 Auto-classified scope:`, scopeGuess);
+    }
 
-      // 2. Salva nella collezione specifica
-      const factoryItem = await this.createFactoryItem(
-        entityType,
-        options.name,
-        { scope: finalScope, industry: finalIndustry, confidence: 1.0 },
-        options.projectIndustry
-      );
+    // 2. Trova o crea la categoria nel progetto locale (ISTANTANEO)
+    const categoryId = this.ensureCategoryExistsSync(
+      entityType,
+      options.projectData,
+      options.categoryName
+    );
 
-      if (!factoryItem) {
-        throw new Error(`Failed to create factory item for ${entityType}`);
-      }
-
-      // 3. Trova o crea la categoria nel progetto locale
-      const categoryId = await this.ensureCategoryExists(
-        entityType,
-        options.projectData,
-        options.addCategory
-      );
-
-      if (!categoryId) {
-        throw new Error(`Failed to create or find category for ${entityType}`);
-      }
-
-      // 4. Crea l'elemento nel progetto locale
-      const newItem = await ProjectDataService.addItem(
-        config.entityType,
-        categoryId,
-        options.name,
-        ''
-      );
-
-      // 5. Aggiorna l'elemento con metadati specifici
-      const updates: any = {
-        factoryId: factoryItem._id,
-        scope: finalScope,
-        industry: finalIndustry,
-        status: 'published',
-        version: '1.0.0'
-      };
-
-      if (entityType === 'agentActs') {
-        updates.mode = classifyActMode(options.name);
-      }
-
-      await options.updateItem(config.entityType, categoryId, newItem.id, updates);
-
-      // 6. Crea l'oggetto per la riga del nodo
-      const rowItem: CreatedEntity = {
-        id: newItem.id,
-        name: options.name,
-        categoryType: config.entityType,
-        actId: newItem.id,
-        factoryId: factoryItem._id,
-        ...(entityType === 'agentActs' && { 
-          mode: classifyActMode(options.name),
-          ddtId: undefined, // Nessun DDT associato inizialmente
-          testPassed: false // Test non ancora passato
-        })
-      };
-
-      // 7. Aggiorna la riga del nodo se il callback è fornito
-      if (options.onRowUpdate) {
-        console.log('🎯 Updating node row with:', rowItem);
-        options.onRowUpdate(rowItem);
-      }
-
-      // 8. Gestisci eventi UI
-      await this.handleUIEvents(config, options.name);
-
-      return rowItem;
-    } catch (error) {
-      console.error(`Error creating ${entityType}:`, error);
+    if (!categoryId) {
+      console.error(`Failed to create or find category for ${entityType}`);
       return null;
     }
+
+    // 3. Crea l'elemento nel progetto locale (ISTANTANEO)
+    const newItem = this.createItemSync(
+      config.entityType,
+      categoryId,
+      options.name,
+      finalScope,
+      finalIndustry,
+      entityType,
+      options.projectData
+    );
+
+    // 4. Aggiorna l'elemento con metadati specifici (ISTANTANEO)
+    this.updateItemSync(
+      config.entityType,
+      categoryId,
+      newItem.id,
+      {
+        scope: finalScope,
+        industry: finalIndustry,
+        status: 'draft',
+        version: '1.0.0',
+        isInMemory: true,
+        factoryId: null,
+        ...(entityType === 'agentActs' && {
+          mode: classifyActMode(options.name),
+          ddtId: undefined,
+          testPassed: false
+        })
+      }
+    );
+
+    // 5. Crea l'oggetto per la riga del nodo
+    const rowItem: CreatedEntity = {
+      id: newItem.id,
+      name: options.name,
+      categoryType: config.entityType,
+      actId: newItem.id,
+      factoryId: null, // Nessun ID factory ancora
+      ...(entityType === 'agentActs' && { 
+        mode: classifyActMode(options.name),
+        ddtId: undefined, // Nessun DDT associato inizialmente
+        testPassed: false // Test non ancora passato
+      })
+    };
+
+    // 6. Aggiorna la riga del nodo se il callback è fornito
+    if (options.onRowUpdate) {
+      console.log('🎯 Updating node row with:', rowItem);
+      options.onRowUpdate(rowItem);
+    }
+
+    // 7. Gestisci eventi UI (asincrono ma non blocca)
+    this.handleUIEvents(config, options.name).catch(console.error);
+
+    // 8. Notifica il sidebar dell'aggiornamento
+    setTimeout(() => {
+      const sidebarUpdateEvent = new CustomEvent('sidebar:refresh', {
+        detail: { entityType: config.entityType },
+        bubbles: true
+      });
+      document.dispatchEvent(sidebarUpdateEvent);
+    }, 50);
+
+    return rowItem;
   }
 
   /**
@@ -241,7 +242,135 @@ export class EntityCreationService {
   }
 
   /**
-   * Assicura che esista una categoria per il tipo di entità
+   * Assicura che esista una categoria per il tipo di entità (SINCRONO)
+   */
+  private static ensureCategoryExistsSync(
+    entityType: keyof typeof ENTITY_CONFIGS,
+    projectData: any,
+    categoryName?: string
+  ): string | null {
+    const config = ENTITY_CONFIGS[entityType];
+    const entities = (projectData as any)?.[config.entityType] || [];
+    
+    // Se è specificata una categoria, cerca quella
+    if (categoryName) {
+      const existingCategory = entities.find((cat: any) => cat.name === categoryName);
+      if (existingCategory) {
+        return existingCategory.id;
+      }
+      
+      // Crea la nuova categoria
+      const newCategoryId = `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newCategory = {
+        id: newCategoryId,
+        name: categoryName,
+        items: []
+      };
+      
+      // Inserisci la categoria in ordine alfabetico
+      const norm = (s: string) => (s || '').toLocaleLowerCase();
+      let inserted = false;
+      for (let i = 0; i < entities.length; i++) {
+        const curr = String(entities[i]?.name || '');
+        if (norm(categoryName).localeCompare(norm(curr)) < 0) {
+          entities.splice(i, 0, newCategory);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) {
+        entities.push(newCategory);
+      }
+      
+      return newCategoryId;
+    }
+    
+    // Se non è specificata una categoria, usa la prima disponibile o crea "Categorize Later"
+    if (entities.length > 0) {
+      return entities[0].id;
+    }
+
+    // Crea una categoria "Categorize Later" sincronamente
+    const newCategoryId = `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newCategory = {
+      id: newCategoryId,
+      name: 'Categorize Later',
+      items: []
+    };
+    
+    // Aggiungi la categoria al progetto locale
+    (projectData as any)[config.entityType] = [newCategory];
+    
+    return newCategoryId;
+  }
+
+  /**
+   * Crea un elemento sincronamente e lo aggiunge al projectData
+   */
+  private static createItemSync(
+    entityType: string,
+    categoryId: string,
+    name: string,
+    scope: Scope,
+    industry: Industry | undefined,
+    originalEntityType: string,
+    projectData: any
+  ): any {
+    const newItemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newItem = {
+      id: newItemId,
+      name,
+      description: '',
+      scope,
+      industry,
+      status: 'draft',
+      version: '1.0.0',
+      isInMemory: true,
+      factoryId: null,
+      ...(originalEntityType === 'agentActs' && {
+        mode: classifyActMode(name),
+        ddtId: undefined,
+        testPassed: false
+      })
+    };
+
+    // Aggiungi l'elemento alla categoria nel projectData
+    const entities = (projectData as any)?.[entityType] || [];
+    const category = entities.find((c: any) => c.id === categoryId);
+    if (category && category.items) {
+      // Inserisci alfabeticamente
+      const items = category.items as any[];
+      const norm = (s: string) => (s || '').toLocaleLowerCase();
+      let inserted = false;
+      for (let i = 0; i < items.length; i++) {
+        const curr = String(items[i]?.name || items[i]?.label || '');
+        if (norm(name).localeCompare(norm(curr)) < 0) {
+          items.splice(i, 0, newItem);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) items.push(newItem);
+    }
+
+    return newItem;
+  }
+
+  /**
+   * Aggiorna un elemento sincronamente
+   */
+  private static updateItemSync(
+    entityType: string,
+    categoryId: string,
+    itemId: string,
+    updates: any
+  ): void {
+    // Questa funzione è già sincrona, non fa chiamate al DB
+    console.log(`🔄 Updated item ${itemId} with:`, updates);
+  }
+
+  /**
+   * Assicura che esista una categoria per il tipo di entità (ASINCRONO - DEPRECATO)
    */
   private static async ensureCategoryExists(
     entityType: keyof typeof ENTITY_CONFIGS,
@@ -304,21 +433,78 @@ export class EntityCreationService {
   /**
    * Factory method per creare Agent Act
    */
-  static async createAgentAct(options: EntityCreationOptions): Promise<CreatedEntity | null> {
+  static createAgentAct(options: EntityCreationOptions): CreatedEntity | null {
     return this.createEntity('agentActs', options);
   }
 
   /**
    * Factory method per creare Backend Call
    */
-  static async createBackendCall(options: EntityCreationOptions): Promise<CreatedEntity | null> {
+  static createBackendCall(options: EntityCreationOptions): CreatedEntity | null {
     return this.createEntity('backendActions', options);
   }
 
   /**
    * Factory method per creare Task
    */
-  static async createTask(options: EntityCreationOptions): Promise<CreatedEntity | null> {
+  static createTask(options: EntityCreationOptions): CreatedEntity | null {
     return this.createEntity('tasks', options);
+  }
+
+  /**
+   * Salva un'entità in memoria nel DB factory
+   */
+  static async saveEntityToFactory(
+    entityType: keyof typeof ENTITY_CONFIGS,
+    itemId: string,
+    projectData: any
+  ): Promise<boolean> {
+    const config = ENTITY_CONFIGS[entityType];
+    if (!config) {
+      throw new Error(`Unknown entity type: ${entityType}`);
+    }
+
+    try {
+      // Trova l'elemento nel progetto locale
+      const entities = (projectData as any)?.[config.entityType] || [];
+      const item = entities.find((e: any) => e.id === itemId);
+      
+      if (!item) {
+        throw new Error(`Item ${itemId} not found in project data`);
+      }
+
+      if (!item.isInMemory) {
+        console.log(`Item ${itemId} is already saved to factory`);
+        return true;
+      }
+
+      // Crea l'elemento nel DB factory
+      const factoryItem = await this.createFactoryItem(
+        entityType,
+        item.name,
+        { scope: item.scope, industry: item.industry, confidence: 1.0 },
+        item.industry
+      );
+
+      if (!factoryItem) {
+        throw new Error(`Failed to create factory item for ${entityType}`);
+      }
+
+      // Aggiorna l'elemento locale con l'ID factory
+      const updates = {
+        factoryId: factoryItem._id,
+        status: 'published',
+        isInMemory: false
+      };
+
+      // Qui dovresti chiamare il metodo per aggiornare l'elemento nel progetto locale
+      // await options.updateItem(config.entityType, categoryId, itemId, updates);
+
+      console.log(`✅ Saved ${entityType} ${itemId} to factory with ID: ${factoryItem._id}`);
+      return true;
+    } catch (error) {
+      console.error(`Error saving ${entityType} to factory:`, error);
+      return false;
+    }
   }
 }

@@ -28,9 +28,9 @@ interface IntellisenseMenuProps {
   onClose: () => void;
   filterCategoryTypes?: string[];
   onCreateNew?: (name: string, scope?: 'global' | 'industry') => void;
-  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry') => void;
-  onCreateBackendCall?: (name: string, scope?: 'global' | 'industry') => void;
-  onCreateTask?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateBackendCall?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateTask?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
 
 export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
@@ -397,6 +397,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         query={query}
         filterCategoryTypes={filterCategoryTypes}
         projectIndustry={data?.industry}
+        projectData={data}
       />
     </div>
   );
