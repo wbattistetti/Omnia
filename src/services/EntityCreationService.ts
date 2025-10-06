@@ -16,6 +16,8 @@ export interface CreatedEntity {
   actId: string;
   factoryId: string;
   mode?: string;
+  ddtId?: string | undefined;
+  testPassed?: boolean;
 }
 
 export interface EntityCreationOptions {
@@ -135,7 +137,11 @@ export class EntityCreationService {
         categoryType: config.entityType,
         actId: newItem.id,
         factoryId: factoryItem._id,
-        ...(entityType === 'agentActs' && { mode: classifyActMode(options.name) })
+        ...(entityType === 'agentActs' && { 
+          mode: classifyActMode(options.name),
+          ddtId: undefined, // Nessun DDT associato inizialmente
+          testPassed: false // Test non ancora passato
+        })
       };
 
       // 7. Aggiorna la riga del nodo se il callback è fornito
@@ -197,7 +203,9 @@ export class EntityCreationService {
       ...(entityType === 'agentActs' && { 
         mode: classifyActMode(name),
         data: {},
-        prompts: {}
+        prompts: {},
+        ddtId: undefined, // Nessun DDT associato inizialmente
+        testPassed: false // Test non ancora passato
       })
     };
 

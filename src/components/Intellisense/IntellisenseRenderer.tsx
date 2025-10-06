@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { IntellisenseResult, IntellisenseLayoutConfig } from './IntellisenseTypes';
 import { IntellisenseItem } from './IntellisenseItem';
 import { IntellisenseCategoryHeader } from './IntellisenseCategoryHeader';
-import { Plus, Bot, Database, CheckSquare, ChevronDown } from 'lucide-react';
+import { Plus, Bot, Database, CheckSquare, ChevronDown, Loader2 } from 'lucide-react';
 
 interface IntellisenseRendererProps {
   fuzzyResults: Map<string, IntellisenseResult[]>;
@@ -47,9 +47,60 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [showCreateDropdown, setShowCreateDropdown] = useState<'global' | 'industry' | false>(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [creatingScope, setCreatingScope] = useState<'global' | 'industry' | null>(null);
   
   // Aggiungi uno stato per distinguere tra selezione da tastiera e da mouse
   const lastInputType = useRef<'keyboard' | 'mouse'>('keyboard');
+
+  // Funzioni wrapper per gestire il loading durante la creazione
+  const handleCreateAgentAct = async (name: string, scope: 'global' | 'industry') => {
+    setIsCreating(true);
+    setCreatingScope(scope);
+    try {
+      await onCreateAgentAct?.(name, scope);
+    } finally {
+      setIsCreating(false);
+      setCreatingScope(null);
+      setShowCreateDropdown(false);
+    }
+  };
+
+  const handleCreateBackendCall = async (name: string, scope: 'global' | 'industry') => {
+    setIsCreating(true);
+    setCreatingScope(scope);
+    try {
+      await onCreateBackendCall?.(name, scope);
+    } finally {
+      setIsCreating(false);
+      setCreatingScope(null);
+      setShowCreateDropdown(false);
+    }
+  };
+
+  const handleCreateTask = async (name: string, scope: 'global' | 'industry') => {
+    setIsCreating(true);
+    setCreatingScope(scope);
+    try {
+      await onCreateTask?.(name, scope);
+    } finally {
+      setIsCreating(false);
+      setCreatingScope(null);
+      setShowCreateDropdown(false);
+    }
+  };
+
+  const handleCreateNew = async (name: string, scope: 'global' | 'industry') => {
+    setIsCreating(true);
+    setCreatingScope(scope);
+    try {
+      await onCreateNew?.(name, scope);
+    } finally {
+      setIsCreating(false);
+      setCreatingScope(null);
+      setShowCreateDropdown(false);
+    }
+  };
 
   // Calculate total items for layout decisions
   const totalFuzzyItems = Array.from(fuzzyResults.values()).reduce((sum, items) => sum + items.length, 0);
@@ -133,7 +184,11 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                         className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors whitespace-nowrap"
                         title="Crea elemento globale (cross-industry)"
                       >
-                        <Plus className="w-3 h-3" />
+                        {isCreating && creatingScope === 'global' ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Plus className="w-3 h-3" />
+                        )}
                         Global
                         <ChevronDown className="w-3 h-3" />
                       </button>
@@ -143,8 +198,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                           <button
                             onClick={() => {
                               console.log('🎯 Create Global Agent Act clicked with query:', query.trim());
-                              onCreateAgentAct?.(query.trim(), 'global');
-                              setShowCreateDropdown(false);
+                              handleCreateAgentAct(query.trim(), 'global');
                             }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                           >
@@ -153,8 +207,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                           </button>
                           <button
                             onClick={() => {
-                              onCreateBackendCall?.(query.trim(), 'global');
-                              setShowCreateDropdown(false);
+                              handleCreateBackendCall(query.trim(), 'global');
                             }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                           >
@@ -163,8 +216,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                           </button>
                           <button
                             onClick={() => {
-                              onCreateTask?.(query.trim(), 'global');
-                              setShowCreateDropdown(false);
+                              handleCreateTask(query.trim(), 'global');
                             }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                           >
@@ -182,7 +234,11 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                         className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors whitespace-nowrap"
                         title={`Crea elemento per ${projectIndustry}`}
                       >
-                        <Plus className="w-3 h-3" />
+                        {isCreating && creatingScope === 'industry' ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Plus className="w-3 h-3" />
+                        )}
                         {projectIndustry}
                         <ChevronDown className="w-3 h-3" />
                       </button>
@@ -192,8 +248,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                           <button
                             onClick={() => {
                               console.log('🎯 Create Industry Agent Act clicked with query:', query.trim());
-                              onCreateAgentAct?.(query.trim(), 'industry');
-                              setShowCreateDropdown(false);
+                              handleCreateAgentAct(query.trim(), 'industry');
                             }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                           >
@@ -202,8 +257,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                           </button>
                           <button
                             onClick={() => {
-                              onCreateBackendCall?.(query.trim(), 'industry');
-                              setShowCreateDropdown(false);
+                              handleCreateBackendCall(query.trim(), 'industry');
                             }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                           >
@@ -212,8 +266,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                           </button>
                           <button
                             onClick={() => {
-                              onCreateTask?.(query.trim(), 'industry');
-                              setShowCreateDropdown(false);
+                              handleCreateTask(query.trim(), 'industry');
                             }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                           >
@@ -237,7 +290,11 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                           className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors whitespace-nowrap"
                           title="Crea condizione globale (cross-industry)"
                         >
-                          <Plus className="w-3 h-3" />
+                          {isCreating && creatingScope === 'global' ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Plus className="w-3 h-3" />
+                          )}
                           Global
                           <ChevronDown className="w-3 h-3" />
                         </button>
@@ -247,8 +304,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                             <button
                               onClick={() => {
                                 console.log('🎯 Create Global Condition clicked with query:', query.trim());
-                                onCreateNew?.(query.trim(), 'global');
-                                setShowCreateDropdown(false);
+                                handleCreateNew(query.trim(), 'global');
                               }}
                               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                             >
@@ -266,7 +322,11 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                           className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors whitespace-nowrap"
                           title={`Crea condizione per ${projectIndustry}`}
                         >
-                          <Plus className="w-3 h-3" />
+                          {isCreating && creatingScope === 'industry' ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Plus className="w-3 h-3" />
+                          )}
                           {projectIndustry}
                           <ChevronDown className="w-3 h-3" />
                         </button>
@@ -276,8 +336,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                             <button
                               onClick={() => {
                                 console.log('🎯 Create Industry Condition clicked with query:', query.trim());
-                                onCreateNew?.(query.trim(), 'industry');
-                                setShowCreateDropdown(false);
+                                handleCreateNew(query.trim(), 'industry');
                               }}
                               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                             >

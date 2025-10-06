@@ -44,7 +44,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const isNewAndEmpty = !data.rows || data.rows.length === 0;
   // const initialRowId = isNewAndEmpty ? '1' : (data.rows && data.rows[0]?.id);
   const [nodeRows, setNodeRows] = useState<NodeRowData[]>(
-    isNewAndEmpty ? [{ id: '1', text: '', included: true }] : (data.rows || [])
+    isNewAndEmpty ? [{ id: '1', text: '', included: true, mode: 'Message' as const }] : (data.rows || [])
   );
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
@@ -129,7 +129,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const newRow: NodeRowData = {
       id: (nodeRows.length + 1).toString(),
       text: text,
-      included: true
+      included: true,
+      mode: 'Message' as const
     };
     const updatedRows = [...nodeRows, newRow];
     setNodeRows(updatedRows);
@@ -163,17 +164,24 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     if (editingRowId) {
       // Apply selection to the current row
       const baseRows = nodeRows.map(row =>
-        row.id === editingRowId ? { ...row, ...item, id: row.id, categoryType: item.categoryType as any, userActs: item.userActs, mode: item.mode, actId: item.actId, factoryId: item.factoryId } : row
+        row.id === editingRowId ? { ...row, ...item, id: row.id, categoryType: item.categoryType as any, userActs: item.userActs, mode: item.mode || 'Message' as const, actId: item.actId, factoryId: item.factoryId } : row
       );
-      // Append a new empty row immediately after selection and focus it
-      const newRowId = (baseRows.length + 1).toString();
-      const nextRows = [...baseRows, { id: newRowId, text: '', included: true } as any];
-      setNodeRows(nextRows);
-      setEditingRowIdWithLog(newRowId);
-      if (data.onUpdate) data.onUpdate({ rows: nextRows });
+      
+      // Solo se il nodo era inizialmente vuoto, aggiungi una nuova riga vuota
+      if (isNewAndEmpty) {
+        const newRowId = (baseRows.length + 1).toString();
+        const nextRows = [...baseRows, { id: newRowId, text: '', included: true, mode: 'Message' as const } as any];
+        setNodeRows(nextRows);
+        setEditingRowIdWithLog(newRowId);
+        if (data.onUpdate) data.onUpdate({ rows: nextRows });
+      } else {
+        // Se il nodo non era vuoto, solo aggiorna la riga corrente e chiudi editing
+        setNodeRows(baseRows);
+        setEditingRowIdWithLog(null);
+        if (data.onUpdate) data.onUpdate({ rows: baseRows });
+      }
     }
     setShowIntellisense(false);
-    // keep focus on the new empty row
   };
 
   const handleTitleUpdate = (newTitle: string) => {
@@ -189,7 +197,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       id: (nodeRows.length + 1).toString(),
       text: '',
       isNew: true,
-      included: true
+      included: true,
+      mode: 'Message' as const
     };
     const updatedRows = [...nodeRows];
     updatedRows.splice(index, 0, newRow);
@@ -198,7 +207,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const secondRow: NodeRowData = {
         id: (parseInt(newRow.id, 10) + 1).toString(),
         text: '',
-        included: true
+        included: true,
+        mode: 'Message' as const
       } as any;
       updatedRows.splice(index + 1, 0, secondRow);
     }
@@ -274,6 +284,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       drag.setHoveredRowIndex(newHoveredIndex);
       
       // Calcola lo snap offset per far "seguire" il mouse allo scatto
+      const rowHeight = 40; // Altezza approssimativa di una riga
       const targetY = drag.draggedRowInitialRect.top + (newHoveredIndex * rowHeight);
       const currentMouseBasedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
       const snapOffsetY = targetY - currentMouseBasedY;
@@ -338,7 +349,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   useEffect(() => {
     if (isEditingNode && !hasAddedNewRow) {
       const newRowId = (nodeRows.length + 1).toString();
-      const newRow = { id: newRowId, text: '' };
+      const newRow = { id: newRowId, text: '', mode: 'Message' as const };
       setNodeRows([...nodeRows, newRow]);
       setEditingRowIdWithLog(newRowId);
       setHasAddedNewRow(true);
