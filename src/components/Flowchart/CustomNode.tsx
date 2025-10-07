@@ -16,6 +16,38 @@ function newUid() {
     : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Helper per inizializzazione lazy delle righe
+function initRows(nodeId: string, rows?: NodeRowData[]): NodeRowData[] {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return [{ id: `${nodeId}-${newUid()}`, text: '', included: true, mode: 'Message' as const }];
+  }
+  return rows.map(r =>
+    r.id?.startsWith(`${nodeId}-`) ? r : { ...r, id: `${nodeId}-${r.id || newUid()}` }
+  );
+}
+
+// Helper per inizializzazione lazy del focus
+function initFocus(nodeId: string, rows: NodeRowData[], focusRowId?: string | null) {
+  // Se c'è un focusRowId specifico, cerca la riga corrispondente
+  if (focusRowId) {
+    const target = focusRowId.startsWith(`${nodeId}-`) ? focusRowId : `${nodeId}-${focusRowId}`;
+    const found = rows.find(r => r.id === target);
+    if (found) return found.id;
+  }
+  
+  // Se non trova la riga specifica ma c'è un focusRowId, usa la prima riga disponibile
+  if (focusRowId && rows.length > 0) {
+    return rows[0].id;
+  }
+  
+  // Se nodo nuovo (una sola riga vuota) → prima riga
+  if (rows.length === 1 && rows[0].text.trim() === '') {
+    return rows[0].id;
+  }
+  
+  return null;
+}
+
 /**
  * Dati custom per un nodo del flowchart
  * @property title - titolo del nodo
@@ -42,51 +74,42 @@ export interface CustomNodeData {
 export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
   id,
   data, 
-  isConnectable, selected
+  isConnectable, 
+  selected
 }) => {
   const [isEditingNode, setIsEditingNode] = useState(false);
   const [nodeTitle, setNodeTitle] = useState(data.title || 'New Node');
-
-  const isNewNode = !Array.isArray(data.rows) || data.rows.length === 0;
+  const [showIntellisense, setShowIntellisense] = useState(false);
+  const [intellisensePosition] = useState({ x: 0, y: 0 });
 
   const makeRowId = React.useCallback(() => `${id}-${newUid()}`, [id]);
 
-  const initialRows = useMemo<NodeRowData[]>(() => {
-    if (isNewNode) {
-      return [{ id: makeRowId(), text: '', included: true, mode: 'Message' as const }];
-    }
-    return (data.rows || []).map(r =>
-      r.id?.startsWith(`${id}-`) ? r : { ...r, id: `${id}-${r.id || newUid()}` }
-    );
-  }, [isNewNode, data.rows, id, makeRowId]);
-
-  const [nodeRows, setNodeRows] = useState<NodeRowData[]>(initialRows);
-  const [showIntellisense, setShowIntellisense] = useState(false);
-  const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
-  // Focus locale, scoped per nodo (rowId prefissato da `${id}-`)
-  const [editingRowId, setEditingRowId] = useState<string | null>(() => {
-    if (data.focusRowId) {
-      return data.focusRowId.startsWith(`${id}-`) ? data.focusRowId : `${id}-${data.focusRowId}`;
-    }
-    return isNewNode ? initialRows[0].id : null;
+  // ✅ CORREZIONE 1: Lazy state initialization con ID stabili
+  const [nodeRows, setNodeRows] = useState<NodeRowData[]>(() => {
+    return initRows(id, data.rows);
   });
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
 
-  // Debug log per diagnosticare il problema
-  console.log('🎯 [CustomNode] Debug:', {
-    id,
-    isNewNode,
-    initialRows: initialRows.map(r => ({ id: r.id, text: r.text })),
-    editingRowId,
-    focusRowId: data.focusRowId
-  });
+  // ✅ CORREZIONE 2: Evita isNewNode stale - usa stato corrente invece di flag globale
 
-  // Forza il focus per i nodi nuovi se non è già impostato
+  // Funzione semplice per uscire dall'editing
+  const exitEditing = () => {
+    setEditingRowId(null);
+  };
+
+
+
+  // ✅ CORREZIONE: Focus sicuro per nodi nuovi (solo una volta)
   useEffect(() => {
-    if (isNewNode && initialRows.length > 0 && !editingRowId) {
-      console.log('🎯 [CustomNode] Forcing focus for new node:', initialRows[0].id);
-      setEditingRowId(initialRows[0].id);
+    // Solo se il nodo ha focusRowId (è nuovo) e nodeRows è disponibile
+    if (data.focusRowId && nodeRows.length > 0 && !editingRowId) {
+      // Controlla se la prima riga è ancora vuota (nodo veramente nuovo)
+      const firstRow = nodeRows[0];
+      if (firstRow && firstRow.text.trim() === '') {
+        setEditingRowId(firstRow.id);
+      }
     }
-  }, [isNewNode, initialRows, editingRowId]);
+  }, [data.focusRowId, nodeRows.length]);
 
   // Stati per il drag-and-drop
   const drag = useNodeRowDrag(nodeRows);
@@ -111,6 +134,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Ref al contenitore delle righe per calcoli DnD locali
   const rowsContainerRef = useRef<HTMLDivElement | null>(null);
+  // ✅ CORREZIONE 4: Ref per il container root del nodo
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const handleUpdateRow = (
     rowId: string,
@@ -168,30 +193,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
   };
 
-  const handleAddRow = (text: string) => {
-    const newRow: NodeRowData = {
-      id: makeRowId(),
-      text,
-      included: true,
-      mode: 'Message' as const
-    };
-    const updatedRows = [...nodeRows, newRow];
-    setNodeRows(updatedRows);
-    setEditingRowId(newRow.id);
-    data.onUpdate?.({ rows: updatedRows });
-  };
-
-  const handleShowIntellisense = (event: React.KeyboardEvent, rowId: string) => {
-    if (event.key === 'Enter') {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setIntellisensePosition({
-        x: rect.left,
-        y: rect.bottom + 5
-      });
-      setEditingRowId(rowId);
-      setShowIntellisense(true);
-    }
-  };
+  // Funzioni rimosse - non più utilizzate
 
   // const handleIntellisenseSelect = (selectedText: string) => {
   //   if (editingRowId) {
@@ -203,24 +205,26 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   const handleIntellisenseSelectItem = (item: IntellisenseItem) => {
     if (editingRowId) {
-      // Apply selection to the current row
+      // ✅ CORREZIONE 6: Mappa esplicitamente i campi ammessi invece di ...item
       const baseRows = nodeRows.map(row =>
-        row.id === editingRowId ? { ...row, ...item, id: row.id, categoryType: item.categoryType as any, userActs: item.userActs, mode: item.mode || 'Message' as const, actId: item.actId, factoryId: item.factoryId } : row
+        row.id === editingRowId 
+          ? { 
+              ...row, 
+              text: item.name,
+              categoryType: item.categoryType as any, 
+              userActs: item.userActs, 
+              mode: item.mode || 'Message' as const, 
+              actId: item.actId, 
+              factoryId: item.factoryId 
+            } 
+          : row
       );
       
-      // Solo se il nodo era inizialmente vuoto, aggiungi una nuova riga vuota
-      if (isNewNode) {
-        const newRowId = (baseRows.length + 1).toString();
-        const nextRows = [...baseRows, { id: newRowId, text: '', included: true, mode: 'Message' as const } as any];
-        setNodeRows(nextRows);
-        setEditingRowId(newRowId);
-        if (data.onUpdate) data.onUpdate({ rows: nextRows });
-      } else {
-        // Se il nodo non era vuoto, solo aggiorna la riga corrente e chiudi editing
-        setNodeRows(baseRows);
-        setEditingRowId(null);
-        if (data.onUpdate) data.onUpdate({ rows: baseRows });
-      }
+      // ✅ CORREZIONE: Dopo aver aggiunto un atto, esci sempre dall'editing
+      setNodeRows(baseRows);
+      exitEditing();
+      // Rimuovi focusRowId per evitare che il focus si riattivi
+      data.onUpdate?.({ rows: baseRows, focusRowId: undefined });
     }
     setShowIntellisense(false);
   };
@@ -273,17 +277,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   };
 
   // React-DnD-like simple move API used by NodeRow when dragging label
-  const handleMoveRow = (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= nodeRows.length || toIndex >= nodeRows.length) return;
-    const updated = [...nodeRows];
-    const [row] = updated.splice(fromIndex, 1);
-    updated.splice(toIndex, 0, row);
-    setNodeRows(updated);
-  };
-
-  const handleDropRow = () => {
-    if (data.onUpdate) data.onUpdate({ rows: nodeRows });
-  };
+  // Funzioni drag-and-drop rimosse - gestite dal hook useNodeRowDrag
 
   const handleGlobalMouseMove = (event: MouseEvent | PointerEvent) => {
     if (!drag.draggedRowId || !drag.draggedRowInitialRect || drag.draggedRowInitialClientY === null) return;
@@ -295,14 +289,14 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     drag.setDraggedRowCurrentClientY(event.clientY);
 
     // Calcola la posizione attuale della riga trascinata (senza snap)
-    const currentDraggedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
+    // const currentDraggedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
 
     // Determina il nuovo indice di hover basandosi sulla posizione delle altre righe
     // Determine hovered index using actual DOM positions of this node only
     let newHoveredIndex = drag.draggedRowOriginalIndex || 0;
     const scope = rowsContainerRef.current || document;
     const elements = Array.from(scope.querySelectorAll('.node-row-outer')) as HTMLElement[];
-    const rects = elements.map((el, idx) => ({ idx: Number(el.dataset.index), top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }));
+    const rects = elements.map((el) => ({ idx: Number(el.dataset.index), top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }));
     const centerY = event.clientY;
     for (const r of rects) {
       if (centerY < r.top + r.height / 2) { newHoveredIndex = r.idx; break; }
@@ -330,7 +324,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     if (hasOriginal && (targetIndex === null || targetIndex === undefined)) {
       const scope = rowsContainerRef.current || document;
       const elements = Array.from(scope.querySelectorAll('.node-row-outer')) as HTMLElement[];
-      const rects = elements.map((el, idx) => ({ idx: Number(el.dataset.index), top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }));
+      const rects = elements.map((el) => ({ idx: Number(el.dataset.index), top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }));
       const centerY = (drag.draggedRowCurrentClientY ?? drag.draggedRowInitialClientY) as number;
       let inferred = drag.draggedRowOriginalIndex as number;
       for (const r of rects) { if (centerY < r.top + r.height / 2) { inferred = r.idx; break; } inferred = r.idx + 1; }
@@ -392,19 +386,22 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   }, [isEditingNode, hasAddedNewRow, makeRowId]);
 
 
-  // Click sul canvas: agisci solo se il focus è di questo nodo
+  // ✅ CORREZIONE 4: Canvas click che ignora click dentro al nodo
   useEffect(() => {
-    const onCanvasClick = () => {
-      if (!editingRowId) return;
-      // Garantisce che il focus appartenga a QUESTO nodo
-      if (!editingRowId.startsWith(`${id}-`)) return;
+    const onCanvasClick = (ev: any) => {
+      if (!editingRowId?.startsWith(`${id}-`)) return;
+
+      // Se hai il target reale, ignora click dentro al nodo
+      if (ev?.target && rootRef.current && rootRef.current.contains(ev.target)) return;
 
       const row = nodeRows.find(r => r.id === editingRowId);
-      if (row && String(row.text || '').trim().length === 0) {
+      if (row && row.text.trim() === '') {
         const updated = nodeRows.filter(r => r.id !== editingRowId);
         setNodeRows(updated);
-        setEditingRowId(null);
+        exitEditing();
         data.onUpdate?.({ rows: updated });
+      } else {
+        exitEditing();
       }
     };
 
@@ -447,6 +444,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   return (
     <div
+      ref={rootRef}
       className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
       style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content' }}
       tabIndex={-1}
@@ -464,17 +462,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
         if (isInput) { e.stopPropagation(); }
       }}
-      onFocusCapture={(e) => { /* no-op: lasciamo passare focus per drag header */ }}
+      onFocusCapture={() => { /* no-op: lasciamo passare focus per drag header */ }}
     >
       <div
         className="relative"
-        onClickCapture={(e) => {
+        onClickCapture={() => {
           // intercetta evento custom delete dall'header
-          if ((e as any).type === 'flow:node:delete') {
-            e.preventDefault();
-            e.stopPropagation();
-            handleDeleteNode();
-          }
+          // if ((e as any).type === 'flow:node:delete') {
+          //   e.preventDefault();
+          //   e.stopPropagation();
+          //   handleDeleteNode();
+          // }
         }}
       >
         <NodeHeader
@@ -504,31 +502,24 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included })}
           onDelete={(row) => handleDeleteRow(row.id)}
           onKeyDown={(e) => {
+            // ✅ CORREZIONE 3: Enter con guard per trailing empty
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
+              const trailingEmpty = nodeRows.length > 0 && nodeRows[nodeRows.length - 1].text.trim() === '';
+              if (trailingEmpty) return; // già pronta
               const newRowId = makeRowId();
-              const newRow: NodeRowData = { id: newRowId, text: '', included: true, mode: 'Message' as const } as any;
+              const newRow: NodeRowData = { id: newRowId, text: '', included: true, mode: 'Message' as const };
               const updatedRows = [...nodeRows, newRow];
               setNodeRows(updatedRows);
               setEditingRowId(newRowId);
               data.onUpdate?.({ rows: updatedRows });
-            }
-            if (e.key === 'Escape') {
-              // Se il nodo ha una sola riga vuota, elimina il nodo
-              if (nodeRows.length === 1) {
-                const singleRow = nodeRows[0];
-                if (!singleRow.text || singleRow.text.trim() === '') {
-                  data.onDelete?.();
-                } else {
-                  setEditingRowId(null);
-                }
-              } else {
-                setEditingRowId(null);
-              }
+            } else if (e.key === 'Escape') {
+              const singleEmpty = nodeRows.length === 1 && nodeRows[0].text.trim() === '';
+              singleEmpty ? data.onDelete?.() : exitEditing();
             }
           }}
           onDragStart={handleRowDragStart}
-          canDelete={(row) => nodeRows.length > 1}
+          canDelete={() => nodeRows.length > 1}
           totalRows={nodeRows.length}
           onCreateAgentAct={data.onCreateAgentAct}
           onCreateBackendCall={data.onCreateBackendCall}
@@ -538,7 +529,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
           draggedItem={draggedItem ?? null}
           draggedRowStyle={draggedRowStyle}
-          onEditingEnd={() => setEditingRowId(null)}
+          onEditingEnd={exitEditing}
         />
         {/* Renderizza la riga trascinata separatamente */}
         {/* Do not render an extra floating NodeRow; use ghost element only to avoid layout shift */}

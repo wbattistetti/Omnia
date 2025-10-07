@@ -52,12 +52,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   onCreateBackendCall,
   onCreateTask
 }) => {
-  // Debug log per diagnosticare il problema
-  console.log('🎯 [NodeRowList] Debug:', {
-    rows: rows.map(r => ({ id: r.id, text: r.text })),
-    editingRowId,
-    forceEditingRows: rows.map(r => ({ id: r.id, forceEditing: editingRowId === r.id }))
-  });
+  // Log rimosso per pulizia
 
   // Hide any visible inserter as soon as a textbox appears (editing mode)
   React.useEffect(() => {

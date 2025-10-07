@@ -49,6 +49,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   // Debug gate for icon/flow logs (enable with localStorage.setItem('debug.flowIcons','1'))
   const debugFlowIcons = (() => { try { return Boolean(localStorage.getItem('debug.flowIcons')); } catch { return false; } })();
   const [isEditing, setIsEditing] = useState(forceEditing);
+  const [hasEverBeenEditing, setHasEverBeenEditing] = useState(forceEditing);
   const [currentText, setCurrentText] = useState(row.text);
   const [included, setIncluded] = useState(row.included !== false); // default true
   const [showIntellisense, setShowIntellisense] = useState(false);
@@ -131,9 +132,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   }, [showIcons]);
 
   useEffect(() => {
-    console.log('🎯 [NodeRow] forceEditing changed:', { rowId: row.id, forceEditing, isEditing });
     if (forceEditing) setIsEditing(true);
-  }, [forceEditing, row.id, isEditing]);
+  }, [forceEditing]);
 
   // Debug disattivato di default (abilitabile via debug.flowIcons)
   useEffect(() => {
@@ -153,10 +153,19 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   }, [isEditing]);
 
   useEffect(() => {
-    if (!isEditing && typeof onEditingEnd === 'function') {
-      onEditingEnd();
+    // Traccia se siamo mai entrati in editing
+    if (isEditing) {
+      setHasEverBeenEditing(true);
     }
   }, [isEditing]);
+
+  useEffect(() => {
+    // Solo chiamare onEditingEnd se stiamo uscendo dall'editing (era true, ora false)
+    // E se siamo mai entrati in editing
+    if (!isEditing && hasEverBeenEditing && typeof onEditingEnd === 'function') {
+      onEditingEnd();
+    }
+  }, [isEditing, hasEverBeenEditing]);
 
   // Canvas click = ESC semantics: close intellisense if open, otherwise end editing without deleting
   useEffect(() => {

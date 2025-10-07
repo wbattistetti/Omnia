@@ -414,19 +414,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setSelectedEdgeId(null);
     
     // Controlla se ci sono nodi con zero righe stabilizzate (vuoti) in editing
-    console.log('🔍 [CanvasClick] Checking nodes:', nodes.length);
+    // Log rimosso per pulizia
     nodes.forEach(node => {
       const nodeData = node.data as any;
       const rows = nodeData?.rows || [];
       const editingRowId = nodeData?.editingRowId;
       const focusRowId = nodeData?.focusRowId;
       
-      console.log('🔍 [CanvasClick] Node:', node.id, {
-        editingRowId,
-        focusRowId,
-        rowsLength: rows.length,
-        rows: rows
-      });
+      // Log rimosso per pulizia
       
       // Se il nodo ha zero righe stabilizzate (vuoto) e è in editing, cancellalo
       if (rows.length === 0 && (editingRowId || focusRowId)) {
