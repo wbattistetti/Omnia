@@ -99,23 +99,22 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
 
 
-  // ✅ CORREZIONE: Focus sicuro per nodi nuovi (solo una volta)
+  // ✅ PATCH 1: Focus per nodi nuovi (semplificato)
   useEffect(() => {
-    // Solo se il nodo ha focusRowId (è nuovo) e nodeRows è disponibile
-    if (data.focusRowId && nodeRows.length > 0 && !editingRowId) {
-      // Controlla se la prima riga è ancora vuota (nodo veramente nuovo)
+    // Se abbiamo focusRowId (nodo nuovo) e non c'è editingRowId, impostalo
+    if (data.focusRowId && !editingRowId && nodeRows.length > 0) {
       const firstRow = nodeRows[0];
       if (firstRow && firstRow.text.trim() === '') {
+        console.log('🎯 [PATCH1] Impostando focus per nodo nuovo:', firstRow.id);
         setEditingRowId(firstRow.id);
       }
     }
-  }, [data.focusRowId, nodeRows.length]);
+  }, [data.focusRowId, editingRowId, nodeRows.length]);
 
   // Stati per il drag-and-drop
   const drag = useNodeRowDrag(nodeRows);
 
-  // Stato per tracciare se la nuova row è stata aggiunta in questa sessione di editing
-  const [hasAddedNewRow, setHasAddedNewRow] = useState(false);
+  // ✅ PATCH 2: Rimossa variabile hasAddedNewRow non più necessaria
 
   // Riferimenti DOM per le righe
   // const rowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -368,46 +367,26 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     };
   }, []);
 
-  useEffect(() => {
-    if (isEditingNode && !hasAddedNewRow) {
-      const newRowId = makeRowId();
-      const newRow = { id: newRowId, text: '', mode: 'Message' as const } as any;
-      setNodeRows(prev => [...prev, newRow]);
-      setEditingRowId(newRowId);
-      setHasAddedNewRow(true);
-    } else if (!isEditingNode && hasAddedNewRow) {
-      setNodeRows(prev => {
-        const last = prev[prev.length - 1];
-        return last && last.text === '' ? prev.slice(0, -1) : prev;
-      });
-      setHasAddedNewRow(false);
-      setEditingRowId(null);
-    }
-  }, [isEditingNode, hasAddedNewRow, makeRowId]);
+  // ✅ PATCH 2: Rimosso useEffect problematico che generava loop di instabilità
+  // La gestione delle righe vuote è ora gestita direttamente in handleUpdateRow
 
 
-  // ✅ CORREZIONE 4: Canvas click che ignora click dentro al nodo
+  // ✅ PATCH 3: Canvas click semplificato - solo exit editing, niente cancellazione automatica
   useEffect(() => {
     const onCanvasClick = (ev: any) => {
+      // Solo se questo nodo ha una riga in editing
       if (!editingRowId?.startsWith(`${id}-`)) return;
 
-      // Se hai il target reale, ignora click dentro al nodo
-      if (ev?.target && rootRef.current && rootRef.current.contains(ev.target)) return;
+      // Ignora click dentro al nodo
+      if (ev?.target && rootRef.current && rootRef.current.contains(ev.target as Node)) return;
 
-      const row = nodeRows.find(r => r.id === editingRowId);
-      if (row && row.text.trim() === '') {
-        const updated = nodeRows.filter(r => r.id !== editingRowId);
-        setNodeRows(updated);
-        exitEditing();
-        data.onUpdate?.({ rows: updated });
-      } else {
-        exitEditing();
-      }
+      // Semplicemente esci dall'editing
+      exitEditing();
     };
 
     window.addEventListener('flow:canvas:click', onCanvasClick as any);
     return () => window.removeEventListener('flow:canvas:click', onCanvasClick as any);
-  }, [editingRowId, nodeRows, id, data]);
+  }, [editingRowId, id]);
 
   // Crea l'array di visualizzazione per il feedback visivo
   const displayRows = useMemo(() => nodeRows, [nodeRows]);

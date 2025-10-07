@@ -52,7 +52,6 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   onCreateBackendCall,
   onCreateTask
 }) => {
-  // Log rimosso per pulizia
 
   // Hide any visible inserter as soon as a textbox appears (editing mode)
   React.useEffect(() => {
