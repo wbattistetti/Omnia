@@ -108,8 +108,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Funzione semplice per uscire dall'editing
   const exitEditing = () => {
     setEditingRowId(null);
+    // ✅ RIMOSSO: Non stabilizzare automaticamente il nodo qui
+    // La stabilizzazione avverrà solo quando si esce completamente dal nodo
   };
-
 
 
   // ✅ PATCH 1: Focus per nodi nuovi (semplificato)
@@ -155,6 +156,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     categoryType?: EntityType,
     meta?: Partial<NodeRowData>
   ) => {
+    console.log('🔍 [AutoAppend] handleUpdateRow called with:', { 
+      rowId, 
+      newText: newText.substring(0, 20) + '...', 
+      isTemporary: data.isTemporary 
+    });
+    
     const prev = nodeRows;
     const idx = prev.findIndex(r => r.id === rowId);
     if (idx === -1) return;
@@ -177,17 +184,20 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     );
 
     const isLast = idx === prev.length - 1;
+// ✅ MODIFICA: Auto-append SOLO per nodi temporanei (fino a quando non esci dal nodo)
+    // ✅ 
 
-    // ✅ MODIFICA: Auto-append SOLO per nodi temporanei, e senza doppio onUpdate
+    const shouldAutoAppend = data.isTemporary && isLast && wasEmpty && nowFilled;
+    
     console.log('🔍 [AutoAppend] Debug:', {
       isTemporary: data.isTemporary,
       isLast,
       wasEmpty,
       nowFilled,
-      shouldAppend: data.isTemporary && isLast && wasEmpty && nowFilled
+      shouldAppend: shouldAutoAppend
     });
     
-    if (data.isTemporary && isLast && wasEmpty && nowFilled) {
+    if (shouldAutoAppend) {
       console.log('✅ [AutoAppend] Appending new row!');
       const { nextRows, newRowId } = appendEmptyRow(updatedRows);
       updatedRows = nextRows;
@@ -196,14 +206,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
     setNodeRows(updatedRows);
 
-    // ✅ MODIFICA: Stabilizzazione del nodo temporaneo (unica onUpdate)
-    const becameNonEmpty =
-      data.isTemporary && updatedRows.some(r => (r.text || '').trim().length > 0);
-
-    data.onUpdate?.({
-      rows: updatedRows,
-      ...(becameNonEmpty ? { isTemporary: false, hidden: false } : {}),
+    console.log('🔍 [AutoAppend] handleUpdateRow calling onUpdate with:', { 
+      rows: updatedRows.length, 
+      isTemporary: data.isTemporary 
     });
+    data.onUpdate?.({ rows: updatedRows, isTemporary: data.isTemporary });
   };
 
   const handleDeleteRow = (rowId: string) => {
@@ -245,9 +252,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       
       // ✅ CORREZIONE: Dopo aver aggiunto un atto, esci sempre dall'editing
       setNodeRows(baseRows);
-      exitEditing();
       // Rimuovi focusRowId per evitare che il focus si riattivi
-      data.onUpdate?.({ rows: baseRows, focusRowId: undefined });
+      console.log('🔍 [Intellisense] Before onUpdate:', { isTemporary: data.isTemporary });
+      data.onUpdate?.({ rows: baseRows, focusRowId: undefined, isTemporary: data.isTemporary });
+      console.log('🔍 [Intellisense] After onUpdate');
     }
     setShowIntellisense(false);
   };
@@ -404,8 +412,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       // Ignora click dentro al nodo
       if (ev?.target && rootRef.current && rootRef.current.contains(ev.target as Node)) return;
 
-      // Semplicemente esci dall'editing
+      // Esci dall'editing e stabilizza il nodo se è temporaneo
       exitEditing();
+      if (data.isTemporary) {
+        data.onUpdate?.({ isTemporary: false, hidden: false });
+      }
     };
 
     window.addEventListener('flow:canvas:click', onCanvasClick as any);

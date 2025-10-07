@@ -34,6 +34,13 @@ export function useNodeManager(
    * Aggiorna un nodo per id
    */
   const updateNode = useCallback((nodeId: string, updates: Partial<NodeData>) => {
+    console.log('🔍 [useNodeManager] updateNode called:', { 
+      nodeId, 
+      updates,
+      currentIsTemporary: updates.isTemporary,
+      hasIsTemporary: 'isTemporary' in updates
+    });
+    console.trace('🔍 [useNodeManager] Stack trace:');
     setNodes((nds) =>
       nds.map((node) =>
         node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node

@@ -455,7 +455,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   function cleanupAllTempNodesAndEdges() {
     const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
     const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
-    setNodes((nds) => nds.filter((n: any) => n.id !== tempNodeId && !(n?.data?.isTemporary === true)));
+    setNodes((nds) => nds.filter((n: any) => {
+      // Non rimuovere il nodo temporaneo specifico per le connessioni
+      if (n.id === tempNodeId) return false;
+      // Non rimuovere nodi temporanei che hanno contenuto (per auto-append)
+      if (n?.data?.isTemporary === true) {
+        const hasContent = n.data.rows && n.data.rows.some((row: any) => row.text && row.text.trim().length > 0);
+        if (hasContent) return true; // Mantieni il nodo temporaneo con contenuto
+      }
+      return true;
+    }));
     setEdges((eds) => removeAllTempEdges(eds, nodesRef.current).filter(e => e.id !== tempEdgeId));
   }
 
