@@ -514,7 +514,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               data.onUpdate?.({ rows: updatedRows });
             }
             if (e.key === 'Escape') {
-              setEditingRowId(null);
+              // Se il nodo ha una sola riga vuota, elimina il nodo
+              if (nodeRows.length === 1) {
+                const singleRow = nodeRows[0];
+                if (!singleRow.text || singleRow.text.trim() === '') {
+                  data.onDelete?.();
+                } else {
+                  setEditingRowId(null);
+                }
+              } else {
+                setEditingRowId(null);
+              }
             }
           }}
           onDragStart={handleRowDragStart}
