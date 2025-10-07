@@ -131,8 +131,9 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   }, [showIcons]);
 
   useEffect(() => {
+    console.log('🎯 [NodeRow] forceEditing changed:', { rowId: row.id, forceEditing, isEditing });
     if (forceEditing) setIsEditing(true);
-  }, [forceEditing]);
+  }, [forceEditing, row.id, isEditing]);
 
   // Debug disattivato di default (abilitabile via debug.flowIcons)
   useEffect(() => {
