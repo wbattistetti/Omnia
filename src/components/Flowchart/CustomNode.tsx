@@ -406,16 +406,50 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ PATCH 3: Canvas click semplificato - solo exit editing, niente cancellazione automatica
   useEffect(() => {
     const onCanvasClick = (ev: any) => {
-      // Solo se questo nodo ha una riga in editing
-      if (!editingRowId?.startsWith(`${id}-`)) return;
+      console.log('🖱️ [CanvasClick] Evento ricevuto:', { 
+        editingRowId, 
+        nodeId: id, 
+        isTemporary: data.isTemporary,
+        hasEditingRow: editingRowId?.startsWith(`${id}-`)
+      });
+      
+      // Se il nodo è temporaneo, fai sempre la pulizia (anche senza riga in editing)
+      if (!data.isTemporary) {
+        console.log('🖱️ [CanvasClick] Nodo non temporaneo, esco');
+        return;
+      }
 
-      // Ignora click dentro al nodo
-      if (ev?.target && rootRef.current && rootRef.current.contains(ev.target as Node)) return;
+      // Ignora click dentro al nodo (solo se c'è una riga in editing)
+      if (editingRowId?.startsWith(`${id}-`) && ev?.target && rootRef.current && rootRef.current.contains(ev.target as Node)) {
+        console.log('🖱️ [CanvasClick] Click dentro al nodo con riga in editing, ignoro');
+        return;
+      }
 
+      console.log('🖱️ [CanvasClick] Click fuori dal nodo, procedo con cleanup');
+      
       // Esci dall'editing e stabilizza il nodo se è temporaneo
       exitEditing();
       if (data.isTemporary) {
-        data.onUpdate?.({ isTemporary: false, hidden: false });
+        console.log('🧹 [Cleanup] Rimuovendo righe non stabilizzate...');
+        console.log('🧹 [Cleanup] Righe attuali:', nodeRows.map(r => ({ id: r.id, text: r.text, isEmpty: !r.text || r.text.trim().length === 0 })));
+        
+        // Filtra via tutte le righe vuote/non stabilizzate
+        const stabilizedRows = nodeRows.filter(row => 
+          row.text && row.text.trim().length > 0
+        );
+        
+        console.log('🧹 [Cleanup] Righe prima:', nodeRows.length, 'dopo:', stabilizedRows.length);
+        console.log('🧹 [Cleanup] Righe stabilizzate:', stabilizedRows.map(r => ({ id: r.id, text: r.text })));
+        
+        // Se ci sono righe stabilizzate, aggiorna il nodo
+        if (stabilizedRows.length > 0) {
+          setNodeRows(stabilizedRows);
+          data.onUpdate?.({ rows: stabilizedRows, isTemporary: false, hidden: false });
+        } else {
+          // Se non ci sono righe stabilizzate, cancella tutto il nodo
+          console.log('🧹 [Cleanup] Nessuna riga stabilizzata, cancellando nodo');
+          data.onDelete?.();
+        }
       }
     };
 
