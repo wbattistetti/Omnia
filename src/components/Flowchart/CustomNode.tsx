@@ -84,6 +84,19 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   const makeRowId = React.useCallback(() => `${id}-${newUid()}`, [id]);
 
+  // ✅ NUOVO: helper puro che NON fa setState né onUpdate
+  const appendEmptyRow = React.useCallback(
+    (current: NodeRowData[]) => {
+      const newRowId = makeRowId();
+      const next = [
+        ...current,
+        { id: newRowId, text: '', included: true, mode: 'Message' as const } as NodeRowData,
+      ];
+      return { nextRows: next, newRowId };
+    },
+    [makeRowId]
+  );
+
   // ✅ CORREZIONE 1: Lazy state initialization con ID stabili
   const [nodeRows, setNodeRows] = useState<NodeRowData[]>(() => {
     return initRows(id, data.rows);
@@ -149,7 +162,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const wasEmpty = !(prev[idx].text || '').trim();
     const nowFilled = (newText || '').trim().length > 0;
 
-    const updatedRows = prev.map(row =>
+    let updatedRows = prev.map(row =>
       row.id === rowId
         ? {
             ...row,
@@ -164,22 +177,33 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     );
 
     const isLast = idx === prev.length - 1;
-    const hasTrailingEmpty =
-      prev.length > 0 && !(prev[prev.length - 1].text || '').trim();
 
-    if (isLast && wasEmpty && nowFilled && !hasTrailingEmpty) {
-      const newRowId = makeRowId();
-      updatedRows.push({
-        id: newRowId,
-        text: '',
-        included: true,
-        mode: 'Message' as const
-      } as any);
+    // ✅ MODIFICA: Auto-append SOLO per nodi temporanei, e senza doppio onUpdate
+    console.log('🔍 [AutoAppend] Debug:', {
+      isTemporary: data.isTemporary,
+      isLast,
+      wasEmpty,
+      nowFilled,
+      shouldAppend: data.isTemporary && isLast && wasEmpty && nowFilled
+    });
+    
+    if (data.isTemporary && isLast && wasEmpty && nowFilled) {
+      console.log('✅ [AutoAppend] Appending new row!');
+      const { nextRows, newRowId } = appendEmptyRow(updatedRows);
+      updatedRows = nextRows;
       setEditingRowId(newRowId);
     }
 
     setNodeRows(updatedRows);
-    data.onUpdate?.({ rows: updatedRows });
+
+    // ✅ MODIFICA: Stabilizzazione del nodo temporaneo (unica onUpdate)
+    const becameNonEmpty =
+      data.isTemporary && updatedRows.some(r => (r.text || '').trim().length > 0);
+
+    data.onUpdate?.({
+      rows: updatedRows,
+      ...(becameNonEmpty ? { isTemporary: false, hidden: false } : {}),
+    });
   };
 
   const handleDeleteRow = (rowId: string) => {
@@ -410,14 +434,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   }, [draggedItem, drag.draggedRowInitialRect, drag.draggedRowInitialClientX, drag.draggedRowInitialClientY, 
       drag.draggedRowCurrentClientX, drag.draggedRowCurrentClientY, drag.visualSnapOffset]);
 
-  // Se è un nodo temporaneo, renderizza solo gli handles
-  if (data.isTemporary) {
-    return (
-      <div className="w-1 h-1 opacity-0">
-        <NodeHandles isConnectable={isConnectable} />
-      </div>
-    );
-  }
+  // ✅ RIMOSSO: I nodi temporanei ora sono visibili e funzionanti
 
   // Do NOT auto-append an extra row at mount; start with a single textarea only.
 

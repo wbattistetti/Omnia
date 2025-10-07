@@ -383,7 +383,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
         hidden: true,
         focusRowId: '1',
-        isTemporary: true,
+        isTemporary: true, // ✅ MODIFICA: Aggiunto isTemporary: true
       },
     };
     console.log('🆕 [CreateNode] Node created:', newNodeId, { position: { x, y }, focusRowId: '1' });
@@ -425,12 +425,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       // Log rimosso per pulizia
       
       // Se il nodo ha zero righe stabilizzate (vuoto) e è in editing, cancellalo
-      if (rows.length === 0 && (editingRowId || focusRowId)) {
+      // MA NON se è un nodo temporaneo (nuovo)
+      if (rows.length === 0 && (editingRowId || focusRowId) && !nodeData?.isTemporary) {
         console.log('🗑️ [CanvasClick] Deleting empty node:', node.id);
         deleteNodeWithLog(node.id);
       }
       // Se il nodo ha una sola riga vuota in editing, cancellalo
-      else if (rows.length === 1 && editingRowId) {
+      // MA NON se è un nodo temporaneo (nuovo)
+      else if (rows.length === 1 && editingRowId && !nodeData?.isTemporary) {
         const singleRow = rows[0];
         if (!singleRow.text || !singleRow.text.trim()) {
           console.log('🗑️ [CanvasClick] Deleting node with single empty row:', node.id);
