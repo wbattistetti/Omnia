@@ -11,7 +11,7 @@ interface NodeRowListProps {
   handleInsertRow: (idx: number) => void;
   nodeTitle: string;
   onUpdate: (row: NodeRowData, newText: string) => void;
-  onUpdateWithCategory: (row: NodeRowData, newText: string, categoryType?: string) => void;
+  onUpdateWithCategory: (row: NodeRowData, newText: string, categoryType?: string, meta?: any) => void;
   onDelete: (row: NodeRowData) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onDragStart: (id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => void;

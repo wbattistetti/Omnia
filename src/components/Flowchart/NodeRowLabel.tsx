@@ -24,6 +24,7 @@ interface NodeRowLabelProps {
   iconSize?: number;
   hasDDT?: boolean;
   gearColor?: string;
+  onOpenDDT?: () => void;
   onDoubleClick: () => void;
   onIconsHoverChange?: (v: boolean) => void;
   onLabelHoverChange?: (v: boolean) => void;
@@ -49,6 +50,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   iconSize,
   hasDDT,
   gearColor,
+  onOpenDDT,
   onDoubleClick,
   onIconsHoverChange,
   onLabelHoverChange
@@ -123,6 +125,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           iconSize={iconSize}
           hasDDT={hasDDT}
           gearColor={gearColor || labelTextColor}
+          onOpenDDT={onOpenDDT}
           isCondition={String((row as any)?.categoryType || '').toLowerCase() === 'conditions'}
           onWrenchClick={() => {
             try {

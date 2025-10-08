@@ -61,6 +61,11 @@ export interface NodeRowData {
   factoryId?: string;
   // Interaction mode for the agent act row
   mode: 'DataRequest' | 'DataConfirmation' | 'Message';
+  // Per-row instance linkage (project-scoped)
+  baseActId?: string;
+  instanceId?: string;
+  // Local content for Message rows (preview/cache)
+  message?: { text?: string };
   // Optional compact label for chips (fallback to name/text when absent)
   shortLabel?: string;
   isNew?: boolean;

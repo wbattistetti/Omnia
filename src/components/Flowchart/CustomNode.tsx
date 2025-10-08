@@ -150,6 +150,21 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ CORREZIONE 4: Ref per il container root del nodo
   const rootRef = useRef<HTMLDivElement>(null);
 
+  // Listen for global message text updates coming from NonInteractive editor
+  useEffect(() => {
+    const handler = (e: any) => {
+      const d = (e && e.detail) || {};
+      if (!d || !d.instanceId) return;
+      setNodeRows(prev => {
+        const next = prev.map(r => (r as any)?.instanceId === d.instanceId ? { ...r, message: { ...(r as any)?.message, text: d.text } } : r);
+        if (typeof data.onUpdate === 'function') data.onUpdate({ rows: next });
+        return next;
+      });
+    };
+    document.addEventListener('rowMessage:update', handler as any);
+    return () => document.removeEventListener('rowMessage:update', handler as any);
+  }, [data]);
+
   const handleUpdateRow = (
     rowId: string,
     newText: string,
@@ -182,6 +197,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           }
         : row
     );
+    // Debug istanza/meta
+    try { console.log('[Row][handleUpdateRow][meta]', meta); } catch {}
 
     const isLast = idx === prev.length - 1;
 // ✅ MODIFICA: Auto-append SOLO per nodi temporanei (fino a quando non esci dal nodo)
@@ -540,7 +557,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           handleInsertRow={handleInsertRow}
           nodeTitle={nodeTitle}
           onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included })}
-          onUpdateWithCategory={(row, newText, categoryType) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included })}
+          onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included, ...(meta || {}) })}
           onDelete={(row) => handleDeleteRow(row.id)}
           onKeyDown={(e) => {
             // ✅ CORREZIONE 3: Enter con guard per trailing empty

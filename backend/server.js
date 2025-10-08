@@ -282,6 +282,101 @@ app.get('/api/projects/:pid/acts', async (req, res) => {
   }
 });
 
+// -----------------------------
+// Endpoints: Act Instances (create/update/get)
+// -----------------------------
+app.post('/api/projects/:pid/instances', async (req, res) => {
+  const projectId = req.params.pid;
+  const payload = req.body || {};
+  if (!payload.baseActId || !payload.mode) {
+    return res.status(400).json({ error: 'baseActId_and_mode_required' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const now = new Date();
+
+    // derive base ddt version/hash from project_acts when available
+    let base = null;
+    try { base = await projDb.collection('project_acts').findOne({ _id: payload.baseActId }); } catch {}
+    const instance = {
+      projectId,
+      baseActId: payload.baseActId,
+      ddtRefId: payload.baseActId,
+      mode: payload.mode,
+      message: payload.message || null,
+      overrides: payload.overrides || null,
+      baseVersion: base?.updatedAt || null,
+      baseHash: null,
+      ddtSnapshot: null,
+      createdAt: now,
+      updatedAt: now
+    };
+    const r = await projDb.collection('act_instances').insertOne(instance);
+    const saved = await projDb.collection('act_instances').findOne({ _id: r.insertedId });
+    res.json(saved);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
+  const projectId = req.params.pid;
+  const iid = req.params.iid;
+  const payload = req.body || {};
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+
+    const update = { updatedAt: new Date() };
+    if (payload.message !== undefined) update['message'] = payload.message;
+    if (payload.overrides !== undefined) update['overrides'] = payload.overrides;
+
+    // optional: fork = true → copy current project_acts.ddtSnapshot into instance.ddtSnapshot
+    if (payload.fork === true) {
+      const curr = await projDb.collection('act_instances').findOne({ _id: iid });
+      const baseId = payload.baseActId || curr?.baseActId;
+      if (baseId) {
+        const base = await projDb.collection('project_acts').findOne({ _id: baseId });
+        if (base && base.ddtSnapshot) {
+          update['ddtSnapshot'] = base.ddtSnapshot;
+          update['baseVersion'] = base.updatedAt || new Date();
+        }
+      }
+    }
+
+    await projDb.collection('act_instances').updateOne({ _id: iid }, { $set: update });
+    const saved = await projDb.collection('act_instances').findOne({ _id: iid });
+    res.json(saved);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+app.get('/api/projects/:pid/instances', async (req, res) => {
+  const projectId = req.params.pid;
+  const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const coll = projDb.collection('act_instances');
+    const filter = ids.length ? { _id: { $in: ids } } : {};
+    const items = await coll.find(filter).sort({ updatedAt: -1 }).toArray();
+    res.json({ count: items.length, items });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
 // Helper functions for mode/isInteractive migration
 function deriveModeFromDoc(doc) {
   if (doc.mode) {

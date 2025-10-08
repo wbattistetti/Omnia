@@ -120,6 +120,32 @@ export const ProjectDataService = {
       macrotasks: []
     };
   },
+
+  // --- Instances API helpers ---
+  async createInstance(projectId: string, payload: { baseActId: string; mode: 'Message'|'DataRequest'|'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('createInstance_failed');
+    return res.json();
+  },
+  async updateInstance(projectId: string, instanceId: string, updates: any): Promise<any> {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/${encodeURIComponent(instanceId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    if (!res.ok) throw new Error('updateInstance_failed');
+    return res.json();
+  },
+  async getInstances(projectId: string, ids?: string[]): Promise<any> {
+    const qs = ids && ids.length ? `?ids=${ids.map(encodeURIComponent).join(',')}` : '';
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances${qs}`);
+    if (!res.ok) throw new Error('getInstances_failed');
+    return res.json();
+  },
   async initializeProjectData(templateName: string, language: string, projectIndustry?: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 100));
     

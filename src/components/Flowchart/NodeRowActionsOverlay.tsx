@@ -17,6 +17,7 @@ interface NodeRowActionsOverlayProps {
   gearColor?: string;
   isCondition?: boolean;
   onWrenchClick?: () => void;
+  onOpenDDT?: () => void;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -34,7 +35,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   hasDDT,
   gearColor,
   isCondition,
-  onWrenchClick
+  onWrenchClick,
+  onOpenDDT
 }) => {
   if (!showIcons || !iconPos) return null;
   const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? Math.max(12, Math.min(20, Math.round(labelRef.current.getBoundingClientRect().height * 0.7))) : 14);
@@ -95,12 +97,13 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         </button>
       )}
       {/* Gear (DDT) */}
-      <span
+      <button
+        onClick={onOpenDDT}
         title={hasDDT ? 'Open DDT' : 'No DDT linked'}
-        style={{ display: 'flex', alignItems: 'center', padding: 2 }}
+        style={{ display: 'flex', alignItems: 'center', padding: 2, background: 'none', border: 'none', cursor: 'pointer' }}
       >
         <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#64748b') : '#9ca3af' }} />
-      </span>
+      </button>
       {/* Cestino (delete) */}
       {canDelete && (
         <button 

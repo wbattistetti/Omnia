@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useProjectData } from '../../context/ProjectDataContext';
+import { useDDTManager } from '../../context/DDTManagerContext';
+import { ProjectDataService } from '../../services/ProjectDataService';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
 import { Ear, CheckCircle2, Megaphone } from 'lucide-react';
@@ -64,6 +66,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   const [showIcons, setShowIcons] = useState(false);
   const labelRef = useRef<HTMLSpanElement>(null);
   const [iconPos, setIconPos] = useState<{top: number, left: number} | null>(null);
+  const { openDDT } = useDDTManager();
   const hoverHideTimerRef = useRef<number | null>(null);
 
   // Calcola la posizione e dimensione della zona buffer
@@ -189,11 +192,26 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     return () => window.removeEventListener('flow:canvas:click', handleCanvasClick as any);
   }, [isEditing, showIntellisense, row.text, onEditingEnd]);
 
-  const handleSave = () => {
-    onUpdate(row, currentText.trim() || row.text);
+  const handleSave = async () => {
+    const label = currentText.trim() || row.text;
+    onUpdate(row, label);
+    try {
+      // aggiorna cache locale del testo messaggio
+      if (onUpdateWithCategory) {
+        (onUpdateWithCategory as any)(row, label, (row as any)?.categoryType, { message: { text: label } });
+      }
+    } catch {}
     setIsEditing(false);
     setShowIntellisense(false);
     setIntellisenseQuery('');
+    // PUT non-bloccante: salva in background
+    try {
+      const pid = (window as any).__currentProjectId || (window as any).__projectId;
+      if (pid && (row as any)?.instanceId && ((row as any)?.mode === 'Message' || !(row as any)?.mode)) {
+        void ProjectDataService.updateInstance(pid, (row as any).instanceId, { message: { text: label } })
+          .catch((e) => { try { console.warn('[Row][save][instance:update] failed', e); } catch {} });
+      }
+    } catch {}
     if (typeof onEditingEnd === 'function') {
       onEditingEnd();
     }
@@ -257,18 +275,33 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     }
   };
 
-  const handleIntellisenseSelect = (item: IntellisenseItem) => {
+  const handleIntellisenseSelect = async (item: IntellisenseItem) => {
     setCurrentText(item.name);
     setShowIntellisense(false);
     setIntellisenseQuery('');
-    
-    // Auto-save the selection with category type
+    // Auto-save the selection with category type (legacy path keeps row label)
     if (onUpdateWithCategory) {
-      // pass meta with identifiers and flags so parent can persist them
-      (onUpdateWithCategory as any)(row, item.name, item.categoryType, { actId: item.actId, factoryId: item.factoryId, mode: item.mode, userActs: item.userActs, categoryType: item.categoryType });
+      (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
+        actId: item.actId,
+        factoryId: item.factoryId,
+        mode: item.mode,
+        userActs: item.userActs,
+        categoryType: item.categoryType,
+        baseActId: item.actId
+      });
     } else {
       onUpdate(row, item.name);
     }
+    // Create instance asynchronously (best-effort)
+    try {
+      const pid = (window as any).__currentProjectId || (window as any).__projectId;
+      if (pid && item.actId && item.categoryType === 'agentActs') {
+        const inst = await ProjectDataService.createInstance(pid, { baseActId: item.actId, mode: (item.mode as any) || 'Message' });
+        if (inst && (onUpdateWithCategory as any)) {
+          (onUpdateWithCategory as any)(row, item.name, item.categoryType, { instanceId: inst._id, baseActId: item.actId });
+        }
+      }
+    } catch (e) { try { console.warn('[Row][instance:create] failed', e); } catch {} }
     setIsEditing(false);
   };
 
@@ -520,6 +553,35 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
             labelTextColor={labelTextColor}
             hasDDT={Boolean((row as any).ddt)}
             gearColor={labelTextColor}
+          onOpenDDT={async () => {
+            try {
+              const { data: projectData } = (require('../../context/ProjectDataContext') as any).useProjectData();
+            } catch {}
+            try {
+              // Best-effort: trova act nel projectData corrente esposto globalmente
+              const pd: any = (window as any).__projectData;
+              const baseId = (row as any).baseActId || (row as any).actId;
+              let act: any = null;
+              if (pd && pd.agentActs) {
+                for (const cat of pd.agentActs) {
+                  const f = (cat.items || []).find((it: any) => it.id === baseId || it._id === baseId || it.id === (row as any).factoryId);
+                  if (f) { act = f; break; }
+                }
+              }
+              const ddt = act?.ddt || act?.ddtSnapshot || (row as any)?.ddt;
+              console.log('[Row][openDDT] click', { rowId: row.id, mode: (row as any)?.mode, baseActId: baseId, hasDDT: !!ddt, instanceId: (row as any)?.instanceId });
+              if (ddt) {
+                openDDT(ddt);
+              } else {
+                // Message (non-interactive): apertura istantanea con cache locale
+                const templateText = ((row as any)?.message?.text) ?? (row.text || '');
+                try {
+                  console.log('[Row][openDDT] open NonInteractive', { title: row.text || 'Agent message', templateText });
+                  document.dispatchEvent(new CustomEvent('nonInteractiveEditor:open', { detail: { title: row.text || 'Agent message', template: templateText, instanceId: (row as any)?.instanceId } }));
+                } catch {}
+              }
+            } catch (e) { console.warn('[Row][openDDT] failed', e); }
+          }}
             onDoubleClick={handleDoubleClick}
             onIconsHoverChange={(v: boolean) => {
               if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);

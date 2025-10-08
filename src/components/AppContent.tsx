@@ -75,13 +75,14 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Usa il nuovo hook per DDT
   const { selectedDDT, closeDDT } = useDDTManager();
   const [nonInteractiveEditor, setNonInteractiveEditor] = useState<null | { title?: string; value: { template: string; vars?: string[]; samples?: Record<string,string> }; accentColor?: string }>(null);
+  const [niSource, setNiSource] = useState<null | { instanceId?: string }>(null);
 
   // Listen to open event for non-interactive acts (open bottom panel like ResponseEditor)
   React.useEffect(() => {
     const handler = (e: any) => {
       const d = (e && e.detail) || {};
-      // Expected: { title?: string, template?: string, accentColor?: string }
       setNonInteractiveEditor({ title: d.title || 'Agent message', value: { template: d.template || '', samples: {}, vars: [] } as any, accentColor: d.accentColor });
+      setNiSource({ instanceId: d.instanceId });
     };
     document.addEventListener('nonInteractiveEditor:open', handler as any);
     return () => document.removeEventListener('nonInteractiveEditor:open', handler as any);
@@ -307,6 +308,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
+      try { (window as any).__currentProjectId = boot.projectId; console.log('[Bootstrap][projectId]', boot.projectId); } catch {}
       setNodes([]);
       setEdges([]);
       await refreshData();
@@ -331,6 +333,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (!response.ok) throw new Error('Errore nel caricamento');
       const project = await response.json();
       setCurrentProject(project); // carica TUTTI i dati, inclusi i dizionari
+      try { (window as any).__currentProjectId = id; console.log('[OpenProject][projectId]', id); } catch {}
       // AGGIUNTA: aggiorna anche nodi e edge se presenti
       setNodes(Array.isArray(project.nodes) ? project.nodes : []);
       setEdges(Array.isArray(project.edges) ? project.edges : []);
@@ -570,21 +573,26 @@ export const AppContent: React.FC<AppContentProps> = ({
                   setNonInteractiveEditor({ title: nonInteractiveEditor.title, value: next, accentColor: (nonInteractiveEditor as any).accentColor });
                 }}
                 onClose={async () => {
+                  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                   try {
                     const svc = await import('../services/ProjectDataService');
                     const dataSvc: any = (svc as any).ProjectDataService;
-                    const projectData: any = await dataSvc.loadProjectData();
-                    const cats: any[] = (projectData?.agentActs || []) as any[];
-                    for (const c of cats) {
-                      const it = (c.items || []).find((i: any) => String(i?.name || '').trim() === String(nonInteractiveEditor?.title || '').trim());
-                      if (it) {
-                        const prompts = { ...(it.prompts || {}), informal: nonInteractiveEditor?.value?.template || '' };
-                        await dataSvc.updateItem('agentActs', c.id, it.id, { prompts } as any);
-                        break;
-                      }
+                    const pid = (window as any).__currentProjectId || (window as any).__projectId;
+                    if (pid && niSource?.instanceId) {
+                      // fire-and-forget: non bloccare la chiusura del pannello
+                      const text = nonInteractiveEditor?.value?.template || '';
+                      void dataSvc.updateInstance(pid, niSource.instanceId, { message: { text } })
+                        .then(() => { try { console.log('[NI][close][PUT ok]', { instanceId: niSource?.instanceId }); } catch {} })
+                        .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch {} });
+                      // broadcast per aggiornare la riga che ha questa istanza
+                      try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: niSource.instanceId, text } })); } catch {}
                     }
-                  } catch {}
+                  } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch {} }
+                  // chiudi SUBITO il pannello (render immediato)
                   setNonInteractiveEditor(null);
+                  setNiSource(null);
+                  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                  try { console.log('[NI][close] panel closed in', Math.round(t1 - t0), 'ms'); } catch {}
                 }}
                 accentColor={(nonInteractiveEditor as any).accentColor}
               />
