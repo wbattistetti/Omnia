@@ -104,6 +104,22 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
 // }
 
 export const ProjectDataService = {
+  async loadActsFromProject(projectId: string): Promise<void> {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/acts`);
+    if (!res.ok) throw new Error('Failed to load project acts');
+    const json = await res.json();
+    const items = Array.isArray(json?.items) ? json.items : [];
+    projectData = {
+      name: projectData.name || '',
+      industry: projectData.industry || '',
+      agentActs: this.convertToCategories(items, 'agentActs'),
+      userActs: [],
+      backendActions: [],
+      conditions: [],
+      tasks: [],
+      macrotasks: []
+    };
+  },
   async initializeProjectData(templateName: string, language: string, projectIndustry?: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 100));
     

@@ -36,7 +36,7 @@ async function migrateTestPassedFlag() {
     console.log('🎉 Migration completed successfully!');
     
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    console.error('❌ Migration failed:', error);git add .
   } finally {
     await client.close();
   }

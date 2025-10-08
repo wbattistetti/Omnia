@@ -19,6 +19,269 @@ const path = require('path');
 const dbFactory = 'factory';
 const dbProjects = 'Projects';
 
+// -----------------------------
+// Helpers: naming & catalog
+// -----------------------------
+function slugifyName(str) {
+  try {
+    return String(str || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  } catch {
+    return '';
+  }
+}
+
+function abbreviateSlug(str, maxLen = 6) {
+  const words = slugifyName(str).split('-').filter(Boolean);
+  let abbr = words.slice(0, 4).map(w => w.slice(0, 1)).join('');
+  if (abbr.length < 3) abbr = words.join('').slice(0, maxLen);
+  const safe = (abbr || 'app').slice(0, maxLen);
+  return safe || 'app';
+}
+
+function randomId(len = 8) {
+  const base = (global.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36) + Math.random().toString(36));
+  return base.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, len);
+}
+
+function makeProjectDbName(clientName, projectName) {
+  const c = abbreviateSlug(clientName, 6);
+  const p = abbreviateSlug(projectName, 6);
+  let name = `t_${c}__p_${p}__${randomId(8)}`;
+  if (name.length > 63) name = name.slice(0, 63);
+  return name;
+}
+
+function makeProjectId() {
+  return `proj_${randomId(10)}`;
+}
+
+async function getProjectCatalogRecord(mongoClient, projectId) {
+  const db = mongoClient.db(dbProjects);
+  const rec = await db.collection('projects_catalog').findOne({ $or: [{ _id: projectId }, { projectId }] });
+  return rec || null;
+}
+
+async function getProjectDb(mongoClient, projectId) {
+  const rec = await getProjectCatalogRecord(mongoClient, projectId);
+  if (!rec || !rec.dbName) throw new Error('project_not_found_or_missing_dbName');
+  return mongoClient.db(rec.dbName);
+}
+
+// -----------------------------
+// Endpoints: DB name preview & catalog (non-distruttivi)
+// -----------------------------
+app.get('/api/projects/dbname/preview', async (req, res) => {
+  try {
+    const clientName = String(req.query.client || 'client');
+    const projectName = String(req.query.project || 'project');
+    const dbName = makeProjectDbName(clientName, projectName);
+    res.json({
+      dbName,
+      clientSlug: slugifyName(clientName),
+      projectSlug: slugifyName(projectName),
+      clientAbbr: abbreviateSlug(clientName, 6),
+      projectAbbr: abbreviateSlug(projectName, 6)
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.get('/api/projects/catalog', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbProjects);
+    const list = await db.collection('projects_catalog').find({}).sort({ updatedAt: -1 }).toArray();
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+app.post('/api/projects/catalog', async (req, res) => {
+  const payload = req.body || {};
+  const clientName = payload.clientName;
+  const projectName = payload.projectName;
+  if (!clientName || !projectName) {
+    return res.status(400).json({ error: 'clientName_and_projectName_required' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbProjects);
+    const coll = db.collection('projects_catalog');
+    const projectId = makeProjectId();
+    const dbName = makeProjectDbName(clientName, projectName);
+    const now = new Date();
+    const doc = {
+      _id: projectId,
+      projectId,
+      tenantId: payload.tenantId || null,
+      clientName,
+      projectName,
+      clientSlug: slugifyName(clientName),
+      projectSlug: slugifyName(projectName),
+      industry: payload.industry || null,
+      dbName,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now
+    };
+    await coll.insertOne(doc);
+    res.json(doc);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoint: Bootstrap progetto (crea DB e clona acts)
+// -----------------------------
+app.post('/api/projects/bootstrap', async (req, res) => {
+  const payload = req.body || {};
+  const clientName = payload.clientName;
+  const projectName = payload.projectName;
+  const industry = payload.industry || null;
+  if (!clientName || !projectName) {
+    return res.status(400).json({ error: 'clientName_and_projectName_required' });
+  }
+
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+
+    // 1) Catalogo: crea record se non esiste
+    const catalogDb = client.db(dbProjects);
+    const cat = catalogDb.collection('projects_catalog');
+    const now = new Date();
+    const projectId = payload.projectId || makeProjectId();
+    const dbName = payload.dbName || makeProjectDbName(clientName, projectName);
+
+    const catalogDoc = {
+      _id: projectId,
+      projectId,
+      tenantId: payload.tenantId || null,
+      clientName,
+      projectName,
+      clientSlug: slugifyName(clientName),
+      projectSlug: slugifyName(projectName),
+      industry,
+      dbName,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now
+    };
+    try {
+      await cat.insertOne(catalogDoc);
+    } catch (e) {
+      // if already exists, update metadata (idempotent)
+      await cat.updateOne({ _id: projectId }, { $set: { ...catalogDoc, createdAt: undefined, updatedAt: now } }, { upsert: true });
+    }
+
+    // 2) Project DB handle
+    const projDb = client.db(dbName);
+
+    // 3) Scrivi metadati locali
+    await projDb.collection('project_meta').updateOne(
+      { _id: 'meta' },
+      {
+        $set: {
+          projectId,
+          tenantId: payload.tenantId || null,
+          clientName,
+          projectName,
+          clientSlug: slugifyName(clientName),
+          projectSlug: slugifyName(projectName),
+          industry,
+          updatedAt: now
+        },
+        $setOnInsert: { createdAt: now }
+      },
+      { upsert: true }
+    );
+
+    // 4) Clona atti dalla factory
+    const factoryDb = client.db(dbFactory);
+    const actsColl = factoryDb.collection('AgentActs');
+    // scope filtering best-effort (i doc potrebbero non avere scope/industry)
+    let query = {};
+    if (industry) {
+      // se presenti metadati scope/industry nel futuro
+      query = { $or: [ { scope: 'global' }, { scope: 'industry', industry } ] };
+    }
+    let acts = await actsColl.find(query).toArray();
+    // Fallback: se il filtro scope/industry non produce risultati, copia tutti gli atti
+    if (!acts || acts.length === 0) {
+      acts = await actsColl.find({}).toArray();
+    }
+
+    const mapped = (acts || []).map((act) => ({
+      _id: act._id || act.id,
+      name: act.label || act.name || 'Unnamed',
+      description: act.description || '',
+      category: act.category || 'Uncategorized',
+      mode: deriveModeFromDoc(act),
+      shortLabel: act.shortLabel || null,
+      data: act.data || {},
+      ddtSnapshot: act.ddt || null,
+      origin: 'factory',
+      originId: act._id || act.id,
+      originVersion: act.updatedAt || null,
+      sourceHash: null,
+      createdAt: now,
+      updatedAt: now
+    }));
+
+    let inserted = 0;
+    if (mapped.length > 0) {
+      const result = await projDb.collection('project_acts').insertMany(mapped, { ordered: false });
+      inserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
+    }
+
+    // 5) Collezioni vuote necessarie
+    await projDb.collection('act_instances').createIndex({ baseActId: 1, updatedAt: -1 }).catch(() => {});
+    await projDb.collection('flow').createIndex({ updatedAt: -1 }).catch(() => {});
+
+    res.json({ ok: true, projectId, dbName, counts: { project_acts: inserted } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoint: Lista atti del progetto
+// -----------------------------
+app.get('/api/projects/:pid/acts', async (req, res) => {
+  const projectId = req.params.pid;
+  const { limit, q } = req.query || {};
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const coll = projDb.collection('project_acts');
+    const filter = q ? { name: { $regex: String(q), $options: 'i' } } : {};
+    const cursor = coll.find(filter).sort({ name: 1 });
+    const docs = await (limit ? cursor.limit(parseInt(String(limit), 10) || 50) : cursor).toArray();
+    const count = await coll.countDocuments(filter);
+    res.json({ count, items: docs });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
 // Helper functions for mode/isInteractive migration
 function deriveModeFromDoc(doc) {
   if (doc.mode) {
