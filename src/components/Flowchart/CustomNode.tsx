@@ -150,20 +150,23 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ CORREZIONE 4: Ref per il container root del nodo
   const rootRef = useRef<HTMLDivElement>(null);
 
+  // Keep latest rows in a ref to update safely from DOM events
+  const latestRowsRef = useRef<NodeRowData[]>(nodeRows);
+  useEffect(() => { latestRowsRef.current = nodeRows; }, [nodeRows]);
+
   // Listen for global message text updates coming from NonInteractive editor
   useEffect(() => {
     const handler = (e: any) => {
       const d = (e && e.detail) || {};
       if (!d || !d.instanceId) return;
-      setNodeRows(prev => {
-        const next = prev.map(r => (r as any)?.instanceId === d.instanceId ? { ...r, message: { ...(r as any)?.message, text: d.text } } : r);
-        if (typeof data.onUpdate === 'function') data.onUpdate({ rows: next });
-        return next;
-      });
+      const next = (latestRowsRef.current || []).map(r => (r as any)?.instanceId === d.instanceId ? { ...r, message: { ...(r as any)?.message, text: d.text } } : r);
+      setNodeRows(next);
+      // Schedule parent update outside render/setState to avoid warnings
+      try { Promise.resolve().then(() => data.onUpdate?.({ rows: next })); } catch {}
     };
     document.addEventListener('rowMessage:update', handler as any);
     return () => document.removeEventListener('rowMessage:update', handler as any);
-  }, [data]);
+  }, [data.onUpdate]);
 
   const handleUpdateRow = (
     rowId: string,

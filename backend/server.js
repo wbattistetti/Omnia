@@ -143,6 +143,39 @@ app.post('/api/projects/catalog', async (req, res) => {
   }
 });
 
+// DELETE catalog by id
+app.delete('/api/projects/catalog/:id', async (req, res) => {
+  const id = req.params.id;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbProjects);
+    const coll = db.collection('projects_catalog');
+    const result = await coll.deleteOne({ $or: [{ _id: id }, { projectId: id }] });
+    res.json({ ok: true, deleted: result?.deletedCount || 0 });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// DELETE all catalog
+app.delete('/api/projects/catalog', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbProjects);
+    const coll = db.collection('projects_catalog');
+    const result = await coll.deleteMany({});
+    res.json({ ok: true, deleted: result?.deletedCount || 0 });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
 // -----------------------------
 // Endpoint: Bootstrap progetto (crea DB e clona acts)
 // -----------------------------
@@ -254,6 +287,48 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     res.json({ ok: true, projectId, dbName, counts: { project_acts: inserted } });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoints: Flow (nodi/edge) per progetto
+// -----------------------------
+app.get('/api/projects/:pid/flow', async (req, res) => {
+  const pid = req.params.pid;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = await getProjectDb(client, pid);
+    const nodes = await db.collection('flow_nodes').find({}).toArray();
+    const edges = await db.collection('flow_edges').find({}).toArray();
+    res.json({ nodes, edges });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+app.put('/api/projects/:pid/flow', async (req, res) => {
+  const pid = req.params.pid;
+  const payload = req.body || {};
+  const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
+  const edges = Array.isArray(payload.edges) ? payload.edges : [];
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = await getProjectDb(client, pid);
+    const ncoll = db.collection('flow_nodes');
+    const ecoll = db.collection('flow_edges');
+    await ncoll.deleteMany({});
+    await ecoll.deleteMany({});
+    if (nodes.length) await ncoll.insertMany(nodes);
+    if (edges.length) await ecoll.insertMany(edges);
+    res.json({ ok: true, nodes: nodes.length, edges: edges.length });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
   }

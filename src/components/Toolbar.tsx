@@ -89,13 +89,9 @@ export function Toolbar({
           disabled={isSaving}
           style={{ position: 'relative' }}
         >
-          {isSaving ? (
-            <Loader2 className="animate-spin w-5 h-5" />
-          ) : saveSuccess ? (
-            <CheckCircle className="w-5 h-5 text-green-400" />
-          ) : (
-            <span>Salva</span>
-          )}
+          {isSaving && <Loader2 className="animate-spin w-5 h-5" />}
+          <span>Salva</span>
+          {(!isSaving && saveSuccess) && <CheckCircle className="w-5 h-5 text-green-400" />}
           {/* Tooltip errore */}
           {saveError && (
             <span className="absolute left-1/2 top-full mt-2 -translate-x-1/2 bg-red-600 text-white text-xs rounded px-2 py-1 shadow z-20 whitespace-nowrap flex items-center gap-1">

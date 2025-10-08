@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HelpCircle, ChevronDown, XCircle, Trash2 } from 'lucide-react';
+import { HelpCircle, ChevronDown, XCircle, Trash2, Building2, Folder } from 'lucide-react';
 
 interface LandingPageProps {
   onNewProject: () => void;
@@ -31,12 +31,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
 
   // Filtra progetti per ricerca nella modale
-  const uniqueRecentProjects = Array.from(new Map(recentProjects.map(p => [p._id, p])).values());
-  const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id, p])).values());
+  const uniqueRecentProjects = Array.from(new Map(recentProjects.map(p => [p._id || p.projectId, p])).values());
+  const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id || p.projectId, p])).values());
   const filteredAll = uniqueAllProjects.filter(
     (p) =>
-      (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+      ((p.projectName || p.name || '') as string).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ((p.clientName || '') as string).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -119,16 +119,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <div key={proj._id} className="flex items-center justify-between px-4 py-2 hover:bg-emerald-50 rounded group">
                       <button
                         className="text-left flex-1 truncate"
-                        title={proj.name}
-                        onClick={() => { setShowDropdown(false); onSelectProject(proj._id); }}
+                        title={`${proj.clientName || ''} — ${proj.projectName || proj.name || ''}`}
+                        onClick={() => { setShowDropdown(false); onSelectProject(proj._id || proj.projectId); }}
                       >
-                        {proj.name || '(senza nome)'}
+                        <span className="inline-flex items-center gap-4">
+                          <span className="inline-flex items-center gap-2 text-emerald-900 font-semibold">
+                            <Building2 className="w-5 h-5 text-emerald-700" />
+                            <span>{proj.clientName || 'Cliente'}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-2 text-emerald-900">
+                            <Folder className="w-5 h-5 text-emerald-900" />
+                            <span>{proj.projectName || proj.name || '(senza nome)'}</span>
+                          </span>
+                        </span>
                       </button>
-                      <span className="text-xs text-slate-400 ml-2">{proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ''}</span>
+                      <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
                       <button
                         className="ml-2 text-red-500 opacity-70 hover:opacity-100"
                         title="Elimina progetto"
-                        onClick={() => onDeleteProject(proj._id)}
+                        onClick={() => onDeleteProject(proj._id || proj.projectId)}
                       >
                         <XCircle className="w-5 h-5" />
                       </button>
@@ -188,16 +197,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <div key={proj._id} className="flex items-center justify-between px-2 py-2 hover:bg-emerald-50 rounded group">
                     <button
                       className="text-left flex-1 truncate"
-                      title={proj.name}
-                      onClick={() => { setShowAllProjectsModal(false); onSelectProject(proj._id); }}
+                      title={`${proj.clientName || ''} — ${proj.projectName || proj.name || ''}`}
+                      onClick={() => { setShowAllProjectsModal(false); onSelectProject(proj._id || proj.projectId); }}
                     >
-                      {proj.name || '(senza nome)'}
+                      <span className="inline-flex items-center gap-4">
+                        <span className="inline-flex items-center gap-2">
+                          <Building2 className="w-5 h-5 text-emerald-700" />
+                          <span className="font-semibold text-emerald-900">{proj.clientName || 'Cliente'}</span>
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <Folder className="w-5 h-5 text-emerald-900" />
+                          <span>{proj.projectName || proj.name || '(senza nome)'}</span>
+                        </span>
+                      </span>
                     </button>
-                    <span className="text-xs text-slate-400 ml-2">{proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ''}</span>
+                    <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
         <button
                       className="ml-2 text-red-500 opacity-70 hover:opacity-100"
                       title="Elimina progetto"
-                      onClick={() => onDeleteProject(proj._id)}
+                      onClick={() => onDeleteProject(proj._id || proj.projectId)}
         >
                       <XCircle className="w-5 h-5" />
         </button>

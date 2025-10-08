@@ -6,12 +6,12 @@ const API = '';
 
 export const ProjectService = {
   async getRecentProjects(): Promise<ProjectData[]> {
-    const res = await fetch(`${API}/projects`);
+    const res = await fetch(`/api/projects/catalog`);
     if (!res.ok) throw new Error('Errore nel recupero progetti recenti');
     return await res.json();
   },
   async getAllProjects(): Promise<ProjectData[]> {
-    const res = await fetch(`${API}/projects/all`);
+    const res = await fetch(`/api/projects/catalog`);
     if (!res.ok) throw new Error('Errore nel recupero di tutti i progetti');
     return await res.json();
   },

@@ -277,22 +277,13 @@ export const AppContent: React.FC<AppContentProps> = ({
     setCreateError(null);
     setIsCreatingProject(true);
     try {
-      // 1) Bootstrap progetto su backend (DB dedicato + clone atti)
-      const resp = await fetch('/api/projects/bootstrap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientName: projectInfo.clientName || projectInfo.name,
-          projectName: projectInfo.name,
-          industry: projectInfo.template, // industry deriva dalla scelta template
-          tenantId: 'tenant_default'
-        })
-      });
-      if (!resp.ok) throw new Error('Bootstrap fallito');
-      const boot = await resp.json();
+      // DRAFT MODE: nessun bootstrap al server; set flag e temp id
+      (window as any).__projectDraft = true;
+      (window as any).__projectTempId = (crypto?.randomUUID ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2));
+      const boot = { projectId: (window as any).__projectTempId } as any;
 
-      // 2) Carica atti dal DB progetto
-      await ProjectDataService.loadActsFromProject(boot.projectId);
+      // Carica atti dalla factory in memoria (già avviene via initializeProjectData o via loadActsFromProject se vuoi i per-project)
+      await ProjectDataService.initializeProjectData(projectInfo.template, projectInfo.language, projectInfo.industry);
       const data = await ProjectDataService.loadProjectData();
 
       // 3) Inizializza stato UI
@@ -308,7 +299,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
-      try { (window as any).__currentProjectId = boot.projectId; console.log('[Bootstrap][projectId]', boot.projectId); } catch {}
+      try { (window as any).__currentProjectId = boot.projectId; console.log('[Bootstrap][projectId][DRAFT]', boot.projectId); } catch {}
       setNodes([]);
       setEdges([]);
       await refreshData();
@@ -329,20 +320,49 @@ export const AppContent: React.FC<AppContentProps> = ({
   const handleOpenProjectById = useCallback(async (id: string) => {
     if (!id) return;
     try {
-      const response = await fetch(`/projects/${id}`);
-      if (!response.ok) throw new Error('Errore nel caricamento');
-      const project = await response.json();
-      setCurrentProject(project); // carica TUTTI i dati, inclusi i dizionari
-      try { (window as any).__currentProjectId = id; console.log('[OpenProject][projectId]', id); } catch {}
-      // AGGIUNTA: aggiorna anche nodi e edge se presenti
-      setNodes(Array.isArray(project.nodes) ? project.nodes : []);
-      setEdges(Array.isArray(project.edges) ? project.edges : []);
-      await ProjectDataService.importProjectData(JSON.stringify(project));
+      // Modalità persisted: apri da catalogo e carica acts dal DB progetto
+      const catRes = await fetch('/api/projects/catalog');
+      if (!catRes.ok) throw new Error('Errore nel recupero catalogo');
+      const list = await catRes.json();
+      const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
+      (window as any).__projectDraft = false;
+      (window as any).__currentProjectId = id;
+      // Carica atti dal DB progetto
+      await ProjectDataService.loadActsFromProject(id);
+      // Carica flow (nodi/edge)
+      let loadedNodes: any[] = [];
+      let loadedEdges: any[] = [];
+      try {
+        const flowRes = await fetch(`/api/projects/${encodeURIComponent(id)}/flow`);
+        if (flowRes.ok) {
+          const flow = await flowRes.json();
+          loadedNodes = Array.isArray(flow.nodes) ? flow.nodes : [];
+          loadedEdges = Array.isArray(flow.edges) ? flow.edges : [];
+        }
+      } catch {}
+      const data = await ProjectDataService.loadProjectData();
+      const newProject: any = {
+        id,
+        name: meta.projectName || 'Project',
+        clientName: meta.clientName || 'Client',
+        template: meta.industry || 'utility_gas',
+        industry: meta.industry || 'utility_gas',
+        agentActs: data.agentActs,
+        userActs: data.userActs,
+        backendActions: data.backendActions,
+        conditions: data.conditions,
+        tasks: data.tasks,
+        macrotasks: data.macrotasks
+      };
+      setCurrentProject(newProject);
+      setNodes(loadedNodes as any);
+      setEdges(loadedEdges as any);
       await refreshData();
+      setAppState('mainApp');
     } catch (err) {
       alert('Errore: ' + (err instanceof Error ? err.message : err));
     }
-  }, [refreshData]);
+  }, [refreshData, setAppState]);
 
   const handleShowRecentProjects = useCallback(async (id?: string) => {
     if (id) {
@@ -436,39 +456,66 @@ export const AppContent: React.FC<AppContentProps> = ({
             <Toolbar
               onNewProject={() => alert('Nuovo progetto')}
               onOpenProject={() => alert('Apri progetto')}
+              isSaving={isCreatingProject}
               onSave={async () => {
                 try {
-                  // Load current in-memory Agent Acts and send them all to backend for full replace
+                  // show spinner in toolbar while saving
+                  setIsCreatingProject(true);
                   const svc = await import('../services/ProjectDataService');
-                  const data = await (svc as any).ProjectDataService.loadProjectData();
-                  const cats = (data?.agentActs || []) as any[];
-                  const allActs: any[] = [];
-                  for (const c of cats) {
-                    for (const it of (c.items || [])) {
-                      allActs.push({
-                        _id: it._id || it.id,
-                        label: it.name,
-                        description: it.description || '',
-                        category: c.name,
-                        mode: it.mode ?? 'Message',
-                        shortLabel: it.shortLabel,
-                        data: it.data || {},
-                        ddt: it.ddt || null
+                  const dataSvc: any = (svc as any).ProjectDataService;
+                  // 1) bootstrap (solo se siamo in draft)
+                  if ((window as any).__projectDraft) {
+                    const resp = await fetch('/api/projects/bootstrap', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        clientName: (currentProject as any)?.clientName || (currentProject as any)?.name || 'Client',
+                        projectName: (currentProject as any)?.name || 'Project',
+                        industry: (currentProject as any)?.template || 'utility_gas',
+                        tenantId: 'tenant_default'
+                      })
+                    });
+                    if (!resp.ok) throw new Error('bootstrap_failed');
+                    const boot = await resp.json();
+                    (window as any).__currentProjectId = boot.projectId;
+                    (window as any).__projectDraft = false;
+                    // registra nel catalogo per la landing
+                    try {
+                      await fetch('/api/projects/catalog', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          clientName: (currentProject as any)?.clientName || (currentProject as any)?.name || 'Client',
+                          projectName: (currentProject as any)?.name || 'Project',
+                          industry: (currentProject as any)?.template || 'utility_gas',
+                          tenantId: 'tenant_default'
+                        })
                       });
-                    }
+                    } catch {}
                   }
-                  const res = await fetch('/api/factory/agent-acts/bulk-replace', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(allActs)
-                  });
-                  if (!res.ok) throw new Error('bulk replace failed');
-                  const result = await res.json();
-                  console.log('[SaveProject] AgentActs bulk replaced:', result);
-                  alert('Progetto salvato (Agent Acts sovrascritti)');
+                  const pid = (window as any).__currentProjectId;
+                  // 2) persisti tutte le istanze dal draft store (se esistono)
+                  const key = (window as any).__projectTempId;
+                  const draft = (dataSvc as any).__draftInstances?.get?.(key);
+                  if (draft && pid) {
+                    for (const [iid, inst] of draft.entries()) {
+                      await fetch(`/api/projects/${encodeURIComponent(pid)}/instances`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inst)
+                      }).catch(()=>{});
+                    }
+                    (dataSvc as any).__draftInstances.delete(key);
+                  }
+                  // 3) salva flusso (nodi/edge)
+                  if (pid) {
+                    try {
+                      await fetch(`/api/projects/${encodeURIComponent(pid)}/flow`, {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nodes, edges })
+                      });
+                    } catch {}
+                  }
                 } catch (e) {
-                  console.error('[SaveProject] error', e);
-                  alert('Errore nel salvataggio del progetto');
+                  console.error('[SaveProject] commit error', e);
+                } finally {
+                  setIsCreatingProject(false);
                 }
               }}
               onRun={() => setShowGlobalDebugger(s => !s)}

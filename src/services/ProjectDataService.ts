@@ -123,28 +123,71 @@ export const ProjectDataService = {
 
   // --- Instances API helpers ---
   async createInstance(projectId: string, payload: { baseActId: string; mode: 'Message'|'DataRequest'|'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error('createInstance_failed');
-    return res.json();
+    if (this.isDraft()) {
+      const key = this.getDraftKey();
+      const store = this.getDraftStore(key);
+      const id = this.makeId();
+      const now = new Date().toISOString();
+      const inst = { _id: id, projectId: key, baseActId: payload.baseActId, ddtRefId: payload.baseActId, mode: payload.mode, message: payload.message || null, overrides: payload.overrides || null, createdAt: now, updatedAt: now };
+      store.set(id, inst);
+      return inst;
+    } else {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('createInstance_failed');
+      return res.json();
+    }
   },
   async updateInstance(projectId: string, instanceId: string, updates: any): Promise<any> {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/${encodeURIComponent(instanceId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    });
-    if (!res.ok) throw new Error('updateInstance_failed');
-    return res.json();
+    if (this.isDraft()) {
+      const key = this.getDraftKey();
+      const store = this.getDraftStore(key);
+      const prev = store.get(instanceId) || { _id: instanceId };
+      const next = { ...prev, ...updates, updatedAt: new Date().toISOString() };
+      store.set(instanceId, next);
+      return next;
+    } else {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/${encodeURIComponent(instanceId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (!res.ok) throw new Error('updateInstance_failed');
+      return res.json();
+    }
   },
   async getInstances(projectId: string, ids?: string[]): Promise<any> {
-    const qs = ids && ids.length ? `?ids=${ids.map(encodeURIComponent).join(',')}` : '';
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances${qs}`);
-    if (!res.ok) throw new Error('getInstances_failed');
-    return res.json();
+    if (this.isDraft()) {
+      const key = this.getDraftKey();
+      const store = this.getDraftStore(key);
+      const items = ids && ids.length ? ids.map(id => store.get(id)).filter(Boolean) : Array.from(store.values());
+      return { count: items.length, items };
+    } else {
+      const qs = ids && ids.length ? `?ids=${ids.map(encodeURIComponent).join(',')}` : '';
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances${qs}`);
+      if (!res.ok) throw new Error('getInstances_failed');
+      return res.json();
+    }
+  },
+
+  // --- Draft storage helpers ---
+  __draftInstances: new Map<string, Map<string, any>>(),
+  isDraft(): boolean {
+    try { return Boolean((window as any).__projectDraft); } catch { return false; }
+  },
+  getDraftKey(): string {
+    try { return String((window as any).__projectTempId || 'draft'); } catch { return 'draft'; }
+  },
+  getDraftStore(key: string): Map<string, any> {
+    let s = this.__draftInstances.get(key);
+    if (!s) { s = new Map(); this.__draftInstances.set(key, s); }
+    return s;
+  },
+  makeId(): string {
+    try { return (crypto as any).randomUUID(); } catch { return Math.random().toString(36).slice(2); }
   },
   async initializeProjectData(templateName: string, language: string, projectIndustry?: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 100));
