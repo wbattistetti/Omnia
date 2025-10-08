@@ -276,32 +276,41 @@ export const AppContent: React.FC<AppContentProps> = ({
     setCreateError(null);
     setIsCreatingProject(true);
     try {
-      // Verifica nome univoco
-      const existing = await ProjectService.getProjectByName(projectInfo.name);
-      if (existing) {
-        setCreateError('Esiste già un progetto con questo nome!');
-        setIsCreatingProject(false);
-        return false;
-      }
-      // Inizializza i dati di progetto dai template
-      await ProjectDataService.initializeProjectData(projectInfo.template, projectInfo.language, projectInfo.industry);
-      const templateDicts = await ProjectDataService.loadProjectData();
-      // Crea il nuovo progetto con info base e dizionari copiati
+      // 1) Bootstrap progetto su backend (DB dedicato + clone atti)
+      const resp = await fetch('/api/projects/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: projectInfo.clientName || projectInfo.name,
+          projectName: projectInfo.name,
+          industry: projectInfo.template, // industry deriva dalla scelta template
+          tenantId: 'tenant_default'
+        })
+      });
+      if (!resp.ok) throw new Error('Bootstrap fallito');
+      const boot = await resp.json();
+
+      // 2) Carica atti dal DB progetto
+      await ProjectDataService.loadActsFromProject(boot.projectId);
+      const data = await ProjectDataService.loadProjectData();
+
+      // 3) Inizializza stato UI
       const newProject: ProjectData & ProjectInfo = {
         ...projectInfo,
-        agentActs: JSON.parse(JSON.stringify(templateDicts.agentActs)),
-        userActs: JSON.parse(JSON.stringify(templateDicts.userActs)),
-        backendActions: JSON.parse(JSON.stringify(templateDicts.backendActions)),
-        conditions: JSON.parse(JSON.stringify(templateDicts.conditions)),
-        tasks: JSON.parse(JSON.stringify(templateDicts.tasks)),
-        macrotasks: JSON.parse(JSON.stringify(templateDicts.macrotasks)),
-        industry: (templateDicts.industry || 'defaultIndustry'),
+        id: boot.projectId,
+        industry: projectInfo.industry || 'defaultIndustry',
+        agentActs: data.agentActs,
+        userActs: data.userActs,
+        backendActions: data.backendActions,
+        conditions: data.conditions,
+        tasks: data.tasks,
+        macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
       setNodes([]);
       setEdges([]);
-    await refreshData();
-    setAppState('mainApp');
+      await refreshData();
+      setAppState('mainApp');
       return true;
     } catch (e) {
       setCreateError('Errore nella creazione del progetto');

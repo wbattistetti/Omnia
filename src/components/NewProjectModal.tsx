@@ -36,7 +36,8 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     name: '',
     description: '',
     template: 'utility_gas',
-    language: 'en'
+    language: 'en',
+    clientName: ''
   });
   const [errors, setErrors] = useState<Partial<ProjectInfo>>({});
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
@@ -164,6 +165,26 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
             )}
           </div>
 
+          {/* Client Name */}
+          <div className="relative">
+            <label className="block text-base font-medium text-slate-200 mb-2">
+              Cliente *
+            </label>
+            <input
+              type="text"
+              value={formData.clientName || ''}
+              onChange={(e) => handleInputChange('clientName', e.target.value)}
+              className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
+                errors.clientName ? 'border-red-500' : 'border-slate-600'
+              }`}
+              placeholder="Nome del cliente (es. Indesit)"
+              disabled={isLoading}
+            />
+            {errors.clientName && (
+              <p className="mt-1 text-sm text-red-400">{String(errors.clientName)}</p>
+            )}
+          </div>
+
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-slate-200 mb-2">
@@ -239,6 +260,8 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
               ))}
             </select>
           </div>
+
+          {/* Industry rimosso: usiamo il template/combobox esistente */}
 
           {/* Actions */}
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-700">

@@ -45,6 +45,8 @@ export interface ProjectInfo {
   description: string;
   template: string;
   language: string;
+  clientName?: string;
+  industry?: string;
 }
 
 /**
