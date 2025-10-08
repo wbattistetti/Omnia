@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HelpCircle, ChevronDown, XCircle, Trash2, Building2, Folder } from 'lucide-react';
+import { HelpCircle, ChevronDown, XCircle, Trash2, Building2, Folder, Loader2 } from 'lucide-react';
 
 interface LandingPageProps {
   onNewProject: () => void;
@@ -11,7 +11,7 @@ interface LandingPageProps {
   setShowAllProjectsModal: (v: boolean) => void;
   searchTerm: string;
   setSearchTerm: (v: string) => void;
-  onSelectProject: (id: string) => void;
+  onSelectProject: (id: string) => void | Promise<void>;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
@@ -29,6 +29,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [showHelp, setShowHelp] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
 
   // Filtra progetti per ricerca nella modale
   const uniqueRecentProjects = Array.from(new Map(recentProjects.map(p => [p._id || p.projectId, p])).values());
@@ -120,7 +121,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       <button
                         className="text-left flex-1 truncate"
                         title={`${proj.clientName || ''} — ${proj.projectName || proj.name || ''}`}
-                        onClick={() => { setShowDropdown(false); onSelectProject(proj._id || proj.projectId); }}
+                        onClick={async () => {
+                          const id = (proj._id || proj.projectId) as string;
+                          setLoadingProjectId(id);
+                          try {
+                            const maybe = onSelectProject(id);
+                            if ((maybe as any)?.then) await (maybe as any);
+                            // chiudi solo dopo che il caricamento ha completato
+                            setShowDropdown(false);
+                          } catch (e) {
+                            setLoadingProjectId(null);
+                          }
+                        }}
                       >
                         <span className="inline-flex items-center gap-4">
                           <span className="inline-flex items-center gap-2 text-emerald-900 font-semibold">
@@ -128,7 +140,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             <span>{proj.clientName || 'Cliente'}</span>
                           </span>
                           <span className="inline-flex items-center gap-2 text-emerald-900">
-                            <Folder className="w-5 h-5 text-emerald-900" />
+                            {loadingProjectId === (proj._id || proj.projectId)
+                              ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
+                              : <Folder className="w-5 h-5 text-emerald-900" />}
                             <span>{proj.projectName || proj.name || '(senza nome)'}</span>
                           </span>
                         </span>
@@ -198,7 +212,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <button
                       className="text-left flex-1 truncate"
                       title={`${proj.clientName || ''} — ${proj.projectName || proj.name || ''}`}
-                      onClick={() => { setShowAllProjectsModal(false); onSelectProject(proj._id || proj.projectId); }}
+                      onClick={async () => {
+                        const id = (proj._id || proj.projectId) as string;
+                        setLoadingProjectId(id);
+                        try {
+                          const maybe = onSelectProject(id);
+                          if ((maybe as any)?.then) await (maybe as any);
+                          // chiudi solo dopo che il caricamento ha completato
+                          setShowAllProjectsModal(false);
+                        } catch (e) {
+                          setLoadingProjectId(null);
+                        }
+                      }}
                     >
                       <span className="inline-flex items-center gap-4">
                         <span className="inline-flex items-center gap-2">
@@ -206,7 +231,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           <span className="font-semibold text-emerald-900">{proj.clientName || 'Cliente'}</span>
                         </span>
                         <span className="inline-flex items-center gap-2">
-                          <Folder className="w-5 h-5 text-emerald-900" />
+                          {loadingProjectId === (proj._id || proj.projectId)
+                            ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
+                            : <Folder className="w-5 h-5 text-emerald-900" />}
                           <span>{proj.projectName || proj.name || '(senza nome)'}</span>
                         </span>
                       </span>
