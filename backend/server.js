@@ -453,6 +453,59 @@ app.post('/api/projects/:pid/acts', async (req, res) => {
 });
 
 // -----------------------------
+// Endpoint: Project Acts bulk upsert
+// -----------------------------
+app.post('/api/projects/:pid/acts/bulk', async (req, res) => {
+  const pid = req.params.pid;
+  const payload = req.body || {};
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  if (!items.length) {
+    return res.json({ ok: true, upsertedCount: 0, modifiedCount: 0, matchedCount: 0 });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = await getProjectDb(client, pid);
+    const coll = db.collection('project_acts');
+    const now = new Date();
+    const ops = items.map((it) => {
+      const doc = {
+        _id: it._id,
+        name: it.name,
+        label: it.label || it.name,
+        description: it.description || '',
+        type: it.type || null,
+        mode: it.mode || null,
+        category: it.category || null,
+        scope: it.scope || 'industry',
+        industry: it.industry || null,
+        ddtSnapshot: it.ddtSnapshot || null,
+        updatedAt: now,
+        createdAt: now
+      };
+      const setDoc = { ...doc };
+      delete setDoc.createdAt;
+      setDoc.updatedAt = now;
+      return {
+        updateOne: {
+          filter: { _id: doc._id },
+          update: { $set: setDoc, $setOnInsert: { createdAt: now } },
+          upsert: true
+        }
+      };
+    });
+    const result = await coll.bulkWrite(ops, { ordered: false });
+    logInfo('Acts.post.bulk', { projectId: pid, count: items.length, matched: result.matchedCount, modified: result.modifiedCount, upserted: result.upsertedCount });
+    res.json({ ok: true, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, upsertedCount: result.upsertedCount });
+  } catch (e) {
+    logError('Acts.post.bulk', e, { projectId: pid, count: items.length });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
 // Endpoints: Act Instances (create/update/get)
 // -----------------------------
 app.post('/api/projects/:pid/instances', async (req, res) => {

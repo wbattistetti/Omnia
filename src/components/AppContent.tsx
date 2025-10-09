@@ -470,10 +470,11 @@ export const AppContent: React.FC<AppContentProps> = ({
                 try {
                   // show spinner in toolbar while saving
                   setIsCreatingProject(true);
-                  const svc = await import('../services/ProjectDataService');
-                  const dataSvc: any = (svc as any).ProjectDataService;
+                  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                  const dataSvc: any = (ProjectDataService as any);
                   // 1) bootstrap (solo se siamo in draft)
                   if ((window as any).__projectDraft) {
+                    const tb = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                     const resp = await fetch('/api/projects/bootstrap', {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
@@ -488,36 +489,53 @@ export const AppContent: React.FC<AppContentProps> = ({
                     (window as any).__currentProjectId = boot.projectId;
                     (window as any).__projectDraft = false;
                     // Nota: non chiamare /api/projects/catalog qui; il bootstrap registra già nel catalogo
+                    const te = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    try { console.log('[Save][timing] bootstrap ms', Math.round(te - tb)); } catch {}
                   }
                   const pid = (window as any).__currentProjectId;
                   // 2) persisti tutte le istanze dal draft store (se esistono)
                   const key = (window as any).__projectTempId;
                   const draft = (dataSvc as any).__draftInstances?.get?.(key);
                   if (draft && pid) {
-                    for (const [iid, inst] of draft.entries()) {
-                      await fetch(`/api/projects/${encodeURIComponent(pid)}/instances`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inst)
-                      }).catch(()=>{});
+                    const tI0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    const postPromises: Promise<any>[] = [];
+                    for (const [, inst] of draft.entries()) {
+                      postPromises.push(
+                        fetch(`/api/projects/${encodeURIComponent(pid)}/instances`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inst)
+                        }).catch(()=>{})
+                      );
                     }
+                    await Promise.allSettled(postPromises);
                     (dataSvc as any).__draftInstances.delete(key);
+                    const tI1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    try { console.log('[Save][timing] instances ms', Math.round(tI1 - tI0), 'count', postPromises.length); } catch {}
                   }
                   // 2b) persisti gli Agent Acts creati al volo nel DB progetto (solo su Save esplicito)
                   try {
                     if (pid && projectData) {
+                      const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
+                      const tA1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                      try { console.log('[Save][timing] acts ms', Math.round(tA1 - tA0)); } catch {}
                     }
                   } catch {}
                   // 3) salva flusso (nodi/edge) - stato così com'è, senza guard
                   if (pid) {
                     try {
+                      const tf0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       try { console.log('[Save][flow]', { pid, nodes: nodes.length, edges: edges.length, sampleNodeIds: (nodes || []).slice(0,3).map(n => n.id) }); } catch {}
                       await fetch(`/api/projects/${encodeURIComponent(pid)}/flow`, {
                         method: 'PUT', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ nodes, edges })
                       });
+                      const tf1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                      try { console.log('[Save][timing] flow ms', Math.round(tf1 - tf0)); } catch {}
                       // Reload automatico e overlay rimossi per test semplificato
                     } catch {}
                   }
+                  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                  try { console.log('[Save][timing] total ms', Math.round(t1 - t0)); } catch {}
                 } catch (e) {
                   console.error('[SaveProject] commit error', e);
                 } finally {

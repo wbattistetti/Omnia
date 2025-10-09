@@ -448,7 +448,9 @@ export const ProjectDataService = {
         industry: item.industry,
         status: item.status,
         version: item.version,
-        tags: item.tags || []
+        tags: item.tags || [],
+        factoryId: (item.origin === 'factory' && item.originId) ? item.originId : (item.factoryId || null),
+        isInMemory: false
       };
 
       categoriesMap[key].items.push(convertedItem);
@@ -591,12 +593,13 @@ export const ProjectDataService = {
     try {
       const pd: any = data || projectData;
       const categories: any[] = Array.isArray(pd?.agentActs) ? pd.agentActs : [];
+      const itemsToPersist: any[] = [];
       for (const cat of categories) {
         const items: any[] = Array.isArray(cat?.items) ? cat.items : [];
         for (const it of items) {
           const shouldPersist = (it?.isInMemory === true) || !it?.factoryId; // save only project-local/new acts
           if (!shouldPersist) continue;
-          const payload = {
+          itemsToPersist.push({
             _id: it.id || it._id,
             name: it.name || it.label,
             label: it.label || it.name,
@@ -607,12 +610,16 @@ export const ProjectDataService = {
             scope: it.scope || 'industry',
             industry: it.industry || pd?.industry || null,
             ddtSnapshot: it.ddtSnapshot || null
-          };
-          await fetch(`/api/projects/${encodeURIComponent(projectId)}/acts`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
           });
         }
       }
+      if (!itemsToPersist.length) return;
+      // Use bulk endpoint to minimize round-trips
+      await fetch(`/api/projects/${encodeURIComponent(projectId)}/acts/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToPersist })
+      });
     } catch {}
   },
 
