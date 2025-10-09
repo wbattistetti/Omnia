@@ -177,6 +177,24 @@ app.delete('/api/projects/catalog', async (req, res) => {
 });
 
 // -----------------------------
+// Factory: list AgentActs (for draft/new projects intellisense)
+// -----------------------------
+app.get('/api/factory/agent-acts', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('AgentActs');
+    const items = await coll.find({}, { projection: { _id: 0, id: 1, name: 1, label: 1, mode: 1, ddt: 1, ddtSnapshot: 1, userActs: 1, category: 1 } }).toArray();
+    res.json({ items });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
 // Endpoint: Bootstrap progetto (crea DB e clona acts)
 // -----------------------------
 app.post('/api/projects/bootstrap', async (req, res) => {

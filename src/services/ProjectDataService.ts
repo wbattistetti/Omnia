@@ -120,6 +120,22 @@ export const ProjectDataService = {
       macrotasks: []
     };
   },
+  async loadActsFromFactory(): Promise<void> {
+    const res = await fetch(`/api/factory/agent-acts`);
+    if (!res.ok) throw new Error('Failed to load factory agent acts');
+    const json = await res.json();
+    const items = Array.isArray(json?.items) ? json.items : [];
+    projectData = {
+      name: projectData.name || '',
+      industry: projectData.industry || '',
+      agentActs: this.convertToCategories(items, 'agentActs'),
+      userActs: [],
+      backendActions: [],
+      conditions: [],
+      tasks: [],
+      macrotasks: []
+    };
+  },
 
   // --- Instances API helpers ---
   async createInstance(projectId: string, payload: { baseActId: string; mode: 'Message'|'DataRequest'|'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
@@ -667,6 +683,9 @@ export function prepareIntellisenseData(
     const typedCategories: Category[] = (data as ProjectData)[typedEntityType] || [];
     typedCategories.forEach((category: Category) => {
       category.items.forEach((item: any) => {
+        // Usa il mode deterministico dal DB Factory; niente euristiche a runtime
+        const mode = ((item as any)?.mode) || 'Message';
+        try { if (localStorage.getItem('debug.mode')) console.log('[Mode][prepareIntellisense]', { item: item?.name || item?.label, mode, userActs: item?.userActs?.length }); } catch {}
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
           actId: item.id,
@@ -679,7 +698,7 @@ export function prepareIntellisenseData(
           categoryType: typedEntityType,
           iconComponent: undefined, // solo riferimento al componente
           color,
-          mode: (item as any)?.mode || 'Message',
+          mode,
           userActs: item.userActs,
           uiColor: undefined // o la tua logica per il colore di sfondo
         });

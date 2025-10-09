@@ -14,7 +14,7 @@ import { NodeRowProps } from '../../types/NodeRowTypes';
 import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
-import { getAgentActIconColor } from '../../utils/agentActIconColor';
+import { getAgentActVisuals, findAgentAct, resolveActMode, hasActDDT } from './actVisuals';
 
 export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   {
@@ -424,40 +424,23 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   // Icona e colore coerenti con la sidebar
   const { data: projectData } = useProjectData();
   let resolvedCategoryType: string | undefined = (row as any).categoryType;
-  // No longer need resolvedInteractive since we use mode directly
-  if (!resolvedCategoryType && (row as any).actId && projectData) {
-    try {
-      const actsCats = (projectData as any).agentActs || [];
-      // cerca item per id
-      for (const cat of actsCats) {
-        const found = (cat.items || []).find((it: any) => it.id === (row as any).actId || it._id === (row as any).factoryId);
-        if (found) {
-          resolvedCategoryType = 'agentActs';
-          break;
-        }
-      }
-    } catch {}
+  let actFound: any = null;
+  if ((row as any).actId || (row as any).baseActId || (row as any).factoryId) {
+    actFound = findAgentAct(projectData, row);
+    if (actFound) resolvedCategoryType = 'agentActs';
   }
 
   const isAgentAct = resolvedCategoryType === 'agentActs';
-  
-  // Get mode from row or find in projectData
-  let mode = (row as any).mode;
-  if (isAgentAct && !mode && row.actId) {
-    const found = projectData?.agentActs?.find((act: any) => act.id === row.actId);
-    mode = found?.mode ?? 'Message';
-  }
-  if (isAgentAct && !mode) {
-    mode = 'Message'; // fallback
-  }
 
-  // logs removed
   let Icon: React.ComponentType<any> | null = null;
 
   if (isAgentAct) {
-    Icon = mode === 'DataRequest' ? Ear : mode === 'DataConfirmation' ? CheckCircle2 : Megaphone;
-    // Usa getAgentActIconColor per determinare il colore basato su DDT e test
-    labelTextColor = getAgentActIconColor(row as any);
+    const mode = resolveActMode(row as any, actFound) as any;
+    const has = hasActDDT(row as any, actFound);
+    try { if (localStorage.getItem('debug.mode')) console.log('[Mode][NodeRow]', { rowId: row.id, text: row.text, mode, hasDDT: has, actFound: !!actFound }); } catch {}
+    const visuals = getAgentActVisuals(mode, has);
+    Icon = visuals.Icon;
+    labelTextColor = visuals.color;
   } else {
     const c = row.categoryType ? (SIDEBAR_TYPE_COLORS as any)[row.categoryType] : null;
     labelTextColor = (c && (c.color || '#111')) || (typeof propTextColor === 'string' ? propTextColor : '');
@@ -551,7 +534,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
                 setIsEditing={setIsEditing}
             bgColor={bgColor}
             labelTextColor={labelTextColor}
-            hasDDT={Boolean((row as any).ddt)}
+            hasDDT={hasActDDT(row as any, actFound)}
             gearColor={labelTextColor}
           onOpenDDT={async () => {
             try {

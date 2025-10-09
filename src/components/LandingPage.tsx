@@ -29,6 +29,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [showHelp, setShowHelp] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
 
   // Filtra progetti per ricerca nella modale
@@ -151,9 +152,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       <button
                         className="ml-2 text-red-500 opacity-70 hover:opacity-100"
                         title="Elimina progetto"
-                        onClick={() => onDeleteProject(proj._id || proj.projectId)}
+                        onClick={async () => {
+                          const id = proj._id || proj.projectId;
+                          setDeletingId(id);
+                          try { await onDeleteProject(id); } finally { setDeletingId(null); }
+                        }}
                       >
-                        <XCircle className="w-5 h-5" />
+                        {deletingId === (proj._id || proj.projectId)
+                          ? <Loader2 className="w-5 h-5 animate-spin" />
+                          : <XCircle className="w-5 h-5" />}
                       </button>
                     </div>
                   ))}
@@ -239,12 +246,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       </span>
                     </button>
                     <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
-        <button
+                    <button
                       className="ml-2 text-red-500 opacity-70 hover:opacity-100"
                       title="Elimina progetto"
-                      onClick={() => onDeleteProject(proj._id || proj.projectId)}
+                      onClick={async () => {
+                        const id = proj._id || proj.projectId;
+                        setDeletingId(id);
+                        try { await onDeleteProject(id); } finally { setDeletingId(null); }
+                      }}
         >
-                      <XCircle className="w-5 h-5" />
+                      {deletingId === (proj._id || proj.projectId)
+                        ? <Loader2 className="w-5 h-5 animate-spin" />
+                        : <XCircle className="w-5 h-5" />}
         </button>
                   </div>
                 ))}

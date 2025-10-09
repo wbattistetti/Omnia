@@ -29,11 +29,11 @@ export const ProjectService = {
     return await res.json();
   },
   async deleteProject(id: string): Promise<void> {
-    const res = await fetch(`${API}/projects/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/projects/catalog/${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Errore nell\'eliminazione progetto');
   },
   async deleteAllProjects(): Promise<void> {
-    const res = await fetch(`${API}/projects`, { method: 'DELETE' });
+    const res = await fetch(`/api/projects/catalog`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Errore nell\'eliminazione di tutti i progetti');
   },
 }; 

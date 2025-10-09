@@ -282,8 +282,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       (window as any).__projectTempId = (crypto?.randomUUID ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2));
       const boot = { projectId: (window as any).__projectTempId } as any;
 
-      // Carica atti dalla factory in memoria (già avviene via initializeProjectData o via loadActsFromProject se vuoi i per-project)
-      await ProjectDataService.initializeProjectData(projectInfo.template, projectInfo.language, projectInfo.industry);
+      // Carica atti direttamente dalla Factory (mode deterministico)
+      await ProjectDataService.loadActsFromFactory();
       const data = await ProjectDataService.loadProjectData();
 
       // 3) Inizializza stato UI

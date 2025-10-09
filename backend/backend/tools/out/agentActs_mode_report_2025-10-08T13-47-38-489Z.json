@@ -1,0 +1,91 @@
+{
+  "examined": 98,
+  "updated": 14,
+  "dryRun": false,
+  "items": [
+    {
+      "_id": "AA023",
+      "name": "Agent asks if customer understood",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "AA011",
+      "name": "Agent requests POD/PDR code",
+      "from": "DataRequest",
+      "to": "Message"
+    },
+    {
+      "_id": "AA024",
+      "name": "Agent asks for confirmation to proceed",
+      "from": "Message",
+      "to": "DataConfirmation"
+    },
+    {
+      "_id": "AA015",
+      "name": "Agent asks number of household residents",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "AA058",
+      "name": "Agent asks customer for recommendation",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "AA042",
+      "name": "Agent asks for preferred communication channel",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "AA041",
+      "name": "Agent asks for preferred payment method",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "AA003",
+      "name": "Agent confirms user's name",
+      "from": "DataRequest",
+      "to": "Message"
+    },
+    {
+      "_id": "ec7eddbf-490d-4590-9823-efff57e64021",
+      "name": "Ask city",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "170ac406-e281-437b-b326-30a599613316",
+      "name": "ask parent's name",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "8116dce3-adcb-4535-8c75-42b335cabee2",
+      "name": "request child name",
+      "from": "DataRequest",
+      "to": "Message"
+    },
+    {
+      "_id": "f0f5ad12-5e9e-4a1a-bfb1-1c26dca801e1",
+      "name": "ask nuoa azione",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "c248749f-d33e-4710-a9fa-0460b328a846",
+      "name": "ask n5",
+      "from": "Message",
+      "to": "DataRequest"
+    },
+    {
+      "_id": "f0b9cbc9-339a-4fbc-bc5a-19dfe530ac9d",
+      "name": "ask n500",
+      "from": "Message",
+      "to": "DataRequest"
+    }
+  ]
+}
