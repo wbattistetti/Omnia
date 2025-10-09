@@ -21,17 +21,15 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   layers: <Layers className="w-5 h-5" />,
 };
 
+// We will render Speech Acts and Backend Calls separately; keep only Conditions and Tasks here
 const entityTypes: EntityType[] = [
-  'agentActs',
-  'userActs',
-  'backendActions',
   'conditions',
-  'tasks',
-  'macrotasks'
+  'tasks'
 ];
 
 const Sidebar: React.FC = () => {
   const { openAccordion, setOpenAccordion } = useSidebarState();
+  const [forceTick, setForceTick] = useState(0);
   const { data } = useProjectData();
   const {
     addCategory,
@@ -45,6 +43,7 @@ const Sidebar: React.FC = () => {
   // Usa il nuovo hook per DDT
   const { ddtList, openDDT, loadDDTError, selectedDDT } = useDDTManager();
   const [search, setSearch] = useState('');
+  const [industryFilter, setIndustryFilter] = useState<string>('all');
 
   const [isSavingDDT, setIsSavingDDT] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -243,6 +242,20 @@ const Sidebar: React.FC = () => {
       }
     };
 
+    const handleSidebarRefresh = (_e: any) => {
+      try { console.log('[SidebarFlow] refresh received'); } catch {}
+      try {
+        // Forza un leggero refresh locale leggendo dal ProjectDataService
+        const ev = new CustomEvent('sidebar:forceRender', { bubbles: true });
+        document.dispatchEvent(ev);
+      } catch {}
+    };
+
+    const handleForceRender = () => {
+      try { console.log('[SidebarFlow] forceRender tick'); } catch {}
+      setForceTick((t) => t + 1);
+    };
+
     const handleHighlightItem = (e: any) => {
       const { entityType, itemName } = e?.detail || {};
       if (entityType && itemName) {
@@ -260,10 +273,14 @@ const Sidebar: React.FC = () => {
     };
 
     document.addEventListener('sidebar:openAccordion', handleOpenAccordion);
+    document.addEventListener('sidebar:refresh', handleSidebarRefresh);
+    document.addEventListener('sidebar:forceRender', handleForceRender);
     document.addEventListener('sidebar:highlightItem', handleHighlightItem);
 
     return () => {
       document.removeEventListener('sidebar:openAccordion', handleOpenAccordion);
+      document.removeEventListener('sidebar:refresh', handleSidebarRefresh);
+      document.removeEventListener('sidebar:forceRender', handleForceRender);
       document.removeEventListener('sidebar:highlightItem', handleHighlightItem);
     };
   }, [data, setOpenAccordion]);
@@ -290,13 +307,43 @@ const Sidebar: React.FC = () => {
 
   const filteredData: any = React.useMemo(() => {
     if (!data) return data;
-    if (!search.trim()) return data;
     const next: any = { ...data };
-    for (const t of entityTypes) {
-      next[t] = filterCategories((data as any)[t] || [], search);
+    // Apply text filter to the panels managed by entityTypes (conditions, tasks)
+    if (search.trim()) {
+      for (const t of entityTypes) {
+        next[t] = filterCategories((data as any)[t] || [], search);
+      }
+    }
+    // Industry 'undefined' => optional empty dictionaries; keep acts by default (industryFilter 'all')
+    if (industryFilter === 'undefined') {
+      next.agentActs = [];
+      next.conditions = [];
     }
     return next;
-  }, [data, search, filterCategories]);
+  }, [data, search, filterCategories, industryFilter, forceTick]);
+
+  // Build Speech Acts (agent acts except BackendCall) and Backend Calls (only BackendCall)
+  const buildFilteredActs = React.useCallback((actsCats: any[] | undefined, predicate: (it: any) => boolean) => {
+    const src = Array.isArray(actsCats) ? actsCats : [];
+    const out: any[] = [];
+    for (const cat of src) {
+      const items = (cat.items || []).filter(predicate);
+      if (items.length > 0) {
+        out.push({ ...cat, items });
+      }
+    }
+    return out;
+  }, []);
+
+  const speechActsCats = React.useMemo(() => {
+    const acts = (filteredData as any)?.agentActs || [];
+    return buildFilteredActs(acts, (it: any) => (it?.type || '') !== 'BackendCall');
+  }, [filteredData, buildFilteredActs, forceTick]);
+
+  const backendCallCats = React.useMemo(() => {
+    const acts = (filteredData as any)?.agentActs || [];
+    return buildFilteredActs(acts, (it: any) => (it?.type || '') === 'BackendCall');
+  }, [filteredData, buildFilteredActs, forceTick]);
 
   return (
     <SidebarContainer>
@@ -310,13 +357,79 @@ const Sidebar: React.FC = () => {
           style={{ width: '100%', border: '1px solid #334155', borderRadius: 8, padding: '6px 10px', background: 'transparent', color: 'var(--sidebar-content-text)' }}
         />
       </div>
+      {/* Industry filter */}
+      <div className="px-4 py-2 border-b" style={{ background: 'var(--sidebar-content-bg)', borderBottom: '1px solid var(--sidebar-border)' }}>
+        <label className="block text-sm text-slate-300 mb-1">Industry</label>
+        <select
+          value={industryFilter}
+          onChange={(e) => setIndustryFilter(e.target.value)}
+          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
+        >
+          <option value="all">all</option>
+          <option value="undefined">undefined</option>
+        </select>
+      </div>
       <div
         ref={zoomRef as any}
         className="p-4 overflow-y-auto"
         style={{ flex: 1, ...zoomStyle }}
       >
-        {/* DDTSection removed per new embedded flow */}
-        {entityTypes.map(type => (
+        {/* Speech Acts (Agent Acts except Backend Call) */}
+        <EntityAccordion
+          key="speechActs"
+          entityKey={'agentActs' as any}
+          title="Speech Acts"
+          icon={ICON_MAP[sidebarTheme['agentActs'].icon]}
+          data={speechActsCats}
+          isOpen={openAccordion === 'speechActs'}
+          onToggle={() => setOpenAccordion(openAccordion === 'speechActs' ? '' : 'speechActs')}
+          onAddCategory={name => addCategory('agentActs', name)}
+          onDeleteCategory={categoryId => deleteCategory('agentActs', categoryId)}
+          onUpdateCategory={(categoryId, updates) => updateCategory('agentActs', categoryId, updates)}
+          onAddItem={async (categoryId, name, desc) => {
+            await addItem('agentActs', categoryId, name, desc);
+          }}
+          onDeleteItem={(categoryId, itemId) => deleteItem('agentActs', categoryId, itemId)}
+          onUpdateItem={(categoryId, itemId, updates) => updateItem('agentActs', categoryId, itemId, updates)}
+          onBuildFromItem={handleBuildFromItem}
+          hasDDTFor={hasDDTFor}
+          onCreateDDT={handleCreateEmbeddedDDT}
+          onOpenEmbedded={(categoryId, itemId) => {
+            const category = (data?.agentActs || []).find((c: any) => c.id === categoryId);
+            const item = category?.items.find((i: any) => i.id === itemId);
+            if (item) handleOpenEmbedded(categoryId, item);
+          }}
+        />
+
+        {/* Backend Calls (Agent Acts of type BackendCall) */}
+        <EntityAccordion
+          key="backendCalls"
+          entityKey={'backendActions' as any}
+          title="Backend Calls"
+          icon={ICON_MAP[sidebarTheme['backendActions'].icon]}
+          data={backendCallCats}
+          isOpen={openAccordion === 'backendCalls'}
+          onToggle={() => setOpenAccordion(openAccordion === 'backendCalls' ? '' : 'backendCalls')}
+          onAddCategory={name => addCategory('agentActs', name)}
+          onDeleteCategory={categoryId => deleteCategory('agentActs', categoryId)}
+          onUpdateCategory={(categoryId, updates) => updateCategory('agentActs', categoryId, updates)}
+          onAddItem={async (categoryId, name, desc) => {
+            await addItem('agentActs', categoryId, name, desc);
+            // Mark as BackendCall if created here (optional - can be set in quick-create flow)
+            try {
+              const cat = (data?.agentActs || []).find((c: any) => c.id === categoryId);
+              const last = cat?.items?.find((i: any) => (i?.name || '') === name);
+              if (last) {
+                await updateItem('agentActs', categoryId, last.id, { type: 'BackendCall' } as any);
+              }
+            } catch {}
+          }}
+          onDeleteItem={(categoryId, itemId) => deleteItem('agentActs', categoryId, itemId)}
+          onUpdateItem={(categoryId, itemId, updates) => updateItem('agentActs', categoryId, itemId, updates)}
+        />
+
+        {/* Conditions and Tasks */}
+        {(['conditions', 'tasks'] as const).map(type => (
           <EntityAccordion
             key={type}
             entityKey={type}
@@ -330,31 +443,9 @@ const Sidebar: React.FC = () => {
             onUpdateCategory={(categoryId, updates) => updateCategory(type, categoryId, updates)}
             onAddItem={async (categoryId, name, desc) => {
               await addItem(type, categoryId, name, desc);
-              if (type === 'agentActs') {
-                try {
-                  const inferred = classifyActInteractivity(name);
-                  if (typeof inferred === 'boolean') {
-                    // find last item just added and update mode
-                    const cat = (data?.agentActs || []).find((c: any) => c.id === categoryId);
-                    const last = cat?.items?.find((i: any) => (i?.name || '') === name);
-                    if (last) {
-                      const mode = inferred ? 'DataRequest' : 'Message';
-                      await updateItem('agentActs', categoryId, last.id, { mode } as any);
-                    }
-                  }
-                } catch {}
-              }
             }}
             onDeleteItem={(categoryId, itemId) => deleteItem(type, categoryId, itemId)}
             onUpdateItem={(categoryId, itemId, updates) => updateItem(type, categoryId, itemId, updates)}
-            onBuildFromItem={type === 'agentActs' ? handleBuildFromItem : undefined}
-            hasDDTFor={type === 'agentActs' ? hasDDTFor : undefined}
-            onCreateDDT={type === 'agentActs' ? handleCreateEmbeddedDDT : undefined}
-            onOpenEmbedded={type === 'agentActs' ? (categoryId, itemId) => {
-              const category = (data?.agentActs || []).find((c: any) => c.id === categoryId);
-              const item = category?.items.find((i: any) => i.id === itemId);
-              if (item) handleOpenEmbedded(categoryId, item);
-            } : undefined}
           />
         ))}
       </div>

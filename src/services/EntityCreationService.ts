@@ -1,9 +1,10 @@
 import { ProjectDataService } from './ProjectDataService';
 import { classifyActMode } from '../nlp/actInteractivity';
+import { modeToType, typeToMode } from '../utils/normalizers';
 import { classifyScopeFromLabel, Scope, Industry } from './ScopeClassificationService';
 
 export interface EntityCreationConfig {
-  entityType: 'agentActs' | 'backendActions' | 'tasks';
+  entityType: 'agentActs' | 'backendActions' | 'tasks' | 'conditions';
   defaultCategoryName: string;
   ddtEditorType: 'agentAct' | 'backendAction' | 'task';
   sidebarEventType: 'agentActs' | 'backendActions' | 'tasks';
@@ -48,6 +49,13 @@ const ENTITY_CONFIGS: Record<string, EntityCreationConfig> = {
     ddtEditorType: 'task',
     sidebarEventType: 'tasks'
   }
+  ,
+  conditions: {
+    entityType: 'conditions',
+    defaultCategoryName: 'Default Conditions',
+    ddtEditorType: 'task',
+    sidebarEventType: 'conditions'
+  }
 };
 
 export class EntityCreationService {
@@ -64,7 +72,7 @@ export class EntityCreationService {
       throw new Error(`Unknown entity type: ${entityType}`);
     }
 
-    console.log(`🎯 Creating ${entityType} in memory with name:`, options.name);
+    try { console.log('[CreateFlow] service.enter', { entityType, name: options.name, scope: options.scope, categoryName: options.categoryName, hasOnRowUpdate: !!options.onRowUpdate }); } catch {}
 
     // 1. Determina lo scope (utente o automatico)
     let finalScope: Scope;
@@ -118,11 +126,22 @@ export class EntityCreationService {
         version: '1.0.0',
         isInMemory: true,
         factoryId: null,
-        ...(entityType === 'agentActs' && {
-          mode: classifyActMode(options.name),
-          ddtId: undefined,
-          testPassed: false
-        })
+        ...(entityType === 'agentActs' && (() => {
+          const chosen = (typeof window !== 'undefined' && (window as any).__chosenActType) || undefined;
+          if (chosen) { try { delete (window as any).__chosenActType; } catch {} }
+          const suppress = (typeof window !== 'undefined' && (window as any).__suppressEditorOnce) || false;
+          if (suppress) { try { delete (window as any).__suppressEditorOnce; } catch {} }
+          const inferredMode = classifyActMode(options.name);
+          const finalType = (chosen as any) || modeToType(inferredMode);
+          const finalMode = typeToMode(finalType as any);
+          return {
+            type: finalType,
+            mode: finalMode,
+            ddtId: undefined,
+            testPassed: false,
+            __suppressEditorOnce: suppress
+          };
+        })())
       }
     );
 
@@ -133,29 +152,38 @@ export class EntityCreationService {
       categoryType: config.entityType,
       actId: newItem.id,
       factoryId: null, // Nessun ID factory ancora
-      ...(entityType === 'agentActs' && { 
-        mode: classifyActMode(options.name),
-        ddtId: undefined, // Nessun DDT associato inizialmente
-        testPassed: false // Test non ancora passato
-      })
+      ...(entityType === 'agentActs' && (() => {
+        const t = (newItem as any)?.type as any;
+        const m = (newItem as any)?.mode as any;
+        const finalType = t || modeToType(m) || 'Message';
+        const finalMode = typeToMode(finalType);
+        return { type: finalType, mode: finalMode, ddtId: undefined, testPassed: false };
+      })())
     };
 
     // 6. Aggiorna la riga del nodo se il callback è fornito
     if (options.onRowUpdate) {
-      console.log('🎯 Updating node row with:', rowItem);
+      try { console.log('[CreateFlow] service.rowUpdateCallback', { id: rowItem.id, type: (rowItem as any)?.type, mode: (rowItem as any)?.mode }); } catch {}
       options.onRowUpdate(rowItem);
     }
 
     // 7. Gestisci eventi UI (asincrono ma non blocca)
-    this.handleUIEvents(config, options.name).catch(console.error);
+    // Se è stato richiesto di non aprire gli editor, salta apertura
+    const suppress = (newItem as any)?.__suppressEditorOnce;
+    if (!suppress && config.entityType !== 'conditions') {
+      this.handleUIEvents(config, options.name).catch(console.error);
+    }
 
     // 8. Notifica il sidebar dell'aggiornamento
     setTimeout(() => {
+      try { console.log('[SidebarFlow] emit refresh -> forceRender'); } catch {}
       const sidebarUpdateEvent = new CustomEvent('sidebar:refresh', {
         detail: { entityType: config.entityType },
         bubbles: true
       });
       document.dispatchEvent(sidebarUpdateEvent);
+      const forceEvent = new CustomEvent('sidebar:forceRender', { bubbles: true });
+      document.dispatchEvent(forceEvent);
     }, 50);
 
     return rowItem;
@@ -316,6 +344,10 @@ export class EntityCreationService {
     originalEntityType: string,
     projectData: any
   ): any {
+    const chosenType = (typeof window !== 'undefined' && (window as any).__chosenActType) || undefined;
+    const inferredMode = classifyActMode(name);
+    const finalType = originalEntityType === 'agentActs' ? ((chosenType as any) || modeToType(inferredMode)) : undefined;
+    const finalMode = originalEntityType === 'agentActs' ? typeToMode((finalType as any) || 'Message') : undefined;
     const newItemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newItem = {
       id: newItemId,
@@ -327,11 +359,7 @@ export class EntityCreationService {
       version: '1.0.0',
       isInMemory: true,
       factoryId: null,
-      ...(originalEntityType === 'agentActs' && {
-        mode: classifyActMode(name),
-        ddtId: undefined,
-        testPassed: false
-      })
+      ...(originalEntityType === 'agentActs' && { type: finalType, mode: finalMode, ddtId: undefined, testPassed: false })
     };
 
     // Aggiungi l'elemento alla categoria nel projectData
@@ -365,8 +393,26 @@ export class EntityCreationService {
     itemId: string,
     updates: any
   ): void {
-    // Questa funzione è già sincrona, non fa chiamate al DB
-    console.log(`🔄 Updated item ${itemId} with:`, updates);
+    // Applica gli aggiornamenti all'elemento nel projectData
+    try {
+      // Prova ad usare la reference globale se disponibile; in alternativa, aggiorna direttamente l'oggetto presente
+      const globalProject: any = (window as any).__projectData;
+      const entities = globalProject?.[entityType] || [];
+      let itemRef: any = null;
+      for (const cat of entities) {
+        if (cat.id !== categoryId) continue;
+        const it = (cat.items || []).find((i: any) => i.id === itemId);
+        if (it) { itemRef = it; break; }
+      }
+      if (itemRef) {
+        const safeUpdates = { ...updates } as any;
+        if (typeof safeUpdates.type === 'undefined') delete safeUpdates.type;
+        if (typeof safeUpdates.mode === 'undefined') delete safeUpdates.mode;
+        Object.assign(itemRef, safeUpdates);
+      } else {
+        // Fallback no-op: se non c'è la ref globale, l'oggetto newItem restituito mantiene già i campi aggiornati
+      }
+    } catch {}
   }
 
   /**
@@ -449,6 +495,13 @@ export class EntityCreationService {
    */
   static createTask(options: EntityCreationOptions): CreatedEntity | null {
     return this.createEntity('tasks', options);
+  }
+
+  /**
+   * Factory method per creare Condition
+   */
+  static createCondition(options: EntityCreationOptions): CreatedEntity | null {
+    return this.createEntity('conditions', options);
   }
 
   /**

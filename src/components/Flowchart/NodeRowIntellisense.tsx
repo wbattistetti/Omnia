@@ -10,6 +10,7 @@ interface NodeRowIntellisenseProps {
   inputRef: React.RefObject<HTMLTextAreaElement>;
   handleIntellisenseSelect: (item: any) => void;
   handleIntellisenseClose: () => void;
+  allowCreatePicker?: boolean;
   onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
@@ -23,6 +24,7 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
   inputRef,
   handleIntellisenseSelect,
   handleIntellisenseClose,
+  allowCreatePicker,
   onCreateAgentAct,
   onCreateBackendCall,
   onCreateTask
@@ -51,6 +53,7 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
             referenceElement={inputRef.current}
             onSelect={handleIntellisenseSelect}
             onClose={handleIntellisenseClose}
+            allowCreatePicker={!!allowCreatePicker}
             filterCategoryTypes={['agentActs', 'backendActions', 'tasks']}
             onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
               return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);

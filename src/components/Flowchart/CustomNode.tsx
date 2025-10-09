@@ -440,7 +440,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       }
 
       // Ignora click dentro al nodo (solo se c'è una riga in editing)
-      if (editingRowId?.startsWith(`${id}-`) && ev?.target && rootRef.current && rootRef.current.contains(ev.target as Node)) {
+      const rootEl = rootRef.current;
+      const targetNode = ev?.target as any;
+      const isInside = !!(rootEl && targetNode && typeof rootEl.contains === 'function' && targetNode instanceof Node && rootEl.contains(targetNode));
+      if (editingRowId?.startsWith(`${id}-`) && isInside) {
         console.log('🖱️ [CanvasClick] Click dentro al nodo con riga in editing, ignoro');
         return;
       }

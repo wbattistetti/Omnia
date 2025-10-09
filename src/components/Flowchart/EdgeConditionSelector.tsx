@@ -63,6 +63,17 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       } else {
         onClose();
       }
+    } else if (e.key === 'Enter') {
+      // Quick-create condition always on Enter
+      const name = (inputValue || '').trim();
+      if (!name) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try { console.log('[CondFlow] enter', { name }); } catch {}
+      if (onCreateCondition) {
+        onCreateCondition(name, 'industry');
+      }
+      setShowIntellisense(false);
     }
   };
 

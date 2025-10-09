@@ -120,7 +120,21 @@ export const ProjectDataService = {
       macrotasks: []
     };
   },
-  async loadActsFromFactory(): Promise<void> {
+  async loadActsFromFactory(projectIndustry?: string): Promise<void> {
+    // If industry is explicitly 'undefined', return empty dictionaries
+    if (String(projectIndustry || '').toLowerCase() === 'undefined') {
+      projectData = {
+        name: projectData.name || '',
+        industry: projectIndustry || '',
+        agentActs: [],
+        userActs: [],
+        backendActions: [],
+        conditions: [],
+        tasks: [],
+        macrotasks: []
+      };
+      return;
+    }
     const res = await fetch(`/api/factory/agent-acts`);
     if (!res.ok) throw new Error('Failed to load factory agent acts');
     const json = await res.json();
@@ -374,6 +388,7 @@ export const ProjectDataService = {
           id: item._id || uuidv4(),
           name: item.name?.it || item.name?.en || item.label || 'Unnamed',
           description: item.description?.it || item.description?.en || item.description || '',
+          type: (item as any)?.type,
           mode: item.mode || 'Message',
           shortLabel: item.shortLabel,
           data: item.data,
@@ -423,6 +438,7 @@ export const ProjectDataService = {
         id: item._id || uuidv4(),
         name: item.name || item.label || 'Unnamed',
         description: item.description || '',
+        type: (item as any)?.type,
         mode: item.mode || 'Message',
         shortLabel: item.shortLabel,
         data: item.data,
@@ -559,7 +575,7 @@ export const ProjectDataService = {
       // If we updated an agent act with embedded DDT, try saving to factory DB (best-effort)
       if (type === 'agentActs') {
         try {
-          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, mode: (item as any)?.mode || 'Message', shortLabel: (item as any)?.shortLabel, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} };
+          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, type: (item as any)?.type, mode: (item as any)?.mode || 'Message', shortLabel: (item as any)?.shortLabel, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} };
           await fetch(`/api/factory/agent-acts/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         } catch (e) { console.warn('[ProjectDataService] save agent act failed', e); }
       }
@@ -592,6 +608,7 @@ export const ProjectDataService = {
             label: item.name,
             description: item.description || '',
             category: cat.name,
+            actType: (item as any)?.type,
             mode: item.mode || 'Message',
             shortLabel: item.shortLabel,
             data: item.data || {},
@@ -685,7 +702,19 @@ export function prepareIntellisenseData(
       category.items.forEach((item: any) => {
         // Usa il mode deterministico dal DB Factory; niente euristiche a runtime
         const mode = ((item as any)?.mode) || 'Message';
-        try { if (localStorage.getItem('debug.mode')) console.log('[Mode][prepareIntellisense]', { item: item?.name || item?.label, mode, userActs: item?.userActs?.length }); } catch {}
+        // Avoid require in browser: inline safe mapping
+        const modeToTypeLocal = (m?: string) => {
+          switch (m) {
+            case 'DataRequest': return 'DataRequest';
+            case 'DataConfirmation': return 'Confirmation';
+            case 'ProblemClassification': return 'ProblemClassification';
+            case 'Summarizer': return 'Summarizer';
+            case 'BackendCall': return 'BackendCall';
+            default: return 'Message';
+          }
+        };
+        const type = (item as any)?.type || modeToTypeLocal(mode);
+        try { console.log('[CreateFlow] intellisense.item', { label: item?.name || item?.label, mode, type }); } catch {}
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
           actId: item.id,
@@ -699,6 +728,7 @@ export function prepareIntellisenseData(
           iconComponent: undefined, // solo riferimento al componente
           color,
           mode,
+          type,
           userActs: item.userActs,
           uiColor: undefined // o la tua logica per il colore di sfondo
         });

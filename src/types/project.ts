@@ -1,5 +1,14 @@
 export type EntityType = 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'tasks' | 'macrotasks';
 
+// New explicit Agent Act types (authoritative)
+export type ActType =
+  | 'Message'
+  | 'DataRequest'
+  | 'Confirmation'
+  | 'ProblemClassification'
+  | 'Summarizer'
+  | 'BackendCall';
+
 /**
  * Rappresenta un'entità generica di progetto (es. task, backend action, ecc.)
  */
@@ -23,6 +32,11 @@ export interface Category<T = ProjectEntityItem> {
  * Rappresenta un agent act, che può avere userActs associati (se interattivo)
  */
 export interface AgentActItem extends ProjectEntityItem {
+  // Authoritative type for visuals/behavior
+  type?: ActType;
+  // Optional category name; undefined means shown at root in the sidebar
+  category?: string;
+  // Legacy: list of user acts for interactive acts (kept for backward compat)
   userActs?: string[];
 }
 
@@ -30,7 +44,7 @@ export type ProjectData = {
   id?: string;
   name: string;
   industry: string;
-  agentActs?: { items: any[] }[]; // Adjust 'any' to the correct type if known
+  agentActs?: { id?: string; name?: string; items: AgentActItem[] }[];
   userActs?: any[];
   backendActions?: any[];
   conditions?: any[];
@@ -59,8 +73,10 @@ export interface NodeRowData {
   categoryType?: EntityType;
   actId?: string;
   factoryId?: string;
-  // Interaction mode for the agent act row
-  mode: 'DataRequest' | 'DataConfirmation' | 'Message';
+  // New: explicit type for the act row (primary)
+  type?: ActType;
+  // Legacy/back-compat: old 'mode' still present until all code migrates
+  mode?: 'DataRequest' | 'DataConfirmation' | 'Message';
   // Per-row instance linkage (project-scoped)
   baseActId?: string;
   instanceId?: string;

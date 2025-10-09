@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Folder, FileText, Zap } from 'lucide-react';
+import { X, Folder, FileText, Zap, CircleSlash, ChevronDown } from 'lucide-react';
 import { ProjectData, ProjectInfo } from '../types/project';
 
 interface NewProjectModalProps {
@@ -30,6 +30,11 @@ const languages = [
   { id: 'fr', name: 'Français' }
 ];
 
+const industries = [
+  { id: 'undefined', name: 'undefined', description: 'Start with empty dictionaries', Icon: CircleSlash, color: 'text-slate-300' },
+  { id: 'utility_gas', name: 'Utility Gas', description: 'Template per servizi di utilità gas', Icon: Zap, color: 'text-blue-400' },
+];
+
 export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProject, duplicateNameError, onProjectNameChange, isLoading, onFactoryTemplatesLoaded }: NewProjectModalProps) {
   const [formData, setFormData] = useState<ProjectInfo>({
     id: '',
@@ -37,12 +42,14 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     description: '',
     template: 'utility_gas',
     language: 'en',
-    clientName: ''
+    clientName: '',
+    industry: 'undefined'
   });
   const [errors, setErrors] = useState<Partial<ProjectInfo>>({});
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
   const [selectedProjectIdx, setSelectedProjectIdx] = useState<number | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const [isIndustryOpen, setIsIndustryOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -109,6 +116,15 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     }
     if (field === 'name' && onProjectNameChange) {
       onProjectNameChange();
+    }
+  };
+
+  const handleSelectIndustry = (id: string) => {
+    setIsIndustryOpen(false);
+    handleInputChange('industry', id);
+    // keep template aligned when a known template industry is picked
+    if (id && id !== 'undefined') {
+      handleInputChange('template', id);
     }
   };
 
@@ -205,40 +221,53 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
             )}
           </div>
 
-          {/* Template Selection */}
+          {/* Industry (combo con icone) */}
           <div>
             <label className="block text-sm font-medium text-slate-200 mb-3">
-              Template
+              Industry
             </label>
-            <div className="grid grid-cols-1 gap-3">
-              {templates.map((template) => {
-                const IconComponent = template.icon;
+            <div className="relative">
+              {(() => {
+                const sel = industries.find(i => i.id === (formData.industry || 'undefined')) || industries[0];
+                const SelectedIcon = sel.Icon;
                 return (
-                  <label
-                    key={template.id}
-                    className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all ${
-                      formData.template === template.id
-                        ? 'border-purple-500 bg-purple-500/10'
-                        : 'border-slate-600 hover:border-slate-500 hover:bg-slate-700/50'
-                    }`}
+                  <button
+                    type="button"
+                    onClick={() => setIsIndustryOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/60 border border-slate-600 rounded-lg text-white hover:border-slate-500 transition-colors"
+                    disabled={isLoading}
                   >
-                    <input
-                      type="radio"
-                      name="template"
-                      value={template.id}
-                      checked={formData.template === template.id}
-                      onChange={(e) => handleInputChange('template', e.target.value)}
-                      className="sr-only"
-                      disabled={isLoading}
-                    />
-                    <IconComponent className={`w-6 h-6 mr-3 ${template.color}`} />
-                    <div>
-                      <div className="text-white font-medium">{template.name}</div>
-                      <div className="text-slate-400 text-sm">{template.description}</div>
-                    </div>
-                  </label>
+                    <span className="flex items-center gap-3">
+                      <SelectedIcon className={`w-5 h-5 ${sel.color}`} />
+                      <span className="text-white font-medium">{sel.name}</span>
+                      <span className="text-slate-400 text-sm">{sel.description}</span>
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  </button>
                 );
-              })}
+              })()}
+              {isIndustryOpen && (
+                <div className="absolute z-50 mt-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-lg overflow-hidden">
+                  {industries.map(opt => {
+                    const OptIcon = opt.Icon;
+                    const active = (formData.industry || 'undefined') === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => handleSelectIndustry(opt.id)}
+                        className={`w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-3 ${active ? 'bg-slate-700' : ''}`}
+                      >
+                        <OptIcon className={`w-5 h-5 ${opt.color}`} />
+                        <div>
+                          <div className="text-white font-medium">{opt.name}</div>
+                          <div className="text-slate-400 text-xs">{opt.description}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -260,8 +289,6 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
               ))}
             </select>
           </div>
-
-          {/* Industry rimosso: usiamo il template/combobox esistente */}
 
           {/* Actions */}
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-700">

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { ProjectDataService } from '../services/ProjectDataService';
+import { normalizeProjectData } from '../utils/normalizers';
 import { ProjectData, EntityType, Category, ProjectEntityItem } from '../types/project';
 
 interface ProjectDataContextType {
@@ -50,12 +51,14 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     try {
       setLoading(true);
       setError(null);
-      const projectData = await ProjectDataService.loadProjectData();
+      const raw = await ProjectDataService.loadProjectData();
+      const projectData = normalizeProjectData(raw);
       setData(projectData);
+      try { (window as any).__projectData = projectData; } catch {}
     } catch (err) {
       console.warn('Failed to load project data:', err);
       // Inizializza con dati vuoti se non c'è un progetto corrente
-      setData({
+      const fallbackData = {
         name: '',
         industry: '',
         agentActs: [],
@@ -64,7 +67,9 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
         tasks: [],
         conditions: [],
         macroTasks: []
-      });
+      };
+      setData(fallbackData);
+      try { (window as any).__projectData = fallbackData as any; } catch {}
     } finally {
       setLoading(false);
     }

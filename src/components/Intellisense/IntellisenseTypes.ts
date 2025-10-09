@@ -14,6 +14,8 @@ export interface IntellisenseItem {
   color?: string;
   // Interaction mode for agent acts (used for icons/colors)
   mode?: 'DataRequest' | 'DataConfirmation' | 'Message';
+  // New: explicit act type propagated to rows
+  type?: 'Message' | 'DataRequest' | 'Confirmation' | 'ProblemClassification' | 'Summarizer' | 'BackendCall';
   userActs?: string[];
   uiColor?: string;
   bgColor?: string; // colore di sfondo personalizzato

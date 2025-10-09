@@ -1,6 +1,7 @@
-import { Ear, CheckCircle2, Megaphone } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { classifyActMode } from '../../nlp/actInteractivity';
+import type { ActType } from '../../types/project';
 
 export type ActMode = 'Message' | 'DataRequest' | 'DataConfirmation';
 
@@ -52,25 +53,63 @@ export function hasActDDT(row: any, act: any): boolean {
   return Boolean(row?.ddt || act?.ddt || act?.ddtSnapshot);
 }
 
-export function getAgentActVisuals(mode: ActMode, hasDDT: boolean) {
-  // Palette centralizzata dal tema
-  const green = (SIDEBAR_TYPE_COLORS as any)?.agentActs?.color || '#22c55e';
-  const blue = (SIDEBAR_TYPE_COLORS as any)?.backendActions?.color || '#60a5fa';
-  const gray = '#6b7280';
+// New: resolve explicit ActType with type as primary source
+export function resolveActType(row: any, act: any): ActType {
+  if (row?.type) {
+    try { if (dbgEnabled()) console.log('[Type][resolve]', { source: 'row.type(primary)', type: row.type, rowText: row?.text }); } catch {}
+    return row.type as ActType;
+  }
+  if (act?.type) {
+    try { if (dbgEnabled()) console.log('[Type][resolve]', { source: 'act.type', type: act.type, rowText: row?.text }); } catch {}
+    return act.type as ActType;
+  }
+  // Back-compat: map mode -> type when only legacy field is present
+  const legacyMode = resolveActMode(row, act);
+  if (legacyMode === 'DataRequest') return 'DataRequest';
+  if (legacyMode === 'DataConfirmation') return 'Confirmation';
+  return 'Message';
+}
 
-  if (mode === 'DataRequest') {
-    const out = { Icon: Ear, color: hasDDT ? blue : gray };
-    try { if (dbgEnabled()) console.log('[Mode][visuals]', { mode, hasDDT, color: out.color }); } catch {}
-    return out;
+export function getAgentActVisualsByType(type: ActType, hasDDT: boolean) {
+  const green = (SIDEBAR_TYPE_COLORS as any)?.agentActs?.color || '#22c55e';
+  const blue = '#3b82f6';
+  const indigo = '#6366f1';
+  const amber = '#f59e0b';
+  const cyan = '#06b6d4';
+  const gray = '#94a3b8';
+
+  let Icon: any = Megaphone;
+  let color = green;
+
+  switch (type) {
+    case 'DataRequest':
+      Icon = Ear;
+      color = hasDDT ? blue : gray;
+      break;
+    case 'Confirmation':
+      Icon = CheckCircle2;
+      color = indigo;
+      break;
+    case 'ProblemClassification':
+      Icon = GitBranch;
+      color = amber;
+      break;
+    case 'Summarizer':
+      Icon = FileText;
+      color = cyan;
+      break;
+    case 'BackendCall':
+      Icon = Server;
+      color = gray;
+      break;
+    case 'Message':
+    default:
+      Icon = Megaphone;
+      color = green;
   }
-  if (mode === 'DataConfirmation') {
-    const out = { Icon: CheckCircle2, color: green };
-    try { if (dbgEnabled()) console.log('[Mode][visuals]', { mode, hasDDT, color: out.color }); } catch {}
-    return out;
-  }
-  const out = { Icon: Megaphone, color: green };
-  try { if (dbgEnabled()) console.log('[Mode][visuals]', { mode, hasDDT, color: out.color }); } catch {}
-  return out;
+
+  try { if (dbgEnabled()) console.log('[Type][visuals]', { type, hasDDT, color }); } catch {}
+  return { Icon, color };
 }
 
 

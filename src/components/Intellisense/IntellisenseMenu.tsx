@@ -31,6 +31,7 @@ interface IntellisenseMenuProps {
   onCreateAgentAct?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateBackendCall?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateTask?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
+  allowCreatePicker?: boolean;
 }
 
 export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
@@ -44,7 +45,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   onCreateNew,
   onCreateAgentAct,
   onCreateBackendCall,
-  onCreateTask
+  onCreateTask,
+  allowCreatePicker = false
 }) => {
   // Debug logging removed to prevent excessive console output
   const { data } = useProjectData();
@@ -115,17 +117,24 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
 
       const finalHeight = Math.min(maxHeight, desiredHeight);
 
-      setMenuStyle({
+      const style: any = {
         position: 'fixed',
         top: `${top}px`,
         left: `${left}px`,
         width: `${menuWidth}px`,
         maxHeight: `${maxHeight}px`,
-        minHeight: `${finalHeight}px`,
-        height: totalItems <= 2 ? `${finalHeight}px` : undefined,
-        overflowY: totalItems <= 2 ? 'visible' : 'auto',
         zIndex: 9999
-      });
+      };
+      if (totalItems > 0) {
+        style.minHeight = `${finalHeight}px`;
+        style.height = totalItems <= 2 ? `${finalHeight}px` : undefined;
+        style.overflowY = totalItems <= 2 ? 'visible' : 'auto';
+      } else {
+        // Nessun risultato: lascia che l'altezza si adatti al contenuto (no rettangolo vuoto)
+        style.overflowY = 'visible';
+      }
+
+      setMenuStyle(style);
     };
 
     updatePosition();
@@ -398,6 +407,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         filterCategoryTypes={filterCategoryTypes}
         projectIndustry={data?.industry}
         projectData={data}
+        allowCreatePicker={allowCreatePicker}
       />
     </div>
   );

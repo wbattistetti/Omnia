@@ -4,7 +4,7 @@ import { IntellisenseResult, IntellisenseLayoutConfig } from './IntellisenseType
 import { IntellisenseItem } from './IntellisenseItem';
 import { IntellisenseCategoryHeader } from './IntellisenseCategoryHeader';
 import { CreateButtons } from './CreateButtons';
-import { Plus, Bot, Database, CheckSquare, ChevronDown, Loader2 } from 'lucide-react';
+import { Plus, Bot, Database, CheckSquare, ChevronDown, Loader2, Megaphone, Ear, CheckCircle, GitBranch, FileText, Server } from 'lucide-react';
 
 interface IntellisenseRendererProps {
   fuzzyResults: Map<string, IntellisenseResult[]>;
@@ -22,6 +22,7 @@ interface IntellisenseRendererProps {
   filterCategoryTypes?: string[];
   projectIndustry?: string;
   projectData?: any;
+  allowCreatePicker?: boolean;
 }
 
 // Configurazione per la virtualizzazione
@@ -44,7 +45,8 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   query = '',
   filterCategoryTypes = [],
   projectIndustry = 'utility-gas',
-  projectData
+  projectData,
+  allowCreatePicker = false
 }) => {
   // Debug logging removed to prevent excessive console output
   const containerRef = useRef<HTMLDivElement>(null);
@@ -211,25 +213,30 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   };
   
   if (allResults.length === 0) {
-    // Determina il contesto basato sui tipi di categoria
+    // Solo pulsanti: per i nodi mostra i tipi di Agent Act; per condizioni usa il flusso esistente
     const isForNodes = filterCategoryTypes.includes('agentActs') || filterCategoryTypes.includes('backendActions');
     const context = isForNodes ? 'nodes' : 'conditions';
-    
     return (
-      <div className="p-4 text-gray-500">
-        {/* Messaggio "Nessun risultato trovato" - sopra e a tutta larghezza */}
-        <div className="text-center">
-          <div className="text-sm text-slate-400">No results found.</div>
-          <div className="text-xs mt-1 text-slate-500">
-            Try with other words or press enter for search.
+      <div className="p-2">
+        {query.trim() && isForNodes && allowCreatePicker ? (
+          <div className="grid grid-cols-3 gap-2">
+            {[{ key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' }, { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' }, { key: 'Confirmation', label: 'Confirmation', Icon: CheckCircle, color: '#6366f1' }, { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' }, { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' }, { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }].map(({ key, label, Icon, color }) => (
+              <button
+                key={key}
+                className="px-4 py-2 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-2 text-xs whitespace-nowrap"
+                style={{ minWidth: 180 }}
+                onClick={() => {
+                  try { (window as any).__chosenActType = key; (window as any).__suppressEditorOnce = true; } catch {}
+                  handleCreateAgentAct(query.trim(), 'industry');
+                }}
+              >
+                <Icon className="w-4 h-4" style={{ color }} />
+                <span className="text-slate-700">{label}</span>
+              </button>
+            ))}
           </div>
-          <div className="text-xs mt-2 text-slate-500">
-            Or add <span className="font-bold text-white">"{query.trim()}"</span> to library:
-          </div>
-          
-          {/* Pulsanti Create - dentro il messaggio */}
-          {query.trim() && (
-            <div className="flex justify-center mt-3">
+        ) : (query.trim() && !isForNodes && allowCreatePicker ? (
+            <div className="flex justify-center mt-1">
               <CreateButtons
                 context={context}
                 query={query}
@@ -240,7 +247,6 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                 showCategorySelector={showCategorySelector}
                 onCategorySelectorShow={setShowCategorySelector}
                 onCreateNew={onCreateNew}
-                // Props per il selettore categoria
                 existingCategories={getExistingCategories()}
                 onCategorySelect={handleCategorySelect}
                 showCategoryInput={showCategoryInput}
@@ -250,8 +256,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                 onCategoryInputKeyDown={handleCategoryInputKeyDown}
               />
             </div>
-          )}
-        </div>
+          ) : null)}
       </div>
     );
   }

@@ -7,6 +7,7 @@ export interface UseEntityCreationReturn {
   createAgentAct: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   createBackendCall: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   createTask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  createCondition: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
 
 /**
@@ -26,12 +27,13 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
   const { refreshData } = projectDataUpdateContext;
 
   const createEntity = useCallback((
-    entityType: 'agentActs' | 'backendActions' | 'tasks',
+    entityType: 'agentActs' | 'backendActions' | 'tasks' | 'conditions',
     name: string,
     onRowUpdate?: (item: any) => void,
     scope?: 'global' | 'industry',
     categoryName?: string
   ) => {
+    try { console.log('[CreateAct][hook][enter]', { entityType, name, hasOnRowUpdate: !!onRowUpdate, scope, categoryName }); } catch {}
     const options: EntityCreationOptions = {
       name,
       onRowUpdate,
@@ -52,6 +54,9 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
       case 'tasks':
         result = EntityCreationService.createTask(options);
         break;
+      case 'conditions':
+        result = EntityCreationService.createCondition(options);
+        break;
       default:
         console.error(`Unknown entity type: ${entityType}`);
         return;
@@ -59,6 +64,7 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
 
     // Aggiorna il context per riflettere le modifiche nel sidebar
     if (result) {
+      try { console.log('[CreateAct][hook][result]', { id: (result as any)?.id, type: (result as any)?.type, mode: (result as any)?.mode }); } catch {}
       console.log('🔄 Refreshing project data after entity creation');
       refreshData();
     }
@@ -79,6 +85,9 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
   return {
     createAgentAct,
     createBackendCall,
-    createTask
+    createTask,
+    createCondition: useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
+      createEntity('conditions', name, onRowUpdate, scope, categoryName);
+    }, [createEntity])
   };
 };

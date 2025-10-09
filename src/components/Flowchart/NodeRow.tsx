@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { useDDTManager } from '../../context/DDTManagerContext';
 import { ProjectDataService } from '../../services/ProjectDataService';
+import { EntityCreationService } from '../../services/EntityCreationService';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
-import { Ear, CheckCircle2, Megaphone } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server } from 'lucide-react';
 import { SIDEBAR_TYPE_ICONS, getSidebarIconComponent } from '../Sidebar/sidebarTheme';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { getLabelColor } from '../../utils/labelColor';
@@ -14,7 +15,8 @@ import { NodeRowProps } from '../../types/NodeRowTypes';
 import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
-import { getAgentActVisuals, findAgentAct, resolveActMode, hasActDDT } from './actVisuals';
+import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from './actVisuals';
+import { modeToType, typeToMode } from '../../utils/normalizers';
 
 export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   {
@@ -56,6 +58,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   const [included, setIncluded] = useState(row.included !== false); // default true
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisenseQuery, setIntellisenseQuery] = useState('');
+  const [allowCreatePicker, setAllowCreatePicker] = useState(false);
+  const [showCreatePicker, setShowCreatePicker] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [nodeOverlayPosition, setNodeOverlayPosition] = useState<{ left: number; top: number } | null>(null);
   const nodeContainerRef = useRef<HTMLDivElement>(null);
@@ -232,31 +236,68 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   };
 
   const handleKeyDownInternal = (e: React.KeyboardEvent) => {
-    
-    if (e.key === 'Enter' && showIntellisense) {
-      // Let intellisense handle this
-      return;
-    } else if (e.key === '/' && !showIntellisense) {
+    const dbg = (() => { try { return Boolean(localStorage.getItem('debug.picker')); } catch { return false; } })();
+
+    if (e.key === '/' && !showIntellisense) {
       // Activate intellisense with slash
       setIntellisenseQuery('');
       setShowIntellisense(true);
+      setAllowCreatePicker(false);
       e.preventDefault();
     } else if (e.key === 'Escape') {
       if (showIntellisense) {
         setShowIntellisense(false);
         setIntellisenseQuery('');
+        setShowCreatePicker(false);
       } else {
         if (onKeyDown) onKeyDown(e); // Propaga ESC al parent
         handleCancel();
       }
     } else if (e.key === 'Enter') {
-      // Only save if intellisense is not open
-      if (!showIntellisense) {
-        if (onKeyDown) onKeyDown(e);
-        handleSave();
-      } else {
-        // Intellisense is open, let it handle Enter
+      e.preventDefault();
+      const q = (currentText || '').trim();
+      // Quick-create Conditions: se questa riga appartiene alle conditions, crea subito senza intellisense
+      if ((row as any)?.categoryType === 'conditions') {
+        try {
+          const { useProjectData } = require('../../context/ProjectDataContext');
+          const { data: projectData } = useProjectData();
+          const { EntityCreationService } = require('../../services/EntityCreationService');
+          const created = EntityCreationService.createCondition({
+            name: q,
+            projectData,
+            projectIndustry: (projectData as any)?.industry,
+            scope: 'industry'
+          });
+          if (created) {
+            try { console.log('[CondFlow] row.update', { id: created?.id, name: q }); } catch {}
+            if (onUpdateWithCategory) {
+              (onUpdateWithCategory as any)(row, q, 'conditions', { conditionId: created.id });
+            } else {
+              onUpdate(row, q);
+            }
+            setIsEditing(false);
+            setShowIntellisense(false);
+            setIntellisenseQuery('');
+            try {
+              console.log('[CondFlow] sidebar.refresh');
+              document.dispatchEvent(new CustomEvent('sidebar:refresh', { bubbles: true }));
+              document.dispatchEvent(new CustomEvent('sidebar:forceRender', { bubbles: true }));
+            } catch {}
+          }
+        } catch (err) {
+          try { console.warn('[CondFlow] quick-create failed', err); } catch {}
+        }
+        return;
       }
+
+      // Agent Acts: apri intellisense (se chiuso) e abilita il picker di creazione
+      if (dbg) try { console.log('[Picker][Enter]', { q, showIntellisense, beforeAllowCreatePicker: allowCreatePicker, beforeShowCreatePicker: showCreatePicker }); } catch {}
+      setIntellisenseQuery(q);
+      setShowIntellisense(true);
+      setAllowCreatePicker(true);
+      setShowCreatePicker(true);
+      if (dbg) try { console.log('[Picker][Enter->state]', { afterAllowCreatePicker: true, afterShowCreatePicker: true }); } catch {}
+      return;
     }
   };
 
@@ -264,9 +305,11 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setCurrentText(newText);
-    
-    // Auto-trigger intellisense when typing
-    if (newText.trim().length > 0) {
+    // Mostra intellisense mentre scrivi; non mostrare il picker finché non premi Enter
+    const q = newText.trim();
+    setAllowCreatePicker(false);
+    setShowCreatePicker(false);
+    if (q.length > 0) {
       setIntellisenseQuery(newText);
       setShowIntellisense(true);
     } else {
@@ -284,7 +327,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
       (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
         actId: item.actId,
         factoryId: item.factoryId,
-        mode: item.mode,
+        type: (item as any)?.type,
+        mode: (item as any)?.mode,
         userActs: item.userActs,
         categoryType: item.categoryType,
         baseActId: item.actId
@@ -296,18 +340,23 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     try {
       const pid = (window as any).__currentProjectId || (window as any).__projectId;
       if (pid && item.actId && item.categoryType === 'agentActs') {
-        const inst = await ProjectDataService.createInstance(pid, { baseActId: item.actId, mode: (item.mode as any) || 'Message' });
+    // Avoid require in browser; import mapping helpers at top-level
+    const chosenType = (item as any)?.type || modeToType((item as any)?.mode);
+    const modeFromType = typeToMode(chosenType);
+        const inst = await ProjectDataService.createInstance(pid, { baseActId: item.actId, mode: (item as any)?.mode || (modeFromType as any) });
         if (inst && (onUpdateWithCategory as any)) {
-          (onUpdateWithCategory as any)(row, item.name, item.categoryType, { instanceId: inst._id, baseActId: item.actId });
+          (onUpdateWithCategory as any)(row, item.name, item.categoryType, { instanceId: inst._id, baseActId: item.actId, type: chosenType, mode: (item as any)?.mode || modeFromType });
         }
       }
     } catch (e) { try { console.warn('[Row][instance:create] failed', e); } catch {} }
     setIsEditing(false);
+    setShowCreatePicker(false);
   };
 
   const handleIntellisenseClose = () => {
     setShowIntellisense(false);
     setIntellisenseQuery('');
+    setShowCreatePicker(false);
   };
 
   const handleDoubleClick = (e?: React.MouseEvent) => {
@@ -435,10 +484,10 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   let Icon: React.ComponentType<any> | null = null;
 
   if (isAgentAct) {
-    const mode = resolveActMode(row as any, actFound) as any;
+    const type = resolveActType(row as any, actFound) as any;
     const has = hasActDDT(row as any, actFound);
-    try { if (localStorage.getItem('debug.mode')) console.log('[Mode][NodeRow]', { rowId: row.id, text: row.text, mode, hasDDT: has, actFound: !!actFound }); } catch {}
-    const visuals = getAgentActVisuals(mode, has);
+    try { if (localStorage.getItem('debug.mode')) console.log('[Type][NodeRow]', { rowId: row.id, text: row.text, type, hasDDT: has, actFound: !!actFound }); } catch {}
+    const visuals = getAgentActVisualsByType(type, has);
     Icon = visuals.Icon;
     labelTextColor = visuals.color;
   } else {
@@ -588,10 +637,93 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
         inputRef={inputRef}
         handleIntellisenseSelect={handleIntellisenseSelect}
         handleIntellisenseClose={handleIntellisenseClose}
+        allowCreatePicker={false}
         onCreateAgentAct={onCreateAgentAct}
         onCreateBackendCall={onCreateBackendCall}
         onCreateTask={onCreateTask}
       />
+
+      {showCreatePicker && isEditing && nodeOverlayPosition && createPortal(
+        <div
+          className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-2"
+          style={{ left: nodeOverlayPosition.left, top: (nodeOverlayPosition.top + 40), minWidth: 300 }}
+        >
+          <div className="grid grid-cols-3 gap-2">
+            {[{ key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
+              { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' },
+              { key: 'Confirmation', label: 'Confirmation', Icon: CheckCircle2, color: '#6366f1' },
+              { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
+              { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' },
+              { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }].map(({ key, label, Icon, color }) => (
+              <button
+                key={key}
+                className="px-4 py-2 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-2 text-xs whitespace-nowrap"
+                style={{ minWidth: 180 }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  try { (window as any).__chosenActType = key; (window as any).__suppressEditorOnce = true; } catch {}
+                  try { console.log('[CreateFlow] click', { type: key, text: (currentText || '').trim() }); } catch {}
+                  // Chiudi subito overlay e intellisense per feedback immediato
+                  setShowCreatePicker(false);
+                  setAllowCreatePicker(false);
+                  setShowIntellisense(false);
+                  const createRowUpdateCallback = (created: any) => {
+                    try { console.log('[CreateFlow] row.update', { id: created?.id, type: (created as any)?.type, mode: (created as any)?.mode }); } catch {}
+                    handleIntellisenseSelect({
+                      id: `agentActs-${created.id}`,
+                      actId: created.actId || created.id,
+                      factoryId: created.factoryId,
+                      label: created.name,
+                      shortLabel: created.name,
+                      name: created.name,
+                      description: '',
+                      category: 'Root',
+                      categoryType: 'agentActs',
+                      mode: created.mode,
+                      type: key as any,
+                    } as any);
+                  };
+                  try {
+                    const created = EntityCreationService.createAgentAct({
+                      name: (currentText || '').trim(),
+                      projectData,
+                      projectIndustry: (projectData as any)?.industry,
+                      scope: 'industry'
+                    });
+                    if (created) {
+                      try { console.log('[CreateFlow] service.created', { id: (created as any)?.id, type: (created as any)?.type }); } catch {}
+                      createRowUpdateCallback(created);
+                      try {
+                        console.log('[CreateFlow] sidebar.refresh');
+                        const ev = new CustomEvent('sidebar:refresh', { bubbles: true });
+                        document.dispatchEvent(ev);
+                      } catch {}
+                    } else if (onCreateAgentAct) {
+                      onCreateAgentAct((currentText || '').trim(), createRowUpdateCallback, 'industry');
+                    } else if (onUpdateWithCategory) {
+                      (onUpdateWithCategory as any)(row, (currentText || '').trim(), 'agentActs', { type: key as any });
+                      setIsEditing(false);
+                    }
+                  } catch {
+                    if (onCreateAgentAct) {
+                      onCreateAgentAct((currentText || '').trim(), createRowUpdateCallback, 'industry');
+                    } else if (onUpdateWithCategory) {
+                      (onUpdateWithCategory as any)(row, (currentText || '').trim(), 'agentActs', { type: key as any });
+                      setIsEditing(false);
+                    }
+                  }
+                }}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              >
+                <Icon className="w-4 h-4" style={{ color }} />
+                <span className="text-slate-700">{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 });
