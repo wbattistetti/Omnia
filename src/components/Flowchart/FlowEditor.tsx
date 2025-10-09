@@ -235,7 +235,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           try { console.log('[CondFix] convertTemp', { tempNodeId, tempEdgeId }); } catch {}
           setNodes((nds) => nds.map(n => n.id === tempNodeId ? {
             ...n,
-            data: { ...(n.data as any), isTemporary: false, title: (n.data as any)?.title || 'Title missing...' }
+            data: { ...(n.data as any), isTemporary: false }
           } : n));
           setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
             ...e,
@@ -258,7 +258,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             type: 'custom',
             position,
             data: {
-              title: 'Title missing...',
+              title: '',
               rows: [],
               onDelete: () => deleteNodeWithLog(newNodeId),
               onUpdate: (updates: any) => updateNode(newNodeId, updates),
@@ -393,7 +393,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [nodes]);
 
   const createNodeAt = useCallback((clientX: number, clientY: number) => {
-    console.log('🆕 [CreateNode] Creating node at:', { clientX, clientY });
+    // debug removed
     const newNodeId = nodeIdCounter.toString();
     let x = 0, y = 0;
     if (reactFlowInstance) {
@@ -406,7 +406,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       type: 'custom',
       position: { x, y },
       data: {
-        title: 'Title missing...',
+        title: '',
         rows: [],
         onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
@@ -415,7 +415,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         isTemporary: true,
       },
     };
-    console.log('🆕 [CreateNode] Node created:', newNodeId, { position: { x, y }, focusRowId: '1' });
+    // debug removed
     addNodeAtPosition(node, x, y);
     requestAnimationFrame(() => {
       try {
@@ -631,7 +631,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     if (tempNodeId) {
       setNodes((nds) => nds.map(n => n.id === tempNodeId ? {
         ...n,
-        data: { ...(n.data as any), isTemporary: false, title: (n.data as any)?.title || 'Title missing...' }
+        data: { ...(n.data as any), isTemporary: false }
       } : n));
       if (tempEdgeId) {
         setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
@@ -676,7 +676,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       type: 'custom',
       position,
       data: {
-        title: 'Title missing...',
+        title: '',
         rows: [],
         onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
@@ -744,7 +744,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       type: 'custom',
       position,
       data: {
-        title: 'New Node',
+        title: '',
         rows: [],
         onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),

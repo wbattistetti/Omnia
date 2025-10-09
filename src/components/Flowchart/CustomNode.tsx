@@ -78,7 +78,25 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   selected
 }) => {
   const [isEditingNode, setIsEditingNode] = useState(false);
-  const [nodeTitle, setNodeTitle] = useState(data.title || 'New Node');
+  const [nodeTitle, setNodeTitle] = useState(data.title || '');
+  const [isHoveredNode, setIsHoveredNode] = useState(false);
+
+  const hasTitle = (nodeTitle || '').trim().length > 0;
+  const showHeader = hasTitle || isHoveredNode || isEditingNode;
+  useEffect(() => {
+    // debug removed
+  }, [showHeader, hasTitle, isHoveredNode, isEditingNode, id]);
+
+  // Nascondi header su click canvas se il titolo è vuoto
+  useEffect(() => {
+    const hideOnCanvasClick = () => {
+      if (!hasTitle) {
+        setIsHoveredNode(false);
+      }
+    };
+    window.addEventListener('flow:canvas:click', hideOnCanvasClick as any);
+    return () => window.removeEventListener('flow:canvas:click', hideOnCanvasClick as any);
+  }, [hasTitle, id]);
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition] = useState({ x: 0, y: 0 });
 
@@ -512,6 +530,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
       style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content' }}
       tabIndex={-1}
+      onMouseEnter={() => { setIsHoveredNode(true); }}
+      onMouseLeave={() => { setIsHoveredNode(false); }}
       onMouseDownCapture={(e) => {
         if (!editingRowId) return;
         const t = e.target as HTMLElement;
@@ -539,20 +559,23 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           // }
         }}
       >
-        <NodeHeader
-          title={nodeTitle}
-          onDelete={handleDeleteNode}
-          onToggleEdit={() => setIsEditingNode(!isEditingNode)}
-          onTitleUpdate={handleTitleUpdate}
-          isEditing={isEditingNode}
-          hasUnchecked={nodeRows.some(r => r.included === false)}
-          hideUnchecked={(data as any)?.hideUncheckedRows === true}
-          onToggleHideUnchecked={() => {
-            if (typeof data.onUpdate === 'function') {
-              data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
-            }
-          }}
-        />
+        {/* Header visibile solo se deciso dal nodo */}
+        {showHeader && (
+          <NodeHeader
+            title={nodeTitle}
+            onDelete={handleDeleteNode}
+            onToggleEdit={() => setIsEditingNode(!isEditingNode)}
+            onTitleUpdate={handleTitleUpdate}
+            isEditing={isEditingNode}
+            hasUnchecked={nodeRows.some(r => r.included === false)}
+            hideUnchecked={(data as any)?.hideUncheckedRows === true}
+            onToggleHideUnchecked={() => {
+              if (typeof data.onUpdate === 'function') {
+                data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+              }
+            }}
+          />
+        )}
       </div>
       <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }} ref={rowsContainerRef}>
         <NodeRowList
