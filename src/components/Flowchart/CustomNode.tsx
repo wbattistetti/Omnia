@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { typeToMode } from '../../utils/normalizers';
 import { NodeProps } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
 import { NodeHandles } from './NodeHandles';
@@ -26,27 +27,7 @@ function initRows(nodeId: string, rows?: NodeRowData[]): NodeRowData[] {
   );
 }
 
-// Helper per inizializzazione lazy del focus
-function initFocus(nodeId: string, rows: NodeRowData[], focusRowId?: string | null) {
-  // Se c'è un focusRowId specifico, cerca la riga corrispondente
-  if (focusRowId) {
-    const target = focusRowId.startsWith(`${nodeId}-`) ? focusRowId : `${nodeId}-${focusRowId}`;
-    const found = rows.find(r => r.id === target);
-    if (found) return found.id;
-  }
-  
-  // Se non trova la riga specifica ma c'è un focusRowId, usa la prima riga disponibile
-  if (focusRowId && rows.length > 0) {
-    return rows[0].id;
-  }
-  
-  // Se nodo nuovo (una sola riga vuota) → prima riga
-  if (rows.length === 1 && rows[0].text.trim() === '') {
-    return rows[0].id;
-  }
-  
-  return null;
-}
+// (initFocus rimosso: non più utilizzato)
 
 /**
  * Dati custom per un nodo del flowchart
@@ -214,19 +195,25 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const wasEmpty = !(prev[idx].text || '').trim();
     const nowFilled = (newText || '').trim().length > 0;
 
-    let updatedRows = prev.map(row =>
-      row.id === rowId
-        ? {
-            ...row,
-            ...(meta || {}),
-            text: newText,
-            categoryType:
-              (meta && (meta as any).categoryType)
-                ? (meta as any).categoryType
-                : (categoryType ?? row.categoryType)
-          }
-        : row
-    );
+    let updatedRows = prev.map(row => {
+      if (row.id !== rowId) return row as any;
+      const incoming: any = meta || {};
+      const existingType: any = (row as any).type;
+      const finalType: any = (typeof incoming.type !== 'undefined') ? incoming.type : existingType;
+      const existingMode: any = (row as any).mode;
+      const finalMode: any = (typeof incoming.mode !== 'undefined') ? incoming.mode : (existingMode || (finalType ? typeToMode(finalType as any) : undefined));
+      return {
+        ...row,
+        ...incoming,
+        type: finalType,
+        mode: finalMode,
+        text: newText,
+        categoryType:
+          (meta && (meta as any).categoryType)
+            ? (meta as any).categoryType
+            : (categoryType ?? row.categoryType)
+      } as any;
+    });
     // Debug istanza/meta
     try { console.log('[Row][handleUpdateRow][meta]', meta); } catch {}
 
@@ -290,7 +277,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               text: item.name,
               categoryType: item.categoryType as any, 
               userActs: item.userActs, 
-              mode: item.mode || 'Message' as const, 
+              mode: (item as any)?.mode || 'Message' as const,
+              type: (item as any)?.type || ((item as any)?.mode === 'DataRequest' ? 'DataRequest' : 'Message'), 
               actId: item.actId, 
               factoryId: item.factoryId 
             } 

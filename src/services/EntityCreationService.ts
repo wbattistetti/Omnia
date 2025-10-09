@@ -28,6 +28,10 @@ export interface EntityCreationOptions {
   projectIndustry?: Industry;
   scope?: 'global' | 'industry';
   categoryName?: string; // Nome della categoria (opzionale, default: "Categorize Later")
+  // New explicit typing to avoid window flags
+  type?: string; // ActType
+  mode?: string; // mapped from type
+  suppressUI?: boolean;
 }
 
 const ENTITY_CONFIGS: Record<string, EntityCreationConfig> = {
@@ -127,19 +131,17 @@ export class EntityCreationService {
         isInMemory: true,
         factoryId: null,
         ...(entityType === 'agentActs' && (() => {
-          const chosen = (typeof window !== 'undefined' && (window as any).__chosenActType) || undefined;
-          if (chosen) { try { delete (window as any).__chosenActType; } catch {} }
-          const suppress = (typeof window !== 'undefined' && (window as any).__suppressEditorOnce) || false;
-          if (suppress) { try { delete (window as any).__suppressEditorOnce; } catch {} }
-          const inferredMode = classifyActMode(options.name);
-          const finalType = (chosen as any) || modeToType(inferredMode);
-          const finalMode = typeToMode(finalType as any);
+          const providedType = (options as any)?.type as any;
+          const providedMode = (options as any)?.mode as any;
+          const inferredMode = providedMode || classifyActMode(options.name);
+          const finalType = providedType || modeToType(inferredMode);
+          const finalMode = providedMode || typeToMode(finalType as any);
           return {
             type: finalType,
             mode: finalMode,
             ddtId: undefined,
             testPassed: false,
-            __suppressEditorOnce: suppress
+            __suppressEditorOnce: Boolean((options as any)?.suppressUI)
           };
         })())
       }
@@ -170,20 +172,16 @@ export class EntityCreationService {
     // 7. Gestisci eventi UI (asincrono ma non blocca)
     // Se è stato richiesto di non aprire gli editor, salta apertura
     const suppress = (newItem as any)?.__suppressEditorOnce;
-    if (!suppress && config.entityType !== 'conditions') {
+    if (!suppress && !options?.suppressUI && config.entityType !== 'conditions') {
       this.handleUIEvents(config, options.name).catch(console.error);
     }
 
     // 8. Notifica il sidebar dell'aggiornamento
     setTimeout(() => {
-      try { console.log('[SidebarFlow] emit refresh -> forceRender'); } catch {}
-      const sidebarUpdateEvent = new CustomEvent('sidebar:refresh', {
-        detail: { entityType: config.entityType },
-        bubbles: true
-      });
-      document.dispatchEvent(sidebarUpdateEvent);
-      const forceEvent = new CustomEvent('sidebar:forceRender', { bubbles: true });
-      document.dispatchEvent(forceEvent);
+      try {
+        // Lazy import to avoid circular deps during SSR
+        import('../ui/events').then(m => { m.emitSidebarRefresh(); m.emitSidebarForceRender(); }).catch(() => {});
+      } catch {}
     }, 50);
 
     return rowItem;

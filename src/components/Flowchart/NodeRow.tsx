@@ -3,6 +3,8 @@ import { useProjectData } from '../../context/ProjectDataContext';
 import { useDDTManager } from '../../context/DDTManagerContext';
 import { ProjectDataService } from '../../services/ProjectDataService';
 import { EntityCreationService } from '../../services/EntityCreationService';
+import { createAndAttachAct } from '../../services/ActFactory';
+import { emitSidebarRefresh } from '../../ui/events';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
 import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server } from 'lucide-react';
@@ -389,9 +391,6 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
       // Quick-create Conditions: se questa riga appartiene alle conditions, crea subito senza intellisense
       if ((row as any)?.categoryType === 'conditions') {
         try {
-          const { useProjectData } = require('../../context/ProjectDataContext');
-          const { data: projectData } = useProjectData();
-          const { EntityCreationService } = require('../../services/EntityCreationService');
           const created = EntityCreationService.createCondition({
             name: q,
             projectData,
@@ -452,64 +451,28 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   };
 
   // Common handler invoked by keyboard or mouse pick
-  const handlePickType = (key: string) => {
-    try { (window as any).__chosenActType = key; (window as any).__suppressEditorOnce = true; } catch {}
+  const handlePickType = async (key: string) => {
     setShowCreatePicker(false);
     setAllowCreatePicker(false);
     setShowIntellisense(false);
-    const instantApplyToRow = (created: any) => {
-      const label = (currentText || '').trim();
-      const chosenType = key as any;
-      const modeFromType = typeToMode(chosenType);
+    const label = (currentText || '').trim();
+    if (!label) { setIsEditing(false); return; }
+    const immediate = (patch: any) => {
       if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, label, 'agentActs', {
-          actId: created.actId || created.id,
-          factoryId: created.factoryId,
-          baseActId: created.actId || created.id,
-          type: chosenType,
-          mode: modeFromType
-        });
+        (onUpdateWithCategory as any)(row, label, 'agentActs', patch);
       } else {
         onUpdate(row, label);
       }
-      setIsEditing(false);
-      // create instance in background, then attach instanceId
-      setTimeout(async () => {
-        try {
-          const pid = (window as any).__currentProjectId || (window as any).__projectId;
-          if (pid) {
-            const inst = await ProjectDataService.createInstance(pid, { baseActId: created.actId || created.id, mode: modeFromType });
-            if (inst && (onUpdateWithCategory as any)) {
-              (onUpdateWithCategory as any)(row, label, 'agentActs', { instanceId: inst._id });
-            }
-          }
-        } catch {}
-      }, 0);
     };
-    try {
-      const created = EntityCreationService.createAgentAct({
-        name: (currentText || '').trim(),
-        projectData,
-        projectIndustry: (projectData as any)?.industry,
-        scope: 'industry'
-      });
-      if (created) {
-        instantApplyToRow(created);
-        try { const ev = new CustomEvent('sidebar:refresh', { bubbles: true }); document.dispatchEvent(ev); } catch {}
-      } else if (onCreateAgentAct) {
-        onCreateAgentAct((currentText || '').trim(), instantApplyToRow, 'industry');
-      } else if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, (currentText || '').trim(), 'agentActs', { type: key as any });
-        setIsEditing(false);
-      }
-    } catch {
-      if (onCreateAgentAct) {
-        onCreateAgentAct((currentText || '').trim(), instantApplyToRow, 'industry');
-      } else if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, (currentText || '').trim(), 'agentActs', { type: key as any });
-        setIsEditing(false);
-      }
-    }
+    setIsEditing(false);
+    await createAndAttachAct({
+      name: label,
+      type: key,
+      scope: 'industry',
+      projectData,
+      onImmediateRowUpdate: immediate,
+    });
+    try { emitSidebarRefresh(); } catch {}
   };
 
   const handleIntellisenseSelect = async (item: IntellisenseItem) => {
@@ -793,7 +756,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
             gearColor={labelTextColor}
           onOpenDDT={async () => {
             try {
-              const { data: projectData } = (require('../../context/ProjectDataContext') as any).useProjectData();
+              // no-op: projectData already available via context earlier
             } catch {}
             try {
               // Best-effort: trova act nel projectData corrente esposto globalmente

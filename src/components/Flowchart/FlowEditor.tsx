@@ -614,32 +614,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           return 'top-target'; // fallback
       }
     };
-    // Se esiste nodo temporaneo usalo; altrimenti prova a dedurlo dagli stati correnti
-    let tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
+    // Strict: require explicit temp ids
+    const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
     let tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
-    if ((!tempNodeId || !tempEdgeId) && (window as any).__flowLastTemp) {
-      tempNodeId = (window as any).__flowLastTemp.nodeId || tempNodeId;
-      tempEdgeId = (window as any).__flowLastTemp.edgeId || tempEdgeId;
-    }
     if (!tempNodeId || !tempEdgeId) {
-      try {
-        const sourceId = connectionMenuRef.current.sourceNodeId || '';
-        const maybeTemps = nodesRef.current
-          .filter(n => (n as any)?.data?.isTemporary === true)
-          .sort((a,b) => ((b as any)?.data?.createdAt || 0) - ((a as any)?.data?.createdAt || 0));
-        for (const m of maybeTemps) {
-          const link = (edgesRef.current || []).find(e => e.target === m.id && e.source === sourceId);
-          if (link) { tempNodeId = m.id; tempEdgeId = link.id; break; }
-        }
-        // Fallback duro: se esiste un temp node ma non troviamo la edge, converti comunque il più recente
-        if ((!tempNodeId || !tempEdgeId) && maybeTemps.length > 0) {
-          const lastTemp = maybeTemps[maybeTemps.length - 1];
-          tempNodeId = lastTemp.id;
-          // prova a recuperare una edge verso di lui; se manca la creiamo tra poco
-          const linkAny = (edgesRef.current || []).find(e => e.target === lastTemp.id);
-          tempEdgeId = linkAny ? linkAny.id : null as any;
-        }
-      } catch {}
+      try { console.warn('[CondFix] promote aborted (missing temp ids)', { tempNodeId, tempEdgeId }); } catch {}
+      return;
     }
     if (tempNodeId) {
       setNodes((nds) => nds.map(n => n.id === tempNodeId ? {

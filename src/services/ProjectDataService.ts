@@ -4,6 +4,7 @@ import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 // import { LABEL_COLORS } from '../components/Flowchart/labelColors';
 // import { getLabelColor } from '../utils/labelColor';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
+import { modeToType } from '../utils/normalizers';
 
 // Import template data
 import agentActsEn from '../../data/templates/utility_gas/agent_acts/en.json';
@@ -739,18 +740,8 @@ export function prepareIntellisenseData(
       category.items.forEach((item: any) => {
         // Usa il mode deterministico dal DB Factory; niente euristiche a runtime
         const mode = ((item as any)?.mode) || 'Message';
-        // Avoid require in browser: inline safe mapping
-        const modeToTypeLocal = (m?: string) => {
-          switch (m) {
-            case 'DataRequest': return 'DataRequest';
-            case 'DataConfirmation': return 'Confirmation';
-            case 'ProblemClassification': return 'ProblemClassification';
-            case 'Summarizer': return 'Summarizer';
-            case 'BackendCall': return 'BackendCall';
-            default: return 'Message';
-          }
-        };
-        const type = (item as any)?.type || modeToTypeLocal(mode);
+        // Use shared normalizer mapping
+        const type = (item as any)?.type || modeToType(mode as any);
         try { console.log('[CreateFlow] intellisense.item', { label: item?.name || item?.label, mode, type }); } catch {}
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
