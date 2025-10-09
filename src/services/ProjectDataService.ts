@@ -586,6 +586,36 @@ export const ProjectDataService = {
     return JSON.stringify(projectData, null, 2);
   },
 
+  /** Persist Agent Acts created in-memory into the project's DB (idempotent upsert). Called only on explicit Save. */
+  async saveProjectActsToDb(projectId: string, data?: ProjectData): Promise<void> {
+    try {
+      const pd: any = data || projectData;
+      const categories: any[] = Array.isArray(pd?.agentActs) ? pd.agentActs : [];
+      for (const cat of categories) {
+        const items: any[] = Array.isArray(cat?.items) ? cat.items : [];
+        for (const it of items) {
+          const shouldPersist = (it?.isInMemory === true) || !it?.factoryId; // save only project-local/new acts
+          if (!shouldPersist) continue;
+          const payload = {
+            _id: it.id || it._id,
+            name: it.name || it.label,
+            label: it.label || it.name,
+            description: it.description || '',
+            type: it.type,
+            mode: it.mode || 'Message',
+            category: cat.name || null,
+            scope: it.scope || 'industry',
+            industry: it.industry || pd?.industry || null,
+            ddtSnapshot: it.ddtSnapshot || null
+          };
+          await fetch(`/api/projects/${encodeURIComponent(projectId)}/acts`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+          });
+        }
+      }
+    } catch {}
+  },
+
   async importProjectData(jsonData: string): Promise<void> {
     try {
       const importedData = JSON.parse(jsonData);

@@ -8,6 +8,24 @@ const { runExtractor } = require('./extractionRegistry');
 console.log('>>> SERVER.JS AVVIATO <<<');
 
 const app = express();
+
+// -----------------------------
+// Minimal structured logger (low-noise)
+// -----------------------------
+function logInfo(tag, meta) {
+  try { console.log(`[${new Date().toISOString()}][INFO][${tag}]`, JSON.stringify(meta)); }
+  catch { console.log(`[INFO][${tag}]`, meta); }
+}
+function logWarn(tag, meta) {
+  try { console.warn(`[${new Date().toISOString()}][WARN][${tag}]`, JSON.stringify(meta)); }
+  catch { console.warn(`[WARN][${tag}]`, meta); }
+}
+function logError(tag, err, meta) {
+  const base = { message: String(err?.message || err), stack: err?.stack };
+  const out = Object.assign(base, meta || {});
+  try { console.error(`[${new Date().toISOString()}][ERROR][${tag}]`, JSON.stringify(out)); }
+  catch { console.error(`[ERROR][${tag}]`, out); }
+}
 app.use(cors());
 // Increase body size limits to allow large DDT payloads
 app.use(express.json({ limit: '200mb' }));
@@ -68,6 +86,7 @@ async function getProjectCatalogRecord(mongoClient, projectId) {
 async function getProjectDb(mongoClient, projectId) {
   const rec = await getProjectCatalogRecord(mongoClient, projectId);
   if (!rec || !rec.dbName) throw new Error('project_not_found_or_missing_dbName');
+  logInfo('ProjectDB.resolve', { projectId, dbName: rec.dbName });
   return mongoClient.db(rec.dbName);
 }
 
@@ -97,8 +116,10 @@ app.get('/api/projects/catalog', async (req, res) => {
     await client.connect();
     const db = client.db(dbProjects);
     const list = await db.collection('projects_catalog').find({}).sort({ updatedAt: -1 }).toArray();
+    logInfo('Catalog.list', { count: Array.isArray(list) ? list.length : 0 });
     res.json(list);
   } catch (e) {
+    logError('Catalog.list', e);
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -302,8 +323,10 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     await projDb.collection('act_instances').createIndex({ baseActId: 1, updatedAt: -1 }).catch(() => {});
     await projDb.collection('flow').createIndex({ updatedAt: -1 }).catch(() => {});
 
+    logInfo('Projects.bootstrap', { projectId, dbName, insertedActs: inserted });
     res.json({ ok: true, projectId, dbName, counts: { project_acts: inserted } });
   } catch (e) {
+    logError('Projects.bootstrap', e);
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -321,8 +344,10 @@ app.get('/api/projects/:pid/flow', async (req, res) => {
     const db = await getProjectDb(client, pid);
     const nodes = await db.collection('flow_nodes').find({}).toArray();
     const edges = await db.collection('flow_edges').find({}).toArray();
+    logInfo('Flow.get', { projectId: pid, nodes: nodes?.length || 0, edges: edges?.length || 0 });
     res.json({ nodes, edges });
   } catch (e) {
+    logError('Flow.get', e, { projectId: pid });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -344,8 +369,10 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
     await ecoll.deleteMany({});
     if (nodes.length) await ncoll.insertMany(nodes);
     if (edges.length) await ecoll.insertMany(edges);
+    logInfo('Flow.put', { projectId: pid, nodes: nodes.length, edges: edges.length });
     res.json({ ok: true, nodes: nodes.length, edges: edges.length });
   } catch (e) {
+    logError('Flow.put', e, { projectId: pid });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -369,6 +396,56 @@ app.get('/api/projects/:pid/acts', async (req, res) => {
     const count = await coll.countDocuments(filter);
     res.json({ count, items: docs });
   } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoints: Project Acts (create/upsert; list esiste già)
+// Persistiamo gli Agent Acts creati al volo solo su Save esplicito
+// -----------------------------
+app.post('/api/projects/:pid/acts', async (req, res) => {
+  const pid = req.params.pid;
+  const payload = req.body || {};
+  if (!payload || !payload._id || !payload.name) {
+    return res.status(400).json({ error: 'id_and_name_required' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = await getProjectDb(client, pid);
+    const coll = db.collection('project_acts');
+    const now = new Date();
+    const doc = {
+      _id: payload._id,
+      name: payload.name,
+      label: payload.label || payload.name,
+      description: payload.description || '',
+      type: payload.type || null,
+      mode: payload.mode || null,
+      category: payload.category || null,
+      scope: payload.scope || 'industry',
+      industry: payload.industry || null,
+      ddtSnapshot: payload.ddtSnapshot || null,
+      updatedAt: now,
+      createdAt: now
+    };
+    // Evita conflitto su 'createdAt' tra $set e $setOnInsert
+    const setDoc = { ...doc };
+    delete setDoc.createdAt;
+    setDoc.updatedAt = now;
+    await coll.updateOne(
+      { _id: doc._id },
+      { $set: setDoc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+    const saved = await coll.findOne({ _id: doc._id });
+    logInfo('Acts.post', { projectId: pid, id: doc._id, name: doc.name, type: doc.type, mode: doc.mode });
+    res.json(saved);
+  } catch (e) {
+    logError('Acts.post', e, { projectId: pid, id: payload?._id });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -408,8 +485,10 @@ app.post('/api/projects/:pid/instances', async (req, res) => {
     };
     const r = await projDb.collection('act_instances').insertOne(instance);
     const saved = await projDb.collection('act_instances').findOne({ _id: r.insertedId });
+    logInfo('Instances.post', { projectId, baseActId: payload.baseActId, mode: payload.mode, instanceId: String(r?.insertedId || '') });
     res.json(saved);
   } catch (e) {
+    logError('Instances.post', e, { projectId, baseActId: payload?.baseActId });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -446,6 +525,7 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
     const saved = await projDb.collection('act_instances').findOne({ _id: iid });
     res.json(saved);
   } catch (e) {
+    logError('Instances.put', e, { projectId, instanceId: iid });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();

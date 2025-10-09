@@ -16,6 +16,111 @@ import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
 import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from './actVisuals';
+// Keyboard navigable type picker toolbar
+const TYPE_OPTIONS = [
+  { key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
+  { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' },
+  { key: 'Confirmation', label: 'Confirmation', Icon: CheckCircle2, color: '#6366f1' },
+  { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
+  { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' },
+  { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }
+];
+
+function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: number; onPick: (k: string) => void; rootRef?: React.RefObject<HTMLDivElement> }) {
+  const COLS = 3;
+  const [focusIdx, setFocusIdx] = React.useState(0);
+  const btnRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+
+  React.useEffect(() => {
+    setFocusIdx(0);
+    setTimeout(() => btnRefs.current[0]?.focus(), 0);
+  }, []);
+
+  const moveFocus = (dr: number, dc: number) => {
+    const row = Math.floor(focusIdx / COLS);
+    const col = focusIdx % COLS;
+    let nr = row + dr;
+    let nc = col + dc;
+    if (nc < 0) { nc = COLS - 1; nr -= 1; }
+    if (nc >= COLS) { nc = 0; nr += 1; }
+    const maxIdx = TYPE_OPTIONS.length - 1;
+    const maxRow = Math.ceil(TYPE_OPTIONS.length / COLS) - 1;
+    nr = Math.max(0, Math.min(maxRow, nr));
+    let next = nr * COLS + nc;
+    if (next > maxIdx) next = maxIdx;
+    if (next < 0) next = 0;
+    setFocusIdx(next);
+    setTimeout(() => btnRefs.current[next]?.focus(), 0);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const key = e.key;
+    const lower = (key || '').toLowerCase();
+    const block = ['ArrowRight','ArrowLeft','ArrowDown','ArrowUp','Enter','Escape'];
+    if (block.includes(key)) { e.preventDefault(); e.stopPropagation(); }
+
+    // Quick hotkeys by initial letter: M, D, C, P, S, B
+    if (lower.length === 1 && /[a-z]/.test(lower)) {
+      const map: Record<string, string> = {
+        m: 'Message',
+        d: 'DataRequest',
+        c: 'Confirmation',
+        p: 'ProblemClassification',
+        s: 'Summarizer',
+        b: 'BackendCall',
+      };
+      const match = map[lower];
+      if (match) {
+        onPick(match);
+        return;
+      }
+    }
+    if (key === 'ArrowRight') { moveFocus(0, +1); }
+    else if (key === 'ArrowLeft') { moveFocus(0, -1); }
+    else if (key === 'ArrowDown') { moveFocus(+1, 0); }
+    else if (key === 'ArrowUp') { moveFocus(-1, 0); }
+    else if (key === 'Enter') { const opt = TYPE_OPTIONS[focusIdx]; if (opt) onPick(opt.key); }
+    // Escape: handled by parent via state; nothing else to do
+  };
+
+  return (
+    <div
+      className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-2"
+      style={{ left, top, minWidth: 300 }}
+      role="toolbar"
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      onKeyDownCapture={onKeyDown}
+      aria-label="Pick act type"
+      ref={rootRef as any}
+    >
+      <div className="grid grid-cols-3 gap-2">
+        {TYPE_OPTIONS.map((opt, i) => (
+          <button
+            key={opt.key}
+            ref={el => (btnRefs.current[i] = el)}
+            className="px-4 py-2 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-2 text-xs whitespace-nowrap"
+            style={{
+              minWidth: 180,
+              background: i === focusIdx ? 'rgba(139,92,246,0.15)' : '#ffffff',
+              borderColor: i === focusIdx ? 'rgba(139,92,246,0.8)' : '#e5e7eb',
+              color: i === focusIdx ? '#1f2937' : '#334155'
+            }}
+            tabIndex={i === focusIdx ? 0 : -1}
+            aria-selected={i === focusIdx}
+            onMouseEnter={() => { setFocusIdx(i); setTimeout(() => btnRefs.current[i]?.focus(), 0); }}
+            onFocus={() => { setFocusIdx(i); }}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onPick(opt.key); }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          >
+            <opt.Icon className="w-4 h-4" style={{ color: opt.color }} />
+            <span className="text-slate-700">{opt.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 import { modeToType, typeToMode } from '../../utils/normalizers';
 
 export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
@@ -60,6 +165,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   const [intellisenseQuery, setIntellisenseQuery] = useState('');
   const [allowCreatePicker, setAllowCreatePicker] = useState(false);
   const [showCreatePicker, setShowCreatePicker] = useState(false);
+  const typeToolbarRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [nodeOverlayPosition, setNodeOverlayPosition] = useState<{ left: number; top: number } | null>(null);
   const nodeContainerRef = useRef<HTMLDivElement>(null);
@@ -79,11 +185,17 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   // Helper per entrare in editing
   const enterEditing = () => {
     setIsEditing(true);
+    // assicurati che la toolbar dei tipi sia sempre chiusa quando inizi a scrivere
+    setShowCreatePicker(false);
+    setAllowCreatePicker(false);
   };
 
   // Quando entri in editing, calcola la posizione del nodo
   useEffect(() => {
     if (isEditing) {
+      // mentre scrivi, assicurati che il picker resti chiuso
+      setShowCreatePicker(false);
+      setAllowCreatePicker(false);
       let left = 0;
       let top = 0;
       if (nodeCanvasPosition && inputRef.current) {
@@ -122,6 +234,24 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     observer.observe(el);
     return () => observer.disconnect();
   }, [isEditing]);
+
+  // Intercetta tasti globali quando la type toolbar è aperta, per evitare che raggiungano il canvas
+  useEffect(() => {
+    if (!showCreatePicker) return;
+    const onGlobalKeyDown = (ev: KeyboardEvent) => {
+      const keys = ['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Enter','Escape'];
+      if (keys.includes(ev.key)) {
+        const t = ev.target as Node | null;
+        if (typeToolbarRef.current && t instanceof Node && typeToolbarRef.current.contains(t)) {
+          return; // lascia passare alla toolbar
+        }
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', onGlobalKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onGlobalKeyDown, { capture: true } as any);
+  }, [showCreatePicker]);
 
   // Calcola la posizione delle icone: appena FUORI dal bordo destro del nodo, all'altezza della label
   useEffect(() => {
@@ -293,9 +423,11 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
       // Agent Acts: apri intellisense (se chiuso) e abilita il picker di creazione
       if (dbg) try { console.log('[Picker][Enter]', { q, showIntellisense, beforeAllowCreatePicker: allowCreatePicker, beforeShowCreatePicker: showCreatePicker }); } catch {}
       setIntellisenseQuery(q);
-      setShowIntellisense(true);
+      // Quando si preme Enter vogliamo solo il type picker, non la lista
+      setShowIntellisense(false);
       setAllowCreatePicker(true);
       setShowCreatePicker(true);
+      try { inputRef.current?.blur(); } catch {}
       if (dbg) try { console.log('[Picker][Enter->state]', { afterAllowCreatePicker: true, afterShowCreatePicker: true }); } catch {}
       return;
     }
@@ -311,10 +443,72 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     setShowCreatePicker(false);
     if (q.length > 0) {
       setIntellisenseQuery(newText);
+      // Mostra intellisense live solo mentre si digita
       setShowIntellisense(true);
     } else {
       setShowIntellisense(false);
       setIntellisenseQuery('');
+    }
+  };
+
+  // Common handler invoked by keyboard or mouse pick
+  const handlePickType = (key: string) => {
+    try { (window as any).__chosenActType = key; (window as any).__suppressEditorOnce = true; } catch {}
+    setShowCreatePicker(false);
+    setAllowCreatePicker(false);
+    setShowIntellisense(false);
+    const instantApplyToRow = (created: any) => {
+      const label = (currentText || '').trim();
+      const chosenType = key as any;
+      const modeFromType = typeToMode(chosenType);
+      if (onUpdateWithCategory) {
+        (onUpdateWithCategory as any)(row, label, 'agentActs', {
+          actId: created.actId || created.id,
+          factoryId: created.factoryId,
+          baseActId: created.actId || created.id,
+          type: chosenType,
+          mode: modeFromType
+        });
+      } else {
+        onUpdate(row, label);
+      }
+      setIsEditing(false);
+      // create instance in background, then attach instanceId
+      setTimeout(async () => {
+        try {
+          const pid = (window as any).__currentProjectId || (window as any).__projectId;
+          if (pid) {
+            const inst = await ProjectDataService.createInstance(pid, { baseActId: created.actId || created.id, mode: modeFromType });
+            if (inst && (onUpdateWithCategory as any)) {
+              (onUpdateWithCategory as any)(row, label, 'agentActs', { instanceId: inst._id });
+            }
+          }
+        } catch {}
+      }, 0);
+    };
+    try {
+      const created = EntityCreationService.createAgentAct({
+        name: (currentText || '').trim(),
+        projectData,
+        projectIndustry: (projectData as any)?.industry,
+        scope: 'industry'
+      });
+      if (created) {
+        instantApplyToRow(created);
+        try { const ev = new CustomEvent('sidebar:refresh', { bubbles: true }); document.dispatchEvent(ev); } catch {}
+      } else if (onCreateAgentAct) {
+        onCreateAgentAct((currentText || '').trim(), instantApplyToRow, 'industry');
+      } else if (onUpdateWithCategory) {
+        (onUpdateWithCategory as any)(row, (currentText || '').trim(), 'agentActs', { type: key as any });
+        setIsEditing(false);
+      }
+    } catch {
+      if (onCreateAgentAct) {
+        onCreateAgentAct((currentText || '').trim(), instantApplyToRow, 'industry');
+      } else if (onUpdateWithCategory) {
+        (onUpdateWithCategory as any)(row, (currentText || '').trim(), 'agentActs', { type: key as any });
+        setIsEditing(false);
+      }
     }
   };
 
@@ -362,6 +556,18 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   const handleDoubleClick = (e?: React.MouseEvent) => {
     try { console.log('[NodeRow][dblclick] label', { rowId: row.id, target: (e?.target as any)?.className }); } catch {}
     setIsEditing(true);
+  };
+
+  // Open type picker when clicking the label icon (outside editing)
+  const openTypePickerFromIcon = () => {
+    try {
+      const rect = labelRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setNodeOverlayPosition({ left: rect.left, top: rect.bottom + window.scrollY });
+      setShowIntellisense(false);
+      setAllowCreatePicker(true);
+      setShowCreatePicker(true);
+    } catch {}
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -511,7 +717,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   return (
     <>
       {/* Zona buffer invisibile per tolleranza spaziale */}
-      {bufferRect && showIcons && createPortal(
+      {bufferRect && showIcons && !showCreatePicker && !isEditing && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -625,6 +831,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
               if (v) setShowIcons(true);
               else hoverHideTimerRef.current = window.setTimeout(() => setShowIcons(false), 120);
             }}
+            onTypeChangeRequest={openTypePickerFromIcon}
           />
         )}
         </div>
@@ -643,86 +850,13 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
         onCreateTask={onCreateTask}
       />
 
-      {showCreatePicker && isEditing && nodeOverlayPosition && createPortal(
-        <div
-          className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-2"
-          style={{ left: nodeOverlayPosition.left, top: (nodeOverlayPosition.top + 40), minWidth: 300 }}
-        >
-          <div className="grid grid-cols-3 gap-2">
-            {[{ key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
-              { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' },
-              { key: 'Confirmation', label: 'Confirmation', Icon: CheckCircle2, color: '#6366f1' },
-              { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
-              { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' },
-              { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }].map(({ key, label, Icon, color }) => (
-              <button
-                key={key}
-                className="px-4 py-2 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-2 text-xs whitespace-nowrap"
-                style={{ minWidth: 180 }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  try { (window as any).__chosenActType = key; (window as any).__suppressEditorOnce = true; } catch {}
-                  try { console.log('[CreateFlow] click', { type: key, text: (currentText || '').trim() }); } catch {}
-                  // Chiudi subito overlay e intellisense per feedback immediato
-                  setShowCreatePicker(false);
-                  setAllowCreatePicker(false);
-                  setShowIntellisense(false);
-                  const createRowUpdateCallback = (created: any) => {
-                    try { console.log('[CreateFlow] row.update', { id: created?.id, type: (created as any)?.type, mode: (created as any)?.mode }); } catch {}
-                    handleIntellisenseSelect({
-                      id: `agentActs-${created.id}`,
-                      actId: created.actId || created.id,
-                      factoryId: created.factoryId,
-                      label: created.name,
-                      shortLabel: created.name,
-                      name: created.name,
-                      description: '',
-                      category: 'Root',
-                      categoryType: 'agentActs',
-                      mode: created.mode,
-                      type: key as any,
-                    } as any);
-                  };
-                  try {
-                    const created = EntityCreationService.createAgentAct({
-                      name: (currentText || '').trim(),
-                      projectData,
-                      projectIndustry: (projectData as any)?.industry,
-                      scope: 'industry'
-                    });
-                    if (created) {
-                      try { console.log('[CreateFlow] service.created', { id: (created as any)?.id, type: (created as any)?.type }); } catch {}
-                      createRowUpdateCallback(created);
-                      try {
-                        console.log('[CreateFlow] sidebar.refresh');
-                        const ev = new CustomEvent('sidebar:refresh', { bubbles: true });
-                        document.dispatchEvent(ev);
-                      } catch {}
-                    } else if (onCreateAgentAct) {
-                      onCreateAgentAct((currentText || '').trim(), createRowUpdateCallback, 'industry');
-                    } else if (onUpdateWithCategory) {
-                      (onUpdateWithCategory as any)(row, (currentText || '').trim(), 'agentActs', { type: key as any });
-                      setIsEditing(false);
-                    }
-                  } catch {
-                    if (onCreateAgentAct) {
-                      onCreateAgentAct((currentText || '').trim(), createRowUpdateCallback, 'industry');
-                    } else if (onUpdateWithCategory) {
-                      (onUpdateWithCategory as any)(row, (currentText || '').trim(), 'agentActs', { type: key as any });
-                      setIsEditing(false);
-                    }
-                  }
-                }}
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              >
-                <Icon className="w-4 h-4" style={{ color }} />
-                <span className="text-slate-700">{label}</span>
-              </button>
-            ))}
-          </div>
-        </div>,
-        document.body
+      {showCreatePicker && nodeOverlayPosition && createPortal(
+        <TypePickerToolbar
+          left={nodeOverlayPosition.left}
+          top={nodeOverlayPosition.top + 40}
+          onPick={(key) => handlePickType(key)}
+          rootRef={typeToolbarRef}
+        />, document.body
       )}
     </>
   );

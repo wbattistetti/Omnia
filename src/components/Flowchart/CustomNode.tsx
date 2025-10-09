@@ -123,11 +123,20 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ CORREZIONE 2: Evita isNewNode stale - usa stato corrente invece di flag globale
 
-  // Funzione semplice per uscire dall'editing
+  // Funzione per uscire dall'editing con pulizia righe non valide
   const exitEditing = () => {
     setEditingRowId(null);
-    // ✅ RIMOSSO: Non stabilizzare automaticamente il nodo qui
-    // La stabilizzazione avverrà solo quando si esce completamente dal nodo
+    // Pulisci righe senza testo o senza tipo (o mode)
+    const isValidRow = (r: NodeRowData) => {
+      const hasText = Boolean((r.text || '').trim().length > 0);
+      const hasType = Boolean((r as any).type || (r as any).mode);
+      return hasText && hasType;
+    };
+    const cleaned = nodeRows.filter(isValidRow);
+    if (cleaned.length !== nodeRows.length) {
+      setNodeRows(cleaned);
+      data.onUpdate?.({ rows: cleaned, isTemporary: data.isTemporary });
+    }
   };
 
 
@@ -307,6 +316,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Funzione per inserire una riga in una posizione specifica
   const handleInsertRow = (index: number) => {
+    // Inserisci una riga solo se l'ultima riga è valida (non vuota e con tipo)
+    const last = nodeRows[nodeRows.length - 1];
+    const lastValid = last ? Boolean((last.text || '').trim().length > 0 && ((last as any).type || (last as any).mode)) : true;
+    if (!lastValid) return;
     const newRow: NodeRowData = {
       id: makeRowId(),
       text: '',
@@ -548,33 +561,25 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       }}
       onFocusCapture={() => { /* no-op: lasciamo passare focus per drag header */ }}
     >
-      <div
-        className="relative"
-        onClickCapture={() => {
-          // intercetta evento custom delete dall'header
-          // if ((e as any).type === 'flow:node:delete') {
-          //   e.preventDefault();
-          //   e.stopPropagation();
-          //   handleDeleteNode();
-          // }
-        }}
-      >
-        {/* Header visibile solo se deciso dal nodo */}
+      <div className="relative">
+        {/* Header sovrapposto: si espande verso l'alto senza spostare il contenuto del nodo */}
         {showHeader && (
-          <NodeHeader
-            title={nodeTitle}
-            onDelete={handleDeleteNode}
-            onToggleEdit={() => setIsEditingNode(!isEditingNode)}
-            onTitleUpdate={handleTitleUpdate}
-            isEditing={isEditingNode}
-            hasUnchecked={nodeRows.some(r => r.included === false)}
-            hideUnchecked={(data as any)?.hideUncheckedRows === true}
-            onToggleHideUnchecked={() => {
-              if (typeof data.onUpdate === 'function') {
-                data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
-              }
-            }}
-          />
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', pointerEvents: 'auto' }}>
+            <NodeHeader
+              title={nodeTitle}
+              onDelete={handleDeleteNode}
+              onToggleEdit={() => setIsEditingNode(!isEditingNode)}
+              onTitleUpdate={handleTitleUpdate}
+              isEditing={isEditingNode}
+              hasUnchecked={nodeRows.some(r => r.included === false)}
+              hideUnchecked={(data as any)?.hideUncheckedRows === true}
+              onToggleHideUnchecked={() => {
+                if (typeof data.onUpdate === 'function') {
+                  data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+                }
+              }}
+            />
+          </div>
         )}
       </div>
       <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }} ref={rowsContainerRef}>
@@ -589,17 +594,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included, ...(meta || {}) })}
           onDelete={(row) => handleDeleteRow(row.id)}
           onKeyDown={(e) => {
-            // ✅ CORREZIONE 3: Enter con guard per trailing empty
+            // Non auto-aggiungere righe su Enter: la creazione avviene solo dopo scelta tipo
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              const trailingEmpty = nodeRows.length > 0 && nodeRows[nodeRows.length - 1].text.trim() === '';
-              if (trailingEmpty) return; // già pronta
-              const newRowId = makeRowId();
-              const newRow: NodeRowData = { id: newRowId, text: '', included: true, mode: 'Message' as const };
-              const updatedRows = [...nodeRows, newRow];
-              setNodeRows(updatedRows);
-              setEditingRowId(newRowId);
-              data.onUpdate?.({ rows: updatedRows });
+              return;
             } else if (e.key === 'Escape') {
               const singleEmpty = nodeRows.length === 1 && nodeRows[0].text.trim() === '';
               singleEmpty ? data.onDelete?.() : exitEditing();

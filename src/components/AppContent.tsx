@@ -338,6 +338,14 @@ export const AppContent: React.FC<AppContentProps> = ({
           const flow = await flowRes.json();
           loadedNodes = Array.isArray(flow.nodes) ? flow.nodes : [];
           loadedEdges = Array.isArray(flow.edges) ? flow.edges : [];
+          try {
+            console.log('[Open][flow]', {
+              pid: id,
+              nodes: loadedNodes.length,
+              edges: loadedEdges.length,
+              sampleNodeIds: (loadedNodes || []).slice(0, 3).map((n: any) => n?.id)
+            });
+          } catch {}
         }
       } catch {}
       const data = await ProjectDataService.loadProjectData();
@@ -410,6 +418,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   return (
     <div className="min-h-screen" style={{ position: 'relative' }}>
+      {/* overlay ricarico rimosso per test */}
       {/* Toast feedback */}
       {toast && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-700 text-white px-6 py-3 rounded shadow-lg z-50 animate-fade-in">
@@ -478,18 +487,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                     const boot = await resp.json();
                     (window as any).__currentProjectId = boot.projectId;
                     (window as any).__projectDraft = false;
-                    // registra nel catalogo per la landing
-                    try {
-                      await fetch('/api/projects/catalog', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          clientName: (currentProject as any)?.clientName || (currentProject as any)?.name || 'Client',
-                          projectName: (currentProject as any)?.name || 'Project',
-                          industry: (currentProject as any)?.template || 'utility_gas',
-                          tenantId: 'tenant_default'
-                        })
-                      });
-                    } catch {}
+                    // Nota: non chiamare /api/projects/catalog qui; il bootstrap registra già nel catalogo
                   }
                   const pid = (window as any).__currentProjectId;
                   // 2) persisti tutte le istanze dal draft store (se esistono)
@@ -503,13 +501,21 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }
                     (dataSvc as any).__draftInstances.delete(key);
                   }
-                  // 3) salva flusso (nodi/edge)
+                  // 2b) persisti gli Agent Acts creati al volo nel DB progetto (solo su Save esplicito)
+                  try {
+                    if (pid && projectData) {
+                      await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
+                    }
+                  } catch {}
+                  // 3) salva flusso (nodi/edge) - stato così com'è, senza guard
                   if (pid) {
                     try {
+                      try { console.log('[Save][flow]', { pid, nodes: nodes.length, edges: edges.length, sampleNodeIds: (nodes || []).slice(0,3).map(n => n.id) }); } catch {}
                       await fetch(`/api/projects/${encodeURIComponent(pid)}/flow`, {
                         method: 'PUT', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ nodes, edges })
                       });
+                      // Reload automatico e overlay rimossi per test semplificato
                     } catch {}
                   }
                 } catch (e) {

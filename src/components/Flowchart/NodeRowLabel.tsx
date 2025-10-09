@@ -28,6 +28,7 @@ interface NodeRowLabelProps {
   onDoubleClick: () => void;
   onIconsHoverChange?: (v: boolean) => void;
   onLabelHoverChange?: (v: boolean) => void;
+  onTypeChangeRequest?: () => void; // NEW: request to open type picker
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -53,7 +54,8 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   onOpenDDT,
   onDoubleClick,
   onIconsHoverChange,
-  onLabelHoverChange
+  onLabelHoverChange,
+  onTypeChangeRequest
 }) => (
   <>
     {/* Checkbox: show only when label/text is present. Default is a black tick; unchecked shows grey box. */}
@@ -98,15 +100,22 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       title="Double-click to edit, start typing for intellisense"
     >
       {Icon && (
-        <Icon
-          className="inline-block"
-          style={{
-            width: typeof iconSize === 'number' ? iconSize : 12,
-            height: typeof iconSize === 'number' ? iconSize : 12,
-            marginRight: 4,
-            color: included ? labelTextColor : '#9ca3af'
-          }}
-        />
+        <button
+          type="button"
+          title="Change act type"
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTypeChangeRequest && onTypeChangeRequest(); }}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', padding: 0, marginRight: 4, cursor: 'pointer' }}
+        >
+          <Icon
+            className="inline-block"
+            style={{
+              width: typeof iconSize === 'number' ? iconSize : 12,
+              height: typeof iconSize === 'number' ? iconSize : 12,
+              color: included ? labelTextColor : '#9ca3af'
+            }}
+          />
+        </button>
       )}
       {/* Gear icon intentionally omitted next to label; shown only in the external actions strip */}
       {row.text}

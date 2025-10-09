@@ -235,7 +235,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           try { console.log('[CondFix] convertTemp', { tempNodeId, tempEdgeId }); } catch {}
           setNodes((nds) => nds.map(n => n.id === tempNodeId ? {
             ...n,
-            data: { ...(n.data as any), isTemporary: false }
+            data: { ...(n.data as any), isTemporary: false, focusRowId: '1' }
           } : n));
           setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
             ...e,
@@ -266,6 +266,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
               onCreateBackendCall: createBackendCall,
               onCreateTask: createTask,
               onCreateCondition: createCondition,
+              focusRowId: '1'
             },
           };
           const targetHandle = getTargetHandle(connectionMenuRef.current.sourceHandleId || '');
@@ -458,21 +459,33 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setSource(nodeId || '', handleId || undefined);
   }, []);
 
-  // Rimuove TUTTI i nodi e edge temporanei
+  // Rimuove TUTTI i nodi temporanei senza contenuto e i relativi edge (ESC/chiusura menu)
   function cleanupAllTempNodesAndEdges() {
-    const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
-    const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
+    // 1) Rimuovi qualsiasi nodo temporaneo che non ha contenuto
     setNodes((nds) => nds.filter((n: any) => {
-      // Non rimuovere il nodo temporaneo specifico per le connessioni
-      if (n.id === tempNodeId) return false;
-      // Non rimuovere nodi temporanei che hanno contenuto (per auto-append)
-      if (n?.data?.isTemporary === true) {
-        const hasContent = n.data.rows && n.data.rows.some((row: any) => row.text && row.text.trim().length > 0);
-        if (hasContent) return true; // Mantieni il nodo temporaneo con contenuto
-      }
-      return true;
+      const isTemp = n?.data?.isTemporary === true;
+      if (!isTemp) return true;
+      const rows = Array.isArray(n?.data?.rows) ? n.data.rows : [];
+      const hasContent = rows.some((r: any) => (r?.text || '').trim().length > 0);
+      return hasContent; // mantieni solo i temporanei che hanno già contenuto
     }));
-    setEdges((eds) => removeAllTempEdges(eds, nodesRef.current).filter(e => e.id !== tempEdgeId));
+
+    // 2) Rimuovi tutti gli edge collegati a nodi ancora temporanei
+    setEdges((eds) => {
+      const currentNodes = nodesRef.current;
+      return eds.filter((e) => {
+        const target = currentNodes.find((n) => n.id === e.target);
+        return !(target && target.data && target.data.isTemporary === true);
+      });
+    });
+
+    // 3) Azzera i riferimenti temporanei per evitare riusi inconsistenti
+    try {
+      connectionMenuRef.current.tempNodeId = null as any;
+      connectionMenuRef.current.tempEdgeId = null as any;
+      (window as any).__flowLastTemp = null;
+      (tempEdgeIdGlobal as any).current = null;
+    } catch {}
   }
 
   const onConnectEnd = useCallback((event: any) => {
@@ -631,7 +644,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     if (tempNodeId) {
       setNodes((nds) => nds.map(n => n.id === tempNodeId ? {
         ...n,
-        data: { ...(n.data as any), isTemporary: false }
+        data: { ...(n.data as any), isTemporary: false, focusRowId: '1' }
       } : n));
       if (tempEdgeId) {
         setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
@@ -684,6 +697,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         onCreateBackendCall: createBackendCall,
         onCreateTask: createTask,
         onCreateCondition: createCondition,
+        focusRowId: '1'
       },
     };
     const targetHandle = getTargetHandle(connectionMenuRef.current.sourceHandleId || '');
