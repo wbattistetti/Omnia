@@ -177,33 +177,19 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
       if (categoryId) {
         // Apri il pannello conditions nel sidebar
-        const sidebarEvent: any = new CustomEvent('sidebar:openAccordion', {
-          detail: { entityType: 'conditions' },
-          bubbles: true
-        });
-        document.dispatchEvent(sidebarEvent);
+        try { (await import('../../ui/events')).emitSidebarOpenAccordion('conditions'); } catch {}
 
         // Aggiungi la nuova condizione
         await addItem('conditions', categoryId, name, '', scope);
         try { console.log('[CondFlow] service.created', { categoryId, name }); } catch {}
 
         // Evidenzia la condizione appena creata nel sidebar
-        setTimeout(() => {
-          const highlightEvent: any = new CustomEvent('sidebar:highlightItem', {
-            detail: {
-              entityType: 'conditions',
-              itemName: name
-            },
-            bubbles: true
-          });
-          document.dispatchEvent(highlightEvent);
+        setTimeout(async () => {
+          try { (await import('../../ui/events')).emitSidebarHighlightItem('conditions', name); } catch {}
         }, 100);
 
         // Forza il render del sidebar
-        try {
-          const ev = new CustomEvent('sidebar:forceRender', { bubbles: true });
-          document.dispatchEvent(ev);
-        } catch {}
+        try { (await import('../../ui/events')).emitSidebarForceRender(); } catch {}
 
         // Non aprire automaticamente il Condition Editor
 

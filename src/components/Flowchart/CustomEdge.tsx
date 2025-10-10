@@ -124,25 +124,14 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       
       if (categoryId) {
         // Apri il pannello conditions nel sidebar
-        const sidebarEvent: any = new CustomEvent('sidebar:openAccordion', { 
-          detail: { entityType: 'conditions' }, 
-          bubbles: true 
-        });
-        document.dispatchEvent(sidebarEvent);
+        try { (await import('../../ui/events')).emitSidebarOpenAccordion('conditions'); } catch {}
         
         // Aggiungi la nuova condizione
         await addItem('conditions', categoryId, name, '');
         
         // Evidenzia la condizione appena creata nel sidebar
-        setTimeout(() => {
-          const highlightEvent: any = new CustomEvent('sidebar:highlightItem', { 
-            detail: { 
-              entityType: 'conditions', 
-              itemName: name 
-            }, 
-            bubbles: true 
-          });
-          document.dispatchEvent(highlightEvent);
+        setTimeout(async () => {
+          try { (await import('../../ui/events')).emitSidebarHighlightItem('conditions', name); } catch {}
         }, 100);
         
         // Apri il ConditionEditor

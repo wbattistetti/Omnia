@@ -226,7 +226,6 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                 className="px-4 py-2 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-2 text-xs whitespace-nowrap"
                 style={{ minWidth: 180 }}
                 onClick={() => {
-                  try { (window as any).__chosenActType = key; (window as any).__suppressEditorOnce = true; } catch {}
                   handleCreateAgentAct(query.trim(), 'industry');
                 }}
               >

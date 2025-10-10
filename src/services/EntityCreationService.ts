@@ -342,9 +342,8 @@ export class EntityCreationService {
     originalEntityType: string,
     projectData: any
   ): any {
-    const chosenType = (typeof window !== 'undefined' && (window as any).__chosenActType) || undefined;
     const inferredMode = classifyActMode(name);
-    const finalType = originalEntityType === 'agentActs' ? ((chosenType as any) || modeToType(inferredMode)) : undefined;
+    const finalType = originalEntityType === 'agentActs' ? modeToType(inferredMode) : undefined;
     const finalMode = originalEntityType === 'agentActs' ? typeToMode((finalType as any) || 'Message') : undefined;
     const newItemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newItem = {
@@ -441,22 +440,11 @@ export class EntityCreationService {
    */
   private static async handleUIEvents(config: EntityCreationConfig, name: string): Promise<void> {
     // Apri il pannello nel sidebar
-    const sidebarEvent = new CustomEvent('sidebar:openAccordion', {
-      detail: { entityType: config.sidebarEventType },
-      bubbles: true
-    });
-    document.dispatchEvent(sidebarEvent);
+    try { (await import('../ui/events')).emitSidebarOpenAccordion(config.sidebarEventType); } catch {}
 
     // Evidenzia l'elemento nel sidebar
-    setTimeout(() => {
-      const highlightEvent = new CustomEvent('sidebar:highlightItem', {
-        detail: {
-          entityType: config.sidebarEventType,
-          itemName: name
-        },
-        bubbles: true
-      });
-      document.dispatchEvent(highlightEvent);
+    setTimeout(async () => {
+      try { (await import('../ui/events')).emitSidebarHighlightItem(config.sidebarEventType, name); } catch {}
     }, 100);
 
     // Apri il DDT Editor

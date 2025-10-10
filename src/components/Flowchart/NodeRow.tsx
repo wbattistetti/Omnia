@@ -409,8 +409,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
             setIntellisenseQuery('');
             try {
               console.log('[CondFlow] sidebar.refresh');
-              document.dispatchEvent(new CustomEvent('sidebar:refresh', { bubbles: true }));
-              document.dispatchEvent(new CustomEvent('sidebar:forceRender', { bubbles: true }));
+              emitSidebarRefresh();
             } catch {}
           }
         } catch (err) {
