@@ -113,26 +113,35 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     try { cmd.do(); } finally { setUndoStack((s) => [...s, cmd]); setRedoStack([]); }
   }, []);
   const undo = useCallback(() => {
+    let toUndo: Command | null = null;
     setUndoStack((s) => {
       if (s.length === 0) return s;
-      const last = s[s.length - 1];
-      try { last.undo(); } catch {}
-      setRedoStack((r) => [...r, last]);
+      toUndo = s[s.length - 1];
       return s.slice(0, -1);
     });
+    if (toUndo) {
+      try { toUndo.undo(); } catch {}
+      setRedoStack((r) => [...r, toUndo as Command]);
+    }
   }, []);
   const redo = useCallback(() => {
+    let toDo: Command | null = null;
     setRedoStack((r) => {
       if (r.length === 0) return r;
-      const last = r[r.length - 1];
-      try { last.do(); } catch {}
-      setUndoStack((s) => [...s, last]);
+      toDo = r[r.length - 1];
       return r.slice(0, -1);
     });
+    if (toDo) {
+      try { toDo.do(); } catch {}
+      setUndoStack((s) => [...s, toDo as Command]);
+    }
   }, []);
   // Keyboard shortcuts: Ctrl/Cmd+Z, Ctrl/Cmd+Y or Ctrl+Shift+Z
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if ((window as any).__debugCanvas) {
+        try { console.log('[CanvasDbg][doc.capture]', { key: e.key, target: (e.target as HTMLElement)?.className, defaultPrevented: e.defaultPrevented }); } catch {}
+      }
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       if (e.key.toLowerCase() === 'z') {
@@ -1136,6 +1145,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
                 const subflowEdges = internalEdges.map(e => ({ ...e }));
                 dlog('flow', '[CreateTask] prepared', { taskId, nodes: subflowNodes.map(n => n.id), edges: subflowEdges.map(e => e.id) });
 
+                let selfCmdRef: Command | null = null;
                 const cmd: Command = {
                   label: 'Collapse to Task',
                   do: () => {
@@ -1147,8 +1157,40 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
                           try { onCreateTaskFlow && onCreateTaskFlow(taskId, finalTitle, subflowNodes as any, subflowEdges as any); } catch {}
                         }, 0);
                       };
-                      const onCancelTitle = () => { try { undo(); } catch {} };
-                      const newNode = { id: taskId, type: 'task' as const, position: { x: cx, y: cy }, data: { title: '', flowId: taskId, editOnMount: true, showGuide: true, onUpdate: (updates: any) => updateNode(taskId, updates), onCommitTitle, onCancelTitle } };
+                      const onCancelTitle = () => {
+                        // Se la command è già in stack, rimuovila e ripristina manualmente
+                        setUndoStack((s) => {
+                          if (s.length && s[s.length - 1] === selfCmdRef) return s.slice(0, -1);
+                          return s;
+                        });
+                        // Ripristina lo stato come nell'undo
+                        setNodes(nds2 => {
+                          const withoutTask = nds2.filter(n => n.id !== taskId);
+                          return [...withoutTask, ...sel];
+                        });
+                        setEdges(eds2 => {
+                          const mapped = eds2.map(x => {
+                            const orig = originalEdges.find(o => o.id === x.id);
+                            return orig ? { ...x, source: orig.source, target: orig.target, sourceHandle: orig.sourceHandle, targetHandle: orig.targetHandle, data: orig.data } : x;
+                          });
+                          const base = mapped.filter(x => x.source !== taskId && x.target !== taskId);
+                          return [...base, ...internalEdges];
+                        });
+                        setSelectedNodeIds(selectedNodeIds);
+                      };
+                      const newNode = {
+                        id: taskId,
+                        type: 'task' as const,
+                        position: { x: cx, y: cy },
+                        data: {
+                          title: '',
+                          flowId: taskId,
+                          editingToken: String(Date.now()),
+                          onUpdate: (updates: any) => updateNode(taskId, updates),
+                          onCommitTitle,
+                          onCancelTitle
+                        }
+                      };
                       return [...filtered, newNode as any];
                     });
                     setEdges(eds => {
@@ -1176,6 +1218,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
                     setSelectedNodeIds(selectedNodeIds);
                   }
                 };
+                selfCmdRef = cmd;
                 executeCommand(cmd);
                 setSelectionMenu({ show: false, x: 0, y: 0 });
               } catch {}

@@ -3,36 +3,52 @@ import type { NodeProps } from 'reactflow';
 import { NodeHandles } from './NodeHandles';
 import { NodeHeader } from './NodeHeader';
 import { CheckSquare } from 'lucide-react';
+import { dlog } from '../../utils/debug';
+
+// Debug gate for TaskNode focus/keys
+const taskDbg = () => {
+  try { return localStorage.getItem('debug.task') === '1'; } catch { return false; }
+};
+const tlog = (...args: any[]) => { if (taskDbg()) { try { console.log('[TaskDbg]', ...args); } catch {} } };
 
 export interface TaskNodeData {
 	title: string;
 	onUpdate?: (updates: any) => void;
-	editOnMount?: boolean;
+	editingToken?: string;
 	onCommitTitle?: (title: string) => void;
 	onCancelTitle?: () => void;
 }
 
-export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ data, selected, isConnectable }) => {
+export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ id, data, selected, isConnectable }) => {
 	const [title, setTitle] = React.useState<string>(data?.title ?? '');
+	const [editing, setEditing] = React.useState<boolean>(Boolean(data?.editOnMount));
 	const inputRef = React.useRef<HTMLInputElement>(null);
-  const DEBUG_FOCUS = (() => { try { return localStorage.getItem('debug.focus') === '1'; } catch { return false; } })();
-  const log = (...args: any[]) => { if (DEBUG_FOCUS) { try { console.log('[Focus][TaskNode]', ...args); } catch {} } };
 
-  useLayoutEffect(() => {
-    if (!(data?.editOnMount || (data as any)?.editSignal)) return;
-    const el = inputRef.current;
-    if (el) {
-      try { el.focus({ preventScroll: true } as any); el.select(); log('focused on mount'); } catch { log('focus error'); }
-    }
-  }, [data?.editOnMount, (data as any)?.editSignal]);
+  // Entra in editing quando cambia il token immutabile
+  React.useEffect(() => {
+    if (!data?.editingToken) return;
+    setEditing(true);
+    const idAnim = requestAnimationFrame(() => {
+      const el = inputRef.current as HTMLInputElement | null;
+      tlog('focus.attempt', { id, token: data.editingToken, hasRef: Boolean(el) });
+      try { if (el) { el.focus(); el.select(); tlog('focus.ok', { id }); } } catch {}
+    });
+    return () => cancelAnimationFrame(idAnim);
+  }, [data?.editingToken]);
+
+  React.useEffect(() => { tlog('editing->', editing, { id, editOnMount: data?.editOnMount }); }, [editing, data?.editOnMount, id]);
 
 	const commit = (v: string) => {
 		const next = (v || '').trim() || 'Task';
-		if (typeof data?.onUpdate === 'function') {
-			data.onUpdate({ data: { ...(data as any), title: next, editOnMount: false, showGuide: false } });
-		}
+    tlog('commit()', { id, next });
+	    setEditing(false);
+	    if (typeof data?.onUpdate === 'function') {
+	        data.onUpdate({ title: next, editOnMount: false, showGuide: false });
+	    }
 		try { (data as any)?.onCommitTitle?.(next); } catch {}
 	};
+
+  const cancel = () => { tlog('cancel()', { id }); setEditing(false); try { (data as any)?.onCancelTitle?.(); } catch {} };
 
 	return (
 		<div
@@ -41,25 +57,46 @@ export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ data, selected, is
 			tabIndex={-1}
 		>
 			<div className="relative" style={{ marginBottom: 0, paddingBottom: 0 }}>
-				{data?.editOnMount ? (
+				{editing ? (
                     <div className="flex items-center gap-2 px-2 py-1">
 						<CheckSquare className="w-3.5 h-3.5" />
-						<input
+                        <input
 							ref={inputRef}
                             autoFocus
 							value={title}
 							onChange={(e) => setTitle(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === 'Enter') {
-									commit(title);
-								} else if (e.key === 'Escape') {
-									try { (data as any)?.onCancelTitle?.(); } catch {}
-								}
-							}}
-                            onBlur={() => commit(title)}
+              onKeyDown={(e) => {
+                if (taskDbg()) tlog('keydown', { key: e.key, id, defaultPrevented: e.defaultPrevented });
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commit(title);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancel();
+                }
+              }}
+              onKeyUp={(e) => {
+                if (taskDbg()) tlog('keyup', { key: e.key, id });
+                if (e.key === 'Enter') {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  commit(title);
+                } else if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  cancel();
+                }
+              }}
+                            onKeyDownCapture={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+              onFocus={() => { tlog('focus', { id, value: title }); }}
+              onBlur={() => { tlog('blur.commit', { id, value: title }); commit(title); }}
                             placeholder="Scrivi il nome del task"
                             className="bg-white text-black text-xs rounded px-2 py-1 outline-none border border-slate-300 focus:border-slate-500"
 							style={{ minWidth: 120 }}
+              data-testid="task-title-input"
 						/>
 					</div>
 				) : (

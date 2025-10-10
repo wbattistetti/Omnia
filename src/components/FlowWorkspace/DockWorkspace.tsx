@@ -49,7 +49,16 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
         return (
           <div className="flex-1 min-h-0 h-full">
             <Pane title="Main" onDropFlow={(fid) => attach('tl', fid)}>
-              {panes.tl && <FlowCanvasHost projectId={projectId} flowId={panes.tl} />}
+              {panes.tl && (
+                <FlowCanvasHost
+                  projectId={projectId}
+                  flowId={panes.tl}
+                  onCreateTaskFlow={(fid, title, nodes, edges) => {
+                    upsertFlow({ id: fid, title: title || 'Task', nodes, edges });
+                    setTimeout(() => openFlowBackground(fid), 0);
+                  }}
+                />
+              )}
             </Pane>
           </div>
         );
