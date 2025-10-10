@@ -204,6 +204,26 @@ export const ProjectDataService = {
     }
   },
 
+  async bulkCreateInstances(projectId: string, items: Array<{ baseActId: string; mode: 'Message'|'DataRequest'|'DataConfirmation'; message?: any; overrides?: any }>): Promise<any> {
+    if (!items || items.length === 0) return { ok: true, inserted: 0 };
+    if (this.isDraft()) {
+      const key = this.getDraftKey();
+      const store = this.getDraftStore(key);
+      const now = new Date().toISOString();
+      for (const it of items) {
+        const id = this.makeId();
+        store.set(id, { _id: id, projectId: key, baseActId: it.baseActId, ddtRefId: it.baseActId, mode: it.mode, message: it.message || null, overrides: it.overrides || null, createdAt: now, updatedAt: now });
+      }
+      return { ok: true, inserted: items.length };
+    } else {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/bulk`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items })
+      });
+      if (!res.ok) throw new Error('bulkCreateInstances_failed');
+      return res.json();
+    }
+  },
+
   // --- Draft storage helpers ---
   __draftInstances: new Map<string, Map<string, any>>(),
   isDraft(): boolean {

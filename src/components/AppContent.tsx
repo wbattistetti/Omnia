@@ -4,6 +4,7 @@ import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
 import Sidebar from './Sidebar/Sidebar';
 import { ProjectDataService } from '../services/ProjectDataService';
+import { useProjectDataUpdate } from '../context/ProjectDataContext';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
 import { NodeData, EdgeData } from './Flowchart/FlowEditor';
@@ -54,6 +55,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   setTestNodeId,
   onPlayNode
 }) => {
+  const pdUpdate = useProjectDataUpdate();
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
   let refreshData: () => Promise<void> = async () => {};
   try {
@@ -278,9 +280,10 @@ export const AppContent: React.FC<AppContentProps> = ({
     setIsCreatingProject(true);
     try {
       // DRAFT MODE: nessun bootstrap al server; set flag e temp id
-      (window as any).__projectDraft = true;
-      (window as any).__projectTempId = (crypto?.randomUUID ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2));
-      const boot = { projectId: (window as any).__projectTempId } as any;
+      const tempId = (crypto?.randomUUID ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2));
+      pdUpdate.setDraft(true);
+      pdUpdate.setTempId(tempId);
+      const boot = { projectId: tempId } as any;
 
       // Carica atti direttamente dalla Factory (mode deterministico) rispettando industry
       await ProjectDataService.loadActsFromFactory(projectInfo.industry);
@@ -299,7 +302,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
-      try { (window as any).__currentProjectId = boot.projectId; console.log('[Bootstrap][projectId][DRAFT]', boot.projectId); } catch {}
+      try { pdUpdate.setCurrentProjectId(boot.projectId); console.log('[Bootstrap][projectId][DRAFT]', boot.projectId); } catch {}
       setNodes([]);
       setEdges([]);
       await refreshData();
@@ -325,8 +328,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (!catRes.ok) throw new Error('Errore nel recupero catalogo');
       const list = await catRes.json();
       const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
-      (window as any).__projectDraft = false;
-      (window as any).__currentProjectId = id;
+      pdUpdate.setDraft(false);
+      pdUpdate.setCurrentProjectId(id);
       // Carica atti dal DB progetto
       await ProjectDataService.loadActsFromProject(id);
       // Carica flow (nodi/edge)
@@ -473,7 +476,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                   const dataSvc: any = (ProjectDataService as any);
                   // 1) bootstrap (solo se siamo in draft)
-                  if ((window as any).__projectDraft) {
+                  if (pdUpdate.isDraft()) {
                     const tb = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                     const resp = await fetch('/api/projects/bootstrap', {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -486,30 +489,28 @@ export const AppContent: React.FC<AppContentProps> = ({
                     });
                     if (!resp.ok) throw new Error('bootstrap_failed');
                     const boot = await resp.json();
-                    (window as any).__currentProjectId = boot.projectId;
-                    (window as any).__projectDraft = false;
+                    pdUpdate.setCurrentProjectId(boot.projectId);
+                    pdUpdate.setDraft(false);
                     // Nota: non chiamare /api/projects/catalog qui; il bootstrap registra già nel catalogo
                     const te = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                     try { console.log('[Save][timing] bootstrap ms', Math.round(te - tb)); } catch {}
                   }
-                  const pid = (window as any).__currentProjectId;
+                  const pid = pdUpdate.getCurrentProjectId();
                   // 2) persisti tutte le istanze dal draft store (se esistono)
-                  const key = (window as any).__projectTempId;
+                  const key = pdUpdate.getTempId();
                   const draft = (dataSvc as any).__draftInstances?.get?.(key);
                   if (draft && pid) {
                     const tI0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    const postPromises: Promise<any>[] = [];
+                    const items: any[] = [];
                     for (const [, inst] of draft.entries()) {
-                      postPromises.push(
-                        fetch(`/api/projects/${encodeURIComponent(pid)}/instances`, {
-                          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inst)
-                        }).catch(()=>{})
-                      );
+                      items.push({ baseActId: inst.baseActId, mode: inst.mode, message: inst.message, overrides: inst.overrides });
                     }
-                    await Promise.allSettled(postPromises);
+                    if (items.length) {
+                      await (ProjectDataService as any).bulkCreateInstances(pid, items);
+                    }
                     (dataSvc as any).__draftInstances.delete(key);
                     const tI1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    try { console.log('[Save][timing] instances ms', Math.round(tI1 - tI0), 'count', postPromises.length); } catch {}
+                    try { console.log('[Save][timing] instances ms', Math.round(tI1 - tI0), 'count', items.length); } catch {}
                   }
                   // 2b) persisti gli Agent Acts creati al volo nel DB progetto (solo su Save esplicito)
                   try {

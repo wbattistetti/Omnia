@@ -144,7 +144,8 @@ export class EntityCreationService {
             __suppressEditorOnce: Boolean((options as any)?.suppressUI)
           };
         })())
-      }
+      },
+      options.projectData
     );
 
     // 5. Crea l'oggetto per la riga del nodo
@@ -388,13 +389,13 @@ export class EntityCreationService {
     entityType: string,
     categoryId: string,
     itemId: string,
-    updates: any
+    updates: any,
+    projectData: any
   ): void {
     // Applica gli aggiornamenti all'elemento nel projectData
     try {
-      // Prova ad usare la reference globale se disponibile; in alternativa, aggiorna direttamente l'oggetto presente
-      const globalProject: any = (window as any).__projectData;
-      const entities = globalProject?.[entityType] || [];
+      // Aggiorna direttamente l'oggetto presente su projectData passato
+      const entities = (projectData as any)?.[entityType] || [];
       let itemRef: any = null;
       for (const cat of entities) {
         if (cat.id !== categoryId) continue;
@@ -407,7 +408,7 @@ export class EntityCreationService {
         if (typeof safeUpdates.mode === 'undefined') delete safeUpdates.mode;
         Object.assign(itemRef, safeUpdates);
       } else {
-        // Fallback no-op: se non c'è la ref globale, l'oggetto newItem restituito mantiene già i campi aggiornati
+        // No direct reference found; the returned newItem already has updated fields
       }
     } catch {}
   }

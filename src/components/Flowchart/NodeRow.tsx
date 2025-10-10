@@ -157,6 +157,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   },
   ref
 ) => {
+  const { data: projectDataCtx } = useProjectData();
   // Debug gate for icon/flow logs (enable with localStorage.setItem('debug.flowIcons','1'))
   const debugFlowIcons = (() => { try { return Boolean(localStorage.getItem('debug.flowIcons')); } catch { return false; } })();
   const [isEditing, setIsEditing] = useState(forceEditing);
@@ -342,7 +343,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     setIntellisenseQuery('');
     // PUT non-bloccante: salva in background
     try {
-      const pid = (window as any).__currentProjectId || (window as any).__projectId;
+      let pid: string | undefined = undefined;
+      try { pid = (await import('../../context/ProjectDataContext')).useProjectDataUpdate().getCurrentProjectId() || undefined; } catch {}
       if (pid && (row as any)?.instanceId && ((row as any)?.mode === 'Message' || !(row as any)?.mode)) {
         void ProjectDataService.updateInstance(pid, (row as any).instanceId, { message: { text: label } })
           .catch((e) => { try { console.warn('[Row][save][instance:update] failed', e); } catch {} });
@@ -759,9 +761,10 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
             } catch {}
             try {
               // Best-effort: trova act nel projectData corrente esposto globalmente
-              const pd: any = (window as any).__projectData;
-              const baseId = (row as any).baseActId || (row as any).actId;
+              // Usa il ProjectData dal context per evitare globals
               let act: any = null;
+              const pd: any = projectDataCtx as any;
+              const baseId = (row as any).baseActId || (row as any).actId;
               if (pd && pd.agentActs) {
                 for (const cat of pd.agentActs) {
                   const f = (cat.items || []).find((it: any) => it.id === baseId || it._id === baseId || it.id === (row as any).factoryId);

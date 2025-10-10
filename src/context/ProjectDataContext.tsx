@@ -11,6 +11,12 @@ interface ProjectDataContextType {
 
 interface ProjectDataUpdateContextType {
   refreshData: () => Promise<void>;
+  getCurrentProjectId: () => string | null;
+  setCurrentProjectId: (id: string | null) => void;
+  isDraft: () => boolean;
+  setDraft: (draft: boolean) => void;
+  getTempId: () => string | null;
+  setTempId: (id: string | null) => void;
   addCategory: (type: EntityType, name: string) => Promise<void>;
   deleteCategory: (type: EntityType, categoryId: string) => Promise<void>;
   updateCategory: (type: EntityType, categoryId: string, updates: Partial<Category>) => Promise<void>;
@@ -46,6 +52,9 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
   const [data, setData] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<boolean>(false);
+  const [tempId, setTempId] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -54,7 +63,6 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
       const raw = await ProjectDataService.loadProjectData();
       const projectData = normalizeProjectData(raw);
       setData(projectData);
-      try { (window as any).__projectData = projectData; } catch {}
     } catch (err) {
       console.warn('Failed to load project data:', err);
       // Inizializza con dati vuoti se non c'è un progetto corrente
@@ -69,7 +77,6 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
         macroTasks: []
       };
       setData(fallbackData);
-      try { (window as any).__projectData = fallbackData as any; } catch {}
     } finally {
       setLoading(false);
     }
@@ -82,6 +89,13 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
   const refreshData = async () => {
     await loadData();
   };
+
+  const getCurrentProjectId = () => currentProjectId;
+  const setCurrentProjectIdSafe = (id: string | null) => setCurrentProjectId(id);
+  const isDraft = () => draft;
+  const setDraftSafe = (v: boolean) => setDraft(v);
+  const getTempId = () => tempId;
+  const setTempIdSafe = (id: string | null) => setTempId(id);
 
   const addCategory = async (type: EntityType, name: string) => {
     try {
@@ -145,6 +159,12 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
 
   const updateContextValue: ProjectDataUpdateContextType = {
     refreshData,
+    getCurrentProjectId,
+    setCurrentProjectId: setCurrentProjectIdSafe,
+    isDraft,
+    setDraft: setDraftSafe,
+    getTempId,
+    setTempId: setTempIdSafe,
     addCategory,
     deleteCategory,
     updateCategory,

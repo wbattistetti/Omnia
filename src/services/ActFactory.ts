@@ -51,8 +51,8 @@ export async function createAndAttachAct(opts: CreateAndAttachOpts) {
 
   // 3) Async instance creation and patch instanceId
   try {
-    const pid = getProjectId?.() ||
-      (typeof window !== 'undefined' && ((window as any).__currentProjectId || (window as any).__projectId));
+           const pid = getProjectId?.() ||
+             (await import('../context/ProjectDataContext')).useProjectDataUpdate().getCurrentProjectId() || undefined;
     if (!pid || !actId) return;
     const inst = await ProjectDataService.createInstance(pid, { baseActId: actId, mode });
     if ((inst as any)?._id) {
