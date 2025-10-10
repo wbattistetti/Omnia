@@ -135,18 +135,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         }, 100);
         
         // Apri il ConditionEditor
-        setTimeout(() => {
+        setTimeout(async () => {
           const variables = (window as any).__omniaVars || {};
-          const ev: any = new CustomEvent('conditionEditor:open', { 
-            detail: { 
-              variables, 
-              script: '', 
-              label: name, 
-              name: name 
-            }, 
-            bubbles: true 
-          });
-          document.dispatchEvent(ev);
+          try { (await import('../../ui/events')).emitConditionEditorOpen({ variables, script: '', label: name, name }); } catch {}
         }, 200);
         
         // Chiudi il selector

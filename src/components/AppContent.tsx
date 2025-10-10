@@ -525,6 +525,9 @@ export const AppContent: React.FC<AppContentProps> = ({
                     try {
                       const tf0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       try { console.log('[Save][flow]', { pid, nodes: nodes.length, edges: edges.length, sampleNodeIds: (nodes || []).slice(0,3).map(n => n.id) }); } catch {}
+                      const svc = await import('../services/FlowPersistService');
+                      await svc.flushFlowPersist();
+                      // Final PUT immediate (explicit Save)
                       await fetch(`/api/projects/${encodeURIComponent(pid)}/flow`, {
                         method: 'PUT', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ nodes, edges })
@@ -577,16 +580,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                       dockWithinParent={true}
                       onRename={(next) => {
                         setConditionLabel(next);
-                        try {
-                          const ev: any = new CustomEvent('conditionEditor:rename', { detail: { label: next }, bubbles: true });
-                          document.dispatchEvent(ev);
-                        } catch {}
+                        try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch {}
                       }}
                       onSave={(script) => {
-                        try {
-                          const ev: any = new CustomEvent('conditionEditor:save', { detail: { script }, bubbles: true });
-                          document.dispatchEvent(ev);
-                        } catch {}
+                        try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch {}
                       }}
                     />
                   )}
@@ -605,16 +602,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                     dockWithinParent={true}
                     onRename={(next) => {
                       setConditionLabel(next);
-                      try {
-                        const ev: any = new CustomEvent('conditionEditor:rename', { detail: { label: next }, bubbles: true });
-                        document.dispatchEvent(ev);
-                      } catch {}
+                      try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch {}
                     }}
                     onSave={(script) => {
-                      try {
-                        const ev: any = new CustomEvent('conditionEditor:save', { detail: { script }, bubbles: true });
-                        document.dispatchEvent(ev);
-                      } catch {}
+                      try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch {}
                     }}
                   />
                 </div>
@@ -648,8 +639,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                   try {
                     const svc = await import('../services/ProjectDataService');
                     const dataSvc: any = (svc as any).ProjectDataService;
-                    let pid: string | undefined = undefined;
-                    try { pid = ((require('../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch {}
+                    const pid = pdUpdate.getCurrentProjectId() || undefined;
                     if (pid && niSource?.instanceId) {
                       // fire-and-forget: non bloccare la chiusura del pannello
                       const text = nonInteractiveEditor?.value?.template || '';

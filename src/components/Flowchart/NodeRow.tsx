@@ -180,6 +180,45 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   const [showIcons, setShowIcons] = useState(false);
   const labelRef = useRef<HTMLSpanElement>(null);
   const [iconPos, setIconPos] = useState<{top: number, left: number} | null>(null);
+  const suppressIntellisenseRef = useRef<boolean>(false);
+  const intellisenseTimerRef = useRef<number | null>(null);
+
+  // Hide action overlay while editing to avoid ghost bars
+  useEffect(() => {
+    if (isEditing) setShowIcons(false);
+  }, [isEditing]);
+
+  // ESC: when type toolbar is open, close it and refocus textbox without propagating to canvas
+  useEffect(() => {
+    if (!showCreatePicker) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+      } catch {}
+      setShowCreatePicker(false);
+      setAllowCreatePicker(false);
+      suppressIntellisenseRef.current = true;
+      // restore focus to the editor textarea
+      try {
+        if (inputRef.current) {
+          const el = inputRef.current;
+          el.focus();
+          // place caret at end
+          const val = el.value || '';
+          el.setSelectionRange(val.length, val.length);
+        }
+      } catch {}
+    };
+    document.addEventListener('keydown', onEsc, true);
+    return () => document.removeEventListener('keydown', onEsc, true);
+  }, [showCreatePicker]);
+
+  // reset suppression when editing ends
+  useEffect(() => {
+    if (!isEditing) suppressIntellisenseRef.current = false;
+  }, [isEditing]);
   const { openDDT } = useDDTManager();
   const hoverHideTimerRef = useRef<number | null>(null);
 
@@ -442,10 +481,12 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     const q = newText.trim();
     setAllowCreatePicker(false);
     setShowCreatePicker(false);
-    if (q.length > 0) {
+    if (intellisenseTimerRef.current) { window.clearTimeout(intellisenseTimerRef.current); intellisenseTimerRef.current = null; }
+    if (q.length >= 2) {
       setIntellisenseQuery(newText);
-      // Mostra intellisense live solo mentre si digita
-      setShowIntellisense(true);
+      intellisenseTimerRef.current = window.setTimeout(() => {
+        if (!suppressIntellisenseRef.current) setShowIntellisense(true);
+      }, 100);
     } else {
       setShowIntellisense(false);
       setIntellisenseQuery('');
@@ -710,7 +751,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
       <div 
         ref={nodeContainerRef}
         className={`node-row-outer flex items-center group transition-colors ${conditionalClasses}`}
-        style={{ ...conditionalStyles, backgroundColor: 'transparent', border: 'none', outline: 'none', boxShadow: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto', width: '100%' }}
+        style={{ ...conditionalStyles, backgroundColor: 'transparent', border: 'none', outline: 'none', boxShadow: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 4, paddingBottom: 4, minHeight: 0, height: 'auto', width: '100%' }}
         data-index={index}
         onMouseEnter={() => {
           if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
@@ -783,7 +824,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
                 const templateText = ((row as any)?.message?.text) ?? (row.text || '');
                 try {
                   console.log('[Row][openDDT] open NonInteractive', { title: row.text || 'Agent message', templateText });
-                  document.dispatchEvent(new CustomEvent('nonInteractiveEditor:open', { detail: { title: row.text || 'Agent message', template: templateText, instanceId: (row as any)?.instanceId } }));
+                  const { emitNonInteractiveEditorOpen } = await import('../../ui/events');
+                  emitNonInteractiveEditorOpen({ title: row.text || 'Agent message', template: templateText, instanceId: (row as any)?.instanceId });
                 } catch {}
               }
             } catch (e) { console.warn('[Row][openDDT] failed', e); }

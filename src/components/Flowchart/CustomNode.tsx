@@ -570,7 +570,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           </div>
         )}
       </div>
-      <div className="px-1.5" style={{ paddingTop: 0, paddingBottom: 0 }} ref={rowsContainerRef}>
+      <div className="px-1.5" ref={rowsContainerRef}>
         <NodeRowList
           rows={((data as any)?.hideUncheckedRows === true) ? displayRows.filter(r => r.included !== false) : displayRows}
           editingRowId={editingRowId}

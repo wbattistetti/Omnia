@@ -38,30 +38,21 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
   return (
     <>
       {showIntellisense && isEditing && nodeOverlayPosition && createPortal(
-        <div
-          className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
-          style={{
-            left: nodeOverlayPosition.left,
-            top: nodeOverlayPosition.top + 4,
-            minWidth: '280px'
-          }}
-        >
-          <IntellisenseMenu
-            isOpen={showIntellisense}
-            query={intellisenseQuery}
-            position={{ x: 0, y: 0 }}
-            referenceElement={inputRef.current}
-            onSelect={handleIntellisenseSelect}
-            onClose={handleIntellisenseClose}
-            allowCreatePicker={!!allowCreatePicker}
-            filterCategoryTypes={['agentActs', 'backendActions', 'tasks']}
-            onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
-              return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);
-            } : undefined}
-            onCreateBackendCall={onCreateBackendCall ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateBackendCall(name, createRowUpdateCallback, scope, categoryName) : undefined}
-            onCreateTask={onCreateTask ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateTask(name, createRowUpdateCallback, scope, categoryName) : undefined}
-          />
-        </div>,
+        <IntellisenseMenu
+          isOpen={showIntellisense}
+          query={intellisenseQuery}
+          position={{ x: 0, y: 0 }}
+          referenceElement={inputRef.current}
+          onSelect={handleIntellisenseSelect}
+          onClose={handleIntellisenseClose}
+          allowCreatePicker={!!allowCreatePicker}
+          filterCategoryTypes={['agentActs', 'backendActions', 'tasks']}
+          onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
+            return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);
+          } : undefined}
+          onCreateBackendCall={onCreateBackendCall ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateBackendCall(name, createRowUpdateCallback, scope, categoryName) : undefined}
+          onCreateTask={onCreateTask ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateTask(name, createRowUpdateCallback, scope, categoryName) : undefined}
+        />,
         document.body
       )}
     </>

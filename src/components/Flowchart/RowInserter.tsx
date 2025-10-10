@@ -13,7 +13,7 @@ export const RowInserter: React.FC<RowInserterProps> = ({ visible, onInsert, onM
   return (
     <div
       className="row-inserter relative flex items-center justify-center"
-      style={{ height: 8, minHeight: 0, width: '100%', margin: 0, padding: 0, cursor: 'copy' }}
+      style={{ height: 6, minHeight: 0, width: '100%', margin: 0, padding: 0, cursor: visible ? 'copy' : 'default' }}
       onMouseEnter={() => onMouseEnter && onMouseEnter()}
       onMouseLeave={() => onMouseLeave && onMouseLeave()}
       onClick={visible ? onInsert : undefined}

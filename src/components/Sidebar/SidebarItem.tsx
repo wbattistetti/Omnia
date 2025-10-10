@@ -81,18 +81,17 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
             title={isAgentAct ? mode : undefined}
             role={isCondition ? 'button' : undefined}
             tabIndex={isCondition ? 0 : undefined}
-            onClick={(e) => {
+            onClick={async (e) => {
               if (!isCondition) return;
               e.stopPropagation();
               try {
                 const variables = (window as any).__omniaVars || {};
                 const script = (item as any)?.data?.script || '';
                 const label = String((item as any)?.name || (item as any)?.label || 'Condition');
-                const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label, name: label }, bubbles: true });
-                (e.currentTarget as any).dispatchEvent(ev);
+                (await import('../../ui/events')).emitConditionEditorOpen({ variables, script, label, name: label });
               } catch {}
             }}
-            onKeyDown={(e) => {
+            onKeyDown={async (e) => {
               if (!isCondition) return;
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -101,8 +100,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                   const variables = (window as any).__omniaVars || {};
                   const script = (item as any)?.data?.script || '';
                   const label = String((item as any)?.name || (item as any)?.label || 'Condition');
-                  const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label, name: label }, bubbles: true });
-                  (e.currentTarget as any).dispatchEvent(ev);
+                  (await import('../../ui/events')).emitConditionEditorOpen({ variables, script, label, name: label });
                 } catch {}
               }
             }}
@@ -126,7 +124,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                 title={isInteractive
                   ? ((hasEmbedded || (hasDDTFor && hasDDTFor(item.name))) ? 'Edit DDT (already built)' : 'Build DDT from this act')
                   : (hasMessage ? 'Edit message' : 'Add message')}
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
                   try {
                     const exists = hasEmbedded || (hasDDTFor ? hasDDTFor(item.name) : false);
@@ -152,13 +150,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                     // Non-interactive → open bottom panel text editor
                     const promptText = (act?.prompts && (act.prompts.informal || act.prompts.formal)) || act?.description || '';
                     const accentColor = nameColor || '#22c55e'; // use computed act forecolor
-                    try {
-                      const openEvt: any = new CustomEvent('nonInteractiveEditor:open', {
-                        detail: { title: String(item?.name || 'Agent message'), template: String(promptText || ''), accentColor },
-                        bubbles: true,
-                      });
-                      (e.currentTarget as any).dispatchEvent(openEvt);
-                    } catch {}
+                    try { (await import('../../ui/events')).emitNonInteractiveEditorOpen({ title: String(item?.name || 'Agent message'), template: String(promptText || ''), accentColor }); } catch {}
                   }
                 }}
                 type="button"

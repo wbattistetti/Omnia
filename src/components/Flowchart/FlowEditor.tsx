@@ -644,52 +644,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       return;
     }
 
-    const newNodeId = nodeIdCounter.toString();
-    const position = reactFlowInstance.screenToFlowPosition({
-      x: connectionMenuRef.current.position.x - 140,
-      y: connectionMenuRef.current.position.y - 20
-    });
-    const newEdgeId = uuidv4();
-    const newNode: Node<NodeData> = {
-      id: newNodeId,
-      type: 'custom',
-      position,
-      data: {
-        title: '',
-        rows: [],
-        onDelete: () => deleteNodeWithLog(newNodeId),
-        onUpdate: (updates: any) => updateNode(newNodeId, updates),
-        onCreateAgentAct: createAgentAct,
-        onCreateBackendCall: createBackendCall,
-        onCreateTask: createTask,
-        onCreateCondition: createCondition,
-        focusRowId: '1'
-      },
-    };
-    const targetHandle = getTargetHandle(connectionMenuRef.current.sourceHandleId || '');
-    const newEdge: Edge<EdgeData> = {
-      id: newEdgeId,
-      source: connectionMenuRef.current.sourceNodeId || '',
-      sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-      target: newNodeId,
-      targetHandle: targetHandle,
-      style: { stroke: '#8b5cf6' }, // solido
-      label: item.description || item.name || '', // <-- label/caption
-      type: 'custom',
-      data: { onDeleteEdge },
-      markerEnd: 'arrowhead',
-    };
-    setNodes((nds) => {
-      const filtered = connectionMenuRef.current.tempNodeId ? nds.filter(n => n.id !== connectionMenuRef.current.tempNodeId) : nds;
-      return [...filtered, newNode];
-    });
-    setEdges((eds) => {
-      const filtered = removeAllTempEdges(eds, nodesRef.current);
-      return [...filtered, newEdge];
-    });
-    setNodeIdCounter(prev => prev + 1);
-    setSelectedEdgeId(newEdgeId);
-    log('createNew', { newNodeId, newEdgeId });
+    // Strict: non creare un nuovo nodo se mancano i temp IDs (evita ghost nodes)
+    log('createNew.aborted', { reason: 'missing_temp_ids_and_target' });
+    cleanupAllTempNodesAndEdges();
     closeMenu();
   }, [setEdges, nodeIdCounter, onDeleteEdge, updateNode, deleteNodeWithLog, setNodes, reactFlowInstance, connectionMenuRef, nodes]);
 

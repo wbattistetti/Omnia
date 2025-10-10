@@ -48,6 +48,14 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   onCreateTask,
   allowCreatePicker = false
 }) => {
+  const ErrorBoundary = React.useMemo(() => (
+    class EB extends React.Component<{ children: React.ReactNode }, { hasError: boolean }>{
+      constructor(props: any) { super(props); this.state = { hasError: false }; }
+      static getDerivedStateFromError() { return { hasError: true }; }
+      componentDidCatch(err: any) { try { console.warn('[IntellisenseMenu][ErrorBoundary]', err); } catch {} }
+      render() { return (this.state as any).hasError ? null : (this.props as any).children; }
+    }
+  ), []);
   // Debug logging removed to prevent excessive console output
   const { data } = useProjectData();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -335,7 +343,14 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     return null;
   }
 
+  // Avoid rendering an empty shell when there are no results and creation is disabled
+  const noResults = totalItems === 0;
+  if (noResults) {
+    return null;
+  }
+
   return (
+    <ErrorBoundary>
     <div
       ref={menuRef}
       style={{
@@ -410,5 +425,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         allowCreatePicker={allowCreatePicker}
       />
     </div>
+    </ErrorBoundary>
   );
 };
