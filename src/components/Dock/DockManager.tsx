@@ -1,6 +1,6 @@
 import React from 'react';
 import { DockNode, DockRegion, DockTab } from '../../dock/types';
-import { splitWithTab, addTabCenter, closeTab, activateTab } from '../../dock/ops';
+import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab } from '../../dock/ops';
 
 type Props = {
   root: DockNode;
@@ -10,20 +10,36 @@ type Props = {
 
 export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent }) => {
   const [dragTab, setDragTab] = React.useState<DockTab | null>(null);
+  const [closedTabs, setClosedTabs] = React.useState<DockTab[]>([]);
+  const [activeTabSetId, setActiveTabSetId] = React.useState<string>('ts_main');
   const [hoverTarget, setHoverTarget] = React.useState<{ tabsetId: string; region: DockRegion } | null>(null);
 
   const onDropTo = (tabsetId: string, region: DockRegion) => {
     if (!dragTab) return;
-    const tree = region === 'center'
-      ? addTabCenter(root, tabsetId, dragTab)
-      : splitWithTab(root, tabsetId, region, dragTab);
-    setRoot(tree);
+    setRoot(moveTab(root, dragTab.id, tabsetId, region));
     setDragTab(null);
     setHoverTarget(null);
   };
 
   return (
     <div className="flex w-full h-full min-h-0">
+      {/* Shelf globale */}
+      {closedTabs.length > 0 && (
+        <div className="flex items-center gap-1 px-2 py-1 border-b bg-slate-50">
+          <span className="text-[11px] text-slate-500">Closed:</span>
+          {closedTabs.map(t => (
+            <button key={t.id} className="px-2 py-0.5 text-[11px] rounded border bg-white hover:bg-slate-100"
+              onClick={() => {
+                // riapri nella tabset attiva
+                setRoot(addTabCenter(root, activeTabSetId, t));
+                setClosedTabs(prev => prev.filter(x => x.id !== t.id));
+              }}>
+              {t.title}
+            </button>
+          ))}
+        </div>
+      )}
+
       <DockRenderer
         node={root}
         onDragTabStart={(tab) => setDragTab(tab)}
@@ -33,6 +49,7 @@ export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent }
         hover={hoverTarget}
         renderTabContent={renderTabContent}
         setRoot={setRoot}
+        setActiveTabSetId={setActiveTabSetId}
         rootNode={root}
       />
     </div>
@@ -49,6 +66,7 @@ function DockRenderer(props: {
   hover: { tabsetId: string; region: DockRegion } | null;
   renderTabContent: (tab: DockTab) => React.ReactNode;
   setRoot: (n: DockNode) => void;
+  setActiveTabSetId: (id: string) => void;
 }) {
   const { node } = props;
   if (node.kind === 'split') {
@@ -68,8 +86,13 @@ function DockRenderer(props: {
       nodeId={node.id}
       tabs={node.tabs}
       active={node.active}
-      setActive={(idx) => props.setRoot(activateTab(props.rootNode, node.tabs[idx].id))}
-      onClose={(tabId) => props.setRoot(closeTab(props.rootNode, tabId))}
+      setActive={(idx) => { props.setActiveTabSetId(node.id); props.setRoot(activateTab(props.rootNode, node.tabs[idx].id)); }}
+      onClose={(tabId) => {
+        // Sposta la tab chiusa nella shelf
+        const t = getTab(props.rootNode, tabId);
+        props.setRoot(closeTab(props.rootNode, tabId));
+        // Nota: la shelf è gestita nel componente padre (DockManager)
+      }}
       onDragTabStart={props.onDragTabStart}
       onDragTabEnd={props.onDragTabEnd}
       onHover={props.onHover}

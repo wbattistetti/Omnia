@@ -61,6 +61,41 @@ export function addTabNextTo(tree: DockNode, siblingTabId: string, newTab: DockT
   });
 }
 
+export function getTab(tree: DockNode, tabId: string): DockTab | null {
+  let found: DockTab | null = null;
+  mapNode(tree, n => {
+    if (n.kind === 'tabset') {
+      const t = n.tabs.find(x => x.id === tabId);
+      if (t) found = t;
+    }
+    return n;
+  });
+  return found;
+}
+
+export function removeTab(tree: DockNode, tabId: string): DockNode {
+  const pruned = mapNode(tree, n => {
+    if (n.kind !== 'tabset') return n;
+    const idx = n.tabs.findIndex(t => t.id === tabId);
+    if (idx === -1) return n;
+    const tabs = n.tabs.filter(t => t.id !== tabId);
+    const active = Math.max(0, Math.min(n.active, tabs.length - 1));
+    return { ...n, tabs, active };
+  });
+  return compact(pruned);
+}
+
+export function insertTab(tree: DockNode, targetId: string, region: DockRegion, tab: DockTab): DockNode {
+  return region === 'center' ? addTabCenter(tree, targetId, tab) : splitWithTab(tree, targetId, region, tab);
+}
+
+export function moveTab(tree: DockNode, tabId: string, targetId: string, region: DockRegion): DockNode {
+  const tab = getTab(tree, tabId);
+  if (!tab) return tree;
+  const without = removeTab(tree, tabId);
+  return insertTab(without, targetId, region, tab);
+}
+
 // helpers
 
 function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
