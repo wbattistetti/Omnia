@@ -496,7 +496,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     }
     // Create instance asynchronously (best-effort)
     try {
-      const pid = (window as any).__currentProjectId || (window as any).__projectId;
+      let pid: string | undefined = undefined;
+      try { pid = (await import('../../context/ProjectDataContext')).useProjectDataUpdate().getCurrentProjectId() || undefined; } catch {}
       if (pid && item.actId && item.categoryType === 'agentActs') {
     // Avoid require in browser; import mapping helpers at top-level
     const chosenType = (item as any)?.type || modeToType((item as any)?.mode);
