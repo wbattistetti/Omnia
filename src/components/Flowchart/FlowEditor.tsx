@@ -36,6 +36,7 @@ export type { EdgeData } from '../../hooks/useEdgeManager';
 // nodeTypes/edgeTypes memoized below
 
 interface FlowEditorProps {
+  flowId?: string;
   testPanelOpen: boolean;
   setTestPanelOpen: (open: boolean) => void;
   testNodeId: string | null;
@@ -51,6 +52,7 @@ interface FlowEditorProps {
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
+  flowId,
   testPanelOpen,
   setTestPanelOpen,
   testNodeId,
@@ -1003,7 +1005,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   return (
     <div className="flex-1 h-full relative" ref={canvasRef} style={{ overflow: 'auto' }} onDoubleClick={handleCanvasDoubleClick} onMouseLeave={() => setCursorTooltip(null)}>
       {/* Expose nodes/edges to GlobalDebuggerPanel (bridge) */}
-      {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; } catch {} return null; })()}
+      {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; if (flowId) { (window as any).__flows = (window as any).__flows || {}; (window as any).__flows[flowId] = { nodes, edges }; } } catch {} return null; })()}
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
@@ -1140,7 +1142,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
                     setNodes(nds => {
                       const filtered = nds.filter(n => !selSet.has(n.id));
                       const onCommitTitle = (finalTitle: string) => {
-                        try { onCreateTaskFlow && onCreateTaskFlow(taskId, finalTitle, subflowNodes as any, subflowEdges as any); } catch {}
+                        // assicurati di invocare dopo il tick per evitare conflitti
+                        setTimeout(() => {
+                          try { onCreateTaskFlow && onCreateTaskFlow(taskId, finalTitle, subflowNodes as any, subflowEdges as any); } catch {}
+                        }, 0);
                       };
                       const onCancelTitle = () => { try { undo(); } catch {} };
                       const newNode = { id: taskId, type: 'task' as const, position: { x: cx, y: cy }, data: { title: '', flowId: taskId, editOnMount: true, showGuide: true, onUpdate: (updates: any) => updateNode(taskId, updates), onCommitTitle, onCancelTitle } };

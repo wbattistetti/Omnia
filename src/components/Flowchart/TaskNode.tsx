@@ -42,10 +42,11 @@ export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ data, selected, is
 		>
 			<div className="relative" style={{ marginBottom: 0, paddingBottom: 0 }}>
 				{data?.editOnMount ? (
-					<div className="flex items-center gap-2 px-2 py-1">
+                    <div className="flex items-center gap-2 px-2 py-1">
 						<CheckSquare className="w-3.5 h-3.5" />
 						<input
 							ref={inputRef}
+                            autoFocus
 							value={title}
 							onChange={(e) => setTitle(e.target.value)}
 							onKeyDown={(e) => {
@@ -55,8 +56,9 @@ export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ data, selected, is
 									try { (data as any)?.onCancelTitle?.(); } catch {}
 								}
 							}}
-							placeholder="Task"
-							className="bg-white/20 text-white text-xs rounded px-2 py-1 outline-none border border-white/30 focus:border-white"
+                            onBlur={() => commit(title)}
+                            placeholder="Scrivi il nome del task"
+                            className="bg-white text-black text-xs rounded px-2 py-1 outline-none border border-slate-300 focus:border-slate-500"
 							style={{ minWidth: 120 }}
 						/>
 					</div>

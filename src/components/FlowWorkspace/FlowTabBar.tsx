@@ -10,7 +10,9 @@ export const FlowTabBar: React.FC = () => {
     <div className="flex items-center gap-1 px-2 py-1 border-b border-slate-300 bg-white sticky top-0 z-10" style={{ minHeight: 30 }}>
       {openFlows.map((fid) => (
         <div key={fid}
-          className={`flex items-center gap-2 px-2 py-0.5 rounded ${activeFlowId===fid? 'bg-slate-200' : 'bg-white'} border border-slate-300 text-[11px] cursor-pointer`}
+          draggable
+          onDragStart={(e) => { try { e.dataTransfer.setData('text/flow-id', fid); } catch {} }}
+          className={`flex items-center gap-2 px-2 py-0.5 rounded ${activeFlowId===fid? 'bg-slate-200' : 'bg-white'} border border-slate-300 text-[11px] cursor-grab`}
           onClick={() => setActiveFlow(fid)}
           title={fid}
         >

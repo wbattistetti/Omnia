@@ -17,6 +17,7 @@ import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
 // import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
 import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
+import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
@@ -526,13 +527,17 @@ export const AppContent: React.FC<AppContentProps> = ({
                   if (pid) {
                     try {
                       const tf0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      try { console.log('[Save][flow]', { pid, nodes: nodes.length, edges: edges.length, sampleNodeIds: (nodes || []).slice(0,3).map(n => n.id) }); } catch {}
+                      try {
+                        const flows = (window as any).__flows || {};
+                        const main = flows?.main || { nodes, edges };
+                        console.log('[Save][flow]', { pid, flowId: 'main', nodes: main.nodes?.length || 0, edges: main.edges?.length || 0, sampleNodeIds: (main.nodes || []).slice(0,3).map((n: any) => n.id) });
+                      } catch {}
                       const svc = await import('../services/FlowPersistService');
                       await svc.flushFlowPersist();
                       // Final PUT immediate (explicit Save)
-                      await fetch(`/api/projects/${encodeURIComponent(pid)}/flow`, {
+                      await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
                         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ nodes, edges })
+                        body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes, edges })
                       });
                       const tf1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       try { console.log('[Save][timing] flow ms', Math.round(tf1 - tf0)); } catch {}
@@ -559,7 +564,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               ) : (
                 <div style={{ position: 'relative' }}>
                   {currentPid ? (
-                    <FlowWorkspace projectId={currentPid} />
+                    <DockWorkspace projectId={currentPid} />
                   ) : (
                     <FlowEditor
                       nodes={nodes}
