@@ -100,6 +100,48 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const edgesRef = useRef(edges);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
+  // --- Undo/Redo command stack ---
+  type Command = { label: string; do: () => void; undo: () => void };
+  const [undoStack, setUndoStack] = useState<Command[]>([]);
+  const [redoStack, setRedoStack] = useState<Command[]>([]);
+  const executeCommand = useCallback((cmd: Command) => {
+    try { cmd.do(); } finally { setUndoStack((s) => [...s, cmd]); setRedoStack([]); }
+  }, []);
+  const undo = useCallback(() => {
+    setUndoStack((s) => {
+      if (s.length === 0) return s;
+      const last = s[s.length - 1];
+      try { last.undo(); } catch {}
+      setRedoStack((r) => [...r, last]);
+      return s.slice(0, -1);
+    });
+  }, []);
+  const redo = useCallback(() => {
+    setRedoStack((r) => {
+      if (r.length === 0) return r;
+      const last = r[r.length - 1];
+      try { last.do(); } catch {}
+      setUndoStack((s) => [...s, last]);
+      return r.slice(0, -1);
+    });
+  }, []);
+  // Keyboard shortcuts: Ctrl/Cmd+Z, Ctrl/Cmd+Y or Ctrl+Shift+Z
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      if (e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) { redo(); } else { undo(); }
+      } else if (e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler as any, { capture: true } as any);
+  }, [undo, redo]);
+
   // Sostituisco onConnect
   const onConnect = useCallback(
     (params: Connection) => {
@@ -989,6 +1031,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         className="bg-white"
         style={{ backgroundColor: '#ffffff', width: contentSize.w ? `${contentSize.w}px` : undefined, height: contentSize.h ? `${contentSize.h}px` : undefined }}
         selectionOnDrag={true}
+        onSelectionChange={(sel) => {
+          try {
+            const ids = Array.isArray(sel?.nodes) ? sel.nodes.map((n: any) => n.id) : [];
+            setSelectedNodeIds(ids);
+          } catch {}
+        }}
         panOnDrag={[2]}
         zoomOnScroll={false}
         zoomOnPinch={false}
@@ -999,7 +1047,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           // When user finishes a drag selection, open a contextual menu near the selection centroid
           try {
             if (!reactFlowInstance) return;
-            if (selectedNodeIds.length === 0) { setSelectionMenu({ show: false, x: 0, y: 0 }); return; }
+            // Usa la selezione live per evitare ritardi di stato
+            const liveNodes: any[] = (reactFlowInstance as any).getNodes ? (reactFlowInstance as any).getNodes() : nodes;
+            const liveSelectedIds = (liveNodes || []).filter(n => n?.selected).map(n => n.id);
+            const effSelected = liveSelectedIds.length ? liveSelectedIds : selectedNodeIds;
+            if (effSelected.length < 2) { setSelectionMenu({ show: false, x: 0, y: 0 }); return; }
+            // sincronizza anche lo state locale, per coerenza
+            try { if (liveSelectedIds.length) setSelectedNodeIds(liveSelectedIds); } catch {}
             // Use mouse release point relative to the FlowEditor container (account for scroll)
             const host = canvasRef.current;
             const rect = host ? host.getBoundingClientRect() : { left: 0, top: 0 } as any;
@@ -1037,13 +1091,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       </ReactFlow>
 
       {/* Selection context mini menu at bottom-right of selection */}
-      {selectionMenu.show && selectedNodeIds.length >= 1 && (
+      {selectionMenu.show && selectedNodeIds.length >= 2 && (
         <div className="absolute z-20 flex items-center gap-1" style={{ left: selectionMenu.x, top: selectionMenu.y, transform: 'translate(8px, 8px)' }}>
           <button
             className="px-2 py-1 text-xs rounded border bg-white border-slate-300 text-slate-700 shadow-sm"
             onClick={() => {
               try {
-                // Compute bounds and centroid
                 const sel = nodes.filter(n => selectedNodeIds.includes(n.id));
                 if (sel.length === 0) return;
                 const minX = Math.min(...sel.map(n => (n.position as any).x));
@@ -1053,48 +1106,49 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
                 const cx = (minX + maxX) / 2;
                 const cy = (minY + maxY) / 2;
 
-                // Harvest internal edges and external connections
                 const selSet = new Set(selectedNodeIds);
                 const internalEdges = edges.filter(e => selSet.has(e.source) && selSet.has(e.target));
                 const inEdges = edges.filter(e => !selSet.has(e.source) && selSet.has(e.target));
                 const outEdges = edges.filter(e => selSet.has(e.source) && !selSet.has(e.target));
 
-                // Build payload
-                const payloadNodes = sel.map(n => ({ id: n.id, position: n.position as any, data: { title: (n.data as any)?.title || 'Node', rows: (n.data as any)?.rows || [] } }));
-                const payloadEdges = internalEdges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle, label: (e as any).label || (e.data as any)?.label }));
+                const originalEdges = edges; // snapshot per undo
+                const taskId = `task_${Date.now()}`;
 
-                // Create a task entity (in-memory)
-                // Lazy import to avoid cycle
-                import('../../services/ProjectDataService').then(async mod => {
-                  const task = await mod.ProjectDataService.addTask('Task', '', { nodes: payloadNodes as any, edges: payloadEdges as any }, {
-                    nodeIds: selectedNodeIds,
-                    edgeIds: internalEdges.map(e => e.id),
-                    entryEdges: inEdges.map(e => e.id),
-                    exitEdges: outEdges.map(e => e.id),
-                    bounds: { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
-                  });
-
-                  // Remove internal nodes and edges, insert task node, rewire entry/exit
-                  setNodes(nds => {
-                    const filtered = nds.filter(n => !selSet.has(n.id));
-                    const newNode = { id: `task_${task.id}`, type: 'task' as const, position: { x: cx, y: cy }, data: { title: '', editOnMount: true, showGuide: true, onUpdate: (updates: any) => updateNode(`task_${task.id}`, updates) } };
-                    return [...filtered, newNode as any];
-                  });
-                  setEdges(eds => {
-                    let filtered = eds.filter(e => !internalEdges.some(i => i.id === e.id));
-                    // Rewire incoming -> task
-                    inEdges.forEach(e => {
-                      filtered = filtered.map(x => x.id === e.id ? { ...x, target: `task_${task.id}`, targetHandle: e.targetHandle } : x);
+                const cmd: Command = {
+                  label: 'Collapse to Task',
+                  do: () => {
+                    setNodes(nds => {
+                      const filtered = nds.filter(n => !selSet.has(n.id));
+                      const newNode = { id: taskId, type: 'task' as const, position: { x: cx, y: cy }, data: { title: '', editOnMount: true, showGuide: true, onUpdate: (updates: any) => updateNode(taskId, updates) } };
+                      return [...filtered, newNode as any];
                     });
-                    // Rewire outgoing <- task
-                    outEdges.forEach(e => {
-                      filtered = filtered.map(x => x.id === e.id ? { ...x, source: `task_${task.id}`, sourceHandle: e.sourceHandle } : x);
+                    setEdges(eds => {
+                      let filtered = eds.filter(e => !internalEdges.some(i => i.id === e.id));
+                      inEdges.forEach(e => { filtered = filtered.map(x => x.id === e.id ? { ...x, target: taskId, targetHandle: e.targetHandle } : x); });
+                      outEdges.forEach(e => { filtered = filtered.map(x => x.id === e.id ? { ...x, source: taskId, sourceHandle: e.sourceHandle } : x); });
+                      return filtered;
                     });
-                    return filtered;
-                  });
-                  setSelectedNodeIds([]);
-                  setSelectionMenu({ show: false, x: 0, y: 0 });
-                });
+                    setSelectedNodeIds([]);
+                  },
+                  undo: () => {
+                    setNodes(nds => {
+                      const withoutTask = nds.filter(n => n.id !== taskId);
+                      return [...withoutTask, ...sel];
+                    });
+                    setEdges(eds => {
+                      // Mappa prima agli endpoint originali, poi filtra eventuali edge ancora collegate al task
+                      const mapped = eds.map(x => {
+                        const orig = originalEdges.find(o => o.id === x.id);
+                        return orig ? { ...x, source: orig.source, target: orig.target, sourceHandle: orig.sourceHandle, targetHandle: orig.targetHandle, data: orig.data } : x;
+                      });
+                      const base = mapped.filter(x => x.source !== taskId && x.target !== taskId);
+                      return [...base, ...internalEdges];
+                    });
+                    setSelectedNodeIds(selectedNodeIds);
+                  }
+                };
+                executeCommand(cmd);
+                setSelectionMenu({ show: false, x: 0, y: 0 });
               } catch {}
             }}
           >
