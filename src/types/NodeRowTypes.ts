@@ -27,4 +27,5 @@ export interface NodeRowProps {
   onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  getProjectId?: () => string | null;
 }

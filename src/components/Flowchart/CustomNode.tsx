@@ -597,6 +597,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onCreateAgentAct={data.onCreateAgentAct}
           onCreateBackendCall={data.onCreateBackendCall}
           onCreateTask={data.onCreateTask}
+          getProjectId={() => {
+            try { return (window as any).__omniaRuntime?.getCurrentProjectId?.() || null; } catch { return null; }
+          }}
           hoveredRowIndex={drag.hoveredRowIndex}
           draggedRowId={drag.draggedRowId}
           draggedRowOriginalIndex={drag.draggedRowOriginalIndex}

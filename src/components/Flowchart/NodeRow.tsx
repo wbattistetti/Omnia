@@ -153,7 +153,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   onEditingEnd,
   onCreateAgentAct,
   onCreateBackendCall,
-  onCreateTask
+  onCreateTask,
+  getProjectId
   },
   ref
 ) => {
@@ -344,7 +345,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     // PUT non-bloccante: salva in background
     try {
       let pid: string | undefined = undefined;
-      try { pid = (await import('../../context/ProjectDataContext')).useProjectDataUpdate().getCurrentProjectId() || undefined; } catch {}
+      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch {}
       if (pid && (row as any)?.instanceId && ((row as any)?.mode === 'Message' || !(row as any)?.mode)) {
         void ProjectDataService.updateInstance(pid, (row as any).instanceId, { message: { text: label } })
           .catch((e) => { try { console.warn('[Row][save][instance:update] failed', e); } catch {} });
@@ -472,6 +473,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
       scope: 'industry',
       projectData,
       onImmediateRowUpdate: immediate,
+      getProjectId: () => (getProjectId ? getProjectId() : null)
     });
     try { emitSidebarRefresh(); } catch {}
   };
@@ -497,7 +499,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     // Create instance asynchronously (best-effort)
     try {
       let pid: string | undefined = undefined;
-      try { pid = (await import('../../context/ProjectDataContext')).useProjectDataUpdate().getCurrentProjectId() || undefined; } catch {}
+      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch {}
       if (pid && item.actId && item.categoryType === 'agentActs') {
     // Avoid require in browser; import mapping helpers at top-level
     const chosenType = (item as any)?.type || modeToType((item as any)?.mode);

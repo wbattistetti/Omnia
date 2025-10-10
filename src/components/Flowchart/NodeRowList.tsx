@@ -26,6 +26,7 @@ interface NodeRowListProps {
   onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  getProjectId?: () => string | null;
 }
 
 export const NodeRowList: React.FC<NodeRowListProps> = ({
@@ -50,7 +51,8 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   onEditingEnd,
   onCreateAgentAct,
   onCreateBackendCall,
-  onCreateTask
+  onCreateTask,
+  getProjectId
 }) => {
 
   // Hide any visible inserter as soon as a textbox appears (editing mode)
@@ -109,6 +111,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onCreateAgentAct={onCreateAgentAct}
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
+            getProjectId={getProjectId}
           />
         </React.Fragment>
       ))}
@@ -145,6 +148,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
           onCreateAgentAct={onCreateAgentAct}
           onCreateBackendCall={onCreateBackendCall}
           onCreateTask={onCreateTask}
+          getProjectId={getProjectId}
         />
       )}
     </>

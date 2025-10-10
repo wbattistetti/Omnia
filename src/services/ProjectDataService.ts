@@ -227,10 +227,10 @@ export const ProjectDataService = {
   // --- Draft storage helpers ---
   __draftInstances: new Map<string, Map<string, any>>(),
   isDraft(): boolean {
-    try { return Boolean((window as any).__projectDraft); } catch { return false; }
+    try { return Boolean((require('../state/runtime') as any).isDraft()); } catch { return false; }
   },
   getDraftKey(): string {
-    try { return String((window as any).__projectTempId || 'draft'); } catch { return 'draft'; }
+    try { return String((require('../state/runtime') as any).getTempId() || 'draft'); } catch { return 'draft'; }
   },
   getDraftStore(key: string): Map<string, any> {
     let s = this.__draftInstances.get(key);

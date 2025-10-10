@@ -55,6 +55,9 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [draft, setDraft] = useState<boolean>(false);
   const [tempId, setTempId] = useState<string | null>(null);
+  useEffect(() => {
+    import('../state/runtime').then(r => { r.setCurrentProjectId(currentProjectId); r.setDraft(draft); r.setTempId(tempId); }).catch(() => {});
+  }, [currentProjectId, draft, tempId]);
 
   const loadData = async () => {
     try {

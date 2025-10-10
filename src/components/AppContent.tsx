@@ -4,7 +4,6 @@ import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
 import Sidebar from './Sidebar/Sidebar';
 import { ProjectDataService } from '../services/ProjectDataService';
-import { useProjectDataUpdate } from '../context/ProjectDataContext';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
 import { NodeData, EdgeData } from './Flowchart/FlowEditor';
@@ -649,7 +648,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                   try {
                     const svc = await import('../services/ProjectDataService');
                     const dataSvc: any = (svc as any).ProjectDataService;
-                    const pid = (window as any).__currentProjectId || (window as any).__projectId;
+                    let pid: string | undefined = undefined;
+                    try { pid = ((require('../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch {}
                     if (pid && niSource?.instanceId) {
                       // fire-and-forget: non bloccare la chiusura del pannello
                       const text = nonInteractiveEditor?.value?.template || '';
