@@ -68,7 +68,7 @@ export default function PanelMessages({ ddt, translations, width = 520, styleChi
           dbg('render.item', { stepKey: it.stepKey, escIndex: it.escIndex, iconName, color: meta?.color });
           const groupBg = (group % 2 === 1) ? 'rgba(148,163,184,0.3)' : 'transparent';
           return (
-          <div key={it.id} title={it.pathLabel} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, display: 'flex', gap: 10, alignItems: 'flex-start', background: groupBg, breakInside: 'avoid-column', marginBottom: 10, width: '100%', display: 'inline-flex' }}>
+          <div key={it.id} title={it.pathLabel} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, display: 'flex', gap: 10, alignItems: 'flex-start', background: groupBg, breakInside: 'avoid-column', marginBottom: 10, width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 64, color: meta?.color }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                 {Icon ? <Icon size={17} color={meta?.color} /> : null}

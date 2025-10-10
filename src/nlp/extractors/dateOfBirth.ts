@@ -38,9 +38,12 @@ export const dateOfBirthExtractor: DataExtractor<DOB> = {
       const dates = (doc as any).dates().json({ partial: true }) as any[];
       if (dates && dates.length > 0) {
         const parts = (dates[0] && (dates[0] as any).parts) || {};
-        if (!year && parts.year) year = Number(parts.year);
-        if (!month && parts.month) month = Number(parts.month);
-        if (!day && parts.day) day = Number(parts.day);
+        const y = parts.year ? Number(parts.year) : undefined;
+        const m = parts.month ? Number(parts.month) : undefined;
+        const d = parts.day ? Number(parts.day) : undefined;
+        if (!prev?.year && y) prev = { ...(prev || {}), year: y };
+        if (!prev?.month && m) prev = { ...(prev || {}), month: m };
+        if (!prev?.day && d) prev = { ...(prev || {}), day: d };
       }
     } catch {}
     const year = parseYear(s) ?? prev?.year;

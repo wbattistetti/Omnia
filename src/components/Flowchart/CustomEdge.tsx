@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { EdgeProps, getBezierPath } from 'reactflow';
+import { EdgeProps, getBezierPath, getSmoothStepPath } from 'reactflow';
 import { Pencil, Trash2, Link, Link2Off as LinkOff, Settings, Wrench } from 'lucide-react';
 import { normalizeMarkerEnd } from '../../utils/markerUtils';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
@@ -148,14 +148,39 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   };
 
-  const edgePath = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  })[0];
+  // Decide il path in base allo stile richiesto
+  const styleKind = (data as any)?.style || 'smoothstep';
+  let edgePath = '';
+  if (styleKind === 'bezier') {
+    edgePath = getBezierPath({
+      sourceX, sourceY, sourcePosition,
+      targetX, targetY, targetPosition,
+    })[0];
+  } else if (styleKind === 'step') {
+    // Ortogonale con un singolo gomito (auto HV o VH)
+    const preferHV = Math.abs(sourceX - targetX) > Math.abs(sourceY - targetY);
+    if (preferHV) {
+      const midX = (sourceX + targetX) / 2;
+      edgePath = `M ${sourceX},${sourceY} L ${midX},${sourceY} L ${midX},${targetY} L ${targetX},${targetY}`;
+    } else {
+      const midY = (sourceY + targetY) / 2;
+      edgePath = `M ${sourceX},${sourceY} L ${sourceX},${midY} L ${targetX},${midY} L ${targetX},${targetY}`;
+    }
+  } else if (styleKind === 'HVH' || styleKind === 'VHV') {
+    if (styleKind === 'HVH') {
+      const midX = (sourceX + targetX) / 2;
+      edgePath = `M ${sourceX},${sourceY} L ${midX},${sourceY} L ${midX},${targetY} L ${targetX},${targetY}`;
+    } else {
+      const midY = (sourceY + targetY) / 2;
+      edgePath = `M ${sourceX},${sourceY} L ${sourceX},${midY} L ${targetX},${midY} L ${targetX},${targetY}`;
+    }
+  } else {
+    edgePath = getSmoothStepPath({
+      sourceX, sourceY, sourcePosition,
+      targetX, targetY, targetPosition,
+      borderRadius: 8, offset: 4,
+    })[0];
+  }
 
   // Midpoint for icons (usato solo per fallback)
   // const midX = (sourceX + targetX) / 2;
@@ -274,6 +299,42 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           className="react-flow__edge-path"
           d={edgePath}
           markerEnd={markerEnd ? `url(#${getNormalizedMarkerEnd(markerEnd)})` : undefined}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              const menu = document.createElement('div');
+              Object.assign(menu.style, {
+                position: 'fixed', left: `${e.clientX}px`, top: `${e.clientY}px`,
+                background: '#111827', color: '#E5E7EB', border: '1px solid #374151', borderRadius: '6px',
+                padding: '6px', zIndex: 99999, fontSize: '12px'
+              } as CSSStyleDeclaration);
+              const mk = (label: string, key: string) => {
+                const b = document.createElement('button');
+                b.textContent = label; b.style.display = 'block'; b.style.width = '100%';
+                b.style.background = 'transparent'; b.style.color = 'inherit'; b.style.border = 'none'; b.style.textAlign = 'left'; b.style.padding = '4px 8px';
+                b.onmouseenter = () => { b.style.background = '#1F2937'; };
+                b.onmouseleave = () => { b.style.background = 'transparent'; };
+                b.onclick = () => {
+                  try {
+                    if (typeof (props as any)?.data?.onUpdate === 'function') {
+                      (props as any).data.onUpdate({ ...(props as any).data, style: key });
+                    }
+                  } catch {}
+                  try { document.body.removeChild(menu); } catch {}
+                };
+                return b;
+              };
+              menu.appendChild(mk('Bezier', 'bezier'));
+              menu.appendChild(mk('Ortogonale (smooth)', 'smoothstep'));
+              menu.appendChild(mk('Ortogonale (step)', 'step'));
+              menu.appendChild(mk('HVH', 'HVH'));
+              menu.appendChild(mk('VHV', 'VHV'));
+              const close = () => { try { document.body.removeChild(menu); } catch {} };
+              setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
+              document.body.appendChild(menu);
+            } catch {}
+          }}
         />
         {/* Label/icone condizione al centro della linea */}
         {/* Mostra label e icone SEMPRE se la edge ha una label */}
