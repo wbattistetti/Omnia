@@ -700,7 +700,8 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
   if (isAgentAct) {
     const type = resolveActType(row as any, actFound) as any;
     const has = hasActDDT(row as any, actFound);
-    try { if (localStorage.getItem('debug.mode')) console.log('[Type][NodeRow]', { rowId: row.id, text: row.text, type, hasDDT: has, actFound: !!actFound }); } catch {}
+    // silent by default; enable only if strictly needed
+    // try { if (localStorage.getItem('debug.mode')) console.log('[Type][NodeRow]', { rowId: row.id, text: row.text, type, hasDDT: has, actFound: !!actFound }); } catch {}
     const visuals = getAgentActVisualsByType(type, has);
     Icon = visuals.Icon;
     labelTextColor = visuals.color;

@@ -1,8 +1,8 @@
-let pendingPayload: { pid: string; nodes: any[]; edges: any[] } | null = null;
+let pendingPayload: { pid: string; flowId: string; nodes: any[]; edges: any[] } | null = null;
 let timer: any = null;
 
-export function queueFlowPersist(pid: string, nodes: any[], edges: any[], delayMs: number = 120) {
-  pendingPayload = { pid, nodes, edges };
+export function queueFlowPersist(pid: string, flowId: string, nodes: any[], edges: any[], delayMs: number = 120) {
+  pendingPayload = { pid, flowId, nodes, edges };
   if (timer) clearTimeout(timer);
   timer = setTimeout(async () => {
     const p = pendingPayload;
@@ -10,7 +10,7 @@ export function queueFlowPersist(pid: string, nodes: any[], edges: any[], delayM
     timer = null;
     if (!p) return;
     try {
-      await fetch(`/api/projects/${encodeURIComponent(p.pid)}/flow`, {
+      await fetch(`/api/projects/${encodeURIComponent(p.pid)}/flow?flowId=${encodeURIComponent(p.flowId)}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: p.nodes, edges: p.edges })
       });
     } catch (e) {
@@ -27,7 +27,7 @@ export function flushFlowPersist() {
   const p = pendingPayload;
   pendingPayload = null;
   if (!p) return Promise.resolve();
-  return fetch(`/api/projects/${encodeURIComponent(p.pid)}/flow`, {
+  return fetch(`/api/projects/${encodeURIComponent(p.pid)}/flow?flowId=${encodeURIComponent(p.flowId)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: p.nodes, edges: p.edges })
   }).catch((e) => { try { console.warn('[FlowPersistService] flush PUT failed', e); } catch {} });
 }

@@ -338,16 +338,17 @@ app.post('/api/projects/bootstrap', async (req, res) => {
 // -----------------------------
 app.get('/api/projects/:pid/flow', async (req, res) => {
   const pid = req.params.pid;
+  const flowId = String(req.query.flowId || 'main');
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = await getProjectDb(client, pid);
-    const nodes = await db.collection('flow_nodes').find({}).toArray();
-    const edges = await db.collection('flow_edges').find({}).toArray();
-    logInfo('Flow.get', { projectId: pid, nodes: nodes?.length || 0, edges: edges?.length || 0 });
+    const nodes = await db.collection('flow_nodes').find({ flowId }).toArray();
+    const edges = await db.collection('flow_edges').find({ flowId }).toArray();
+    logInfo('Flow.get', { projectId: pid, flowId, nodes: nodes?.length || 0, edges: edges?.length || 0 });
     res.json({ nodes, edges });
   } catch (e) {
-    logError('Flow.get', e, { projectId: pid });
+    logError('Flow.get', e, { projectId: pid, flowId });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -356,6 +357,7 @@ app.get('/api/projects/:pid/flow', async (req, res) => {
 
 app.put('/api/projects/:pid/flow', async (req, res) => {
   const pid = req.params.pid;
+  const flowId = String(req.query.flowId || 'main');
   const payload = req.body || {};
   const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const edges = Array.isArray(payload.edges) ? payload.edges : [];
@@ -365,42 +367,64 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
     const db = await getProjectDb(client, pid);
     const ncoll = db.collection('flow_nodes');
     const ecoll = db.collection('flow_edges');
-    // Diff-only upsert: assume nodes/edges carry stable id fields
+    // Diff-only upsert per flowId: assume nodes/edges carry stable id fields
     const now = new Date();
     let nUpserts = 0, nDeletes = 0, eUpserts = 0, eDeletes = 0;
-    const existingNodes = await ncoll.find({}, { projection: { _id: 0, id: 1 } }).toArray();
-    const existingEdges = await ecoll.find({}, { projection: { _id: 0, id: 1 } }).toArray();
+    const existingNodes = await ncoll.find({ flowId }, { projection: { _id: 0, id: 1 } }).toArray();
+    const existingEdges = await ecoll.find({ flowId }, { projection: { _id: 0, id: 1 } }).toArray();
     const existingNodeIds = new Set(existingNodes.map(d => d.id));
     const existingEdgeIds = new Set(existingEdges.map(d => d.id));
 
     // Upsert nodes
     for (const n of nodes) {
-      await ncoll.updateOne({ id: n.id }, { $set: { ...n, updatedAt: now } }, { upsert: true });
+      await ncoll.updateOne({ id: n.id, flowId }, { $set: { ...n, flowId, updatedAt: now } }, { upsert: true });
       nUpserts++;
       existingNodeIds.delete(n.id);
     }
     // Delete removed nodes
     if (existingNodeIds.size) {
-      await ncoll.deleteMany({ id: { $in: Array.from(existingNodeIds) } });
+      await ncoll.deleteMany({ id: { $in: Array.from(existingNodeIds) }, flowId });
       nDeletes = existingNodeIds.size;
     }
 
     // Upsert edges
     for (const e of edges) {
-      await ecoll.updateOne({ id: e.id }, { $set: { ...e, updatedAt: now } }, { upsert: true });
+      await ecoll.updateOne({ id: e.id, flowId }, { $set: { ...e, flowId, updatedAt: now } }, { upsert: true });
       eUpserts++;
       existingEdgeIds.delete(e.id);
     }
     // Delete removed edges
     if (existingEdgeIds.size) {
-      await ecoll.deleteMany({ id: { $in: Array.from(existingEdgeIds) } });
+      await ecoll.deleteMany({ id: { $in: Array.from(existingEdgeIds) }, flowId });
       eDeletes = existingEdgeIds.size;
     }
 
-    logInfo('Flow.put', { projectId: pid, nodes: nodes.length, edges: edges.length, upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } });
+    logInfo('Flow.put', { projectId: pid, flowId, nodes: nodes.length, edges: edges.length, upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } });
     res.json({ ok: true, nodes: nodes.length, edges: edges.length });
   } catch (e) {
-    logError('Flow.put', e, { projectId: pid });
+    logError('Flow.put', e, { projectId: pid, flowId });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// List flows (by distinct flowId in flow_nodes)
+app.get('/api/projects/:pid/flows', async (req, res) => {
+  const pid = req.params.pid;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = await getProjectDb(client, pid);
+    const ncoll = db.collection('flow_nodes');
+    const list = await ncoll.aggregate([
+      { $group: { _id: '$flowId', updatedAt: { $max: '$updatedAt' } } },
+      { $project: { _id: 0, id: '$_id', updatedAt: 1 } },
+      { $sort: { updatedAt: -1 } }
+    ]).toArray();
+    res.json({ items: list });
+  } catch (e) {
+    logError('Flows.list', e, { projectId: pid });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();

@@ -4,6 +4,7 @@ import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 // import { LABEL_COLORS } from '../components/Flowchart/labelColors';
 // import { getLabelColor } from '../utils/labelColor';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
+import { isDraft as runtimeIsDraft, getTempId as runtimeGetTempId } from '../state/runtime';
 import { modeToType } from '../utils/normalizers';
 
 // Import template data
@@ -227,10 +228,10 @@ export const ProjectDataService = {
   // --- Draft storage helpers ---
   __draftInstances: new Map<string, Map<string, any>>(),
   isDraft(): boolean {
-    try { return Boolean((require('../state/runtime') as any).isDraft()); } catch { return false; }
+    try { return Boolean(runtimeIsDraft()); } catch { return false; }
   },
   getDraftKey(): string {
-    try { return String((require('../state/runtime') as any).getTempId() || 'draft'); } catch { return 'draft'; }
+    try { return String(runtimeGetTempId() || 'draft'); } catch { return 'draft'; }
   },
   getDraftStore(key: string): Map<string, any> {
     let s = this.__draftInstances.get(key);
@@ -358,15 +359,15 @@ export const ProjectDataService = {
     }
 
     // Legacy fallback to bundled JSON
-    projectData = {
-      name: '',
+          projectData = {
+            name: '',
       industry: projectIndustry || templateName,
-      agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
-      userActs: convertTemplateDataToCategories(languageData.userActs),
-      backendActions: convertTemplateDataToCategories(languageData.backendActions),
-      conditions: convertTemplateDataToCategories(languageData.conditions),
-      tasks: convertTemplateDataToCategories(languageData.tasks),
-      macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
+        agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
+        userActs: convertTemplateDataToCategories(languageData.userActs),
+        backendActions: convertTemplateDataToCategories(languageData.backendActions),
+        conditions: convertTemplateDataToCategories(languageData.conditions),
+        tasks: convertTemplateDataToCategories(languageData.tasks),
+        macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
     };
   },
 

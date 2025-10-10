@@ -56,11 +56,13 @@ export function hasActDDT(row: any, act: any): boolean {
 // New: resolve explicit ActType with type as primary source
 export function resolveActType(row: any, act: any): ActType {
   if (row?.type) {
-    try { if (dbgEnabled()) console.log('[Type][resolve]', { source: 'row.type(primary)', type: row.type, rowText: row?.text }); } catch {}
+    // quiet by default
+    // try { if (dbgEnabled()) console.log('[Type][resolve]', { source: 'row.type(primary)', type: row.type, rowText: row?.text }); } catch {}
     return row.type as ActType;
   }
   if (act?.type) {
-    try { if (dbgEnabled()) console.log('[Type][resolve]', { source: 'act.type', type: act.type, rowText: row?.text }); } catch {}
+    // quiet by default
+    // try { if (dbgEnabled()) console.log('[Type][resolve]', { source: 'act.type', type: act.type, rowText: row?.text }); } catch {}
     return act.type as ActType;
   }
   // Back-compat: map mode -> type when only legacy field is present
@@ -108,7 +110,8 @@ export function getAgentActVisualsByType(type: ActType, hasDDT: boolean) {
       color = green;
   }
 
-  try { if (dbgEnabled()) console.log('[Type][visuals]', { type, hasDDT, color }); } catch {}
+  // quiet by default
+  // try { if (dbgEnabled()) console.log('[Type][visuals]', { type, hasDDT, color }); } catch {}
   return { Icon, color };
 }
 

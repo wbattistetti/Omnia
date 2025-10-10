@@ -24,6 +24,7 @@ import { useNodeManager, NodeData } from '../../hooks/useNodeManager';
 import { useProjectDataUpdate, useProjectData } from '../../context/ProjectDataContext';
 import { ProjectDataService } from '../../services/ProjectDataService';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
+import { dlog } from '../../utils/debug';
 
 export type { NodeData } from '../../hooks/useNodeManager';
 
@@ -46,6 +47,7 @@ interface FlowEditorProps {
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>;
   currentProject: any;
   setCurrentProject: (project: any) => void;
+  onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
@@ -57,7 +59,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   nodes,
   setNodes,
   edges,
-  setEdges
+  setEdges,
+  onCreateTaskFlow
 }) => {
   // Ref sempre aggiornata con lo stato dei nodi
   const nodesRef = useRef(nodes);
@@ -1035,6 +1038,18 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           try {
             const ids = Array.isArray(sel?.nodes) ? sel.nodes.map((n: any) => n.id) : [];
             setSelectedNodeIds(ids);
+            // Debug selezione solo su flag esplicito
+            dlog('flow', '[selectionChange]', { count: ids.length });
+            // verifica presenza del rettangolo di selezione e stili calcolati
+            setTimeout(() => {
+              try {
+                const el = document.querySelector('.react-flow__selection') as HTMLElement | null;
+                if (el) {
+                  const cs = getComputedStyle(el);
+                  dlog('flow', '[selectionRect]', { bg: cs.backgroundColor });
+                }
+              } catch {}
+            }, 0);
           } catch {}
         }}
         panOnDrag={[2]}
@@ -1097,6 +1112,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             className="px-2 py-1 text-xs rounded border bg-white border-slate-300 text-slate-700 shadow-sm"
             onClick={() => {
               try {
+                dlog('flow', '[CreateTask] click', { selectedNodeIds });
                 const sel = nodes.filter(n => selectedNodeIds.includes(n.id));
                 if (sel.length === 0) return;
                 const minX = Math.min(...sel.map(n => (n.position as any).x));
@@ -1113,13 +1129,21 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
                 const originalEdges = edges; // snapshot per undo
                 const taskId = `task_${Date.now()}`;
+                // Prepara payload per il sotto-flusso (nodi/edge interni)
+                const subflowNodes = sel.map(n => ({ ...n }));
+                const subflowEdges = internalEdges.map(e => ({ ...e }));
+                dlog('flow', '[CreateTask] prepared', { taskId, nodes: subflowNodes.map(n => n.id), edges: subflowEdges.map(e => e.id) });
 
                 const cmd: Command = {
                   label: 'Collapse to Task',
                   do: () => {
                     setNodes(nds => {
                       const filtered = nds.filter(n => !selSet.has(n.id));
-                      const newNode = { id: taskId, type: 'task' as const, position: { x: cx, y: cy }, data: { title: '', editOnMount: true, showGuide: true, onUpdate: (updates: any) => updateNode(taskId, updates) } };
+                      const onCommitTitle = (finalTitle: string) => {
+                        try { onCreateTaskFlow && onCreateTaskFlow(taskId, finalTitle, subflowNodes as any, subflowEdges as any); } catch {}
+                      };
+                      const onCancelTitle = () => { try { undo(); } catch {} };
+                      const newNode = { id: taskId, type: 'task' as const, position: { x: cx, y: cy }, data: { title: '', flowId: taskId, editOnMount: true, showGuide: true, onUpdate: (updates: any) => updateNode(taskId, updates), onCommitTitle, onCancelTitle } };
                       return [...filtered, newNode as any];
                     });
                     setEdges(eds => {

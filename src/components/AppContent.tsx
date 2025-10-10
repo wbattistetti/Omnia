@@ -16,6 +16,7 @@ import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
 // import { DockablePanelsHandle } from './DockablePanels';
 // import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
+import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
@@ -55,6 +56,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   onPlayNode
 }) => {
   const pdUpdate = useProjectDataUpdate();
+  const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
   let refreshData: () => Promise<void> = async () => {};
   try {
@@ -556,19 +558,23 @@ export const AppContent: React.FC<AppContentProps> = ({
                 </div>
               ) : (
                 <div style={{ position: 'relative' }}>
-                  <FlowEditor
-                  nodes={nodes}
-                  setNodes={setNodes}
-                  edges={edges}
-                  setEdges={setEdges}
-                  currentProject={currentProject}
-                  setCurrentProject={setCurrentProject}
-                  onPlayNode={onPlayNode}
-                  testPanelOpen={testPanelOpen}
-                  setTestPanelOpen={setTestPanelOpen}
-                  testNodeId={testNodeId}
-                  setTestNodeId={setTestNodeId}
-                  />
+                  {currentPid ? (
+                    <FlowWorkspace projectId={currentPid} />
+                  ) : (
+                    <FlowEditor
+                      nodes={nodes}
+                      setNodes={setNodes}
+                      edges={edges}
+                      setEdges={setEdges}
+                      currentProject={currentProject}
+                      setCurrentProject={setCurrentProject}
+                      onPlayNode={onPlayNode}
+                      testPanelOpen={testPanelOpen}
+                      setTestPanelOpen={setTestPanelOpen}
+                      testNodeId={testNodeId}
+                      setTestNodeId={setTestNodeId}
+                    />
+                  )}
                   {!showGlobalDebugger && (
                     <ConditionEditor
                       open={conditionEditorOpen}

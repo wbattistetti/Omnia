@@ -92,14 +92,16 @@
 }
 
 /* React Flow - Selection rectangle: azzurrino chiaro semitrasparente */
-.react-flow__selection {
+.react-flow__selection, div.react-flow__selection, .react-flow .react-flow__selection {
   background-color: rgba(125, 211, 252, 0.18) !important; /* sky-300 ~ #7dd3fc */
   border: 1px solid rgba(56, 189, 248, 0.9) !important;   /* sky-400 ~ #38bdf8 */
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25) inset;
 }
 
 .react-flow__selection:active,
-.react-flow__selection.dragging {
+.react-flow__selection.dragging,
+.react-flow .react-flow__selection:active,
+.react-flow .react-flow__selection.dragging {
   background-color: rgba(125, 211, 252, 0.26) !important;
   border-color: rgba(14, 165, 233, 0.95) !important;       /* sky-500 ~ #0ea5e9 */
 }
