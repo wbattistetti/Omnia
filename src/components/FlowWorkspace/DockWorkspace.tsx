@@ -7,15 +7,54 @@ import { dlog } from '../../utils/debug';
 type LayoutMode = 'single' | 'twoCols' | 'twoRows' | 'grid2x2';
 type PaneKey = 'tl' | 'tr' | 'bl' | 'br';
 type PaneMap = Partial<Record<PaneKey, string>>;
+type DockRegion = 'left' | 'right' | 'top' | 'bottom' | 'center';
 
-const Pane: React.FC<{ title: string; onDropFlow: (fid: string) => void; children?: React.ReactNode }> = ({ title, onDropFlow, children }) => {
+function computeRegion(e: React.DragEvent<HTMLDivElement>): DockRegion {
+  const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const w = rect.width;
+  const h = rect.height;
+  const left = x < w * 0.33;
+  const right = x > w * 0.67;
+  const top = y < h * 0.33;
+  const bottom = y > h * 0.67;
+  if (!left && !right && !top && !bottom) return 'center';
+  if (left) return 'left';
+  if (right) return 'right';
+  if (top) return 'top';
+  if (bottom) return 'bottom';
+  return 'center';
+}
+
+const Pane: React.FC<{ title: string; onDropFlow: (fid: string, region: DockRegion) => void; children?: React.ReactNode }> = ({ title, onDropFlow, children }) => {
+  const [region, setRegion] = React.useState<DockRegion | null>(null);
+  const hostRef = React.useRef<HTMLDivElement>(null);
+
+  const overlayRect = React.useMemo(() => {
+    if (!region || !hostRef.current) return null;
+    const r = hostRef.current.getBoundingClientRect();
+    const w = r.width, h = r.height;
+    const rects: Record<DockRegion, {x:number;y:number;w:number;h:number}> = {
+      left: { x: 0, y: 0, w: w * 0.5, h },
+      right: { x: w * 0.5, y: 0, w: w * 0.5, h },
+      top: { x: 0, y: 0, w, h: h * 0.5 },
+      bottom: { x: 0, y: h * 0.5, w, h: h * 0.5 },
+      center: { x: w * 0.15, y: h * 0.15, w: w * 0.7, h: h * 0.7 }
+    };
+    return rects[region];
+  }, [region]);
+
   return (
     <div
+      ref={hostRef}
       className="relative border border-slate-200 rounded h-full flex flex-col min-h-0"
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={(e) => { e.preventDefault(); setRegion(computeRegion(e)); }}
+      onDragLeave={() => setRegion(null)}
       onDrop={(e) => {
         const fid = e.dataTransfer.getData('text/flow-id');
-        if (fid) onDropFlow(fid);
+        if (fid && region) onDropFlow(fid, region);
+        setRegion(null);
       }}
       style={{ minWidth: 200, minHeight: 160, background: '#fff' }}
     >
@@ -27,6 +66,21 @@ const Pane: React.FC<{ title: string; onDropFlow: (fid: string) => void; childre
       <div className="flex-1 min-h-0 h-full">
         {children}
       </div>
+      {overlayRect && (
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className="absolute"
+            style={{
+              left: overlayRect.x,
+              top: overlayRect.y,
+              width: overlayRect.w,
+              height: overlayRect.h,
+              background: 'rgba(59,130,246,0.18)',
+              border: '1px solid rgba(59,130,246,0.9)'
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -43,12 +97,36 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
     dlog('flow', '[dock.attach]', { key, fid });
   };
 
+  const attachWithRegion = (defaultKey: PaneKey, region: DockRegion, fid: string) => {
+    // Mapping semplice per layout: scegli il pane coerente
+    if (mode === 'twoCols') {
+      const key = region === 'right' ? 'tr' : 'tl';
+      attach(key, fid);
+      return;
+    }
+    if (mode === 'twoRows') {
+      const key = region === 'bottom' ? 'bl' : 'tl';
+      attach(key, fid);
+      return;
+    }
+    if (mode === 'grid2x2') {
+      let key: PaneKey = defaultKey;
+      if (region === 'left' || region === 'top') key = defaultKey === 'tr' || defaultKey === 'br' ? (defaultKey === 'tr' ? 'tl' : 'bl') : defaultKey;
+      if (region === 'right') key = defaultKey === 'tl' || defaultKey === 'bl' ? (defaultKey === 'tl' ? 'tr' : 'br') : defaultKey;
+      if (region === 'bottom') key = defaultKey === 'tl' || defaultKey === 'tr' ? (defaultKey === 'tl' ? 'bl' : 'br') : defaultKey;
+      attach(key, fid);
+      return;
+    }
+    // single: sempre tl
+    attach('tl', fid);
+  };
+
   const grid = (() => {
     switch (mode) {
       case 'single':
         return (
           <div className="flex-1 min-h-0 h-full">
-            <Pane title="Main" onDropFlow={(fid) => attach('tl', fid)}>
+            <Pane title="Main" onDropFlow={(fid, region) => attachWithRegion('tl', region, fid)}>
               {panes.tl && (
                 <FlowCanvasHost
                   projectId={projectId}
@@ -65,7 +143,7 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
       case 'twoCols':
         return (
           <div className="grid grid-cols-2 gap-2 flex-1 min-h-0">
-            <Pane title="Left" onDropFlow={(fid) => attach('tl', fid)}>
+            <Pane title="Left" onDropFlow={(fid, region) => attachWithRegion('tl', region, fid)}>
               {panes.tl && (
                 <FlowCanvasHost
                   projectId={projectId}
@@ -77,7 +155,7 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
                 />
               )}
             </Pane>
-            <Pane title="Right" onDropFlow={(fid) => attach('tr', fid)}>
+            <Pane title="Right" onDropFlow={(fid, region) => attachWithRegion('tr', region, fid)}>
               {panes.tr && (
                 <FlowCanvasHost
                   projectId={projectId}
@@ -94,7 +172,7 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
       case 'twoRows':
         return (
           <div className="grid grid-rows-2 gap-2 flex-1 min-h-0">
-            <Pane title="Top" onDropFlow={(fid) => attach('tl', fid)}>
+            <Pane title="Top" onDropFlow={(fid, region) => attachWithRegion('tl', region, fid)}>
               {panes.tl && (
                 <FlowCanvasHost
                   projectId={projectId}
@@ -106,7 +184,7 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
                 />
               )}
             </Pane>
-            <Pane title="Bottom" onDropFlow={(fid) => attach('bl', fid)}>
+            <Pane title="Bottom" onDropFlow={(fid, region) => attachWithRegion('bl', region, fid)}>
               {panes.bl && (
                 <FlowCanvasHost
                   projectId={projectId}
@@ -123,7 +201,7 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
       default:
         return (
           <div className="grid grid-cols-2 grid-rows-2 gap-2 flex-1 min-h-0">
-            <Pane title="Top Left" onDropFlow={(fid) => attach('tl', fid)}>
+            <Pane title="Top Left" onDropFlow={(fid, region) => attachWithRegion('tl', region, fid)}>
               {panes.tl && (
                 <FlowCanvasHost
                   projectId={projectId}
@@ -135,7 +213,7 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
                 />
               )}
             </Pane>
-            <Pane title="Top Right" onDropFlow={(fid) => attach('tr', fid)}>
+            <Pane title="Top Right" onDropFlow={(fid, region) => attachWithRegion('tr', region, fid)}>
               {panes.tr && (
                 <FlowCanvasHost
                   projectId={projectId}
@@ -147,7 +225,7 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
                 />
               )}
             </Pane>
-            <Pane title="Bottom Left" onDropFlow={(fid) => attach('bl', fid)}>
+            <Pane title="Bottom Left" onDropFlow={(fid, region) => attachWithRegion('bl', region, fid)}>
               {panes.bl && (
                 <FlowCanvasHost
                   projectId={projectId}
@@ -159,7 +237,7 @@ const DockInner: React.FC<{ projectId: string }> = ({ projectId }) => {
                 />
               )}
             </Pane>
-            <Pane title="Bottom Right" onDropFlow={(fid) => attach('br', fid)}>
+            <Pane title="Bottom Right" onDropFlow={(fid, region) => attachWithRegion('br', region, fid)}>
               {panes.br && (
                 <FlowCanvasHost
                   projectId={projectId}

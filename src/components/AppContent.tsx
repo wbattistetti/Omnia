@@ -18,6 +18,12 @@ import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
 import { FlowEditor } from './Flowchart/FlowEditor';
 import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
+import { DockManager } from './Dock/DockManager';
+import { DockNode, DockTab } from '../dock/types';
+import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
+import { FlowWorkspaceProvider } from '../flows/FlowStore.tsx';
+import { useFlowActions } from '../flows/FlowStore.tsx';
+import { addTabNextTo } from '../dock/ops';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
@@ -58,6 +64,26 @@ export const AppContent: React.FC<AppContentProps> = ({
 }) => {
   const pdUpdate = useProjectDataUpdate();
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
+  // Dock tree (new dock manager)
+  const [dockTree, setDockTree] = useState<DockNode>({ kind: 'tabset', id: 'ts_main', tabs: [{ id: 'tab_main', title: 'Main', flowId: 'main' }], active: 0 });
+
+  // Wrapper che vive sotto il FlowWorkspaceProvider, così può usare useFlowActions
+  const FlowTabContent: React.FC<{ tab: DockTab }> = ({ tab }) => {
+    const { upsertFlow, openFlowBackground } = useFlowActions();
+    return (
+      <FlowCanvasHost
+        projectId={currentPid as string}
+        flowId={tab.flowId}
+        onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
+          // 1) upsert nel workspace per avere contenuto immediato
+          upsertFlow({ id: newFlowId, title: title || newFlowId, nodes, edges });
+          openFlowBackground(newFlowId);
+          // 2) aggiungi tab accanto a quella corrente nel dock tree
+          setDockTree(prev => addTabNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', flowId: newFlowId }));
+        }}
+      />
+    );
+  };
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
   let refreshData: () => Promise<void> = async () => {};
   try {
@@ -564,7 +590,13 @@ export const AppContent: React.FC<AppContentProps> = ({
               ) : (
                 <div style={{ position: 'relative' }}>
                   {currentPid ? (
-                    <DockWorkspace projectId={currentPid} />
+                    <FlowWorkspaceProvider>
+                      <DockManager
+                        root={dockTree}
+                        setRoot={setDockTree}
+                      renderTabContent={(tab) => (<FlowTabContent tab={tab} />)}
+                      />
+                    </FlowWorkspaceProvider>
                   ) : (
                     <FlowEditor
                       nodes={nodes}
