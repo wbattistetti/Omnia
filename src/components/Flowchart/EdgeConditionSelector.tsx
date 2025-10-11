@@ -35,10 +35,12 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   const [showIntellisense, setShowIntellisense] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus input quando il componente viene montato
+  // Auto-focus input e apri subito l'intellisense quando il componente viene montato
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
+      setShowIntellisense(true);
+      try { console.log('[CondUI][mount] focus + showIntellisense'); } catch {}
     }
   }, []);
 
@@ -64,15 +66,13 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
         onClose();
       }
     } else if (e.key === 'Enter') {
-      // Quick-create condition always on Enter
+      // Conferma: se non è selezionato un item, crea/usa condizione con la label digitata
       const name = (inputValue || '').trim();
-      if (!name) return;
       e.preventDefault();
       e.stopPropagation();
+      if (!name) return;
       try { console.log('[CondFlow] enter', { name }); } catch {}
-      if (onCreateCondition) {
-        onCreateCondition(name, 'industry');
-      }
+      if (onCreateCondition) onCreateCondition(name, 'industry');
       setShowIntellisense(false);
     }
   };
@@ -81,15 +81,13 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setInputValue(newValue);
-    if (newValue.trim().length > 0) {
-      setShowIntellisense(true);
-    } else {
-      setShowIntellisense(false);
-    }
+    // mantieni aperto; il provider interno filtrerà i risultati
+    setShowIntellisense(true);
   };
 
   // Selezione da intellisense
   const handleIntellisenseSelect = (item: IntellisenseItem) => {
+    try { console.log('[CondUI][select]', item); } catch {}
     onSelectCondition(item);
     setShowIntellisense(false);
   };
@@ -100,6 +98,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
 
   // Gestione creazione nuova condizione
   const handleCreateCondition = (name: string, scope?: 'global' | 'industry') => {
+    try { console.log('[CondUI][create]', { name, scope }); } catch {}
     if (onCreateCondition) {
       onCreateCondition(name, scope);
       setShowIntellisense(false);
@@ -115,12 +114,28 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
     <div
       className="edge-condition-selector fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
       style={{
-        left: position.x,
+        // allinea il top del popup esattamente al punto, centrato orizzontalmente (nessun gap)
         top: position.y,
+        left: position.x,
+        transform: 'translate(-50%, 0)',
         width: 520,
         minWidth: 360
       }}
     >
+      {/* Arrow anchor (punta il punto di rilascio, dal bordo superiore del popup) */}
+      <div
+        style={{
+          position: 'absolute',
+          top: -5,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 0,
+          height: 0,
+          borderLeft: '7px solid transparent',
+          borderRight: '7px solid transparent',
+          borderBottom: '7px solid rgba(209,213,219,1)'
+        }}
+      />
       {/* Header */}
       <div className="text-sm font-medium text-gray-700 mb-2">
         Seleziona condizione

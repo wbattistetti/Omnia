@@ -20,8 +20,10 @@ export function useConnectionMenu() {
   }, []);
 
   const openMenu = useCallback((position, sourceNodeId, sourceHandleId) => {
+    try { console.log('[ConnMenu][open]', { position, sourceNodeId, sourceHandleId }); } catch {}
+    const cur = connectionMenuRef.current;
     const next = {
-      ...connectionMenu,
+      ...cur,
       show: true,
       position,
       sourceNodeId,
@@ -32,11 +34,13 @@ export function useConnectionMenu() {
       tempEdgeId: null,
     };
     setMenu(next);
-  }, [connectionMenu, setMenu]);
+  }, [setMenu]);
 
   const closeMenu = useCallback(() => {
+    try { console.log('[ConnMenu][close]'); } catch {}
+    const cur = connectionMenuRef.current;
     const next = {
-      ...connectionMenu,
+      ...cur,
       show: false,
       position: { x: 0, y: 0 },
       sourceNodeId: null,
@@ -47,27 +51,32 @@ export function useConnectionMenu() {
       tempEdgeId: null,
     };
     setMenu(next);
-  }, [connectionMenu, setMenu]);
+  }, [setMenu]);
 
   const setSource = useCallback((sourceNodeId, sourceHandleId) => {
-    const next = { ...connectionMenu, sourceNodeId, sourceHandleId };
+    const cur = connectionMenuRef.current;
+    const next = { ...cur, sourceNodeId, sourceHandleId };
     setMenu(next);
-  }, [connectionMenu, setMenu]);
+  }, [setMenu]);
 
   const setTarget = useCallback((targetNodeId, targetHandleId) => {
-    const next = { ...connectionMenu, targetNodeId, targetHandleId };
+    const cur = connectionMenuRef.current;
+    const next = { ...cur, targetNodeId, targetHandleId };
     setMenu(next);
-  }, [connectionMenu, setMenu]);
+  }, [setMenu]);
 
   const setTemp = useCallback((tempNodeId, tempEdgeId) => {
-    const next = { ...connectionMenu, tempNodeId, tempEdgeId };
+    try { console.log('[ConnMenu][setTemp]', { tempNodeId, tempEdgeId }); } catch {}
+    const cur = connectionMenuRef.current;
+    const next = { ...cur, tempNodeId, tempEdgeId };
     setMenu(next);
-  }, [connectionMenu, setMenu]);
+  }, [setMenu]);
 
   const setPosition = useCallback((position) => {
-    const next = { ...connectionMenu, position };
+    const cur = connectionMenuRef.current;
+    const next = { ...cur, position };
     setMenu(next);
-  }, [connectionMenu, setMenu]);
+  }, [setMenu]);
 
   return {
     connectionMenu,
