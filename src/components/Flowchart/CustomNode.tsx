@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { typeToMode } from '../../utils/normalizers';
 import { NodeProps } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
+import { NodeToolbar } from './NodeToolbar';
 import { NodeHandles } from './NodeHandles';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
@@ -61,9 +62,36 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [isEditingNode, setIsEditingNode] = useState(false);
   const [nodeTitle, setNodeTitle] = useState(data.title || '');
   const [isHoveredNode, setIsHoveredNode] = useState(false);
+  const [isHoverHeader, setIsHoverHeader] = useState(false);
 
   const hasTitle = (nodeTitle || '').trim().length > 0;
-  const showHeader = hasTitle || isHoveredNode || isEditingNode;
+  // Header visibile se c'è un titolo oppure se l'utente ha richiesto l'editing del titolo
+  const showHeader = hasTitle || isEditingNode;
+
+  // Traccia ultima posizione del mouse per ripristinare correttamente l'hover post-edit
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      try { (window as any).__lastMouseX = e.clientX; (window as any).__lastMouseY = e.clientY; } catch {}
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
+    return () => window.removeEventListener('mousemove', onMove);
+  }, []);
+
+  const handleEndTitleEditing = () => {
+    setIsEditingNode(false);
+    setIsHoverHeader(false);
+    try {
+      const rect = rootRef.current?.getBoundingClientRect();
+      const mx = (window as any).__lastMouseX; const my = (window as any).__lastMouseY;
+      if (rect && typeof mx === 'number' && typeof my === 'number') {
+        const inside = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+        setIsHoveredNode(inside);
+      }
+    } catch {}
+  };
+
+  // Se l'header viene nascosto, azzera sempre lo stato hover header
+  useEffect(() => { if (!showHeader) setIsHoverHeader(false); }, [showHeader]);
   useEffect(() => {
     // debug removed
   }, [showHeader, hasTitle, isHoveredNode, isEditingNode, id]);
@@ -534,13 +562,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       onMouseEnter={() => { setIsHoveredNode(true); }}
       onMouseLeave={() => { setIsHoveredNode(false); }}
       onMouseDownCapture={(e) => {
-        if (!editingRowId) return;
+        // Permetti di trascinare il nodo prendendo il corpo (evita solo l'input riga)
         const t = e.target as HTMLElement;
-        const isAnchor = t?.classList?.contains('rigid-anchor') || !!t?.closest?.('.rigid-anchor');
         const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-        // Blocca solo interazioni sull'input riga; consenti header e ancora (drag)
-        if (isInput && !isAnchor) { e.stopPropagation(); }
+        if (!isInput) {
+          // Non bloccare la propagazione: lascia passare a React Flow per il drag
+          return;
+        }
+        // Se stai interagendo con l'input riga, non trascinare
+        e.stopPropagation();
       }}
+      
       onMouseUpCapture={(e) => {
         if (!editingRowId) return;
         const t = e.target as HTMLElement;
@@ -549,27 +581,37 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       }}
       onFocusCapture={() => { /* no-op: lasciamo passare focus per drag header */ }}
     >
-      <div className="relative">
-        {/* Header sovrapposto: si espande verso l'alto senza spostare il contenuto del nodo */}
-        {showHeader && (
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', pointerEvents: 'auto' }}>
-            <NodeHeader
-              title={nodeTitle}
-              onDelete={handleDeleteNode}
-              onToggleEdit={() => setIsEditingNode(!isEditingNode)}
-              onTitleUpdate={handleTitleUpdate}
-              isEditing={isEditingNode}
-              hasUnchecked={nodeRows.some(r => r.included === false)}
-              hideUnchecked={(data as any)?.hideUncheckedRows === true}
-              onToggleHideUnchecked={() => {
-                if (typeof data.onUpdate === 'function') {
-                  data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
-                }
-              }}
-            />
-          </div>
-        )}
-      </div>
+      {/* Header visibile solo se esiste un titolo esplicito */}
+      {showHeader && (
+        <div
+          style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', pointerEvents: 'auto' }}
+          onMouseEnter={() => setIsHoverHeader(true)}
+          onMouseLeave={() => setIsHoverHeader(false)}
+        >
+          <NodeHeader
+            title={nodeTitle}
+            onDelete={handleDeleteNode}
+            onToggleEdit={handleEndTitleEditing}
+            onTitleUpdate={handleTitleUpdate}
+            isEditing={isEditingNode}
+            startEditingTitle={isEditingNode}
+            hasUnchecked={nodeRows.some(r => r.included === false)}
+            hideUnchecked={(data as any)?.hideUncheckedRows === true}
+            onToggleHideUnchecked={() => {
+              if (typeof data.onUpdate === 'function') {
+                data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {/* Toolbar del nodo: sempre visibile sopra il nodo (sopra l'header se presente) quando hover/selected */}
+      {(isHoveredNode || selected) && !isEditingNode && !isHoverHeader && (
+        <div style={{ position: 'absolute', right: 0, bottom: 'calc(100% + 1px)' }}>
+          <NodeToolbar onDelete={handleDeleteNode} onEditTitle={() => setIsEditingNode(true)} />
+        </div>
+      )}
       <div className="px-1.5" ref={rowsContainerRef}>
         <NodeRowList
           rows={((data as any)?.hideUncheckedRows === true) ? displayRows.filter(r => r.included !== false) : displayRows}

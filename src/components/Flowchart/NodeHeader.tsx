@@ -26,13 +26,14 @@ export interface NodeHeaderProps {
   hasUnchecked?: boolean; // se esistono righe deselezionate
   hideUnchecked?: boolean; // stato corrente: nascondi righe deselezionate
   onToggleHideUnchecked?: () => void; // toggle
+  nodeId?: string; // per indirizzare eventi esterni (toolbar)
 }
 
 /**
  * Header del nodo: mostra titolo, azioni di editing e delete.
  */
 export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
-  const { title, onTitleUpdate, startEditingTitle, leftIcon, bgClass, borderBottom, hasUnchecked, hideUnchecked, onToggleHideUnchecked } = props;
+  const { title, onTitleUpdate, startEditingTitle, leftIcon, bgClass, borderBottom, hasUnchecked, hideUnchecked, onToggleHideUnchecked, nodeId } = props;
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(title);
   const [isHovered, setIsHovered] = useState(false);
@@ -81,6 +82,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
     onTitleUpdate(tempTitle.trim() || 'Untitled Node');
     setIsEditingTitle(false);
     setShowIntellisense(false);
+    try { props.onToggleEdit && props.onToggleEdit(); } catch {}
   };
 
   // Annulla editing titolo
@@ -88,6 +90,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
     setTempTitle(title);
     setIsEditingTitle(false);
     setShowIntellisense(false);
+    try { props.onToggleEdit && props.onToggleEdit(); } catch {}
   };
 
   // Gestione tasti Enter/Escape
@@ -113,19 +116,10 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
 
   return (
     <div 
-      className={`relative flex items-center justify-between ${bgClass || 'bg-gray-200'} p-2 rounded-t-lg ${borderBottom === false ? '' : 'border-b border-slate-600'}`}
+      className={`relative flex items-center ${bgClass || 'bg-slate-700'} text-white px-2 py-2 rounded-t-lg ${borderBottom === false ? '' : 'border-b border-slate-600'}`}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={(e) => {
-        try {
-          const rtAny = e.relatedTarget as any;
-          const isNode = rtAny && typeof rtAny === 'object' && typeof rtAny.nodeType === 'number';
-          if (iconBarRef.current && isNode && iconBarRef.current.contains(rtAny as Node)) {
-            return;
-          }
-        } catch {}
-        setIsHovered(false);
-      }}
-      style={{ cursor: isHovered ? 'grab' : 'default' }}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{ cursor: isHovered ? 'grab' : 'default', width: '100%' }}
     >
       {/* No transparent bridges: keep header clean for text events */}
       {/* Titolo + editing */}
@@ -140,8 +134,9 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
               onChange={(e) => setTempTitle(e.target.value)}
               onKeyDown={handleKeyDown}
               autoFocus
-              className="min-w-0 bg-slate-600 text-white text-[8px] px-1.5 py-1 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 border-2 border-purple-400 nodrag"
-              style={{ width: 'calc(100% - 56px)', maxWidth: 'calc(100% - 56px)' }}
+              className="node-title-input min-w-0 bg-slate-600 text-white text-[10px] px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 border border-purple-400 nodrag"
+              data-node-id={nodeId || ''}
+              style={{ width: '100%', paddingRight: 8 }}
               onFocus={() => {
                 if (titleInputRef.current) {
                   const rect = titleInputRef.current.getBoundingClientRect();
@@ -150,20 +145,33 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
                 }
               }}
             />
-            <button
-              onClick={handleTitleSave}
-              className="ml-1 p-1 text-green-400 hover:text-green-300 transition-colors"
-              title="Conferma"
-            >
-              <Check className="w-3 h-3" />
-            </button>
-            <button
-              onClick={handleTitleCancel}
-              className="ml-1 p-1 text-red-400 hover:text-red-300 transition-colors"
-              title="Annulla"
-            >
-              <X className="w-3 h-3" />
-            </button>
+            {(() => {
+              const hasText = (tempTitle || '').trim().length > 0;
+              return (
+                <>
+                  {/* X sempre visibile: subito fuori dal bordo destro */}
+                  <button
+                    onClick={handleTitleCancel}
+                    className="p-0 text-red-300 hover:text-red-200"
+                    title="Annulla"
+                    style={{ position: 'absolute', right: -12, top: '50%', transform: 'translateY(-50%)', zIndex: 4 }}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                  {/* ✓ solo dopo input: ancora più a destra della X */}
+                  {hasText && (
+                    <button
+                      onClick={handleTitleSave}
+                      className="p-0 text-green-300 hover:text-green-200"
+                      title="Conferma"
+                      style={{ position: 'absolute', right: -28, top: '50%', transform: 'translateY(-50%)', zIndex: 4 }}
+                    >
+                      <Check className="w-3 h-3" />
+                    </button>
+                  )}
+                </>
+              );
+            })()}
             {/* IntellisenseMenu come portale */}
             {showIntellisense &&
               createPortal(
@@ -189,7 +197,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
           </div>
         ) : (
           <h3
-            className="text-black text-[8px] font-semibold cursor-text hover:text-purple-300 transition-colors truncate"
+            className="text-black text-[8px] font-semibold cursor-text hover:text-purple-300 transition-colors truncate flex-1"
             onMouseDown={(e) => {
               // Approximate caret index from click X over title width
               try {
@@ -210,73 +218,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
           </h3>
         )}
       </div>
-      {/* Icon bar: appare solo con hover, posizionata FUORI dall'header (sopra, senza gap) */}
-      {isHovered && (
-        <div
-          className="absolute right-0 flex items-center gap-2 z-20"
-          style={{ bottom: '100%', background: 'transparent', border: 'none', boxShadow: 'none', height: 16, alignItems: 'center' }}
-          ref={iconBarRef}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-        >
-          {/* Toggle hide/show unchecked - placed to the LEFT of trash */}
-          {hasUnchecked && (
-            <button
-              className="p-0"
-              title={hideUnchecked ? 'Show unchecked rows' : 'Hide unchecked rows'}
-              style={{ background: 'none', border: 'none' }}
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleHideUnchecked && onToggleHideUnchecked(); }}
-            >
-              {hideUnchecked ? (
-                <Eye className="w-3 h-3 text-slate-500 hover:text-slate-800" />
-              ) : (
-                <EyeOff className="w-3 h-3 text-slate-500 hover:text-slate-800" />
-              )}
-            </button>
-          )}
-          <button className="p-0" title="Edit" style={{ background: 'none', border: 'none' }}>
-            <Edit3 className="w-3 h-3 text-slate-500 hover:text-green-500" />
-          </button>
-          <button
-            className="p-0"
-            title="Delete"
-            style={{ background: 'none', border: 'none' }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              try {
-                // Cerca callback nel parent data/onDelete
-                const deleteEvent = new CustomEvent('flow:node:delete', { bubbles: true });
-                (e.currentTarget as HTMLElement).dispatchEvent(deleteEvent);
-              } catch {}
-              // Fallback: prova a invocare prop se disponibile (non visibile qui perché destrutturata)
-              try { (props as any)?.onDelete?.(); } catch {}
-            }}
-          >
-            <Trash2 className="w-3 h-3 text-slate-500 hover:text-red-500" />
-          </button>
-          <button className="p-0" title="Play" style={{ background: 'none', border: 'none' }}>
-            <Play className="w-3 h-3 text-slate-500 hover:text-emerald-500" />
-          </button>
-        </div>
-      )}
-
-      {/* Anchor handle per drag "rigido" dell'intero cluster */}
-      <div title="Drag to move with descendants" className="rigid-anchor" style={{ cursor: 'grab' }}
-           onMouseDown={() => {
-             try {
-               (window as any).__flowDragMode = 'rigid';
-               // gated logs removed
-             } catch {}
-           }}
-           onMouseUp={() => {
-             try {
-               (window as any).__flowDragMode = undefined;
-               // gated logs removed
-             } catch {}
-           }}>
-        {isHovered && <Anchor className="w-3 h-3 text-slate-700" />}
-      </div>
+      {/* Toolbar/anchor non presenti nell'header: la toolbar vive fuori dall'header */}
     </div>
   );
 };
