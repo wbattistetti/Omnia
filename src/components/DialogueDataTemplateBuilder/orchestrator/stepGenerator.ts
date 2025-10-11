@@ -124,11 +124,18 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
             body = JSON.stringify({ meaning: data.label || data.name || '', desc: '', ...extraBody });
           }
           try {
-          const res = await fetch(`${stepDef.endpoint}`, {
+          const url = `${stepDef.endpoint}`;
+          const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+          console.log('[DDT][Plan][step][request]', { key: stepDef.key, type: stepDef.type, url, body });
+          const res = await fetch(url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: body,
           });
+          const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
+          let raw = '';
+          try { raw = await res.clone().text(); } catch {}
+          console.log('[DDT][Plan][step][response]', { key: stepDef.key, type: stepDef.type, status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
           const result = await res.json();
           
           // Handle different response structures

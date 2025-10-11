@@ -19,11 +19,19 @@ const stepOrder: DDTGenerationStep[] = [
 ];
 
 async function recognizeTypeAPI(userDesc: string) {
-  const res = await fetch(`/step2`, {
+  const url = `/step2`;
+  const body = userDesc;
+  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  console.log('[DDT][Orchestrator][DetectType][request]', { url, body });
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(userDesc),
   });
+  const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
+  let raw = '';
+  try { raw = await res.clone().text(); } catch {}
+  console.log('[DDT][Orchestrator][DetectType][response]', { status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
   if (!res.ok) throw new Error('Type recognition failed');
   const data = await res.json();
   if (!data.ai || !data.ai.type || !data.ai.icon) throw new Error('Recognition response missing fields');

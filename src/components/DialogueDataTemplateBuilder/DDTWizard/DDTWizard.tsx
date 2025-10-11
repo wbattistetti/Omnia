@@ -105,17 +105,34 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const handleDetectType = async () => {
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     setStep('loading');
+    try { console.log('[DDT][Wizard][step] → loading'); } catch {}
     setErrorMsg(null);
     try {
-        const res = await fetch(`/step2`, {
+        const reqBody = userDesc.trim();
+        // Clean path via Vite proxy
+        const urlPrimary = `/step2`;
+        const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody });
+        const ctrl = new AbortController();
+        const timeoutMs = 15000;
+        const timeoutId = setTimeout(() => { try { ctrl.abort(); console.warn('[DDT][DetectType][timeout]', { url: urlPrimary, timeoutMs }); } catch {} }, timeoutMs);
+        let res = await fetch(urlPrimary, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userDesc.trim()),
+          body: JSON.stringify(reqBody),
+          signal: ctrl.signal as any,
       });
+        clearTimeout(timeoutId);
+      const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
+      let raw = '';
+      try { raw = await res.clone().text(); } catch {}
+      console.log('[DDT][DetectType][response]', { status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
       if (!res.ok) throw new Error('Errore comunicazione IA');
       const result = await res.json();
+      console.log('[DDT][DetectType][parsed]', result);
       const ai = result.ai || result;
       const schema = ai.schema;
+      console.log('[DDT][DetectType][schema]', schema);
       if (schema && Array.isArray(schema.mainData)) {
         const root = schema.label || 'Data';
         const mains0: SchemaNode[] = (schema.mainData || []).map((m: any) => {
@@ -135,7 +152,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         });
       setDetectTypeIcon(ai.icon || null);
         // Enrich constraints immediately, then show structure step
+        console.log('[DDT][DetectType] → enrichConstraints', { root, mainsCount: mains0.length });
         const enrichedRes = await enrichConstraintsFor(root, mains0);
+        console.log('[DDT][DetectType][enrich.done]', enrichedRes);
         const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
         let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
         // If AI returned multiple atomic mains (no subData), wrap them into a single aggregator main using the root label
@@ -147,12 +166,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         setSchemaRootLabel(finalRoot);
         setSchemaMains(finalMains);
         setStep('structure');
+        try { console.log('[DDT][Wizard][step] → structure', { root: finalRoot, mains: finalMains.length }); } catch {}
         return;
       }
+      console.warn('[DDT][DetectType][invalidSchema]', { schema });
       throw new Error('Schema non valido');
     } catch (err: any) {
-      setErrorMsg('Errore IA: ' + (err.message || ''));
+      console.error('[DDT][Wizard][error]', err);
+      const msg = (err && (err.name === 'AbortError' || err.message === 'The operation was aborted.')) ? 'Timeout step2' : (err.message || '');
+      setErrorMsg('Errore IA: ' + msg);
       setStep('error');
+      try { console.log('[DDT][Wizard][step] → error'); } catch {}
     }
   };
 
@@ -164,9 +188,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const res = await fetch(`/step3`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(schema),
+        body: JSON.stringify(schema)
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn('[DDT][Constraints][response.notOk]', { status: res.status });
+        return;
+      }
       const result = await res.json();
       console.log('[constraints] raw result', result);
       const enriched: any = (result && result.ai && result.ai.schema) ? result.ai.schema : {};

@@ -3,8 +3,13 @@ import react from '@vitejs/plugin-react';
 import monacoEditorPlugin from 'vite-plugin-monaco-editor';
 
 // https://vitejs.dev/config/
+// Support both function and object exports from vite-plugin-monaco-editor
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const monacoAny: any = monacoEditorPlugin as any;
+const monacoPlugin = (typeof monacoAny === 'function' ? monacoAny({}) : monacoAny);
+
 export default defineConfig({
-  plugins: [react(), monacoEditorPlugin],
+  plugins: [react(), monacoPlugin],
   optimizeDeps: {
     exclude: ['lucide-react'],
   },

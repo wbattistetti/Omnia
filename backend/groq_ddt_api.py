@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Body, Request, Response
+from typing import Any
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -14,35 +15,33 @@ if _CURR_DIR and _CURR_DIR not in sys.path:
 
 # Support running either from project root (package imports) or from backend/ (local imports)
 try:
-	from backend.ai_steps.step3_suggest_constraints import router as step3_router
-	from backend.ai_steps.step2_detect_type import router as step2_router
-	from backend.ai_steps.constraint_messages import router as constraint_messages_router
-	from backend.ai_steps.generate_validator import router as generate_validator_router
-	from backend.ai_steps.generate_tests import router as generate_tests_router
-	from backend.ai_steps.stepNoMatch import router as stepNoMatch_router
-	from backend.ai_steps.stepNoInput import router as stepNoInput_router
-	from backend.ai_steps.stepConfirmation import router as stepConfirmation_router
-	from backend.ai_steps.nlp_extract import router as nlp_extract_router
-	from backend.ner_spacy import router as ner_router
-	from backend.ai_steps.stepSuccess import router as stepSuccess_router
-	from backend.ai_steps.startPrompt import router as startPrompt_router
-	from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
-	from backend.ai_steps.parse_address import router as parse_address_router
+    from backend.ai_steps.step3_suggest_constraints import router as step3_router
+    from backend.ai_steps.constraint_messages import router as constraint_messages_router
+    from backend.ai_steps.generate_validator import router as generate_validator_router
+    from backend.ai_steps.generate_tests import router as generate_tests_router
+    from backend.ai_steps.stepNoMatch import router as stepNoMatch_router
+    from backend.ai_steps.stepNoInput import router as stepNoInput_router
+    from backend.ai_steps.stepConfirmation import router as stepConfirmation_router
+    from backend.ai_steps.nlp_extract import router as nlp_extract_router
+    from backend.ner_spacy import router as ner_router
+    from backend.ai_steps.stepSuccess import router as stepSuccess_router
+    from backend.ai_steps.startPrompt import router as startPrompt_router
+    from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
+    from backend.ai_steps.parse_address import router as parse_address_router
 except Exception:
-	from ai_steps.step3_suggest_constraints import router as step3_router
-	from ai_steps.step2_detect_type import router as step2_router
-	from ai_steps.constraint_messages import router as constraint_messages_router
-	from ai_steps.generate_validator import router as generate_validator_router
-	from ai_steps.generate_tests import router as generate_tests_router
-	from ai_steps.stepNoMatch import router as stepNoMatch_router
-	from ai_steps.stepNoInput import router as stepNoInput_router
-	from ai_steps.stepConfirmation import router as stepConfirmation_router
-	from ai_steps.nlp_extract import router as nlp_extract_router
-	from ner_spacy import router as ner_router
-	from ai_steps.stepSuccess import router as stepSuccess_router
-	from ai_steps.startPrompt import router as startPrompt_router
-	from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
-	from ai_steps.parse_address import router as parse_address_router
+    from ai_steps.step3_suggest_constraints import router as step3_router
+    from ai_steps.constraint_messages import router as constraint_messages_router
+    from ai_steps.generate_validator import router as generate_validator_router
+    from ai_steps.generate_tests import router as generate_tests_router
+    from ai_steps.stepNoMatch import router as stepNoMatch_router
+    from ai_steps.stepNoInput import router as stepNoInput_router
+    from ai_steps.stepConfirmation import router as stepConfirmation_router
+    from ai_steps.nlp_extract import router as nlp_extract_router
+    from ner_spacy import router as ner_router
+    from ai_steps.stepSuccess import router as stepSuccess_router
+    from ai_steps.startPrompt import router as startPrompt_router
+    from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
+    from ai_steps.parse_address import router as parse_address_router
 
 GROQ_KEY = os.environ.get("Groq_key")
 IDE_LANGUE = os.environ.get("IdeLangue", "it")
@@ -162,17 +161,17 @@ async def log_requests(request: Request, call_next):
 	except Exception:
 		pass
 	return response
-app.include_router(step2_router)
-app.include_router(step3_router)
-app.include_router(constraint_messages_router)
-app.include_router(generate_validator_router)
-app.include_router(generate_tests_router)
-app.include_router(stepNoMatch_router)
-app.include_router(stepNoInput_router)
-app.include_router(stepConfirmation_router)
-app.include_router(stepSuccess_router)
-app.include_router(startPrompt_router)
-app.include_router(stepNotConfirmed_router)
+# NOTE: we register only neutral routers; custom fallback endpoints below handle prompts and steps
+# app.include_router(step3_router)
+# app.include_router(constraint_messages_router)
+# app.include_router(generate_validator_router)
+# app.include_router(generate_tests_router)
+# app.include_router(stepNoMatch_router)
+# app.include_router(stepNoInput_router)
+# app.include_router(stepConfirmation_router)
+# app.include_router(stepSuccess_router)
+# app.include_router(startPrompt_router)
+# app.include_router(stepNotConfirmed_router)
 app.include_router(nlp_extract_router)
 app.include_router(ner_router)
 app.include_router(parse_address_router)
@@ -1175,16 +1174,52 @@ def _safe_json_loads(text: str):
 			return None
 
 # --- step2: Data type recognition (detectType)
-@app.post("/step1")
-def step2(user_desc: str = Body(...)):
-	EN_MEANINGS = [
-		'date of birth', 'email', 'phone number', 'address', 'number', 'text', 'boolean'
-	]
-	ICON_LIST = [
-		'Sparkles', 'CheckSquare', 'Hash', 'Type', 'IdCard', 'Gift', 'Phone', 'Calendar', 'Mail', 'HelpCircle', 'MapPin', 'FileQuestion'
-	]
+@app.post("/step2")
+def step2(user_desc: Any = Body(...)):
 	print("\nSTEP: /step2 – Data type recognition (detectType)")
-	prompt = f"""
+	try:
+		text = str(user_desc or "").strip()
+		lc = text.lower()
+		TYPE_ICON = {
+			"date": "Calendar",
+			"email": "Mail",
+			"phone": "Phone",
+			"address": "MapPin",
+			"number": "Hash",
+			"boolean": "CheckSquare",
+			"text": "Type",
+		}
+		TYPE_LABEL = {
+			"date": "Date",
+			"email": "Email address",
+			"phone": "Phone number",
+			"address": "Address",
+			"number": "Number",
+			"boolean": "Boolean",
+			"text": "Text",
+		}
+		def guess_type(s: str) -> str:
+			if re.search(r"\b(email|e-mail|mail|pec)\b", s):
+				return "email"
+			if re.search(r"\b(phone|telefono|cellulare|mobile|numero\s+di\s+telefono)\b", s):
+				return "phone"
+			if re.search(r"\b(date|data|nascita|birth|birthday|dob)\b", s):
+				return "date"
+			if re.search(r"\b(address|indirizzo|via|street|avenue|rua)\b", s):
+				return "address"
+			if re.search(r"\b(number|numero|quantità|amount|cifra|cpf|cf|codice\s+fiscale)\b", s):
+				return "text"
+			if re.search(r"\b(true|false|vero|falso|sí|nao|não|yes|no)\b", s):
+				return "boolean"
+			return "text"
+		fallback_t = guess_type(lc)
+		fallback_icon = TYPE_ICON.get(fallback_t, "Type")
+		fallback_label = TYPE_LABEL.get(fallback_t, fallback_t.capitalize())
+		if GROQ_KEY:
+			try:
+				EN_MEANINGS = ['date of birth', 'email', 'phone number', 'address', 'number', 'text', 'boolean']
+				ICON_LIST = ['Sparkles', 'CheckSquare', 'Hash', 'Type', 'IdCard', 'Gift', 'Phone', 'Calendar', 'Mail', 'HelpCircle', 'MapPin', 'FileQuestion']
+				prompt = f"""
 You are a data type classifier.
 
 Given the following user intent (in English), extract the most specific data type from this list:
@@ -1200,32 +1235,50 @@ If no suitable icon is found, use 'HelpCircle'.
 Respond ONLY with a JSON object in this format (strict JSON, no comments, no trailing commas):
 {{ "type": "<English label>", "icon": "<Lucide icon name>" }}
 
-User intent: '{user_desc}'
+User intent: '{text}'
 """
-	print("AI PROMPT ================")
-	print(prompt)
-	ai = call_groq([
-		{"role": "system", "content": "Always reply in English."},
-		{"role": "user", "content": prompt}
-	])
-	print("AI ANSWER ================")
-	print(ai)
-	try:
-		ai_obj = json.loads(ai)
-		print("[GROQ RESPONSE /step2]", ai_obj)
-		if not isinstance(ai_obj, dict) or 'type' not in ai_obj or 'icon' not in ai_obj:
-			return {"error": "unrecognized_data_type"}
-		if ai_obj['type'] == 'unrecognized_data_type':
-			return {"error": "unrecognized_data_type"}
-		return {"ai": ai_obj}
-	except Exception:
-		return {"error": "unrecognized_data_type"}
+				print("AI PROMPT ================")
+				print(prompt)
+				ai = call_groq([
+					{"role": "system", "content": "Always reply in English."},
+					{"role": "user", "content": prompt}
+				])
+				print("AI ANSWER ================")
+				print(ai)
+				ai_obj = json.loads(ai)
+				if isinstance(ai_obj, dict) and ai_obj.get('type') and ai_obj.get('icon'):
+					if 'schema' not in ai_obj:
+						ai_obj['schema'] = {
+							'label': 'Data',
+							'mainData': [{
+								'label': TYPE_LABEL.get(str(ai_obj.get('type')).lower(), str(ai_obj.get('type'))),
+								'type': ai_obj.get('type'),
+								'icon': ai_obj.get('icon'),
+								'subData': []
+							}]
+						}
+					return {"ai": ai_obj}
+			except Exception as e:
+				try: print("[step2][ai_error]", str(e))
+				except Exception: pass
+		return {"ai": {
+			"type": fallback_t,
+			"icon": fallback_icon,
+			"schema": {
+				"label": "Data",
+				"mainData": [{ "label": fallback_label, "type": fallback_t, "icon": fallback_icon, "subData": [] }]
+			}
+		}}
+	except Exception as e:
+		try: print("[step2][fatal]", str(e))
+		except Exception: pass
+		return {"ai": {"type": "text", "icon": "Type", "schema": {"label": "Data", "mainData": [{"label": "Text", "type": "text", "icon": "Type", "subData": []}]}}}
 
 # --- step3: Suggest constraints/validations (constraints)
-@app.post("/step2")
+@app.post("/step3")
 def step3(meaning: str = Body(...), desc: str = Body(...)):
-	print("\nSTEP: /step3 – Suggest constraints/validations")
-	prompt = f"""
+    print("\nSTEP: /step3 – Suggest constraints/validations")
+    prompt = f"""
 You are a data validation assistant.
 
 Given the following data field (with possible subfields), suggest the most appropriate validation constraints for each field.
@@ -1274,22 +1327,30 @@ Respond ONLY with a single strict JSON object (no markdown, no comments, no trai
 
 Do NOT generate any id or GUID. Do NOT include explanations or comments outside the JSON. All messages and labels must be in English. If unsure, return an empty object.
 """
-	print("AI PROMPT ================")
-	print(prompt)
-	ai = call_groq([
-		{"role": "system", "content": "Always reply in English."},
-		{"role": "user", "content": prompt}
-	])
-	print("AI ANSWER ================")
-	print(ai)
-	ai_obj = _safe_json_loads(ai)
-	if ai_obj is None:
-		return {"ai": {}, "error": "Failed to parse AI JSON"}
-	print("[GROQ RESPONSE /step3]", ai_obj)
-	return {"ai": ai_obj}
+    try:
+        print("AI PROMPT ================")
+        print(prompt)
+        if GROQ_KEY:
+            ai = call_groq([
+                {"role": "system", "content": "Always reply in English."},
+                {"role": "user", "content": prompt}
+            ])
+            print("AI ANSWER ================")
+            print(ai)
+            ai_obj = _safe_json_loads(ai)
+            if ai_obj is None:
+                return {"ai": {}, "error": "Failed to parse AI JSON"}
+            print("[GROQ RESPONSE /step3]", ai_obj)
+            return {"ai": ai_obj}
+        # Fallback: return empty enrichment (no constraints)
+        return {"ai": {"schema": {"mainData": []}}}
+    except Exception as e:
+        try: print("[step3][fatal]", str(e))
+        except Exception: pass
+        return {"ai": {"schema": {"mainData": []}}}
 
 # --- step3b: Parse user constraints (optional, sub-step)
-@app.post("/step4")
+@app.post("/step3b")
 def step3b(user_constraints: str = Body(...), meaning: str = Body(...), desc: str = Body(...)):
 	print("\nSTEP: /step3b – Parse user constraints (optional, sub-step)")
 	prompt = (
@@ -1509,114 +1570,146 @@ async def ddt_structure(request: Request):
 # --- stepNoMatch: Generate no match prompts ---
 @app.post("/api/stepNoMatch")
 def step_no_match(body: dict = Body(...)):
-	print("[BACKEND] /api/stepNoMatch CHIAMATA - body:", body)
-	meaning = body.get('meaning', '')
-	desc = body.get('desc', '')
-	print("\nSTEP: /api/stepNoMatch – Generazione messaggi no match")
-	prompt = f"""
+    print("[BACKEND] /api/stepNoMatch CHIAMATA - body:", body)
+    meaning = body.get('meaning', '')
+    desc = body.get('desc', '')
+    print("\nSTEP: /api/stepNoMatch – Generazione messaggi no match")
+    prompt = f"""
 You are a conversational AI message generator.
 
 Generate 3 escalation messages to use when the user input does not match the expected data type: '{meaning}'.
 
 Return ONLY a JSON array of 3 English strings, no explanations, no comments, no IDs.
 """
-	print("AI PROMPT ================")
-	print(prompt)
-	ai = call_groq([
-		{"role": "system", "content": "Always reply in English."},
-		{"role": "user", "content": prompt}
-	])
-	print("AI ANSWER ================")
-	print(ai)
-	try:
-		ai_obj = json.loads(ai)
-		print("[GROQ RESPONSE /stepNoMatch]", ai_obj)
-		print("[BACKEND] /api/stepNoMatch RISPOSTA OK")
-		return {"ai": ai_obj}
-	except Exception as e:
-		print("[BACKEND] /api/stepNoMatch ERRORE PARSING:", str(e))
-		return {"error": f"Failed to parse AI JSON: {str(e)}"}
+    try:
+        print("AI PROMPT ================")
+        print(prompt)
+        if GROQ_KEY:
+            ai = call_groq([
+                {"role": "system", "content": "Always reply in English."},
+                {"role": "user", "content": prompt}
+            ])
+            print("AI ANSWER ================")
+            print(ai)
+            ai_obj = json.loads(ai)
+            print("[GROQ RESPONSE /stepNoMatch]", ai_obj)
+            return {"ai": ai_obj}
+        # Fallback stub (3 brevi messaggi)
+        return {"ai": [
+            "I didn't catch that. Could you repeat, please?",
+            "Sorry, I didn't get it. Could you say it again?",
+            "I still couldn't parse that. One more time, please."
+        ]}
+    except Exception as e:
+        return {"ai": [
+            "I didn't catch that. Could you repeat, please?",
+            "Sorry, I didn't get it. Could you say it again?",
+            "I still couldn't parse that. One more time, please."
+        ]}
 
 # --- stepNoInput: Generate no input prompts ---
 @app.post("/api/stepNoInput")
 def step_no_input(body: dict = Body(...)):
-	meaning = body.get('meaning', '')
-	desc = body.get('desc', '')
-	print("\nSTEP: /api/stepNoInput – Generazione messaggi no input")
-	prompt = f"""
+    meaning = body.get('meaning', '')
+    desc = body.get('desc', '')
+    print("\nSTEP: /api/stepNoInput – Generazione messaggi no input")
+    prompt = f"""
 You are a conversational AI message generator.
 
 Generate 3 escalation messages to use when the user provides no input for the expected data type: '{meaning}'.
 
 Return ONLY a JSON array of 3 English strings, no explanations, no comments, no IDs.
 """
-	print("AI PROMPT ================")
-	print(prompt)
-	ai = call_groq([
-		{"role": "system", "content": "Always reply in English."},
-		{"role": "user", "content": prompt}
-	])
-	print("AI ANSWER ================")
-	print(ai)
-	try:
-		ai_obj = json.loads(ai)
-		print("[GROQ RESPONSE /stepNoInput]", ai_obj)
-		return {"ai": ai_obj}
-	except Exception as e:
-		return {"error": f"Failed to parse AI JSON: {str(e)}"}
+    try:
+        print("AI PROMPT ================")
+        print(prompt)
+        if GROQ_KEY:
+            ai = call_groq([
+                {"role": "system", "content": "Always reply in English."},
+                {"role": "user", "content": prompt}
+            ])
+            print("AI ANSWER ================")
+            print(ai)
+            ai_obj = json.loads(ai)
+            print("[GROQ RESPONSE /stepNoInput]", ai_obj)
+            return {"ai": ai_obj}
+        # Fallback stub (3 re-ask)
+        return {"ai": [
+            "Could you share it, please?",
+            "I’m still waiting for the value.",
+            "One more time, please." 
+        ]}
+    except Exception as e:
+        return {"ai": [
+            "Could you share it, please?",
+            "I’m still waiting for the value.",
+            "One more time, please." 
+        ]}
 
 # --- stepConfirmation: Generate confirmation prompts ---
 @app.post("/api/stepConfirmation")
 def step_confirmation(body: dict = Body(...)):
-	meaning = body.get('meaning', '')
-	desc = body.get('desc', '')
-	print("\nSTEP: /api/stepConfirmation – Generazione messaggi di conferma")
-	prompt = f"""
+    meaning = body.get('meaning', '')
+    desc = body.get('desc', '')
+    print("\nSTEP: /api/stepConfirmation – Generazione messaggi di conferma")
+    prompt = f"""
 You are a conversational AI message generator.
 
 Generate 2 escalation messages to confirm with the user the value for the data type: '{meaning}'.
 
 Return ONLY a JSON array of 2 English strings, no explanations, no comments, no IDs.
 """
-	print("AI PROMPT ================")
-	print(prompt)
-	ai = call_groq([
-		{"role": "system", "content": "Always reply in English."},
-		{"role": "user", "content": prompt}
-	])
-	print("AI ANSWER ================")
-	print(ai)
-	try:
-		ai_obj = json.loads(ai)
-		print("[GROQ RESPONSE /stepConfirmation]", ai_obj)
-		return {"ai": ai_obj}
-	except Exception as e:
-		return {"error": f"Failed to parse AI JSON: {str(e)}"}
+    try:
+        print("AI PROMPT ================")
+        print(prompt)
+        if GROQ_KEY:
+            ai = call_groq([
+                {"role": "system", "content": "Always reply in English."},
+                {"role": "user", "content": prompt}
+            ])
+            print("AI ANSWER ================")
+            print(ai)
+            ai_obj = json.loads(ai)
+            print("[GROQ RESPONSE /stepConfirmation]", ai_obj)
+            return {"ai": ai_obj}
+        # Fallback stub (2 conferme)
+        return {"ai": [
+            "Is this correct?",
+            "Please confirm."
+        ]}
+    except Exception as e:
+        return {"ai": [
+            "Is this correct?",
+            "Please confirm."
+        ]}
 
 # --- stepSuccess: Generate success prompts ---
 @app.post("/api/stepSuccess")
 def step_success(body: dict = Body(...)):
-	meaning = body.get('meaning', '')
-	desc = body.get('desc', '')
-	print("\nSTEP: /api/stepSuccess – Generazione messaggio di successo")
-	prompt = f"""
+    meaning = body.get('meaning', '')
+    desc = body.get('desc', '')
+    print("\nSTEP: /api/stepSuccess – Generazione messaggio di successo")
+    prompt = f"""
 You are a conversational AI message generator.
 
 Generate 1 message to use when the user has successfully provided the expected data type: '{meaning}'.
 
 Return ONLY a JSON array with 1 English string, no explanations, no comments, no IDs.
 """
-	print("AI PROMPT ================")
-	print(prompt)
-	ai = call_groq([
-		{"role": "system", "content": "Always reply in English."},
-		{"role": "user", "content": prompt}
-	])
-	print("AI ANSWER ================")
-	print(ai)
-	try:
-		ai_obj = json.loads(ai)
-		print("[GROQ RESPONSE /stepSuccess]", ai_obj)
-		return {"ai": ai_obj}
-	except Exception as e:
-		return {"error": f"Failed to parse AI JSON: {str(e)}"} 
+    try:
+        print("AI PROMPT ================")
+        print(prompt)
+        if GROQ_KEY:
+            ai = call_groq([
+                {"role": "system", "content": "Always reply in English."},
+                {"role": "user", "content": prompt}
+            ])
+            print("AI ANSWER ================")
+            print(ai)
+            ai_obj = json.loads(ai)
+            print("[GROQ RESPONSE /stepSuccess]", ai_obj)
+            return {"ai": ai_obj}
+        # Fallback stub (1 ack)
+        return {"ai": ["Thanks, got it."]}
+    except Exception as e:
+        return {"ai": ["Thanks, got it."]}

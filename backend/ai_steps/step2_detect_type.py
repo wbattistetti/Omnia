@@ -8,7 +8,11 @@ router = APIRouter()
 @router.post("/step2")
 def step2(user_desc: str = Body(...)):
     prompt = get_detect_type_prompt(user_desc)
-    print("[AI PROMPT][detectSchema]", prompt)
+    # Guard logging to avoid Windows console Unicode errors (cp1252)
+    try:
+        print("[AI PROMPT][detectSchema]", str(prompt).encode('ascii', 'ignore').decode('ascii'))
+    except Exception:
+        pass
     try:
         ai = call_groq([
             {"role": "system", "content": "Always reply in English."},
@@ -17,7 +21,10 @@ def step2(user_desc: str = Body(...)):
     except Exception as e:
         print("[AI ERROR][detectSchema]", str(e))
         raise HTTPException(status_code=502, detail=f"AI provider error: {str(e)}")
-    print("[AI ANSWER][detectSchema]", ai)
+    try:
+        print("[AI ANSWER][detectSchema]", str(ai).encode('ascii', 'ignore').decode('ascii'))
+    except Exception:
+        pass
     try:
         ai_obj = json.loads(ai)
         # New schema-aware shape: { label, mains: [...] }

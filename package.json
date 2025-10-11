@@ -8,6 +8,7 @@
     "be:express": "node backend/server.js",
     "be:api": "set EXPRESS_BASE=http://localhost:3100&& .\\.venv\\Scripts\\python.exe -m uvicorn backend.groq_ddt_api:app --host 127.0.0.1 --port 8000 --reload",
     "dev:be": "concurrently -n express,api -c yellow,cyan \"npm:be:express\" \"npm:be:api\"",
+    "dev:all": "concurrently -n web,express,api -c green,yellow,cyan \"vite\" \"npm:be:express\" \"npm:be:api\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

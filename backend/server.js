@@ -1245,6 +1245,10 @@ app.post('/api/factory/data-dialogue-translations', async (req, res) => {
   }
 });
 
+// --- DDT Wizard (mock) ---
+// Minimal mock for detect-type to avoid relying on FastAPI during dev
+// (removed) /api/ddt/step2 mock — using FastAPI /step2
+
 app.post('/api/factory/dialogue-templates', async (req, res) => {
   try { console.log('>>> SAVE /api/factory/dialogue-templates size ~', Buffer.byteLength(JSON.stringify(req.body || {})), 'bytes'); } catch {}
   const client = new MongoClient(uri);
