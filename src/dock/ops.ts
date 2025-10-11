@@ -12,6 +12,12 @@ export function addTabCenter(tree: DockNode, targetId: string, tab: DockTab): Do
   });
 }
 
+export function upsertAddCenter(tree: DockNode, targetId: string, tab: DockTab): DockNode {
+  // Rimuovi se già esiste lo stesso id, poi aggiungi al centro del target
+  const without = removeTab(tree, tab.id);
+  return addTabCenter(without, targetId, tab);
+}
+
 export function splitWithTab(tree: DockNode, targetId: string, region: DockRegion, tab: DockTab): DockNode {
   return mapNode(tree, n => {
     if (n.kind === 'tabset' && n.id === targetId) {
@@ -59,6 +65,12 @@ export function addTabNextTo(tree: DockNode, siblingTabId: string, newTab: DockT
     const active = idx + 1;
     return { ...n, tabs, active };
   });
+}
+
+export function upsertAddNextTo(tree: DockNode, siblingTabId: string, newTab: DockTab): DockNode {
+  // Se la tab esiste altrove, rimuovila prima di inserirla accanto al sibling
+  const without = removeTab(tree, newTab.id);
+  return addTabNextTo(without, siblingTabId, newTab);
 }
 
 export function getTab(tree: DockNode, tabId: string): DockTab | null {
@@ -113,12 +125,20 @@ function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
 
 function compact(n: DockNode): DockNode {
   if (n.kind === 'split') {
-    const kids = n.children.map(compact).filter(Boolean) as DockNode[];
+    // Compatta ricorsivamente e rimuove i tabset vuoti dai figli
+    const kids = n.children
+      .map(compact)
+      .filter((child) => !(child.kind === 'tabset' && child.tabs.length === 0)) as DockNode[];
+
     if (kids.length === 1) return kids[0];
+    if (kids.length === 0) {
+      // Nessun figlio: torna a un tabset vuoto per mantenere una radice valida
+      return { kind: 'tabset', id: newId(), tabs: [], active: 0 };
+    }
     return { ...n, children: kids };
   }
   if (n.kind === 'tabset') {
-    if (n.tabs.length === 0) return { ...n, tabs: [], active: 0 };
+    // I tabset vuoti rimangono solo se sono la radice; se sono figli verranno rimossi dal padre
     return n;
   }
   return n;

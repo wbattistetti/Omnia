@@ -1,6 +1,7 @@
 import React from 'react';
 import { DockNode, DockRegion, DockTab } from '../../dock/types';
-import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab } from '../../dock/ops';
+import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab, removeTab } from '../../dock/ops';
+import { Workflow } from 'lucide-react';
 
 type Props = {
   root: DockNode;
@@ -50,6 +51,10 @@ export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent }
         renderTabContent={renderTabContent}
         setRoot={setRoot}
         setActiveTabSetId={setActiveTabSetId}
+        onTabClosed={(tab) => {
+          if (!tab) return;
+          setClosedTabs(prev => (prev.find(x => x.id === tab.id) ? prev : [...prev, tab]));
+        }}
         rootNode={root}
       />
     </div>
@@ -67,6 +72,7 @@ function DockRenderer(props: {
   renderTabContent: (tab: DockTab) => React.ReactNode;
   setRoot: (n: DockNode) => void;
   setActiveTabSetId: (id: string) => void;
+  onTabClosed: (tab: DockTab | null) => void;
 }) {
   const { node } = props;
   if (node.kind === 'split') {
@@ -88,10 +94,11 @@ function DockRenderer(props: {
       active={node.active}
       setActive={(idx) => { props.setActiveTabSetId(node.id); props.setRoot(activateTab(props.rootNode, node.tabs[idx].id)); }}
       onClose={(tabId) => {
-        // Sposta la tab chiusa nella shelf
+        // Chiudi la tab nel suo tabset; non spostarla automaticamente altrove.
+        // Delego all'header "Closed" (shelf) la riapertura esplicita.
         const t = getTab(props.rootNode, tabId);
+        if (t) props.onTabClosed(t);
         props.setRoot(closeTab(props.rootNode, tabId));
-        // Nota: la shelf è gestita nel componente padre (DockManager)
       }}
       onDragTabStart={props.onDragTabStart}
       onDragTabEnd={props.onDragTabEnd}
@@ -131,25 +138,34 @@ function TabSet(props: {
   return (
     <div
       ref={hostRef}
-      className="relative w-full h-full border border-slate-200 rounded min-h-0"
+      className="relative w-full h-full rounded min-h-0"
+      style={{ border: '1px solid #38bdf8', backgroundColor: '#e0f2fe' }}
       onDragOver={(e) => { e.preventDefault(); const r = computeRegion(e); setRegion(r); props.onHover(props.nodeId, r); }}
       onDragLeave={() => { setRegion(null); props.onHover(props.nodeId, 'center'); }}
       onDrop={(e) => { const r = region || 'center'; props.onDrop(props.nodeId, r); setRegion(null); }}
     >
-      <div className="flex items-center gap-1 px-2 py-1 border-b bg-white">
+      <div className="flex items-center gap-1 px-2 border-b"
+           style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>
         {props.tabs.map((t, i) => (
           <div key={t.id}
             draggable
             onDragStart={() => props.onDragTabStart(t)}
             onDragEnd={props.onDragTabEnd}
             onClick={() => props.setActive(i)}
-            className={`px-2 py-0.5 text-xs rounded border ${props.active===i?'bg-slate-200':'bg-white'} cursor-grab`}>
-            {t.title}
-            <button className="ml-1 text-slate-500" onClick={(e) => { e.stopPropagation(); props.onClose(t.id); }}>×</button>
+            className="px-2 py-0.5 text-xs rounded border cursor-grab flex items-center gap-1"
+            style={{
+              backgroundColor: props.active===i ? '#bae6fd' : '#ffffff',
+              borderColor: '#38bdf8',
+              color: '#0c4a6e'
+            }}>
+            {/* icona diagramma lucide */}
+            <Workflow size={14} color="#0c4a6e" />
+            <span style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{t.title}</span>
+            <button className="ml-1" style={{ color: '#0c4a6e' }} onClick={(e) => { e.stopPropagation(); props.onClose(t.id); }}>×</button>
           </div>
         ))}
       </div>
-      <div className="w-full h-[calc(100%-28px)] min-h-0">
+      <div className="w-full min-h-0" style={{ height: 'calc(100% - 40px)', backgroundColor: '#ffffff' }}>
         {props.tabs[props.active] && props.renderTabContent(props.tabs[props.active])}
       </div>
       {!!region && (

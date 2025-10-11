@@ -962,6 +962,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [nodes.length, setCursorTooltip]);
 
+  // Persisted selection rectangle (keeps the user-drawn area after mouseup)
+  const [persistedSel, setPersistedSel] = useState<null | { x: number; y: number; w: number; h: number }>(null);
+  const dragStartRef = useRef<null | { x: number; y: number }>(null);
+
   // Fallback: doppio click catturato sul wrapper, valido anche sul primo load
   const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -1012,7 +1016,26 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Spostati fuori dal componente per evitare ricreazioni durante HMR
 
   return (
-    <div className="flex-1 h-full relative" ref={canvasRef} style={{ overflow: 'auto' }} onDoubleClick={handleCanvasDoubleClick} onMouseLeave={() => setCursorTooltip(null)}>
+    <div
+      className="flex-1 h-full relative"
+      ref={canvasRef}
+      style={{ overflow: 'auto' }}
+      onDoubleClick={handleCanvasDoubleClick}
+      onMouseLeave={() => setCursorTooltip(null)}
+      onMouseDown={(e) => {
+        const tgt = e.target as HTMLElement;
+        const isPane = tgt?.classList?.contains('react-flow__pane') || !!tgt?.closest?.('.react-flow__pane');
+        if (!isPane) return;
+        // reset previous persisted rectangle and store start in canvas coords (including scroll)
+        setPersistedSel(null);
+        const host = canvasRef.current;
+        if (!host) return;
+        const rect = host.getBoundingClientRect();
+        const sx = (e.clientX - rect.left) + host.scrollLeft;
+        const sy = (e.clientY - rect.top) + host.scrollTop;
+        dragStartRef.current = { x: sx, y: sy };
+      }}
+    >
       {/* Expose nodes/edges to GlobalDebuggerPanel (bridge) */}
       {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; if (flowId) { (window as any).__flows = (window as any).__flows || {}; (window as any).__flows[flowId] = { nodes, edges }; } } catch {} return null; })()}
       <ReactFlow
@@ -1089,6 +1112,22 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             const y = (e.clientY - rect.top) + scrollY;
             setSelectionMenu({ show: true, x, y });
           } catch {}
+          // Persist the selection rectangle exactly as drawn
+          try {
+            const start = dragStartRef.current;
+            dragStartRef.current = null;
+            const host = canvasRef.current;
+            if (start && host) {
+              const rect = host.getBoundingClientRect();
+              const ex = (e.clientX - rect.left) + host.scrollLeft;
+              const ey = (e.clientY - rect.top) + host.scrollTop;
+              const x = Math.min(start.x, ex);
+              const y = Math.min(start.y, ey);
+              const w = Math.abs(ex - start.x);
+              const h = Math.abs(ey - start.y);
+              if (w > 3 && h > 3) setPersistedSel({ x, y, w, h }); else setPersistedSel(null);
+            }
+          } catch {}
         }}
       >
         <Controls className="bg-white shadow-lg border border-slate-200" />
@@ -1116,6 +1155,22 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         </svg>
       </ReactFlow>
 
+      {persistedSel && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: persistedSel.x,
+            top: persistedSel.y,
+            width: persistedSel.w,
+            height: persistedSel.h,
+            backgroundColor: 'rgba(125, 211, 252, 0.18)',
+            border: '1px solid rgba(56, 189, 248, 0.9)',
+            boxShadow: '0 0 0 1px rgba(56,189,248,0.25) inset',
+            zIndex: 5
+          }}
+        />
+      )}
+
       {/* Selection context mini menu at bottom-right of selection */}
       {selectionMenu.show && selectedNodeIds.length >= 2 && (
         <div className="absolute z-20 flex items-center gap-1" style={{ left: selectionMenu.x, top: selectionMenu.y, transform: 'translate(8px, 8px)' }}>
@@ -1123,6 +1178,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             className="px-2 py-1 text-xs rounded border bg-white border-slate-300 text-slate-700 shadow-sm"
             onClick={() => {
               try {
+                // Clear both selection rectangles when creating the Task
+                setPersistedSel(null);
                 dlog('flow', '[CreateTask] click', { selectedNodeIds });
                 const sel = nodes.filter(n => selectedNodeIds.includes(n.id));
                 if (sel.length === 0) return;

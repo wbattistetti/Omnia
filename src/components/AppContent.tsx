@@ -23,7 +23,7 @@ import { DockNode, DockTab } from '../dock/types';
 import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
 import { FlowWorkspaceProvider } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
-import { addTabNextTo } from '../dock/ops';
+import { upsertAddNextTo } from '../dock/ops';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
@@ -79,7 +79,7 @@ export const AppContent: React.FC<AppContentProps> = ({
           upsertFlow({ id: newFlowId, title: title || newFlowId, nodes, edges });
           openFlowBackground(newFlowId);
           // 2) aggiungi tab accanto a quella corrente nel dock tree
-          setDockTree(prev => addTabNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', flowId: newFlowId }));
+          setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', flowId: newFlowId }));
         }}
       />
     );
