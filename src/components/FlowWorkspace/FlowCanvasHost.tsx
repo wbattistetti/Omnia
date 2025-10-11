@@ -5,9 +5,9 @@ import { FlowEditor } from '../Flowchart/FlowEditor';
 import { dlog } from '../../utils/debug';
 import { useProjectDataUpdate } from '../../context/ProjectDataContext';
 
-type Props = { projectId: string; flowId: string; onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void };
+type Props = { projectId: string; flowId: string; onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void; onOpenTaskFlow?: (flowId: string, title: string) => void };
 
-export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTaskFlow }) => {
+export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTaskFlow, onOpenTaskFlow }) => {
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph } = useFlowActions();
   const pd = useProjectDataUpdate();
@@ -44,6 +44,7 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTas
       setTestNodeId={() => {}}
       onPlayNode={() => {}}
       onCreateTaskFlow={onCreateTaskFlow}
+      onOpenTaskFlow={onOpenTaskFlow}
     />
   );
 };

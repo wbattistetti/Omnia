@@ -81,6 +81,11 @@ export const AppContent: React.FC<AppContentProps> = ({
           // 2) aggiungi tab accanto a quella corrente nel dock tree
           setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', flowId: newFlowId }));
         }}
+        onOpenTaskFlow={(taskFlowId, title) => {
+          // Apri la tab del task accanto a quella corrente (senza duplicati)
+          setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${taskFlowId}`, title: title || 'Task', flowId: taskFlowId }));
+          openFlowBackground(taskFlowId);
+        }}
       />
     );
   };

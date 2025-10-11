@@ -49,6 +49,7 @@ interface FlowEditorProps {
   currentProject: any;
   setCurrentProject: (project: any) => void;
   onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void;
+  onOpenTaskFlow?: (flowId: string, title: string) => void;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
@@ -62,7 +63,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   setNodes,
   edges,
   setEdges,
-  onCreateTaskFlow
+  onCreateTaskFlow,
+  onOpenTaskFlow
 }) => {
   // Ref sempre aggiornata con lo stato dei nodi
   const nodesRef = useRef(nodes);
@@ -969,7 +971,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Fallback: doppio click catturato sul wrapper, valido anche sul primo load
   const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
-    const isPane = target?.classList?.contains('react-flow__pane') || !!target?.closest?.('.react-flow__pane');
+    // Solo se il doppio click avviene DIRETTAMENTE sul pane (non dentro nodi)
+    const isPane = target?.classList?.contains('react-flow__pane');
     if (!isPane) return;
     e.preventDefault();
     e.stopPropagation();
@@ -1063,6 +1066,15 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
+        onNodeDoubleClick={(e, node) => {
+          if (node?.type === 'task') {
+            e.preventDefault();
+            e.stopPropagation();
+            const flowId = (node.data as any)?.flowId || node.id;
+            const title = (node.data as any)?.title || 'Task';
+            if (onOpenTaskFlow) onOpenTaskFlow(flowId, title);
+          }
+        }}
         defaultViewport={{ x: 0, y: 0, zoom: 1 }}
         maxZoom={4}
         className="bg-white"

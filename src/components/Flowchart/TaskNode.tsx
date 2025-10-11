@@ -26,7 +26,8 @@ export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ id, data, selected
 
   // Entra in editing quando cambia il token immutabile
   React.useEffect(() => {
-    if (!data?.editingToken) return;
+    // Solo alla creazione: serve token e titolo ancora vuoto
+    if (!data?.editingToken || (title || '').trim().length > 0) return;
     setEditing(true);
     const idAnim = requestAnimationFrame(() => {
       const el = inputRef.current as HTMLInputElement | null;
@@ -34,7 +35,7 @@ export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ id, data, selected
       try { if (el) { el.focus(); el.select(); tlog('focus.ok', { id }); } } catch {}
     });
     return () => cancelAnimationFrame(idAnim);
-  }, [data?.editingToken]);
+  }, [data?.editingToken, title]);
 
   React.useEffect(() => { tlog('editing->', editing, { id, editOnMount: data?.editOnMount }); }, [editing, data?.editOnMount, id]);
 
@@ -43,12 +44,19 @@ export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ id, data, selected
     tlog('commit()', { id, next });
 	    setEditing(false);
 	    if (typeof data?.onUpdate === 'function') {
-	        data.onUpdate({ title: next, editOnMount: false, showGuide: false });
+        // rimuovi editingToken così non va più in edit al reload
+        data.onUpdate({ title: next, editOnMount: false, editingToken: undefined, showGuide: false });
 	    }
 		try { (data as any)?.onCommitTitle?.(next); } catch {}
 	};
 
-  const cancel = () => { tlog('cancel()', { id }); setEditing(false); try { (data as any)?.onCancelTitle?.(); } catch {} };
+  const cancel = () => {
+    tlog('cancel()', { id });
+    setEditing(false);
+    // pulisci anche in cancel (es. ESC)
+    if (typeof data?.onUpdate === 'function') data.onUpdate({ editOnMount: false, editingToken: undefined });
+    try { (data as any)?.onCancelTitle?.(); } catch {}
+  };
 
 	return (
 		<div
