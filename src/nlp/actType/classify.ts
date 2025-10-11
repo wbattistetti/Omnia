@@ -28,14 +28,14 @@ export function classify(label: string, opts?: InferOptions): Inference {
     tryCat('MESSAGE', 0.8);
     tryCat('SUMMARY', 0.8);
 
-    if (RS.PROBLEM?.test(txt) && best.score < 0.6) {
-      best = { type: 'PROBLEM_SPEC', score: 0.6, lang: L, reason: 'PROBLEM' };
+    // Reason-of-call patterns: alta priorità (sopra REQUEST_DATA)
+    const reasonArr: RegExp[] = (RS as any).PROBLEM_REASON || [];
+    if (reasonArr.some(r => r.test(txt)) && best.score < 0.9) {
+      best = { type: 'PROBLEM_SPEC', score: 0.9, lang: L, reason: 'PROBLEM_REASON' };
     }
 
-    // Reason-of-call patterns: promuovi a PROBLEM_SPEC con score medio-alto
-    const reasonArr: RegExp[] = (RS as any).PROBLEM_REASON || [];
-    if (reasonArr.some(r => r.test(txt)) && best.score < 0.82) {
-      best = { type: 'PROBLEM_SPEC', score: 0.82, lang: L, reason: 'PROBLEM_REASON' };
+    if (RS.PROBLEM?.test(txt) && best.score < 0.6) {
+      best = { type: 'PROBLEM_SPEC', score: 0.6, lang: L, reason: 'PROBLEM' };
     }
   }
 

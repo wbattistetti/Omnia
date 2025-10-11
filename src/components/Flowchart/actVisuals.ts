@@ -86,28 +86,28 @@ export function getAgentActVisualsByType(type: ActType, hasDDT: boolean) {
   switch (type) {
     case 'DataRequest':
       Icon = Ear;
-      color = hasDDT ? blue : gray;
+      color = hasDDT ? blue : gray; // grigio se non configurato
       break;
     case 'Confirmation':
       Icon = CheckCircle2;
-      color = indigo;
+      color = hasDDT ? indigo : gray;
       break;
     case 'ProblemClassification':
       Icon = GitBranch;
-      color = amber;
+      color = hasDDT ? amber : gray;
       break;
     case 'Summarizer':
       Icon = FileText;
-      color = cyan;
+      color = hasDDT ? cyan : gray;
       break;
     case 'BackendCall':
       Icon = Server;
-      color = gray;
+      color = hasDDT ? green : gray;
       break;
     case 'Message':
     default:
       Icon = Megaphone;
-      color = green;
+      color = hasDDT ? green : gray;
   }
 
   // quiet by default

@@ -15,6 +15,8 @@ export const IT_RULES: RuleSet = {
     /^(descrive|spiega|indica|racconta)\s+(il\s+)?(problema|errore|guasto|bug|sintom[oi])\b/i,
   ],
   PROBLEM_REASON: [
+    /^(chiedi|richiedi|domanda)\s+(il\s+)?(motivo|perch[eéè])\b/i,
+    /^(chiede|richiede|domanda)\s+(il\s+)?(motivo|perch[eéè])\b/i,
     /^(chiedi|richiedi|domanda)\s+(il\s+)?(problema|motivo\s+della\s+(chiamata|telefonata|richiesta|segnalazione))\b/i,
     /^(chiede|richiede|domanda)\s+(il\s+)?(problema|motivo\s+della\s+(chiamata|telefonata|richiesta|segnalazione))\b/i,
   ],
@@ -34,6 +36,8 @@ export const IT_RULES: RuleSet = {
     /\b(get|post|put|patch|delete)\b/i,
     /^(chiama|invoca|esegui|effettua|recupera|aggiorna|elimina|crea)\b/i,
     /^(chiama|invoca|esegue|recupera|aggiorna|elimina|crea)\b/i,
+    /^(controlla|verifica|guarda)\b/i,
+    /^(controlla|verifica|guarda)\s+se\b/i,
   ],
 };
 

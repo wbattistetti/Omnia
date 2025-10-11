@@ -15,8 +15,9 @@ export const EN_RULES: RuleSet = {
     /^(describes|explains|details|lists)\s+(the\s+)?(issue|problem|error|failure|bug|symptom[s]?)\b/i,
   ],
   PROBLEM_REASON: [
-    /^(ask(\s+for)?|request)\s+(the\s+)?(problem|reason\s+for\s+(the\s+)?(call|contact|request))\b/i,
-    /^(asks(\s+for)?|requests)\s+(the\s+)?(problem|reason\s+for\s+(the\s+)?(call|contact|request))\b/i,
+    /^(ask(\s+for)?|request)\s+(the\s+)?(reason|why)\b/i,
+    /^(asks(\s+for)?|requests)\s+(the\s+)?(reason|why)\b/i,
+    /^(ask|asks)\s+why\b/i,
   ],
   CONFIRM_DATA: [
     /^(confirm|verify|make\s+sure)\b/i,
@@ -33,6 +34,8 @@ export const EN_RULES: RuleSet = {
     /\b(get|post|put|patch|delete)\b/i,
     /^(call|invoke|execute|fetch|update|delete|create)\b/i,
     /^(calls|invokes|executes|fetches|updates|deletes|creates)\b/i,
+    /^(check|verify|look\s*up)\b/i,
+    /^(checks|verifies|looks\s*up)\b/i,
   ],
 };
 

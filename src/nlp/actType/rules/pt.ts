@@ -15,8 +15,8 @@ export const PT_RULES: RuleSet = {
     /^(descreve|explica|lista|relata)\s+(o\s+)?(problema|erro|falha|bug|sintoma[s]?)\b/i,
   ],
   PROBLEM_REASON: [
-    /^(pe[çc]a|solicite|pergunte)\s+(o\s+)?(problema|motivo\s+da\s+(liga[çc][aã]o|chamada|solicita[çc][aã]o))\b/i,
-    /^(pede|solicita|pergunta)\s+(o\s+)?(problema|motivo\s+da\s+(liga[çc][aã]o|chamada|solicita[çc][aã]o))\b/i,
+    /^(pergunte|solicite|pe[çc]a)\s+(o\s+)?(motivo|por\s+que)\b/i,
+    /^(pergunta|solicita|pede)\s+(o\s+)?(motivo|por\s+que)\b/i,
   ],
   CONFIRM_DATA: [
     /^(confirme|verifique|certifique\-se)\b/i,
@@ -33,6 +33,8 @@ export const PT_RULES: RuleSet = {
     /\b(get|post|put|patch|delete)\b/i,
     /^(chame|invoque|execute|busque|atualize|exclua|crie)\b/i,
     /^(chama|invoca|executa|busca|atualiza|exclui|cria)\b/i,
+    /^(verifique|confira|veja|consulte|cheque)\b/i,
+    /^(verifica|confere|v[eê]|consulta|checa)\b/i,
   ],
 };
 
