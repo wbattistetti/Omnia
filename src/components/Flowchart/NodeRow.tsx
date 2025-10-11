@@ -18,6 +18,8 @@ import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
 import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from './actVisuals';
+import { inferActType, heuristicToInternal } from '../../nlp/actType';
+import { modeToType, typeToMode } from '../../utils/normalizers';
 // Keyboard navigable type picker toolbar
 const TYPE_OPTIONS = [
   { key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
@@ -123,39 +125,39 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
     </div>
   );
 }
-import { modeToType, typeToMode } from '../../utils/normalizers';
+// (moved import of normalizers to top to avoid mid-file import parsing issues)
 
-export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
+const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
-  row,
-  nodeTitle,
-  nodeCanvasPosition,
-  onUpdate, 
-  onUpdateWithCategory,
-  onDelete, 
-  onKeyDown,
-  onDragStart,
-  onMoveRow,
-  onDropRow,
-  index,
-  canDelete,
-  totalRows,
-  isHoveredTarget = false,
-  isBeingDragged = false,
-  isPlaceholder = false,
-  style,
-  forceEditing = false,
-  onMouseEnter,
-  onMouseLeave,
-  onMouseMove,
-  bgColor: propBgColor,
-  textColor: propTextColor,
-  onEditingEnd,
-  onCreateAgentAct,
-  onCreateBackendCall,
-  onCreateTask,
-  getProjectId
-  },
+    row,
+    nodeTitle,
+    nodeCanvasPosition,
+    onUpdate,
+    onUpdateWithCategory,
+    onDelete,
+    onKeyDown,
+    onDragStart,
+    onMoveRow,
+    onDropRow,
+    index,
+    canDelete,
+    totalRows,
+    isHoveredTarget = false,
+    isBeingDragged = false,
+    isPlaceholder = false,
+    style,
+    forceEditing = false,
+    onMouseEnter,
+    onMouseLeave,
+    onMouseMove,
+    bgColor: propBgColor,
+    textColor: propTextColor,
+    onEditingEnd,
+    onCreateAgentAct,
+    onCreateBackendCall,
+    onCreateTask,
+    getProjectId
+  }: NodeRowProps,
   ref
 ) => {
   const { data: projectDataCtx } = useProjectData();
@@ -409,7 +411,7 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
     }
   };
 
-  const handleKeyDownInternal = (e: React.KeyboardEvent) => {
+  const handleKeyDownInternal = async (e: React.KeyboardEvent) => {
     const dbg = (() => { try { return Boolean(localStorage.getItem('debug.picker')); } catch { return false; } })();
 
     if (e.key === '/' && !showIntellisense) {
@@ -460,16 +462,32 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
         return;
       }
 
-      // Agent Acts: apri intellisense (se chiuso) e abilita il picker di creazione
-      if (dbg) try { console.log('[Picker][Enter]', { q, showIntellisense, beforeAllowCreatePicker: allowCreatePicker, beforeShowCreatePicker: showCreatePicker }); } catch {}
-      setIntellisenseQuery(q);
-      // Quando si preme Enter vogliamo solo il type picker, non la lista
-      setShowIntellisense(false);
-      setAllowCreatePicker(true);
-      setShowCreatePicker(true);
-      try { inputRef.current?.blur(); } catch {}
-      if (dbg) try { console.log('[Picker][Enter->state]', { afterAllowCreatePicker: true, afterShowCreatePicker: true }); } catch {}
-      return;
+      // Alt+Enter: apri la toolbar manuale dei tipi
+      if (e.altKey) {
+        if (dbg) try { console.log('[Picker][Alt+Enter]', { q }); } catch {}
+        setIntellisenseQuery(q);
+        setShowIntellisense(false);
+        setAllowCreatePicker(true);
+        setShowCreatePicker(true);
+        try { inputRef.current?.blur(); } catch {}
+        return;
+      }
+      // Heuristica multilingua: IT/EN/PT con fallback a Message
+      try {
+        const inf = inferActType(q, { languageOrder: ['IT','EN','PT'] as any });
+        const internal = heuristicToInternal(inf.type as any);
+        if (dbg) try { console.log('[Heuristics][actType]', { q, inf, internal }); } catch {}
+        await handlePickType(internal);
+        return;
+      } catch (err) {
+        try { console.warn('[Heuristics] failed, fallback to picker', err); } catch {}
+        setIntellisenseQuery(q);
+        setShowIntellisense(false);
+        setAllowCreatePicker(true);
+        setShowCreatePicker(true);
+        try { inputRef.current?.blur(); } catch {}
+        return;
+      }
     }
   };
 
@@ -871,4 +889,6 @@ export const NodeRow = React.forwardRef<HTMLDivElement, NodeRowProps>((
       )}
     </>
   );
-});
+};
+
+export const NodeRow = React.forwardRef(NodeRowInner);

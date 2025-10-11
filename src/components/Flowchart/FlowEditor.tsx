@@ -532,6 +532,34 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     } catch {}
   }
 
+  // Promuove il nodo/edge temporanei a definitivi e rimuove ogni altro temporaneo residuo
+  function finalizeTempPromotion(keepNodeId: string, keepEdgeId?: string) {
+    // 1) marca il nodo da tenere come non temporaneo e rimuovi tutti i temporanei residui
+    setNodes((nds) => nds
+      .map(n => n.id === keepNodeId ? { ...n, data: { ...(n.data as any), isTemporary: false } } : n)
+      .filter(n => !(n as any)?.data?.isTemporary)
+    );
+    // 2) rimuovi eventuali edge che puntano a nodi temporanei (che sono appena stati rimossi)
+    setEdges((eds) => {
+      const current = nodesRef.current;
+      return eds.filter(e => {
+        const tgt = current.find(n => n.id === e.target);
+        return !(tgt && (tgt.data as any)?.isTemporary);
+      });
+    });
+    // 3) azzera i riferimenti temporanei e bersagli
+    try {
+      connectionMenuRef.current.tempNodeId = null as any;
+      connectionMenuRef.current.tempEdgeId = null as any;
+      connectionMenuRef.current.targetNodeId = null as any;
+      connectionMenuRef.current.targetHandleId = null as any;
+      (window as any).__flowLastTemp = null;
+      (tempEdgeIdGlobal as any).current = null;
+    } catch {}
+    // 4) cleanup di sicurezza
+    cleanupAllTempNodesAndEdges();
+  }
+
   const onConnectEnd = useCallback((event: any) => {
     // Se subito prima è stata creata una edge reale (onConnect), NON creare il collegamento flottante
     if (pendingEdgeIdRef.current) {
@@ -620,6 +648,48 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       closeMenu();
       return;
     }
+    // 1) Promozione prioritaria dei temporanei (se presenti)
+    {
+      const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
+      let tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
+      if (tempNodeId) {
+        setNodes((nds) => nds.map(n => n.id === tempNodeId ? {
+          ...n,
+          data: { ...(n.data as any), isTemporary: false, focusRowId: '1' }
+        } : n));
+        if (tempEdgeId) {
+          setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
+            ...e,
+            style: { stroke: '#8b5cf6' },
+            label: item.description || item.name || '',
+            data: { ...(e.data || {}), onDeleteEdge }
+          } : e));
+        } else {
+          // Crea la edge mancante dal source al temp node convertito
+          const newEdgeId = uuidv4();
+          setEdges((eds) => ([...eds, {
+            id: newEdgeId,
+            source: connectionMenuRef.current.sourceNodeId || '',
+            sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
+            target: tempNodeId || '',
+            targetHandle: connectionMenuRef.current.targetHandleId || undefined,
+            style: { stroke: '#8b5cf6' },
+            label: item.description || item.name || '',
+            type: 'custom',
+            data: { onDeleteEdge },
+            markerEnd: 'arrowhead'
+          } as any]));
+          tempEdgeId = newEdgeId;
+        }
+        log('convertTemp', { tempNodeId, tempEdgeId });
+        finalizeTempPromotion(tempNodeId, tempEdgeId || undefined);
+        setSelectedEdgeId(tempEdgeId || null);
+        closeMenu();
+        return;
+      }
+    }
+
+    // 2) Collegamento fra nodi esistenti
     if (connectionMenuRef.current.sourceNodeId && connectionMenuRef.current.targetNodeId) {
       const newEdgeId = uuidv4();
       setEdges((eds) => {
@@ -658,49 +728,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           return 'top-target'; // fallback
       }
     };
-    // Strict: require explicit temp ids
-    const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
-    let tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
-    if (!tempNodeId || !tempEdgeId) {
-      try { console.warn('[CondFix] promote aborted (missing temp ids)', { tempNodeId, tempEdgeId }); } catch {}
-      return;
-    }
-    if (tempNodeId) {
-      setNodes((nds) => nds.map(n => n.id === tempNodeId ? {
-        ...n,
-        data: { ...(n.data as any), isTemporary: false, focusRowId: '1' }
-      } : n));
-      if (tempEdgeId) {
-        setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
-          ...e,
-          style: { stroke: '#8b5cf6' },
-          label: item.description || item.name || '',
-          data: { ...(e.data || {}), onDeleteEdge }
-        } : e));
-      } else {
-        // Crea la edge mancante dal source al temp node convertito
-        const newEdgeId = uuidv4();
-        setEdges((eds) => ([...eds, {
-          id: newEdgeId,
-          source: connectionMenuRef.current.sourceNodeId || '',
-          sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-          target: tempNodeId || '',
-          targetHandle: connectionMenuRef.current.targetHandleId || undefined,
-          style: { stroke: '#8b5cf6' },
-          label: item.description || item.name || '',
-          type: 'custom',
-          data: { onDeleteEdge },
-          markerEnd: 'arrowhead'
-        } as any]));
-        tempEdgeId = newEdgeId;
-      }
-      log('convertTemp', { tempNodeId, tempEdgeId });
-      connectionMenuRef.current.tempNodeId = null as any;
-      connectionMenuRef.current.tempEdgeId = null as any;
-      setSelectedEdgeId(tempEdgeId);
-      closeMenu();
-      return;
-    }
+    // 3) Nessun temp id e nessun target esistente: caso non valido → cleanup
 
     // Strict: non creare un nuovo nodo se mancano i temp IDs (evita ghost nodes)
     log('createNew.aborted', { reason: 'missing_temp_ids_and_target' });
