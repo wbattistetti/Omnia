@@ -839,13 +839,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               if (ddt) {
                 openDDT(ddt);
               } else {
-                // Message (non-interactive): apertura istantanea con cache locale
-                const templateText = ((row as any)?.message?.text) ?? (row.text || '');
-                try {
-                  console.log('[Row][openDDT] open NonInteractive', { title: row.text || 'Agent message', templateText });
-                  const { emitNonInteractiveEditorOpen } = await import('../../ui/events');
-                  emitNonInteractiveEditorOpen({ title: row.text || 'Agent message', template: templateText, instanceId: (row as any)?.instanceId });
-                } catch {}
+                // Apri SEMPRE il ResponseEditor con Wizard a sinistra (DDT vuoto)
+                const placeholder = {
+                  id: (row as any)?.instanceId || `temp_ddt_${Date.now()}`,
+                  label: row.text || 'Data',
+                  mainData: []
+                } as any;
+                try { console.log('[Row][openDDT] open ResponseEditor (Wizard)', { id: placeholder.id, label: placeholder.label }); } catch {}
+                openDDT(placeholder);
               }
             } catch (e) { console.warn('[Row][openDDT] failed', e); }
           }}

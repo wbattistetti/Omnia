@@ -1,4 +1,6 @@
 import React from 'react';
+import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
+import { isDDTEmpty } from '../../../utils/ddt';
 import ActionList from '../ActionViewer/ActionList';
 import { Plus } from 'lucide-react';
 import TreeView from './TreeView';
@@ -37,6 +39,7 @@ export interface ResponseEditorUIProps {
   selectedStep?: string;
   onToggleSimulator?: () => void;
   showSimulator?: boolean;
+  onWizardComplete?: (ddt: any) => void;
 }
 
 const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
@@ -46,6 +49,23 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
   const [showSynonyms, setShowSynonyms] = React.useState(false);
 
   const [localSynonyms, setLocalSynonyms] = React.useState<string[]>([]);
+
+  // Debug logs gated by localStorage flag
+  const debugEnabled = React.useMemo(() => {
+    try { return localStorage.getItem('debug.response') === '1' || localStorage.getItem('debug.response') === 'true'; } catch { return false; }
+  }, []);
+  const log = React.useCallback((label: string, payload?: any) => {
+    if (!debugEnabled) return;
+    try { console.log(`[ResponseEditorUI] ${label}`, payload ?? ''); } catch {}
+  }, [debugEnabled]);
+
+  // Wizard visibility under header (left column)
+  const [showWizard, setShowWizard] = React.useState<boolean>(() => isDDTEmpty(props.editorState.ddt));
+  React.useEffect(() => {
+    const empty = isDDTEmpty(props.editorState.ddt);
+    setShowWizard(empty);
+    log('wizard.init', { empty });
+  }, [props.editorState.ddt, log]);
 
   // Log escalations for the selected step of the selected node
   const selectedNode = props.editorState.selectedNode;
@@ -130,28 +150,42 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
           Dizionario
         </button>
       </div>
-      
-      <StepStrip
-        steps={props.stepKeys}
-        stepMeta={props.stepMeta}
-        selectedStep={props.editorState.selectedStep}
-        onStepChange={props.editorState.onStepChange}
-      />
-      
-      {/* Lista constraint */}
-      {props.constraints && props.constraints.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <h4 style={{ color: '#fff', fontWeight: 600, fontSize: 16, marginBottom: 6 }}>Constraint attivi:</h4>
-          <ul style={{ color: '#fbbf24', fontSize: 15 }}>
-            {props.constraints.map((c, i) => (
-              <li key={c.id || i}><b>{c.title}</b> — <span style={{ color: '#cbd5e1' }}>{c.explanation}</span></li>
-            ))}
-          </ul>
+      {/* Grid: left Wizard, right editor (hide right when wizard is visible) */}
+      <div style={{ display: 'grid', gridTemplateColumns: showWizard ? 'minmax(540px, 720px)' : 'minmax(420px,520px) 1fr', gap: 12, height: '100%' }}>
+        <div style={{ overflow: 'auto', borderRight: '1px solid #1f2340' }}>
+          {showWizard && (
+            <DDTWizard
+              initialDDT={props.editorState.ddt}
+              onCancel={() => { log('wizard.cancel'); props.onClose(); }}
+              onComplete={(finalDDT) => {
+                log('wizard.complete', { hasMainData: !!finalDDT?.mainData, keys: Object.keys(finalDDT || {}).slice(0, 6) });
+                setShowWizard(false);
+                if (props.onWizardComplete) props.onWizardComplete(finalDDT);
+              }}
+              startOnStructure={false}
+            />
+          )}
         </div>
-      )}
-      
-      <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
-        <div style={{ flex: 1, minWidth: 320, padding: 16 }}>
+        {!showWizard && (
+        <div style={{ minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <StepStrip
+            steps={props.stepKeys}
+            stepMeta={props.stepMeta}
+            selectedStep={props.editorState.selectedStep}
+            onStepChange={props.editorState.onStepChange}
+          />
+          {props.constraints && props.constraints.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <h4 style={{ color: '#fff', fontWeight: 600, fontSize: 16, marginBottom: 6 }}>Constraint attivi:</h4>
+              <ul style={{ color: '#fbbf24', fontSize: 15 }}>
+                {props.constraints.map((c, i) => (
+                  <li key={c.id || i}><b>{c.title}</b> — <span style={{ color: '#cbd5e1' }}>{c.explanation}</span></li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
+            <div style={{ flex: 1, minWidth: 320, padding: 16 }}>
           {/* Main content area */}
           {showSynonyms ? (
             <SynonymsEditor
@@ -258,6 +292,7 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

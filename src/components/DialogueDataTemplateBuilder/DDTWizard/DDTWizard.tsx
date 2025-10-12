@@ -30,7 +30,7 @@ interface DataNode {
   subData?: string[];
 }
 
-const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean }> = ({ onCancel, onComplete, initialDDT, startOnStructure }) => {
+const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean; onSeePrompts?: () => void }> = ({ onCancel, onComplete, initialDDT, startOnStructure, onSeePrompts }) => {
   const API_BASE = '';
   // Ensure accent is inherited in nested components
   React.useEffect(() => {
@@ -101,11 +101,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     };
   }, []);
 
+  // Two-panel layout: show results panel at right after user clicks Continue on the left
+  const [showRight, setShowRight] = useState<boolean>(startOnStructure ? true : false);
+
   // Funzione per chiamare la detection AI
   const handleDetectType = async () => {
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
+    setShowRight(true);
     setStep('loading');
-    try { console.log('[DDT][Wizard][step] → loading'); } catch {}
+    try { console.log('[DDT][Wizard][step] → loading (two-panel)'); } catch {}
     setErrorMsg(null);
     try {
         const reqBody = userDesc.trim();
@@ -277,277 +281,79 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Se chiuso, non renderizzare nulla
   if (closed) return null;
 
-  // Durante la pipeline mostra SOLO la pipeline
-  if (step === 'pipeline') {
-    if (!stableDataNode) {
-      return null;
-    }
-    return (
-      <WizardPipelineStep
-        key={`pipeline-${stableDataNode.name || 'unknown'}`}
-        dataNode={stableDataNode}
-        detectTypeIcon={detectTypeIcon}
-        onCancel={() => handleClose()}
-        onComplete={(finalDDT) => {
-          // Propaga il DDT finale al genitore
-          handleClose(finalDDT);
-        }}
-        skipDetectType={true}
-        confirmedLabel={schemaRootLabel || ''}
-      />
-    );
-  }
-
-  // Struttura: editor dei main data (primo step dopo detect)
-  if (step === 'structure') {
-    computeWorkPlan(schemaMains, { stepsPerConstraint: 3 });
-    // Gestione tastiera: up/down per selezione
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        setSelectedIdx((prev) => Math.min(schemaMains.length - 1, prev + 1));
-        e.preventDefault();
-      } else if (e.key === 'ArrowUp') {
-        setSelectedIdx((prev) => Math.max(0, prev - 1));
-        e.preventDefault();
-      }
-    };
-    return (
-      <div style={{ padding: 16 }}>
-        <div tabIndex={0} onKeyDown={handleKeyDown} style={{ outline: 'none' }}>
-          <MainDataCollection
-            rootLabel={schemaRootLabel || 'Data'}
-            mains={schemaMains}
-            onChangeMains={setSchemaMains}
-            onAddMain={handleAddMain}
-            progressByPath={{ ...progressByPath, __root__: rootProgress }}
-            selectedIdx={selectedIdx}
-            onSelect={setSelectedIdx}
-            autoEditIndex={autoEditIndex}
-            onChangeEvent={handleChangeEvent}
-          />
-        </div>
-        {isProcessing && currentProcessingLabel && (
-          <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 10 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#0ea5e9' }}>
-              <span style={{ display: 'inline-flex', animation: 'spin 1.2s linear infinite' }}>
-                <Hourglass size={16} color="#0ea5e9" />
-              </span>
-              <span style={{ fontWeight: 600 }}>{currentProcessingLabel}<AnimatedDots /></span>
-            </div>
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12 }}>
-          <button
-            onClick={() => {
-              const v = !playChime;
-              setPlayChime(v);
-              try { localStorage.setItem('ddtWizard.playChime', v ? '1' : '0'); } catch {}
-            }}
-            title={playChime ? 'Disable chime on completion' : 'Enable chime on completion'}
-            aria-label="Toggle chime on completion"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 32,
-              height: 32,
-              border: `1px solid ${playChime ? '#0ea5e9' : '#475569'}`,
-              color: playChime ? '#0ea5e9' : '#64748b',
-              background: 'transparent',
-              borderRadius: 8,
-              cursor: 'pointer'
-            }}
-          >
-            <Bell size={16} color={playChime ? '#0ea5e9' : '#64748b'} />
-          </button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setStep('input')} style={{ background: 'transparent', color: '#fb923c', border: '1px solid #7c2d12', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Back</button>
-            <button onClick={() => handleClose()} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
-            <button
-              onClick={async () => {
-                if (isProcessing) return;
-                setIsProcessing(true);
-                // Build plan and totals (switch a refine incrementale in base a changes)
-                const hasIncremental = changes.mains.size > 0 || changes.subs.size > 0 || changes.constraints.size > 0;
-                const plan = hasIncremental ? buildPartialPlanForChanges(schemaMains as any, changes as any) : buildStepPlan(schemaMains);
-                // Nota: per brevità qui non implemento buildPartialPlanForChanges; placeholder: quando hasIncremental sarà true, costruiremo solo gli step necessari
-                const total: Record<string, number> = {};
-                const done: Record<string, number> = {};
-                for (const s of plan) { total[s.path] = (total[s.path] || 0) + 1; }
-                setTotalByPath(total);
-                setProgressByPath({});
-
-                const API_BASE = '';
-                const results: PlanRunResult[] = [];
-
-                const callStep = async (step: any) => {
-                  // Resolve datum by path
-                  const parts = step.path.split('/');
-                  const norm = (s: string) => s.replace(/\//g, '-');
-                  const findDatum = () => {
-                    const main = schemaMains.find(m => norm(m.label) === parts[0]);
-                    if (!main) return null;
-                    if (parts.length === 1) return main;
-                    const sub = (main.subData || []).find(s => norm(s.label) === parts[1]);
-                    return sub || null;
-                  };
-                  const datum: any = findDatum();
-                  if (!datum) return;
-
-                  try {
-                    const prettyPath = step.path.replace(/-/g, ' ');
-                    const mapType = (t: string) => {
-                      switch (t) {
-                        case 'start': return 'creando gli start prompts';
-                        case 'noMatch': return 'creando i no match prompts';
-                        case 'noInput': return 'creando i no input prompts';
-                        case 'confirmation': return 'creando i confirmation prompts';
-                        case 'notConfirmed': return 'creando i not confirmed prompts';
-                        case 'success': return 'creando i success prompts';
-                        case 'constraintMessages': return 'creando i messaggi di violazione vincoli';
-                        case 'validator': return 'generando il validator';
-                        case 'testset': return 'generando il test set';
-                        default: return 'processing';
-                      }
-                    };
-                    const msg = `${mapType(step.type)} per ${prettyPath}`;
-                    setCurrentProcessingLabel(msg.charAt(0).toUpperCase() + msg.slice(1));
-                    if (step.type === 'constraintMessages') {
-                      const body = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
-                      const res = await fetch(`/api/constraintMessages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                      results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
-                    } else if (step.type === 'validator') {
-                      const body = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
-                      const res = await fetch(`/api/validator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                      results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
-                    } else if (step.type === 'testset') {
-                      const datumBody = { label: datum.label, type: datum.type, constraints: (datum.constraints || []).filter((c: any) => c && c.kind !== 'required') };
-                      const res = await fetch(`/api/testset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ datum: datumBody, notes: [] }) });
-                      results.push({ step: { path: step.path, type: step.type, constraintKind: step.constraintKind }, payload: await res.json() });
-                    } else {
-                      const meaning = parts[parts.length - 1];
-                      let endpoint = '';
-                      switch (step.type) {
-                        case 'start': endpoint = '/api/startPrompt'; break;
-                        case 'noMatch': endpoint = '/api/stepNoMatch'; break;
-                        case 'noInput': endpoint = '/api/stepNoInput'; break;
-                        case 'confirmation': endpoint = '/api/stepConfirmation'; break;
-                        case 'success': endpoint = '/api/stepSuccess'; break;
-                      }
-                      if (endpoint) {
-                        const res = await fetch(`${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ meaning, desc: '' }) });
-                        results.push({ step: { path: step.path, type: step.type }, payload: await res.json() });
-                      }
-                    }
-                  } finally {
-                    // Auto-select main in processing
-                    try {
-                      const mainLabel = parts[0];
-                      const idx = schemaMains.findIndex(m => norm(m.label) === mainLabel);
-                      if (idx !== -1) setSelectedIdx(idx);
-                    } catch {}
-                    done[step.path] = (done[step.path] || 0) + 1;
-                    const nextProg: Record<string, number> = {};
-                    for (const p of Object.keys(total)) nextProg[p] = (done[p] || 0) / (total[p] || 1);
-                    setProgressByPath(nextProg);
-                    const sumDone = Object.values(done).reduce((a, b) => a + (b || 0), 0);
-                    const sumTotal = Object.values(total).reduce((a, b) => a + (b || 0), 0);
-                    setRootProgress(sumTotal ? sumDone / sumTotal : 0);
-                  }
-                };
-
-                for (const step of plan) {
-                  // sequential to animate progress
-                  /* eslint-disable no-await-in-loop */
-                  await callStep(step);
-                }
-
-                setIsProcessing(false);
-                // Build delta store and merge into persisted store
-                const deltaStore = buildArtifactStore(results);
-                let merged = mergeArtifactStores(artifactStore, deltaStore);
-                // Apply pending path moves due to rename events
-                if (pendingRenames.length > 0) {
-                  for (const { from, to } of pendingRenames) {
-                    merged = moveArtifactsPath(merged, from, to);
-                  }
-                }
-                setArtifactStore(merged);
-                // Clear processed changes and renames after incremental refine
-                if (hasIncremental) {
-                  setChanges({ mains: new Set(), subs: new Set(), constraints: new Set() });
-                  setPendingRenames([]);
-                }
-                const finalDDT = await assembleFinalDDT(schemaRootLabel || 'Data', schemaMains, merged);
-                // optional chime to signal completion
-                if (playChime) {
-                  try {
-                    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                    const o = audioCtx.createOscillator();
-                    const g = audioCtx.createGain();
-                    o.type = 'sine';
-                    o.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-                    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-                    g.gain.exponentialRampToValueAtTime(0.2, audioCtx.currentTime + 0.01);
-                    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
-                    o.connect(g);
-                    g.connect(audioCtx.destination);
-                    o.start();
-                    o.stop(audioCtx.currentTime + 0.35);
-                  } catch (_) {
-                    // ignore audio errors (e.g., autoplay restrictions)
-                  }
-                }
-                // chiudi wizard e notifica il parent per aggiornare lista e aprire editor
-                if (onComplete) {
-                  onComplete(finalDDT);
-                }
-                setClosed(true);
-              }}
-              disabled={isProcessing}
-              style={{ background: isProcessing ? '#fbbf24' : '#fb923c', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: isProcessing ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              onMouseEnter={() => {/* could compute tooltip count here */}}
-              title={(changes.mains.size + changes.subs.size + changes.constraints.size) > 0 ? `Refine ${changes.mains.size + changes.subs.size + changes.constraints.size} items` : ''}
-            >
-              {isProcessing ? (
-                <span
-                  style={{
-                    fontWeight: 700
-                  }}
-                >
-                  Processing…
-                </span>
-              ) : (
-                (changes.mains.size > 0 || changes.subs.size > 0 || changes.constraints.size > 0) ? 'Refine' : 'Continue'
-              )}
-            </button>
-          </div>
-        </div>
-        <V2TogglePanel />
-        {/* editor modal removed: sidebar will open editor after onComplete */}
-        {/* debug removed */}
+  // Two-panel layout render (simplified, as requested)
+  const rightHasContent = Boolean(
+    showRight && (
+      (step === 'structure' && Array.isArray(schemaMains) && schemaMains.length > 0) ||
+      step === 'pipeline' || step === 'error' || step === 'support'
+    )
+  );
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: rightHasContent ? 'minmax(420px,520px) 1fr' : '1fr',
+        gap: 12,
+        height: '100%',
+      }}
+    >
+      <div style={{ overflow: 'auto', padding: '0 8px' }}>
+        <WizardInputStep
+          userDesc={userDesc}
+          setUserDesc={setUserDesc}
+          onNext={handleDetectType}
+          onCancel={handleClose}
+          dataNode={stableDataNode || undefined}
+        />
       </div>
-    );
-  }
 
-  if (step === 'input') {
-    return <WizardInputStep 
-      userDesc={userDesc} 
-      setUserDesc={setUserDesc} 
-      onNext={handleDetectType} 
-      onCancel={() => handleClose()}
-    />;
-  }
-  if (step === 'loading') {
-    return <WizardLoadingStep />;
-  }
-  if (step === 'error') {
-    return <WizardErrorStep errorMsg={errorMsg} onRetry={handleDetectType} onSupport={() => setStep('support')} onCancel={() => handleClose()} />;
-  }
-  if (step === 'support') {
-    return <WizardSupportModal onOk={() => handleClose()} />;
-  }
-  return null;
+      {rightHasContent && (
+        <div style={{ overflow: 'auto', borderLeft: '1px solid #1f2340', padding: 12 }}>
+          {step === 'loading' && <WizardLoadingStep />}
+
+          {step === 'error' && (
+            <WizardErrorStep
+              errorMsg={errorMsg}
+              onRetry={handleDetectType}
+              onSupport={() => setStep('support')}
+              onCancel={handleClose}
+            />
+          )}
+
+          {step === 'structure' && (
+            <div style={{ padding: 4 }}>
+              <div tabIndex={0} style={{ outline: 'none' }}>
+                <MainDataCollection
+                  rootLabel={schemaRootLabel || 'Data'}
+                  mains={schemaMains}
+                  onChangeMains={setSchemaMains}
+                  onAddMain={handleAddMain}
+                  progressByPath={{ ...progressByPath, __root__: rootProgress }}
+                  selectedIdx={selectedIdx}
+                  onSelect={setSelectedIdx}
+                  autoEditIndex={autoEditIndex}
+                  onChangeEvent={handleChangeEvent}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
+                <button
+                  onClick={() => { if (onSeePrompts) onSeePrompts(); }}
+                  style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Build Messages
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Contenuto “normale” del pannello destro */}
+          <V2TogglePanel />
+          {/* CTA moved next to Cancel above */}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default DDTWizard;

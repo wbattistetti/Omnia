@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
+import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
 import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X, BookOpen, ListChecks, Sparkles } from 'lucide-react';
@@ -171,6 +173,20 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
   const [dragging, setDragging] = useState(false);
   const [showSynonyms, setShowSynonyms] = useState(false);
+
+  // Wizard/general layout flags
+  const [showRightGeneral, setShowRightGeneral] = useState<boolean>(false);
+  const [showWizard, setShowWizard] = useState<boolean>(() => isDDTEmpty(localDDT));
+  useEffect(() => {
+    const empty = isDDTEmpty(localDDT);
+    setShowWizard(empty);
+    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[RE][wizard.init]', { empty }); } catch {}
+  }, [localDDT]);
+
+  const handleWizardSeeResult = () => {
+    setShowWizard(false);
+    setShowRightGeneral(true);
+  };
 
   // Nodo selezionato: sempre main/sub in base agli indici
   const selectedNode = useMemo(() => {
@@ -362,10 +378,26 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
 
   // Layout
   return (
-    <div ref={rootRef} style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
+    <div ref={rootRef} style={{ position: 'relative', height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
       {/* Header con sfondo arancione sopra sidebar e contenuto */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #22273a', background: '#fb923c', minHeight: 48 }}>
-        <div style={{ color: '#0b1220', fontSize: 18, fontWeight: 700 }}>Response Editor</div>
+        <div style={{ color: '#0b1220', fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Response Editor</span>
+          <button
+            title={showWizard ? 'Close Wizard' : 'Open Wizard'}
+            onClick={() => {
+              if (showWizard) {
+                setShowWizard(false);
+              } else {
+                setShowWizard(true);
+                setShowRightGeneral(false);
+              }
+            }}
+            style={{ background: '#fff', color: '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', fontSize: 12 }}
+          >
+            ⚙
+          </button>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button title="Undo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#0b1220', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
             <Undo2 size={16} />
@@ -408,7 +440,27 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
           </button>
         </div>
       </div>
-      {/* Flex row: sidebar + contenuto */}
+      {/* Canvas centrale a 1/2 colonne */}
+      <div style={{ display: 'grid', gridTemplateColumns: (showWizard && !showRightGeneral) ? '1fr' : 'minmax(520px,1fr) minmax(360px,auto)', gap: 12, flex: 1, minHeight: 0 }}>
+        {/* Colonna sinistra: Wizard se attivo, altrimenti editor */}
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          {showWizard ? (
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+              <DDTWizard
+                initialDDT={localDDT}
+                onCancel={onClose || (() => {})}
+                onComplete={(finalDDT) => {
+                  const coerced = coercePhoneKind(finalDDT);
+                  setLocalDDT(coerced);
+                  try { replaceSelectedDDT(coerced); } catch {}
+                  // non apriamo qui la colonna destra generale; lo fa onSeePrompts
+                }}
+                startOnStructure={false}
+                onSeePrompts={handleWizardSeeResult}
+              />
+            </div>
+          ) : (
+      /* Flex row: sidebar + contenuto */
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Always visible left navigation */}
         <Sidebar
@@ -635,6 +687,29 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
             )}
           </div>
         </div>
+      </div>
+          )}
+        </div>
+
+        {/* Colonna destra generale visibile solo quando richiesto */}
+        {showRightGeneral && (
+          <div style={{ flex: 'none', minWidth: 120, width: rightWidth, maxWidth: rightWidth, borderLeft: '1px solid #eee', background: '#fafaff', minHeight: 900 }}>
+            {showSynonyms ? (
+              <div style={{ padding: 16 }}>Dizionario</div>
+            ) : (
+              <RightPanel
+                mode={rightMode}
+                width={rightWidth}
+                onWidthChange={setRightWidth}
+                onStartResize={() => setDragging(true)}
+                dragging={dragging}
+                ddt={localDDT}
+                translations={localTranslations}
+                selectedNode={selectedNode}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

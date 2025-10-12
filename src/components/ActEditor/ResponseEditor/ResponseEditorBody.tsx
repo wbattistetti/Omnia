@@ -1,40 +1,20 @@
-// REGOLA GLOBALE PER LE CHIAVI DI TRANSLATION DEI DDT (runtime):
-// Formato:
-//   runtime.<DDT_ID>.<step>[#<n>].<actionInstanceId>.text
-// - <DDT_ID>: l'id del DataDialogueTemplate (es: DDT_BirthOfDate)
-// - <step>: tipo di step (es: normal, noInput, noMatch, explicitConfirmation, success, ecc.)
-// - [#<n>]: numero escalation (opzionale, parte da 1 se ci sono più azioni per step)
-// - <actionInstanceId>: es. sayMessage2, askQuestion1, ecc.
-// - .text: suffisso fisso per il testo principale
-// Esempi:
-//   runtime.DDT_BirthOfDate.normal#1.askQuestion1.text
-//   runtime.DDT_BirthOfDate.noInput#1.sayMessage1.text
-//   runtime.DDT_BirthOfDate.noMatch#2.sayMessageX.text
-//   runtime.DDT_BirthOfDate.success#1.sayMessageSuccess.text
-// Note: questa regola va rispettata sia negli script di inserimento/aggiornamento che nel codice di lookup delle translations.
-//
-// ---
-// Executive summary: Main entry point for the Response Editor component. Handles layout and orchestration of the response tree.
-import React, { useEffect } from 'react';
-import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
-import { isDDTEmpty } from '../../../utils/ddt';
+import React from 'react';
 import ResponseEditorUI from './ResponseEditorUI';
-import { Mail, Calendar, MapPin, FileText, PlayCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle } from 'lucide-react';
+import { FileText, Calendar, Mail, MapPin, PlayCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle } from 'lucide-react';
 import { TreeNodeProps } from './types';
-import { useRef, useCallback } from 'react';
-import { estraiNodiDaDDT, insertNodeAt } from './treeFactories';
 import { createAction } from './actionFactories';
 import { createParameter } from './parameterFactories';
+import { estraiNodiDaDDT, insertNodeAt } from './treeFactories';
 import { useResponseEditorState } from './useResponseEditorState';
 
-interface ResponseEditorProps {
-  ddt?: any;
-  translations?: any;
-  lang?: string;
+interface ResponseEditorBodyProps {
+  ddt: any;
+  translations: any;
+  lang: string;
   onClose?: () => void;
 }
 
-const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang = 'it', onClose }) => {
+const ResponseEditorBody: React.FC<ResponseEditorBodyProps> = ({ ddt, translations, lang, onClose }) => {
   const {
     state,
     dispatch,
@@ -44,25 +24,17 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     redo
   } = useResponseEditorState();
 
-  // Mantieni un DDT locale che può essere aggiornato dal Wizard
-  const [ddtLocal, setDdtLocal] = React.useState<any>(ddt);
-  React.useEffect(() => { setDdtLocal(ddt); }, [ddt]);
-
-  const ddtIsEmpty = isDDTEmpty(ddtLocal);
-  const [showRight, setShowRight] = React.useState<boolean>(() => !ddtIsEmpty);
-  React.useEffect(() => { setShowRight(!ddtIsEmpty); }, [ddtIsEmpty]);
-  const showWizard = !showRight; // mostra wizard finché non completa
-
   const [showSimulator, setShowSimulator] = React.useState(false);
   const handleToggleSimulator = () => setShowSimulator(v => !v);
 
   const { selectedStep, nodes } = state;
+  const stepKeys = ddt && ddt.steps ? Object.keys(ddt.steps) : [];
 
-  const stepKeys = ddtLocal && ddtLocal.steps ? Object.keys(ddtLocal.steps) : [];
-  const historyRef = useRef<any[]>([]);
-  const indexRef = useRef(0);
+  // History management for local UI actions (kept minimal)
+  const historyRef = React.useRef<any[]>([]);
+  const indexRef = React.useRef(0);
 
-  const dispatchWithHistory = useCallback((action: any) => {
+  const dispatchWithHistory = React.useCallback((action: any) => {
     const newState = action;
     if (JSON.stringify(newState) !== JSON.stringify(state)) {
       const newHistory = historyRef.current.slice(0, indexRef.current + 1);
@@ -77,23 +49,19 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     dispatch(action);
   }, [state, dispatch]);
 
-  useEffect(() => {
-    if (stepKeys.length > 0 && !selectedStep) {
-      dispatchWithHistory({ type: 'SET_STEP', step: stepKeys[0] });
-    }
-  }, [stepKeys, selectedStep, dispatchWithHistory]);
-
-  useEffect(() => {
+  React.useEffect(() => {
     fetch('/data/actionsCatalog.json')
       .then(res => res.json())
       .then(data => dispatchWithHistory({ type: 'SET_ACTION_CATALOG', catalog: data }));
   }, [dispatchWithHistory]);
 
-  useEffect(() => {
-    const estratti = estraiNodiDaDDT(ddtLocal?.mainData, translations, lang);
+  // Build nodes from DDT whenever it changes
+  React.useEffect(() => {
+    const estratti = estraiNodiDaDDT(ddt?.mainData, translations, lang);
     dispatchWithHistory({ type: 'SET_NODES', nodes: estratti });
-  }, [ddtLocal, translations, lang, dispatchWithHistory]);
+  }, [ddt, translations, lang, dispatchWithHistory]);
 
+  // Filter nodes by selected step
   let filteredNodes: TreeNodeProps[] = [];
   if (selectedStep) {
     const escalationNodes = nodes.filter(n => n.type === 'escalation' && n.stepType === selectedStep);
@@ -141,14 +109,13 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   };
 
   const removeNode = (id: string) => {
-    if (typeof id !== 'string') {
-      console.error('[removeNode] id non è una stringa:', id, 'typeof:', typeof id);
-      return;
-    }
+    if (typeof id !== 'string') return;
     dispatchWithHistory({ type: 'REMOVE_NODE', id });
   };
 
-  const handleAddEscalation = () => dispatchWithHistory({ type: 'ADD_ESCALATION' });
+  const handleAddEscalation = () => {
+    dispatchWithHistory({ type: 'ADD_ESCALATION' });
+  };
 
   const getDDTIcon = (type: string) => {
     if (!type) return <FileText className="w-5 h-5 text-fuchsia-100 mr-2" />;
@@ -172,14 +139,14 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   const onStepChange = (step: string) => dispatchWithHistory({ type: 'SET_STEP', step });
   const onShowLabelChange = (show: boolean) => dispatchWithHistory({ type: 'SET_SHOW_LABEL', show });
 
-  const ddtType = ddtLocal?.dataType?.type;
-  const ddtLabel = ddtLocal?.label || ddtLocal?.name || '—';
+  const ddtType = ddt?.dataType?.type;
+  const ddtLabel = ddt?.label || ddt?.name || '—';
 
   const editorStateForUI = {
     ...state,
     ddtType,
     ddtLabel,
-    ddt: ddtLocal,
+    ddt,
     onStepChange,
     onShowLabelChange,
   };
@@ -189,49 +156,52 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
   };
 
   const [selectedNodeIndex, setSelectedNodeIndex] = React.useState<number | null>(null);
-
   function getNodeByIndex(mainData: any, index: any) {
     if (index == null) return mainData;
     if (!mainData.subData || !mainData.subData[index]) return mainData;
     return mainData.subData[index];
   }
 
-  const selectedNode = getNodeByIndex(ddtLocal?.mainData || {}, selectedNodeIndex);
-  const ddtForUI = ddtLocal ? {
-    ...ddtLocal,
+  const selectedNode = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
+  const ddtForUI = ddt ? {
+    ...ddt,
     steps: Object.fromEntries(
       (selectedNode?.steps || []).map((stepGroup: any) => [
         stepGroup.type,
         (stepGroup.escalations || []).map((escalation: any) => ({
-          type: 'escalation', id: escalation.escalationId, actions: escalation.actions
+          type: 'escalation',
+          id: escalation.escalationId,
+          actions: escalation.actions
         }))
       ])
     )
-  } : ddtLocal;
+  } : ddt;
 
   let uiStepKeys = ddtForUI?.steps ? Object.keys(ddtForUI.steps) : [];
-  const v2Main = ddtLocal?.v2Draft?.['__main__'];
+  const v2Main = ddt?.v2Draft?.['__main__'];
   const hasNotConfirmedV2 = Boolean(v2Main?.notConfirmed?.prompts && v2Main.notConfirmed.prompts.length === 3);
   const isMainSelected = selectedNodeIndex == null;
   if (isMainSelected && hasNotConfirmedV2 && !uiStepKeys.includes('notConfirmed')) {
     uiStepKeys = [...uiStepKeys, 'notConfirmed'];
   }
 
-  useEffect(() => {
-    const mainData = ddtLocal?.mainData || {};
+  React.useEffect(() => {
+    const mainData = ddt?.mainData || {};
     const node = getNodeByIndex(mainData, selectedNodeIndex);
-    if (node && node.steps) { node.steps.forEach((_step: any) => {}); }
-  }, [selectedNodeIndex, ddtLocal]);
+    if (node && node.steps) {
+      node.steps.forEach((_step: any) => {});
+    }
+  }, [selectedNodeIndex, ddt]);
 
-  useEffect(() => {
-    const node = getNodeByIndex(ddtLocal?.mainData || {}, selectedNodeIndex);
+  React.useEffect(() => {
+    const node = getNodeByIndex(ddt?.mainData || {}, selectedNodeIndex);
     const estratti = estraiNodiDaDDT(node, translations, lang);
     dispatchWithHistory({ type: 'SET_NODES', nodes: estratti });
-  }, [selectedNodeIndex, translations, lang, dispatchWithHistory, ddtLocal]);
+  }, [selectedNodeIndex, translations, lang, ddt, dispatchWithHistory]);
 
   const handleSelectNode = (index: number | null) => {
     setSelectedNodeIndex(index);
-    const node = getNodeByIndex(ddtLocal?.mainData || {}, index);
+    const node = getNodeByIndex(ddt?.mainData || {}, index);
     const availableSteps = node?.steps?.map((s: any) => s.type) || [];
     if (selectedStep && !availableSteps.includes(selectedStep)) {
       if (availableSteps.length > 0) dispatchWithHistory({ type: 'SET_STEP', step: availableSteps[0] });
@@ -239,51 +209,35 @@ const ResponseEditor: React.FC<ResponseEditorProps> = ({ ddt, translations, lang
     }
   };
 
-  const handleAIGenerate = async (_actionId: string, _exampleMessage: string, _applyToAll: boolean) => { return; };
+  const handleAIGenerate = async (_actionId: string, _exampleMessage: string, _applyToAll: boolean) => {
+    // Placeholder for future AI integration within the editor body
+    return;
+  };
 
   return (
-    <div style={{ height: '100%', display: 'grid', gridTemplateColumns: showWizard ? 'minmax(420px,520px) 1fr' : '1fr', gap: 12 }}>
-      {/* Colonna sinistra: Wizard (solo finché non completa) */}
-      {showWizard && (
-        <div style={{ overflow: 'auto', borderRight: '1px solid #1f2340' }}>
-          <DDTWizard
-            initialDDT={ddtLocal}
-            onCancel={onClose || (() => {})}
-            onComplete={(finalDDT) => { setDdtLocal(finalDDT); setShowRight(true); }}
-            startOnStructure={false}
-          />
-        </div>
-      )}
-
-      {/* Colonna destra: Editor */}
-      {showRight && (
-        <div style={{ minWidth: 0, overflow: 'hidden' }}>
-          <ResponseEditorUI
-            editorState={editorStateForUI}
-            filteredNodes={filteredNodes}
-            stepKeys={uiStepKeys}
-            stepMeta={stepMeta}
-            handleDrop={handleDrop}
-            removeNode={removeNode}
-            handleAddEscalation={handleAddEscalation}
-            handleUndo={undo}
-            handleRedo={redo}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            getDDTIcon={getDDTIcon}
-            onClose={onClose || (() => {})}
-            onToggleInclude={handleToggleInclude}
-            selectedNodeIndex={selectedNodeIndex}
-            onSelectNode={handleSelectNode}
-            onAIGenerate={handleAIGenerate}
-            selectedStep={selectedStep || undefined}
-            onToggleSimulator={handleToggleSimulator}
-            showSimulator={showSimulator}
-          />
-        </div>
-      )}
-    </div>
+    <ResponseEditorUI
+      editorState={editorStateForUI}
+      filteredNodes={filteredNodes}
+      stepKeys={uiStepKeys}
+      stepMeta={stepMeta}
+      handleDrop={handleDrop}
+      removeNode={removeNode}
+      handleAddEscalation={handleAddEscalation}
+      handleUndo={undo}
+      handleRedo={redo}
+      canUndo={canUndo}
+      canRedo={canRedo}
+      getDDTIcon={getDDTIcon}
+      onClose={onClose || (() => {})}
+      onToggleInclude={handleToggleInclude}
+      selectedNodeIndex={selectedNodeIndex}
+      onSelectNode={handleSelectNode}
+      onAIGenerate={handleAIGenerate}
+      selectedStep={selectedStep || undefined}
+      onToggleSimulator={handleToggleSimulator}
+      showSimulator={showSimulator}
+    />
   );
 };
 
-export default ResponseEditor;
+export default ResponseEditorBody;
