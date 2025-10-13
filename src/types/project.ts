@@ -38,6 +38,8 @@ export interface AgentActItem extends ProjectEntityItem {
   category?: string;
   // Legacy: list of user acts for interactive acts (kept for backward compat)
   userActs?: string[];
+  // ProblemClassification payload (act-owned). Present only when type === 'ProblemClassification'
+  problem?: ProblemPayload;
 }
 
 export type ProjectData = {
@@ -51,6 +53,35 @@ export type ProjectData = {
   tasks?: any[];
   macrotasks?: any[];
   // ...other fields as needed
+};
+
+// ---- ProblemClassification (Intent Editor) Act-owned model ----
+export type Lang = 'it'|'en'|'pt';
+
+export type ProblemIntentPhrase = { id: string; text: string; lang: Lang };
+
+export type ProblemIntent = {
+  id: string;
+  name: string;
+  threshold?: number;
+  phrases: {
+    matching: ProblemIntentPhrase[];
+    notMatching: ProblemIntentPhrase[];
+    keywords: { t: string; w: number }[];
+  };
+};
+
+export type ProblemEditorTest = { id: string; text: string; status: 'unknown'|'correct'|'wrong' };
+
+export type ProblemEditorState = {
+  selectedIntentId?: string;
+  tests: ProblemEditorTest[];
+};
+
+export type ProblemPayload = {
+  version: 1;
+  intents: ProblemIntent[];
+  editor?: ProblemEditorState;
 };
 
 export interface ProjectInfo {

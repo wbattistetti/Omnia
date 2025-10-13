@@ -465,6 +465,8 @@ export const ProjectDataService = {
         shortLabel: item.shortLabel,
         data: item.data,
         ddt: item.ddt,
+        // Include ProblemClassification payload persisted per act (project-owned)
+        problem: (item as any)?.problem,
         prompts: item.prompts || {},
         scope: item.scope,
         industry: item.industry,
@@ -610,6 +612,22 @@ export const ProjectDataService = {
     return JSON.stringify(projectData, null, 2);
   },
 
+  /** Update the ProblemClassification payload for an Agent Act by actId (in-memory only) */
+  setAgentActProblemById(actId: string, problem: any | null): void {
+    try {
+      const cats: any[] = (projectData as any)?.agentActs || [];
+      for (const c of cats) {
+        const items: any[] = c?.items || [];
+        for (const it of items) {
+          if (String(it?.id || it?._id) === String(actId)) {
+            (it as any).problem = problem || null;
+            return;
+          }
+        }
+      }
+    } catch {}
+  },
+
   /** Persist Agent Acts created in-memory into the project's DB (idempotent upsert). Called only on explicit Save. */
   async saveProjectActsToDb(projectId: string, data?: ProjectData): Promise<void> {
     try {
@@ -619,7 +637,8 @@ export const ProjectDataService = {
       for (const cat of categories) {
         const items: any[] = Array.isArray(cat?.items) ? cat.items : [];
         for (const it of items) {
-          const shouldPersist = (it?.isInMemory === true) || !it?.factoryId; // save only project-local/new acts
+          // Persist when: newly created in-memory, local project acts (no factoryId), or when a Problem payload exists/changed
+          const shouldPersist = Boolean(it?.problem) || (it?.isInMemory === true) || !it?.factoryId;
           if (!shouldPersist) continue;
           itemsToPersist.push({
             _id: it.id || it._id,
@@ -631,17 +650,29 @@ export const ProjectDataService = {
             category: cat.name || null,
             scope: it.scope || 'industry',
             industry: it.industry || pd?.industry || null,
-            ddtSnapshot: it.ddtSnapshot || null
+            ddtSnapshot: it.ddtSnapshot || null,
+            // Persist ProblemClassification payload
+            problem: it.problem || null
           });
         }
       }
       if (!itemsToPersist.length) return;
       // Use bulk endpoint to minimize round-trips
-      await fetch(`/api/projects/${encodeURIComponent(projectId)}/acts/bulk`, {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/acts/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: itemsToPersist })
       });
+      if (!res.ok) {
+        try {
+          const txt = await res.text();
+          console.warn('[Acts][bulk][error]', { status: res.status, statusText: res.statusText, body: txt });
+        } catch (e) {
+          console.warn('[Acts][bulk][error.no-body]', { status: res.status, statusText: res.statusText });
+        }
+      } else {
+        try { console.log('[Acts][bulk][ok]', { count: itemsToPersist.length }); } catch {}
+      }
     } catch {}
   },
 

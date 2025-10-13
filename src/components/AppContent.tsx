@@ -331,6 +331,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       const tempId = (crypto?.randomUUID ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2));
       pdUpdate.setDraft(true);
       pdUpdate.setTempId(tempId);
+      try { localStorage.setItem('current.projectId', tempId); } catch {}
       const boot = { projectId: tempId } as any;
 
       // Carica atti direttamente dalla Factory (mode deterministico) rispettando industry
@@ -379,6 +380,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
       pdUpdate.setDraft(false);
       pdUpdate.setCurrentProjectId(id);
+      try { localStorage.setItem('current.projectId', id); } catch {}
       // Carica atti dal DB progetto
       await ProjectDataService.loadActsFromProject(id);
       // Carica flow (nodi/edge)
@@ -527,6 +529,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                   const dataSvc: any = (ProjectDataService as any);
                   // 1) bootstrap (solo se siamo in draft)
+                  let pid = pdUpdate.getCurrentProjectId();
                   if (pdUpdate.isDraft()) {
                     const tb = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                     const resp = await fetch('/api/projects/bootstrap', {
@@ -540,13 +543,17 @@ export const AppContent: React.FC<AppContentProps> = ({
                     });
                     if (!resp.ok) throw new Error('bootstrap_failed');
                     const boot = await resp.json();
+                    // Aggiorna sia il context che la variabile locale da usare in questo save
                     pdUpdate.setCurrentProjectId(boot.projectId);
+                    pid = boot.projectId;
+                    try { localStorage.setItem('current.projectId', boot.projectId); } catch {}
                     pdUpdate.setDraft(false);
                     // Nota: non chiamare /api/projects/catalog qui; il bootstrap registra già nel catalogo
                     const te = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                     try { console.log('[Save][timing] bootstrap ms', Math.round(te - tb)); } catch {}
                   }
-                  const pid = pdUpdate.getCurrentProjectId();
+                  // Usa sempre la variabile locale pid (aggiornata sopra se bootstrap)
+                  try { console.log('[Save][begin]', { pid, draft: pdUpdate.isDraft() }); } catch {}
                   // 2) persisti tutte le istanze dal draft store (se esistono)
                   const key = pdUpdate.getTempId();
                   const draft = (dataSvc as any).__draftInstances?.get?.(key);
@@ -557,6 +564,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                       items.push({ baseActId: inst.baseActId, mode: inst.mode, message: inst.message, overrides: inst.overrides });
                     }
                     if (items.length) {
+                      try { console.log('[Save][instances][bulk]', { pid, count: items.length }); } catch {}
                       await (ProjectDataService as any).bulkCreateInstances(pid, items);
                     }
                     (dataSvc as any).__draftInstances.delete(key);
@@ -566,6 +574,11 @@ export const AppContent: React.FC<AppContentProps> = ({
                   // 2b) persisti gli Agent Acts creati al volo nel DB progetto (solo su Save esplicito)
                   try {
                     if (pid && projectData) {
+                      try {
+                        const flows = (window as any).__flows || {};
+                        const main = flows?.main || { nodes, edges };
+                        console.log('[Save][precheck]', { pid, mainNodes: main.nodes?.length || 0, mainEdges: main.edges?.length || 0 });
+                      } catch {}
                       const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
                       const tA1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -579,30 +592,26 @@ export const AppContent: React.FC<AppContentProps> = ({
                       try {
                         const flows = (window as any).__flows || {};
                         const main = flows?.main || { nodes, edges };
-                        console.log('[Save][flow]', { pid, flowId: 'main', nodes: main.nodes?.length || 0, edges: main.edges?.length || 0, sampleNodeIds: (main.nodes || []).slice(0,3).map((n: any) => n.id) });
+                        console.log('[Flow][save][begin]', { pid, flowId: 'main', nodes: main.nodes?.length || 0, edges: main.edges?.length || 0 });
                       } catch {}
                       const svc = await import('../services/FlowPersistService');
                       await svc.flushFlowPersist();
                       // Final PUT immediate (explicit Save)
-                      await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
+                      const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
                         method: 'PUT', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes, edges })
                       });
+                      if (!putRes.ok) {
+                        try { console.warn('[Flow][save][error]', { status: putRes.status, statusText: putRes.statusText, body: await putRes.text() }); } catch {}
+                      }
                       const tf1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      try { console.log('[Save][timing] flow ms', Math.round(tf1 - tf0)); } catch {}
+                      try { console.log('[Flow][save][ok]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0) }); } catch {}
                       // Reload automatico e overlay rimossi per test semplificato
                     } catch {}
                   }
                   const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  try { console.log('[Save][timing] total ms', Math.round(t1 - t0)); } catch {}
-                  // Persist selected language to server-side project meta if available
-                  try {
-                    const pid2 = pdUpdate.getCurrentProjectId();
-                    const lang = localStorage.getItem('project.lang');
-                    if (pid2 && lang) {
-                      await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ _id: pid2, language: lang }) });
-                    }
-                  } catch {}
+                  try { console.log('[Save][end]', { totalMs: Math.round(t1 - t0) }); } catch {}
+                  // Removed noisy meta POST; language is already stored during bootstrap
                 } catch (e) {
                   console.error('[SaveProject] commit error', e);
                 } finally {
@@ -774,13 +783,6 @@ function ActEditorOverlay(){
     }
     return () => { window.removeEventListener('resize', update); mo?.disconnect(); };
   }, []);
-  React.useEffect(() => {
-    try {
-      if (localStorage.getItem('debug.intent') === '1') {
-        console.log('[ActEditorOverlay]', { hasCtx: !!ctx, hasAct: !!ctx.act, hostRect });
-      }
-    } catch {}
-  }, [ctx, hostRect]);
   if (!ctx.act || !hostRect) return null;
   const node = (
     <div

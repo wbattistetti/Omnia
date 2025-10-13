@@ -17,12 +17,13 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTas
     (async () => {
       if (!flows[flowId] || (!flows[flowId].nodes?.length && !flows[flowId].edges?.length)) {
         if (isDraft) {
+          try { console.log('[Flow][canvas][draft-init]', { projectId, flowId }); } catch {}
           upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: [], edges: [] });
-          dlog('flow', '[canvas.loaded][draft]', { flowId });
         } else {
+          try { console.log('[Flow][canvas][load]', { projectId, flowId }); } catch {}
           const data = await loadFlow(projectId, flowId);
           upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: data.nodes, edges: data.edges });
-          dlog('flow', '[canvas.loaded]', { flowId, nodes: data.nodes.length, edges: data.edges.length });
+          try { console.log('[Flow][canvas][loaded]', { projectId, flowId, nodes: data.nodes.length, edges: data.edges.length }); } catch {}
         }
       }
     })();

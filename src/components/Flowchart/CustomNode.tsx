@@ -155,7 +155,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     if (data.focusRowId && !editingRowId && nodeRows.length > 0) {
       const firstRow = nodeRows[0];
       if (firstRow && firstRow.text.trim() === '') {
-        console.log('🎯 [PATCH1] Impostando focus per nodo nuovo:', firstRow.id);
         setEditingRowId(firstRow.id);
       }
     }
@@ -210,12 +209,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     categoryType?: EntityType,
     meta?: Partial<NodeRowData>
   ) => {
-    console.log('🔍 [AutoAppend] handleUpdateRow called with:', { 
-      rowId, 
-      newText: newText.substring(0, 20) + '...', 
-      isTemporary: data.isTemporary 
-    });
-    
     const prev = nodeRows;
     const idx = prev.findIndex(r => r.id === rowId);
     if (idx === -1) return;
@@ -242,36 +235,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             : (categoryType ?? row.categoryType)
       } as any;
     });
-    // Debug istanza/meta
-    try { console.log('[Row][handleUpdateRow][meta]', meta); } catch {}
 
     const isLast = idx === prev.length - 1;
-// ✅ MODIFICA: Auto-append SOLO per nodi temporanei (fino a quando non esci dal nodo)
-    // ✅ 
-
     const shouldAutoAppend = data.isTemporary && isLast && wasEmpty && nowFilled;
-    
-    console.log('🔍 [AutoAppend] Debug:', {
-      isTemporary: data.isTemporary,
-      isLast,
-      wasEmpty,
-      nowFilled,
-      shouldAppend: shouldAutoAppend
-    });
-    
+
     if (shouldAutoAppend) {
-      console.log('✅ [AutoAppend] Appending new row!');
       const { nextRows, newRowId } = appendEmptyRow(updatedRows);
       updatedRows = nextRows;
       setEditingRowId(newRowId);
     }
 
     setNodeRows(updatedRows);
-
-    console.log('🔍 [AutoAppend] handleUpdateRow calling onUpdate with:', { 
-      rows: updatedRows.length, 
-      isTemporary: data.isTemporary 
-    });
     data.onUpdate?.({ rows: updatedRows, isTemporary: data.isTemporary });
   };
 
@@ -312,13 +286,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             } 
           : row
       );
-      
-      // ✅ CORREZIONE: Dopo aver aggiunto un atto, esci sempre dall'editing
       setNodeRows(baseRows);
-      // Rimuovi focusRowId per evitare che il focus si riattivi
-      console.log('🔍 [Intellisense] Before onUpdate:', { isTemporary: data.isTemporary });
       data.onUpdate?.({ rows: baseRows, focusRowId: undefined, isTemporary: data.isTemporary });
-      console.log('🔍 [Intellisense] After onUpdate');
     }
     setShowIntellisense(false);
   };
@@ -366,8 +335,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
 
-    // Log rimosso
-
     window.addEventListener('pointermove', handleGlobalMouseMove as any, { capture: true });
     window.addEventListener('pointerup', handleGlobalMouseUp as any, { capture: true });
     window.addEventListener('mousemove', handleGlobalMouseMove as any, { capture: true });
@@ -383,13 +350,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     drag.setDraggedRowCurrentClientX(event.clientX);
     drag.setDraggedRowCurrentClientY(event.clientY);
 
-    drag.setDraggedRowCurrentClientX(event.clientX);
-    drag.setDraggedRowCurrentClientY(event.clientY);
-
-    // Calcola la posizione attuale della riga trascinata (senza snap)
-    // const currentDraggedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
-
-    // Determina il nuovo indice di hover basandosi sulla posizione delle altre righe
     // Determine hovered index using actual DOM positions of this node only
     let newHoveredIndex = drag.draggedRowOriginalIndex || 0;
     const scope = rowsContainerRef.current || document;
@@ -403,15 +363,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
     if (newHoveredIndex !== drag.hoveredRowIndex) {
       drag.setHoveredRowIndex(newHoveredIndex);
-      
-      // Calcola lo snap offset per far "seguire" il mouse allo scatto
-      const rowHeight = 40; // Altezza approssimativa di una riga
+      // Snap offset for visual feedback
+      const rowHeight = 40; // approx
       const targetY = drag.draggedRowInitialRect.top + (newHoveredIndex * rowHeight);
       const currentMouseBasedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
       const snapOffsetY = targetY - currentMouseBasedY;
-      
       drag.setVisualSnapOffset({ x: 0, y: snapOffsetY });
-      // Log rimosso
     }
   };
 
@@ -433,7 +390,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const draggedRow = updatedRows[drag.draggedRowOriginalIndex as number];
       updatedRows.splice(drag.draggedRowOriginalIndex as number, 1);
       updatedRows.splice(targetIndex as number, 0, draggedRow);
-      // Log rimosso
       setNodeRows(updatedRows);
       if (data.onUpdate) data.onUpdate({ rows: updatedRows });
     }
@@ -472,52 +428,16 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ PATCH 3: Canvas click semplificato - solo exit editing, niente cancellazione automatica
   useEffect(() => {
-    const onCanvasClick = (ev: any) => {
-      console.log('🖱️ [CanvasClick] Evento ricevuto:', { 
-        editingRowId, 
-        nodeId: id, 
-        isTemporary: data.isTemporary,
-        hasEditingRow: editingRowId?.startsWith(`${id}-`)
-      });
-      
-      // Se il nodo è temporaneo, fai sempre la pulizia (anche senza riga in editing)
-      if (!data.isTemporary) {
-        console.log('🖱️ [CanvasClick] Nodo non temporaneo, esco');
-        return;
-      }
-
-      // Ignora click dentro al nodo (solo se c'è una riga in editing)
-      const rootEl = rootRef.current;
-      const targetNode = ev?.target as any;
-      const isInside = !!(rootEl && targetNode && typeof rootEl.contains === 'function' && targetNode instanceof Node && rootEl.contains(targetNode));
-      if (editingRowId?.startsWith(`${id}-`) && isInside) {
-        console.log('🖱️ [CanvasClick] Click dentro al nodo con riga in editing, ignoro');
-        return;
-      }
-
-      console.log('🖱️ [CanvasClick] Click fuori dal nodo, procedo con cleanup');
-      
+    const onCanvasClick = () => {
       // Esci dall'editing e stabilizza il nodo se è temporaneo
       exitEditing();
       if (data.isTemporary) {
-        console.log('🧹 [Cleanup] Rimuovendo righe non stabilizzate...');
-        console.log('🧹 [Cleanup] Righe attuali:', nodeRows.map(r => ({ id: r.id, text: r.text, isEmpty: !r.text || r.text.trim().length === 0 })));
-        
         // Filtra via tutte le righe vuote/non stabilizzate
-        const stabilizedRows = nodeRows.filter(row => 
-          row.text && row.text.trim().length > 0
-        );
-        
-        console.log('🧹 [Cleanup] Righe prima:', nodeRows.length, 'dopo:', stabilizedRows.length);
-        console.log('🧹 [Cleanup] Righe stabilizzate:', stabilizedRows.map(r => ({ id: r.id, text: r.text })));
-        
-        // Se ci sono righe stabilizzate, aggiorna il nodo
+        const stabilizedRows = nodeRows.filter(row => row.text && row.text.trim().length > 0);
         if (stabilizedRows.length > 0) {
           setNodeRows(stabilizedRows);
           data.onUpdate?.({ rows: stabilizedRows, isTemporary: false, hidden: false });
         } else {
-          // Se non ci sono righe stabilizzate, cancella tutto il nodo
-          console.log('🧹 [Cleanup] Nessuna riga stabilizzata, cancellando nodo');
           data.onDelete?.();
         }
       }
@@ -525,7 +445,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
     window.addEventListener('flow:canvas:click', onCanvasClick as any);
     return () => window.removeEventListener('flow:canvas:click', onCanvasClick as any);
-  }, [editingRowId, id]);
+  }, [editingRowId, id, nodeRows, data]);
 
   // Crea l'array di visualizzazione per il feedback visivo
   const displayRows = useMemo(() => nodeRows, [nodeRows]);

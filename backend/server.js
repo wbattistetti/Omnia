@@ -348,7 +348,7 @@ app.get('/api/projects/:pid/flow', async (req, res) => {
     const db = await getProjectDb(client, pid);
     const nodes = await db.collection('flow_nodes').find({ flowId }).toArray();
     const edges = await db.collection('flow_edges').find({ flowId }).toArray();
-    logInfo('Flow.get', { projectId: pid, flowId, nodes: nodes?.length || 0, edges: edges?.length || 0 });
+    logInfo('Flow.get', { projectId: pid, flowId, nodesCount: nodes?.length || 0, edgesCount: edges?.length || 0 });
     res.json({ nodes, edges });
   } catch (e) {
     logError('Flow.get', e, { projectId: pid, flowId });
@@ -380,9 +380,10 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
 
     // Upsert nodes
     for (const n of nodes) {
+      if (!n || !n.id) continue;
       await ncoll.updateOne({ id: n.id, flowId }, { $set: { ...n, flowId, updatedAt: now } }, { upsert: true });
       nUpserts++;
-      existingNodeIds.delete(n.id);
+      if (n.id) existingNodeIds.delete(n.id);
     }
     // Delete removed nodes
     if (existingNodeIds.size) {
@@ -392,9 +393,10 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
 
     // Upsert edges
     for (const e of edges) {
+      if (!e || !e.id) continue;
       await ecoll.updateOne({ id: e.id, flowId }, { $set: { ...e, flowId, updatedAt: now } }, { upsert: true });
       eUpserts++;
-      existingEdgeIds.delete(e.id);
+      if (e.id) existingEdgeIds.delete(e.id);
     }
     // Delete removed edges
     if (existingEdgeIds.size) {
@@ -402,10 +404,15 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
       eDeletes = existingEdgeIds.size;
     }
 
-    logInfo('Flow.put', { projectId: pid, flowId, nodes: nodes.length, edges: edges.length, upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } });
+    logInfo('Flow.put', {
+      projectId: pid,
+      flowId,
+      payload: { nodes: nodes.length, edges: edges.length },
+      result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } }
+    });
     res.json({ ok: true, nodes: nodes.length, edges: edges.length });
   } catch (e) {
-    logError('Flow.put', e, { projectId: pid, flowId });
+    logError('Flow.put', e, { projectId: pid, flowId, payloadNodes: nodes.length, payloadEdges: edges.length });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -484,6 +491,8 @@ app.post('/api/projects/:pid/acts', async (req, res) => {
       scope: payload.scope || 'industry',
       industry: payload.industry || null,
       ddtSnapshot: payload.ddtSnapshot || null,
+      // Persist ProblemClassification payload when provided
+      problem: payload.problem || null,
       updatedAt: now,
       createdAt: now
     };
@@ -535,6 +544,8 @@ app.post('/api/projects/:pid/acts/bulk', async (req, res) => {
         scope: it.scope || 'industry',
         industry: it.industry || null,
         ddtSnapshot: it.ddtSnapshot || null,
+        // Persist ProblemClassification payload when provided
+        problem: it.problem || null,
         updatedAt: now,
         createdAt: now
       };
@@ -549,7 +560,13 @@ app.post('/api/projects/:pid/acts/bulk', async (req, res) => {
         }
       };
     });
-    const result = await coll.bulkWrite(ops, { ordered: false });
+    let result;
+    try {
+      result = await coll.bulkWrite(ops, { ordered: false });
+    } catch (e) {
+      logError('Acts.post.bulk.exec', e, { projectId: pid, count: items.length });
+      return res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
     logInfo('Acts.post.bulk', { projectId: pid, count: items.length, matched: result.matchedCount, modified: result.modifiedCount, upserted: result.upsertedCount });
     res.json({ ok: true, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, upsertedCount: result.upsertedCount });
   } catch (e) {

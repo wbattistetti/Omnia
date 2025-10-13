@@ -39,8 +39,7 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
   React.useEffect(() => {
     setFocusIdx(0);
     setTimeout(() => btnRefs.current[0]?.focus(), 0);
-    try { console.log('[TypePicker][mount]', { left, top }); } catch {}
-    return () => { try { console.log('[TypePicker][unmount]'); } catch {} };
+    return () => {};
   }, []);
 
   const moveFocus = (dr: number, dc: number) => {
@@ -65,7 +64,6 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
     const lower = (key || '').toLowerCase();
     const block = ['ArrowRight','ArrowLeft','ArrowDown','ArrowUp','Enter','Escape'];
     if (block.includes(key)) { e.preventDefault(); e.stopPropagation(); }
-    try { console.log('[TypePicker][key]', key, 'focusIdx=', focusIdx); } catch {}
 
     // Quick hotkeys by initial letter: M, D, C, P, S, B
     if (lower.length === 1 && /[a-z]/.test(lower)) {
@@ -87,7 +85,7 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
     else if (key === 'ArrowLeft') { moveFocus(0, -1); }
     else if (key === 'ArrowDown') { moveFocus(+1, 0); }
     else if (key === 'ArrowUp') { moveFocus(-1, 0); }
-    else if (key === 'Enter') { const opt = TYPE_OPTIONS[focusIdx]; if (opt) { try { console.log('[TypePicker][enterPick]', opt.key); } catch {}; onPick(opt.key); } }
+    else if (key === 'Enter') { const opt = TYPE_OPTIONS[focusIdx]; if (opt) { onPick(opt.key); } }
     // Escape: handled by parent via state; nothing else to do
   };
 
@@ -118,7 +116,7 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
             aria-selected={i === focusIdx}
             onMouseEnter={() => { setFocusIdx(i); setTimeout(() => btnRefs.current[i]?.focus(), 0); }}
             onFocus={() => { setFocusIdx(i); }}
-            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); try { console.log('[TypePicker][mousePick]', opt.key); } catch {}; onPick(opt.key); }}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onPick(opt.key); }}
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           >
             <opt.Icon className="w-4 h-4" style={{ color: opt.color }} />
@@ -198,7 +196,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const bufferRect = useOverlayBuffer(labelRef, iconPos, showIcons);
   // Debug: log overlay area changes safely (guard undefined)
   useEffect(() => {
-    try { console.log('[TypePicker][bufferRect]', bufferRect, 'showIcons=', showIcons); } catch {}
   }, [bufferRect, showIcons]);
 
   // ESC: when type toolbar is open, close it and refocus textbox without propagating to canvas
@@ -210,7 +207,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         e.preventDefault();
         e.stopPropagation();
       } catch {}
-      try { console.log('[TypePicker][esc] close'); } catch {}
       setShowCreatePicker(false);
       setAllowCreatePicker(false);
       suppressIntellisenseRef.current = true;
@@ -231,7 +227,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Debug: track picker visibility/position
   useEffect(() => {
-    try { console.log('[TypePicker][state]', { showCreatePicker, nodeOverlayPosition }); } catch {}
   }, [showCreatePicker, nodeOverlayPosition]);
 
   // reset suppression when editing ends
@@ -337,18 +332,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   useEffect(() => {
     // no-op
   }, [showIcons, row.id, iconPos, debugFlowIcons]);
-
-  useEffect(() => {
-    if (isEditing) {
-      const attemptFocus = (i: number) => {
-        const el = inputRef.current || (document.querySelector('.node-row-input') as HTMLInputElement | null);
-        const exists = Boolean(el);
-        try { if (el) { el.focus(); el.select(); } } catch {}
-        if (!exists && i < 10) setTimeout(() => attemptFocus(i + 1), 25);
-      };
-      attemptFocus(0);
-    }
-  }, [isEditing]);
 
   useEffect(() => {
     // Traccia se siamo mai entrati in editing
@@ -458,7 +441,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             scope: 'industry'
           });
           if (created) {
-            try { console.log('[CondFlow] row.update', { id: created?.id, name: q }); } catch {}
             if (onUpdateWithCategory) {
               (onUpdateWithCategory as any)(row, q, 'conditions', { conditionId: created.id });
             } else {
@@ -467,10 +449,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             setIsEditing(false);
             setShowIntellisense(false);
             setIntellisenseQuery('');
-            try {
-              console.log('[CondFlow] sidebar.refresh');
-              emitSidebarRefresh();
-            } catch {}
+            try { emitSidebarRefresh(); } catch {}
           }
         } catch (err) {
           try { console.warn('[CondFlow] quick-create failed', err); } catch {}
@@ -480,7 +459,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
       // Alt+Enter: apri la toolbar manuale dei tipi
       if (e.altKey) {
-        if (dbg) try { console.log('[Picker][Alt+Enter]', { q }); } catch {}
+        if (dbg) {}
         setIntellisenseQuery(q);
         setShowIntellisense(false);
         setAllowCreatePicker(true);
@@ -492,7 +471,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       try {
         const inf = inferActType(q, { languageOrder: ['IT','EN','PT'] as any });
         const internal = heuristicToInternal(inf.type as any);
-        if (dbg) try { console.log('[Heuristics][actType]', { q, inf, internal }); } catch {}
+        if (dbg) {}
         await handlePickType(internal);
         return;
       } catch (err) {
@@ -596,38 +575,34 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   };
 
   const handleDoubleClick = (e?: React.MouseEvent) => {
-    try { console.log('[NodeRow][dblclick] label', { rowId: row.id, target: (e?.target as any)?.className }); } catch {}
     setIsEditing(true);
   };
 
   // Open type picker when clicking the label icon (outside editing)
   const openTypePickerFromIcon = (anchor?: DOMRect) => {
-    try {
-      const rect = anchor || labelRef.current?.getBoundingClientRect();
-      if (!rect) { try { console.warn('[TypePicker][open] missing rect'); } catch {}; return; }
-      // rect is from getBoundingClientRect (viewport coords) → use fixed positioning
-      const finalPos = { left: rect.left, top: (rect as any).bottom || (rect.top + (rect as any).height || 0) };
-      // Sanity bounds
-      const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
-      const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
-      try { console.log('[TypePicker][open]', { finalPos, anchor: rect, viewport: { vw, vh }, scroll: { x: window.scrollX, y: window.scrollY } }); } catch {}
-      setNodeOverlayPosition(finalPos);
-      setShowIntellisense(false);
-      setAllowCreatePicker(true);
-      // keep toolbar visible while submenu is open
-      setShowIcons(true);
-      setShowCreatePicker(true);
-      // close on outside click or second click
-      const onDocClick = (ev: MouseEvent) => {
-        const target = ev.target as Node | null;
-        const toolbarEl = typeToolbarRef.current as unknown as HTMLElement | null;
-        if (toolbarEl && target && toolbarEl.contains(target)) return; // inside menu
-        // if clicking the same icon again, this will also fire → close
-        setShowCreatePicker(false);
-        document.removeEventListener('mousedown', onDocClick, true);
-      };
-      document.addEventListener('mousedown', onDocClick, true);
-    } catch {}
+    const rect = anchor || labelRef.current?.getBoundingClientRect();
+    if (!rect) { return; }
+    // rect is from getBoundingClientRect (viewport coords) → use fixed positioning
+    const finalPos = { left: rect.left, top: (rect as any).bottom || (rect.top + (rect as any).height || 0) };
+    // Sanity bounds
+    const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+    setNodeOverlayPosition(finalPos);
+    setShowIntellisense(false);
+    setAllowCreatePicker(true);
+    // keep toolbar visible while submenu is open
+    setShowIcons(true);
+    setShowCreatePicker(true);
+    // close on outside click or second click
+    const onDocClick = (ev: MouseEvent) => {
+      const target = ev.target as Node | null;
+      const toolbarEl = typeToolbarRef.current as unknown as HTMLElement | null;
+      if (toolbarEl && target && toolbarEl.contains(target)) return; // inside menu
+      // if clicking the same icon again, this will also fire → close
+      setShowCreatePicker(false);
+      document.removeEventListener('mousedown', onDocClick, true);
+    };
+    document.addEventListener('mousedown', onDocClick, true);
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -639,7 +614,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       const fromNode = nodeContainerRef.current ? nodeContainerRef.current.getBoundingClientRect() : null;
       const fallback = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const rect = fromRef || fromNode || fallback;
-      try { console.log('[RowDrag][mouseDown]', { rowId: row.id, index, client: { x: e.clientX, y: e.clientY }, rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height } }); } catch {}
       onDragStart(row.id, index, e.clientX, e.clientY, rect);
     }
   };
@@ -684,7 +658,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Ghost preview while dragging
   useEffect(() => {
     if (!isBeingDragged) return;
-    try { console.log('[RowDrag][ghost:create]', { rowId: row.id }); } catch {}
     const ghost = document.createElement('div');
     ghost.style.position = 'fixed';
     ghost.style.pointerEvents = 'none';
@@ -706,7 +679,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     return () => {
       document.removeEventListener('mousemove', move);
       document.body.removeChild(ghost);
-      try { console.log('[RowDrag][ghost:remove]', { rowId: row.id }); } catch {}
     };
   }, [isBeingDragged, row.text]);
 
@@ -805,12 +777,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         onMouseEnter={() => {
           if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
           setShowIcons(true);
-          try { console.log('[TypePicker][hover][enter]'); } catch {}
         }}
         onMouseLeave={() => {
           if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
           hoverHideTimerRef.current = window.setTimeout(() => setShowIcons(false), 120);
-          try { console.log('[TypePicker][hover][leave]'); } catch {}
         }}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
@@ -858,7 +828,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType
               const baseId = (row as any).baseActId || (row as any).actId || (row as any).factoryId || row.id;
               const type = resolveActType(row as any, actFound) as any;
-              try { console.log('[ActEditorHost][open]', { baseId, type, label: row.text }); } catch {}
               // Host present → open deterministically
               actEditorCtx.open({ id: String(baseId), type, label: row.text });
               return;
@@ -896,7 +865,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
       {showCreatePicker && nodeOverlayPosition && createPortal(
         <>
-          {(() => { try { console.log('[TypePicker][renderAt]', nodeOverlayPosition); } catch {}; return null; })()}
           <TypePickerToolbar
             left={nodeOverlayPosition.left}
             top={nodeOverlayPosition.top}
