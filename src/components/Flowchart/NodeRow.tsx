@@ -8,7 +8,7 @@ import { useActEditor } from '../ActEditor/EditorHost/ActEditorContext';
 import { emitSidebarRefresh } from '../../ui/events';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
-import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check } from 'lucide-react';
 import { SIDEBAR_TYPE_ICONS, getSidebarIconComponent } from '../Sidebar/sidebarTheme';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
 import { getLabelColor } from '../../utils/labelColor';
@@ -31,8 +31,7 @@ const TYPE_OPTIONS = [
   { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }
 ];
 
-function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: number; onPick: (k: string) => void; rootRef?: React.RefObject<HTMLDivElement> }) {
-  const COLS = 1; // popover as a compact vertical list
+function TypePickerToolbar({ left, top, onPick, rootRef, currentType }: { left: number; top: number; onPick: (k: string) => void; rootRef?: React.RefObject<HTMLDivElement>; currentType?: string }) {
   const [focusIdx, setFocusIdx] = React.useState(0);
   const btnRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -42,87 +41,76 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
     return () => {};
   }, []);
 
-  const moveFocus = (dr: number, dc: number) => {
-    const row = Math.floor(focusIdx / COLS);
-    const col = focusIdx % COLS;
-    let nr = row + dr;
-    let nc = col + dc;
-    if (nc < 0) { nc = COLS - 1; nr -= 1; }
-    if (nc >= COLS) { nc = 0; nr += 1; }
-    const maxIdx = TYPE_OPTIONS.length - 1;
-    const maxRow = Math.ceil(TYPE_OPTIONS.length / COLS) - 1;
-    nr = Math.max(0, Math.min(maxRow, nr));
-    let next = nr * COLS + nc;
-    if (next > maxIdx) next = maxIdx;
-    if (next < 0) next = 0;
-    setFocusIdx(next);
-    setTimeout(() => btnRefs.current[next]?.focus(), 0);
-  };
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const key = e.key;
     const lower = (key || '').toLowerCase();
-    const block = ['ArrowRight','ArrowLeft','ArrowDown','ArrowUp','Enter','Escape'];
+    const block = ['ArrowDown','ArrowUp','Enter','Escape'];
     if (block.includes(key)) { e.preventDefault(); e.stopPropagation(); }
-
-    // Quick hotkeys by initial letter: M, D, C, P, S, B
     if (lower.length === 1 && /[a-z]/.test(lower)) {
-      const map: Record<string, string> = {
-        m: 'Message',
-        d: 'DataRequest',
-        c: 'Confirmation',
-        p: 'ProblemClassification',
-        s: 'Summarizer',
-        b: 'BackendCall',
-      };
+      const map: Record<string, string> = { m:'Message', d:'DataRequest', c:'Confirmation', p:'ProblemClassification', s:'Summarizer', b:'BackendCall' };
       const match = map[lower];
-      if (match) {
-        onPick(match);
-        return;
-      }
+      if (match && match !== currentType) { onPick(match); return; }
     }
-    if (key === 'ArrowRight') { moveFocus(0, +1); }
-    else if (key === 'ArrowLeft') { moveFocus(0, -1); }
-    else if (key === 'ArrowDown') { moveFocus(+1, 0); }
-    else if (key === 'ArrowUp') { moveFocus(-1, 0); }
-    else if (key === 'Enter') { const opt = TYPE_OPTIONS[focusIdx]; if (opt) { onPick(opt.key); } }
-    // Escape: handled by parent via state; nothing else to do
+    if (key === 'ArrowDown') setFocusIdx(i => Math.min(TYPE_OPTIONS.length - 1, i + 1));
+    else if (key === 'ArrowUp') setFocusIdx(i => Math.max(0, i - 1));
+    else if (key === 'Enter') { const opt = TYPE_OPTIONS[focusIdx]; if (opt && opt.key !== currentType) onPick(opt.key); }
   };
 
   return (
     <div
-      className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl"
-      style={{ left, top, minWidth: 240, padding: '6px', marginTop: 0 }}
-      role="toolbar"
+      style={{
+        position: 'fixed', left, top,
+        padding: 6,
+        background: 'rgba(17,24,39,0.92)',
+        border: '1px solid rgba(234,179,8,0.35)',
+        boxShadow: '0 10px 24px rgba(0,0,0,0.35)',
+        width: 'max-content', maxWidth: 220,
+        borderRadius: 12,
+        backdropFilter: 'blur(3px) saturate(120%)',
+        WebkitBackdropFilter: 'blur(3px) saturate(120%)'
+      }}
+      role="menu"
       tabIndex={0}
       onKeyDown={onKeyDown}
-      onKeyDownCapture={onKeyDown}
       aria-label="Pick act type"
       ref={rootRef as any}
     >
-      <div className="grid grid-cols-1 gap-1">
-        {TYPE_OPTIONS.map((opt, i) => (
-          <button
-            key={opt.key}
-            ref={el => (btnRefs.current[i] = el)}
-            className="px-3 py-1.5 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-2 text-xs whitespace-nowrap"
-            style={{
-              minWidth: 240,
-              background: i === focusIdx ? 'rgba(139,92,246,0.15)' : '#ffffff',
-              borderColor: i === focusIdx ? 'rgba(139,92,246,0.8)' : '#e5e7eb',
-              color: i === focusIdx ? '#1f2937' : '#334155'
-            }}
-            tabIndex={i === focusIdx ? 0 : -1}
-            aria-selected={i === focusIdx}
-            onMouseEnter={() => { setFocusIdx(i); setTimeout(() => btnRefs.current[i]?.focus(), 0); }}
-            onFocus={() => { setFocusIdx(i); }}
-            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onPick(opt.key); }}
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          >
-            <opt.Icon className="w-4 h-4" style={{ color: opt.color }} />
-            <span className="text-slate-700">{opt.label}</span>
-          </button>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }} onMouseLeave={() => setShowCreatePicker(false)}>
+        {TYPE_OPTIONS.map((opt, i) => {
+          const isCurrent = currentType === opt.key;
+          return (
+            <button
+              key={opt.key}
+              ref={el => (btnRefs.current[i] = el)}
+              disabled={isCurrent}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                minWidth: 180,
+                padding: '6px 8px',
+                border: 'none',
+                borderRadius: 8,
+                background: isCurrent ? 'rgba(30,41,59,0.7)' : 'rgba(0,0,0,0.75)',
+                color: isCurrent ? '#94a3b8' : '#e5e7eb',
+                cursor: isCurrent ? 'default' : 'pointer',
+                outline: i === focusIdx ? '1px solid rgba(234,179,8,0.45)' : 'none'
+              }}
+              tabIndex={i === focusIdx ? 0 : -1}
+              aria-selected={i === focusIdx}
+              onMouseEnter={() => setFocusIdx(i)}
+              onFocus={() => setFocusIdx(i)}
+              onMouseDown={(e) => { if (isCurrent) return; e.preventDefault(); e.stopPropagation(); onPick(opt.key); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <opt.Icon className="w-4 h-4" style={{ color: isCurrent ? '#64748b' : opt.color }} />
+                <span>{opt.label}</span>
+              </span>
+              {isCurrent && (
+                <Check className="w-4 h-4" style={{ color: '#22c55e' }} />
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -574,31 +562,43 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     setShowCreatePicker(false);
   };
 
+  // Ensure toolbar stays visible while the type picker is open (and cancel any pending hide timers)
+  useEffect(() => {
+    if (showCreatePicker) {
+      if (hoverHideTimerRef.current) {
+        window.clearTimeout(hoverHideTimerRef.current);
+        hoverHideTimerRef.current = null;
+      }
+      setShowIcons(true);
+    }
+  }, [showCreatePicker]);
+
   const handleDoubleClick = (e?: React.MouseEvent) => {
     setIsEditing(true);
   };
 
   // Open type picker when clicking the label icon (outside editing)
-  const openTypePickerFromIcon = (anchor?: DOMRect) => {
+  const [pickerCurrentType, setPickerCurrentType] = useState<string | undefined>(undefined);
+
+  const openTypePickerFromIcon = (anchor?: DOMRect, currentType?: string) => {
     const rect = anchor || labelRef.current?.getBoundingClientRect();
     if (!rect) { return; }
-    // rect is from getBoundingClientRect (viewport coords) → use fixed positioning
-    const finalPos = { left: rect.left, top: (rect as any).bottom || (rect.top + (rect as any).height || 0) };
-    // Sanity bounds
-    const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
-    const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+    // Position menu close to icon with minimal padding to avoid right whitespace
+    const finalPos = { left: rect.left, top: (rect as any).bottom } as { left: number; top: number };
     setNodeOverlayPosition(finalPos);
     setShowIntellisense(false);
     setAllowCreatePicker(true);
     // keep toolbar visible while submenu is open
     setShowIcons(true);
     setShowCreatePicker(true);
-    // close on outside click or second click
+    setPickerCurrentType(currentType);
+    // close on outside click (not when moving between toolbar and picker)
     const onDocClick = (ev: MouseEvent) => {
       const target = ev.target as Node | null;
       const toolbarEl = typeToolbarRef.current as unknown as HTMLElement | null;
-      if (toolbarEl && target && toolbarEl.contains(target)) return; // inside menu
-      // if clicking the same icon again, this will also fire → close
+      const overToolbar = !!(toolbarEl && target && toolbarEl instanceof Node && toolbarEl.contains(target as Node));
+      const overlayEl = document.querySelector('.node-row-outer');
+      if (overToolbar) return;
       setShowCreatePicker(false);
       document.removeEventListener('mousedown', onDocClick, true);
     };
@@ -720,13 +720,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const isAgentAct = resolvedCategoryType === 'agentActs';
 
   let Icon: React.ComponentType<any> | null = null;
+  let currentTypeForPicker: string | undefined = undefined;
 
   if (isAgentAct) {
-    const type = resolveActType(row as any, actFound) as any;
+    const typeResolved = resolveActType(row as any, actFound) as any;
+    currentTypeForPicker = typeResolved;
     const has = hasActDDT(row as any, actFound);
     // silent by default; enable only if strictly needed
     // try { if (localStorage.getItem('debug.mode')) console.log('[Type][NodeRow]', { rowId: row.id, text: row.text, type, hasDDT: has, actFound: !!actFound }); } catch {}
-    const visuals = getAgentActVisualsByType(type, has);
+    const visuals = getAgentActVisualsByType(typeResolved, has);
     Icon = visuals.Icon;
     labelTextColor = visuals.color;
   } else {
@@ -836,15 +838,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             onDoubleClick={handleDoubleClick}
             onIconsHoverChange={(v: boolean) => {
               if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
-              if (v) setShowIcons(true);
-              else hoverHideTimerRef.current = window.setTimeout(() => setShowIcons(false), 120);
+              if (v || showCreatePicker) { setShowIcons(true); }
+              else { hoverHideTimerRef.current = window.setTimeout(() => setShowIcons(false), 120); }
             }}
             onLabelHoverChange={(v: boolean) => {
               if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
-              if (v) setShowIcons(true);
-              else hoverHideTimerRef.current = window.setTimeout(() => setShowIcons(false), 120);
+              if (v || showCreatePicker) { setShowIcons(true); }
+              else { hoverHideTimerRef.current = window.setTimeout(() => setShowIcons(false), 120); }
             }}
-            onTypeChangeRequest={openTypePickerFromIcon}
+            onTypeChangeRequest={(anchor) => openTypePickerFromIcon(anchor, currentTypeForPicker)}
           />
         )}
         </div>
@@ -870,6 +872,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             top={nodeOverlayPosition.top}
             onPick={(key) => handlePickType(key)}
             rootRef={typeToolbarRef}
+            currentType={pickerCurrentType}
           />
         </>, document.body
       )}

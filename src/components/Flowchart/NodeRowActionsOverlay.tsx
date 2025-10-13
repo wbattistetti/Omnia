@@ -21,7 +21,8 @@ interface NodeRowActionsOverlayProps {
   // NEW: act type icon and handler to open inline picker
   ActIcon?: React.ComponentType<any> | null;
   actColor?: string;
-  onTypeChangeRequest?: () => void;
+  onTypeChangeRequest?: (anchor: DOMRect) => void;
+  onRequestClosePicker?: () => void;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -43,7 +44,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   onOpenDDT,
   ActIcon,
   actColor,
-  onTypeChangeRequest
+  onTypeChangeRequest,
+  onRequestClosePicker
 }) => {
   if (!showIcons || !iconPos) return null;
   const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? Math.max(12, Math.min(20, Math.round(labelRef.current.getBoundingClientRect().height * 0.7))) : 14);
@@ -77,40 +79,41 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            try {
-              console.log('[TypePicker][overlayIcon][click]', {
-                iconPos,
-                labelRect: labelRef.current?.getBoundingClientRect()
-              });
-            } catch {}
             // Anchor to the icon itself (client coordinates for fixed positioning)
             const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
             onTypeChangeRequest && onTypeChangeRequest(anchor);
           }}
+          onMouseEnter={(e) => {
+            const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            onTypeChangeRequest && onTypeChangeRequest(anchor);
+          }}
           title="Change act type"
-          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
+          className="hover:opacity-100 hover:scale-110"
         >
-          <ActIcon style={{ width: size, height: size, color: actColor || '#64748b' }} />
+          <ActIcon style={{ width: size, height: size, color: actColor || '#fbbf24', filter: 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' }} />
         </button>
       )}
       {/* Drag handle */}
       <span
-        className="cursor-grab nodrag"
+        className="cursor-grab nodrag hover:opacity-100 hover:scale-110"
         title="Trascina la riga"
-        style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 2, userSelect: 'none' }}
+        style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 2, userSelect: 'none', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
         draggable={false}
         onDragStart={(e) => { e.preventDefault(); }}
-        onPointerDown={(e) => { try { console.log('[RowDrag][grip:down]'); } catch {} onDrag(e as any); }}
-        onMouseDown={(e) => { try { console.log('[RowDrag][grip:mouseDown]'); } catch {} onDrag(e); }}
+        onPointerDown={(e) => { onDrag(e as any); }}
+        onMouseDown={(e) => { onDrag(e); }}
+        onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
       >
-        <GripVertical className="text-slate-400 hover:text-black transition-colors" style={{ width: size, height: size }} />
+        <GripVertical className="text-slate-300 hover:text-amber-300 transition-colors" style={{ width: size, height: size, filter: 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' }} />
       </span>
       {/* Matita (edit) */}
       <button 
         onClick={onEdit}
-        className="text-slate-400 hover:text-black transition-colors"
+        className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110"
         title="Edit row"
-        style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
+        style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
+        onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
       >
         <Edit3 style={{ width: size, height: size }} />
       </button>
@@ -118,9 +121,10 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       {isCondition && (
         <button
           onClick={onWrenchClick}
-          className="text-slate-400 hover:text-black transition-colors"
+          className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110"
           title="Edit condition"
-          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
+          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
+          onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
         >
           <Wrench style={{ width: size, height: size }} />
         </button>
@@ -129,17 +133,20 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       <button
         onClick={onOpenDDT}
         title={hasDDT ? 'Open DDT' : 'No DDT linked'}
-        style={{ display: 'flex', alignItems: 'center', padding: 2, background: 'none', border: 'none', cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', padding: 2, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
+        className="hover:opacity-100 hover:scale-110"
+        onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
       >
-        <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#64748b') : '#9ca3af' }} />
+        <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
       </button>
       {/* Cestino (delete) */}
       {canDelete && (
         <button 
           onClick={onDelete}
-          className="text-red-400 hover:text-red-600 transition-colors"
+          className="text-red-400 hover:text-red-500 transition-colors hover:opacity-100 hover:scale-110"
           title="Delete row"
-          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer' }}
+          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.95, transition: 'opacity 120ms linear, transform 120ms ease' }}
+          onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
         >
           <Trash2 style={{ width: size, height: size }} />
         </button>
