@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { MessageSquare, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { MessageSquare, Check, X, Trash2 } from 'lucide-react';
 import { useTestStore } from '../../state/testStore';
 import { useIntentStore } from '../../state/intentStore';
 
@@ -43,8 +43,9 @@ export default function TestGrid(){
         <div className="divide-y">
           {list.map(it => {
             const isHover = hoverId === it.id;
-            const LeftIcon = it.status === 'correct' ? CheckCircle2 : (it.status === 'wrong' ? XCircle : MessageSquare);
-            const leftColor = it.status === 'correct' ? 'text-green-500' : (it.status === 'wrong' ? 'text-red-500' : 'text-slate-400');
+            const LeftIcon = it.status === 'correct' ? Check : (it.status === 'wrong' ? X : MessageSquare);
+            const leftColor = it.status === 'correct' ? 'text-green-600' : (it.status === 'wrong' ? 'text-red-600' : 'text-slate-400');
+            const textColor = it.status === 'correct' ? 'text-green-600' : (it.status === 'wrong' ? 'text-red-600' : '');
             const isExpanded = expandedWrongId === it.id && it.status === 'wrong';
             return (
               <div key={it.id}
@@ -52,8 +53,8 @@ export default function TestGrid(){
                    onMouseEnter={() => setHoverId(it.id)}
                    onMouseLeave={() => setHoverId(undefined)}>
                 <div className="flex items-center gap-2">
-                  <LeftIcon size={16} className={leftColor} />
-                  <div className="text-sm flex-1 truncate" title={it.text}>{it.text}</div>
+                  <LeftIcon size={18} className={leftColor} />
+                  <div className={`text-sm flex-1 truncate ${textColor}`} title={it.text}>{it.text}</div>
                   {/* hover toolbar */}
                   {isHover && (
                     <div className="flex items-center gap-1">

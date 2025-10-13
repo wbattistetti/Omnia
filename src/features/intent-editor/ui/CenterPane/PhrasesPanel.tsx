@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ListGrid from '../common/ListGrid';
-import { CheckCircle, XCircle, MessageSquare, Tag, Sparkles } from 'lucide-react';
+import { CheckCircle, XCircle, MessageSquare, Tag, Sparkles, Loader2 } from 'lucide-react';
 import { generateVariantsForIntent } from '../../services/variantsService';
 
 type Phrase = { id: string; text: string };
@@ -29,6 +29,7 @@ export default function PhrasesPanel({
   const [tab, setTab] = useState<'pos'|'neg'|'key'>('pos');
   const [loading, setLoading] = useState(false);
   const [genN, setGenN] = useState<number>(10);
+  const [lastGen, setLastGen] = useState<{ count: number; requested: number } | null>(null);
 
   const posItems = useMemo(()=> positive.map(p=>({ id: p.id, label: p.text })), [positive]);
   const negItems = useMemo(()=> negative.map(p=>({ id: p.id, label: p.text })), [negative]);
@@ -90,21 +91,47 @@ export default function PhrasesPanel({
           onClick={async ()=>{
             try {
               setLoading(true);
+              setLastGen(null);
+              const requested = genN;
               // Send ALL phrases currently in the grids as explicit "do not repeat"
               const exclude = allExisting;
               const kind = tab==='pos' ? 'positive' : tab==='neg' ? 'negative' : 'keywords';
-              // Use current positive items as seeds to steer generation
-              const generated = await generateVariantsForIntent({ intentName, kind: kind as any, exclude, n: genN, lang });
+              const generated = await generateVariantsForIntent({ intentName, kind: kind as any, exclude, n: requested, lang });
+              let added = 0;
               for (const g of generated) {
-                if (tab==='pos') { if (!existsIn(g, posItems) && !existsIn(g, negItems)) onAddPositive(g); }
-                if (tab==='neg') { if (!existsIn(g, negItems) && !existsIn(g, posItems)) onAddNegative(g); }
-                if (tab==='key') { if (!existsIn(g, keyItems)) onAddKeyword(g); }
+                if (tab==='pos') { if (!existsIn(g, posItems) && !existsIn(g, negItems)) { onAddPositive(g); added++; } }
+                if (tab==='neg') { if (!existsIn(g, negItems) && !existsIn(g, posItems)) { onAddNegative(g); added++; } }
+                if (tab==='key') { if (!existsIn(g, keyItems)) { onAddKeyword(g); added++; } }
               }
+              setLastGen({ count: added, requested });
             } finally { setLoading(false); }
           }}
           >
-            <Sparkles size={14} /> {loading ? '...' : 'Generate'}
+            {loading ? (
+              <span className="flex items-center gap-1">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generate
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Sparkles size={14} /> Generate
+              </span>
+            )}
           </button>
+          {!loading && lastGen && (
+            <span
+              className={[
+                'px-2 py-0.5 text-xs rounded border',
+                lastGen.count === 0 ? 'bg-rose-100 text-rose-700 border-rose-200' :
+                lastGen.count < lastGen.requested ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                'bg-emerald-100 text-emerald-700 border-emerald-200'
+              ].join(' ')}
+              title={`Generated ${lastGen.count} of ${lastGen.requested}`}
+              aria-live="polite"
+            >
+              {lastGen.count}/{lastGen.requested}
+            </span>
+          )}
           <button
             className={`px-2 py-1 text-xs rounded-md border flex items-center gap-1`}
             onClick={async ()=>{ if (onTest) await onTest(); }}
@@ -124,6 +151,17 @@ export default function PhrasesPanel({
             onSelect={()=>{}}
             placeholder="Aggiungi frase (matching)…"
             addButtonLabel="+"
+            onEditItem={(id,newLabel)=>{ /* map id->label; here we just add new and remove old */
+              const prev = posItems.find(p=>p.id===id)?.label;
+              if (!prev) return;
+              // naive: replace text by removing/adding
+              // caller store functions expect only add; editing flow can be refined later
+              if (!existsIn(newLabel, posItems)) onAddPositive(newLabel);
+            }}
+            onDeleteItem={(id)=>{
+              // temporary: no dedicated delete in store; ignore here.
+              // Deletion should be handled by parent store (future work).
+            }}
             onEnterAdd={(text)=>{
               // dedup locale e cross-tab
               if (existsIn(text, posItems)) return; // TODO: scroll a item
@@ -142,6 +180,12 @@ export default function PhrasesPanel({
             onSelect={()=>{}}
             placeholder="Aggiungi frase (not matching)…"
             addButtonLabel="+"
+            onEditItem={(id,newLabel)=>{
+              const prev = negItems.find(p=>p.id===id)?.label;
+              if (!prev) return;
+              if (!existsIn(newLabel, negItems)) onAddNegative(newLabel);
+            }}
+            onDeleteItem={(id)=>{}}
             onEnterAdd={(text)=>{
               if (existsIn(text, negItems)) return;
               if (existsIn(text, posItems)) { setTab('pos'); return; }
@@ -159,6 +203,12 @@ export default function PhrasesPanel({
             onSelect={()=>{}}
             placeholder="Aggiungi keyword…"
             addButtonLabel="+"
+            onEditItem={(id,newLabel)=>{
+              const prev = keyItems.find(p=>p.id===id)?.label;
+              if (!prev) return;
+              if (!existsIn(newLabel, keyItems)) onAddKeyword(newLabel);
+            }}
+            onDeleteItem={(id)=>{}}
             onEnterAdd={(text)=>{
               if (existsIn(text, keyItems)) return;
               onAddKeyword(text);

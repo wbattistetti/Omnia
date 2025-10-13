@@ -7,6 +7,8 @@ type IntentState = {
   selectedId?: string;
   select: (id?: string) => void;
   addIntent: (name: string, langs: Lang[]) => string;
+  renameIntent: (id: string, name: string) => void;
+  removeIntent: (id: string) => void;
   addStaging: (id: string, vs: Variant[]) => void;
   promoteToCurated: (id: string, variantIds: string[]) => void;
   addHardNeg: (id: string, v: Variant) => void;
@@ -31,6 +33,19 @@ export const useIntentStore = create<IntentState>((set, get) => ({
     set(s => ({ intents: [it, ...s.intents], selectedId: id }));
     return id;
   },
+  renameIntent: (id, name) => set(s => {
+    const trimmed = name.trim();
+    if (!trimmed) return {} as any;
+    const n = normalizeName(trimmed);
+    const dup = s.intents.find(x => x.id !== id && normalizeName(x.name) === n);
+    if (dup) return {} as any; // ignore rename to duplicate
+    return { intents: s.intents.map(it => it.id === id ? { ...it, name: trimmed } : it) };
+  }),
+  removeIntent: (id) => set(s => {
+    const rest = s.intents.filter(it => it.id !== id);
+    const nextSelected = s.selectedId === id ? (rest[0]?.id) : s.selectedId;
+    return { intents: rest, selectedId: nextSelected };
+  }),
   addStaging: (id, vs) => set(s => ({
     intents: s.intents.map(it => it.id === id ? { ...it, variants: { ...it.variants, staging: [...it.variants.staging, ...vs] } } : it)
   })),

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Optional
 import os
+import itertools
 
 try:
     from backend.call_groq import call_groq
@@ -43,49 +44,68 @@ def _fallback_generate(name: str, kind: str, lang: str, num: int, exclude: list[
 
     if kind == 'keywords':
         if lang == 'pt':
-            add_many([
-                '{name}', 'segunda via', '2ª via', 'segunda via boleto', 'segunda via fatura',
-            ])
+            base = ['{name}', 'segunda via', '2ª via', 'segunda via boleto', 'segunda via fatura']
         elif lang == 'en':
-            add_many(['{name}', 'second copy', 'duplicate bill', 'bill reprint'])
+            base = ['{name}', 'second copy', 'duplicate bill', 'bill reprint']
         else:
-            add_many(['{name}', 'seconda via', 'duplicato bolletta', 'ristampa fattura'])
+            base = ['{name}', 'seconda via', 'duplicato bolletta', 'ristampa fattura']
+        # Expand up to requested amount
+        pool = list(itertools.islice(itertools.cycle(base), max(num, len(base))))
+        add_many(pool)
     else:
         if lang == 'pt':
-            add_many([
-                'preciso da segunda via da fatura',
-                'pode gerar a segunda via do boleto?',
-                'quero a 2ª via da conta',
-                'como faço para pedir a segunda via?',
-                'envie a segunda via por favor',
-                'tem como reemitir a fatura? preciso da segunda via',
-                'consigo baixar a segunda via agora?',
-                'quero consultar e imprimir a segunda via',
-                'poderia disponibilizar a segunda via da minha conta?',
-                'onde pego a 2ª via do boleto?',
-            ])
+            verbs = ['preciso', 'quero', 'consigo', 'gostaria', 'tem como', 'pode', 'poderia']
+            actions = [
+                'da segunda via da fatura',
+                'a 2ª via da conta',
+                'gerar a segunda via do boleto',
+                'reemitir a fatura (segunda via)',
+                'baixar a segunda via agora',
+                'consultar e imprimir a segunda via',
+                'disponibilizar a segunda via da minha conta',
+                'pegar a 2ª via do boleto',
+            ]
+            templates = [
+                '{v} {a}',
+                '{v} de {a}',
+                'como faço para {a}?',
+                'pode {a}?',
+                'envie {a}, por favor',
+            ]
         elif lang == 'en':
-            add_many([
-                'I need the second copy of my bill',
-                'can you reissue the invoice?',
-                'I want a duplicate bill',
-                'how can I request a reprint?',
-                'please send the second copy',
-                'is it possible to regenerate the invoice?',
-                'where can I download the duplicate bill?',
-                'I want to view and print the second copy',
-            ])
+            verbs = ['I need', 'I want', 'can I', 'could you', 'is it possible to']
+            actions = [
+                'the second copy of my bill',
+                'reissue the invoice',
+                'get a duplicate bill',
+                'request a reprint',
+                'download the duplicate bill',
+            ]
+            templates = ['{v} {a}', '{v} {a}?', 'please {a} for me']
         else:  # it
-            add_many([
-                'mi serve la seconda via della bolletta',
-                'puoi generare una copia della fattura?',
-                'vorrei il duplicato della bolletta',
-                'come posso richiedere la ristampa?',
-                'invia la seconda via per favore',
-                'è possibile riemettere la fattura?',
-                'dove scarico il duplicato della bolletta?',
-                'voglio vedere e stampare la seconda via',
-            ])
+            verbs = ['mi serve', 'vorrei', 'posso', 'puoi', 'si può']
+            actions = [
+                'la seconda via della bolletta',
+                'generare una copia della fattura',
+                'il duplicato della bolletta',
+                'richiedere la ristampa',
+                'scaricare il duplicato della bolletta',
+            ]
+            templates = ['{v} {a}', '{v} {a}?', 'per favore {a}']
+
+        # Build combinations to exceed requested amount
+        combos: list[str] = []
+        for v in verbs:
+            for a in actions:
+                for t in templates:
+                    combos.append(t.replace('{v}', v).replace('{a}', a))
+        # If still short, append name-specific requests
+        combos += [
+            f'frases para "{n}"',
+            f'varianti per "{n}"',
+            f'esempi per "{n}"',
+        ]
+        add_many(combos)
     return [ { 'text': t, 'lang': lang } for t in out[:num] ]
 
 def _build_prompt(name: str, kind: str, lang: str, num: int, exclude: List[str]) -> str:

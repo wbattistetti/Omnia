@@ -3,6 +3,7 @@ import { useIntentStore } from '../../state/intentStore';
 import PhrasesPanel from './PhrasesPanel';
 import { useIntentStore as useStore } from '../../state/intentStore';
 import { ThresholdControl } from './ThresholdControl';
+import { actionRunAllTests } from '../../actions/runAllTests';
 
 export function CenterPane({ intentId }: { intentId?: string }){
   const it = useIntentStore(s=> s.intents.find(x=>x.id===intentId));
@@ -21,11 +22,7 @@ export function CenterPane({ intentId }: { intentId?: string }){
         onAddPositive={(t)=>{ useStore.getState().addCurated(it.id, t, 'it'); }}
         onAddNegative={(t)=>{ useStore.getState().addHardNeg(it.id, { id: (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2), text: t, lang: 'it' }); }}
         onAddKeyword={(t)=>{ useStore.getState().addKeyword(it.id, t, 1); }}
-        onTest={async ()=>{
-          // Real services hook point: call trainingService + inferenceService
-          // Qui possiamo prelevare il testo dalla TestConsole via store condiviso
-          console.log('[Test][train+inference] TODO: collega servizi reali');
-        }}
+        onTest={async ()=>{ try { await actionRunAllTests(); } catch {} }}
       />
     </div>
   );
