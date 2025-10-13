@@ -9,7 +9,7 @@ export function CenterPane({ intentId }: { intentId?: string }){
   if(!it) return <div className="border rounded-2xl p-4 bg-white">Select a problem</div>;
   try { if (localStorage.getItem('debug.intent')==='1') console.log('[CenterPane]', { intentId, name: it.name, curated: it.variants.curated.length, neg: it.variants.hardNeg.length, keys: (it as any).signals?.keywords?.length || 0 }); } catch {}
   return (
-    <div className="bg-white border rounded-2xl shadow-sm p-4 flex flex-col min-h-0">
+    <div className="h-full flex flex-col min-h-0">
       {/* titolo/soglia nascosti per semplificare: sono già nel pannello a sinistra */}
       <div className="hidden"><h2 className="font-semibold">{it.name}</h2><ThresholdControl id={it.id} value={it.threshold}/></div>
       <PhrasesPanel

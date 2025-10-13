@@ -19,7 +19,7 @@ export default function IntentEditorShell(){
         <div className="p-3 border-b border-amber-100 bg-amber-50 rounded-t-2xl">
           <h2 className="font-semibold text-amber-800">Training phrases</h2>
         </div>
-        <div className="p-3 min-h-0">
+        <div className="p-3 flex-1 min-h-0">
           <CenterPane intentId={selectedId} />
         </div>
       </div>

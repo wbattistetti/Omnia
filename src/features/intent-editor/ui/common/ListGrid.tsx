@@ -67,7 +67,7 @@ export default function ListGrid({
   };
 
   return (
-    <div className="bg-white border rounded-2xl shadow-sm p-0 flex flex-col">
+  <div className="bg-white border rounded-2xl shadow-sm p-0 flex flex-col h-full min-h-0">
       <div className="flex items-center gap-2 mb-2">
         <div className="flex items-center gap-2 flex-1 rounded-lg border px-2 py-1.5">
           {LeftIcon ? <LeftIcon size={16} /> : null}
@@ -85,7 +85,7 @@ export default function ListGrid({
           <button className="px-2 py-1 text-sm rounded-lg border" onClick={handleAdd}>{addButtonLabel}</button>
         )}
       </div>
-      <div className="overflow-auto rounded-xl border">
+    <div className="overflow-auto rounded-xl border min-h-0 flex-1">
         <div className="divide-y">
           {list.map(it => {
             const selected = it.id === selectedId;

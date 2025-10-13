@@ -59,7 +59,7 @@ export default function PhrasesPanel({
   const existsIn = (label: string, list: { id: string; label: string }[]) => list.find(i=>norm(i.label)===norm(label));
 
   return (
-    <div className="mt-2 flex flex-col min-h-0">
+    <div className="mt-2 flex flex-col min-h-0 h-full">
       {/* Tabs row tight under header */}
       <div className="flex items-center gap-2 border-b group mb-2">
         <button className={`px-3 py-1.5 text-sm flex items-center gap-2 ${tab==='pos'?'bg-emerald-100':''}`} onClick={()=>setTab('pos')}>
