@@ -18,6 +18,10 @@ interface NodeRowActionsOverlayProps {
   isCondition?: boolean;
   onWrenchClick?: () => void;
   onOpenDDT?: () => void;
+  // NEW: act type icon and handler to open inline picker
+  ActIcon?: React.ComponentType<any> | null;
+  actColor?: string;
+  onTypeChangeRequest?: () => void;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -36,7 +40,10 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   gearColor,
   isCondition,
   onWrenchClick,
-  onOpenDDT
+  onOpenDDT,
+  ActIcon,
+  actColor,
+  onTypeChangeRequest
 }) => {
   if (!showIcons || !iconPos) return null;
   const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? Math.max(12, Math.min(20, Math.round(labelRef.current.getBoundingClientRect().height * 0.7))) : 14);
@@ -64,6 +71,28 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       onMouseEnter={() => onHoverChange && onHoverChange(true)}
       onMouseLeave={() => onHoverChange && onHoverChange(false)}
     >
+      {/* Current ActType icon → opens inline type picker below */}
+      {ActIcon && (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              console.log('[TypePicker][overlayIcon][click]', {
+                iconPos,
+                labelRect: labelRef.current?.getBoundingClientRect()
+              });
+            } catch {}
+            // Anchor to the icon itself (client coordinates for fixed positioning)
+            const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            onTypeChangeRequest && onTypeChangeRequest(anchor);
+          }}
+          title="Change act type"
+          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+        >
+          <ActIcon style={{ width: size, height: size, color: actColor || '#64748b' }} />
+        </button>
+      )}
       {/* Drag handle */}
       <span
         className="cursor-grab nodrag"

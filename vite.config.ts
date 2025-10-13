@@ -15,6 +15,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/ai': { target: 'http://localhost:8000', changeOrigin: true },
       // FastAPI endpoints
       '/step1': { target: 'http://localhost:8000', changeOrigin: true },
       '/step2': { target: 'http://localhost:8000', changeOrigin: true },

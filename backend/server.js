@@ -223,6 +223,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
   const clientName = payload.clientName;
   const projectName = payload.projectName;
   const industry = payload.industry || null;
+  const language = payload.language || 'pt';
   if (!clientName || !projectName) {
     return res.status(400).json({ error: 'clientName_and_projectName_required' });
   }
@@ -247,6 +248,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       clientSlug: slugifyName(clientName),
       projectSlug: slugifyName(projectName),
       industry,
+      language,
       dbName,
       status: 'active',
       createdAt: now,
@@ -274,6 +276,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
           clientSlug: slugifyName(clientName),
           projectSlug: slugifyName(projectName),
           industry,
+          language,
           updatedAt: now
         },
         $setOnInsert: { createdAt: now }

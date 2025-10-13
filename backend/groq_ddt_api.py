@@ -28,6 +28,7 @@ try:
     from backend.ai_steps.startPrompt import router as startPrompt_router
     from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
     from backend.ai_steps.parse_address import router as parse_address_router
+    from backend.ai_endpoints.intent_generation import router as intent_gen_router
 except Exception:
     from ai_steps.step3_suggest_constraints import router as step3_router
     from ai_steps.constraint_messages import router as constraint_messages_router
@@ -42,6 +43,7 @@ except Exception:
     from ai_steps.startPrompt import router as startPrompt_router
     from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
     from ai_steps.parse_address import router as parse_address_router
+    from ai_endpoints.intent_generation import router as intent_gen_router
 
 GROQ_KEY = os.environ.get("Groq_key")
 IDE_LANGUE = os.environ.get("IdeLangue", "it")
@@ -175,6 +177,7 @@ async def log_requests(request: Request, call_next):
 app.include_router(nlp_extract_router)
 app.include_router(ner_router)
 app.include_router(parse_address_router)
+app.include_router(intent_gen_router)
 
 # --- Condition: suggest minimal variables ---
 @app.post("/api/conditions/suggest-vars")

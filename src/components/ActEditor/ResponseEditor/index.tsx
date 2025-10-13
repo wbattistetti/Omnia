@@ -4,6 +4,7 @@ import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
 import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X, BookOpen, ListChecks, Sparkles } from 'lucide-react';
+import { getAgentActVisualsByType } from '../../Flowchart/actVisuals';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
@@ -16,7 +17,7 @@ import {
   getNodeSteps
 } from './ddtSelectors';
 
-export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: () => void }) {
+export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClose?: () => void, act?: { id: string; type: string; label?: string } }) {
   // Font zoom (Ctrl+wheel) like sidebar
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 24;
@@ -379,24 +380,17 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
   // Layout
   return (
     <div ref={rootRef} style={{ position: 'relative', height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
-      {/* Header con sfondo arancione sopra sidebar e contenuto */}
+      {/* Header: icon and act label (no generic title) */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #22273a', background: '#fb923c', minHeight: 48 }}>
-        <div style={{ color: '#0b1220', fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>Response Editor</span>
-          <button
-            title={showWizard ? 'Close Wizard' : 'Open Wizard'}
-            onClick={() => {
-              if (showWizard) {
-                setShowWizard(false);
-              } else {
-                setShowWizard(true);
-                setShowRightGeneral(false);
-              }
-            }}
-            style={{ background: '#fff', color: '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', fontSize: 12 }}
-          >
-            ⚙
-          </button>
+        <div style={{ color: '#0b1220', fontSize: 18, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Left act icon identical to node visuals */}
+          {(() => {
+            const type = String(act?.type || 'Message') as any;
+            const hasDDT = !!(act && (act as any).ddt);
+            const { Icon, color } = getAgentActVisualsByType(type, hasDDT);
+            return <Icon size={22} style={{ color }} />;
+          })()}
+          <span style={{ fontWeight: 400 }}>{act?.label || ddt?.label || 'Data'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button title="Undo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#0b1220', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
@@ -435,7 +429,18 @@ export default function ResponseEditor({ ddt, onClose }: { ddt: any, onClose?: (
               <BookOpen size={16} />
             </button>
           </div>
-          <button title="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#0b1220', borderRadius: 8, padding: '6px', cursor: 'pointer', marginLeft: 12, fontSize: 20, lineHeight: 1 }}>
+          {/* Move gear to the far right, before Close */}
+          <button
+            title={showWizard ? 'Close Wizard' : 'Open Wizard'}
+            onClick={() => {
+              if (showWizard) { setShowWizard(false); }
+              else { setShowWizard(true); setShowRightGeneral(false); }
+            }}
+            style={{ background: '#fff', color: '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', marginLeft: 6 }}
+          >
+            ⚙
+          </button>
+          <button title="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#0b1220', borderRadius: 8, padding: '6px', cursor: 'pointer', marginLeft: 8, fontSize: 20, lineHeight: 1 }}>
             <X size={24} />
           </button>
         </div>

@@ -39,3 +39,8 @@ export function emitNonInteractiveEditorOpen(detail: { title?: string; template:
   try { document.dispatchEvent(new CustomEvent('nonInteractiveEditor:open', { detail, bubbles: true })); } catch {}
 }
 
+// Act Editor Host events
+export function emitActEditorOpen(detail: { id: string; type: string; label?: string }) {
+  try { document.dispatchEvent(new CustomEvent('actEditor:open', { detail, bubbles: true })); } catch {}
+}
+

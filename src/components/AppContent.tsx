@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
 import { NewProjectModal } from './NewProjectModal';
@@ -27,6 +28,8 @@ import { upsertAddNextTo } from '../dock/ops';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
+import ResizableActEditorHost from './ActEditor/EditorHost/ResizableActEditorHost';
+import { ActEditorProvider, useActEditor } from './ActEditor/EditorHost/ActEditorContext';
 import ConditionEditor from './conditions/ConditionEditor';
 import FlowRunner from './debugger/FlowRunner';
 import { useDDTContext } from '../context/DDTContext';
@@ -121,6 +124,18 @@ export const AppContent: React.FC<AppContentProps> = ({
     };
     document.addEventListener('nonInteractiveEditor:open', handler as any);
     return () => document.removeEventListener('nonInteractiveEditor:open', handler as any);
+  }, []);
+
+  // Listen for ActEditor open events (route envelope to the right editor)
+  React.useEffect(() => {
+    const h = (e: any) => {
+      try {
+        const d = (e && e.detail) || {};
+        const { open } = (require('./ActEditor/EditorHost/ActEditorContext') as any);
+      } catch {}
+    };
+    // We use context in overlay; simply set a flag by dispatching through context in NodeRow
+    return () => {};
   }, []);
 
   // Stato globale per nodi e edge
@@ -335,11 +350,12 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
+      try { localStorage.setItem('project.lang', String(projectInfo.language || 'pt')); } catch {}
       try { pdUpdate.setCurrentProjectId(boot.projectId); console.log('[Bootstrap][projectId][DRAFT]', boot.projectId); } catch {}
       setNodes([]);
       setEdges([]);
-      await refreshData();
-      setAppState('mainApp');
+    await refreshData();
+    setAppState('mainApp');
       return true;
     } catch (e) {
       setCreateError('Errore nella creazione del progetto');
@@ -399,6 +415,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
+      try { if (meta && meta.language) localStorage.setItem('project.lang', String(meta.language)); } catch {}
       setNodes(loadedNodes as any);
       setEdges(loadedEdges as any);
       await refreshData();
@@ -453,6 +470,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   }, [showAllProjectsModal, fetchAllProjects]);
 
   return (
+    <ActEditorProvider>
     <div className="min-h-screen" style={{ position: 'relative' }}>
       {/* overlay ricarico rimosso per test */}
       {/* Toast feedback */}
@@ -577,6 +595,14 @@ export const AppContent: React.FC<AppContentProps> = ({
                   }
                   const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                   try { console.log('[Save][timing] total ms', Math.round(t1 - t0)); } catch {}
+                  // Persist selected language to server-side project meta if available
+                  try {
+                    const pid2 = pdUpdate.getCurrentProjectId();
+                    const lang = localStorage.getItem('project.lang');
+                    if (pid2 && lang) {
+                      await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ _id: pid2, language: lang }) });
+                    }
+                  } catch {}
                 } catch (e) {
                   console.error('[SaveProject] commit error', e);
                 } finally {
@@ -587,7 +613,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               onSettings={() => setShowBackendBuilder(true)}
               projectName={currentProject?.name}
             />
-            <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? '1fr 380px' : '1fr' }}>
+            <div id="flow-canvas-host" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? '1fr 380px' : '1fr', position: 'relative' }}>
               {showBackendBuilder ? (
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
@@ -603,19 +629,19 @@ export const AppContent: React.FC<AppContentProps> = ({
                       />
                     </FlowWorkspaceProvider>
                   ) : (
-                    <FlowEditor
-                      nodes={nodes}
-                      setNodes={setNodes}
-                      edges={edges}
-                      setEdges={setEdges}
-                      currentProject={currentProject}
-                      setCurrentProject={setCurrentProject}
-                      onPlayNode={onPlayNode}
-                      testPanelOpen={testPanelOpen}
-                      setTestPanelOpen={setTestPanelOpen}
-                      testNodeId={testNodeId}
-                      setTestNodeId={setTestNodeId}
-                    />
+                  <FlowEditor
+                  nodes={nodes}
+                  setNodes={setNodes}
+                  edges={edges}
+                  setEdges={setEdges}
+                  currentProject={currentProject}
+                  setCurrentProject={setCurrentProject}
+                  onPlayNode={onPlayNode}
+                  testPanelOpen={testPanelOpen}
+                  setTestPanelOpen={setTestPanelOpen}
+                  testNodeId={testNodeId}
+                  setTestNodeId={setTestNodeId}
+                  />
                   )}
                   {!showGlobalDebugger && (
                     <ConditionEditor
@@ -659,6 +685,9 @@ export const AppContent: React.FC<AppContentProps> = ({
                 </div>
               )}
             </div>
+            {/* Act Editor Host overlay (always listens via context) */}
+            <ActEditorOverlay />
+
             {selectedDDT && (
               (() => {
                 const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);
@@ -711,5 +740,54 @@ export const AppContent: React.FC<AppContentProps> = ({
         </div>
       )}
     </div>
+    </ActEditorProvider>
   );
 };
+
+// Overlay that renders the ActEditorHost when an act is selected via context
+function ActEditorOverlay(){
+  const ctx = useActEditor();
+  const [hostRect, setHostRect] = React.useState<DOMRect | null>(null);
+  // Bridge DOM event → context.open to allow callers to emit without importing the hook
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const d = (e && e.detail) || {};
+      if (d && d.id && d.type) ctx.open(d);
+    };
+    document.addEventListener('actEditor:open', handler as any);
+    return () => document.removeEventListener('actEditor:open', handler as any);
+  }, [ctx]);
+  // Track canvas host bounding box
+  React.useEffect(() => {
+    const update = () => {
+      const el = document.getElementById('flow-canvas-host');
+      if (el) setHostRect(el.getBoundingClientRect());
+      else setHostRect(null);
+    };
+    update();
+    window.addEventListener('resize', update);
+    const el = document.getElementById('flow-canvas-host');
+    let mo: MutationObserver | undefined;
+    if (el) {
+      mo = new MutationObserver(update);
+      mo.observe(el, { attributes: true, childList: true, subtree: true });
+    }
+    return () => { window.removeEventListener('resize', update); mo?.disconnect(); };
+  }, []);
+  React.useEffect(() => {
+    try {
+      if (localStorage.getItem('debug.intent') === '1') {
+        console.log('[ActEditorOverlay]', { hasCtx: !!ctx, hasAct: !!ctx.act, hostRect });
+      }
+    } catch {}
+  }, [ctx, hostRect]);
+  if (!ctx.act || !hostRect) return null;
+  const node = (
+    <div
+      style={{ position: 'absolute', left: hostRect.left, width: hostRect.width, bottom: 0, zIndex: 50, pointerEvents: 'auto' }}
+    >
+      <ResizableActEditorHost act={ctx.act} onClose={ctx.close} />
+    </div>
+  );
+  return createPortal(node, document.body);
+}

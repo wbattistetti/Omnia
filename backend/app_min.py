@@ -14,10 +14,15 @@ try:
     from backend.ai_steps.nlp_extract import router as nlp_extract_router
 except Exception:
     from ai_steps.nlp_extract import router as nlp_extract_router
+try:
+    from backend.ai_endpoints.intent_generation import router as intent_gen_router
+except Exception:
+    from ai_endpoints.intent_generation import router as intent_gen_router
 
 app = FastAPI()
 app.include_router(ner_router)
 app.include_router(nlp_extract_router)
+app.include_router(intent_gen_router)
 
 
 @app.get("/api/ping")

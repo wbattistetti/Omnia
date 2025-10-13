@@ -28,7 +28,7 @@ interface NodeRowLabelProps {
   onDoubleClick: () => void;
   onIconsHoverChange?: (v: boolean) => void;
   onLabelHoverChange?: (v: boolean) => void;
-  onTypeChangeRequest?: () => void; // NEW: request to open type picker
+  onTypeChangeRequest?: (anchor?: DOMRect) => void; // NEW: request to open type picker with anchor rect
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -104,7 +104,15 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           type="button"
           title="Change act type"
           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTypeChangeRequest && onTypeChangeRequest(); }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              console.log('[TypePicker][labelIcon][click]', { rect, labelRect: labelRef.current?.getBoundingClientRect() });
+              onTypeChangeRequest && onTypeChangeRequest(rect);
+            } catch (err) { try { console.warn('[TypePicker][labelIcon][err]', err); } catch {} }
+          }}
           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', padding: 0, marginRight: 4, cursor: 'pointer' }}
         >
           <Icon
@@ -120,7 +128,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       {/* Gear icon intentionally omitted next to label; shown only in the external actions strip */}
       {row.text}
       {showIcons && iconPos && createPortal(
-        <NodeRowActionsOverlay
+          <NodeRowActionsOverlay
           iconPos={iconPos}
           showIcons={showIcons}
           canDelete={canDelete}
@@ -142,6 +150,9 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
               (await import('../../ui/events')).emitConditionEditorOpen({ variables });
             } catch {}
           }}
+            ActIcon={Icon}
+            actColor={labelTextColor}
+            onTypeChangeRequest={onTypeChangeRequest}
         />, 
         document.body
       )}

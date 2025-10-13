@@ -587,23 +587,23 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', pointerEvents: 'auto' }}
           onMouseEnter={() => setIsHoverHeader(true)}
           onMouseLeave={() => setIsHoverHeader(false)}
-        >
-          <NodeHeader
-            title={nodeTitle}
-            onDelete={handleDeleteNode}
+      >
+        <NodeHeader
+          title={nodeTitle}
+          onDelete={handleDeleteNode}
             onToggleEdit={handleEndTitleEditing}
-            onTitleUpdate={handleTitleUpdate}
-            isEditing={isEditingNode}
+          onTitleUpdate={handleTitleUpdate}
+          isEditing={isEditingNode}
             startEditingTitle={isEditingNode}
-            hasUnchecked={nodeRows.some(r => r.included === false)}
-            hideUnchecked={(data as any)?.hideUncheckedRows === true}
-            onToggleHideUnchecked={() => {
-              if (typeof data.onUpdate === 'function') {
-                data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
-              }
-            }}
-          />
-        </div>
+          hasUnchecked={nodeRows.some(r => r.included === false)}
+          hideUnchecked={(data as any)?.hideUncheckedRows === true}
+          onToggleHideUnchecked={() => {
+            if (typeof data.onUpdate === 'function') {
+              data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+            }
+          }}
+        />
+      </div>
       )}
 
       {/* Toolbar del nodo: sempre visibile sopra il nodo (sopra l'header se presente) quando hover/selected */}

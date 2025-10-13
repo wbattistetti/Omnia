@@ -4,6 +4,7 @@ import { useDDTManager } from '../../context/DDTManagerContext';
 import { ProjectDataService } from '../../services/ProjectDataService';
 import { EntityCreationService } from '../../services/EntityCreationService';
 import { createAndAttachAct } from '../../services/ActFactory';
+import { useActEditor } from '../ActEditor/EditorHost/ActEditorContext';
 import { emitSidebarRefresh } from '../../ui/events';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
@@ -31,13 +32,15 @@ const TYPE_OPTIONS = [
 ];
 
 function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: number; onPick: (k: string) => void; rootRef?: React.RefObject<HTMLDivElement> }) {
-  const COLS = 3;
+  const COLS = 1; // popover as a compact vertical list
   const [focusIdx, setFocusIdx] = React.useState(0);
   const btnRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
 
   React.useEffect(() => {
     setFocusIdx(0);
     setTimeout(() => btnRefs.current[0]?.focus(), 0);
+    try { console.log('[TypePicker][mount]', { left, top }); } catch {}
+    return () => { try { console.log('[TypePicker][unmount]'); } catch {} };
   }, []);
 
   const moveFocus = (dr: number, dc: number) => {
@@ -62,6 +65,7 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
     const lower = (key || '').toLowerCase();
     const block = ['ArrowRight','ArrowLeft','ArrowDown','ArrowUp','Enter','Escape'];
     if (block.includes(key)) { e.preventDefault(); e.stopPropagation(); }
+    try { console.log('[TypePicker][key]', key, 'focusIdx=', focusIdx); } catch {}
 
     // Quick hotkeys by initial letter: M, D, C, P, S, B
     if (lower.length === 1 && /[a-z]/.test(lower)) {
@@ -83,14 +87,14 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
     else if (key === 'ArrowLeft') { moveFocus(0, -1); }
     else if (key === 'ArrowDown') { moveFocus(+1, 0); }
     else if (key === 'ArrowUp') { moveFocus(-1, 0); }
-    else if (key === 'Enter') { const opt = TYPE_OPTIONS[focusIdx]; if (opt) onPick(opt.key); }
+    else if (key === 'Enter') { const opt = TYPE_OPTIONS[focusIdx]; if (opt) { try { console.log('[TypePicker][enterPick]', opt.key); } catch {}; onPick(opt.key); } }
     // Escape: handled by parent via state; nothing else to do
   };
 
   return (
     <div
-      className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-2"
-      style={{ left, top, minWidth: 300 }}
+      className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl"
+      style={{ left, top, minWidth: 240, padding: '6px', marginTop: 0 }}
       role="toolbar"
       tabIndex={0}
       onKeyDown={onKeyDown}
@@ -98,14 +102,14 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
       aria-label="Pick act type"
       ref={rootRef as any}
     >
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 gap-1">
         {TYPE_OPTIONS.map((opt, i) => (
           <button
             key={opt.key}
             ref={el => (btnRefs.current[i] = el)}
-            className="px-4 py-2 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-2 text-xs whitespace-nowrap"
+            className="px-3 py-1.5 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-2 text-xs whitespace-nowrap"
             style={{
-              minWidth: 180,
+              minWidth: 240,
               background: i === focusIdx ? 'rgba(139,92,246,0.15)' : '#ffffff',
               borderColor: i === focusIdx ? 'rgba(139,92,246,0.8)' : '#e5e7eb',
               color: i === focusIdx ? '#1f2937' : '#334155'
@@ -114,7 +118,7 @@ function TypePickerToolbar({ left, top, onPick, rootRef }: { left: number; top: 
             aria-selected={i === focusIdx}
             onMouseEnter={() => { setFocusIdx(i); setTimeout(() => btnRefs.current[i]?.focus(), 0); }}
             onFocus={() => { setFocusIdx(i); }}
-            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onPick(opt.key); }}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); try { console.log('[TypePicker][mousePick]', opt.key); } catch {}; onPick(opt.key); }}
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           >
             <opt.Icon className="w-4 h-4" style={{ color: opt.color }} />
@@ -190,6 +194,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     if (isEditing) setShowIcons(false);
   }, [isEditing]);
 
+  // Compute buffer after deps are defined
+  const bufferRect = useOverlayBuffer(labelRef, iconPos, showIcons);
+  // Debug: log overlay area changes safely (guard undefined)
+  useEffect(() => {
+    try { console.log('[TypePicker][bufferRect]', bufferRect, 'showIcons=', showIcons); } catch {}
+  }, [bufferRect, showIcons]);
+
   // ESC: when type toolbar is open, close it and refocus textbox without propagating to canvas
   useEffect(() => {
     if (!showCreatePicker) return;
@@ -199,6 +210,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         e.preventDefault();
         e.stopPropagation();
       } catch {}
+      try { console.log('[TypePicker][esc] close'); } catch {}
       setShowCreatePicker(false);
       setAllowCreatePicker(false);
       suppressIntellisenseRef.current = true;
@@ -217,6 +229,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     return () => document.removeEventListener('keydown', onEsc, true);
   }, [showCreatePicker]);
 
+  // Debug: track picker visibility/position
+  useEffect(() => {
+    try { console.log('[TypePicker][state]', { showCreatePicker, nodeOverlayPosition }); } catch {}
+  }, [showCreatePicker, nodeOverlayPosition]);
+
   // reset suppression when editing ends
   useEffect(() => {
     if (!isEditing) suppressIntellisenseRef.current = false;
@@ -224,8 +241,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const { openDDT } = useDDTManager();
   const hoverHideTimerRef = useRef<number | null>(null);
 
-  // Calcola la posizione e dimensione della zona buffer
-  const bufferRect = useOverlayBuffer(labelRef, iconPos, showIcons);
+  // Calcola la posizione e dimensione della zona buffer (already computed above)
 
   // Helper per entrare in editing
   const enterEditing = () => {
@@ -585,14 +601,32 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   };
 
   // Open type picker when clicking the label icon (outside editing)
-  const openTypePickerFromIcon = () => {
+  const openTypePickerFromIcon = (anchor?: DOMRect) => {
     try {
-      const rect = labelRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setNodeOverlayPosition({ left: rect.left, top: rect.bottom + window.scrollY });
+      const rect = anchor || labelRef.current?.getBoundingClientRect();
+      if (!rect) { try { console.warn('[TypePicker][open] missing rect'); } catch {}; return; }
+      // rect is from getBoundingClientRect (viewport coords) → use fixed positioning
+      const finalPos = { left: rect.left, top: (rect as any).bottom || (rect.top + (rect as any).height || 0) };
+      // Sanity bounds
+      const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+      const vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+      try { console.log('[TypePicker][open]', { finalPos, anchor: rect, viewport: { vw, vh }, scroll: { x: window.scrollX, y: window.scrollY } }); } catch {}
+      setNodeOverlayPosition(finalPos);
       setShowIntellisense(false);
       setAllowCreatePicker(true);
+      // keep toolbar visible while submenu is open
+      setShowIcons(true);
       setShowCreatePicker(true);
+      // close on outside click or second click
+      const onDocClick = (ev: MouseEvent) => {
+        const target = ev.target as Node | null;
+        const toolbarEl = typeToolbarRef.current as unknown as HTMLElement | null;
+        if (toolbarEl && target && toolbarEl.contains(target)) return; // inside menu
+        // if clicking the same icon again, this will also fire → close
+        setShowCreatePicker(false);
+        document.removeEventListener('mousedown', onDocClick, true);
+      };
+      document.addEventListener('mousedown', onDocClick, true);
     } catch {}
   };
 
@@ -739,6 +773,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // console.log(`[NodeRow] render row.id=${row.id} forceEditing=${forceEditing} isEditing=${isEditing}`);
   });
 
+  // Editor host context (for opening the right editor per ActType) - host is always present
+  const actEditorCtx = useActEditor();
+
   // Icon già determinata sopra
 
   return (
@@ -752,18 +789,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             left: bufferRect.left,
             width: bufferRect.width,
             height: bufferRect.height,
-            zIndex: 9998,
-            pointerEvents: 'auto',
+            zIndex: 500, // below toolbar buttons
+            pointerEvents: 'none', // never block clicks on toolbar
             background: 'transparent',
           }}
-          onMouseEnter={() => {
-            if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
-            setShowIcons(true);
-          }}
-          onMouseLeave={() => {
-            if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
-            hoverHideTimerRef.current = window.setTimeout(() => setShowIcons(false), 120);
-          }}
+          // keep only for debugging; since pointerEvents is none, these won't fire
         />,
         document.body
       )}
@@ -775,10 +805,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         onMouseEnter={() => {
           if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
           setShowIcons(true);
+          try { console.log('[TypePicker][hover][enter]'); } catch {}
         }}
         onMouseLeave={() => {
           if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
           hoverHideTimerRef.current = window.setTimeout(() => setShowIcons(false), 120);
+          try { console.log('[TypePicker][hover][leave]'); } catch {}
         }}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
@@ -823,31 +855,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               // no-op: projectData already available via context earlier
             } catch {}
             try {
-              // Best-effort: trova act nel projectData corrente esposto globalmente
-              // Usa il ProjectData dal context per evitare globals
-              let act: any = null;
-              const pd: any = projectDataCtx as any;
-              const baseId = (row as any).baseActId || (row as any).actId;
-              if (pd && pd.agentActs) {
-                for (const cat of pd.agentActs) {
-                  const f = (cat.items || []).find((it: any) => it.id === baseId || it._id === baseId || it.id === (row as any).factoryId);
-                  if (f) { act = f; break; }
-                }
-              }
-              const ddt = act?.ddt || act?.ddtSnapshot || (row as any)?.ddt;
-              console.log('[Row][openDDT] click', { rowId: row.id, mode: (row as any)?.mode, baseActId: baseId, hasDDT: !!ddt, instanceId: (row as any)?.instanceId });
-              if (ddt) {
-                openDDT(ddt);
-              } else {
-                // Apri SEMPRE il ResponseEditor con Wizard a sinistra (DDT vuoto)
-                const placeholder = {
-                  id: (row as any)?.instanceId || `temp_ddt_${Date.now()}`,
-                  label: row.text || 'Data',
-                  mainData: []
-                } as any;
-                try { console.log('[Row][openDDT] open ResponseEditor (Wizard)', { id: placeholder.id, label: placeholder.label }); } catch {}
-                openDDT(placeholder);
-              }
+              // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType
+              const baseId = (row as any).baseActId || (row as any).actId || (row as any).factoryId || row.id;
+              const type = resolveActType(row as any, actFound) as any;
+              try { console.log('[ActEditorHost][open]', { baseId, type, label: row.text }); } catch {}
+              // Host present → open deterministically
+              actEditorCtx.open({ id: String(baseId), type, label: row.text });
+              return;
             } catch (e) { console.warn('[Row][openDDT] failed', e); }
           }}
             onDoubleClick={handleDoubleClick}
@@ -881,12 +895,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       />
 
       {showCreatePicker && nodeOverlayPosition && createPortal(
-        <TypePickerToolbar
-          left={nodeOverlayPosition.left}
-          top={nodeOverlayPosition.top + 40}
-          onPick={(key) => handlePickType(key)}
-          rootRef={typeToolbarRef}
-        />, document.body
+        <>
+          {(() => { try { console.log('[TypePicker][renderAt]', nodeOverlayPosition); } catch {}; return null; })()}
+          <TypePickerToolbar
+            left={nodeOverlayPosition.left}
+            top={nodeOverlayPosition.top}
+            onPick={(key) => handlePickType(key)}
+            rootRef={typeToolbarRef}
+          />
+        </>, document.body
       )}
     </>
   );

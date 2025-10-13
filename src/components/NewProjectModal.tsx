@@ -24,6 +24,7 @@ const templates = [
 ];
 
 const languages = [
+  { id: 'pt', name: 'Português' },
   { id: 'en', name: 'English' },
   { id: 'it', name: 'Italiano' },
   { id: 'es', name: 'Español' },
@@ -41,7 +42,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     name: '',
     description: '',
     template: 'utility_gas',
-    language: 'en',
+    language: 'pt',
     clientName: '',
     industry: 'undefined'
   });
