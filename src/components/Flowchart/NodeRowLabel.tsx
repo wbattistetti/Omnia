@@ -29,6 +29,8 @@ interface NodeRowLabelProps {
   onIconsHoverChange?: (v: boolean) => void;
   onLabelHoverChange?: (v: boolean) => void;
   onTypeChangeRequest?: (anchor?: DOMRect) => void; // NEW: request to open type picker with anchor rect
+  onRequestClosePicker?: () => void; // NEW: ask parent to close type picker
+  overlayRef?: React.RefObject<HTMLDivElement>;
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -55,7 +57,9 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   onDoubleClick,
   onIconsHoverChange,
   onLabelHoverChange,
-  onTypeChangeRequest
+  onTypeChangeRequest,
+  onRequestClosePicker,
+  overlayRef
 }) => (
   <>
     {/* Checkbox: show only when label/text is present. Default is a black tick; unchecked shows grey box. */}
@@ -153,6 +157,8 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
             ActIcon={Icon}
             actColor={labelTextColor}
             onTypeChangeRequest={onTypeChangeRequest}
+            onRequestClosePicker={onRequestClosePicker}
+            outerRef={overlayRef}
         />, 
         document.body
       )}

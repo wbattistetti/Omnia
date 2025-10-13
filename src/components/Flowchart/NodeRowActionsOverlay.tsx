@@ -23,6 +23,7 @@ interface NodeRowActionsOverlayProps {
   actColor?: string;
   onTypeChangeRequest?: (anchor: DOMRect) => void;
   onRequestClosePicker?: () => void;
+  outerRef?: React.RefObject<HTMLDivElement>;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -45,12 +46,14 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   ActIcon,
   actColor,
   onTypeChangeRequest,
-  onRequestClosePicker
+  onRequestClosePicker,
+  outerRef
 }) => {
   if (!showIcons || !iconPos) return null;
   const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? Math.max(12, Math.min(20, Math.round(labelRef.current.getBoundingClientRect().height * 0.7))) : 14);
   return (
     <div
+      ref={outerRef}
       style={{
         position: 'fixed',
         top: iconPos.top + 3,
@@ -70,8 +73,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         pointerEvents: 'auto'
       }}
       className="flex items-center"
-      onMouseEnter={() => onHoverChange && onHoverChange(true)}
-      onMouseLeave={() => onHoverChange && onHoverChange(false)}
+      onMouseEnter={() => { onHoverChange && onHoverChange(true); console.log('[Toolbar][enter][overlay]'); }}
+      onMouseLeave={() => { onHoverChange && onHoverChange(false); console.log('[Toolbar][leave][overlay]'); }}
     >
       {/* Current ActType icon → opens inline type picker below */}
       {ActIcon && (
@@ -86,6 +89,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           onMouseEnter={(e) => {
             const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
             onTypeChangeRequest && onTypeChangeRequest(anchor);
+            console.log('[Picker][trigger] icon hover → open');
           }}
           title="Change act type"
           style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
