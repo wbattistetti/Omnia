@@ -16,6 +16,7 @@ import {
   getSubDataList,
   getNodeSteps
 } from './ddtSelectors';
+import EditorHeader from '../../common/EditorHeader';
 
 export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClose?: () => void, act?: { id: string; type: string; label?: string } }) {
   // Font zoom (Ctrl+wheel) like sidebar
@@ -187,6 +188,17 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
   const handleWizardSeeResult = () => {
     setShowWizard(false);
     setShowRightGeneral(true);
+  };
+
+  // Undo/Redo action proxies (already provided by props above in old header flow)
+  const handleUndo = () => {
+    try { (document.activeElement as HTMLElement)?.blur?.(); } catch {}
+    try { (window as any).__re_do?.undo?.(); } catch {}
+    // fallback: no-op; actual undo/redo functions were previously injected via props
+  };
+  const handleRedo = () => {
+    try { (document.activeElement as HTMLElement)?.blur?.(); } catch {}
+    try { (window as any).__re_do?.redo?.(); } catch {}
   };
 
   // Nodo selezionato: sempre main/sub in base agli indici
@@ -380,71 +392,70 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
   // Layout
   return (
     <div ref={rootRef} style={{ position: 'relative', height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
-      {/* Header: icon and act label (no generic title) */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid #22273a', background: '#fb923c', minHeight: 48 }}>
-        <div style={{ color: '#0b1220', fontSize: 18, fontWeight: 400, display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Left act icon identical to node visuals */}
-          {(() => {
-            const type = String(act?.type || 'Message') as any;
-            const hasDDT = !!(act && (act as any).ddt);
-            const { Icon, color } = getAgentActVisualsByType(type, hasDDT);
-            return <Icon size={22} style={{ color }} />;
-          })()}
-          <span style={{ fontWeight: 400 }}>{act?.label || ddt?.label || 'Data'}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button title="Undo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#0b1220', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-            <Undo2 size={16} />
-          </button>
-          <button title="Redo" style={{ background: 'transparent', border: '1px solid #fb923c', color: '#0b1220', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-            <Redo2 size={16} />
-          </button>
-          <button title="Add constraint" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', color: '#fb923c', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-            <Plus size={16} /> <span>Add constraint</span>
-          </button>
-          <div style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
-            <button title="Actions" onClick={() => { setShowSynonyms(false); saveRightMode('actions'); }} style={{ background: rightMode==='actions' ? '#fff' : 'transparent', color: rightMode==='actions' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <Rocket size={16} />
-            </button>
-            <button title="Validator" onClick={() => { setShowSynonyms(false); saveRightMode('validator'); }} style={{ background: rightMode==='validator' ? '#fff' : 'transparent', color: rightMode==='validator' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <Code2 size={16} />
-            </button>
-            <button title="Test set" onClick={() => { setShowSynonyms(false); saveRightMode('testset'); }} style={{ background: rightMode==='testset' ? '#fff' : 'transparent', color: rightMode==='testset' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <FileText size={16} />
-            </button>
-            <button title="Chat" onClick={() => { setShowSynonyms(false); saveRightMode('chat'); }} style={{ background: rightMode==='chat' ? '#fff' : 'transparent', color: rightMode==='chat' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <MessageSquare size={16} />
-            </button>
-            <button title="Message review: view and edit all step messages" onClick={() => { setShowSynonyms(false); saveRightMode('messageReview'); }} style={{ background: rightMode==='messageReview' ? '#fff' : 'transparent', color: rightMode==='messageReview' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <ListChecks size={16} />
-            </button>
-            <button title="Dialogue style presets" onClick={() => { setShowSynonyms(false); saveRightMode('styles'); }} style={{ background: rightMode==='styles' ? '#fff' : 'transparent', color: rightMode==='styles' ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-              <Sparkles size={16} />
-            </button>
-            <button
-              title={showSynonyms ? 'Close contract editor' : 'Open contract editor'}
-              onClick={() => setShowSynonyms(v => !v)}
-              style={{ background: showSynonyms ? '#fff' : 'transparent', color: showSynonyms ? '#fb923c' : '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
-            >
-              <BookOpen size={16} />
-            </button>
-          </div>
-          {/* Move gear to the far right, before Close */}
-          <button
-            title={showWizard ? 'Close Wizard' : 'Open Wizard'}
-            onClick={() => {
-              if (showWizard) { setShowWizard(false); }
-              else { setShowWizard(true); setShowRightGeneral(false); }
-            }}
-            style={{ background: '#fff', color: '#0b1220', border: '1px solid #fb923c', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', marginLeft: 6 }}
-          >
-            ⚙
-          </button>
-          <button title="Close" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#0b1220', borderRadius: 8, padding: '6px', cursor: 'pointer', marginLeft: 8, fontSize: 20, lineHeight: 1 }}>
-            <X size={24} />
-          </button>
-        </div>
-      </div>
+      {/* Header dell'editor DataRequest: icona, titolo, toolbar: */}
+      {(() => {
+        const type = String(act?.type || 'DataRequest') as any;
+        const hasDDT = !!(act && (act as any).ddt);
+        const { Icon, color } = getAgentActVisualsByType(type, hasDDT);
+        return (
+          <EditorHeader
+            icon={<Icon size={18} style={{ color }} />}
+            title={String(act?.label || (localDDT as any)?.label || 'Data')}
+            color="orange"
+            onClose={onClose}
+            rightActions={(
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button title="Undo" onClick={handleUndo} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.35)', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                  <Undo2 size={16} />
+                </button>
+                <button title="Redo" onClick={handleRedo} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.35)', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                  <Redo2 size={16} />
+                </button>
+                <button title="Add constraint" onClick={() => setShowConstraintWizard(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.92)', color: '#9a4f00', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                  <Plus size={16} /> <span>Add constraint</span>
+                </button>
+                <div style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
+                  <button title="Actions" onClick={() => { setShowSynonyms(false); saveRightMode('actions'); }} style={{ background: rightMode==='actions' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                    <Rocket size={16} />
+                  </button>
+                  <button title="Validator" onClick={() => { setShowSynonyms(false); saveRightMode('validator'); }} style={{ background: rightMode==='validator' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                    <Code2 size={16} />
+                  </button>
+                  <button title="Test set" onClick={() => { setShowSynonyms(false); saveRightMode('testset'); }} style={{ background: rightMode==='testset' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                    <FileText size={16} />
+                  </button>
+                  <button title="Chat" onClick={() => { setShowSynonyms(false); saveRightMode('chat'); }} style={{ background: rightMode==='chat' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                    <MessageSquare size={16} />
+                  </button>
+                  <button title="Message review" onClick={() => { setShowSynonyms(false); saveRightMode('messageReview'); }} style={{ background: rightMode==='messageReview' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                    <ListChecks size={16} />
+                  </button>
+                  <button title="Styles" onClick={() => { setShowSynonyms(false); saveRightMode('styles'); }} style={{ background: rightMode==='styles' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
+                    <Sparkles size={16} />
+                  </button>
+                  <button
+                    title={showSynonyms ? 'Close contract editor' : 'Open contract editor'}
+                    onClick={() => setShowSynonyms(v => !v)}
+                    style={{ background: showSynonyms ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
+                  >
+                    <BookOpen size={16} />
+                  </button>
+                </div>
+                <button
+                  title={showWizard ? 'Close Wizard' : 'Open Wizard'}
+                  onClick={() => {
+                    if (showWizard) { setShowWizard(false); }
+                    else { setShowWizard(true); setShowRightGeneral(false); }
+                  }}
+                  style={{ background: 'rgba(255,255,255,0.92)', color: '#0b1220', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
+                >
+                  ⚙
+                </button>
+              </div>
+            )}
+          />
+        );
+      })()}
       {/* Canvas centrale a 1/2 colonne */}
       <div style={{ display: 'grid', gridTemplateColumns: (showWizard && !showRightGeneral) ? '1fr' : 'minmax(520px,1fr) minmax(360px,auto)', gap: 12, flex: 1, minHeight: 0 }}>
         {/* Colonna sinistra: Wizard se attivo, altrimenti editor */}

@@ -1,4 +1,6 @@
 import React, { useEffect } from 'react';
+import EditorHeader from '../../components/common/EditorHeader';
+import { getAgentActVisualsByType } from '../../components/Flowchart/actVisuals';
 import IntentEditorShell from './IntentEditorShell';
 import { useIntentStore } from './state/intentStore';
 import { useTestStore } from './state/testStore';
@@ -70,7 +72,21 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
     }, 700); });
     return () => { unsubA(); unsubB(); clearTimeout(t); };
   }, [props.act?.id]);
-  return <IntentEditorShell />;
+  const type = String(props.act?.type || 'ProblemClassification') as any;
+  const { Icon, color } = getAgentActVisualsByType(type, true);
+  return (
+    <div className="h-full w-full flex flex-col min-h-0">
+      <EditorHeader
+        icon={<Icon size={18} style={{ color }} />}
+        title={String(props.act?.label || 'Problem')}
+        color="orange"
+        onClose={props.onClose}
+      />
+      <div className="flex-1 min-h-0">
+        <IntentEditorShell />
+      </div>
+    </div>
+  );
 }
 
 

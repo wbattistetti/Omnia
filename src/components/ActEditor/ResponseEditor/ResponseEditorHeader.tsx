@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, Square } from 'lucide-react';
 import SmartTooltip from '../../SmartTooltip';
 import { TooltipWrapper } from '../../TooltipWrapper';
+import EditorHeader from '../../common/EditorHeader';
 
 interface ResponseEditorHeaderProps {
   ddt: any;
@@ -37,10 +38,55 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
   showSimulator,
 }) => {
   return (
-    <div style={{ background: '#a21caf', borderRadius: 10, padding: '8px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 18 }}>
-      {/* Response Editor title */}
-      <span style={{ color: 'white', fontWeight: 600, fontSize: 14 }}>Response Editor</span>
-      
+    <EditorHeader
+      title="Response Editor"
+      color="purple"
+      rightActions={(
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={showLabel}
+              onChange={(e) => onShowLabelChange(e.target.checked)}
+              style={{ margin: 0 }}
+            />
+            <span style={{ color: 'white', fontSize: 12 }}>Mostra label azione</span>
+          </div>
+          <button
+            onClick={onAddConstraint}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: 'none',
+              borderRadius: 6,
+              padding: '4px 12px',
+              color: 'white',
+              fontSize: 12,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4
+            }}
+          >
+            + Aggiungi constraint
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: '1px solid rgba(255,255,255,0.35)',
+              color: 'white',
+              fontSize: 12,
+              padding: '4px 10px',
+              borderRadius: 6,
+              cursor: 'pointer'
+            }}
+          >
+            Chiudi
+          </button>
+        </div>
+      )}
+      style={{ borderRadius: 10, marginBottom: 8 }}
+    >
       {/* MainData and SubData buttons */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         {/* MainData button with SmartTooltip (icon expands on click) */}
@@ -177,56 +223,7 @@ const ResponseEditorHeader: React.FC<ResponseEditorHeaderProps> = ({
         </button>
       </div>
       
-      {/* Toolbar controls */}
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={showLabel}
-            onChange={(e) => onShowLabelChange(e.target.checked)}
-            style={{ margin: 0 }}
-          />
-          <span style={{ color: 'white', fontSize: 12 }}>Mostra label azione</span>
-        </div>
-        
-        <button
-          onClick={onAddConstraint}
-          style={{
-            background: 'rgba(255,255,255,0.2)',
-            border: 'none',
-            borderRadius: 6,
-            padding: '4px 12px',
-            color: 'white',
-            fontSize: 12,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4
-          }}
-        >
-          + Aggiungi constraint
-        </button>
-        
-        <button
-          onClick={onClose}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'white',
-            fontSize: 18,
-            cursor: 'pointer',
-            padding: 0,
-            width: 24,
-            height: 24,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          ×
-        </button>
-      </div>
-    </div>
+    </EditorHeader>
   );
 };
 

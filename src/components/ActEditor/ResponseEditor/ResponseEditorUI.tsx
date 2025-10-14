@@ -10,7 +10,6 @@ import styles from './ResponseEditor.module.css';
 import ConstraintWizard from '../../ConstraintGenerator/ConstraintWizard';
 import { createConstraint, updateConstraint, removeConstraint } from './constraintFactories';
 import { AlertTriangle } from 'lucide-react';
-import ResponseEditorHeader from './ResponseEditorHeader';
 import StepStrip from './StepStrip';
 import ResponseSimulator from './ChatSimulator/ResponseSimulator';
 
@@ -123,22 +122,7 @@ const ResponseEditorUI: React.FC<ResponseEditorUIProps> = (props) => {
 
   return (
     <div className={styles.responseEditorRoot}>
-      <ResponseEditorHeader
-        ddt={props.editorState.ddt}
-        selectedNodeIndex={props.selectedNodeIndex}
-        onSelectNode={props.onSelectNode || (() => {})}
-        showLabel={props.editorState.showLabel}
-        onShowLabelChange={props.editorState.onShowLabelChange}
-        onAddConstraint={() => setShowConstraintWizard(true)}
-        getDDTIcon={props.getDDTIcon}
-        onClose={props.onClose}
-        handleUndo={props.handleUndo}
-        handleRedo={props.handleRedo}
-        canUndo={props.canUndo}
-        canRedo={props.canRedo}
-        onToggleSimulator={props.onToggleSimulator}
-        showSimulator={props.showSimulator}
-      />
+      {/* Header centralizzato rimosso: ogni editor figlio deve renderizzare il proprio header usando EditorHeader */}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 12px' }}>
         <button
