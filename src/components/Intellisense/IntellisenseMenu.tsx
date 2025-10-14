@@ -32,6 +32,11 @@ interface IntellisenseMenuProps {
   onCreateBackendCall?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateTask?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   allowCreatePicker?: boolean;
+  // Optional seed items to inject into the dataset (e.g., Problem intents from source node)
+  seedItems?: IntellisenseItem[];
+  // Unified item list (conditions + intents) already prepared by caller. If provided, overrides project data.
+  extraItems?: IntellisenseItem[];
+  allowedKinds?: Array<'condition'|'intent'>;
 }
 
 export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
@@ -46,7 +51,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   onCreateAgentAct,
   onCreateBackendCall,
   onCreateTask,
-  allowCreatePicker = false
+  allowCreatePicker = false,
+  seedItems,
+  extraItems,
+  allowedKinds
 }) => {
   const ErrorBoundary = React.useMemo(() => (
     class EB extends React.Component<{ children: React.ReactNode }, { hasError: boolean }>{
@@ -187,17 +195,32 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
 
   // Initialize / refresh fuzzy search when data or activeCats change
   useEffect(() => {
-    if (!data) return;
-    let intellisenseData = prepareIntellisenseData(data);
+    // Build dataset: prefer unified extraItems when provided; otherwise build from project and append seeds
+    let intellisenseData: IntellisenseItem[] = [];
+    if (Array.isArray(extraItems) && extraItems.length) {
+      intellisenseData = extraItems;
+    } else {
+      intellisenseData = data ? prepareIntellisenseData(data) : [] as IntellisenseItem[];
+      if (Array.isArray(seedItems) && seedItems.length) {
+        intellisenseData = [...intellisenseData, ...seedItems];
+      }
+    }
+    try { console.log('[Intelli][dataset]', { hasData: !!data, base: (data ? 'project' : 'empty'), seed: Array.isArray(seedItems) ? seedItems.length : 0, cats: activeCats }); } catch {}
     if (activeCats && activeCats.length > 0) {
       intellisenseData = intellisenseData.filter(item => activeCats.includes(item.categoryType));
+    }
+    if (Array.isArray(allowedKinds) && allowedKinds.length) {
+      intellisenseData = intellisenseData.filter(item => !item.kind || allowedKinds.includes(item.kind));
     }
     initializeFuzzySearch(intellisenseData);
     setAllIntellisenseItems(intellisenseData);
     setIsInitialized(true);
     // Immediately compute results for current query so new items appear right away
     if (!query.trim()) {
-      const allResults: IntellisenseResult[] = intellisenseData.map(item => ({ item } as IntellisenseResult));
+      // Show the full dataset (which already includes seedItems appended), without prioritizing seeds
+      const baseItems = intellisenseData;
+      const allResults: IntellisenseResult[] = baseItems.map(item => ({ item } as IntellisenseResult));
+      try { console.log('[Intelli][emptyQuery][count]', { total: allResults.length }); } catch {}
       setFuzzyResults(groupAndSortResults(allResults));
       setSemanticResults([]);
       setSelectedIndex(0);
@@ -207,7 +230,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
       setSemanticResults([]);
       setSelectedIndex(0);
     }
-  }, [data, activeCats, query, isOpen]);
+  }, [data, activeCats, query, isOpen, seedItems, extraItems, allowedKinds]);
 
   // Perform search when query changes
   useEffect(() => {
@@ -226,9 +249,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     }
 
     // Esegui solo la ricerca fuzzy quando la query cambia
-    const fuzzyResults = performFuzzySearch(query);
+    const fuzzyResults = performFuzzySearch(query, allIntellisenseItems);
     const groupedFuzzy = groupAndSortResults(fuzzyResults);
-    
     setFuzzyResults(groupedFuzzy);
     setSemanticResults([]); // Reset semantic results
     setSelectedIndex(0);

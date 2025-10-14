@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link2Off as LinkOff } from 'lucide-react';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
+import { useProjectData } from '../../context/ProjectDataContext';
+import { findAgentAct } from './actVisuals';
 
 /**
  * Props per EdgeConditionSelector
@@ -18,6 +20,7 @@ export interface EdgeConditionSelectorProps {
   onSelectElse?: () => void;
   onClose: () => void;
   onCreateCondition?: (name: string, scope?: 'global' | 'industry') => void;
+  seedItems?: IntellisenseItem[];
 }
 
 /**
@@ -29,20 +32,24 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   onSelectUnconditioned,
   onSelectElse,
   onClose,
-  onCreateCondition
+  onCreateCondition,
+  seedItems
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [showIntellisense, setShowIntellisense] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { data: projectData } = useProjectData();
+  const [extraItems, setExtraItems] = useState<IntellisenseItem[] | undefined>(undefined);
 
   // Auto-focus input e apri subito l'intellisense quando il componente viene montato
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
+      // Apri sempre: se seedItems è presente, verranno mostrati anche senza dati globali
       setShowIntellisense(true);
-      try { console.log('[CondUI][mount] focus + showIntellisense'); } catch {}
+      try { console.log('[CondUI][mount] focus + showIntellisense', { extraCount: Array.isArray(extraItems) ? extraItems.length : 0 }); } catch {}
     }
-  }, []);
+  }, [extraItems]);
 
   // Chiudi il popup se clicchi fuori
   useEffect(() => {
@@ -83,6 +90,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
     setInputValue(newValue);
     // mantieni aperto; il provider interno filtrerà i risultati
     setShowIntellisense(true);
+    try { console.log('[CondUI][input]', { value: newValue }); } catch {}
   };
 
   // Selezione da intellisense
@@ -95,6 +103,33 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   const handleIntellisenseClose = () => {
     setShowIntellisense(false);
   };
+
+  // Build unified extraItems from projectData intents (ProblemClassification)
+  useEffect(() => {
+    try {
+      const intents: IntellisenseItem[] = [];
+      const cats: any[] = (projectData as any)?.agentActs || [];
+      for (const c of cats) {
+        for (const it of (c.items || [])) {
+          if (String((it as any)?.type) === 'ProblemClassification' && Array.isArray((it as any)?.problem?.intents)) {
+            for (const intent of (it as any).problem.intents) {
+              intents.push({
+                id: `intent-${(it as any).id || (it as any)._id}-${intent.id || intent.name}`,
+                label: intent.name,
+                name: intent.name,
+                description: intent.name,
+                category: 'Problem Intents',
+                categoryType: 'conditions',
+                kind: 'intent',
+                payload: { actId: (it as any).id || (it as any)._id, intentId: intent.id, intent }
+              });
+            }
+          }
+        }
+      }
+      setExtraItems(intents);
+    } catch {}
+  }, [projectData]);
 
   // Gestione creazione nuova condizione
   const handleCreateCondition = (name: string, scope?: 'global' | 'industry') => {
@@ -186,8 +221,11 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
           onClose={handleIntellisenseClose}
           filterCategoryTypes={['conditions']}
           onCreateNew={handleCreateCondition}
+          extraItems={extraItems}
+          allowedKinds={['condition','intent']}
         />
       )}
+
     </div>
   );
 };

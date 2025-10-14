@@ -18,6 +18,7 @@ import { NodeRowProps } from '../../types/NodeRowTypes';
 import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
+import { useRowToolbar } from './hooks/useRowToolbar';
 import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from './actVisuals';
 import { inferActType, heuristicToInternal } from '../../nlp/actType';
 import { modeToType, typeToMode } from '../../utils/normalizers';
@@ -181,6 +182,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const labelRef = useRef<HTMLSpanElement>(null);
   const [iconPos, setIconPos] = useState<{top: number, left: number} | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  // State machine for toolbar/picker visibility (after refs are initialized)
+  const toolbarSM = useRowToolbar({ rowRef: nodeContainerRef as any, overlayRef: overlayRef as any, pickerRef: typeToolbarRef as any });
   const suppressIntellisenseRef = useRef<boolean>(false);
   const intellisenseTimerRef = useRef<number | null>(null);
 
@@ -340,6 +343,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       setIconPos(null);
     }
   }, [showIcons]);
+
+  // Bridge SM → local booleans used by layout effects
+  useEffect(() => {
+    if (toolbarSM.showIcons !== showIcons) setShowIcons(toolbarSM.showIcons);
+    if (toolbarSM.showPicker !== showCreatePicker) setShowCreatePicker(toolbarSM.showPicker);
+  }, [toolbarSM.showIcons, toolbarSM.showPicker]);
 
   useEffect(() => {
     if (forceEditing) setIsEditing(true);
@@ -618,13 +627,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       const target = ev.target as Node | null;
       const toolbarEl = typeToolbarRef.current as unknown as HTMLElement | null;
       const overToolbar = !!(toolbarEl && target && toolbarEl instanceof Node && toolbarEl.contains(target as Node));
-      const overlayEl = nodeContainerRef.current as HTMLElement | null;
+      const rowEl = nodeContainerRef.current as HTMLElement | null;
+      const overRow = !!(rowEl && target && target instanceof Node && rowEl.contains(target as Node));
+      const overlayEl = overlayRef.current as HTMLElement | null;
       const overOverlay = !!(overlayEl && target && target instanceof Node && overlayEl.contains(target as Node));
-      console.log('[Picker][docClick]', { overToolbar, overOverlay, targetTag: (ev.target as HTMLElement)?.tagName, class: (ev.target as HTMLElement)?.className });
-      if (overToolbar || overOverlay) return;
-      console.log('[Picker][close] docClick outside → hide toolbar+menu');
+      console.log('[Picker][docClick]', { overToolbar, overRow, overOverlay, targetTag: (ev.target as HTMLElement)?.tagName, class: (ev.target as HTMLElement)?.className });
+      if (overToolbar || overRow || overOverlay) return; // clicks inside picker, row, or toolbar overlay should NOT close
+      console.log('[Picker][close] docClick outside → close picker');
       setShowCreatePicker(false);
-      setShowIcons(false);
       document.removeEventListener('mousedown', onDocClick, true);
       window.removeEventListener('mousemove', onMoveCloseIfFar, true);
     };
@@ -822,27 +832,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         className={`node-row-outer flex items-center group transition-colors ${conditionalClasses}`}
         style={{ ...conditionalStyles, backgroundColor: 'transparent', border: 'none', outline: 'none', boxShadow: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 4, paddingBottom: 4, minHeight: 0, height: 'auto', width: '100%' }}
         data-index={index}
-        onMouseEnter={() => {
-          if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
-          console.log('[Toolbar][enter][row]');
-          setShowIcons(true);
-        }}
-        onMouseLeave={() => {
-          if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
-          if (showCreatePicker) {
-            // Non nascondere la toolbar se il menu è aperto
-            setShowIcons(true);
-            return;
-          }
-          // Stability buffer: keep toolbar if pointer is still close to row or toolbar overlay
-          const pt = mousePosRef.current;
-          const rowRect = nodeContainerRef.current?.getBoundingClientRect() || null;
-          const tbRect = iconPos ? getToolbarRect(iconPos.left, iconPos.top, labelRef.current, 180) : null;
-          const keep = isInsideWithPadding(pt, rowRect, 20) || isInsideWithPadding(pt, tbRect, 24);
-          try { console.log('[Toolbar][rowLeave]', { pt, keep, hasRow: !!rowRect, hasTb: !!tbRect, showCreatePicker }); } catch {}
-          if (keep) { setShowIcons(true); return; }
-          hoverHideTimerRef.current = window.setTimeout(() => { try { console.log('[Toolbar][row] hide (timer)'); } catch {} setShowIcons(false); }, 120);
-        }}
+        onMouseEnter={() => toolbarSM.row.onEnter()}
+        onMouseLeave={(e) => toolbarSM.row.onLeave(e as any)}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
       {isEditing ? (
@@ -868,7 +859,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             labelRef={labelRef}
             Icon={Icon}
             iconSize={Math.max(10, Math.min(18, Math.round(12 * getZoom())))}
-            showIcons={showIcons}
+            showIcons={toolbarSM.showIcons}
                 iconPos={iconPos}
                 canDelete={canDelete}
                 onEdit={() => enterEditing()}
@@ -883,7 +874,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             gearColor={labelTextColor}
           onOpenDDT={async () => {
             try {
-              // no-op: projectData already available via context earlier
+              console.log('[DDT][open] request', { rowId: row.id, text: row.text });
             } catch {}
             try {
               // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType
@@ -891,32 +882,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               const type = resolveActType(row as any, actFound) as any;
               // Host present → open deterministically
               actEditorCtx.open({ id: String(baseId), type, label: row.text });
+              console.log('[DDT][open] done', { baseId, type });
               return;
             } catch (e) { console.warn('[Row][openDDT] failed', e); }
           }}
             onDoubleClick={handleDoubleClick}
-            onIconsHoverChange={(v: boolean) => {
-              if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
-              if (v || showCreatePicker) { setShowIcons(true); return; }
-              const pt = mousePosRef.current;
-              const rowRect = nodeContainerRef.current?.getBoundingClientRect() || null;
-              const tbRect = iconPos ? getToolbarRect(iconPos.left, iconPos.top, labelRef.current, 180) : null;
-              const keep = isInsideWithPadding(pt, rowRect, 20) || isInsideWithPadding(pt, tbRect, 24);
-              try { console.log('[Toolbar][iconsHover=false]', { pt, keep, hasRow: !!rowRect, hasTb: !!tbRect, showCreatePicker }); } catch {}
-              if (keep) { setShowIcons(true); return; }
-              hoverHideTimerRef.current = window.setTimeout(() => { setShowIcons(false); }, 120);
-            }}
-            onLabelHoverChange={(v: boolean) => {
-              if (hoverHideTimerRef.current) window.clearTimeout(hoverHideTimerRef.current);
-              if (v || showCreatePicker) { setShowIcons(true); return; }
-              const pt = mousePosRef.current;
-              const rowRect = nodeContainerRef.current?.getBoundingClientRect() || null;
-              const tbRect = iconPos ? getToolbarRect(iconPos.left, iconPos.top, labelRef.current, 180) : null;
-              const keep = isInsideWithPadding(pt, rowRect, 20) || isInsideWithPadding(pt, tbRect, 24);
-              try { console.log('[Toolbar][labelHover=false]', { pt, keep, hasRow: !!rowRect, hasTb: !!tbRect, showCreatePicker }); } catch {}
-              if (keep) { setShowIcons(true); return; }
-              hoverHideTimerRef.current = window.setTimeout(() => { setShowIcons(false); }, 120);
-            }}
+            onIconsHoverChange={(v: boolean) => { v ? toolbarSM.overlay.onEnter() : toolbarSM.overlay.onLeave(); }}
+            onLabelHoverChange={(v: boolean) => { v ? toolbarSM.row.onEnter() : toolbarSM.row.onLeave({ relatedTarget: null } as any); }}
             onTypeChangeRequest={(anchor) => openTypePickerFromIcon(anchor, currentTypeForPicker)}
             onRequestClosePicker={() => setShowCreatePicker(false)}
             overlayRef={overlayRef}
@@ -938,7 +910,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         onCreateTask={onCreateTask}
       />
 
-      {showCreatePicker && nodeOverlayPosition && createPortal(
+      {toolbarSM.showPicker && nodeOverlayPosition && createPortal(
         <>
           <TypePickerToolbar
             left={nodeOverlayPosition.left}

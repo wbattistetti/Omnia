@@ -21,9 +21,11 @@ export function ActEditorProvider({ children }: { children: React.ReactNode }){
   useEffect(() => {
   }, []);
   const open = (a: ActMeta) => {
+    try { console.log('[ActEditor][open]', a); } catch {}
     setAct(a);
   };
   const close = () => {
+    try { console.log('[ActEditor][close]'); } catch {}
     setAct(undefined);
   };
   return (

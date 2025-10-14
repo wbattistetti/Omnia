@@ -25,6 +25,7 @@ import { useProjectDataUpdate, useProjectData } from '../../context/ProjectDataC
 import { ProjectDataService } from '../../services/ProjectDataService';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { dlog } from '../../utils/debug';
+import { findAgentAct, resolveActType } from './actVisuals';
 
 export type { NodeData } from '../../hooks/useNodeManager';
 
@@ -215,6 +216,57 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
   const { addItem, addCategory } = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
+
+  // Prepara seed items leggendo SOLO dal nodo sorgente: ProblemClassification → problem.intents (con fallback shadow locale)
+  const problemIntentSeedItems = React.useMemo(() => {
+    try {
+      if (!connectionMenu.show) return undefined;
+      const sourceId = connectionMenu.sourceNodeId as string | null;
+      if (!sourceId) return undefined;
+      const srcNode = nodes.find(n => n.id === sourceId);
+      const rows: any[] = Array.isArray((srcNode?.data as any)?.rows) ? (srcNode!.data as any).rows : [];
+      if (!rows.length) return undefined;
+
+      // 1) riga ProblemClassification (max una)
+      const pcRow = rows.find(r => (r?.type === 'ProblemClassification') || (resolveActType(r, null as any) === 'ProblemClassification'));
+      if (!pcRow) return undefined;
+
+      // 2) id atto
+      const actId = pcRow.baseActId || pcRow.actId || pcRow.factoryId || pcRow.id;
+      if (!actId) return undefined;
+
+      // 3) prova direttamente dal project data (atto agganciato alla riga)
+      let intents: any[] | undefined;
+      const act = projectData ? findAgentAct(projectData as any, pcRow) : null;
+      if (act && (act as any)?.problem?.intents?.length) intents = (act as any).problem.intents;
+
+      // 4) fallback locale: shadow salvato dall’editor
+      if (!intents || !intents.length) {
+        const pid = (()=>{ try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+        const keys = [`problem.${pid}.${actId}`, `problem.${pid}.${pcRow.id}`];
+        for (const k of keys) {
+          const raw = (()=>{ try { return localStorage.getItem(k); } catch { return null; } })();
+          if (!raw) continue;
+          try {
+            const payload = JSON.parse(raw);
+            if (Array.isArray(payload?.intents) && payload.intents.length) { intents = payload.intents; break; }
+          } catch {}
+        }
+      }
+
+      if (!intents || !intents.length) return undefined;
+      return intents.map((int: any) => ({
+        id: `intent-${int.id || int.name}`,
+        label: int.name,
+        shortLabel: int.name,
+        name: int.name,
+        description: int.name,
+        category: 'Problem Intents',
+        categoryType: 'conditions' as const,
+        color: '#f59e0b',
+      }));
+    } catch { return undefined; }
+  }, [nodes, projectData, connectionMenu.show, connectionMenu.sourceNodeId]);
   
   // Hook centralizzato per la creazione di entità (solo se il context è pronto)
   const entityCreation = useEntityCreation();
@@ -1374,6 +1426,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             closeMenu();
           }}
           onClose={handleConnectionMenuClose}
+          seedItems={problemIntentSeedItems}
           onCreateCondition={handleCreateCondition}
         />
       )}

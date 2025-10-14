@@ -20,6 +20,9 @@ export interface IntellisenseItem {
   uiColor?: string;
   bgColor?: string; // colore di sfondo personalizzato
   textColor?: string; // colore del testo personalizzato
+  // Unified model extensions
+  kind?: 'condition' | 'intent';
+  payload?: any;
 }
 
 export interface IntellisenseCategory {

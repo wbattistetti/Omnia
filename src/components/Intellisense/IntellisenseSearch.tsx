@@ -75,24 +75,17 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
 
   const results = allItems
     .map((item: IntellisenseItem) => {
-      // Cerca su label, shortLabel e description
-      const fields = [item.label, item.shortLabel, item.description].filter((f): f is string => typeof f === 'string' && f.trim() !== '').map(f => f.toLowerCase());
+      // Cerca su label, shortLabel, description, name e tags opzionali
+      const baseFields: string[] = [item.label, item.shortLabel, item.description, (item as any).name]
+        .filter((f): f is string => typeof f === 'string' && f.trim() !== '')
+        .map(f => f.toLowerCase());
+      const tagFields: string[] = Array.isArray((item as any).tags) ? (item as any).tags.map((t: any) => String(t).toLowerCase()) : [];
+      const fields = [...baseFields, ...tagFields];
       const words = fields.join(' ').split(/\s+/);
       // AND logico: ogni keyword deve matchare almeno una parola di uno dei campi
       const allMatched = keywords.every(k => words.some(w => w.startsWith(k)));
       if (!allMatched) return null;
-      // Highlight: per ogni parola, se matcha una keyword, segna la lunghezza
-      const highlights = words.map(w => {
-        const kw = keywords.find(k => w.startsWith(k));
-        return kw ? { word: w, highlightLength: kw.length } : { word: w, highlightLength: 0 };
-      });
-      return {
-        item,
-        score: 0,
-        matches: [{ indices: highlights
-          .flatMap((h, i) => h.highlightLength > 0 ? [[words.slice(0, i).join(' ').length + (i > 0 ? 1 : 0), words.slice(0, i).join(' ').length + h.highlightLength - 1 + (i > 0 ? 1 : 0)]] : [])
-        }]
-      };
+      return { item, score: 0, matches: [{ indices: [] }] } as IntellisenseResult;
     })
     .filter(Boolean) as IntellisenseResult[];
   return results;

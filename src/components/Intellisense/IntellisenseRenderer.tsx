@@ -167,11 +167,19 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   // Per ora disabilitiamo il grid layout per semplificare la virtualizzazione
   const useGridLayout = false;
   
+  // Filter categories if filterCategoryTypes is provided (allow unified 'intent' kind under 'conditions')
+  const filteredFuzzy = new Map<string, IntellisenseResult[]>();
+  fuzzyResults.forEach((categoryResults, categoryType) => {
+    if (!filterCategoryTypes.length || filterCategoryTypes.includes(categoryType)) {
+      filteredFuzzy.set(categoryType, categoryResults);
+    }
+  });
+
   // Flatten all results for index calculation
   const allResults: Array<{ result: IntellisenseResult; isFromAI: boolean; categoryType?: string }> = [];
   
-  // Add fuzzy results by category
-  fuzzyResults.forEach((categoryResults, categoryType) => {
+  // Add fuzzy results by category (filtered)
+  filteredFuzzy.forEach((categoryResults, categoryType) => {
     categoryResults.forEach(result => {
       allResults.push({ result, isFromAI: false, categoryType });
     });

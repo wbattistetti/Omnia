@@ -142,7 +142,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           isEditing={isEditing}
           setIsEditing={setIsEditing}
           labelRef={labelRef}
-          onHoverChange={onIconsHoverChange}
+           onHoverChange={(v) => { onIconsHoverChange && onIconsHoverChange(v); }}
           iconSize={iconSize}
           hasDDT={hasDDT}
           gearColor={gearColor || labelTextColor}
