@@ -42,6 +42,8 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   sourceRows
 }) => {
   const [inputValue, setInputValue] = useState('');
+  const [navSeq, setNavSeq] = useState(0);
+  const [navDir, setNavDir] = useState<1 | -1>(1);
   const [showIntellisense, setShowIntellisense] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { data: projectData } = useProjectData();
@@ -78,8 +80,24 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       } else {
         onClose();
       }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      setNavDir(dir);
+      setNavSeq(s => {
+        const next = s + 1;
+        try { console.log('[CondUI][nav]', { key: e.key, dir, seq: next }); } catch {}
+        return next;
+      });
     } else if (e.key === 'Enter') {
-      // Conferma: se non è selezionato un item, crea/usa condizione con la label digitata
+      // Se il menu è aperto, conferma l'item selezionato nel menu
+      if (showIntellisense) {
+        e.preventDefault();
+        e.stopPropagation();
+        try { document.dispatchEvent(new CustomEvent('intelli-enter')); } catch {}
+        return;
+      }
+      // Altrimenti: crea/usa condizione con la label digitata
       const name = (inputValue || '').trim();
       e.preventDefault();
       e.stopPropagation();
@@ -282,6 +300,15 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
               extraItems={extraItemsFromCaller || extraItems}
               allowedKinds={['condition','intent']}
               inlineAnchor={true}
+              navSignal={{ seq: navSeq, dir: navDir }}
+              onEnterSelected={(sel) => {
+                try { console.log('[CondUI][enterSelected]', sel); } catch {}
+                if (sel) {
+                  // riflette la scelta nella textbox per chiarezza
+                  try { setInputValue(sel.label || (sel as any).name || ''); } catch {}
+                  handleIntellisenseSelect(sel as any);
+                }
+              }}
             />
           </div>
         </div>

@@ -111,6 +111,108 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const edgesRef = useRef(edges);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
+  // Deferred apply for labels on just-created edges (avoids race with RF state)
+  const pendingApplyRef = useRef<null | { id: string; label: string; data?: any; tries: number }>(null);
+  const scheduleApplyLabel = useCallback((edgeId: string, label: string, extraData?: any) => {
+    pendingApplyRef.current = { id: edgeId, label, data: extraData, tries: 0 };
+    const tick = () => {
+      const cur = pendingApplyRef.current;
+      if (!cur) return;
+      const exists = (edgesRef.current || []).some(e => e.id === cur.id);
+      if (exists) {
+        setEdges(eds => eds.map(e => e.id === cur.id ? { ...e, label: cur.label, data: cur.data ? { ...(e.data || {}), ...cur.data } : e.data } : e));
+        setSelectedEdgeId(cur.id);
+        pendingEdgeIdRef.current = null;
+        pendingApplyRef.current = null;
+        return;
+      }
+      if (cur.tries >= 12) { // ~2 frames fallback
+        // As a fallback, try to match by src/tgt currently recorded
+        const src = connectionMenuRef.current.sourceNodeId;
+        const tgt = connectionMenuRef.current.targetNodeId;
+        if (src && tgt) {
+          setEdges(eds => eds.map(e => (e.source === src && e.target === tgt) ? { ...e, label: cur.label, data: cur.data ? { ...(e.data || {}), ...cur.data } : e.data } : e));
+        }
+        pendingEdgeIdRef.current = null;
+        pendingApplyRef.current = null;
+        return;
+      }
+      pendingApplyRef.current = { ...cur, tries: cur.tries + 1 };
+      setTimeout(tick, 0);
+    };
+    setTimeout(tick, 0);
+  }, [setEdges, setSelectedEdgeId]);
+
+  // Also attempt apply on every edges change (fast path)
+  useEffect(() => {
+    const cur = pendingApplyRef.current;
+    if (!cur) return;
+    if ((edges || []).some(e => e.id === cur.id)) {
+      setEdges(eds => eds.map(e => e.id === cur.id ? { ...e, label: cur.label, data: cur.data ? { ...(e.data || {}), ...cur.data } : e.data } : e));
+      setSelectedEdgeId(cur.id);
+      pendingEdgeIdRef.current = null;
+      pendingApplyRef.current = null;
+    }
+  }, [edges, setEdges]);
+
+  // Commit helper: apply a label to the current linkage context deterministically
+  const commitEdgeLabel = useCallback((label: string): boolean => {
+    // 1) Just-created edge between existing nodes
+    if (pendingEdgeIdRef.current) {
+      const pid = pendingEdgeIdRef.current;
+      // If not yet present in state, defer until it appears
+      const exists = (edgesRef.current || []).some(e => e.id === pid);
+      if (exists) {
+        setEdges(eds => eds.map(e => e.id === pid ? { ...e, label } : e));
+        setSelectedEdgeId(pid);
+        pendingEdgeIdRef.current = null;
+      } else {
+        scheduleApplyLabel(pid, label);
+      }
+      return true;
+    }
+    // 2) Promote temp node/edge if present
+    const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
+    const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
+    if (tempNodeId && tempEdgeId) {
+      const fp = (connectionMenuRef.current as any).flowPosition;
+      setNodes(nds => nds.map(n => n.id === tempNodeId ? {
+        ...n,
+        position: fp ? { x: fp.x - (NODE_WIDTH / 2), y: fp.y } : n.position,
+        data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined }
+      } : n));
+      setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label, style: { ...(e.style || {}), stroke: '#8b5cf6' } } : e));
+      finalizeTempPromotion(tempNodeId, tempEdgeId);
+      connectionMenuRef.current.tempNodeId = null as any;
+      connectionMenuRef.current.tempEdgeId = null as any;
+      return true;
+    }
+    // 3) Existing nodes registered
+    const src = connectionMenuRef.current.sourceNodeId;
+    const tgt = connectionMenuRef.current.targetNodeId;
+    if (src && tgt) {
+      setEdges(eds => {
+        const exists = eds.some(e => e.source === src && e.target === tgt);
+        if (exists) return eds.map(e => (e.source === src && e.target === tgt) ? { ...e, label } : e);
+        const id = uuidv4();
+        return [...eds, {
+          id,
+          source: src,
+          sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
+          target: tgt,
+          targetHandle: connectionMenuRef.current.targetHandleId || undefined,
+          style: { stroke: '#8b5cf6' },
+          label,
+          type: 'custom',
+          data: { onDeleteEdge },
+          markerEnd: 'arrowhead'
+        }];
+      });
+      return true;
+    }
+    return false;
+  }, [setEdges, setNodes, finalizeTempPromotion, connectionMenuRef, onDeleteEdge]);
+
   // --- Undo/Redo command stack ---
   type Command = { label: string; do: () => void; undo: () => void };
   const [undoStack, setUndoStack] = useState<Command[]>([]);
@@ -165,19 +267,30 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Sostituisco onConnect
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdgeId = uuidv4();
-      addEdgeManaged({
-        ...params,
-        id: newEdgeId,
-        source: params.source || '',
-        target: params.target || '',
-        sourceHandle: params.sourceHandle || undefined,
-        targetHandle: params.targetHandle || undefined,
-        style: { stroke: '#8b5cf6' },
-        data: { onDeleteEdge }
-      });
-      // Salva l'ID dell'edge appena creata
-      pendingEdgeIdRef.current = newEdgeId;
+      // Se esiste già una edge identica, usa quella; altrimenti crea nuova
+      const existing = (edgesRef.current || []).find(e =>
+        e.source === (params.source || '') &&
+        e.target === (params.target || '') &&
+        (e.sourceHandle || undefined) === (params.sourceHandle || undefined) &&
+        (e.targetHandle || undefined) === (params.targetHandle || undefined)
+      );
+      if (existing) {
+        pendingEdgeIdRef.current = existing.id;
+      } else {
+        const newEdgeId = uuidv4();
+        addEdgeManaged({
+          ...params,
+          id: newEdgeId,
+          source: params.source || '',
+          target: params.target || '',
+          sourceHandle: params.sourceHandle || undefined,
+          targetHandle: params.targetHandle || undefined,
+          style: { stroke: '#8b5cf6' },
+          data: { onDeleteEdge }
+        });
+        // Salva l'ID dell'edge appena creata
+        pendingEdgeIdRef.current = newEdgeId;
+      }
       // Se source e target sono entrambi nodi esistenti, apri subito intellisense
       if (params.source && params.target) {
         // Trova posizione del target node per posizionare il menu
@@ -188,11 +301,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           menuPos = { x: rect.left + rect.width / 2, y: rect.top };
         }
         openMenu(menuPos, params.source, params.sourceHandle);
+        // Registra anche il bersaglio per consentire aggiornamenti deterministici
+        try { setTarget(params.target, params.targetHandle || undefined); } catch {}
       }
-      // Resetta subito dopo il tick per consentire onConnectEnd di capire se la connessione ha davvero aggiunto l'edge
-      setTimeout(() => { pendingEdgeIdRef.current = null; }, 0);
     },
-    [addEdgeManaged, onDeleteEdge, openMenu],
+    [addEdgeManaged, onDeleteEdge, openMenu, setTarget],
   );
 
   // Log dettagliato su ogni cambiamento di nodes.length
@@ -276,6 +389,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const handleCreateCondition = useCallback(async (name: string, scope?: 'global' | 'industry') => {
     try {
       try { console.log('[CondFlow] service.enter', { name, scope }); } catch {}
+      // Se stiamo etichettando un edge appena creato tra due nodi esistenti,
+      // aggiorna subito quell'edge per non perdere la selezione dell'utente.
+      let attachToEdgeId: string | null = null;
+      if (pendingEdgeIdRef.current) {
+        attachToEdgeId = pendingEdgeIdRef.current;
+        setEdges((eds) => eds.map(e => e.id === attachToEdgeId ? { ...e, label: name } : e));
+        setSelectedEdgeId(attachToEdgeId);
+        pendingEdgeIdRef.current = null;
+        // non chiudere qui: continuiamo a creare la condition e poi attacchiamo l'id
+      }
       let categoryId = '';
       const conditions = (projectData as any)?.conditions || [];
 
@@ -305,6 +428,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         // Evidenzia nel sidebar e aggiorna UI (non blocca il flusso)
         setTimeout(async () => { try { (await import('../../ui/events')).emitSidebarHighlightItem('conditions', name); } catch {} }, 100);
         try { (await import('../../ui/events')).emitSidebarForceRender(); } catch {}
+
+        // Se avevamo un edge esistente, attacca ora il conditionId e chiudi
+        if (attachToEdgeId) {
+          setEdges((eds) => eds.map(e => e.id === attachToEdgeId ? { ...e, data: { ...(e.data || {}), onDeleteEdge, conditionId }, label: name } : e));
+          closeMenu();
+          return;
+        }
 
         // Crea/promuovi nodo collegato
         const getTargetHandle = (sourceHandleId: string): string => {
@@ -560,6 +690,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Rimuove TUTTI i nodi temporanei senza contenuto e i relativi edge (ESC/chiusura menu)
   function cleanupAllTempNodesAndEdges() {
+    // Se è in corso una conferma (lock), non eseguire cleanup
+    try { if ((connectionMenuRef.current as any)?.locked) return; } catch {}
     // 1) Rimuovi qualsiasi nodo temporaneo che non ha contenuto
     setNodes((nds) => nds.filter((n: any) => {
       const isTemp = n?.data?.isTemporary === true;
@@ -589,6 +721,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Promuove il nodo/edge temporanei a definitivi e rimuove ogni altro temporaneo residuo
   function finalizeTempPromotion(keepNodeId: string, keepEdgeId?: string) {
+    // rispetto lock: funzione chiamata in fase di conferma
     // 1) marca il nodo da tenere come non temporaneo e rimuovi tutti i temporanei residui
     setNodes((nds) => nds
       .map(n => n.id === keepNodeId ? { ...n, data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined } } : n)
@@ -712,7 +845,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   };
 
   const handleSelectCondition = useCallback((item: any) => {
+    // Attiva un lock per evitare cleanup concorrenti durante la conferma
+    try { (connectionMenuRef.current as any).locked = true; } catch {}
     const label = item?.description || item?.name || '';
+
+    // Commit via unified helper
+    const handled = commitEdgeLabel(label);
+    if (handled) { closeMenu(); try { (connectionMenuRef.current as any).locked = false; } catch {} return; }
 
     // A) Promuovi temp se presente
     const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
@@ -727,34 +866,47 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       } : n));
       setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label, style: { ...(e.style || {}), stroke: '#8b5cf6' } } : e));
       finalizeTempPromotion(tempNodeId, tempEdgeId);
+      // azzera i riferimenti temp per evitare ulteriori cleanup
+      connectionMenuRef.current.tempNodeId = null as any;
+      connectionMenuRef.current.tempEdgeId = null as any;
       closeMenu();
+      try { (connectionMenuRef.current as any).locked = false; } catch {}
       return;
     }
 
-    // B) Collega due nodi esistenti
+    // B) Collega due nodi esistenti o aggiorna edge (fallback)
     const src = connectionMenuRef.current.sourceNodeId;
     const tgt = connectionMenuRef.current.targetNodeId;
     if (src && tgt) {
-      const id = uuidv4();
-      setEdges(eds => [...removeAllTempEdges(eds, nodes), {
-        id,
-        source: src,
-        sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-        target: tgt,
-        targetHandle: connectionMenuRef.current.targetHandleId || undefined,
-        style: { stroke: '#8b5cf6' },
-        label,
-        type: 'custom',
-        data: { onDeleteEdge },
-        markerEnd: 'arrowhead'
-      }]);
+      setEdges(eds => {
+        const id = uuidv4();
+        // Se esiste già una edge tra src e tgt, aggiorna label; altrimenti crea nuova
+        const exists = eds.some(e => e.source === src && e.target === tgt);
+        if (exists) {
+          return eds.map(e => (e.source === src && e.target === tgt) ? { ...e, label } : e);
+        }
+        return [...eds, {
+          id,
+          source: src,
+          sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
+          target: tgt,
+          targetHandle: connectionMenuRef.current.targetHandleId || undefined,
+          style: { stroke: '#8b5cf6' },
+          label,
+          type: 'custom',
+          data: { onDeleteEdge },
+          markerEnd: 'arrowhead'
+        }];
+      });
       closeMenu();
+      try { (connectionMenuRef.current as any).locked = false; } catch {}
       return;
     }
 
     // C) Altrimenti abort pulito (niente creazione nuovi nodi qui)
-    cleanupAllTempNodesAndEdges();
+    // Non fare cleanup aggressivo qui: lascia stato invariato, solo chiudi menu
     closeMenu();
+    try { (connectionMenuRef.current as any).locked = false; } catch {}
   }, [nodes, setNodes, setEdges, closeMenu]);
 
   const handleSelectUnconditioned = useCallback(() => {
@@ -828,6 +980,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Handler robusto per chiusura intellisense/condition menu
   const handleConnectionMenuClose = useCallback(() => {
+    // Se è in corso una conferma, non fare cleanup
+    try { if ((connectionMenuRef.current as any)?.locked) { closeMenu(); return; } } catch {}
     // Rimuovi nodo e collegamento temporanei se esistono
     cleanupAllTempNodesAndEdges();
     closeMenu();

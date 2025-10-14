@@ -39,7 +39,7 @@ interface IntellisenseMenuProps {
   allowedKinds?: Array<'condition'|'intent'>;
 }
 
-export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?: boolean }> = ({
+export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?: boolean; navSignal?: { seq: number; dir: 1 | -1 }; onEnterSelected?: (item: IntellisenseItem | null) => void }> = ({
   isOpen,
   query,
   position,
@@ -55,7 +55,9 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   seedItems,
   extraItems,
   allowedKinds,
-  inlineAnchor = false
+  inlineAnchor = false,
+  navSignal,
+  onEnterSelected
 }) => {
   const ErrorBoundary = React.useMemo(() => (
     class EB extends React.Component<{ children: React.ReactNode }, { hasError: boolean }>{
@@ -244,33 +246,14 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       flat.set('conditions', fres);
       setFuzzyResults(flat);
       setSemanticResults([]);
-      setSelectedIndex(0);
+      // non resettare selectedIndex se già valido
+      const total = fres.length;
+      setSelectedIndex((prev) => (prev >= 0 && prev < total ? prev : 0));
     }
   }, [data, activeCats, query, isOpen, seedItems, extraItems, allowedKinds]);
 
-  // One-shot debug: when menu opens, show all labels available (conditions + intents)
-  useEffect(() => {
-    if (!isOpen) { loggedThisOpenRef.current = false; return; }
-    if (loggedThisOpenRef.current) return;
-    if (allIntellisenseItems.length > 0) {
-      try {
-        const labels = allIntellisenseItems.map(i => i.label);
-        console.log('[Intellisense][dataset]', { total: allIntellisenseItems.length, labels });
-      } catch {}
-      loggedThisOpenRef.current = true;
-      return;
-    }
-    // If dataset is not ready yet, log once after a short delay
-    const t = window.setTimeout(() => {
-      if (!isOpen || loggedThisOpenRef.current) return;
-      try {
-        const labels = allIntellisenseItems.map(i => i.label);
-        console.log('[Intellisense][dataset]', { total: allIntellisenseItems.length, labels });
-      } catch {}
-      loggedThisOpenRef.current = true;
-    }, 150);
-    return () => window.clearTimeout(t);
-  }, [isOpen, allIntellisenseItems]);
+  // Rimuovi i log dataset (troppo rumorosi)
+  useEffect(() => { if (!isOpen) loggedThisOpenRef.current = false; }, [isOpen]);
 
   // Perform search when query changes
   useEffect(() => {
@@ -290,13 +273,9 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     flat.set('conditions', results);
     setFuzzyResults(flat);
     setSemanticResults([]); // Reset semantic results
-    setSelectedIndex(0);
-    try {
-      if ((window as any).__intellisenseLastQuery !== query) {
-        console.log('[Intellisense][matches]', { query, count: results.length, labels: results.map(r => r.item.label) });
-        (window as any).__intellisenseLastQuery = query;
-      }
-    } catch {}
+    // mantieni selezione se possibile
+    const total = results.length;
+    setSelectedIndex((prev) => (prev >= 0 && prev < total ? prev : 0));
     
     // Dopo aver ottenuto fuzzyResults
   }, [query, isInitialized, allIntellisenseItems]);
@@ -310,6 +289,51 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     allResults.push(...semanticResults);
     return allResults;
   };
+
+  // Snapshot del selezionato corrente (deterministico su Enter)
+  const lastSelectedRef = useRef<IntellisenseItem | null>(null);
+  useEffect(() => {
+    const all = getAllResults();
+    lastSelectedRef.current = all[selectedIndex]?.item || null;
+  }, [selectedIndex, fuzzyResults, semanticResults]);
+
+  // Ensure selectedIndex is within bounds when results change
+  useEffect(() => {
+    const total = Array.from(fuzzyResults.values()).reduce((s, arr) => s + arr.length, 0) + semanticResults.length;
+    if (selectedIndex >= total) setSelectedIndex(total > 0 ? total - 1 : 0);
+  }, [fuzzyResults, semanticResults, selectedIndex]);
+
+  // Host-driven navigation (clean integration from parent input)
+  const lastNavSeqRef = useRef<number>(-1);
+  const suppressHoverUntilRef = useRef<number>(0);
+  useEffect(() => {
+    if (!isOpen) return;
+    const total = Array.from(fuzzyResults.values()).reduce((s, arr) => s + arr.length, 0) + semanticResults.length;
+    if (!navSignal || typeof navSignal.seq !== 'number' || navSignal.seq === lastNavSeqRef.current || total === 0) return;
+    lastNavSeqRef.current = navSignal.seq;
+    let idx = selectedIndex + (navSignal.dir > 0 ? 1 : -1);
+    if (idx < 0) idx = total - 1; else if (idx >= total) idx = 0;
+    try { console.log('[Intellisense][nav]', { from: selectedIndex, to: idx, total, nav: navSignal }); } catch {}
+    setSelectedIndex(idx);
+    // Suppress hover selection for a brief window to avoid flicker
+    suppressHoverUntilRef.current = Date.now() + 200;
+    // Scroll the newly selected item into view
+    try {
+      const container = menuRef.current as HTMLElement | null;
+      if (container) {
+        const items = container.querySelectorAll('[data-intellisense-item]');
+        const el = items[idx] as HTMLElement | undefined;
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    } catch {}
+  }, [navSignal, isOpen, fuzzyResults, semanticResults, selectedIndex]);
+
+  // Log selection changes (diagnostic)
+  useEffect(() => {
+    try { console.log('[Intellisense][selectedIndex]', selectedIndex); } catch {}
+  }, [selectedIndex]);
 
   // Debug UI flag: render matched labels directly in the menu (no console needed)
   const debugIntellisenseUi = (() => { try { return localStorage.getItem('debug.intellisense.ui') === '1'; } catch { return false; } })();
@@ -333,6 +357,15 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
           break;
         case 'Enter':
           e.preventDefault();
+          // Conferma usando lo snapshot per evitare ricalcoli durante l'enter
+          const snap = lastSelectedRef.current;
+          if (snap) {
+            if (onEnterSelected) onEnterSelected(snap);
+            else onSelect(snap);
+            return;
+          }
+          // notify parent (inline) solo se non c'è selezionato
+          try { document.dispatchEvent(new CustomEvent('intelli-enter')); } catch {}
           // If no fuzzy results and we have a query, trigger semantic search
           if (totalItems === 0 && query.trim() && allIntellisenseItems.length > 0) {
             const performSemanticOnly = async () => {
@@ -352,10 +385,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
           }
           
           const allResults = getAllResults();
-          if (allResults[selectedIndex]) {
-            onSelect(allResults[selectedIndex].item);
-          } else {
-            // console.log('❌ IntellisenseMenu - Nessun elemento selezionabile all\'indice:', selectedIndex);
+          const sel = allResults[selectedIndex]?.item || null;
+          if (sel) {
+            if (onEnterSelected) onEnterSelected(sel);
+            else onSelect(sel);
           }
           return;
         case 'Escape':
@@ -369,9 +402,33 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedIndex, totalItems, fuzzyResults, semanticResults, onSelect, onClose, query, allIntellisenseItems]);
+    // Solo se non ancorato a input inline: altrimenti gestisce il parent
+    if (!inlineAnchor) {
+      document.addEventListener('keydown', handleKeyDown, true);
+    }
+    // Also listen to custom navigation events from host inputs
+    const onNav = (e: any) => {
+      const dir = e?.detail?.dir as number | undefined;
+      if (!dir || totalItems === 0) return;
+      let idx = selectedIndex + (dir > 0 ? 1 : -1);
+      if (idx < 0) idx = totalItems - 1; else if (idx >= totalItems) idx = 0;
+      setSelectedIndex(idx);
+    };
+    document.addEventListener('intelli-nav', onNav as any, true);
+    const onEnter = () => {
+      const sel = lastSelectedRef.current;
+      if (sel) {
+        if (onEnterSelected) onEnterSelected(sel);
+        else onSelect(sel);
+      }
+    };
+    document.addEventListener('intelli-enter', onEnter as any, true);
+    return () => {
+      if (!inlineAnchor) document.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('intelli-nav', onNav as any, true);
+      document.removeEventListener('intelli-enter', onEnter as any, true);
+    };
+  }, [isOpen, selectedIndex, totalItems, fuzzyResults, semanticResults, onSelect, onClose, query, allIntellisenseItems, inlineAnchor]);
 
   // Auto-scroll to keep selected item visible
   useEffect(() => {
@@ -492,7 +549,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
         layoutConfig={defaultLayoutConfig}
         categoryConfig={{}}
         onItemSelect={(result) => onSelect(result.item)}
-        onItemHover={(index) => setSelectedIndex(index)}
+        onItemHover={(index) => {
+          if (Date.now() < suppressHoverUntilRef.current) return;
+          setSelectedIndex(index);
+        }}
         onCreateNew={onCreateNew}
         onCreateAgentAct={onCreateAgentAct}
         onCreateBackendCall={onCreateBackendCall}

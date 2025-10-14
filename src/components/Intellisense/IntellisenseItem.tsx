@@ -42,11 +42,12 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
     <div
       className={`
         flex items-start p-2 cursor-pointer rounded-md transition-all duration-150
-        ${isSelected ? 'border border-black' : 'border border-transparent'}
+        ${isSelected ? 'bg-amber-200 text-black border-2 border-amber-500' : 'border border-transparent'}
       `}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
-      style={{ background: item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined }}
+      style={{ background: isSelected ? undefined : (item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined) }}
+      data-intellisense-item
     >
       {/* Icon */}
       <div className="mr-2 mt-0.5 flex-shrink-0">
@@ -72,7 +73,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
         {/* Label principale con tooltip se description */}
         <div
           className="font-normal text-sm whitespace-nowrap overflow-hidden text-ellipsis"
-          style={{ color: foreColor }}
+          style={{ color: isSelected ? '#111' : (foreColor as any) }}
           title={item.description && item.description.trim() !== '' ? item.description : undefined}
         >
           {highlightMatches(item.label || item.name, nameMatches)}
