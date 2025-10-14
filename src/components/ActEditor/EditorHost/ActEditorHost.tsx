@@ -7,7 +7,8 @@ import { getAgentActVisualsByType } from '../../Flowchart/actVisuals';
 export default function ActEditorHost({ act, onClose }: EditorProps) {
   const kind = resolveEditorKind(act);
   const Comp = registry[kind];
-  try { console.log('[ActEditorHost][mount]', { kind, act }); } catch {}
+  // quiet: remove mount spam; enable only via debug flag if needed
+  try { if (localStorage.getItem('debug.actEditor')==='1') console.log('[ActEditorHost][mount]', { kind, act }); } catch {}
 
   return (
     <div className="h-full w-full grid grid-rows-[48px_1fr] bg-slate-900">
@@ -20,7 +21,7 @@ export default function ActEditorHost({ act, onClose }: EditorProps) {
           })()}
           <span>{act.label || 'Editor'}</span>
         </div>
-        <button className="px-2 py-1 text-sm rounded-lg border border-amber-400 bg-white" onClick={() => { try { console.log('[ActEditorHost][close:click]'); } catch {} onClose(); }}>Close</button>
+        <button className="px-2 py-1 text-sm rounded-lg border border-amber-400 bg-white" onClick={() => { try { if (localStorage.getItem('debug.actEditor')==='1') console.log('[ActEditorHost][close:click]'); } catch {} onClose(); }}>Close</button>
       </div>
       <div className="min-h-0">
         <Suspense fallback={null}>

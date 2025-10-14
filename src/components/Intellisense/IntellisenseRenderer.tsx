@@ -177,18 +177,11 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
 
   // Flatten all results for index calculation
   const allResults: Array<{ result: IntellisenseResult; isFromAI: boolean; categoryType?: string }> = [];
-  
-  // Add fuzzy results by category (filtered)
-  filteredFuzzy.forEach((categoryResults, categoryType) => {
-    categoryResults.forEach(result => {
-      allResults.push({ result, isFromAI: false, categoryType });
-    });
+  // Flat list: ignore categories entirely to avoid hiding matched items
+  fuzzyResults.forEach(categoryResults => {
+    categoryResults.forEach(result => { allResults.push({ result, isFromAI: false }); });
   });
-  
-  // Add semantic results
-  semanticResults.forEach(result => {
-    allResults.push({ result, isFromAI: true });
-  });
+  semanticResults.forEach(result => { allResults.push({ result, isFromAI: true }); });
   
   // Calcola quali item sono visibili
   const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER_SIZE);
@@ -269,39 +262,28 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   }
 
   
-  const smallSet = totalItems <= 2;
+  // Render flat list without virtualization to avoid hiding matched items
   return (
-    <div 
+    <div
       ref={containerRef}
-      className={smallSet ? '' : 'overflow-auto'}
+      className={'overflow-auto'}
       onScroll={handleScroll}
-      style={{ 
-        maxHeight: smallSet ? undefined : layoutConfig.maxMenuHeight,
+      style={{
+        maxHeight: layoutConfig.maxMenuHeight,
         maxWidth: layoutConfig.maxMenuWidth,
-        height: smallSet ? (totalItems * ITEM_HEIGHT) : Math.min(totalItems * ITEM_HEIGHT, layoutConfig.maxMenuHeight),
-        overflow: smallSet ? 'visible' : undefined
+        overflowY: 'auto'
       }}
     >
-      {/* Spazio virtuale sopra: disattivato per liste piccole */}
-      {!smallSet && <div style={{ height: startIndex * ITEM_HEIGHT }} />}
-      
-      {/* Renderizza solo gli item visibili */}
-      {visibleResults.map((item, index) => {
-        const globalIndex = startIndex + index;
-        return (
-          <IntellisenseItem
-            key={`${item.result.item.id}-${globalIndex}`}
-            result={item.result}
-            isSelected={selectedIndex === globalIndex}
-            isFromAI={item.isFromAI}
-            onClick={() => onItemSelect(item.result)}
-            onMouseEnter={() => handleItemHover(globalIndex)}
-          />
-        );
-      })}
-      
-      {/* Spazio virtuale sotto: disattivato per liste piccole */}
-      {!smallSet && <div style={{ height: (totalItems - endIndex) * ITEM_HEIGHT }} />}
+      {allResults.map((item, index) => (
+        <IntellisenseItem
+          key={`${item.result.item.id}-${index}`}
+          result={item.result}
+          isSelected={selectedIndex === index}
+          isFromAI={item.isFromAI}
+          onClick={() => onItemSelect(item.result)}
+          onMouseEnter={() => handleItemHover(index)}
+        />
+      ))}
     </div>
   );
 };

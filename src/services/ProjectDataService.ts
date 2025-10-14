@@ -794,7 +794,7 @@ export function prepareIntellisenseData(
         const mode = ((item as any)?.mode) || 'Message';
         // Use shared normalizer mapping
         const type = (item as any)?.type || modeToType(mode as any);
-        try { console.log('[CreateFlow] intellisense.item', { label: item?.name || item?.label, mode, type }); } catch {}
+        // try { console.log('[CreateFlow] intellisense.item', { label: item?.name || item?.label, mode, type }); } catch {}
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
           actId: item.id,

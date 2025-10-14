@@ -41,7 +41,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   return (
     <div
       className={`
-        flex items-start p-3 cursor-pointer rounded-lg transition-all duration-150
+        flex items-start p-2 cursor-pointer rounded-md transition-all duration-150
         ${isSelected ? 'border border-black' : 'border border-transparent'}
       `}
       onClick={onClick}
@@ -49,7 +49,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       style={{ background: item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined }}
     >
       {/* Icon */}
-      <div className="mr-3 mt-0.5 flex-shrink-0">
+      <div className="mr-2 mt-0.5 flex-shrink-0">
         {item.iconComponent ? (
           <item.iconComponent className="w-4 h-4" style={{ color: foreColor }} />
         ) : (item.categoryType === 'agentActs') ? (
@@ -71,7 +71,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       <div className="flex-1 min-w-0">
         {/* Label principale con tooltip se description */}
         <div
-          className="font-normal text-sm mb-1 whitespace-nowrap overflow-hidden text-ellipsis"
+          className="font-normal text-sm whitespace-nowrap overflow-hidden text-ellipsis"
           style={{ color: foreColor }}
           title={item.description && item.description.trim() !== '' ? item.description : undefined}
         >

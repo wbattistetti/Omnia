@@ -75,13 +75,14 @@ function TypePickerToolbar({ left, top, onPick, rootRef, currentType, onRequestC
       onKeyDown={onKeyDown}
       aria-label="Pick act type"
       ref={rootRef as any}
+      onPointerDown={(e) => { e.stopPropagation(); }}
+      onPointerLeave={() => { setTimeout(() => { try { onRequestClose && onRequestClose(); } catch {} }, 100); }}
     >
       <div
         style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
         onMouseEnter={() => { try { console.log('[Picker][enter]'); } catch {} }}
         onMouseLeave={() => {
           try { console.log('[Picker][leave]'); } catch {}
-          // close shortly after leaving picker to allow smooth transitions
           setTimeout(() => { try { onRequestClose && onRequestClose(); } catch {} }, 100);
         }}
       >

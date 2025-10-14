@@ -378,10 +378,11 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
     const existingNodeIds = new Set(existingNodes.map(d => d.id));
     const existingEdgeIds = new Set(existingEdges.map(d => d.id));
 
-    // Upsert nodes
+    // Upsert nodes (exclude immutable _id)
     for (const n of nodes) {
       if (!n || !n.id) continue;
-      await ncoll.updateOne({ id: n.id, flowId }, { $set: { ...n, flowId, updatedAt: now } }, { upsert: true });
+      const { _id: _nid, ...nset } = n || {};
+      await ncoll.updateOne({ id: n.id, flowId }, { $set: { ...nset, flowId, updatedAt: now } }, { upsert: true });
       nUpserts++;
       if (n.id) existingNodeIds.delete(n.id);
     }
@@ -391,10 +392,11 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
       nDeletes = existingNodeIds.size;
     }
 
-    // Upsert edges
+    // Upsert edges (exclude immutable _id)
     for (const e of edges) {
       if (!e || !e.id) continue;
-      await ecoll.updateOne({ id: e.id, flowId }, { $set: { ...e, flowId, updatedAt: now } }, { upsert: true });
+      const { _id: _eid, ...eset } = e || {};
+      await ecoll.updateOne({ id: e.id, flowId }, { $set: { ...eset, flowId, updatedAt: now } }, { upsert: true });
       eUpserts++;
       if (e.id) existingEdgeIds.delete(e.id);
     }

@@ -65,29 +65,65 @@ export function initializeFuzzySearch(items: IntellisenseItem[]): void {
  * Custom search: AND tra parole chiave (min 2 caratteri), match su inizio parola del titolo
  */
 export function performFuzzySearch(query: string, items?: IntellisenseItem[]): IntellisenseResult[] {
-  if (!query.trim()) return [];
+  const raw = (query || '').trim();
+  if (!raw) return [];
 
   // Usa tutti gli item se non passati (fallback per compatibilità)
   const allItems = items || (fuseInstance ? (fuseInstance as any)._docs : []);
 
-  const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length >= 1);
-  if (keywords.length === 0) return [];
+  // Token della query separati da spazi; richiede almeno 2 caratteri per evitare rumore
+  const tokens = raw
+    .toLowerCase()
+    .split(/\s+/)
+    .map(t => t.trim())
+    .filter(t => t.length >= 2);
+  if (tokens.length === 0) return [];
+
+  // Normalizzazione: minuscole, rimozione accenti, compattazione spazi/underscore/trattini
+  const normalize = (s: string) =>
+    (s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9\s_-]/g, ' ')
+      .replace(/[\s_-]+/g, ' ')
+      .trim();
+
+  const tokenizeFields = (item: IntellisenseItem): string[] => {
+    const fields: string[] = [
+      item.label,
+      item.shortLabel,
+      item.description,
+      (item as any).name,
+      ...(Array.isArray((item as any).tags) ? (item as any).tags : []),
+    ].filter((f): f is string => typeof f === 'string' && f.trim() !== '');
+
+    const words = fields
+      .map(f => normalize(f))
+      .join(' ')
+      .split(/\s+/)
+      .filter(Boolean);
+    return words;
+  };
 
   const results = allItems
     .map((item: IntellisenseItem) => {
-      // Cerca su label, shortLabel, description, name e tags opzionali
-      const baseFields: string[] = [item.label, item.shortLabel, item.description, (item as any).name]
-        .filter((f): f is string => typeof f === 'string' && f.trim() !== '')
-        .map(f => f.toLowerCase());
-      const tagFields: string[] = Array.isArray((item as any).tags) ? (item as any).tags.map((t: any) => String(t).toLowerCase()) : [];
-      const fields = [...baseFields, ...tagFields];
-      const words = fields.join(' ').split(/\s+/);
-      // AND logico: ogni keyword deve matchare almeno una parola di uno dei campi
-      const allMatched = keywords.every(k => words.some(w => w.startsWith(k)));
-      if (!allMatched) return null;
-      return { item, score: 0, matches: [{ indices: [] }] } as IntellisenseResult;
+      const words = tokenizeFields(item);
+      const ok = tokens.every(tok => words.some(w => w.startsWith(tok)));
+      try {
+        if (localStorage.getItem('debug.intellisense')==='1') {
+          console.log('[Intellisense][matchDbg]', {
+            label: item.label,
+            words,
+            tokens,
+            ok
+          });
+        }
+      } catch {}
+      return ok ? ({ item, score: 0 } as IntellisenseResult) : null;
     })
     .filter(Boolean) as IntellisenseResult[];
+
   return results;
 }
 

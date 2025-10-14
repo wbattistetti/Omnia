@@ -581,6 +581,13 @@ export const AppContent: React.FC<AppContentProps> = ({
                       } catch {}
                       const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
+                      // Reload fresh project data so act.problem is populated from DB
+                      try {
+                        const fresh = await (ProjectDataService as any).loadProjectData?.();
+                        if (fresh) {
+                          try { pdUpdate.setData && (pdUpdate as any).setData(fresh); } catch {}
+                        }
+                      } catch {}
                       const tA1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       try { console.log('[Save][timing] acts ms', Math.round(tA1 - tA0)); } catch {}
                     }
@@ -601,11 +608,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                         method: 'PUT', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes, edges })
                       });
-                      if (!putRes.ok) {
-                        try { console.warn('[Flow][save][error]', { status: putRes.status, statusText: putRes.statusText, body: await putRes.text() }); } catch {}
-                      }
                       const tf1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      try { console.log('[Flow][save][ok]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0) }); } catch {}
+                      if (!putRes.ok) {
+                        try { console.warn('[Flow][save][error]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0), status: putRes.status, statusText: putRes.statusText, body: await putRes.text() }); } catch {}
+                      } else {
+                        try { console.log('[Flow][save][ok]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0) }); } catch {}
+                      }
                       // Reload automatico e overlay rimossi per test semplificato
                     } catch {}
                   }

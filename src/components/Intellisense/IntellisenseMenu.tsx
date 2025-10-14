@@ -39,7 +39,7 @@ interface IntellisenseMenuProps {
   allowedKinds?: Array<'condition'|'intent'>;
 }
 
-export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
+export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?: boolean }> = ({
   isOpen,
   query,
   position,
@@ -54,7 +54,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   allowCreatePicker = false,
   seedItems,
   extraItems,
-  allowedKinds
+  allowedKinds,
+  inlineAnchor = false
 }) => {
   const ErrorBoundary = React.useMemo(() => (
     class EB extends React.Component<{ children: React.ReactNode }, { hasError: boolean }>{
@@ -74,13 +75,14 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [allIntellisenseItems, setAllIntellisenseItems] = useState<IntellisenseItem[]>([]);
-  const defaultCats = ['agentActs', 'userActs', 'backendActions', 'tasks'];
+  // Include 'conditions' by default so condition items are not filtered out
+  const defaultCats = ['agentActs', 'userActs', 'backendActions', 'conditions', 'tasks'];
   const [activeCats, setActiveCats] = useState<string[]>(filterCategoryTypes && filterCategoryTypes.length ? filterCategoryTypes : defaultCats);
+  const loggedThisOpenRef = useRef(false);
 
-  // LOG DATI INTELLISENSE
+  // Remove noisy logs: keep hook for future metrics if needed
   useEffect(() => {
-    // Calcola il numero totale di risultati fuzzy
-    const fuzzyCount = Array.from(fuzzyResults.values()).reduce((sum, arr) => sum + arr.length, 0);
+    // no-op: metrics disabled
   }, [allIntellisenseItems, query, fuzzyResults, semanticResults]);
 
   // Calculate total items for navigation
@@ -195,65 +197,106 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
 
   // Initialize / refresh fuzzy search when data or activeCats change
   useEffect(() => {
-    // Build dataset: prefer unified extraItems when provided; otherwise build from project and append seeds
+    // Build dataset as UNION: [extraItems (if any)] + [project data] + [seedItems]
     let intellisenseData: IntellisenseItem[] = [];
-    if (Array.isArray(extraItems) && extraItems.length) {
-      intellisenseData = extraItems;
+    const usingExtra = Array.isArray(extraItems) && extraItems.length > 0;
+    const baseFromProject = data ? prepareIntellisenseData(data) : [] as IntellisenseItem[];
+
+    if (usingExtra) {
+      intellisenseData = [...(extraItems as IntellisenseItem[]), ...baseFromProject];
     } else {
-      intellisenseData = data ? prepareIntellisenseData(data) : [] as IntellisenseItem[];
-      if (Array.isArray(seedItems) && seedItems.length) {
-        intellisenseData = [...intellisenseData, ...seedItems];
-      }
+      intellisenseData = baseFromProject;
     }
-    try { console.log('[Intelli][dataset]', { hasData: !!data, base: (data ? 'project' : 'empty'), seed: Array.isArray(seedItems) ? seedItems.length : 0, cats: activeCats }); } catch {}
-    if (activeCats && activeCats.length > 0) {
-      intellisenseData = intellisenseData.filter(item => activeCats.includes(item.categoryType));
+    if (Array.isArray(seedItems) && seedItems.length) {
+      intellisenseData = [...intellisenseData, ...seedItems];
+    }
+
+    // Applica filtri SOLO se richiesti dai chiamanti
+    if (Array.isArray(filterCategoryTypes) && filterCategoryTypes.length) {
+      intellisenseData = intellisenseData.filter(item => filterCategoryTypes.includes((item as any)?.categoryType));
     }
     if (Array.isArray(allowedKinds) && allowedKinds.length) {
-      intellisenseData = intellisenseData.filter(item => !item.kind || allowedKinds.includes(item.kind));
+      intellisenseData = intellisenseData.filter(item => {
+        const kind = (item as any)?.kind as any;
+        if (kind) return allowedKinds.includes(kind);
+        // condizioni spesso non hanno kind esplicito
+        if ((item as any)?.categoryType === 'conditions' && allowedKinds.includes('condition' as any)) return true;
+        return false;
+      });
     }
     initializeFuzzySearch(intellisenseData);
     setAllIntellisenseItems(intellisenseData);
     setIsInitialized(true);
     // Immediately compute results for current query so new items appear right away
     if (!query.trim()) {
-      // Show the full dataset (which already includes seedItems appended), without prioritizing seeds
+      // Show the full dataset
       const baseItems = intellisenseData;
       const allResults: IntellisenseResult[] = baseItems.map(item => ({ item } as IntellisenseResult));
-      try { console.log('[Intelli][emptyQuery][count]', { total: allResults.length }); } catch {}
-      setFuzzyResults(groupAndSortResults(allResults));
+      // Flat category: avoid any category-based filtering downstream
+      const flat = new Map<string, IntellisenseResult[]>();
+      flat.set('conditions', allResults);
+      setFuzzyResults(flat);
       setSemanticResults([]);
       setSelectedIndex(0);
     } else {
       const fres = performFuzzySearch(query, intellisenseData);
-      setFuzzyResults(groupAndSortResults(fres));
+      const flat = new Map<string, IntellisenseResult[]>();
+      flat.set('conditions', fres);
+      setFuzzyResults(flat);
       setSemanticResults([]);
       setSelectedIndex(0);
     }
   }, [data, activeCats, query, isOpen, seedItems, extraItems, allowedKinds]);
 
+  // One-shot debug: when menu opens, show all labels available (conditions + intents)
+  useEffect(() => {
+    if (!isOpen) { loggedThisOpenRef.current = false; return; }
+    if (loggedThisOpenRef.current) return;
+    if (allIntellisenseItems.length > 0) {
+      try {
+        const labels = allIntellisenseItems.map(i => i.label);
+        console.log('[Intellisense][dataset]', { total: allIntellisenseItems.length, labels });
+      } catch {}
+      loggedThisOpenRef.current = true;
+      return;
+    }
+    // If dataset is not ready yet, log once after a short delay
+    const t = window.setTimeout(() => {
+      if (!isOpen || loggedThisOpenRef.current) return;
+      try {
+        const labels = allIntellisenseItems.map(i => i.label);
+        console.log('[Intellisense][dataset]', { total: allIntellisenseItems.length, labels });
+      } catch {}
+      loggedThisOpenRef.current = true;
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [isOpen, allIntellisenseItems]);
+
   // Perform search when query changes
   useEffect(() => {
     if (!isInitialized) return;
+    const qlen = (query || '').trim().length;
 
-    // Se la query è vuota, mostra tutte le voci disponibili
-    if (!query.trim()) {
-      const allResults: IntellisenseResult[] = allIntellisenseItems.map(item => ({
-        item
-      }));
-      
-      const groupedResults = groupAndSortResults(allResults);
-      setFuzzyResults(groupedResults);
+    // Se la query è corta (<2), non mostrare nulla
+    if (qlen < 2) {
+      setFuzzyResults(new Map());
       setSemanticResults([]);
       return;
     }
 
     // Esegui solo la ricerca fuzzy quando la query cambia
-    const fuzzyResults = performFuzzySearch(query, allIntellisenseItems);
-    const groupedFuzzy = groupAndSortResults(fuzzyResults);
-    setFuzzyResults(groupedFuzzy);
+    const results = performFuzzySearch(query, allIntellisenseItems);
+    const flat = new Map<string, IntellisenseResult[]>();
+    flat.set('conditions', results);
+    setFuzzyResults(flat);
     setSemanticResults([]); // Reset semantic results
     setSelectedIndex(0);
+    try {
+      if ((window as any).__intellisenseLastQuery !== query) {
+        console.log('[Intellisense][matches]', { query, count: results.length, labels: results.map(r => r.item.label) });
+        (window as any).__intellisenseLastQuery = query;
+      }
+    } catch {}
     
     // Dopo aver ottenuto fuzzyResults
   }, [query, isInitialized, allIntellisenseItems]);
@@ -267,6 +310,9 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     allResults.push(...semanticResults);
     return allResults;
   };
+
+  // Debug UI flag: render matched labels directly in the menu (no console needed)
+  const debugIntellisenseUi = (() => { try { return localStorage.getItem('debug.intellisense.ui') === '1'; } catch { return false; } })();
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -361,33 +407,44 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
     }
   }, [selectedIndex, isOpen]);
 
-  if (!isOpen || !isInitialized) {
+  if (!isOpen || !isInitialized || ((query || '').trim().length < 2)) {
     return null;
   }
 
-  // Avoid rendering an empty shell when there are no results and creation is disabled
+  // If no results, still render the shell to avoid blink/hide issues during updates
   const noResults = totalItems === 0;
-  if (noResults) {
-    return null;
-  }
 
   return (
     <ErrorBoundary>
     <div
       ref={menuRef}
-      style={{
+      style={inlineAnchor ? {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        background: '#fff',
+        color: '#111',
+        border: '1px solid #d1d5db',
+        boxShadow: '0 4px 24px rgba(30,41,59,0.10)',
+        borderRadius: 12,
+        padding: 0,
+        width: 320,
+        maxHeight: 320,
+        overflowY: 'auto',
+        zIndex: 9999
+      } : {
         ...menuStyle,
         background: '#fff',
+        color: '#111',
         border: '1px solid #d1d5db', // gray-300
         boxShadow: '0 4px 24px 0 rgba(30,41,59,0.10)',
         borderRadius: 12,
         padding: 0,
-        // Lasciare max/min/overflow a menuStyle per usare il calcolo dinamico sopra
       }}
       className="bg-white rounded-lg shadow-xl border border-gray-300"
     >
       {/* Compact header: only category filter bar (no result/hints text) */}
-      {totalItems > 0 && (
+      {false && totalItems > 0 && (
         <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">
           {/* Category filter bar */}
           <div className="mt-2 flex items-center gap-2">
@@ -441,11 +498,13 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps> = ({
         onCreateBackendCall={onCreateBackendCall}
         onCreateTask={onCreateTask}
         query={query}
-        filterCategoryTypes={filterCategoryTypes}
+        filterCategoryTypes={[...new Set(['conditions', ...filterCategoryTypes])]} 
         projectIndustry={data?.industry}
         projectData={data}
         allowCreatePicker={allowCreatePicker}
       />
+
+      {debugIntellisenseUi && null}
     </div>
     </ErrorBoundary>
   );

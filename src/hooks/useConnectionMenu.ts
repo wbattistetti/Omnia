@@ -20,7 +20,6 @@ export function useConnectionMenu() {
   }, []);
 
   const openMenu = useCallback((position, sourceNodeId, sourceHandleId) => {
-    try { console.log('[ConnMenu][open]', { position, sourceNodeId, sourceHandleId }); } catch {}
     const cur = connectionMenuRef.current;
     const next = {
       ...cur,
@@ -37,7 +36,6 @@ export function useConnectionMenu() {
   }, [setMenu]);
 
   const closeMenu = useCallback(() => {
-    try { console.log('[ConnMenu][close]'); } catch {}
     const cur = connectionMenuRef.current;
     const next = {
       ...cur,
@@ -66,7 +64,6 @@ export function useConnectionMenu() {
   }, [setMenu]);
 
   const setTemp = useCallback((tempNodeId, tempEdgeId) => {
-    try { console.log('[ConnMenu][setTemp]', { tempNodeId, tempEdgeId }); } catch {}
     const cur = connectionMenuRef.current;
     const next = { ...cur, tempNodeId, tempEdgeId };
     setMenu(next);

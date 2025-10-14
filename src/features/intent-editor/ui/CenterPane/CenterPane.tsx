@@ -8,7 +8,6 @@ import { actionRunAllTests } from '../../actions/runAllTests';
 export function CenterPane({ intentId }: { intentId?: string }){
   const it = useIntentStore(s=> s.intents.find(x=>x.id===intentId));
   if(!it) return <div className="border rounded-2xl p-4 bg-white">Select a problem</div>;
-  try { if (localStorage.getItem('debug.intent')==='1') console.log('[CenterPane]', { intentId, name: it.name, curated: it.variants.curated.length, neg: it.variants.hardNeg.length, keys: (it as any).signals?.keywords?.length || 0 }); } catch {}
   return (
     <div className="h-full flex flex-col min-h-0">
       {/* titolo/soglia nascosti per semplificare: sono già nel pannello a sinistra */}

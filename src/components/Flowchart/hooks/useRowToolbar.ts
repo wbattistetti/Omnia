@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type ToolbarState = 'hidden' | 'toolbar' | 'picker';
 
@@ -43,15 +43,17 @@ export function useRowToolbar({
   const openPicker = useCallback(() => { clearTimer(); setState('picker'); }, []);
   const closePicker = useCallback(() => { clearTimer(); setState('toolbar'); }, []);
 
-  const docClick = useCallback((ev: MouseEvent) => {
-    const t = ev.target as Node | null;
-    const overRow = contains(rowRef.current || null, t);
-    const overOverlay = contains(overlayRef.current || null, t);
-    const overPicker = contains(pickerRef.current || null, t);
-    if (overRow || overOverlay || overPicker) return false; // handled inside
+  // Robust outside detection using pointerdown capture + composedPath()
+  const inPath = (ev: Event, el?: HTMLElement | null) => !!el && typeof (ev as any).composedPath === 'function' && (ev as any).composedPath().includes(el);
+  const onDocPointerDown = useCallback((ev: PointerEvent) => {
+    if (inPath(ev, rowRef.current) || inPath(ev, overlayRef.current) || inPath(ev, pickerRef.current)) return;
     setState('hidden');
-    return true;
   }, [rowRef, overlayRef, pickerRef]);
+
+  useEffect(() => {
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
+  }, [onDocPointerDown]);
 
   return {
     state,
@@ -59,7 +61,7 @@ export function useRowToolbar({
     showPicker: state === 'picker',
     row: { onEnter: rowEnter, onLeave: rowLeave },
     overlay: { onEnter: overlayEnter, onLeave: overlayLeave },
-    picker: { open: openPicker, close: closePicker, docClick },
+    picker: { open: openPicker, close: closePicker },
   } as const;
 }
 

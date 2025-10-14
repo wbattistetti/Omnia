@@ -21,6 +21,9 @@ export interface EdgeConditionSelectorProps {
   onClose: () => void;
   onCreateCondition?: (name: string, scope?: 'global' | 'industry') => void;
   seedItems?: IntellisenseItem[];
+  extraItems?: IntellisenseItem[];
+  sourceNodeId?: string | null;
+  sourceRows?: any[];
 }
 
 /**
@@ -33,7 +36,10 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   onSelectElse,
   onClose,
   onCreateCondition,
-  seedItems
+  seedItems,
+  extraItems: extraItemsFromCaller,
+  sourceNodeId,
+  sourceRows
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [showIntellisense, setShowIntellisense] = useState(false);
@@ -47,7 +53,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       inputRef.current.focus();
       // Apri sempre: se seedItems è presente, verranno mostrati anche senza dati globali
       setShowIntellisense(true);
-      try { console.log('[CondUI][mount] focus + showIntellisense', { extraCount: Array.isArray(extraItems) ? extraItems.length : 0 }); } catch {}
+      try { if (localStorage.getItem('debug.condUI')==='1') console.log('[CondUI][mount] focus + showIntellisense', { extraCount: Array.isArray(extraItems) ? extraItems.length : 0 }); } catch {}
     }
   }, [extraItems]);
 
@@ -96,6 +102,15 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   // Selezione da intellisense
   const handleIntellisenseSelect = (item: IntellisenseItem) => {
     try { console.log('[CondUI][select]', item); } catch {}
+    // If user picked an intent, materialize a new condition with the intent name
+    if ((item as any)?.kind === 'intent') {
+      const intentName = item.label || item.name;
+      if (onCreateCondition && intentName) {
+        onCreateCondition(intentName, 'industry');
+        setShowIntellisense(false);
+        return;
+      }
+    }
     onSelectCondition(item);
     setShowIntellisense(false);
   };
@@ -104,32 +119,73 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
     setShowIntellisense(false);
   };
 
-  // Build unified extraItems from projectData intents (ProblemClassification)
+  // Build unified extraItems prioritizing intents from the source node's Problem act
   useEffect(() => {
     try {
-      const intents: IntellisenseItem[] = [];
-      const cats: any[] = (projectData as any)?.agentActs || [];
-      for (const c of cats) {
-        for (const it of (c.items || [])) {
-          if (String((it as any)?.type) === 'ProblemClassification' && Array.isArray((it as any)?.problem?.intents)) {
-            for (const intent of (it as any).problem.intents) {
-              intents.push({
-                id: `intent-${(it as any).id || (it as any)._id}-${intent.id || intent.name}`,
-                label: intent.name,
-                name: intent.name,
-                description: intent.name,
-                category: 'Problem Intents',
-                categoryType: 'conditions',
-                kind: 'intent',
-                payload: { actId: (it as any).id || (it as any)._id, intentId: intent.id, intent }
-              });
+      const out: IntellisenseItem[] = [];
+      const pid = (()=>{ try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+      const rows = Array.isArray(sourceRows) ? sourceRows : [];
+      // 1) Prefer intents from the Problem act present in the source node rows
+      for (const r of rows) {
+        const isPC = String(r?.type || '').toLowerCase() === 'problemclassification';
+        if (!isPC) continue;
+        const actId = r?.baseActId || r?.actId || r?.factoryId || r?.id;
+        if (!actId) continue;
+        const key = `problem.${pid}.${actId}`;
+        let payload: any = null;
+        try { const raw = localStorage.getItem(key); payload = raw ? JSON.parse(raw) : null; } catch {}
+        let intentsSrc: any[] = Array.isArray(payload?.intents) ? payload.intents : [];
+        if (intentsSrc.length === 0) {
+          // fallback: scan projectData
+          const act = findAgentAct(projectData as any, r);
+          if (act && Array.isArray((act as any)?.problem?.intents)) intentsSrc = (act as any).problem.intents as any[];
+        }
+        const actLabel = String(r?.text || r?.label || 'problem').trim();
+        const varName = `${actLabel.replace(/\s+/g, '_').toLowerCase()}.variable`;
+        for (const intent of intentsSrc) {
+          out.push({
+            id: `intent-${actId}-${intent.id || intent.name}`,
+            label: intent.name,
+            name: intent.name,
+            description: intent.name,
+            category: 'Problem Intents',
+            categoryType: 'conditions',
+            kind: 'intent',
+            payload: { actId, intentId: intent.id, intent, actVariable: varName }
+          });
+        }
+      }
+      // 2) If none found via source node, fallback to all projectData Problem acts
+      if (out.length === 0) {
+        const cats: any[] = (projectData as any)?.agentActs || [];
+        for (const c of cats) {
+          for (const it of (c.items || [])) {
+            if (String((it as any)?.type) === 'ProblemClassification' && Array.isArray((it as any)?.problem?.intents)) {
+              const actLabel = String((it as any)?.name || (it as any)?.label || 'problem').trim();
+              const varName = `${actLabel.replace(/\s+/g, '_').toLowerCase()}.variable`;
+              for (const intent of (it as any).problem.intents) {
+                out.push({
+                  id: `intent-${(it as any).id || (it as any)._id}-${intent.id || intent.name}`,
+                  label: intent.name,
+                  name: intent.name,
+                  description: intent.name,
+                  category: 'Problem Intents',
+                  categoryType: 'conditions',
+                  kind: 'intent',
+                  payload: { actId: (it as any).id || (it as any)._id, intentId: intent.id, intent, actVariable: varName }
+                });
+              }
             }
           }
         }
       }
-      setExtraItems(intents);
+      setExtraItems(out);
+      try {
+        const labels = out.map(i => i.label);
+        console.log('[CondUI][extraItems]', { count: out.length, labels });
+      } catch {}
     } catch {}
-  }, [projectData]);
+  }, [projectData, sourceNodeId, Array.isArray(sourceRows) ? sourceRows.length : 0]);
 
   // Gestione creazione nuova condizione
   const handleCreateCondition = (name: string, scope?: 'global' | 'industry') => {
@@ -212,18 +268,23 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       </div>
       {/* Intellisense Menu */}
       {showIntellisense && (
-        <IntellisenseMenu
-          isOpen={showIntellisense}
-          query={inputValue}
-          position={{ x: 0, y: 0 }}
-          referenceElement={inputRef.current}
-          onSelect={handleIntellisenseSelect}
-          onClose={handleIntellisenseClose}
-          filterCategoryTypes={['conditions']}
-          onCreateNew={handleCreateCondition}
-          extraItems={extraItems}
-          allowedKinds={['condition','intent']}
-        />
+        <div style={{ position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 36, left: 0, right: 0, zIndex: 9999 }}>
+            <IntellisenseMenu
+              isOpen={showIntellisense}
+              query={inputValue}
+              position={{ x: 0, y: 0 }}
+              referenceElement={inputRef.current}
+              onSelect={handleIntellisenseSelect}
+              onClose={handleIntellisenseClose}
+              filterCategoryTypes={[]}
+              onCreateNew={handleCreateCondition}
+              extraItems={extraItemsFromCaller || extraItems}
+              allowedKinds={['condition','intent']}
+              inlineAnchor={true}
+            />
+          </div>
+        </div>
       )}
 
     </div>

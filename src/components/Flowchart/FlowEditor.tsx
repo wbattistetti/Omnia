@@ -102,7 +102,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     // connectionMenuRef.current = connectionMenu; // This is now handled by the hook
   }, [connectionMenu]);
   React.useEffect(() => {
-    try { console.log('[Conn][state]', connectionMenu); } catch {}
+    try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][state]', connectionMenu); } catch {}
   }, [connectionMenu]);
 
   // Ref per memorizzare l'ID dell'ultima edge creata (sia tra nodi esistenti che con nodo temporaneo)
@@ -628,7 +628,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       const tempNodeId = uuidv4();
       const tempEdgeId = uuidv4();
       const posFlow = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      try { console.log('[Conn][drop]', { ui:{x:event.clientX,y:event.clientY}, flow:posFlow, source: connectionMenuRef.current.sourceNodeId }); } catch {}
+      try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][drop]', { ui:{x:event.clientX,y:event.clientY}, flow:posFlow, source: connectionMenuRef.current.sourceNodeId }); } catch {}
       // Posiziona il nodo in modo che l'handle TOP-CENTER coincida col punto di rilascio
       const position = { x: posFlow.x - (NODE_WIDTH / 2), y: posFlow.y };
       // Crea nodo temporaneo invisibile
@@ -671,7 +671,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             const dx = expectedLeft - position.x;
             if (Math.abs(dx) > 0.5) {
               setNodes(nds => nds.map(n => n.id === tempNodeId ? { ...n, position: { x: (n.position as any).x + dx, y: (n.position as any).y } } : n));
-              try { console.log('[Conn][temp.align]', { tempNodeId, realWidth, fromX: position.x, toX: expectedLeft, dx }); } catch {}
+              try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][temp.align]', { tempNodeId, realWidth, fromX: position.x, toX: expectedLeft, dx }); } catch {}
             }
           }
         } catch {}
@@ -679,16 +679,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       // registra i temp anche PRIMA di aprire (per compatibilità con logiche che leggono subito)
       setTemp(tempNodeId, tempEdgeId);
       // apri il menu (può resettare lo stato interno)
-      try { console.log('[Conn][popup.open]', { ui:{x:event.clientX,y:event.clientY} }); } catch {}
+      try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][popup.open]', { ui:{x:event.clientX,y:event.clientY} }); } catch {}
       openMenu({ x: event.clientX, y: event.clientY }, connectionMenuRef.current.sourceNodeId, connectionMenuRef.current.sourceHandleId);
       // e registrali DI NUOVO dopo l'apertura per evitare che l'open li azzeri
       setTemp(tempNodeId, tempEdgeId);
-      try { console.log('[Conn][popup.afterOpen]', { tempNodeId, tempEdgeId, menu: connectionMenuRef.current }); } catch {}
+      try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][popup.afterOpen]', { tempNodeId, tempEdgeId, menu: connectionMenuRef.current }); } catch {}
       try {
         (connectionMenuRef.current as any).tempNodeId = tempNodeId;
         (connectionMenuRef.current as any).tempEdgeId = tempEdgeId;
         (window as any).__flowLastTemp = { nodeId: tempNodeId, edgeId: tempEdgeId };
-        console.log('[Conn][temp.created]', { tempNodeId, tempEdgeId, position, flow: posFlow });
+        if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][temp.created]', { tempNodeId, tempEdgeId, position, flow: posFlow });
       } catch {}
     }
   }, [reactFlowInstance, setNodes, setEdges, onDeleteEdge, openMenu, setSource, setTarget, connectionMenuRef, setTemp, edges]);
@@ -1427,6 +1427,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           }}
           onClose={handleConnectionMenuClose}
           seedItems={problemIntentSeedItems}
+          extraItems={problemIntentSeedItems}
+          sourceNodeId={connectionMenuRef.current.sourceNodeId as any}
+          sourceRows={(() => {
+            try {
+              const id = connectionMenuRef.current.sourceNodeId as string | null;
+              if (!id) return [] as any[];
+              const node = nodesRef.current.find(n => n.id === id);
+              return Array.isArray((node as any)?.data?.rows) ? (node as any).data.rows : [];
+            } catch { return [] as any[]; }
+          })()}
           onCreateCondition={handleCreateCondition}
         />
       )}
