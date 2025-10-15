@@ -24,6 +24,8 @@ interface Props {
   onComplete?: (finalDDT: any) => void;
   skipDetectType?: boolean;
   confirmedLabel?: string;
+  onProgress?: (percentByPath: Record<string, number>) => void; // optional progress reporter
+  headless?: boolean; // if true, orchestrate without rendering UI
 }
 
 function normalizeStructure(node: any) {
@@ -35,7 +37,7 @@ function normalizeStructure(node: any) {
   return out;
 }
 
-const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel }) => {
+const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, onProgress, headless }) => {
   const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType));
   const [finalDDT, setFinalDDT] = useState<any>(null);
   const [totalSteps, setTotalSteps] = useState(0);
@@ -121,6 +123,16 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   const detectedType = orchestrator.state.detectedType;
   const mainData = orchestrator.state.mainData;
   const currentStepLabel = orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || '';
+
+  // Report progress to parent (root-only for now)
+  useEffect(() => {
+    if (onProgress && totalSteps > 0) {
+      onProgress({ __root__: currentStep / totalSteps });
+    }
+  }, [currentStep, totalSteps, onProgress]);
+
+  // Headless mode: run orchestration but don't render visual UI
+  if (headless) return null;
 
   const handleCopyStructure = () => {
     if (!structurePreview) return;

@@ -48,7 +48,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [userDesc, setUserDesc] = useState('');
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [dataNode] = useState<DataNode | null>(null);
+  const [dataNode] = useState<DataNode | null>(() => ({ name: initialDDT?.label || '' }));
   const [closed, setClosed] = useState(false);
   // removed unused refs
 
@@ -161,6 +161,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         console.log('[DDT][DetectType][enrich.done]', enrichedRes);
         const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
         let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
+        // Fallback: se nessuna subData proposta, inferisci dal testo utente
+        try {
+          const inferred = inferSubDataFromText(userDesc);
+          if (Array.isArray(finalMains) && finalMains.length > 0 && (!finalMains[0].subData || finalMains[0].subData.length === 0) && inferred.length > 0) {
+            finalMains = [{ ...finalMains[0], subData: inferred }];
+          }
+        } catch {}
         // If AI returned multiple atomic mains (no subData), wrap them into a single aggregator main using the root label
         const allAtomic = Array.isArray(finalMains) && finalMains.length > 1 && finalMains.every((m: any) => !Array.isArray((m as any)?.subData) || (m as any).subData.length === 0);
         if (allAtomic) {
@@ -186,9 +193,57 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // removed old continue
 
+  // Assembla un DDT minimale dalla struttura corrente (root + mains + subData)
+  const assembleMinimalDDT = () => {
+    const root = (schemaRootLabel || 'Data');
+    const mains = (schemaMains || []).map((m) => ({
+      label: m.label || 'Field',
+      type: m.type,
+      icon: (m as any).icon,
+      constraints: (m as any).constraints,
+      subData: (m.subData || []).map((s) => ({
+        label: s.label || 'Field',
+        type: s.type,
+        icon: (s as any).icon,
+        constraints: (s as any).constraints,
+      }))
+    }));
+    // preserva id/_id e translations dall'initialDDT per evitare rimbalzi
+    const baseId = (initialDDT as any)?.id || (initialDDT as any)?._id;
+    const ddt = {
+      ...(baseId ? { id: (initialDDT as any)?.id || baseId } : {}),
+      ...(((initialDDT as any)?._id && !(initialDDT as any)?.id) ? { _id: (initialDDT as any)._id } : {}),
+      label: root,
+      mainData: mains,
+      ...(initialDDT && (initialDDT as any).translations ? { translations: (initialDDT as any).translations } : {}),
+    } as any;
+    try {
+      console.log('[DDT][Wizard][assemble]', { root, mainsCount: mains.length, mainsLabels: mains.map(m => m.label), preservedId: baseId });
+    } catch {}
+    return ddt;
+  };
+
+  // Heuristic: infer simple subData list from user description when AI doesn't provide it
+  function inferSubDataFromText(text: string): Array<{ label: string; type?: string; icon?: string }> {
+    try {
+      const t = (text || '').toLowerCase();
+      const out: Array<{ label: string; type?: string; icon?: string }> = [];
+      const add = (label: string, type?: string) => {
+        if (!out.some(x => x.label.toLowerCase() === label.toLowerCase())) out.push({ label, type });
+      };
+      if (/country\s*code|prefisso\s*internazionale/.test(t)) add('Country code', 'string');
+      if (/area\s*code|prefisso\s*area|prefisso\s*citt[aà]/.test(t)) add('Area code', 'string');
+      if (/\bnumber|numero\b/.test(t)) add('Number', 'string');
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
   const enrichConstraintsFor = async (rootLabelIn: string, mainsIn: SchemaNode[]) => {
     try {
-      const schema = { label: rootLabelIn || 'Data', mains: mainsIn.map((m) => ({ label: m.label, type: m.type, icon: m.icon, subData: (m.subData || []).map(s => ({ label: s.label, type: s.type, icon: s.icon })) })) };
+      const schema = { label: rootLabelIn || 'Data', mains: mainsIn.map((m) => ({ label: m.label, type: m.type, icon: m.icon, subData: (m.subData || []).map(s => ({ label: s.label, type: s.type, icon: s.icon })) })), text: userDesc };
+      try { console.log('[DDT][Constraints][request]', { url: '/step3', body: schema }); } catch {}
       const res = await fetch(`/step3`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -284,6 +339,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Two-panel layout render (simplified, as requested)
   const rightHasContent = Boolean(
     showRight && (
+      step === 'loading' ||
       (step === 'structure' && Array.isArray(schemaMains) && schemaMains.length > 0) ||
       step === 'pipeline' || step === 'error' || step === 'support'
     )
@@ -338,13 +394,38 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                 <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
                 <button
-                  onClick={() => { if (onSeePrompts) onSeePrompts(); }}
+                  onClick={() => {
+                    try { console.log('[DDT][Wizard][complete.click] Build Messages'); } catch {}
+                    // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
+                    setShowRight(true);
+                    setStep('pipeline');
+                  }}
                   style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
                 >
                   Build Messages
                 </button>
               </div>
             </div>
+          )}
+
+          {step === 'pipeline' && (
+            <WizardPipelineStep
+              headless
+              dataNode={{ name: schemaRootLabel || 'Data', subData: schemaMains as any }}
+              detectTypeIcon={detectTypeIcon}
+              onCancel={() => setStep('structure')}
+              skipDetectType
+              confirmedLabel={schemaRootLabel || 'Data'}
+              onProgress={(m) => {
+                const r = typeof (m as any)?.__root__ === 'number' ? (m as any).__root__ : 0;
+                setRootProgress(r);
+                setProgressByPath((prev) => ({ ...(prev || {}), ...(m || {}) }));
+              }}
+              onComplete={(finalDDT) => {
+                try { console.log('[DDT][Wizard][complete] from pipeline'); } catch {}
+                handleClose(finalDDT);
+              }}
+            />
           )}
 
           {/* Contenuto “normale” del pannello destro */}

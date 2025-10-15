@@ -188,6 +188,45 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
   const handleWizardSeeResult = () => {
     setShowWizard(false);
     setShowRightGeneral(true);
+    // Open message review directly after building messages
+    try { saveRightMode('messageReview'); } catch {}
+    // Bootstrap minimal messages so the review is never empty
+    try {
+      setLocalDDT((prev: any) => {
+        if (!prev) return prev;
+        const next = JSON.parse(JSON.stringify(prev));
+        const mains = getMainDataList(next);
+        const ensureTextForStep = (node: any, stepKey: string) => {
+          // 1) if node.messages[stepKey].textKey exists, keep
+          const msgObj = (node.messages && typeof node.messages === 'object') ? node.messages[stepKey] : undefined;
+          const existingKey = typeof msgObj?.textKey === 'string' ? msgObj.textKey : undefined;
+          if (existingKey) return;
+          // 2) if steps[stepKey].escalations contains action with parameter 'text', keep
+          const steps = node.steps || {};
+          const escs = Array.isArray(steps?.[stepKey]?.escalations) ? steps[stepKey].escalations : [];
+          const hasActionText = escs.some((esc: any) => Array.isArray(esc?.actions) && esc.actions.some((a: any) => Array.isArray(a?.parameters) && a.parameters.some((p: any) => p?.parameterId === 'text' && typeof p?.value === 'string')));
+          if (hasActionText) return;
+          // 3) otherwise create messages[stepKey].textKey with default string
+          const root = (next?.label || 'data').toString().toLowerCase().replace(/\s+/g, '_');
+          const nodeLabel = (node?.label || 'node').toString().toLowerCase().replace(/\s+/g, '_');
+          const key = `ddt.${root}.${nodeLabel}.${stepKey}`;
+          node.messages = node.messages && typeof node.messages === 'object' ? node.messages : {};
+          node.messages[stepKey] = { ...(node.messages[stepKey] || {}), textKey: key };
+          // also seed a readable default in translations if missing
+          try {
+            const readable = `${node.label || ''} – ${stepKey}`.trim();
+            setLocalTranslations((t: any) => ({ ...(t || {}), [key]: (t && t[key]) || readable }));
+          } catch {}
+        };
+        const DEFAULT_STEPS = ['start','noInput','noMatch','confirmation','notConfirmed','success'];
+        mains.forEach((m: any) => {
+          DEFAULT_STEPS.forEach(sk => ensureTextForStep(m, sk));
+          const subs = Array.isArray(m?.subData) ? m.subData : [];
+          subs.forEach((s: any) => DEFAULT_STEPS.forEach(sk => ensureTextForStep(s, sk)));
+        });
+        return next;
+      });
+    } catch {}
   };
 
   // Undo/Redo action proxies (already provided by props above in old header flow)
@@ -469,10 +508,11 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
                   const coerced = coercePhoneKind(finalDDT);
                   setLocalDDT(coerced);
                   try { replaceSelectedDDT(coerced); } catch {}
-                  // non apriamo qui la colonna destra generale; lo fa onSeePrompts
+                  // chiudi il wizard e apri direttamente la Message Review
+                  setShowWizard(false);
+                  handleWizardSeeResult();
                 }}
                 startOnStructure={false}
-                onSeePrompts={handleWizardSeeResult}
               />
             </div>
           ) : (
@@ -619,16 +659,7 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
         />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Steps toolbar hidden during NLP editor and message review */}
-          {!showSynonyms && rightMode !== 'messageReview' && (
-            <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
-              <StepsStrip
-                stepKeys={uiStepKeys}
-                selectedStepKey={selectedStepKey}
-                onSelectStep={setSelectedStepKey}
-                node={selectedNode}
-              />
-            </div>
-          )}
+          {/* Rimuove la barra descrittiva: usa la label dell'atto come titolo nel header sopra */}
           {/* Content */}
           <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: '16px 16px 0 16px' }}>

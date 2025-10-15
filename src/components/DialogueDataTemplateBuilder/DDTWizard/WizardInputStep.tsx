@@ -28,6 +28,15 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
     };
   }, [setUserDesc]);
 
+  // If empty, initialize the textarea with the act label (repeat header title inside textbox)
+  React.useEffect(() => {
+    const initial = (dataNode?.name || '').trim();
+    if (!userDesc || userDesc.trim().length === 0) {
+      try { setUserDesc(initial); } catch {}
+      if (textareaRef.current) { textareaRef.current.value = initial; }
+    }
+  }, [dataNode?.name]);
+
   return (
     <div
       style={{
@@ -41,38 +50,20 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         boxSizing: 'border-box',
       }}
     >
-      <div style={{ margin: '0 0 16px 0', paddingBottom: 10, borderBottom: '1px solid var(--ddt-accent, #a21caf)' }}>
-        <div style={{ fontSize: 15, fontWeight: 500, color: '#cbd5e1', marginBottom: 8 }}>
+      {/* Header: keep only the instruction line */}
+      <div style={{ margin: '0 0 12px 0' }}>
+        <div style={{ fontSize: 15, fontWeight: 500, color: '#cbd5e1' }}>
           Describe in detail the data or information the virtual agent must ask to the user:
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {dataNode?.name && <Calendar size={22} style={{ color: 'var(--ddt-accent, #a21caf)' }} />}
-          <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--ddt-accent, #a21caf)' }}>{dataNode?.name || ''}</span>
-        </div>
-        {dataNode?.subData && dataNode.subData.length > 0 && (
-          <div style={{
-            marginTop: 8,
-            padding: '6px 10px',
-            backgroundColor: 'color-mix(in oklab, var(--ddt-accent, #a21caf) 12%, transparent)',
-            borderRadius: 6,
-            fontSize: 14,
-            color: '#e5e7eb',
-            border: '1px solid color-mix(in oklab, var(--ddt-accent, #a21caf) 28%, transparent)'
-          }}>
-            <div style={{ fontWeight: 500 }}>Structure: ({dataNode.subData.join(', ')})</div>
-          </div>
-        )}
       </div>
 
-      <div style={{ marginBottom: 12, fontSize: 14, color: '#9ca3af' }}>
-        {dataNode?.name ? 'You can refine the description to change type or structure.' : ''}
-      </div>
+      {/* Subtitle removed as requested */}
 
       <textarea
         ref={textareaRef}
         value={userDesc}
         onChange={e => setUserDesc(e.target.value)}
-        placeholder="e.g., date of birth, email, phone number..."
+        placeholder={dataNode?.name || ''}
         rows={2}
         style={{
           fontSize: 17,

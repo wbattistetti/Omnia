@@ -85,6 +85,15 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
           )}
         </div>
       )}
+      {/* Root progress also when a single main exists */}
+      {mains.length <= 1 && (((progressByPath as any)?.__root__ || 0) > 0) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ flex: 1, height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
+            <div style={{ width: `${Math.round(((progressByPath as any)?.__root__ || 0) * 100)}%`, height: '100%', background: '#fb923c' }} />
+          </div>
+          <span style={{ fontSize: 11, color: '#93c5fd', minWidth: 34, textAlign: 'left' }}>{Math.round((((progressByPath as any)?.__root__ || 0) * 100))}%</span>
+        </div>
+      )}
       <div>
         {mains.map((m, i) => (
           <div key={i} onClick={() => onSelect(i)}>
