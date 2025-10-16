@@ -5,7 +5,8 @@ import { generateSteps, DataNode } from './stepGenerator';
 // Permetti una funzione custom per generare gli step
 export function useOrchestrator(
   data: DataNode,
-  customGenerateSteps?: (data: DataNode) => Step[]
+  customGenerateSteps?: (data: DataNode) => Step[],
+  headless?: boolean // Se true, non mostra debug modal e avanza automaticamente
 ) {
   // Usa la funzione custom se fornita, altrimenti generateSteps
   const [steps, setSteps] = useState<Step[]>(() => {
@@ -64,8 +65,15 @@ export function useOrchestrator(
       if (result.translations) {
         setTranslations(prev => ({ ...prev, ...result.translations }));
       }
-      setDebugModal({ step, result }); // Mostra modale di debug
-      setStepLoading(false);
+      
+      // Se headless, avanza automaticamente senza modale debug
+      if (headless) {
+        setCurrentStepIndex(idx => idx + 1);
+        setStepLoading(false);
+      } else {
+        setDebugModal({ step, result }); // Mostra modale di debug
+        setStepLoading(false);
+      }
     } catch (e: any) {
       setStepError(true);
       setLastError(e);

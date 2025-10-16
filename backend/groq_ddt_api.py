@@ -46,6 +46,11 @@ except Exception:
     from ai_endpoints.intent_generation import router as intent_gen_router
 
 GROQ_KEY = os.environ.get("Groq_key")
+# Import OPENAI_KEY from call_openai to get registry fallback
+try:
+    from backend.call_openai import OPENAI_KEY
+except Exception:
+    from call_openai import OPENAI_KEY
 IDE_LANGUE = os.environ.get("IdeLangue", "it")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"  # PATCH: endpoint corretto
 MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-70b-instruct")
@@ -1257,15 +1262,15 @@ def step2(user_desc: Any = Body(...)):
             if re.search(r"\b(true|false|vero|falso|sí|nao|não|yes|no)\b", s):
                 return "boolean"
             return "text"
-        fallback_t = guess_type(lc)
-        fallback_icon = TYPE_ICON.get(fallback_t, "Type")
-        fallback_label = TYPE_LABEL.get(fallback_t, fallback_t.capitalize())
-        if GROQ_KEY:
-            try:
-                EN_MEANINGS = ['date of birth', 'email', 'phone number', 'address', 'number', 'text', 'boolean']
-                ICON_LIST = ['Sparkles', 'CheckSquare', 'Hash', 'Type', 'IdCard', 'Gift', 'Phone', 'Calendar', 'Mail', 'HelpCircle', 'MapPin', 'FileQuestion']
-                if current_schema and isinstance(current_schema, dict) and (current_schema.get('mainData') or current_schema.get('mains')):
-                    prompt = f"""
+        # Check AI key availability
+        if not (GROQ_KEY or OPENAI_KEY):
+            raise HTTPException(status_code=500, detail="missing_ai_key")
+        
+        EN_MEANINGS = ['date of birth', 'email', 'phone number', 'address', 'number', 'text', 'boolean']
+        ICON_LIST = ['Sparkles', 'CheckSquare', 'Hash', 'Type', 'IdCard', 'Gift', 'Phone', 'Calendar', 'Mail', 'HelpCircle', 'MapPin', 'FileQuestion']
+        
+        if current_schema and isinstance(current_schema, dict) and (current_schema.get('mainData') or current_schema.get('mains')):
+            prompt = f"""
 You are a data structure refiner.
 
 Input (natural-language refinement):
@@ -1298,91 +1303,129 @@ Rules:
 - If the description asks to split the field (e.g., country code, area code, number), include those parts in subData in natural order.
 - Use concise English labels. No explanations.
 """
-                else:
-                    prompt = f"""
-You are a data type and structure classifier.
+        else:
+            prompt = f"""
+You are a data collection structure designer.
 
 User description:
 {text}
 
-Return ONLY a strict JSON in this exact format (no markdown/comments/trailing commas):
+Your task:
+1. Identify ALL distinct data fields/concepts mentioned (e.g., name, date of birth, phone number, email, address).
+2. For EACH distinct field, create a separate entry in "mainData".
+3. For EACH field, subdivide into logical sub-fields when semantically appropriate (even if not explicitly requested):
+   - Full name: First name, Last name
+   - Date of birth: Day, Month, Year
+   - Phone number: Country code, Area code, Number
+   - Address: Street, Civic number, Internal, Postal code, City, Region, Country
+   - Email: no subData (atomic field)
+
+Return ONLY strict JSON (no markdown, no comments, no trailing commas):
 {{
-  "type": "<one of: phone|email|date|address|number|text|boolean>",
-  "icon": "<Lucide icon name>",
+  "type": "object",
+  "icon": "Folder",
   "schema": {{
     "label": "Data",
     "mainData": [
       {{
-        "label": "<Main label in English>",
-        "type": "<repeat 'type'>",
+        "label": "<Field 1 label in English>",
+        "type": "<one of: phone|email|date|address|number|text|boolean>",
         "icon": "<Lucide icon name>",
         "subData": [
-          {{ "label": "<Sub1>", "type": "string" }}
+          {{ "label": "<Sub1>", "type": "string" }},
+          {{ "label": "<Sub2>", "type": "string" }}
         ]
+      }},
+      {{
+        "label": "<Field 2 label in English>",
+        "type": "<type>",
+        "icon": "<icon>",
+        "subData": [ ... ]
       }}
     ]
   }}
 }}
 
+Examples:
+Input: "chiedi nome e cognome"
+Output: mainData: [{{"label": "Full name", "type": "text", "icon": "User", "subData": [{{"label": "First name", "type": "string"}}, {{"label": "Last name", "type": "string"}}]}}]
+
+Input: "chiedi data di nascita"
+Output: mainData: [{{"label": "Date of birth", "type": "date", "icon": "Calendar", "subData": [{{"label": "Day", "type": "string"}}, {{"label": "Month", "type": "string"}}, {{"label": "Year", "type": "string"}}]}}]
+
+Input: "chiedi telefono"
+Output: mainData: [{{"label": "Phone number", "type": "phone", "icon": "Phone", "subData": [{{"label": "Country code", "type": "string"}}, {{"label": "Area code", "type": "string"}}, {{"label": "Number", "type": "string"}}]}}]
+
+Input: "chiedi indirizzo"
+Output: mainData: [{{"label": "Address", "type": "address", "icon": "MapPin", "subData": [{{"label": "Street", "type": "string"}}, {{"label": "Civic number", "type": "string"}}, {{"label": "Internal", "type": "string"}}, {{"label": "Postal code", "type": "string"}}, {{"label": "City", "type": "string"}}, {{"label": "Region", "type": "string"}}, {{"label": "Country", "type": "string"}}]}}]
+
+Input: "chiedi email"
+Output: mainData: [{{"label": "Email address", "type": "email", "icon": "Mail", "subData": []}}]
+
+Input: "chiedi nome cognome data di nascita telefono e email"
+Output: mainData: [
+  {{"label": "Full name", "type": "text", "icon": "User", "subData": [{{"label": "First name", "type": "string"}}, {{"label": "Last name", "type": "string"}}]}},
+  {{"label": "Date of birth", "type": "date", "icon": "Calendar", "subData": [{{"label": "Day", "type": "string"}}, {{"label": "Month", "type": "string"}}, {{"label": "Year", "type": "string"}}]}},
+  {{"label": "Phone number", "type": "phone", "icon": "Phone", "subData": [{{"label": "Country code", "type": "string"}}, {{"label": "Area code", "type": "string"}}, {{"label": "Number", "type": "string"}}]}},
+  {{"label": "Email address", "type": "email", "icon": "Mail", "subData": []}}
+]
+
 Rules:
-- Choose the most specific type from the list above.
-- If the description asks to split the field (e.g., country code, area code, number), include those parts in subData in natural order.
-- Use concise English labels. No explanations.
+- Always create MULTIPLE main entries if multiple concepts are mentioned.
+- Always subdivide structured fields (name, date, phone, address) even if not explicitly asked.
+- Use concise English labels.
+- No explanations, no extra text.
 """
-                print("AI PROMPT ================")
-                print(prompt)
-                # Provider routing (align with /step3)
-                provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
-                try:
-                    print(f"[step2][provider]={provider} text_len={len(text)} has_current_schema={bool(current_schema)}")
-                except Exception:
-                    pass
-                if provider == "openai":
-                    try:
-                        from backend.call_openai import call_openai_json as _call_json
-                    except Exception:
-                        from call_openai import call_openai_json as _call_json
-                else:
-                    _call_json = call_groq_json
-                ai = _call_json([
-                    {"role": "system", "content": "Always reply in English with strict JSON."},
-                    {"role": "user", "content": prompt}
-                ])
-                print("AI ANSWER ================")
-                print(ai)
-                ai_obj = ai if isinstance(ai, dict) else _safe_json_loads(ai)
-                if isinstance(ai_obj, dict) and ai_obj.get('type') and ai_obj.get('icon'):
-                    inferred = _infer_subdata_from_text(text)
-                    # Coerce to phone if text clearly describes phone subparts but model picked generic type
-                    if (ai_obj.get('type') in (None, 'text')) and inferred:
-                        ai_obj['type'] = 'phone'
-                        ai_obj['icon'] = 'Phone'
-                    if 'schema' not in ai_obj:
-                        ai_obj['schema'] = {
-                            'label': 'Data',
-                            'mainData': [{
-                                'label': TYPE_LABEL.get(str(ai_obj.get('type')).lower(), str(ai_obj.get('type'))),
-                                'type': ai_obj.get('type'),
-                                'icon': ai_obj.get('icon'),
-                                'subData': inferred
-                            }]
-                        }
-                    return {"ai": ai_obj}
-            except Exception as e:
-                try: print("[step2][ai_error]", str(e))
-                except Exception: pass
-        return {"ai": {
-            "type": fallback_t,
-            "icon": fallback_icon,
-            "schema": {
-                "label": "Data",
-                "mainData": [{ "label": fallback_label, "type": fallback_t, "icon": fallback_icon, "subData": _infer_subdata_from_text(text) }]
-            }
-        }}
+        
+        print("AI PROMPT ================")
+        print(prompt)
+        
+        # Provider routing (align with /step3)
+        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+        print(f"[step2][provider]={provider} text_len={len(text)} has_current_schema={bool(current_schema)}")
+        
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai_json as _call_json
+            except Exception:
+                from call_openai import call_openai_json as _call_json
+        else:
+            _call_json = call_groq_json
+        
+        ai = _call_json([
+            {"role": "system", "content": "Always reply in English with strict JSON."},
+            {"role": "user", "content": prompt}
+        ])
+        
+        print("AI ANSWER ================")
+        print(ai)
+        
+        ai_obj = ai if isinstance(ai, dict) else _safe_json_loads(ai)
+        
+        if isinstance(ai_obj, dict) and ai_obj.get('type') and ai_obj.get('icon'):
+            inferred = _infer_subdata_from_text(text)
+            # Coerce to phone if text clearly describes phone subparts but model picked generic type
+            if (ai_obj.get('type') in (None, 'text')) and inferred:
+                ai_obj['type'] = 'phone'
+                ai_obj['icon'] = 'Phone'
+            if 'schema' not in ai_obj:
+                ai_obj['schema'] = {
+                    'label': 'Data',
+                    'mainData': [{
+                        'label': TYPE_LABEL.get(str(ai_obj.get('type')).lower(), str(ai_obj.get('type'))),
+                        'type': ai_obj.get('type'),
+                        'icon': ai_obj.get('icon'),
+                        'subData': inferred
+                    }]
+                }
+            return {"ai": ai_obj}
+        else:
+            raise HTTPException(status_code=500, detail="invalid_ai_response")
+    except HTTPException:
+        raise
     except Exception as e:
-        try: print("[step2][fatal]", str(e))
-        except Exception: pass
-        return {"ai": {"type": "text", "icon": "Type", "schema": {"label": "Data", "mainData": [{"label": "Text", "type": "text", "icon": "Type", "subData": []}]}}}
+        print("[step2][fatal]", str(e))
+        raise HTTPException(status_code=500, detail=f"step2_error: {str(e)}")
 
 # --- step3: Suggest constraints/validations (constraints)
 @app.post("/step3")

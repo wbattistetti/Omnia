@@ -108,6 +108,32 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Two-panel layout: show results panel at right after user clicks Continue on the left
   const [showRight, setShowRight] = useState<boolean>(startOnStructure ? true : false);
 
+  // Auto-collapse/expand: quando un main data raggiunge 100%, passa automaticamente al successivo
+  useEffect(() => {
+    if (step !== 'pipeline') return;
+    if (schemaMains.length === 0) return;
+    
+    const currentMain = schemaMains[selectedIdx];
+    if (!currentMain) return;
+    
+    const currentMainProgress = progressByPath[currentMain.label] || 0;
+    
+    // Se il main corrente ha raggiunto 100%, cerca il prossimo non completato
+    if (currentMainProgress >= 0.99) { // 0.99 per tolleranza float
+      const nextIdx = schemaMains.findIndex((m, i) => 
+        i > selectedIdx && (progressByPath[m.label] || 0) < 0.99
+      );
+      
+      if (nextIdx !== -1) {
+        // Auto-espandi il prossimo main data
+        try {
+          console.log(`[DDT][auto-advance] ${currentMain.label} completed (${Math.round(currentMainProgress * 100)}%) → opening ${schemaMains[nextIdx].label}`);
+        } catch {}
+        setSelectedIdx(nextIdx);
+      }
+    }
+  }, [progressByPath, selectedIdx, schemaMains, step]);
+
   // DataNode stabile per pipeline (evita rilanci causati da oggetti inline)
   const pipelineDataNode = React.useMemo(() => {
     const main0 = schemaMains[selectedIdx] || schemaMains[0] || ({} as any);
@@ -435,6 +461,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       // reset progress state to avoid stale 100%
                       setProgressByPath({});
                       setRootProgress(0);
+                      // Apri il primo main data
+                      setSelectedIdx(0);
                       setStep('pipeline');
                     }}
                     style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
@@ -459,11 +487,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                 setRootProgress(r);
                 setProgressByPath((prev) => ({ ...(prev || {}), ...(m || {}) }));
               }}
-              onComplete={(_finalDDT) => {
-                try { console.log('[DDT][Wizard][complete] pipeline (stay-on-structure)'); } catch {}
-                // Stay on structure panel, keep showing the results and progress (now complete)
-                setStep('structure');
-                setShowRight(true);
+              onComplete={(finalDDT) => {
+                try { console.log('[DDT][Wizard][complete] pipeline received final DDT', { id: finalDDT?.id, mainDataCount: finalDDT?.mainData?.length }); } catch {}
+                // WizardPipelineStep already assembled the DDT with all messages
+                // Just pass it to parent to open ResponseEditor
+                if (finalDDT) {
+                  handleClose(finalDDT, finalDDT.translations || {});
+                } else {
+                  console.error('[DDT][Wizard][complete] No finalDDT received from pipeline!');
+                }
               }}
             />
           )}
