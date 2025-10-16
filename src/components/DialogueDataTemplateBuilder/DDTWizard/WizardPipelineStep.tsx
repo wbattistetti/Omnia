@@ -117,6 +117,7 @@ useEffect(() => {
   // When pipeline done, assemble
   useEffect(() => {
     if (hadErrorRef.current) return; // don't complete if any step failed
+    
     if (
       orchestrator.state.currentStepIndex >= orchestrator.state.steps.length &&
       !finalDDT

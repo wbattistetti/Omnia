@@ -488,7 +488,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                 setProgressByPath((prev) => ({ ...(prev || {}), ...(m || {}) }));
               }}
               onComplete={(finalDDT) => {
-                try { console.log('[DDT][Wizard][complete] pipeline received final DDT', { id: finalDDT?.id, mainDataCount: finalDDT?.mainData?.length }); } catch {}
                 // WizardPipelineStep already assembled the DDT with all messages
                 // Just pass it to parent to open ResponseEditor
                 if (finalDDT) {

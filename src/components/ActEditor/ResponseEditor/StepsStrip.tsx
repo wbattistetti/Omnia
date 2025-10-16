@@ -49,10 +49,10 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     <div
       style={{
         display: 'flex',
-        flexWrap: 'wrap',
-        gap: 10,
-        rowGap: 10,
-        padding: '6px 16px 10px 16px'
+        flexWrap: 'nowrap',
+        gap: 8,
+        padding: '6px 16px 10px 16px',
+        overflowX: 'auto'
       }}
     >
       {stepKeys.map((key) => {
@@ -72,13 +72,15 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
               fontWeight: selected ? 700 : 500,
               background: 'transparent',
               color: color,
-              border: selected ? `4px solid ${color}` : `1px solid ${color}`,
+              border: selected ? `3px solid ${color}` : `1px solid ${color}`,
               borderRadius: 10,
-              padding: '6px 12px',
+              padding: '5px 10px',
               cursor: 'pointer',
-              fontSize: 14,
+              fontSize: 13,
               transition: 'border 0.15s',
               minWidth: 0,
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}
           >
             <span>{iconForStep(key)}</span>

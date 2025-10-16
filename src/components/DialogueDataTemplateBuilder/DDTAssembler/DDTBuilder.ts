@@ -12,17 +12,19 @@ export function buildDDT(
 ) : AssembledDDT {
   const stepMessagesWithSubData = buildStepsWithSubData(stepResults);
   const translations: Record<string, string> = {};
-  const mainData: MainDataNode = buildMainDataNodeWithSubData(
+  const mainDataNode: MainDataNode = buildMainDataNodeWithSubData(
     ddtId,
     dataNode,
     stepMessagesWithSubData,
     translations
   ) as MainDataNode;
   const label = dataNode.label || ddtId;
+  
+  // Wrap mainDataNode in array - DDT expects mainData: MainDataNode[]
   const assembledDDT: AssembledDDT = {
     id: ddtId,
     label,
-    mainData,
+    mainData: [mainDataNode],  // ← Array wrapper!
     translations
   };
   console.log('[DDTAssembler] Assembled DDT JSON:', assembledDDT);

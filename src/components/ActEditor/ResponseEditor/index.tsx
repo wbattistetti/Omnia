@@ -120,11 +120,23 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
   }
 
   useEffect(() => {
+    // Don't sync from prop if wizard owns the data
+    if (wizardOwnsDataRef.current) {
+      console.log('[RE][sync] Skipping sync - wizard owns data');
+      return;
+    }
+
     const prevId = (localDDT && (localDDT.id || localDDT._id)) as any;
     const nextId = (ddt && (ddt.id || ddt._id)) as any;
     const isSameDDT = prevId && nextId && prevId === nextId;
     const coerced = coercePhoneKind(ddt);
-    if (localDDT !== coerced) {
+    
+    // Sync ONLY if:
+    // 1. It's a different DDT (ID changed)
+    // 2. It's the first load (no previous ID)
+    const shouldSync = !prevId || !nextId || !isSameDDT;
+    
+    if (shouldSync && localDDT !== coerced) {
       try {
         const mainsBefore = Array.isArray((localDDT || {}).mainData) ? (localDDT as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
         const mainsAfter = Array.isArray((coerced || {}).mainData) ? (coerced as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
@@ -134,16 +146,19 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
       const enriched = preserveStepsFromPrev(localDDT, coerced);
       setLocalDDT(enriched);
     }
+    
     const nextTranslations = { ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) };
     setLocalTranslations((prev: any) => {
       const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
       return same ? prev : nextTranslations;
     });
+    
     // Reset selection when a different DDT is opened (new session)
     if (!isSameDDT) {
-    setSelectedMainIndex(0);
-    setSelectedSubIndex(undefined);
+      setSelectedMainIndex(0);
+      setSelectedSubIndex(undefined);
     }
+    
     try {
       const counts = {
         ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
@@ -156,8 +171,7 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
       const mains = getMainDataList(ddt) || [];
       log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map((m: any) => m?.label));
     } catch {}
-  // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
-  }, [ddt, mergedBase, localDDT?.id, localDDT?._id]);
+  }, [ddt, mergedBase]);
 
   // Note: do not persist on unmount to avoid re-opening the editor after close.
 
@@ -175,58 +189,107 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
   const [dragging, setDragging] = useState(false);
   const [showSynonyms, setShowSynonyms] = useState(false);
+  const [showConstraintWizard, setShowConstraintWizard] = useState(false);
 
   // Wizard/general layout flags
   const [showRightGeneral, setShowRightGeneral] = useState<boolean>(false);
   const [showWizard, setShowWizard] = useState<boolean>(() => isDDTEmpty(localDDT));
+  const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
+  
   useEffect(() => {
     const empty = isDDTEmpty(localDDT);
-    setShowWizard(empty);
-    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[RE][wizard.init]', { empty }); } catch {}
+    
+    if (empty && !wizardOwnsDataRef.current) {
+      // DDT is empty → open wizard and take ownership
+      setShowWizard(true);
+      wizardOwnsDataRef.current = true;
+      console.log('[RE][wizard] Opening wizard, taking ownership');
+    } else if (!empty && wizardOwnsDataRef.current) {
+      // DDT is complete and wizard had ownership → close wizard and release ownership
+      setShowWizard(false);
+      wizardOwnsDataRef.current = false;
+      console.log('[RE][wizard] DDT complete, closing wizard, releasing ownership');
+    }
+    
+    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[RE][wizard.init]', { empty, wizardOwnsData: wizardOwnsDataRef.current }); } catch {}
   }, [localDDT]);
 
   const handleWizardSeeResult = () => {
+    console.log('[DEBUG][handleWizardSeeResult] START - closing wizard and bootstrapping messages');
     setShowWizard(false);
-    setShowRightGeneral(true);
-    // Open message review directly after building messages
-    try { saveRightMode('messageReview'); } catch {}
+    setShowRightGeneral(false); // Close right panel, show normal editor layout
+    // Don't force messageReview - let user navigate normally with StepsStrip + StepEditor
     // Bootstrap minimal messages so the review is never empty
     try {
       setLocalDDT((prev: any) => {
-        if (!prev) return prev;
+        if (!prev) {
+          console.log('[DEBUG][handleWizardSeeResult] No prev DDT, skipping');
+          return prev;
+        }
+        console.log('[DEBUG][handleWizardSeeResult] Cloning DDT', { id: prev.id, label: prev.label });
         const next = JSON.parse(JSON.stringify(prev));
         const mains = getMainDataList(next);
+        console.log('[DEBUG][handleWizardSeeResult] Found mains:', mains.map((m: any) => m.label));
+        
         const ensureTextForStep = (node: any, stepKey: string) => {
+          const nodeLabel = node?.label || 'unknown';
+          console.log(`[DEBUG][ensureTextForStep] Checking ${nodeLabel}.${stepKey}`);
+          
           // 1) if node.messages[stepKey].textKey exists, keep
           const msgObj = (node.messages && typeof node.messages === 'object') ? node.messages[stepKey] : undefined;
           const existingKey = typeof msgObj?.textKey === 'string' ? msgObj.textKey : undefined;
-          if (existingKey) return;
+          if (existingKey) {
+            console.log(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - Already has message key: ${existingKey}`);
+            return;
+          }
+          
           // 2) if steps[stepKey].escalations contains action with parameter 'text', keep
           const steps = node.steps || {};
           const escs = Array.isArray(steps?.[stepKey]?.escalations) ? steps[stepKey].escalations : [];
           const hasActionText = escs.some((esc: any) => Array.isArray(esc?.actions) && esc.actions.some((a: any) => Array.isArray(a?.parameters) && a.parameters.some((p: any) => p?.parameterId === 'text' && typeof p?.value === 'string')));
-          if (hasActionText) return;
+          if (hasActionText) {
+            console.log(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - Already has escalation with text action`);
+            return;
+          }
+          
           // 3) otherwise create messages[stepKey].textKey with default string
           const root = (next?.label || 'data').toString().toLowerCase().replace(/\s+/g, '_');
-          const nodeLabel = (node?.label || 'node').toString().toLowerCase().replace(/\s+/g, '_');
-          const key = `ddt.${root}.${nodeLabel}.${stepKey}`;
+          const nodeLabelKey = (node?.label || 'node').toString().toLowerCase().replace(/\s+/g, '_');
+          const key = `ddt.${root}.${nodeLabelKey}.${stepKey}`;
           node.messages = node.messages && typeof node.messages === 'object' ? node.messages : {};
           node.messages[stepKey] = { ...(node.messages[stepKey] || {}), textKey: key };
+          
+          console.log(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - CREATED message key: ${key}`);
+          
           // also seed a readable default in translations if missing
           try {
             const readable = `${node.label || ''} – ${stepKey}`.trim();
             setLocalTranslations((t: any) => ({ ...(t || {}), [key]: (t && t[key]) || readable }));
-          } catch {}
+            console.log(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - Set translation: "${readable}"`);
+          } catch (e) {
+            console.error(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - Error setting translation:`, e);
+          }
         };
         const DEFAULT_STEPS = ['start','noInput','noMatch','confirmation','notConfirmed','success'];
+        console.log('[DEBUG][handleWizardSeeResult] Bootstrapping messages for DEFAULT_STEPS:', DEFAULT_STEPS);
+        
         mains.forEach((m: any) => {
+          console.log(`[DEBUG][handleWizardSeeResult] Processing main: ${m.label}`);
           DEFAULT_STEPS.forEach(sk => ensureTextForStep(m, sk));
           const subs = Array.isArray(m?.subData) ? m.subData : [];
-          subs.forEach((s: any) => DEFAULT_STEPS.forEach(sk => ensureTextForStep(s, sk)));
+          console.log(`[DEBUG][handleWizardSeeResult] ${m.label} has ${subs.length} sub-data`);
+          subs.forEach((s: any) => {
+            console.log(`[DEBUG][handleWizardSeeResult] Processing sub: ${s.label}`);
+            DEFAULT_STEPS.forEach(sk => ensureTextForStep(s, sk));
+          });
         });
+        
+        console.log('[DEBUG][handleWizardSeeResult] Bootstrap complete, returning updated DDT');
         return next;
       });
-    } catch {}
+    } catch (e) {
+      console.error('[DEBUG][handleWizardSeeResult] Error during bootstrap:', e);
+    }
   };
 
   // Undo/Redo action proxies (already provided by props above in old header flow)
@@ -243,10 +306,30 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
   // Nodo selezionato: sempre main/sub in base agli indici
   const selectedNode = useMemo(() => {
     const main = mainList[selectedMainIndex];
-    if (!main) return null;
-    if (selectedSubIndex == null) return main;
+    if (!main) {
+      console.log('[DEBUG][selectedNode] No main at index', selectedMainIndex);
+      return null;
+    }
+    if (selectedSubIndex == null) {
+      console.log('[DEBUG][selectedNode] Selected MAIN:', main.label, {
+        hasSteps: !!main.steps,
+        stepsShape: Array.isArray(main.steps) ? 'array' : (main.steps ? 'object' : 'none'),
+        stepKeys: main.steps ? (Array.isArray(main.steps) ? main.steps.map((s: any) => s.type) : Object.keys(main.steps)) : [],
+        hasMessages: !!main.messages,
+        messageKeys: main.messages ? Object.keys(main.messages) : []
+      });
+      return main;
+    }
     const subList = getSubDataList(main);
-    return subList[selectedSubIndex] || main;
+    const sub = subList[selectedSubIndex] || main;
+    console.log('[DEBUG][selectedNode] Selected SUB:', sub.label, {
+      hasSteps: !!sub.steps,
+      stepsShape: Array.isArray(sub.steps) ? 'array' : (sub.steps ? 'object' : 'none'),
+      stepKeys: sub.steps ? (Array.isArray(sub.steps) ? sub.steps.map((s: any) => s.type) : Object.keys(sub.steps)) : [],
+      hasMessages: !!sub.messages,
+      messageKeys: sub.messages ? Object.keys(sub.messages) : []
+    });
+    return sub;
   }, [mainList, selectedMainIndex, selectedSubIndex]);
 
   // Step keys per il nodo selezionato
@@ -505,10 +588,22 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
                 initialDDT={localDDT}
                 onCancel={onClose || (() => {})}
                 onComplete={(finalDDT) => {
+                  console.log('[RE][Wizard.onComplete] Received finalDDT', { id: finalDDT?.id, label: finalDDT?.label, mainsCount: finalDDT?.mainData?.length });
                   const coerced = coercePhoneKind(finalDDT);
+                  
+                  // Update localDDT first (while wizard still owns data)
                   setLocalDDT(coerced);
+                  
+                  // Update context (this will trigger prop ddt change, but will be ignored due to ownership)
                   try { replaceSelectedDDT(coerced); } catch {}
-                  // chiudi il wizard e apri direttamente la Message Review
+                  
+                  // Release ownership after a brief delay to ensure all state updates are processed
+                  setTimeout(() => {
+                    wizardOwnsDataRef.current = false;
+                    console.log('[RE][Wizard.onComplete] Ownership released');
+                  }, 100);
+                  
+                  // Close wizard and open Message Review
                   setShowWizard(false);
                   handleWizardSeeResult();
                 }}
@@ -658,8 +753,17 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
           onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
         />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* Steps toolbar hidden during NLP editor and message review */}
-          {/* Rimuove la barra descrittiva: usa la label dell'atto come titolo nel header sopra */}
+          {/* Steps toolbar */}
+          {!showSynonyms && !showRightGeneral && (
+            <div style={{ padding: '8px 16px 0 16px' }}>
+              <StepsStrip
+                stepKeys={stepKeys}
+                selectedStepKey={selectedStepKey}
+                onSelectStep={setSelectedStepKey}
+                node={selectedNode}
+              />
+            </div>
+          )}
           {/* Content */}
           <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: '16px 16px 0 16px' }}>
@@ -690,9 +794,6 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
                     />
                   </div>
                 ) : (
-                  rightMode === 'messageReview' ? (
-                    <MessageReview ddt={localDDT} translations={localTranslations} />
-                ) : (
                   <StepEditor
                     node={selectedNode}
                     stepKey={selectedStepKey}
@@ -715,7 +816,6 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
                       return next;
                     })}
                   />
-                  )
                 )}
                 </div>
               </div>

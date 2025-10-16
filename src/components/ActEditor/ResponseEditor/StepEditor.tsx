@@ -88,7 +88,19 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   // const icon = meta?.icon || null;
   // const title = meta?.label || stepKey;
 
-  const model = React.useMemo(() => buildModel(node, stepKey, translations), [node, stepKey, translations]);
+  const model = React.useMemo(() => {
+    const result = buildModel(node, stepKey, translations);
+    console.log('[StepEditor] Building model', { 
+      nodeLabel: node?.label, 
+      stepKey, 
+      modelLength: result.length,
+      hasSteps: !!node?.steps,
+      stepsShape: Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none'),
+      hasMessages: !!node?.messages,
+      messageForStep: node?.messages?.[stepKey]
+    });
+    return result;
+  }, [node, stepKey, translations]);
   // Debug logging gated; enable via localStorage.setItem('debug.stepEditor','1')
   React.useEffect(() => {
     if (!node || !stepKey) return;
