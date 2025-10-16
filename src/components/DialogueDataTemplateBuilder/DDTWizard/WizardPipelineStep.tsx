@@ -11,6 +11,9 @@ import HourglassSpinner from './HourglassSpinner';
 import ProgressBar from '../../Common/ProgressBar';
 import StructurePreviewModal from './StructurePreviewModal';
 
+const __DEBUG_DDT_UI__ = false;
+const dlog = (...a: any[]) => { if (__DEBUG_DDT_UI__) console.log(...a); };
+
 interface DataNode {
   name: string;
   type?: string;
@@ -45,6 +48,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   const alreadyStartedRef = useRef(false);
   const [showStructureModal, setShowStructureModal] = useState(false);
   const [structurePreview, setStructurePreview] = useState<any>(null);
+  const hadErrorRef = useRef(false);
 
   useEffect(() => {
     const total = calculateTotalSteps(dataNode);
@@ -52,8 +56,20 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   }, [dataNode]);
 
   useEffect(() => {
+    dlog('[DDT][UI][Pipeline][mount]', { headless, initialTotal: calculateTotalSteps(dataNode) });
+    return () => dlog('[DDT][UI][Pipeline][unmount]');
+  }, []);
+
+  useEffect(() => {
     setCurrentStep(orchestrator.state.currentStepIndex + 1);
   }, [orchestrator.state.currentStepIndex]);
+
+  // Freeze advancement on first error
+  useEffect(() => {
+    if (orchestrator.state.stepError) {
+      hadErrorRef.current = true;
+    }
+  }, [orchestrator.state.stepError]);
 
   useEffect(() => {
     return () => {
@@ -67,9 +83,16 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     alreadyStartedRef.current = false;
   }, [dataNode]);
 
-  useEffect(() => {
-    orchestrator.runNextStep();
-  }, [dataNode, orchestrator.state.currentStepIndex]);
+useEffect(() => {
+  if (hadErrorRef.current) return;
+  if (orchestrator.state.stepError || orchestrator.state.stepLoading) return;
+  if (alreadyStartedRef.current) return;
+  alreadyStartedRef.current = true;
+  Promise.resolve()
+    .then(() => orchestrator.runNextStep())
+    .finally(() => { alreadyStartedRef.current = false; });
+// not depending on dataNode to avoid retriggers on renders
+}, [orchestrator.state.currentStepIndex, orchestrator.state.stepError, orchestrator.state.stepLoading]);
 
   useEffect(() => {
     if (orchestrator.debugModal) {
@@ -84,6 +107,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     const structureResult = orchestrator.state.stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
     const mainData = structureResult?.payload?.mainData || structureResult?.payload;
     if (mainData && !showStructureModal && !finalDDT) {
+      dlog('[DDT][UI][Pipeline] showStructureModal → open');
       const normalized = normalizeStructure(mainData);
       setStructurePreview(normalized);
       setShowStructureModal(true);
@@ -92,6 +116,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
   // When pipeline done, assemble
   useEffect(() => {
+    if (hadErrorRef.current) return; // don't complete if any step failed
     if (
       orchestrator.state.currentStepIndex >= orchestrator.state.steps.length &&
       !finalDDT
@@ -124,15 +149,48 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   const mainData = orchestrator.state.mainData;
   const currentStepLabel = orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || '';
 
-  // Report progress to parent (root-only for now)
+  // Quantized per-element progress (main + each sub), based on completed message steps
   useEffect(() => {
-    if (onProgress && totalSteps > 0) {
-      onProgress({ __root__: currentStep / totalSteps });
+    if (!onProgress) return;
+    if (hadErrorRef.current) return; // stop emitting progress after an error
+
+    const MESSAGE_TYPES = new Set(['startPrompt', 'noMatchPrompts', 'noInputPrompts', 'confirmationPrompts', 'successPrompts']);
+
+    const steps = orchestrator.state.steps || [];
+    const idx = orchestrator.state.currentStepIndex || 0; // steps [0..idx-1] already completed
+    const mainLabel = (confirmedLabel || dataNode.name || '').trim();
+    const subList: Array<string> = Array.isArray(dataNode.subData)
+      ? dataNode.subData.map((s: any) => String(s?.label || s?.name || '')).filter(Boolean)
+      : [];
+
+    const totalMsgSteps = Math.max(1, 5 * (1 + subList.length));
+    const counts: Record<string, number> = {};
+    let doneTotal = 0;
+
+    for (let i = 0; i < idx; i++) {
+      const st: any = steps[i];
+      if (!st || !MESSAGE_TYPES.has(st.type)) continue;
+      const sub = (st as any)?.subDataInfo;
+      const subLabel = String(sub?.label || sub?.name || '') || undefined;
+      const key = subLabel ? `${mainLabel}/${subLabel}` : mainLabel;
+      counts[key] = (counts[key] || 0) + 1;
+      doneTotal++;
     }
-  }, [currentStep, totalSteps, onProgress]);
+
+    const payload: Record<string, number> = {};
+    payload.__root__ = Math.min(1, doneTotal / totalMsgSteps);
+    if (mainLabel) payload[mainLabel] = Math.min(1, (counts[mainLabel] || 0) / 5);
+    for (const s of subList) {
+      const k = `${mainLabel}/${s}`;
+      payload[k] = Math.min(1, (counts[k] || 0) / 5);
+    }
+
+    onProgress(payload);
+    dlog('[DDT][UI][Pipeline][progress.quantized]', { idx, totalMsgSteps, payload, currentStepLabel });
+  }, [orchestrator.state.currentStepIndex, orchestrator.state.steps, onProgress, dataNode, confirmedLabel]);
 
   // Headless mode: run orchestration but don't render visual UI
-  if (headless) return null;
+  if (headless) { dlog('[DDT][UI][Pipeline] headless=true → UI hidden'); return null; }
 
   const handleCopyStructure = () => {
     if (!structurePreview) return;
@@ -185,7 +243,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
             height: '100%',
             background: '#a21caf',
             borderRadius: 8,
-            transition: 'width 0.3s'
+            transition: 'width 0.8s ease'
           }} />
           <span style={{
             position: 'absolute',

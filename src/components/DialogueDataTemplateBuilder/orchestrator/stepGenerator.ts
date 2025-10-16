@@ -7,6 +7,10 @@ import batchMessages from './batchMessages';
 // Backend base URL
 const API_BASE = '';
 
+// DEBUG helper
+export const __DEBUG_DDT__ = false;
+const dlog = (...a: any[]) => { if (__DEBUG_DDT__) console.log(...a); };
+
 // Tipo base per input
 export interface DataNode {
   name: string;
@@ -107,6 +111,9 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
       label: stepDef.label,
       payoff: stepDef.payoff,
       type: stepDef.type,
+      // Propagate subData metadata so UI can attribute progress to each sub
+      subDataInfo: stepDef.subDataInfo,
+      subDataIndex: stepDef.subDataIndex,
       run: async () => {
           let body: any;
           if (stepDef.key === 'detectType') {
@@ -126,7 +133,7 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
           try {
           const url = `${stepDef.endpoint}`;
           const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-          console.log('[DDT][Plan][step][request]', { key: stepDef.key, type: stepDef.type, url, body });
+          dlog('[DDT][Plan][step][request]', { key: stepDef.key, type: stepDef.type, url, body });
           const res = await fetch(url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -135,8 +142,14 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
           const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
           let raw = '';
           try { raw = await res.clone().text(); } catch {}
-          console.log('[DDT][Plan][step][response]', { key: stepDef.key, type: stepDef.type, status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
+          dlog('[DDT][Plan][step][response]', { key: stepDef.key, type: stepDef.type, status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
+          if (!res.ok) {
+            throw new Error(`${stepDef.key} ${res.status}: ${raw || res.statusText}`);
+          }
           const result = await res.json();
+          // Piccola pausa tra gli step per evitare esaurimento risorse browser
+          const GAP_MS = 1200;
+          await new Promise(r => setTimeout(r, GAP_MS));
           
           // Handle different response structures
           let payload;

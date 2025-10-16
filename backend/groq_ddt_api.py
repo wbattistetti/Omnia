@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Body, Request, Response
+from fastapi import FastAPI, Body, Request, Response, HTTPException
 from typing import Any
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -163,21 +163,37 @@ async def log_requests(request: Request, call_next):
     except Exception:
         pass
     return response
-# NOTE: we register only neutral routers; custom fallback endpoints below handle prompts and steps
-# app.include_router(step3_router)
-# app.include_router(constraint_messages_router)
-# app.include_router(generate_validator_router)
-# app.include_router(generate_tests_router)
-# app.include_router(stepNoMatch_router)
-# app.include_router(stepNoInput_router)
-# app.include_router(stepConfirmation_router)
-# app.include_router(stepSuccess_router)
-# app.include_router(startPrompt_router)
-# app.include_router(stepNotConfirmed_router)
+
+# ---- Global error logging handlers ----
+@app.exception_handler(HTTPException)
+async def http_exception_logger(request: Request, exc: HTTPException):
+    try:
+        print(f"[HTTPERROR] {request.url.path} status={exc.status_code} detail={exc.detail}")
+    except Exception:
+        pass
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+@app.exception_handler(Exception)
+async def unhandled_exception_logger(request: Request, exc: Exception):
+    try:
+        print(f"[UNHANDLED] {request.url.path} error={exc}")
+    except Exception:
+        pass
+    return JSONResponse(status_code=500, content={"detail": "internal_error"})
+# NOTE: mount routers
+# Neutral routers
 app.include_router(nlp_extract_router)
 app.include_router(ner_router)
 app.include_router(parse_address_router)
 app.include_router(intent_gen_router)
+
+# DDT Wizard step routers (required by Build Messages)
+app.include_router(stepNoMatch_router)
+app.include_router(stepNoInput_router)
+app.include_router(stepConfirmation_router)
+app.include_router(stepSuccess_router)
+app.include_router(startPrompt_router)
+app.include_router(stepNotConfirmed_router)
 
 # --- Condition: suggest minimal variables ---
 @app.post("/api/conditions/suggest-vars")

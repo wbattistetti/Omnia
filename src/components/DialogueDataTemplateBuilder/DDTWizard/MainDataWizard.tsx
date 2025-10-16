@@ -286,7 +286,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
                 <div style={{ flex: 1, height: 4, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.round(val * 100)}%`, height: '100%', background: '#fb923c' }} />
+                  <div style={{ width: `${Math.round(val * 100)}%`, height: '100%', background: '#fb923c', transition: 'width 0.8s ease' }} />
                 </div>
                 <span style={{ fontSize: 11, color: '#93c5fd', minWidth: 34, textAlign: 'left' }}>{Math.round(val * 100)}%</span>
               </div>
@@ -316,9 +316,9 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
             onMouseEnter={() => setHoverMainConstraints(true)}
             onMouseLeave={() => setHoverMainConstraints(false)}
           >
-            {Array.isArray(node.constraints) && node.constraints.length > 0 && (
+            {(Array.isArray(node.constraints) && (node.constraints as any[]).some((c: any) => (String(c?.title||'').trim().length > 0) || (String(c?.payoff||'').trim().length > 0))) && (
               <div style={{ marginBottom: 8 }}>
-                {node.constraints.map((c, idx) => (
+                {(node.constraints as any[]).filter((c: any) => (String(c?.title||'').trim().length > 0) || (String(c?.payoff||'').trim().length > 0)).map((c: any, idx: number) => (
                   <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 0', width: '100%' }}>
                     {editingConstraint && editingConstraint.scope === 'main' && editingConstraint.idx === idx ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
@@ -332,12 +332,10 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                       <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }} onMouseEnter={() => setHoverMainConstraints(true)} onMouseLeave={() => setHoverMainConstraints(false)}>
                           {(() => {
-                            const mainText = (c as any)?.title && String((c as any).title).trim().length > 0
-                              ? String((c as any).title)
-                              : String((c as any)?.payoff || '').trim();
+                            const mainText = (String((c as any)?.title||'').trim() || String((c as any)?.payoff||'').trim());
                             return (
                               <span style={{ fontWeight: 600, fontSize: 14, color: '#c7d2fe', whiteSpace: 'nowrap' }}>
-                                {mainText || 'constraint'}
+                                {mainText}
                               </span>
                             );
                           })()}
@@ -348,7 +346,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                             </>
                           )}
                         </div>
-                        {((c as any)?.title && String((c as any).title).trim().length > 0 && (c as any)?.payoff) ? (
+                        {(String((c as any)?.payoff||'').trim().length > 0) ? (
                           <div style={{ fontSize: 14, color: '#94a3b8' }}>{(c as any).payoff}</div>
                         ) : null}
                       </>
@@ -399,15 +397,15 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                       )}
                       <div style={{ flex: 1 }} />
                     </div>
-                    {/* sub progress bar with percentage text (inline with sub label); starts adjacent to label */}
+                    {/* sub progress bar with percentage text (under label, aligned left) */}
                     {(() => {
                       const path = `${node.label}/${s.label}`;
                       const val = progressByPath ? progressByPath[path] : undefined;
                       if (typeof val === 'number') {
                         return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8, flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 0 22px', width: 'calc(100% - 22px)' }}>
                             <div style={{ flex: 1, height: 3, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
-                              <div style={{ width: `${Math.round(val * 100)}%`, height: '100%', background: '#fb923c' }} />
+                              <div style={{ width: `${Math.round(val * 100)}%`, height: '100%', background: '#fb923c', transition: 'width 0.8s ease' }} />
                             </div>
                             <span style={{ fontSize: 10, color: '#93c5fd', minWidth: 28, textAlign: 'left' }}>{Math.round(val * 100)}%</span>
                           </div>
@@ -416,9 +414,13 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                       return null;
                     })()}
 
-                    {Array.isArray(s.constraints) && s.constraints.length > 0 && (
+                    {(() => {
+                      const useful = (Array.isArray(s.constraints) ? s.constraints : [])
+                        .filter((c: any) => (String(c?.title||'').trim().length > 0) || (String(c?.payoff||'').trim().length > 0));
+                      if (useful.length === 0) return null;
+                      return (
                       <div style={{ marginLeft: 20 }}>
-                        {s.constraints.map((c, j) => (
+                        {useful.map((c, j) => (
                           <div key={`c-${i}-${j}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 0', width: '100%' }}>
                             {editingConstraint && editingConstraint.scope === 'sub' && (editingConstraint as any).subIdx === i && editingConstraint.idx === j ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
@@ -432,12 +434,10 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                               <>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }} onMouseEnter={() => setHoverSubIdx(i)} onMouseLeave={() => setHoverSubIdx(curr => (curr === i ? null : curr))}>
                                   {(() => {
-                                    const mainText = (c as any)?.title && String((c as any).title).trim().length > 0
-                                      ? String((c as any).title)
-                                      : String((c as any)?.payoff || '').trim();
+                                    const mainText = (String((c as any)?.title||'').trim() || String((c as any)?.payoff||'').trim());
                                     return (
                                       <span style={{ fontWeight: 600, fontSize: 14, color: '#c7d2fe', whiteSpace: 'nowrap' }}>
-                                        {mainText || 'constraint'}
+                                        {mainText}
                                       </span>
                                     );
                                   })()}
@@ -448,7 +448,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                                     </>
                                   )}
                                 </div>
-                                {((c as any)?.title && String((c as any).title).trim().length > 0 && (c as any)?.payoff) ? (
+                                {(String((c as any)?.payoff||'').trim().length > 0) ? (
                                   <div style={{ fontSize: 14, color: '#94a3b8' }}>{(c as any).payoff}</div>
                                 ) : null}
                               </>
@@ -456,7 +456,8 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                           </div>
                         ))}
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>

@@ -14,6 +14,10 @@ import { assembleFinalDDT } from './assembleFinal';
 import { Hourglass, Bell } from 'lucide-react';
 // ResponseEditor will be opened by sidebar after onComplete
 
+// DEBUG (toggle)
+const __DEBUG_DDT_UI__ = false;
+const dlog = (...a: any[]) => { if (__DEBUG_DDT_UI__) console.log(...a); };
+
 // Piccolo componente per i puntini animati
 const AnimatedDots: React.FC<{ intervalMs?: number }> = ({ intervalMs = 450 }) => {
   const [count, setCount] = useState(0);
@@ -104,12 +108,22 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Two-panel layout: show results panel at right after user clicks Continue on the left
   const [showRight, setShowRight] = useState<boolean>(startOnStructure ? true : false);
 
+  // DataNode stabile per pipeline (evita rilanci causati da oggetti inline)
+  const pipelineDataNode = React.useMemo(() => {
+    const main0 = schemaMains[selectedIdx] || schemaMains[0] || ({} as any);
+    return {
+      name: (main0 as any)?.label || 'Data',
+      type: (main0 as any)?.type,
+      subData: ((main0 as any)?.subData || []) as any[],
+    } as any;
+  }, [schemaMains, selectedIdx]);
+
   // Funzione per chiamare la detection AI
   const handleDetectType = async () => {
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     setShowRight(true);
     setStep('loading');
-    try { console.log('[DDT][Wizard][step] → loading (two-panel)'); } catch {}
+    try { dlog('[DDT][UI] step → loading'); } catch {}
     setErrorMsg(null);
     try {
         const reqBody = userDesc.trim();
@@ -177,7 +191,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         setSchemaRootLabel(finalRoot);
         setSchemaMains(finalMains);
         setStep('structure');
-        try { console.log('[DDT][Wizard][step] → structure', { root: finalRoot, mains: finalMains.length }); } catch {}
+        try { dlog('[DDT][UI] step → structure', { root: finalRoot, mains: finalMains.length }); } catch {}
         return;
       }
       console.warn('[DDT][DetectType][invalidSchema]', { schema });
@@ -187,7 +201,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const msg = (err && (err.name === 'AbortError' || err.message === 'The operation was aborted.')) ? 'Timeout step2' : (err.message || '');
       setErrorMsg('Errore IA: ' + msg);
       setStep('error');
-      try { console.log('[DDT][Wizard][step] → error'); } catch {}
+      try { dlog('[DDT][UI] step → error'); } catch {}
     }
   };
 
@@ -269,10 +283,25 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             for (const s of em.subData) subMap.set(norm(s.label), s);
             nextSub = nextSub.map((sub) => {
               const es = subMap.get(norm(sub.label));
-              return { ...sub, constraints: es?.constraints || sub.constraints };
+              // usa SOLO i constraints restituiti dall'AI; niente fallback locali
+              return { ...sub, constraints: Array.isArray(es?.constraints) ? es.constraints : [] };
             });
           }
-          return { ...existing, constraints: em?.constraints || existing.constraints, subData: nextSub };
+          // Dedupe helper
+          const dedupe = (arr?: any[]) => {
+            const seen = new Set<string>();
+            const out: any[] = [];
+            for (const c of (arr || [])) {
+              const k = JSON.stringify({ t: (c as any)?.title || '', p: (c as any)?.payoff || '' }).toLowerCase();
+              if (!seen.has(k)) { seen.add(k); out.push(c); }
+            }
+            return out;
+          };
+          // Usa SOLO i constraints restituiti dall'AI anche per il main
+          const mainConstraints = Array.isArray(em?.constraints) ? dedupe(em!.constraints) : [];
+          // Dedupe per i sub
+          nextSub = nextSub.map(s => ({ ...s, constraints: dedupe((s as any).constraints) }));
+          return { ...existing, constraints: mainConstraints, subData: nextSub };
         });
         return { label: ((enriched as any).label || rootLabelIn) as string, mains: nextMains };
       }
@@ -344,6 +373,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       step === 'pipeline' || step === 'error' || step === 'support'
     )
   );
+  const pipelineHeadless = true; // run pipeline headlessly; show progress under structure
+  const renderTogglePanel = step !== 'pipeline';
+  try { dlog('[DDT][UI] render', { step, showRight, rightHasContent, pipelineHeadless, renderTogglePanel }); } catch {}
+
   return (
     <div
       style={{
@@ -376,7 +409,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             />
           )}
 
-          {step === 'structure' && (
+          {(step === 'structure' || step === 'pipeline') && (
             <div style={{ padding: 4 }}>
               <div tabIndex={0} style={{ outline: 'none' }}>
                 <MainDataCollection
@@ -391,45 +424,53 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   onChangeEvent={handleChangeEvent}
                 />
               </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
-                <button
-                  onClick={() => {
-                    try { console.log('[DDT][Wizard][complete.click] Build Messages'); } catch {}
-                    // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
-                    setShowRight(true);
-                    setStep('pipeline');
-                  }}
-                  style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Build Messages
-                </button>
-              </div>
+              {step === 'structure' && (
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                  <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
+                  <button
+                    onClick={() => {
+                      try { dlog('[DDT][UI] step → pipeline'); } catch {}
+                      // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
+                      setShowRight(true);
+                      // reset progress state to avoid stale 100%
+                      setProgressByPath({});
+                      setRootProgress(0);
+                      setStep('pipeline');
+                    }}
+                    style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Build Messages
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
           {step === 'pipeline' && (
-            <WizardPipelineStep
-              headless
-              dataNode={{ name: schemaRootLabel || 'Data', subData: schemaMains as any }}
-              detectTypeIcon={detectTypeIcon}
+                <WizardPipelineStep
+              headless={pipelineHeadless}
+              dataNode={pipelineDataNode}
+              detectTypeIcon={(schemaMains[selectedIdx] as any)?.icon || detectTypeIcon}
               onCancel={() => setStep('structure')}
               skipDetectType
-              confirmedLabel={schemaRootLabel || 'Data'}
+              confirmedLabel={pipelineDataNode?.name || 'Data'}
               onProgress={(m) => {
                 const r = typeof (m as any)?.__root__ === 'number' ? (m as any).__root__ : 0;
                 setRootProgress(r);
                 setProgressByPath((prev) => ({ ...(prev || {}), ...(m || {}) }));
               }}
-              onComplete={(finalDDT) => {
-                try { console.log('[DDT][Wizard][complete] from pipeline'); } catch {}
-                handleClose(finalDDT);
+              onComplete={(_finalDDT) => {
+                try { console.log('[DDT][Wizard][complete] pipeline (stay-on-structure)'); } catch {}
+                // Stay on structure panel, keep showing the results and progress (now complete)
+                setStep('structure');
+                setShowRight(true);
               }}
             />
           )}
 
-          {/* Contenuto “normale” del pannello destro */}
-          <V2TogglePanel />
+          {/* Contenuto “normale” del pannello destro (solo quando non in pipeline) */}
+          {(() => { try { dlog('[DDT][UI] render TogglePanel?', { render: renderTogglePanel }); } catch {}; return null; })()}
+          {renderTogglePanel && <V2TogglePanel />}
           {/* CTA moved next to Cancel above */}
         </div>
       )}
