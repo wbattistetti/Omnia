@@ -49,6 +49,11 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   };
 
   const openDDT = (ddt: any) => {
+    console.log('[DDTManager][openDDT] CALLED', {
+      ddtId: ddt?.id || ddt?._id,
+      ddtLabel: ddt?.label,
+      stack: new Error().stack?.split('\n').slice(1, 5).join('\n')
+    });
     try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
     // Deep diagnostic: summarize incoming DDT to compare first vs second open
     try {
@@ -169,6 +174,16 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
     setDDTList(list => list.map(d => (d.id === next.id || d._id === next._id ? next : d)));
   };
 
+  // DEBUG: Track every selectedDDT change
+  useEffect(() => {
+    console.log('[DDTManager][selectedDDT CHANGED]', {
+      hasSelected: !!selectedDDT,
+      ddtId: selectedDDT?.id || selectedDDT?._id,
+      ddtLabel: selectedDDT?.label,
+      mainsCount: Array.isArray(selectedDDT?.mainData) ? selectedDDT.mainData.length : 'not-array'
+    });
+  }, [selectedDDT]);
+  
   // Carica i DDT all'inizializzazione
   useEffect(() => {
     loadDDT();

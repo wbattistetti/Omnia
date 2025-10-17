@@ -36,6 +36,12 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
+    begin: () => {
+      console.log('[DnD][ActionRow][begin]', { escalationIdx, actionIdx, label: action?.label || action?.actionId });
+    },
+    end: (item, monitor) => {
+      console.log('[DnD][ActionRow][end]', { didDrop: monitor.didDrop() });
+    },
   });
 
   const accepts = React.useMemo(() => (allowViewerDrop ? [DND_TYPE, DND_TYPE_VIEWER] : [DND_TYPE]), [allowViewerDrop]);
@@ -85,11 +91,28 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
       if (item.type === DND_TYPE) {
         if (item.escalationIdx === escalationIdx && item.actionIdx === actionIdx) return;
         console.log('[DnD drop:move]', 'from', item.escalationIdx, item.actionIdx, 'to', escalationIdx, actionIdx, position);
-        if (onMoveAction) onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
-        if (onDropAction) onDropAction(item, { escalationIdx, actionIdx }, position);
+        if (onMoveAction) {
+          console.log('[DnD][drop] Calling onMoveAction');
+          onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
+        }
+        if (onDropAction) {
+          console.log('[DnD][drop] Calling onDropAction');
+          onDropAction(item, { escalationIdx, actionIdx }, position);
+        }
       } else if (allowViewerDrop && item.type === DND_TYPE_VIEWER) {
-        console.log('[DnD drop:new]', 'to', escalationIdx, actionIdx, position);
-        if (onDropNewAction) onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
+        console.log('[DnD drop:new]', { 
+          actionLabel: item.label, 
+          actionId: item.action?.id,
+          to: { escalationIdx, actionIdx }, 
+          position,
+          hasCallback: !!onDropNewAction
+        });
+        if (onDropNewAction) {
+          console.log('[DnD][drop] Calling onDropNewAction with action:', item.action);
+          onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
+        } else {
+          console.warn('[DnD][drop] onDropNewAction NOT PROVIDED!');
+        }
       }
       setPreviewPosition(undefined);
       setCanShowPreview(false);

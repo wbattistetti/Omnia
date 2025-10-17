@@ -51,6 +51,13 @@ const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, 
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
+    begin: () => {
+      console.log('[DnD][ActionItem][begin]', { label, iconName, actionId: action?.id });
+    },
+    end: (item, monitor) => {
+      const didDrop = monitor.didDrop();
+      console.log('[DnD][ActionItem][end]', { label, didDrop });
+    },
   });
 
   return (

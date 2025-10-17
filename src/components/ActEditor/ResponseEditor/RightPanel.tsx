@@ -4,9 +4,8 @@ import ResponseSimulator from './ChatSimulator/ResponseSimulator';
 import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
 import { useDDTManager } from '../../../context/DDTManagerContext';
-import MessageReviewPanel from './MessageReviewPanel';
 
-export type RightPanelMode = 'actions' | 'validator' | 'testset' | 'chat' | 'messageReview' | 'styles' | 'none';
+export type RightPanelMode = 'actions' | 'validator' | 'testset' | 'chat' | 'styles' | 'none';
 
 type Props = {
   mode: RightPanelMode;
@@ -252,6 +251,14 @@ function StylesView() {
 }
 
 export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode }: Props) {
+  console.log('[RightPanel][render]', {
+    mode,
+    width,
+    hasSelectedNode: !!selectedNode,
+    selectedNodeLabel: selectedNode?.label,
+    selectedNodeType: typeof selectedNode
+  });
+  
   const minWidth = 160;
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -286,7 +293,6 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
         )}
         {mode === 'validator' && <ValidatorView node={selectedNode} />}
         {mode === 'testset' && <TestsetView node={selectedNode} />}
-        {mode === 'messageReview' && <MessageReviewPanel ddt={ddt} translations={translations} />}
         {mode === 'styles' && <StylesView />}
       </div>
     </div>

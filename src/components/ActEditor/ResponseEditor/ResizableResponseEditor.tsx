@@ -17,6 +17,14 @@ const ResizableResponseEditor: React.FC<ResizableResponseEditorProps> = ({
   lang,
   onClose
 }) => {
+  const mountId = React.useRef(Math.random().toString(36).slice(2, 9));
+  console.log(`[ResizableRE][MOUNT] Instance ${mountId.current}`, {
+    ddtId: ddt?.id || ddt?._id,
+    ddtLabel: ddt?.label,
+    translationsCount: Object.keys(translations || {}).length,
+    stack: new Error().stack?.split('\n').slice(1, 4).join('\n')
+  });
+  
   const { size, handleResize, style } = useResizablePanel({
     initialSize: 400,
     min: 200,

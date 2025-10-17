@@ -489,8 +489,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               }}
               onComplete={(finalDDT) => {
                 // WizardPipelineStep already assembled the DDT with all messages
-                // Just pass it to parent to open ResponseEditor
+                // Preserve _userLabel from initial dataNode if present
                 if (finalDDT) {
+                  if ((dataNode as any)?._userLabel && !(finalDDT as any)._userLabel) {
+                    (finalDDT as any)._userLabel = (dataNode as any)._userLabel;
+                  }
                   handleClose(finalDDT, finalDDT.translations || {});
                 } else {
                   console.error('[DDT][Wizard][complete] No finalDDT received from pipeline!');

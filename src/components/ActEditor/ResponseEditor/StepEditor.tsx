@@ -20,17 +20,22 @@ type Props = {
 type EscalationModel = { actions: Array<{ actionId: string; text?: string; textKey?: string; icon?: string; label?: string; color?: string }> };
 
 function buildModel(node: any, stepKey: string, translations: Record<string, string>): EscalationModel[] {
-  try {
-    if (localStorage.getItem('debug.reopen') === '1') {
-      const shape = Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none');
-      const keys = node?.steps && !Array.isArray(node.steps) ? Object.keys(node.steps) : (Array.isArray(node?.steps) ? (node.steps as any[]).map((g:any)=>g?.type) : []);
-      // eslint-disable-next-line no-console
-      console.log('[RE][buildModel]', { nodeLabel: node?.label, stepKey, stepsShape: shape, keys });
-    }
-  } catch {}
+  // Always log to diagnose message display issues
+  const shape = Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none');
+  const keys = node?.steps && !Array.isArray(node.steps) ? Object.keys(node.steps) : (Array.isArray(node?.steps) ? (node.steps as any[]).map((g:any)=>g?.type) : []);
+  console.log('[RE][buildModel] START', {
+    nodeLabel: node?.label,
+    stepKey,
+    stepsShape: shape,
+    stepsKeys: keys,
+    hasMessages: !!node?.messages,
+    messagesKeys: Object.keys(node?.messages || {}),
+    messagesForStep: node?.messages?.[stepKey]
+  });
   // Case A: steps as object { start: { escalations: [...] } }
   if (node?.steps && !Array.isArray(node.steps) && node.steps[stepKey] && Array.isArray(node.steps[stepKey].escalations)) {
     const escs = node.steps[stepKey].escalations as any[];
+    console.log('[RE][buildModel] Using Case A (object steps)', { stepKey, escalationsCount: escs.length });
     return escs.map((esc) => ({
       actions: (esc.actions || []).map((a: any) => {
         const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
@@ -45,6 +50,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   if (Array.isArray(node?.steps)) {
     const group = (node.steps as any[]).find((g: any) => (g?.type === stepKey));
     if (group && Array.isArray(group.escalations)) {
+      console.log('[RE][buildModel] Using Case B (array steps)', { stepKey, escalationsCount: group.escalations.length });
       return (group.escalations as any[]).map((esc: any) => ({
         actions: (esc.actions || []).map((a: any) => {
           const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
@@ -53,6 +59,8 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
           return { actionId: a.actionId, text, textKey };
         })
       }));
+    } else {
+      console.log('[RE][buildModel] Case B: No group found for stepKey', { stepKey, availableTypes: node.steps.map((g:any) => g?.type) });
     }
   }
 
@@ -61,6 +69,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   if (msg && typeof msg.textKey === 'string') {
     const textKey = msg.textKey;
     const text = translations[textKey] || textKey;
+    console.log('[RE][buildModel] Using messages fallback', { stepKey, textKey, hasText: !!text });
     return [
       { actions: [{ actionId: 'sayMessage', text, textKey }] }
     ];
@@ -71,6 +80,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
     const keys = Object.keys(translations || {});
     const matches = keys.filter(k => (stepKey ? k.includes(`.${stepKey}.`) : false) && (label ? k.includes(label) : true));
     if (matches.length > 0) {
+      console.log('[RE][buildModel] Using translation keys fallback', { stepKey, matchesCount: matches.length });
       return [
         {
           actions: matches.map(k => ({ actionId: 'sayMessage', text: translations[k] || k, textKey: k }))
@@ -78,6 +88,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
       ];
     }
   } catch {}
+  console.log('[RE][buildModel] NO DATA - returning empty model', { stepKey });
   return [];
 }
 

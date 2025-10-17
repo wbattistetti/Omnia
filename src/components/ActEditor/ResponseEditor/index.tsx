@@ -3,22 +3,37 @@ import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
 import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
-import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, X, BookOpen, ListChecks, Sparkles } from 'lucide-react';
-import { getAgentActVisualsByType } from '../../Flowchart/actVisuals';
+import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, BookOpen, Sparkles } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
 // import SynonymsEditor from './SynonymsEditor';
 import NLPExtractorProfileEditor from './NLPExtractorProfileEditor';
-import MessageReview from './MessageReview/MessageReview';
+import EditorHeader from '../../common/EditorHeader';
+import { getAgentActVisualsByType } from '../../Flowchart/actVisuals';
 import {
   getMainDataList,
   getSubDataList,
   getNodeSteps
 } from './ddtSelectors';
-import EditorHeader from '../../common/EditorHeader';
 
-export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClose?: () => void, act?: { id: string; type: string; label?: string } }) {
+export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
+  // DEBUG: Log every render to detect duplicate mounts
+  const mountId = useRef(Math.random().toString(36).slice(2, 9));
+  console.log(`[RE][MOUNT] ResponseEditor instance ${mountId.current}`, {
+    ddtId: ddt?.id || ddt?._id,
+    ddtLabel: ddt?.label,
+    mainsCount: Array.isArray(ddt?.mainData) ? ddt.mainData.length : 'not-array',
+    stack: new Error().stack?.split('\n').slice(1, 4).join('\n')
+  });
+  
+  useEffect(() => {
+    console.log(`[RE][EFFECT] Instance ${mountId.current} mounted`);
+    return () => {
+      console.log(`[RE][UNMOUNT] Instance ${mountId.current} unmounting`);
+    };
+  }, []);
+  
   // Font zoom (Ctrl+wheel) like sidebar
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 24;
@@ -131,9 +146,7 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
     const isSameDDT = prevId && nextId && prevId === nextId;
     const coerced = coercePhoneKind(ddt);
     
-    // Sync ONLY if:
-    // 1. It's a different DDT (ID changed)
-    // 2. It's the first load (no previous ID)
+    // Sync ONLY if it's a different DDT (ID changed) or first load
     const shouldSync = !prevId || !nextId || !isSameDDT;
     
     if (shouldSync && localDDT !== coerced) {
@@ -146,19 +159,16 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
       const enriched = preserveStepsFromPrev(localDDT, coerced);
       setLocalDDT(enriched);
     }
-    
     const nextTranslations = { ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) };
     setLocalTranslations((prev: any) => {
       const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
       return same ? prev : nextTranslations;
     });
-    
     // Reset selection when a different DDT is opened (new session)
     if (!isSameDDT) {
-      setSelectedMainIndex(0);
-      setSelectedSubIndex(undefined);
+    setSelectedMainIndex(0);
+    setSelectedSubIndex(undefined);
     }
-    
     try {
       const counts = {
         ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
@@ -171,7 +181,8 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
       const mains = getMainDataList(ddt) || [];
       log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map((m: any) => m?.label));
     } catch {}
-  }, [ddt, mergedBase]);
+  // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
+  }, [ddt, mergedBase, localDDT?.id, localDDT?._id]);
 
   // Note: do not persist on unmount to avoid re-opening the editor after close.
 
@@ -183,18 +194,44 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
   const [selectedMainIndex, setSelectedMainIndex] = useState(0);
   const [selectedSubIndex, setSelectedSubIndex] = useState<number | undefined>(undefined);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const [rightMode, setRightMode] = useState<RightPanelMode>(() => {
-    try { return (localStorage.getItem('responseEditor.rightMode') as RightPanelMode) || 'actions'; } catch { return 'actions'; }
-  });
+  const [rightMode, setRightMode] = useState<RightPanelMode>('actions'); // Always start with actions panel visible
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
   const [dragging, setDragging] = useState(false);
   const [showSynonyms, setShowSynonyms] = useState(false);
-  const [showConstraintWizard, setShowConstraintWizard] = useState(false);
-
   // Wizard/general layout flags
-  const [showRightGeneral, setShowRightGeneral] = useState<boolean>(false);
   const [showWizard, setShowWizard] = useState<boolean>(() => isDDTEmpty(localDDT));
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
+  
+  // Header: icon, title, and toolbar
+  const actType = (act?.type || 'DataRequest') as any;
+  const { Icon, color: iconColor } = getAgentActVisualsByType(actType, true);
+  // Priority: act.label (user input) > fallback "Response Editor"
+  // Priority: act.label (from ActEditorOverlay) > localDDT._userLabel (preserved original) > fallback
+  const headerTitle = act?.label || (localDDT as any)?._userLabel || 'Response Editor';
+  console.log('[RE][header]', { 
+    actLabel: act?.label, 
+    ddtUserLabel: (localDDT as any)?._userLabel,
+    ddtLabel: localDDT?.label, 
+    headerTitle 
+  });
+  
+  const saveRightMode = (m: RightPanelMode) => {
+    setRightMode(m);
+    try { localStorage.setItem('responseEditor.rightMode', m); } catch {}
+  };
+  
+  // Toolbar buttons (empty during wizard, full after)
+  const toolbarButtons = !showWizard ? [
+    { icon: <Undo2 size={16} />, onClick: () => {}, title: "Undo" },
+    { icon: <Redo2 size={16} />, onClick: () => {}, title: "Redo" },
+    { icon: <Plus size={16} />, label: "Add constraint", onClick: () => {}, primary: true },
+    { icon: <Rocket size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('actions'); }, title: "Actions", active: rightMode === 'actions' },
+    { icon: <Code2 size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('validator'); }, title: "Validator", active: rightMode === 'validator' },
+    { icon: <FileText size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('testset'); }, title: "Test set", active: rightMode === 'testset' },
+    { icon: <MessageSquare size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('chat'); }, title: "Chat", active: rightMode === 'chat' },
+    { icon: <Sparkles size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('styles'); }, title: "Dialogue style presets", active: rightMode === 'styles' },
+    { icon: <BookOpen size={16} />, onClick: () => setShowSynonyms(v => !v), title: showSynonyms ? 'Close contract editor' : 'Open contract editor', active: showSynonyms },
+  ] : [];
   
   useEffect(() => {
     const empty = isDDTEmpty(localDDT);
@@ -203,131 +240,38 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
       // DDT is empty → open wizard and take ownership
       setShowWizard(true);
       wizardOwnsDataRef.current = true;
-      console.log('[RE][wizard] Opening wizard, taking ownership');
     } else if (!empty && wizardOwnsDataRef.current) {
       // DDT is complete and wizard had ownership → close wizard and release ownership
       setShowWizard(false);
       wizardOwnsDataRef.current = false;
-      console.log('[RE][wizard] DDT complete, closing wizard, releasing ownership');
     }
-    
-    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[RE][wizard.init]', { empty, wizardOwnsData: wizardOwnsDataRef.current }); } catch {}
   }, [localDDT]);
-
-  const handleWizardSeeResult = () => {
-    console.log('[DEBUG][handleWizardSeeResult] START - closing wizard and bootstrapping messages');
-    setShowWizard(false);
-    setShowRightGeneral(false); // Close right panel, show normal editor layout
-    // Don't force messageReview - let user navigate normally with StepsStrip + StepEditor
-    // Bootstrap minimal messages so the review is never empty
-    try {
-      setLocalDDT((prev: any) => {
-        if (!prev) {
-          console.log('[DEBUG][handleWizardSeeResult] No prev DDT, skipping');
-          return prev;
-        }
-        console.log('[DEBUG][handleWizardSeeResult] Cloning DDT', { id: prev.id, label: prev.label });
-        const next = JSON.parse(JSON.stringify(prev));
-        const mains = getMainDataList(next);
-        console.log('[DEBUG][handleWizardSeeResult] Found mains:', mains.map((m: any) => m.label));
-        
-        const ensureTextForStep = (node: any, stepKey: string) => {
-          const nodeLabel = node?.label || 'unknown';
-          console.log(`[DEBUG][ensureTextForStep] Checking ${nodeLabel}.${stepKey}`);
-          
-          // 1) if node.messages[stepKey].textKey exists, keep
-          const msgObj = (node.messages && typeof node.messages === 'object') ? node.messages[stepKey] : undefined;
-          const existingKey = typeof msgObj?.textKey === 'string' ? msgObj.textKey : undefined;
-          if (existingKey) {
-            console.log(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - Already has message key: ${existingKey}`);
-            return;
-          }
-          
-          // 2) if steps[stepKey].escalations contains action with parameter 'text', keep
-          const steps = node.steps || {};
-          const escs = Array.isArray(steps?.[stepKey]?.escalations) ? steps[stepKey].escalations : [];
-          const hasActionText = escs.some((esc: any) => Array.isArray(esc?.actions) && esc.actions.some((a: any) => Array.isArray(a?.parameters) && a.parameters.some((p: any) => p?.parameterId === 'text' && typeof p?.value === 'string')));
-          if (hasActionText) {
-            console.log(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - Already has escalation with text action`);
-            return;
-          }
-          
-          // 3) otherwise create messages[stepKey].textKey with default string
-          const root = (next?.label || 'data').toString().toLowerCase().replace(/\s+/g, '_');
-          const nodeLabelKey = (node?.label || 'node').toString().toLowerCase().replace(/\s+/g, '_');
-          const key = `ddt.${root}.${nodeLabelKey}.${stepKey}`;
-          node.messages = node.messages && typeof node.messages === 'object' ? node.messages : {};
-          node.messages[stepKey] = { ...(node.messages[stepKey] || {}), textKey: key };
-          
-          console.log(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - CREATED message key: ${key}`);
-          
-          // also seed a readable default in translations if missing
-          try {
-            const readable = `${node.label || ''} – ${stepKey}`.trim();
-            setLocalTranslations((t: any) => ({ ...(t || {}), [key]: (t && t[key]) || readable }));
-            console.log(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - Set translation: "${readable}"`);
-          } catch (e) {
-            console.error(`[DEBUG][ensureTextForStep] ${nodeLabel}.${stepKey} - Error setting translation:`, e);
-          }
-        };
-        const DEFAULT_STEPS = ['start','noInput','noMatch','confirmation','notConfirmed','success'];
-        console.log('[DEBUG][handleWizardSeeResult] Bootstrapping messages for DEFAULT_STEPS:', DEFAULT_STEPS);
-        
-        mains.forEach((m: any) => {
-          console.log(`[DEBUG][handleWizardSeeResult] Processing main: ${m.label}`);
-          DEFAULT_STEPS.forEach(sk => ensureTextForStep(m, sk));
-          const subs = Array.isArray(m?.subData) ? m.subData : [];
-          console.log(`[DEBUG][handleWizardSeeResult] ${m.label} has ${subs.length} sub-data`);
-          subs.forEach((s: any) => {
-            console.log(`[DEBUG][handleWizardSeeResult] Processing sub: ${s.label}`);
-            DEFAULT_STEPS.forEach(sk => ensureTextForStep(s, sk));
-          });
-        });
-        
-        console.log('[DEBUG][handleWizardSeeResult] Bootstrap complete, returning updated DDT');
-        return next;
-      });
-    } catch (e) {
-      console.error('[DEBUG][handleWizardSeeResult] Error during bootstrap:', e);
-    }
-  };
-
-  // Undo/Redo action proxies (already provided by props above in old header flow)
-  const handleUndo = () => {
-    try { (document.activeElement as HTMLElement)?.blur?.(); } catch {}
-    try { (window as any).__re_do?.undo?.(); } catch {}
-    // fallback: no-op; actual undo/redo functions were previously injected via props
-  };
-  const handleRedo = () => {
-    try { (document.activeElement as HTMLElement)?.blur?.(); } catch {}
-    try { (window as any).__re_do?.redo?.(); } catch {}
-  };
 
   // Nodo selezionato: sempre main/sub in base agli indici
   const selectedNode = useMemo(() => {
     const main = mainList[selectedMainIndex];
     if (!main) {
-      console.log('[DEBUG][selectedNode] No main at index', selectedMainIndex);
+      console.log('[RE][selectedNode] No main', { selectedMainIndex, mainListLength: mainList.length });
       return null;
     }
-    if (selectedSubIndex == null) {
-      console.log('[DEBUG][selectedNode] Selected MAIN:', main.label, {
-        hasSteps: !!main.steps,
-        stepsShape: Array.isArray(main.steps) ? 'array' : (main.steps ? 'object' : 'none'),
-        stepKeys: main.steps ? (Array.isArray(main.steps) ? main.steps.map((s: any) => s.type) : Object.keys(main.steps)) : [],
-        hasMessages: !!main.messages,
-        messageKeys: main.messages ? Object.keys(main.messages) : []
-      });
-      return main;
-    }
+    console.log('[RE][selectedNode] Main node', {
+      selectedMainIndex,
+      mainLabel: main?.label,
+      hasSteps: !!main?.steps,
+      stepsType: Array.isArray(main?.steps) ? 'array' : (main?.steps ? 'object' : 'none'),
+      stepsKeys: main?.steps ? (Array.isArray(main?.steps) ? main.steps.map((s:any) => s?.type) : Object.keys(main.steps)) : [],
+      hasMessages: !!main?.messages,
+      messageKeys: Object.keys(main?.messages || {})
+    });
+    
+    if (selectedSubIndex == null) return main;
     const subList = getSubDataList(main);
     const sub = subList[selectedSubIndex] || main;
-    console.log('[DEBUG][selectedNode] Selected SUB:', sub.label, {
-      hasSteps: !!sub.steps,
-      stepsShape: Array.isArray(sub.steps) ? 'array' : (sub.steps ? 'object' : 'none'),
-      stepKeys: sub.steps ? (Array.isArray(sub.steps) ? sub.steps.map((s: any) => s.type) : Object.keys(sub.steps)) : [],
-      hasMessages: !!sub.messages,
-      messageKeys: sub.messages ? Object.keys(sub.messages) : []
+    console.log('[RE][selectedNode] Sub node', {
+      selectedSubIndex,
+      subLabel: sub?.label,
+      hasSteps: !!sub?.steps,
+      hasMessages: !!sub?.messages
     });
     return sub;
   }, [mainList, selectedMainIndex, selectedSubIndex]);
@@ -450,12 +394,7 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
     };
   }, [dragging, setRightWidth]);
 
-  const saveRightMode = (m: RightPanelMode) => {
-    setRightMode(m);
-    try { localStorage.setItem('responseEditor.rightMode', m); } catch {}
-  };
-
-  // Funzione per capire se c'è editing attivo (input, textarea, select)
+  // Funzione per capire se c'├¿ editing attivo (input, textarea, select)
   function isEditingActive() {
     const el = document.activeElement;
     if (!el) return false;
@@ -513,106 +452,80 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
 
   // Layout
   return (
-    <div ref={rootRef} style={{ position: 'relative', height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
-      {/* Header dell'editor DataRequest: icona, titolo, toolbar: */}
-      {(() => {
-        const type = String(act?.type || 'DataRequest') as any;
-        const hasDDT = !!(act && (act as any).ddt);
-        const { Icon, color } = getAgentActVisualsByType(type, hasDDT);
-        return (
-          <EditorHeader
-            icon={<Icon size={18} style={{ color }} />}
-            title={String(act?.label || (localDDT as any)?.label || 'Data')}
-            color="orange"
-            onClose={onClose}
-            rightActions={(
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button title="Undo" onClick={handleUndo} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.35)', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                  <Undo2 size={16} />
-                </button>
-                <button title="Redo" onClick={handleRedo} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.35)', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                  <Redo2 size={16} />
-                </button>
-                <button title="Add constraint" onClick={() => setShowConstraintWizard(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.92)', color: '#9a4f00', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                  <Plus size={16} /> <span>Add constraint</span>
-                </button>
-                <div style={{ marginLeft: 8, display: 'inline-flex', gap: 6 }}>
-                  <button title="Actions" onClick={() => { setShowSynonyms(false); saveRightMode('actions'); }} style={{ background: rightMode==='actions' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                    <Rocket size={16} />
-                  </button>
-                  <button title="Validator" onClick={() => { setShowSynonyms(false); saveRightMode('validator'); }} style={{ background: rightMode==='validator' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                    <Code2 size={16} />
-                  </button>
-                  <button title="Test set" onClick={() => { setShowSynonyms(false); saveRightMode('testset'); }} style={{ background: rightMode==='testset' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                    <FileText size={16} />
-                  </button>
-                  <button title="Chat" onClick={() => { setShowSynonyms(false); saveRightMode('chat'); }} style={{ background: rightMode==='chat' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                    <MessageSquare size={16} />
-                  </button>
-                  <button title="Message review" onClick={() => { setShowSynonyms(false); saveRightMode('messageReview'); }} style={{ background: rightMode==='messageReview' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                    <ListChecks size={16} />
-                  </button>
-                  <button title="Styles" onClick={() => { setShowSynonyms(false); saveRightMode('styles'); }} style={{ background: rightMode==='styles' ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>
-                    <Sparkles size={16} />
-                  </button>
-                  <button
-                    title={showSynonyms ? 'Close contract editor' : 'Open contract editor'}
-                    onClick={() => setShowSynonyms(v => !v)}
-                    style={{ background: showSynonyms ? 'rgba(255,255,255,0.9)' : 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
-                  >
-                    <BookOpen size={16} />
-                  </button>
-                </div>
-                <button
-                  title={showWizard ? 'Close Wizard' : 'Open Wizard'}
-                  onClick={() => {
-                    if (showWizard) { setShowWizard(false); }
-                    else { setShowWizard(true); setShowRightGeneral(false); }
-                  }}
-                  style={{ background: 'rgba(255,255,255,0.92)', color: '#0b1220', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}
-                >
-                  ⚙
-                </button>
-              </div>
-            )}
-          />
-        );
-      })()}
-      {/* Canvas centrale a 1/2 colonne */}
-      <div style={{ display: 'grid', gridTemplateColumns: (showWizard && !showRightGeneral) ? '1fr' : 'minmax(520px,1fr) minmax(360px,auto)', gap: 12, flex: 1, minHeight: 0 }}>
-        {/* Colonna sinistra: Wizard se attivo, altrimenti editor */}
-        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          {showWizard ? (
-            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-              <DDTWizard
-                initialDDT={localDDT}
-                onCancel={onClose || (() => {})}
-                onComplete={(finalDDT) => {
-                  console.log('[RE][Wizard.onComplete] Received finalDDT', { id: finalDDT?.id, label: finalDDT?.label, mainsCount: finalDDT?.mainData?.length });
-                  const coerced = coercePhoneKind(finalDDT);
-                  
-                  // Update localDDT first (while wizard still owns data)
-                  setLocalDDT(coerced);
-                  
-                  // Update context (this will trigger prop ddt change, but will be ignored due to ownership)
-                  try { replaceSelectedDDT(coerced); } catch {}
-                  
-                  // Release ownership after a brief delay to ensure all state updates are processed
-                  setTimeout(() => {
-                    wizardOwnsDataRef.current = false;
-                    console.log('[RE][Wizard.onComplete] Ownership released');
-                  }, 100);
-                  
-                  // Close wizard and open Message Review
-                  setShowWizard(false);
-                  handleWizardSeeResult();
-                }}
-                startOnStructure={false}
-              />
-            </div>
-          ) : (
-      /* Flex row: sidebar + contenuto */
+    <div ref={rootRef} style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
+      
+      {/* Header sempre visibile (minimale durante wizard, completo dopo) */}
+      <EditorHeader
+        icon={<Icon size={18} style={{ color: iconColor }} />}
+        title={headerTitle}
+        toolbarButtons={toolbarButtons}
+        onClose={onClose}
+        color="orange"
+      />
+      
+      {/* Contenuto: sempre con RightPanel per permettere DnD anche durante wizard */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      {showWizard ? (
+        /* Wizard + RightPanel side-by-side */
+        <>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <DDTWizard
+              initialDDT={localDDT}
+              onCancel={onClose || (() => {})}
+              onComplete={(finalDDT) => {
+                const coerced = coercePhoneKind(finalDDT);
+                
+                // If parent provided onWizardComplete, delegate to it (DDTHostAdapter case)
+                if (onWizardComplete) {
+                  console.log('[RE][wizard.complete] Delegating to onWizardComplete');
+                  onWizardComplete(coerced);
+                  return;
+                }
+                
+                // Otherwise, handle locally (direct DDTManager case)
+                console.log('[RE][wizard.complete] Handling locally with replaceSelectedDDT');
+                // Set flag to prevent auto-reopen
+                wizardOwnsDataRef.current = true;
+                
+                setLocalDDT(coerced);
+                try { replaceSelectedDDT(coerced); } catch {}
+                
+                // Release ownership after a brief delay
+                setTimeout(() => {
+                  wizardOwnsDataRef.current = false;
+                }, 100);
+                
+                // Close wizard and reset UI to show StepEditor (not MessageReview)
+                setShowWizard(false);
+                setRightMode('actions'); // Force show StepEditor with StepsStrip
+                setSelectedStepKey('start'); // Start with first step
+              }}
+              startOnStructure={false}
+            />
+          </div>
+          {/* RightPanel visible during wizard for drag & drop */}
+          {(() => {
+            console.log('[RE][wizard.render] Mounting RightPanel for DnD', {
+              rightMode,
+              rightWidth
+            });
+            return (
+              <RightPanel
+                mode={rightMode}
+                width={rightWidth}
+                onWidthChange={setRightWidth}
+                onStartResize={() => setDragging(true)}
+                dragging={dragging}
+                ddt={localDDT}
+                translations={localTranslations}
+                selectedNode={selectedNode}
+              />
+            );
+          })()}
+        </>
+      ) : (
+        /* Normal editor layout with 3 panels (no header, already shown above) */
+      <>
         {/* Always visible left navigation */}
         <Sidebar
           ref={sidebarRef}
@@ -753,11 +666,11 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
           onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
         />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* Steps toolbar */}
-          {!showSynonyms && !showRightGeneral && (
-            <div style={{ padding: '8px 16px 0 16px' }}>
+          {/* Steps toolbar hidden during NLP editor */}
+          {!showSynonyms && (
+            <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
               <StepsStrip
-                stepKeys={stepKeys}
+                stepKeys={uiStepKeys}
                 selectedStepKey={selectedStepKey}
                 onSelectStep={setSelectedStepKey}
                 node={selectedNode}
@@ -820,43 +733,31 @@ export default function ResponseEditor({ ddt, onClose, act }: { ddt: any, onClos
                 </div>
               </div>
             </div>
-            {!showSynonyms && rightMode !== 'messageReview' && (
-              <RightPanel
-                mode={rightMode}
-                width={rightWidth}
-                onWidthChange={setRightWidth}
-                onStartResize={() => setDragging(true)}
-                dragging={dragging}
-                ddt={localDDT}
-                translations={localTranslations}
-                selectedNode={selectedNode}
-              />
-            )}
+            {!showSynonyms && (() => {
+              console.log('[RE][render] Mounting RightPanel', {
+                showSynonyms,
+                rightMode,
+                rightWidth,
+                hasSelectedNode: !!selectedNode,
+                selectedNodeLabel: selectedNode?.label
+              });
+              return (
+                <RightPanel
+                  mode={rightMode}
+                  width={rightWidth}
+                  onWidthChange={setRightWidth}
+                  onStartResize={() => setDragging(true)}
+                  dragging={dragging}
+                  ddt={localDDT}
+                  translations={localTranslations}
+                  selectedNode={selectedNode}
+                />
+              );
+            })()}
           </div>
         </div>
-      </div>
-          )}
-        </div>
-
-        {/* Colonna destra generale visibile solo quando richiesto */}
-        {showRightGeneral && (
-          <div style={{ flex: 'none', minWidth: 120, width: rightWidth, maxWidth: rightWidth, borderLeft: '1px solid #eee', background: '#fafaff', minHeight: 900 }}>
-            {showSynonyms ? (
-              <div style={{ padding: 16 }}>Dizionario</div>
-            ) : (
-              <RightPanel
-                mode={rightMode}
-                width={rightWidth}
-                onWidthChange={setRightWidth}
-                onStartResize={() => setDragging(true)}
-                dragging={dragging}
-                ddt={localDDT}
-                translations={localTranslations}
-                selectedNode={selectedNode}
-              />
-            )}
-          </div>
-        )}
+      </>
+      )}
       </div>
     </div>
   );
