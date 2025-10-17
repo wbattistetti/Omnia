@@ -92,6 +92,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     constraints: new Set(),
   });
   const [currentProcessingLabel, setCurrentProcessingLabel] = useState<string>('');
+  // Parallel processing: accumulate partial DDT results for each main
+  const [partialResults, setPartialResults] = useState<Record<number, any>>({});
   // Persisted artifacts across runs for incremental assemble
   const [artifactStore, setArtifactStore] = useState<any | null>(null);
   // Track pending renames to relocate artifacts keys between normalized paths
@@ -383,9 +385,21 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Handler per chiusura (annulla o completamento)
   const handleClose = (result?: any, messages?: any) => {
+    console.log('[DDT][Wizard][handleClose]', { 
+      hasResult: !!result, 
+      hasOnComplete: !!onComplete,
+      resultId: result?.id,
+      resultLabel: result?.label,
+      mainsCount: Array.isArray(result?.mainData) ? result.mainData.length : 'not-array'
+    });
     setClosed(true);
-    if (result && onComplete) onComplete(result, messages);
-    else onCancel();
+    if (result && onComplete) {
+      console.log('[DDT][Wizard][handleClose] Calling onComplete callback');
+      onComplete(result, messages);
+    } else {
+      console.log('[DDT][Wizard][handleClose] Calling onCancel');
+      onCancel();
+    }
   };
 
   // Se chiuso, non renderizzare nulla
@@ -461,6 +475,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       // reset progress state to avoid stale 100%
                       setProgressByPath({});
                       setRootProgress(0);
+                      setPartialResults({}); // Reset parallel processing results
                       // Apri il primo main data
                       setSelectedIdx(0);
                       setStep('pipeline');
@@ -475,31 +490,126 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           )}
 
           {step === 'pipeline' && (
-                <WizardPipelineStep
-              headless={pipelineHeadless}
-              dataNode={pipelineDataNode}
-              detectTypeIcon={(schemaMains[selectedIdx] as any)?.icon || detectTypeIcon}
-              onCancel={() => setStep('structure')}
-              skipDetectType
-              confirmedLabel={pipelineDataNode?.name || 'Data'}
-              onProgress={(m) => {
-                const r = typeof (m as any)?.__root__ === 'number' ? (m as any).__root__ : 0;
-                setRootProgress(r);
-                setProgressByPath((prev) => ({ ...(prev || {}), ...(m || {}) }));
-              }}
-              onComplete={(finalDDT) => {
-                // WizardPipelineStep already assembled the DDT with all messages
-                // Preserve _userLabel from initial dataNode if present
-                if (finalDDT) {
-                  if ((dataNode as any)?._userLabel && !(finalDDT as any)._userLabel) {
-                    (finalDDT as any)._userLabel = (dataNode as any)._userLabel;
-                  }
-                  handleClose(finalDDT, finalDDT.translations || {});
-                } else {
-                  console.error('[DDT][Wizard][complete] No finalDDT received from pipeline!');
-                }
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              {schemaMains.map((mainItem, mainIdx) => {
+                const mainDataNode = {
+                  name: (mainItem as any)?.label || 'Data',
+                  label: (mainItem as any)?.label || 'Data',  // ← ADD: label for DDT assembly
+                  type: (mainItem as any)?.type,
+                  icon: (mainItem as any)?.icon,              // ← ADD: icon for proper display
+                  subData: ((mainItem as any)?.subData || []) as any[],
+                };
+                
+                return (
+                  <div 
+                    key={`pipeline-${mainIdx}-${mainItem.label}`}
+                    style={{ 
+                      display: mainIdx === selectedIdx ? 'block' : 'none' 
+                    }}
+                  >
+                    <WizardPipelineStep
+                      headless={pipelineHeadless}
+                      dataNode={mainDataNode}
+                      detectTypeIcon={(mainItem as any)?.icon || detectTypeIcon}
+                      onCancel={() => setStep('structure')}
+                      skipDetectType
+                      confirmedLabel={mainDataNode?.name || 'Data'}
+                      onProgress={(m) => {
+                        const mainLabel = mainItem.label;
+                        // Update individual main progress
+                        const mainProgress = typeof (m as any)?.[mainLabel] === 'number' ? (m as any)[mainLabel] : 0;
+                        
+                        setProgressByPath((prev) => {
+                          const updated = { ...(prev || {}), ...(m || {}) };
+                          // Calculate overall root progress (average of all mains)
+                          const allProgress = schemaMains.map(m => updated[m.label] || 0);
+                          const avgProgress = allProgress.reduce((sum, p) => sum + p, 0) / schemaMains.length;
+                          updated.__root__ = avgProgress;
+                          return updated;
+                        });
+                        
+                        setRootProgress((prev) => {
+                          const allProgress = schemaMains.map(m => (progressByPath[m.label] || 0));
+                          return allProgress.reduce((sum, p) => sum + p, 0) / schemaMains.length;
+                        });
+                      }}
+                      onComplete={(partialDDT) => {
+                        console.log(`[DDT][Wizard][parallel] Main ${mainIdx + 1}/${schemaMains.length} completed:`, {
+                          mainLabel: mainItem.label,
+                          hasDDT: !!partialDDT,
+                          mainsCount: Array.isArray(partialDDT?.mainData) ? partialDDT.mainData.length : 'not-array'
+                        });
+                        
+                        // Accumulate partial result
+                        setPartialResults(prev => {
+                          const updated = { ...prev, [mainIdx]: partialDDT };
+                          
+                          // Check if all mains completed
+                          const completedCount = Object.keys(updated).length;
+                          console.log(`[DDT][Wizard][parallel] Progress: ${completedCount}/${schemaMains.length} mains completed`);
+                          
+                          if (completedCount === schemaMains.length) {
+                            // All mains completed - assemble final DDT
+                            console.log('[DDT][Wizard][parallel] All mains completed, assembling final DDT...');
+                            
+                            try {
+                              // Merge all mainData from partial results
+                              const allMains = schemaMains.map((schemaMain, idx) => {
+                                const partial = updated[idx];
+                                if (!partial || !partial.mainData || partial.mainData.length === 0) {
+                                  console.warn(`[DDT][Wizard][parallel] Missing mainData for idx ${idx}:`, schemaMain.label);
+                                  return null;
+                                }
+                                return partial.mainData[0]; // Each partial has 1 main
+                              }).filter(Boolean);
+                              
+                              // Merge translations
+                              const mergedTranslations: any = {};
+                              Object.values(updated).forEach((partial: any) => {
+                                if (partial?.translations) {
+                                  Object.assign(mergedTranslations, partial.translations);
+                                }
+                              });
+                              
+                              const finalDDT = {
+                                id: schemaRootLabel || 'Data',
+                                label: schemaRootLabel || 'Data',
+                                mainData: allMains,
+                                translations: mergedTranslations,
+                                _fromWizard: true  // Flag to identify wizard-generated DDTs
+                              };
+                              
+                              console.log('[DDT][Wizard][parallel] Final DDT assembled:', {
+                                id: finalDDT.id,
+                                label: finalDDT.label,
+                                mainsCount: finalDDT.mainData.length,
+                                mainLabels: finalDDT.mainData.map((m: any) => m?.label),
+                                translationsCount: Object.keys(mergedTranslations).length
+                              });
+                              
+                              // Preserve _userLabel and _sourceAct
+                              if ((dataNode as any)?._userLabel && !(finalDDT as any)._userLabel) {
+                                (finalDDT as any)._userLabel = (dataNode as any)._userLabel;
+                              }
+                              if ((dataNode as any)?._sourceAct) {
+                                (finalDDT as any)._sourceAct = (dataNode as any)._sourceAct;
+                              }
+                              
+                              console.log('[DDT][Wizard][parallel] Calling handleClose with final DDT');
+                              handleClose(finalDDT, finalDDT.translations || {});
+                            } catch (err) {
+                              console.error('[DDT][Wizard][parallel] Failed to assemble final DDT:', err);
+                            }
+                          }
+                          
+                          return updated;
+                        });
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           )}
 
           {/* Contenuto “normale” del pannello destro (solo quando non in pipeline) */}

@@ -128,20 +128,40 @@ useEffect(() => {
         stepResults = [fakeDetectType, ...orchestrator.state.stepResults];
       }
       const stepMessages = buildSteps(stepResults);
-      const structureResult = stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
-      const mainData = structureResult?.payload?.mainData || structureResult?.payload;
-      if (mainData && Array.isArray(mainData.subData)) {
-        mainData.subData.forEach((sub: any, idx: number) => {
+      
+      // ✅ FIX: Use dataNode prop directly - it already has name, label, icon, subData from DDTWizard
+      // The structureResult.payload only has subData, losing name/label/icon!
+      const ddtId = dataNode.label || dataNode.name || 'ddt_unknown';
+      
+      console.log('[WizardPipelineStep][buildDDT] Starting assembly', { 
+        ddtId,
+        dataNodeKeys: Object.keys(dataNode || {}),
+        label: dataNode?.label,
+        name: dataNode?.name,
+        icon: dataNode?.icon,
+        type: dataNode?.type,
+        subDataCount: Array.isArray(dataNode?.subData) ? dataNode.subData.length : 0,
+        stepResultsCount: stepResults.length
+      });
+      
+      try {
+        // ✅ Pass dataNode directly - it has all the correct properties (name, label, icon, type, subData)!
+        const final = buildDDT(ddtId, dataNode, stepResults);
+        console.log('[WizardPipelineStep][buildDDT] Assembly complete', {
+          hasFinal: !!final,
+          finalId: final?.id,
+          finalLabel: final?.label,
+          mainsCount: Array.isArray(final?.mainData) ? final.mainData.length : 'not-array'
         });
+        setFinalDDT(final);
+        if (onComplete) {
+          console.log('[WizardPipelineStep] Calling onComplete with final DDT');
+          onComplete(final);
+        }
+      } catch (err) {
+        console.error('[WizardPipelineStep][buildDDT] Assembly FAILED', err);
+        throw err;
       }
-      const ddtId = mainData?.name || dataNode.name || 'ddt_' + (dataNode?.name || 'unknown');
-      if (!mainData) {
-        console.error('[Wizard] Missing mainData; cannot assemble DDT. stepResults=', stepResults);
-        return;
-      }
-      const final = buildDDT(ddtId, mainData, stepResults);
-      setFinalDDT(final);
-      if (onComplete) onComplete(final);
     }
   }, [orchestrator.state.currentStepIndex, orchestrator.state.steps.length, orchestrator.state.stepResults, finalDDT, onComplete, confirmedLabel, dataNode]);
 

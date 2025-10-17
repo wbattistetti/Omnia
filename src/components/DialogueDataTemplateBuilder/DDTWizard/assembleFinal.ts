@@ -248,16 +248,40 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
   };
 
   // Normalize kinds/subs deterministically so extractors work out of the box
-  const normalizedMains = normalizeDDTMainNodes(mains as any);
-  const assembledMains = (normalizedMains || []).map(m => assembleNode(m, [m.label]));
+  try {
+    console.log('[assembleFinalDDT][START]', { rootLabel, mainsCount: mains.length, mainLabels: mains.map(m => m.label) });
+    
+    const normalizedMains = normalizeDDTMainNodes(mains as any);
+    console.log('[assembleFinalDDT][NORMALIZED]', { count: normalizedMains?.length || 0, labels: (normalizedMains || []).map((m: any) => m.label) });
+    
+    const assembledMains = (normalizedMains || []).map((m, idx) => {
+      console.log(`[assembleFinalDDT][ASSEMBLING] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '| subData:', (m.subData || []).length);
+      try {
+        const assembled = assembleNode(m, [m.label]);
+        console.log(`[assembleFinalDDT][ASSEMBLED] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '✓');
+        return assembled;
+      } catch (err) {
+        console.error(`[assembleFinalDDT][ERROR] Failed to assemble main ${idx + 1}:`, m.label, err);
+        throw err;
+      }
+    });
+    
+    console.log('[assembleFinalDDT][COMPLETE]', { mainsCount: assembledMains.length, translationsCount: Object.keys(translations).length });
 
-  return {
-    id: ddtId,
-    label: rootLabel || 'Data',
-    mainData: assembledMains,
-    translations: { en: translations },
-    v2Draft: getAllV2Draft(),
-  };
+    const result = {
+      id: ddtId,
+      label: rootLabel || 'Data',
+      mainData: assembledMains,
+      translations: { en: translations },
+      v2Draft: getAllV2Draft(),
+    };
+    
+    console.log('[assembleFinalDDT][RESULT]', { id: result.id, label: result.label, mainsCount: result.mainData.length });
+    return result;
+  } catch (err) {
+    console.error('[assembleFinalDDT][FATAL_ERROR]', err);
+    throw err;
+  }
 }
 
 

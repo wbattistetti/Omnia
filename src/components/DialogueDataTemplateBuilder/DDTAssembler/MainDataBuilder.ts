@@ -21,6 +21,16 @@ export function buildMainDataNodeWithSubData(
   stepMessagesWithSubData: SubDataStepMessages,
   translations: Record<string, string>
 ) {
+  console.log('[MainDataBuilder][buildMainDataNodeWithSubData]', {
+    ddtId,
+    hasDataNode: !!dataNode,
+    dataNodeKeys: dataNode ? Object.keys(dataNode) : [],
+    label: dataNode?.label,
+    name: dataNode?.name,
+    variable: dataNode?.variable,
+    type: dataNode?.type
+  });
+  
   // Normalize and enrich constraints, add prompt translations
   const constraints = enrichAndTranslateConstraints(Array.isArray(dataNode.constraints) ? dataNode.constraints : [], ddtId, translations);
 
@@ -67,10 +77,21 @@ export function buildMainDataNodeWithSubData(
     steps,
     subData,
   };
-  // Always set label and id for mainData
+  // Always set label, id, and icon for mainData
   mainData.label = dataNode.label || dataNode.variable || dataNode.name || 'Subdata';
   mainData.id = dataNode.id || uuidv4();
   if (dataNode.variable) mainData.variable = dataNode.variable;
+  if (dataNode.icon) mainData.icon = dataNode.icon;  // ✅ Preserve icon from AI
+  
+  console.log('[MainDataBuilder][result]', {
+    ddtId,
+    assignedLabel: mainData.label,
+    usedFallback: mainData.label === 'Subdata',
+    hadLabel: !!dataNode.label,
+    hadVariable: !!dataNode.variable,
+    hadName: !!dataNode.name
+  });
+  
   // Final clean log for the full node (including subData)
   return mainData;
 }

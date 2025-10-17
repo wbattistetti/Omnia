@@ -10,8 +10,9 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps){
     id: `temp_ddt_${act.id}`,
     label: act.label || 'Data',
     _userLabel: act.label,  // Preserve user's original input for header display
+    _sourceAct: { id: act.id, label: act.label, type: act.type },  // Preserve act info for header display
     mainData: []
-  }), [act.id, act.label]);
+  }), [act.id, act.label, act.type]);
   
   // When ResponseEditor completes wizard and has a final DDT:
   // 1. Close ActEditorOverlay (this component)

@@ -39,6 +39,16 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   const isMainIncluded = (idx: number) => includedMains[idx] !== false;
   const toggleMainInclude = (idx: number, v: boolean) => setIncludedMains(prev => ({ ...prev, [idx]: v }));
 
+  // Expanded state for accordion collapse/expand
+  const [expandedMainIndex, setExpandedMainIndex] = React.useState<number | null>(selectedMainIndex);
+  
+  // Sync expanded state when external selection changes
+  React.useEffect(() => {
+    if (selectedMainIndex !== expandedMainIndex) {
+      setExpandedMainIndex(selectedMainIndex);
+    }
+  }, [selectedMainIndex]);
+
   const safeSelectedSubIndex = typeof selectedSubIndex === 'number' && !isNaN(selectedSubIndex) ? selectedSubIndex : undefined;
 
   // Keyboard navigation between mains and subs
@@ -244,12 +254,35 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                 <span
                   role="button"
                   tabIndex={0}
-                  title={(selectedMainIndex === idx && selectedSubIndex == null) ? 'Collapse' : 'Expand'}
-                  onClick={(e) => { e.stopPropagation(); if (selectedMainIndex === idx && selectedSubIndex == null) { onSelectSub && onSelectSub(0); } else { onSelectMain(idx); onSelectSub && onSelectSub(undefined); } }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); if (selectedMainIndex === idx && selectedSubIndex == null) { onSelectSub && onSelectSub(0); } else { onSelectMain(idx); onSelectSub && onSelectSub(undefined); } } }}
+                  title={(expandedMainIndex === idx) ? 'Collapse' : 'Expand'}
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    if (expandedMainIndex === idx) { 
+                      // Accordion già espanso → collassa (chiudi)
+                      setExpandedMainIndex(null);
+                    } else { 
+                      // Accordion chiuso → espandi e seleziona
+                      setExpandedMainIndex(idx);
+                      onSelectMain(idx); 
+                      onSelectSub && onSelectSub(undefined); 
+                    } 
+                  }}
+                  onKeyDown={(e) => { 
+                    if (e.key === 'Enter' || e.key === ' ') { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                      if (expandedMainIndex === idx) { 
+                        setExpandedMainIndex(null);
+                      } else { 
+                        setExpandedMainIndex(idx);
+                        onSelectMain(idx); 
+                        onSelectSub && onSelectSub(undefined); 
+                      } 
+                    } 
+                  }}
                   style={{ marginLeft: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0, display: 'inline-flex' }}
                 >
-                  <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: `rotate(${(selectedMainIndex === idx && selectedSubIndex == null) ? 90 : 0}deg)`, transition: 'transform 0.15s' }} aria-hidden>
+                  <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: `rotate(${(expandedMainIndex === idx) ? 90 : 0}deg)`, transition: 'transform 0.15s' }} aria-hidden>
                     <polyline points="2,1 8,5 2,9" fill="none" stroke={borderColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
@@ -270,7 +303,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                 />
               </div>
             )}
-            {(selectedMainIndex === idx && subs.length > 0) && (
+            {(expandedMainIndex === idx && subs.length > 0) && (
               <div style={{ marginLeft: 36, marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {subs.map((sub: any, sidx: number) => {
                   const reqEffective = sub?.required !== false;
