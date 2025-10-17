@@ -251,14 +251,6 @@ function StylesView() {
 }
 
 export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode }: Props) {
-  console.log('[RightPanel][render]', {
-    mode,
-    width,
-    hasSelectedNode: !!selectedNode,
-    selectedNodeLabel: selectedNode?.label,
-    selectedNodeType: typeof selectedNode
-  });
-  
   const minWidth = 160;
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();

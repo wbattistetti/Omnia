@@ -2,6 +2,7 @@
 import React from 'react';
 import styles from './ActionItem.module.css';
 import { useDrag } from 'react-dnd';
+import { getEmptyImage } from 'react-dnd-html5-backend';
 import { DND_TYPE_VIEWER } from '../ResponseEditor/ActionRowDnDWrapper';
 
 const MIN_THUMBNAIL_WIDTH = 100;
@@ -37,28 +38,28 @@ interface ActionItemProps {
 }
 
 const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, color, description, primaryValue, parameters }) => {
-  const [{ isDragging }, dragRef] = useDrag({
+  const [{ isDragging }, dragRef, preview] = useDrag({
     type: DND_TYPE_VIEWER,
-    item: {
-      type: DND_TYPE_VIEWER,
-      action,
-      label,
-      icon: iconName,
-      color,
-      primaryValue,
-      parameters
+    item: () => {
+      return {
+        type: DND_TYPE_VIEWER,
+        action,
+        label,
+        icon: iconName,
+        color,
+        primaryValue,
+        parameters
+      };
     },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-    begin: () => {
-      console.log('[DnD][ActionItem][begin]', { label, iconName, actionId: action?.id });
-    },
-    end: (item, monitor) => {
-      const didDrop = monitor.didDrop();
-      console.log('[DnD][ActionItem][end]', { label, didDrop });
-    },
   });
+
+  // Nasconde il preview nativo del browser per evitare doppio rendering durante il drag
+  React.useEffect(() => {
+    preview(getEmptyImage(), { captureDraggingState: true });
+  }, [preview]);
 
   return (
     <div 
@@ -66,16 +67,19 @@ const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, 
       className={styles.item}
       style={{
         opacity: isDragging ? 0.5 : 1,
-        cursor: 'grab',
+        cursor: isDragging ? 'grabbing' : 'grab',
         border: isDragging ? '2px solid #2563eb' : undefined,
         background: isDragging ? '#e0e7ff' : undefined,
-        marginBottom: 4
+        marginBottom: 4,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        touchAction: 'none'
       }}
     >
-      <div className={`${color} ${styles.icon}`}>
+      <div className={`${color} ${styles.icon}`} style={{ pointerEvents: 'none' }}>
         {icon}
       </div>
-      <span className={styles.label}>{label}</span>
+      <span className={styles.label} style={{ pointerEvents: 'none' }}>{label}</span>
     </div>
   );
 };

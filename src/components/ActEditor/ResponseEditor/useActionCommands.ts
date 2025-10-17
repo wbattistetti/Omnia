@@ -35,22 +35,14 @@ export default function useActionCommands(setLocalModel: React.Dispatch<React.Se
   }, [setLocalModel]);
 
   const dropFromViewer = React.useCallback((incoming: any, to: { escalationIdx: number; actionIdx: number }, position: Position) => {
-    console.log('[useActionCommands][dropFromViewer]', { 
-      incoming, 
-      to, 
-      position,
-      incomingKeys: Object.keys(incoming || {})
-    });
+    console.log('[useActionCommands][dropFromViewer]', { to, position });
     setLocalModel(prev => {
-      console.log('[useActionCommands][dropFromViewer] prev model:', prev);
       const next = prev.map(esc => ({ ...esc, actions: [...esc.actions] }));
       const newAction = normalizeActionFromViewer(incoming);
-      console.log('[useActionCommands][dropFromViewer] normalized action:', newAction);
       let insertIdx = to.actionIdx;
       if (position === 'after') insertIdx++;
-      console.log('[useActionCommands][dropFromViewer] inserting at:', insertIdx, 'in escalation:', to.escalationIdx);
       next[to.escalationIdx].actions.splice(insertIdx, 0, newAction);
-      console.log('[useActionCommands][dropFromViewer] new model:', next);
+      console.log('[useActionCommands] Action added at', insertIdx);
       return next;
     });
   }, [setLocalModel]);

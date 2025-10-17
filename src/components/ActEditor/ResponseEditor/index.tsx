@@ -11,6 +11,7 @@ import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
 import NLPExtractorProfileEditor from './NLPExtractorProfileEditor';
 import EditorHeader from '../../common/EditorHeader';
 import { getAgentActVisualsByType } from '../../Flowchart/actVisuals';
+import ActionDragLayer from './ActionDragLayer';
 import {
   getMainDataList,
   getSubDataList,
@@ -18,22 +19,6 @@ import {
 } from './ddtSelectors';
 
 export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
-  // DEBUG: Log every render to detect duplicate mounts
-  const mountId = useRef(Math.random().toString(36).slice(2, 9));
-  console.log(`[RE][MOUNT] ResponseEditor instance ${mountId.current}`, {
-    ddtId: ddt?.id || ddt?._id,
-    ddtLabel: ddt?.label,
-    mainsCount: Array.isArray(ddt?.mainData) ? ddt.mainData.length : 'not-array',
-    stack: new Error().stack?.split('\n').slice(1, 4).join('\n')
-  });
-  
-  useEffect(() => {
-    console.log(`[RE][EFFECT] Instance ${mountId.current} mounted`);
-    return () => {
-      console.log(`[RE][UNMOUNT] Instance ${mountId.current} unmounting`);
-    };
-  }, []);
-  
   // Font zoom (Ctrl+wheel) like sidebar
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 24;
@@ -137,7 +122,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   useEffect(() => {
     // Don't sync from prop if wizard owns the data
     if (wizardOwnsDataRef.current) {
-      console.log('[RE][sync] Skipping sync - wizard owns data');
       return;
     }
 
@@ -208,12 +192,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   // Priority: act.label (user input) > fallback "Response Editor"
   // Priority: act.label (from ActEditorOverlay) > localDDT._userLabel (preserved original) > fallback
   const headerTitle = act?.label || (localDDT as any)?._userLabel || 'Response Editor';
-  console.log('[RE][header]', { 
-    actLabel: act?.label, 
-    ddtUserLabel: (localDDT as any)?._userLabel,
-    ddtLabel: localDDT?.label, 
-    headerTitle 
-  });
   
   const saveRightMode = (m: RightPanelMode) => {
     setRightMode(m);
@@ -251,28 +229,11 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const selectedNode = useMemo(() => {
     const main = mainList[selectedMainIndex];
     if (!main) {
-      console.log('[RE][selectedNode] No main', { selectedMainIndex, mainListLength: mainList.length });
       return null;
     }
-    console.log('[RE][selectedNode] Main node', {
-      selectedMainIndex,
-      mainLabel: main?.label,
-      hasSteps: !!main?.steps,
-      stepsType: Array.isArray(main?.steps) ? 'array' : (main?.steps ? 'object' : 'none'),
-      stepsKeys: main?.steps ? (Array.isArray(main?.steps) ? main.steps.map((s:any) => s?.type) : Object.keys(main.steps)) : [],
-      hasMessages: !!main?.messages,
-      messageKeys: Object.keys(main?.messages || {})
-    });
-    
     if (selectedSubIndex == null) return main;
     const subList = getSubDataList(main);
     const sub = subList[selectedSubIndex] || main;
-    console.log('[RE][selectedNode] Sub node', {
-      selectedSubIndex,
-      subLabel: sub?.label,
-      hasSteps: !!sub?.steps,
-      hasMessages: !!sub?.messages
-    });
     return sub;
   }, [mainList, selectedMainIndex, selectedSubIndex]);
 
@@ -299,14 +260,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   React.useEffect(() => {
     try {
       if (localStorage.getItem('debug.reopen') === '1') {
-        const main = mainList[selectedMainIndex];
-        const sub = selectedSubIndex == null ? null : (getSubDataList(main) || [])[selectedSubIndex];
-        console.log('[RE][selection]', {
-          main: main?.label,
-          sub: sub?.label || null,
-          step: selectedStepKey,
-          availableSteps: stepKeys,
-        });
+        // Selection changed, could track analytics here if needed
       }
     } catch {}
   }, [mainList, selectedMainIndex, selectedSubIndex, selectedStepKey, stepKeys]);
@@ -463,66 +417,43 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         color="orange"
       />
       
-      {/* Contenuto: sempre con RightPanel per permettere DnD anche durante wizard */}
+      {/* Contenuto */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       {showWizard ? (
-        /* Wizard + RightPanel side-by-side */
-        <>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <DDTWizard
-              initialDDT={localDDT}
-              onCancel={onClose || (() => {})}
-              onComplete={(finalDDT) => {
-                const coerced = coercePhoneKind(finalDDT);
-                
-                // If parent provided onWizardComplete, delegate to it (DDTHostAdapter case)
-                if (onWizardComplete) {
-                  console.log('[RE][wizard.complete] Delegating to onWizardComplete');
-                  onWizardComplete(coerced);
-                  return;
-                }
-                
-                // Otherwise, handle locally (direct DDTManager case)
-                console.log('[RE][wizard.complete] Handling locally with replaceSelectedDDT');
-                // Set flag to prevent auto-reopen
-                wizardOwnsDataRef.current = true;
-                
-                setLocalDDT(coerced);
-                try { replaceSelectedDDT(coerced); } catch {}
-                
-                // Release ownership after a brief delay
-                setTimeout(() => {
-                  wizardOwnsDataRef.current = false;
-                }, 100);
-                
-                // Close wizard and reset UI to show StepEditor (not MessageReview)
-                setShowWizard(false);
-                setRightMode('actions'); // Force show StepEditor with StepsStrip
-                setSelectedStepKey('start'); // Start with first step
-              }}
-              startOnStructure={false}
-            />
-          </div>
-          {/* RightPanel visible during wizard for drag & drop */}
-          {(() => {
-            console.log('[RE][wizard.render] Mounting RightPanel for DnD', {
-              rightMode,
-              rightWidth
-            });
-            return (
-              <RightPanel
-                mode={rightMode}
-                width={rightWidth}
-                onWidthChange={setRightWidth}
-                onStartResize={() => setDragging(true)}
-                dragging={dragging}
-                ddt={localDDT}
-                translations={localTranslations}
-                selectedNode={selectedNode}
-              />
-            );
-          })()}
-        </>
+        /* Full-screen wizard without RightPanel */
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <DDTWizard
+            initialDDT={localDDT}
+            onCancel={onClose || (() => {})}
+            onComplete={(finalDDT) => {
+              const coerced = coercePhoneKind(finalDDT);
+              
+              // If parent provided onWizardComplete, delegate to it (DDTHostAdapter case)
+              if (onWizardComplete) {
+                onWizardComplete(coerced);
+                return;
+              }
+              
+              // Otherwise, handle locally (direct DDTManager case)
+              // Set flag to prevent auto-reopen
+              wizardOwnsDataRef.current = true;
+              
+              setLocalDDT(coerced);
+              try { replaceSelectedDDT(coerced); } catch {}
+              
+              // Release ownership after a brief delay
+              setTimeout(() => {
+                wizardOwnsDataRef.current = false;
+              }, 100);
+              
+              // Close wizard and reset UI to show StepEditor (not MessageReview)
+              setShowWizard(false);
+              setRightMode('actions'); // Force show ActionList
+              setSelectedStepKey('start'); // Start with first step
+            }}
+            startOnStructure={false}
+          />
+        </div>
       ) : (
         /* Normal editor layout with 3 panels (no header, already shown above) */
       <>
@@ -733,15 +664,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                 </div>
               </div>
             </div>
-            {!showSynonyms && (() => {
-              console.log('[RE][render] Mounting RightPanel', {
-                showSynonyms,
-                rightMode,
-                rightWidth,
-                hasSelectedNode: !!selectedNode,
-                selectedNodeLabel: selectedNode?.label
-              });
-              return (
+            {!showSynonyms && (
                 <RightPanel
                   mode={rightMode}
                   width={rightWidth}
@@ -752,13 +675,15 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                   translations={localTranslations}
                   selectedNode={selectedNode}
                 />
-              );
-            })()}
+            )}
           </div>
         </div>
       </>
       )}
       </div>
+      
+      {/* Drag layer for visual feedback when dragging actions */}
+      <ActionDragLayer />
     </div>
   );
 } 

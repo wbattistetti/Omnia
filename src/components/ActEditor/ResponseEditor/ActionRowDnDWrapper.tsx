@@ -32,13 +32,13 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
 
   const [{ isDragging }, drag] = useDrag({
     type: DND_TYPE,
-    item: { type: DND_TYPE, escalationIdx, actionIdx, action },
+    item: () => {
+      console.log('[DnD][ActionRow][begin]', { escalationIdx, actionIdx, label: action?.label || action?.actionId });
+      return { type: DND_TYPE, escalationIdx, actionIdx, action };
+    },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-    begin: () => {
-      console.log('[DnD][ActionRow][begin]', { escalationIdx, actionIdx, label: action?.label || action?.actionId });
-    },
     end: (item, monitor) => {
       console.log('[DnD][ActionRow][end]', { didDrop: monitor.didDrop() });
     },
@@ -74,9 +74,6 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
       }
       setPreviewPosition(show ? position : undefined);
       setCanShowPreview(show);
-      if (show) {
-        console.log('[DnD hover]', item.type, '-> esc', escalationIdx, 'row', actionIdx, 'pos', position);
-      }
     },
     drop: (item: any, monitor) => {
       if (!ref.current) return;
@@ -100,15 +97,8 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
           onDropAction(item, { escalationIdx, actionIdx }, position);
         }
       } else if (allowViewerDrop && item.type === DND_TYPE_VIEWER) {
-        console.log('[DnD drop:new]', { 
-          actionLabel: item.label, 
-          actionId: item.action?.id,
-          to: { escalationIdx, actionIdx }, 
-          position,
-          hasCallback: !!onDropNewAction
-        });
+        console.log('[DnD drop:new]', item.label, '→', escalationIdx, actionIdx, position);
         if (onDropNewAction) {
-          console.log('[DnD][drop] Calling onDropNewAction with action:', item.action);
           onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
         } else {
           console.warn('[DnD][drop] onDropNewAction NOT PROVIDED!');

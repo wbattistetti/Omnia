@@ -471,15 +471,6 @@ export const AppContent: React.FC<AppContentProps> = ({
     }
   }, [showAllProjectsModal, fetchAllProjects]);
 
-  // DEBUG: Log render state
-  console.log('[AppContent][RENDER]', {
-    appState,
-    hasSelectedDDT: !!selectedDDT,
-    selectedDDTId: selectedDDT?.id || selectedDDT?._id,
-    selectedDDTLabel: selectedDDT?.label,
-    hasNonInteractiveEditor: !!nonInteractiveEditor
-  });
-
   return (
     <ActEditorProvider>
     <div className="min-h-screen" style={{ position: 'relative' }}>
@@ -714,27 +705,19 @@ export const AppContent: React.FC<AppContentProps> = ({
             {/* Act Editor Host overlay (always listens via context) */}
             <ActEditorOverlay />
 
-            {selectedDDT && (
-              (() => {
-                console.log('[AppContent][RENDER] Mounting ResizableResponseEditor', {
-                  ddtId: selectedDDT?.id || selectedDDT?._id,
-                  ddtLabel: selectedDDT?.label,
-                  hasSelectedDDT: !!selectedDDT,
-                  stack: new Error().stack?.split('\n').slice(1, 3).join('\n')
-                });
-                const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);
-                const fallback = selectedDDT.translations;
-                const translationsToUse = Object.keys(t || {}).length > 0 ? t : fallback;
-                return (
-                  <ResizableResponseEditor
-                    ddt={selectedDDT}
-                    translations={translationsToUse}
-                    lang="it"
-                    onClose={closeDDT}
-                  />
-                );
-              })()
-            )}
+            {selectedDDT && (() => {
+              const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);
+              const fallback = selectedDDT.translations;
+              const translationsToUse = Object.keys(t || {}).length > 0 ? t : fallback;
+              return (
+                <ResizableResponseEditor
+                  ddt={selectedDDT}
+                  translations={translationsToUse}
+                  lang="it"
+                  onClose={closeDDT}
+                />
+              );
+            })()}
             {!selectedDDT && nonInteractiveEditor && (
               <ResizableNonInteractiveEditor
                 title={nonInteractiveEditor.title}

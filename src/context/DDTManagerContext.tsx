@@ -49,34 +49,7 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   };
 
   const openDDT = (ddt: any) => {
-    console.log('[DDTManager][openDDT] CALLED', {
-      ddtId: ddt?.id || ddt?._id,
-      ddtLabel: ddt?.label,
-      stack: new Error().stack?.split('\n').slice(1, 5).join('\n')
-    });
     try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
-    // Deep diagnostic: summarize incoming DDT to compare first vs second open
-    try {
-      const summarize = (x: any) => {
-        const mains: any[] = Array.isArray(x?.mainData) ? x.mainData : [];
-        return mains.map((m: any) => {
-          const steps = m?.steps;
-          const shape = steps ? (Array.isArray(steps) ? 'array' : 'object') : 'none';
-          const stepKeys = shape === 'object' ? Object.keys(steps || {}) : (shape === 'array' ? (steps as any[]).map((g:any)=>g?.type).filter(Boolean) : []);
-          const msgKeys = Object.keys(m?.messages || {});
-          const subs = Array.isArray(m?.subData) ? m.subData : [];
-          const subsSummary = subs.slice(0, 3).map((s: any) => {
-            const sSteps = s?.steps;
-            const sShape = sSteps ? (Array.isArray(sSteps) ? 'array' : 'object') : 'none';
-            const sStepKeys = sShape === 'object' ? Object.keys(sSteps || {}) : (sShape === 'array' ? (sSteps as any[]).map((g:any)=>g?.type).filter(Boolean) : []);
-            const sMsgKeys = Object.keys(s?.messages || {});
-            return { label: s?.label, shape: sShape, stepCount: sStepKeys.length, msgCount: sMsgKeys.length };
-          });
-          return { label: m?.label, shape, stepCount: stepKeys.length, msgCount: msgKeys.length, subs: subsSummary };
-        });
-      };
-      console.log('[RE][openDDT.summary]', summarize(ddt));
-    } catch {}
     // Preserve steps if we already have an enriched copy of the same DDT in memory
     const sameId = (a: any, b: any) => !!a && !!b && ((a.id && b.id && a.id === b.id) || (a._id && b._id && a._id === b._id));
     const byLabel = (arr: any[]) => {
@@ -175,14 +148,7 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   };
 
   // DEBUG: Track every selectedDDT change
-  useEffect(() => {
-    console.log('[DDTManager][selectedDDT CHANGED]', {
-      hasSelected: !!selectedDDT,
-      ddtId: selectedDDT?.id || selectedDDT?._id,
-      ddtLabel: selectedDDT?.label,
-      mainsCount: Array.isArray(selectedDDT?.mainData) ? selectedDDT.mainData.length : 'not-array'
-    });
-  }, [selectedDDT]);
+  // Track selectedDDT changes if needed for analytics
   
   // Carica i DDT all'inizializzazione
   useEffect(() => {
