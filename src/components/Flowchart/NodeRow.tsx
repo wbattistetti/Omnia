@@ -213,8 +213,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     if (isEditing) setShowIcons(false);
   }, [isEditing]);
 
-  // Compute buffer after deps are defined
-  const bufferRect = useOverlayBuffer(labelRef, iconPos, showIcons);
+  // Compute buffer after deps are defined - passa overlayRef per calcolo preciso
+  const bufferRect = useOverlayBuffer(labelRef, iconPos, showIcons, overlayRef);
   // Debug: log overlay area changes safely (guard undefined)
   useEffect(() => {
   }, [bufferRect, showIcons]);
@@ -811,7 +811,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   return (
     <>
-      {/* Zona buffer invisibile per tolleranza spaziale */}
+      {/* Zona buffer ESTESA per tolleranza spaziale: riga + toolbar + 7px padding */}
       {bufferRect && showIcons && !showCreatePicker && !isEditing && createPortal(
         <div
           style={{
@@ -820,11 +820,20 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             left: bufferRect.left,
             width: bufferRect.width,
             height: bufferRect.height,
-            zIndex: 500, // below toolbar buttons
-            pointerEvents: 'none', // never block clicks on toolbar
+            zIndex: 499, // Sotto la toolbar (1000) ma sopra il contenuto normale
+            pointerEvents: 'auto', // Cattura hover per mantenere toolbar visibile
             background: 'transparent',
+            // Debug: mostra l'area (rimuovere in produzione)
+            // border: '1px dashed rgba(0, 255, 0, 0.3)',
           }}
-          // keep only for debugging; since pointerEvents is none, these won't fire
+          onMouseEnter={() => {
+            console.log('[HoverArea] Mouse entered extended area');
+            toolbarSM.row.onEnter(); // Mantieni toolbar visibile
+          }}
+          onMouseLeave={(e) => {
+            console.log('[HoverArea] Mouse left extended area');
+            toolbarSM.row.onLeave(e as any);
+          }}
         />,
         document.body
       )}

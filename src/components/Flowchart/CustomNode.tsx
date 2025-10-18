@@ -64,6 +64,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [isHoveredNode, setIsHoveredNode] = useState(false);
   const [isHoverHeader, setIsHoverHeader] = useState(false);
 
+  // 🔍 DEBUG: Monitor hover state changes
+  React.useEffect(() => {
+    console.log('[🔍 STATE] isHoveredNode changed:', isHoveredNode, { nodeId: id, nodeTitle });
+  }, [isHoveredNode, id, nodeTitle]);
+
   const hasTitle = (nodeTitle || '').trim().length > 0;
   // Header visibile se c'è un titolo oppure se l'utente ha richiesto l'editing del titolo
   const showHeader = hasTitle || isEditingNode;
@@ -474,33 +479,39 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Do NOT auto-append an extra row at mount; start with a single textarea only.
 
   return (
-    <div
-      ref={rootRef}
-      className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
-      style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content' }}
-      tabIndex={-1}
-      onMouseEnter={() => { setIsHoveredNode(true); }}
-      onMouseLeave={() => { setIsHoveredNode(false); }}
-      onMouseDownCapture={(e) => {
-        // Permetti di trascinare il nodo prendendo il corpo (evita solo l'input riga)
-        const t = e.target as HTMLElement;
-        const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-        if (!isInput) {
-          // Non bloccare la propagazione: lascia passare a React Flow per il drag
-          return;
-        }
-        // Se stai interagendo con l'input riga, non trascinare
-        e.stopPropagation();
-      }}
-      
-      onMouseUpCapture={(e) => {
-        if (!editingRowId) return;
-        const t = e.target as HTMLElement;
-        const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-        if (isInput) { e.stopPropagation(); }
-      }}
-      onFocusCapture={() => { /* no-op: lasciamo passare focus per drag header */ }}
-    >
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <div
+        ref={rootRef}
+        className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
+        style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content', position: 'relative', zIndex: 1 }}
+        tabIndex={-1}
+        onMouseEnter={() => {
+          console.log('[🎯 HOVER] Node ENTER - activating hover + extended area', { nodeId: id, nodeTitle });
+          setIsHoveredNode(true);
+        }}
+        onMouseLeave={() => {
+          console.log('[🎯 HOVER] Node LEAVE - checking if entering extended area', { nodeId: id });
+        }}
+        onMouseDownCapture={(e) => {
+          // Permetti di trascinare il nodo prendendo il corpo (evita solo l'input riga)
+          const t = e.target as HTMLElement;
+          const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
+          if (!isInput) {
+            // Non bloccare la propagazione: lascia passare a React Flow per il drag
+            return;
+          }
+          // Se stai interagendo con l'input riga, non trascinare
+          e.stopPropagation();
+        }}
+        
+        onMouseUpCapture={(e) => {
+          if (!editingRowId) return;
+          const t = e.target as HTMLElement;
+          const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
+          if (isInput) { e.stopPropagation(); }
+        }}
+        onFocusCapture={() => { /* no-op: lasciamo passare focus per drag header */ }}
+      >
       {/* Header visibile solo se esiste un titolo esplicito */}
       {showHeader && (
         <div
@@ -526,9 +537,23 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       </div>
       )}
 
-      {/* Toolbar del nodo: sempre visibile sopra il nodo (sopra l'header se presente) quando hover/selected */}
+      {/* Toolbar del nodo: visibile SOPRA il nodo, allineata a DESTRA */}
       {(isHoveredNode || selected) && !isEditingNode && !isHoverHeader && (
-        <div style={{ position: 'absolute', right: 0, bottom: 'calc(100% + 1px)' }}>
+        <div 
+          style={{ 
+            position: 'absolute', 
+            right: 0,        // Allineata al bordo destro del nodo
+            bottom: '100%',  // Sopra il nodo
+            marginBottom: 8, // Spazio tra toolbar e nodo
+            zIndex: 10 
+          }}
+          onMouseEnter={() => {
+            console.log('[🛠️ TOOLBAR NODO] Mouse entered toolbar', { nodeId: id });
+          }}
+          onMouseLeave={() => {
+            console.log('[🛠️ TOOLBAR NODO] Mouse left toolbar', { nodeId: id });
+          }}
+        >
           <NodeToolbar onDelete={handleDeleteNode} onEditTitle={() => setIsEditingNode(true)} />
         </div>
       )}
@@ -585,6 +610,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
         />
       )}
+    </div>
     </div>
   );
 };
