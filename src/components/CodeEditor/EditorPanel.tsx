@@ -15,12 +15,12 @@ const TEMPLATE = `// Describe below, in detail, when the condition should be TRU
 // Now - vars["Agent asks for user's name.DateOfBirth"] > 18 years
 `;
 
-export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [] }: { code: any; onChange: (s: string) => void; fontSize?: number; varKeys?: string[] }) {
+export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [], language = 'javascript' }: { code: any; onChange: (s: string) => void; fontSize?: number; varKeys?: string[]; language?: string }) {
   const safeCode: string = typeof code === 'string' ? code : (code == null ? '' : (() => { try { return JSON.stringify(code, null, 2); } catch { return String(code); } })());
   return (
     <div className="w-full h-full border border-slate-700 rounded">
       <MonacoEditor
-        language="javascript"
+        language={language}
         theme="vs-dark"
         value={safeCode}
         onChange={(v: string) => onChange(v || '')}

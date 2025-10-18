@@ -8,6 +8,27 @@ import PostProcessEditor from './PostProcessEditor';
 import { Calendar, Mail, Phone, Hash, Globe, MapPin, User, FileText, CreditCard, CarFront as Car, Badge, Landmark, Type as TypeIcon, ChevronDown, Plus, ChevronsRight, Wrench, BarChart2 } from 'lucide-react';
 import nlpTypesConfig from '../../../../config/nlp-types.json';
 
+// 🎯 Custom Hooks
+import { useNotes } from './hooks/useNotes';
+import { useEditorState } from './hooks/useEditorState';
+
+// 🎨 Config Components
+import KindSelector from './Config/KindSelector';
+import ConfidenceInput from './Config/ConfidenceInput';
+import WaitingMessagesConfig from './Config/WaitingMessagesConfig';
+
+// 📝 Note Components
+import NoteButton from './CellNote/NoteButton';
+import NoteEditor from './CellNote/NoteEditor';
+import NoteDisplay from './CellNote/NoteDisplay';
+import NoteSeparator from './CellNote/NoteSeparator';
+
+// ✏️ Inline Editors
+import RegexInlineEditor from './InlineEditors/RegexInlineEditor';
+import ExtractorInlineEditor from './InlineEditors/ExtractorInlineEditor';
+import NERInlineEditor from './InlineEditors/NERInlineEditor';
+import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
+
 // 🎨 Colori centralizzati per extractors
 const EXTRACTOR_COLORS = {
   regex: '#d1fae5',        // Verde chiaro
@@ -145,47 +166,8 @@ export default function NLPExtractorProfileEditor({
   // Default: Auto unchecked to avoid flipping kind -> 'auto' on mount
   const [lockKind, setLockKind] = React.useState<boolean>(false);
   const [kind, setKind] = React.useState<string>(initial.kind);
-  const KIND_OPTIONS = React.useMemo(() => {
-    const iconColor = '#9ca3af';
-    const mk = (value: string, label: string, IconCmp: any) => ({ value, label, Icon: () => <IconCmp size={14} color={iconColor} /> });
-    const opts = [
-      mk('address', 'address', MapPin),
-      mk('city', 'city', MapPin),
-      mk('country', 'country', Globe),
-      mk('credit_card', 'credit card', CreditCard),
-      mk('date', 'date', Calendar),
-      mk('email', 'email', Mail),
-      mk('gender', 'gender', User),
-      mk('iban', 'iban', Landmark),
-      mk('license_plate', 'license plate', Car),
-      mk('name', 'name', TypeIcon),
-      mk('number', 'number', Hash),
-      mk('phone', 'phone', Phone),
-      mk('province', 'province', MapPin),
-      mk('street', 'street', MapPin),
-      mk('vat', 'vat', Badge),
-      mk('zip', 'zip', Hash),
-      mk('generic', 'generic', FileText),
-    ];
-    return opts.sort((a, b) => a.label.localeCompare(b.label));
-  }, []);
-  const selectedKindOpt = React.useMemo(() => KIND_OPTIONS.find(o => o.value === kind) || KIND_OPTIONS[0], [KIND_OPTIONS, kind]);
-  const [kindOpen, setKindOpen] = React.useState(false);
-  const kindRef = React.useRef<HTMLDivElement | null>(null);
-  React.useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (kindRef.current && !kindRef.current.contains(e.target as Node)) setKindOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
   const [synonymsText, setSynonymsText] = React.useState<string>(toCommaList(initial.synonyms));
   const [regex, setRegex] = React.useState<string>(initial.regex || '');
-  const [regexAiMode, setRegexAiMode] = React.useState<boolean>(false);
-  const [regexAiPrompt, setRegexAiPrompt] = React.useState<string>('');
-  const [regexBackup, setRegexBackup] = React.useState<string>('');
-  const [generatingRegex, setGeneratingRegex] = React.useState<boolean>(false);
-  const regexInputRef = React.useRef<HTMLInputElement>(null);
   const [formatText, setFormatText] = React.useState<string>(toCommaList(initial.formatHints));
   const [examplesList, setExamplesList] = React.useState<string[]>(Array.isArray(initial.examples) ? initial.examples : []);
   const [minConf, setMinConf] = React.useState<number>(initial.minConfidence || 0.6);
@@ -227,12 +209,29 @@ export default function NLPExtractorProfileEditor({
   const [reportOpen, setReportOpen] = React.useState<boolean>(false);
   const [jsonError, setJsonError] = React.useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = React.useState<'regex' | 'extractor' | 'post' | null>(null);
-  const [activeEditor, setActiveEditor] = React.useState<'regex' | 'extractor' | 'ner' | 'llm' | null>(null);
   
-  // Note system: cellNotes[rowIndex][column] = note text
-  const [cellNotes, setCellNotes] = React.useState<Record<string, string>>({});
-  const [editingNote, setEditingNote] = React.useState<string | null>(null);
-  const [hoveredCell, setHoveredCell] = React.useState<string | null>(null);
+  // 🎯 Use custom hooks
+  const { 
+    notes: cellNotes, 
+    getNote, 
+    hasNote, 
+    addNote, 
+    deleteNote, 
+    startEditing, 
+    stopEditing, 
+    isEditing, 
+    setHovered, 
+    isHovered 
+  } = useNotes();
+  
+  const { 
+    activeEditor, 
+    openEditor, 
+    closeEditor, 
+    toggleEditor, 
+    isEditorOpen, 
+    isAnyEditorOpen 
+  } = useEditorState();
   
   const [endpointBase] = React.useState<string>(() => {
     try {
@@ -882,100 +881,26 @@ export default function NLPExtractorProfileEditor({
       {/* Header compatto + tab editor */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) 80px 1fr', alignItems: 'end', gap: 12 }}>
-          {/* Kind stretto */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>Kind</label>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, opacity: 0.8 }}>
-                <input type="checkbox" checked={lockKind} onChange={(e) => { const v = e.target.checked; setLockKind(v); setKind(v ? 'auto' : inferredKind); }} /> Auto
-                  </label>
+          {/* Kind Selector Component */}
+          <KindSelector
+            kind={kind}
+            setKind={setKind}
+            lockKind={lockKind}
+            setLockKind={setLockKind}
+            inferredKind={inferredKind}
+          />
+          
+          {/* Confidence Component */}
+          <ConfidenceInput value={minConf} onChange={setMinConf} />
+          
+          {/* Waiting Messages Component */}
+          <WaitingMessagesConfig
+            waitingNER={waitingEsc1}
+            setWaitingNER={setWaitingEsc1}
+            waitingLLM={waitingEsc2}
+            setWaitingLLM={setWaitingEsc2}
+          />
                 </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} ref={kindRef}>
-              {lockKind ? (
-                <select value={'auto'} disabled style={{ flex: 1, padding: 6, border: '1px solid #ddd', borderRadius: 8, background: '#f3f4f6' }}>
-                  <option value="auto">auto</option>
-                </select>
-              ) : (
-                <div style={{ position: 'relative', flex: 1 }}>
-                  {/* ⚠️ Warning when kind='generic' */}
-                  <button 
-                    type="button" 
-                    onClick={() => setKindOpen(o => !o)} 
-                    style={{ 
-                      width: '100%', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 8, 
-                      padding: 6, 
-                      border: kind === 'generic' ? '2px solid #ef4444' : '1px solid #ddd', 
-                      borderRadius: 8, 
-                      background: kind === 'generic' ? '#fef2f2' : '#fff', 
-                      cursor: 'pointer',
-                      position: 'relative'
-                    }}
-                    title={kind === 'generic' ? '⚠️ L\'AI ha usato il tipo generico. Verifica se serve un tipo più specifico.' : undefined}
-                  >
-                    <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center' }}><selectedKindOpt.Icon /></span>
-                    <span style={{ flex: 1, textAlign: 'left', color: kind === 'generic' ? '#dc2626' : 'inherit', fontWeight: kind === 'generic' ? 600 : 400 }}>
-                      {selectedKindOpt.label}
-                      {kind === 'generic' && ' ⚠️'}
-                    </span>
-                    <ChevronDown size={14} color={kind === 'generic' ? '#dc2626' : '#9ca3af'} />
-                  </button>
-                  {kind === 'generic' && (
-                    <div style={{ 
-                      marginTop: 4, 
-                      padding: '6px 8px', 
-                      background: '#fef2f2', 
-                      border: '1px solid #fecaca', 
-                      borderRadius: 6, 
-                      fontSize: 11, 
-                      color: '#dc2626',
-                      display: 'flex',
-                      gap: 6,
-                      alignItems: 'flex-start'
-                    }}>
-                      <span style={{ flexShrink: 0 }}>⚠️</span>
-                      <span>L'AI ha usato il tipo <strong>generic</strong>. Verifica se serve un tipo più specifico (number, date, email, etc.).</span>
-                    </div>
-                  )}
-                  {kindOpen && (
-                    <div style={{ position: 'absolute', zIndex: 20, marginTop: 4, left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }}>
-                      {KIND_OPTIONS.map(opt => (
-                        <button key={opt.value} type="button" onClick={() => { setKind(opt.value); setKindOpen(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: opt.value === kind ? '#f3f4f6' : '#fff', border: 'none', cursor: 'pointer' }}>
-                          <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center' }}><opt.Icon /></span>
-                          <span style={{ textAlign: 'left' }}>{opt.label}</span>
-                        </button>
-                      ))}
-              </div>
-                  )}
-              </div>
-              )}
-            </div>
-          </div>
-          {/* Confidence compatto */}
-          <div>
-            <label style={{ fontSize: 12, opacity: 0.8 }}>Confidence</label>
-            <input type="number" min={0} max={1} step={0.05} value={minConf} onChange={(e) => setMinConf(parseFloat(e.target.value))} style={{ width: '100%', padding: 6, border: '1px solid #ddd', borderRadius: 8 }} />
-          </div>
-          {/* Waiting Messages Configuration */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 8, background: '#f0fdf4', borderRadius: 8 }}>
-            <div>
-              <label style={{ fontSize: 12, opacity: 0.8, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                <MessageCircle size={14} />
-                Waiting NER
-              </label>
-              <input value={waitingEsc1} onChange={(e) => setWaitingEsc1(e.target.value)} title="Testo mostrato all'utente mentre si attende il riconoscimento NER" style={{ width: '100%', padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6 }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, opacity: 0.8, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                <MessageCircle size={14} />
-                Waiting LLM
-              </label>
-              <input value={waitingEsc2} onChange={(e) => setWaitingEsc2(e.target.value)} title="Testo mostrato all'utente mentre si attende l'analisi LLM" style={{ width: '100%', padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6 }} />
-            </div>
-          </div>
-        </div>
         {/* OLD tab editors - now replaced by inline editors */}
         <div style={{ marginTop: 10, display: 'none' }}>
           {activeTab === 'regex' && (
@@ -1143,7 +1068,7 @@ export default function NLPExtractorProfileEditor({
                   </button>
                 )}
               </div>
-            </div>
+                </div>
           )}
           {activeTab === 'extractor' && (
             <NLPCompactEditor
@@ -1162,7 +1087,8 @@ export default function NLPExtractorProfileEditor({
         </div>
       </div>
 
-      {/* Tester full width */}
+      {/* 🎨 Tester section - hidden when inline editor is active */}
+      {!activeEditor && (
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Tester</div>
           {/* Controls in one line: input fills, icons right */}
@@ -1288,10 +1214,9 @@ export default function NLPExtractorProfileEditor({
               )}
             </div>
           </div>
-          {/* Grid - show only when no editor is active */}
-          {!activeEditor && (
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
+          {/* 🎨 Grid - already hidden by parent !activeEditor condition */}
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
               <thead>
                 <tr>
                   <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: '#f9fafb' }}>Frase</th>
@@ -1302,7 +1227,7 @@ export default function NLPExtractorProfileEditor({
                         <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>({COLUMN_LABELS.regex.tech})</span>
                       </div>
                       <button
-                        onClick={() => setActiveEditor(activeEditor === 'regex' ? null : 'regex')}
+                        onClick={() => toggleEditor('regex')}
                         title="Configure Regex"
                         style={{
                           background: activeEditor === 'regex' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
@@ -1326,7 +1251,7 @@ export default function NLPExtractorProfileEditor({
                         <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>({COLUMN_LABELS.deterministic.tech})</span>
                       </div>
                       <button
-                        onClick={() => setActiveEditor(activeEditor === 'extractor' ? null : 'extractor')}
+                        onClick={() => toggleEditor('extractor')}
                         title="Configure Extractor"
                         style={{
                           background: activeEditor === 'extractor' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
@@ -1350,7 +1275,7 @@ export default function NLPExtractorProfileEditor({
                         <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>({COLUMN_LABELS.ner.tech})</span>
                       </div>
                       <button
-                        onClick={() => setActiveEditor(activeEditor === 'ner' ? null : 'ner')}
+                        onClick={() => toggleEditor('ner')}
                         title="Configure NER"
                         style={{
                           background: activeEditor === 'ner' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
@@ -1374,7 +1299,7 @@ export default function NLPExtractorProfileEditor({
                         <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>({COLUMN_LABELS.llm.tech})</span>
                       </div>
                       <button
-                        onClick={() => setActiveEditor(activeEditor === 'llm' ? null : 'llm')}
+                        onClick={() => toggleEditor('llm')}
                         title="Configure LLM"
                         style={{
                           background: activeEditor === 'llm' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
@@ -1429,346 +1354,134 @@ export default function NLPExtractorProfileEditor({
                       </td>
                       <td 
                         style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.regex, position: 'relative', verticalAlign: 'top' }}
-                        onMouseEnter={() => setHoveredCell(`${i}-regex`)}
-                        onMouseLeave={() => setHoveredCell(null)}
+                        onMouseEnter={() => setHovered(i, 'regex')}
+                        onMouseLeave={() => setHovered(null, null)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ flex: 1 }}>
                             {(rr.regex || '—') + ms(rr.regexMs)}
                           </div>
-                          {(hoveredCell === `${i}-regex` || cellNotes[`${i}-regex`]) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingNote(editingNote === `${i}-regex` ? null : `${i}-regex`);
-                              }}
-                              title={cellNotes[`${i}-regex`] ? "Edit note" : "Add note"}
-                              style={{
-                                background: cellNotes[`${i}-regex`] ? '#3b82f6' : 'rgba(255,255,255,0.5)',
-                                border: 'none',
-                                borderRadius: 4,
-                                padding: 4,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                marginLeft: 4,
-                                flexShrink: 0
-                              }}
-                            >
-                              <MessageCircle size={12} color={cellNotes[`${i}-regex`] ? '#fff' : '#666'} />
-                            </button>
+                          {(isHovered(i, 'regex') || hasNote(i, 'regex')) && (
+                            <NoteButton
+                              hasNote={hasNote(i, 'regex')}
+                              onClick={() => isEditing(i, 'regex') ? stopEditing() : startEditing(i, 'regex')}
+                            />
                           )}
                         </div>
-                        {(cellNotes[`${i}-regex`] || editingNote === `${i}-regex`) && (
+                        {(getNote(i, 'regex') || isEditing(i, 'regex')) && (
                           <>
-                            <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
-                            {editingNote === `${i}-regex` ? (
-                              <div>
-                                <textarea
-                                  value={cellNotes[`${i}-regex`] || ''}
-                                  onChange={(e) => setCellNotes({...cellNotes, [`${i}-regex`]: e.target.value})}
-                                  placeholder="Add note..."
-                                  rows={2}
-                                  autoFocus
-                                  style={{
-                                    width: '100%',
-                                    padding: 4,
-                                    fontSize: 11,
-                                    border: '1px solid #ddd',
-                                    borderRadius: 4,
-                                    background: 'rgba(255,255,255,0.9)',
-                                    resize: 'vertical'
-                                  }}
-                                />
-                                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setEditingNote(null); }}
-                                    style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                  >
-                                    💾
-                                  </button>
-                                  {cellNotes[`${i}-regex`] && (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setCellNotes({...cellNotes, [`${i}-regex`]: ''}); setEditingNote(null); }}
-                                      style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                    >
-                                      🗑️
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setEditingNote(null); }}
-                                    style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                  >
-                                    ❌
-                                  </button>
-                                </div>
-                              </div>
+                            <NoteSeparator />
+                            {isEditing(i, 'regex') ? (
+                              <NoteEditor
+                                value={getNote(i, 'regex')}
+                                onSave={(text) => { addNote(i, 'regex', text); stopEditing(); }}
+                                onDelete={() => { deleteNote(i, 'regex'); stopEditing(); }}
+                                onCancel={stopEditing}
+                              />
                             ) : (
-                              <div style={{ fontSize: 11, fontStyle: 'italic', color: '#666', display: 'flex', gap: 4, alignItems: 'start' }}>
-                                <MessageCircle size={10} style={{ marginTop: 2, flexShrink: 0 }} />
-                                <span style={{ wordBreak: 'break-word' }}>{cellNotes[`${i}-regex`]}</span>
-                              </div>
+                              <NoteDisplay text={getNote(i, 'regex')} />
                             )}
                           </>
                         )}
                       </td>
                       <td 
                         style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.deterministic, position: 'relative', verticalAlign: 'top' }}
-                        onMouseEnter={() => setHoveredCell(`${i}-deterministic`)}
-                        onMouseLeave={() => setHoveredCell(null)}
+                        onMouseEnter={() => setHovered(i, 'deterministic')}
+                        onMouseLeave={() => setHovered(null, null)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ flex: 1 }}>
-                            {rr.detRunning && <span title="Deterministic" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                            {renderStackedSummary(rr.deterministic, i, 'det')}
-                            {renderTimeBar(rr.detMs, maxMs)}
+                        {rr.detRunning && <span title="Deterministic" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
+                        {renderStackedSummary(rr.deterministic, i, 'det')}
+                        {renderTimeBar(rr.detMs, maxMs)}
                           </div>
-                          {(hoveredCell === `${i}-deterministic` || cellNotes[`${i}-deterministic`]) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingNote(editingNote === `${i}-deterministic` ? null : `${i}-deterministic`);
-                              }}
-                              title={cellNotes[`${i}-deterministic`] ? "Edit note" : "Add note"}
-                              style={{
-                                background: cellNotes[`${i}-deterministic`] ? '#3b82f6' : 'rgba(255,255,255,0.5)',
-                                border: 'none',
-                                borderRadius: 4,
-                                padding: 4,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                marginLeft: 4,
-                                flexShrink: 0
-                              }}
-                            >
-                              <MessageCircle size={12} color={cellNotes[`${i}-deterministic`] ? '#fff' : '#666'} />
-                            </button>
+                          {(isHovered(i, 'deterministic') || hasNote(i, 'deterministic')) && (
+                            <NoteButton
+                              hasNote={hasNote(i, 'deterministic')}
+                              onClick={() => isEditing(i, 'deterministic') ? stopEditing() : startEditing(i, 'deterministic')}
+                            />
                           )}
                         </div>
-                        {(cellNotes[`${i}-deterministic`] || editingNote === `${i}-deterministic`) && (
+                        {(getNote(i, 'deterministic') || isEditing(i, 'deterministic')) && (
                           <>
-                            <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
-                            {editingNote === `${i}-deterministic` ? (
-                              <div>
-                                <textarea
-                                  value={cellNotes[`${i}-deterministic`] || ''}
-                                  onChange={(e) => setCellNotes({...cellNotes, [`${i}-deterministic`]: e.target.value})}
-                                  placeholder="Add note..."
-                                  rows={2}
-                                  autoFocus
-                                  style={{
-                                    width: '100%',
-                                    padding: 4,
-                                    fontSize: 11,
-                                    border: '1px solid #ddd',
-                                    borderRadius: 4,
-                                    background: 'rgba(255,255,255,0.9)',
-                                    resize: 'vertical'
-                                  }}
-                                />
-                                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setEditingNote(null); }}
-                                    style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                  >
-                                    💾
-                                  </button>
-                                  {cellNotes[`${i}-deterministic`] && (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setCellNotes({...cellNotes, [`${i}-deterministic`]: ''}); setEditingNote(null); }}
-                                      style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                    >
-                                      🗑️
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setEditingNote(null); }}
-                                    style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                  >
-                                    ❌
-                                  </button>
-                                </div>
-                              </div>
+                            <NoteSeparator />
+                            {isEditing(i, 'deterministic') ? (
+                              <NoteEditor
+                                value={getNote(i, 'deterministic')}
+                                onSave={(text) => { addNote(i, 'deterministic', text); stopEditing(); }}
+                                onDelete={() => { deleteNote(i, 'deterministic'); stopEditing(); }}
+                                onCancel={stopEditing}
+                              />
                             ) : (
-                              <div style={{ fontSize: 11, fontStyle: 'italic', color: '#666', display: 'flex', gap: 4, alignItems: 'start' }}>
-                                <MessageCircle size={10} style={{ marginTop: 2, flexShrink: 0 }} />
-                                <span style={{ wordBreak: 'break-word' }}>{cellNotes[`${i}-deterministic`]}</span>
-                              </div>
+                              <NoteDisplay text={getNote(i, 'deterministic')} />
                             )}
                           </>
                         )}
                       </td>
                       <td 
                         style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.ner, position: 'relative', verticalAlign: 'top' }}
-                        onMouseEnter={() => setHoveredCell(`${i}-ner`)}
-                        onMouseLeave={() => setHoveredCell(null)}
+                        onMouseEnter={() => setHovered(i, 'ner')}
+                        onMouseLeave={() => setHovered(null, null)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ flex: 1 }}>
-                            {rr.nerRunning && <span title="NER" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #34d399', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                            {renderStackedSummary(rr.ner, i, 'ner')}
-                            {renderTimeBar(rr.nerMs, maxMs)}
+                        {rr.nerRunning && <span title="NER" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #34d399', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
+                        {renderStackedSummary(rr.ner, i, 'ner')}
+                        {renderTimeBar(rr.nerMs, maxMs)}
                           </div>
-                          {(hoveredCell === `${i}-ner` || cellNotes[`${i}-ner`]) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingNote(editingNote === `${i}-ner` ? null : `${i}-ner`);
-                              }}
-                              title={cellNotes[`${i}-ner`] ? "Edit note" : "Add note"}
-                              style={{
-                                background: cellNotes[`${i}-ner`] ? '#3b82f6' : 'rgba(255,255,255,0.5)',
-                                border: 'none',
-                                borderRadius: 4,
-                                padding: 4,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                marginLeft: 4,
-                                flexShrink: 0
-                              }}
-                            >
-                              <MessageCircle size={12} color={cellNotes[`${i}-ner`] ? '#fff' : '#666'} />
-                            </button>
+                          {(isHovered(i, 'ner') || hasNote(i, 'ner')) && (
+                            <NoteButton
+                              hasNote={hasNote(i, 'ner')}
+                              onClick={() => isEditing(i, 'ner') ? stopEditing() : startEditing(i, 'ner')}
+                            />
                           )}
                         </div>
-                        {(cellNotes[`${i}-ner`] || editingNote === `${i}-ner`) && (
+                        {(getNote(i, 'ner') || isEditing(i, 'ner')) && (
                           <>
-                            <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
-                            {editingNote === `${i}-ner` ? (
-                              <div>
-                                <textarea
-                                  value={cellNotes[`${i}-ner`] || ''}
-                                  onChange={(e) => setCellNotes({...cellNotes, [`${i}-ner`]: e.target.value})}
-                                  placeholder="Add note..."
-                                  rows={2}
-                                  autoFocus
-                                  style={{
-                                    width: '100%',
-                                    padding: 4,
-                                    fontSize: 11,
-                                    border: '1px solid #ddd',
-                                    borderRadius: 4,
-                                    background: 'rgba(255,255,255,0.9)',
-                                    resize: 'vertical'
-                                  }}
-                                />
-                                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setEditingNote(null); }}
-                                    style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                  >
-                                    💾
-                                  </button>
-                                  {cellNotes[`${i}-ner`] && (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setCellNotes({...cellNotes, [`${i}-ner`]: ''}); setEditingNote(null); }}
-                                      style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                    >
-                                      🗑️
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setEditingNote(null); }}
-                                    style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                  >
-                                    ❌
-                                  </button>
-                                </div>
-                              </div>
+                            <NoteSeparator />
+                            {isEditing(i, 'ner') ? (
+                              <NoteEditor
+                                value={getNote(i, 'ner')}
+                                onSave={(text) => { addNote(i, 'ner', text); stopEditing(); }}
+                                onDelete={() => { deleteNote(i, 'ner'); stopEditing(); }}
+                                onCancel={stopEditing}
+                              />
                             ) : (
-                              <div style={{ fontSize: 11, fontStyle: 'italic', color: '#666', display: 'flex', gap: 4, alignItems: 'start' }}>
-                                <MessageCircle size={10} style={{ marginTop: 2, flexShrink: 0 }} />
-                                <span style={{ wordBreak: 'break-word' }}>{cellNotes[`${i}-ner`]}</span>
-                              </div>
+                              <NoteDisplay text={getNote(i, 'ner')} />
                             )}
                           </>
                         )}
                       </td>
                       <td 
                         style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.llm, position: 'relative', verticalAlign: 'top' }}
-                        onMouseEnter={() => setHoveredCell(`${i}-llm`)}
-                        onMouseLeave={() => setHoveredCell(null)}
+                        onMouseEnter={() => setHovered(i, 'llm')}
+                        onMouseLeave={() => setHovered(null, null)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ flex: 1 }}>
-                            {rr.llmRunning && <span title="LLM" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #fbbf24', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                            {renderStackedSummary(rr.llm, i, 'llm')}
-                            {renderTimeBar(rr.llmMs, maxMs)}
+                        {rr.llmRunning && <span title="LLM" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #fbbf24', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
+                        {renderStackedSummary(rr.llm, i, 'llm')}
+                        {renderTimeBar(rr.llmMs, maxMs)}
                           </div>
-                          {(hoveredCell === `${i}-llm` || cellNotes[`${i}-llm`]) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingNote(editingNote === `${i}-llm` ? null : `${i}-llm`);
-                              }}
-                              title={cellNotes[`${i}-llm`] ? "Edit note" : "Add note"}
-                              style={{
-                                background: cellNotes[`${i}-llm`] ? '#3b82f6' : 'rgba(255,255,255,0.5)',
-                                border: 'none',
-                                borderRadius: 4,
-                                padding: 4,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                marginLeft: 4,
-                                flexShrink: 0
-                              }}
-                            >
-                              <MessageCircle size={12} color={cellNotes[`${i}-llm`] ? '#fff' : '#666'} />
-                            </button>
+                          {(isHovered(i, 'llm') || hasNote(i, 'llm')) && (
+                            <NoteButton
+                              hasNote={hasNote(i, 'llm')}
+                              onClick={() => isEditing(i, 'llm') ? stopEditing() : startEditing(i, 'llm')}
+                            />
                           )}
                         </div>
-                        {(cellNotes[`${i}-llm`] || editingNote === `${i}-llm`) && (
+                        {(getNote(i, 'llm') || isEditing(i, 'llm')) && (
                           <>
-                            <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
-                            {editingNote === `${i}-llm` ? (
-                              <div>
-                                <textarea
-                                  value={cellNotes[`${i}-llm`] || ''}
-                                  onChange={(e) => setCellNotes({...cellNotes, [`${i}-llm`]: e.target.value})}
-                                  placeholder="Add note..."
-                                  rows={2}
-                                  autoFocus
-                                  style={{
-                                    width: '100%',
-                                    padding: 4,
-                                    fontSize: 11,
-                                    border: '1px solid #ddd',
-                                    borderRadius: 4,
-                                    background: 'rgba(255,255,255,0.9)',
-                                    resize: 'vertical'
-                                  }}
-                                />
-                                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setEditingNote(null); }}
-                                    style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                  >
-                                    💾
-                                  </button>
-                                  {cellNotes[`${i}-llm`] && (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setCellNotes({...cellNotes, [`${i}-llm`]: ''}); setEditingNote(null); }}
-                                      style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                    >
-                                      🗑️
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setEditingNote(null); }}
-                                    style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', borderRadius: 3, border: '1px solid #ddd' }}
-                                  >
-                                    ❌
-                                  </button>
-                                </div>
-                              </div>
+                            <NoteSeparator />
+                            {isEditing(i, 'llm') ? (
+                              <NoteEditor
+                                value={getNote(i, 'llm')}
+                                onSave={(text) => { addNote(i, 'llm', text); stopEditing(); }}
+                                onDelete={() => { deleteNote(i, 'llm'); stopEditing(); }}
+                                onCancel={stopEditing}
+                              />
                             ) : (
-                              <div style={{ fontSize: 11, fontStyle: 'italic', color: '#666', display: 'flex', gap: 4, alignItems: 'start' }}>
-                                <MessageCircle size={10} style={{ marginTop: 2, flexShrink: 0 }} />
-                                <span style={{ wordBreak: 'break-word' }}>{cellNotes[`${i}-llm`]}</span>
-                              </div>
+                              <NoteDisplay text={getNote(i, 'llm')} />
                             )}
                           </>
                         )}
@@ -1789,241 +1502,38 @@ export default function NLPExtractorProfileEditor({
               </tbody>
             </table>
           </div>
-          )}
-
-          {/* Inline Editors - show when activeEditor is set */}
-          {activeEditor && (
-            <div style={{ 
-              border: '1px solid #e5e7eb', 
-              borderRadius: 8, 
-              padding: 16,
-              background: '#f9fafb',
-              animation: 'fadeIn 0.2s ease-in'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-                  {activeEditor === 'regex' && '🪄 Configure Regex'}
-                  {activeEditor === 'extractor' && '🪄 Configure Extractor'}
-                  {activeEditor === 'ner' && '🪄 Configure NER'}
-                  {activeEditor === 'llm' && '🪄 Configure LLM'}
-                </h3>
-                <button
-                  onClick={() => setActiveEditor(null)}
-                  style={{
-                    background: '#e5e7eb',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '6px 12px',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 500
-                  }}
-                >
-                  ❌ Close
-                </button>
-              </div>
-
-              {activeEditor === 'regex' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>Regex Pattern</label>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input
-                      ref={regexInputRef}
-                      value={
-                        generatingRegex 
-                          ? "⏳ Creating regex..." 
-                          : (regexAiMode ? regexAiPrompt : regex)
-                      }
-                      onChange={(e) => {
-                        if (regexAiMode && !generatingRegex) {
-                          setRegexAiPrompt(e.target.value);
-                        } else if (!generatingRegex) {
-                          setRegex(e.target.value);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        // ESC key: exit AI mode and restore original regex
-                        if (e.key === 'Escape' && regexAiMode) {
-                          setRegexAiMode(false);
-                          // Keep regexAiPrompt in memory for future iterations
-                          // Restore the original regex (even if it was empty!)
-                          setRegex(regexBackup);
-                          e.preventDefault();
-                          console.log('[AI Regex] Cancelled via ESC - restored:', regexBackup, '- prompt kept in memory');
-                        }
-                      }}
-                      placeholder={
-                        regexAiMode && !generatingRegex 
-                          ? "Describe here what the regex should match (in English)" 
-                          : "es. \\b\\d{5}\\b"
-                      }
-                      disabled={generatingRegex}
-                      style={{ 
-                        flex: 1, 
-                        padding: 10, 
-                        border: regexAiMode ? '2px solid #3b82f6' : '1px solid #ddd',
-                        borderRadius: 8, 
-                        fontFamily: regexAiMode ? 'inherit' : 'monospace',
-                        backgroundColor: generatingRegex ? '#f9fafb' : (regexAiMode ? '#eff6ff' : '#fff'),
-                        transition: 'all 0.2s ease'
-                      }}
-                    />
-                    
-                    {/* Show WAND ONLY in normal mode (NOT in AI mode) */}
-                    {!regexAiMode && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // Save current regex before entering AI mode (even if empty!)
-                          setRegexBackup(regex);
-                          setRegexAiMode(true);
-                          // Keep regexAiPrompt in memory - don't reset it!
-                          // Give focus to input after state update
-                          setTimeout(() => {
-                            regexInputRef.current?.focus();
-                          }, 0);
-                        }}
-                        disabled={generatingRegex}
-                        title="Generate regex with AI"
-                        style={{
-                          padding: 10,
-                          border: '1px solid #ddd',
-                          borderRadius: 8,
-                          background: '#fff',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          minWidth: 40,
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <Wand2 size={16} color='#666' />
-                      </button>
-                    )}
-                    
-                    {/* Show CREATE BUTTON when: AI mode AND at least 5 characters */}
-                    {regexAiMode && regexAiPrompt.trim().length >= 5 && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!regexAiPrompt.trim()) return;
-                          
-                          setGeneratingRegex(true);
-                          try {
-                            console.log('[AI Regex] Generating regex for:', regexAiPrompt);
-                            
-                            const response = await fetch('/api/nlp/generate-regex', { 
-                              method: 'POST', 
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ description: regexAiPrompt })
-                            });
-                            
-                            if (!response.ok) {
-                              const error = await response.json();
-                              throw new Error(error.detail || 'Failed to generate regex');
-                            }
-                            
-                            const data = await response.json();
-                            console.log('[AI Regex] Response:', data);
-                            
-                            if (data.success && data.regex) {
-                              setRegex(data.regex);
-                              console.log('[AI Regex] Regex generated successfully:', data.regex);
-                              
-                              if (data.explanation) {
-                                console.log('[AI Regex] Explanation:', data.explanation);
-                                console.log('[AI Regex] Examples:', data.examples);
-                              }
-                              
-                              // Exit AI mode and return to normal
-                              // Keep regexAiPrompt in memory for future iterations
-                              setRegexAiMode(false);
-                            } else {
-                              throw new Error('No regex returned from API');
-                            }
-                          } catch (error) {
-                            console.error('[AI Regex] Error:', error);
-                            alert(`Error generating regex: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                          } finally {
-                            setGeneratingRegex(false);
-                          }
-                        }}
-                        disabled={generatingRegex}
-                        title="Generate regex from description"
-                        style={{
-                          padding: '10px 16px',
-                          border: '2px solid #3b82f6',
-                          borderRadius: 8,
-                          background: generatingRegex ? '#f3f4f6' : '#3b82f6',
-                          color: '#fff',
-                          cursor: generatingRegex ? 'default' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          fontSize: 13,
-                          fontWeight: 500,
-                          minWidth: 120,
-                          justifyContent: 'center',
-                          transition: 'all 0.2s ease',
-                          animation: 'fadeIn 0.2s ease-in'
-                        }}
-                      >
-                        {generatingRegex ? (
-                          <>
-                            <span style={{ 
-                              display: 'inline-block', 
-                              width: 14, 
-                              height: 14, 
-                              border: '2px solid #fff',
-                              borderTopColor: 'transparent',
-                              borderRadius: '50%',
-                              animation: 'spin 0.8s linear infinite'
-                            }} />
-                            <span>Creating...</span>
-                          </>
-                        ) : (
-                          'Create Regex'
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeEditor === 'extractor' && (
-                <div>
-                  <NLPCompactEditor
-                    synonymsText={synonymsText}
-                    setSynonymsText={setSynonymsText}
-                    formatText={formatText}
-                    setFormatText={setFormatText}
-                  />
-                </div>
-              )}
-
-              {activeEditor === 'ner' && (
-                <div style={{ padding: 16, textAlign: 'center', color: '#666' }}>
-                  <p>NER configuration coming soon...</p>
-                  <p style={{ fontSize: 12, marginTop: 8 }}>
-                    Enable/disable NER and set confidence threshold
-                  </p>
-                </div>
-              )}
-
-              {activeEditor === 'llm' && (
-                <div style={{ padding: 16, textAlign: 'center', color: '#666' }}>
-                  <p>LLM prompt editor coming soon...</p>
-                  <p style={{ fontSize: 12, marginTop: 8 }}>
-                    Configure custom prompts for AI extraction
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Details panel rimosso */}
       </div>
+      )}
+
+      {/* 🎨 Inline Editors - shown in place of Tester when activeEditor is set */}
+      {/* 📐 Full-height container for inline editors */}
+      {activeEditor && (
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, minHeight: 600 }}>
+          {activeEditor === 'regex' && (
+            <RegexInlineEditor
+              regex={regex}
+              setRegex={setRegex}
+              onClose={closeEditor}
+            />
+          )}
+          
+          {activeEditor === 'extractor' && (
+            <ExtractorInlineEditor
+              onClose={closeEditor}
+            />
+          )}
+          
+          {activeEditor === 'ner' && (
+            <NERInlineEditor onClose={closeEditor} />
+          )}
+          
+          {activeEditor === 'llm' && (
+            <LLMInlineEditor onClose={closeEditor} />
+          )}
+        </div>
+      )}
+
+      {/* Details panel rimosso */}
     </div>
   );
 }

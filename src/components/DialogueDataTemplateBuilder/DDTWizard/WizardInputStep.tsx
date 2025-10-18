@@ -70,7 +70,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
           padding: '10px 16px',
           width: '100%',
           borderRadius: 8,
-          border: '1px solid var(--ddt-accent, #a21caf)',
+          border: '1px solid #4b5563',
           outline: 'none',
           marginBottom: 20,
           background: '#111827',
@@ -84,28 +84,31 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         autoFocus
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+        {/* 🎨 Pulsante Annulla: sfondo bianco, bordo nero, testo nero */}
         <button
           onClick={onCancel}
           style={{
-            background: 'transparent',
-            color: '#e2e8f0',
-            border: '1px solid var(--ddt-accent, #a21caf)',
+            background: '#fff',
+            color: '#000',
+            border: '1px solid #000',
             borderRadius: 8,
             fontWeight: 600,
             fontSize: 14,
             cursor: 'pointer',
             padding: '6px 16px',
+            transition: 'all 0.2s ease'
           }}
         >
           Annulla
         </button>
+        {/* 🎨 Pulsante Invia: sfondo verde, bordo verde, testo bianco */}
         <button
           onClick={() => { try { console.log('[DDT][WizardInputStep][submit][Click]'); } catch {}; onNext(); }}
           disabled={!userDesc.trim()}
           style={{
-            background: 'var(--ddt-accent, #a21caf)',
-            color: '#0b1220',
-            border: 'none',
+            background: '#22c55e',
+            color: '#fff',
+            border: '1px solid #22c55e',
             borderRadius: 8,
             fontWeight: 600,
             fontSize: 14,

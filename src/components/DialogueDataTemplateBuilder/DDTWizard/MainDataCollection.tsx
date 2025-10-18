@@ -49,7 +49,19 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
   return (
     <div style={{ background: '#0f172a', borderRadius: 12, padding: 16, color: '#e2e8f0', marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontWeight: 700 }}>Create a dialogue for</div>
+        {/* 📍 "Create a dialogue for" + Percentuale inline */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontWeight: 700 }}>Create a dialogue for</div>
+          {/* Mostra percentuale solo se presente */}
+          {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
+            const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
+            return (
+              <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600 }}>
+                {percentage}%
+              </span>
+            );
+          })()}
+        </div>
         <button
           onClick={onAddMain}
           title="Add data"
@@ -70,28 +82,74 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
         </button>
       </div>
       {mains.length > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, whiteSpace: 'nowrap', fontSize: 16, padding: '4px 10px', borderRadius: 12, border: '1px solid #334155', background: '#1f2937', color: '#e2e8f0' }}>
-            <Folder size={18} color="#fb923c" />
-            {rootLabel}
-          </span>
-          {(((progressByPath as any)?.__root__ || 0) > 0) && (
-            <>
-              <div style={{ flex: 1, height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden', marginLeft: 8 }}>
-                <div style={{ width: `${Math.round(((progressByPath as any)?.__root__ || 0) * 100)}%`, height: '100%', background: '#fb923c' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+          {/* 📐 Riga 1: Label + Percentuale inline */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, whiteSpace: 'nowrap', fontSize: 16, padding: '4px 10px', borderRadius: 12, border: '1px solid #334155', background: '#1f2937', color: '#e2e8f0' }}>
+              <Folder size={18} color="#fb923c" />
+              {rootLabel}
+            </span>
+            {/* 📍 Percentuale subito dopo il testo */}
+            {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
+              const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
+              return (
+                <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600, marginLeft: 4 }}>
+                  {percentage}%
+                </span>
+              );
+            })()}
+          </div>
+          {/* 📐 Riga 2: Barra di progresso sotto, full width */}
+          {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
+            const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
+            const isComplete = percentage >= 100;
+            const barColor = isComplete ? '#ef4444' : '#fbbf24';
+            const barStyle = isComplete 
+              ? { background: barColor }
+              : { 
+                  background: `repeating-linear-gradient(
+                    to right,
+                    ${barColor} 0px,
+                    ${barColor} 8px,
+                    transparent 8px,
+                    transparent 12px
+                  )`
+                };
+            
+            return (
+              <div style={{ width: '100%', height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
+                <div style={{ width: `${percentage}%`, height: '100%', ...barStyle, transition: 'width 0.8s ease, background 0.3s ease' }} />
               </div>
-              <span style={{ fontSize: 11, color: '#93c5fd', minWidth: 34, textAlign: 'left' }}>{Math.round((((progressByPath as any)?.__root__ || 0) * 100))}%</span>
-            </>
-          )}
+            );
+          })()}
         </div>
       )}
       {/* Root progress also when a single main exists */}
       {mains.length <= 1 && (((progressByPath as any)?.__root__ || 0) > 0) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{ flex: 1, height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
-            <div style={{ width: `${Math.round(((progressByPath as any)?.__root__ || 0) * 100)}%`, height: '100%', background: '#fb923c' }} />
-          </div>
-          <span style={{ fontSize: 11, color: '#93c5fd', minWidth: 34, textAlign: 'left' }}>{Math.round((((progressByPath as any)?.__root__ || 0) * 100))}%</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+          {/* 📐 Barra di progresso sotto "Create a dialogue for", full width */}
+          {(() => {
+            const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
+            const isComplete = percentage >= 100;
+            const barColor = isComplete ? '#ef4444' : '#fbbf24';
+            const barStyle = isComplete 
+              ? { background: barColor }
+              : { 
+                  background: `repeating-linear-gradient(
+                    to right,
+                    ${barColor} 0px,
+                    ${barColor} 8px,
+                    transparent 8px,
+                    transparent 12px
+                  )`
+                };
+            
+            return (
+              <div style={{ width: '100%', height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
+                <div style={{ width: `${percentage}%`, height: '100%', ...barStyle, transition: 'width 0.8s ease, background 0.3s ease' }} />
+              </div>
+            );
+          })()}
         </div>
       )}
       <div>

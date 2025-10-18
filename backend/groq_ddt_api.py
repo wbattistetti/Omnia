@@ -1752,6 +1752,345 @@ Be precise and practical. Test mentally that your regex works correctly.
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating regex: {str(e)}")
 
+# --- API: Generate TypeScript Extractor from natural language description ---
+@app.post("/api/nlp/generate-extractor")
+def generate_extractor(body: dict = Body(...)):
+    """
+    Generate a TypeScript DataExtractor implementation from a natural language description.
+    
+    Body example:
+    {
+      "description": "Extract age between 1-120, accept numeric or written form (uno, due, tre...)",
+      "dataType": "number"
+    }
+    
+    Returns:
+    {
+      "success": true,
+      "code": "export const ageExtractor: DataExtractor<number> = { ... }",
+      "explanation": "This extractor validates age between 1-120..."
+    }
+    """
+    print("\n[API] POST /api/nlp/generate-extractor")
+    
+    try:
+        description = (body or {}).get("description", "").strip()
+        data_type = (body or {}).get("dataType", "string").strip()
+        
+        if not description:
+            raise HTTPException(status_code=400, detail="Description is required")
+        
+        if not (GROQ_KEY or OPENAI_KEY):
+            raise HTTPException(status_code=500, detail="missing_ai_key")
+        
+        prompt = f"""
+You are a TypeScript expert specializing in data extraction and validation.
+
+User wants: "{description}"
+Base data type: {data_type}
+
+Generate a complete TypeScript DataExtractor implementation following this interface:
+
+interface DataExtractor<T> {{
+  extract(text: string): {{ value?: T; confidence: number; reasons?: string[] }};
+  validate(value: T): {{ ok: boolean; errors?: string[] }};
+  format(value: T): string;
+}}
+
+Requirements:
+1. START with a JSDoc comment block containing the user's original request verbatim
+2. The JSDoc header MUST be in this exact format:
+   /**
+    * {description}
+    * 
+    * AI-generated extractor for semantic data extraction
+    */
+3. Export a const with a descriptive name (e.g., ageExtractor, emailExtractor)
+4. Handle all edge cases: empty input, null, undefined, invalid formats
+5. For Italian context: support Italian language where relevant (month names, numbers, etc.)
+6. Return confidence scores: 0.9+ for exact matches, 0.7-0.8 for fuzzy, 0 for invalid
+7. Add clear inline comments explaining the logic
+8. Use type-safe TypeScript (use proper types for T generic)
+9. The extract() method should parse the text and return the extracted value
+10. The validate() method should validate the extracted value semantically
+11. The format() method should return a user-friendly string representation
+
+Example for age 1-120:
+
+/**
+ * Extract age between 1-120, accept numeric or written form (uno, due, tre...)
+ * 
+ * AI-generated extractor for semantic data extraction
+ */
+export const ageExtractor: DataExtractor<number> = {{
+  extract(text) {{
+    const raw = text.trim().toLowerCase();
+    
+    // Try numeric parsing
+    const num = parseInt(raw, 10);
+    if (!isNaN(num)) {{
+      return {{ value: num, confidence: 0.9 }};
+    }}
+    
+    // Try Italian written numbers
+    const written: Record<string, number> = {{
+      'uno': 1, 'due': 2, 'tre': 3, 'quattro': 4, 'cinque': 5,
+      'sei': 6, 'sette': 7, 'otto': 8, 'nove': 9, 'dieci': 10,
+      'undici': 11, 'dodici': 12, 'tredici': 13, 'quattordici': 14,
+      'quindici': 15, 'sedici': 16, 'diciassette': 17, 'diciotto': 18,
+      'diciannove': 19, 'venti': 20, 'trenta': 30, 'quaranta': 40,
+      'cinquanta': 50, 'sessanta': 60, 'settanta': 70, 'ottanta': 80,
+      'novanta': 90, 'cento': 100
+    }};
+    
+    if (written[raw]) {{
+      return {{ value: written[raw], confidence: 0.85 }};
+    }}
+    
+    return {{ confidence: 0, reasons: ['invalid-format'] }};
+  }},
+  
+  validate(v) {{
+    if (typeof v !== 'number' || isNaN(v)) {{
+      return {{ ok: false, errors: ['not-a-number'] }};
+    }}
+    if (v < 1 || v > 120) {{
+      return {{ ok: false, errors: ['age-out-of-range'] }};
+    }}
+    return {{ ok: true }};
+  }},
+  
+  format(v) {{
+    return `${{v}} anni`;
+  }}
+}};
+
+Return ONLY the TypeScript code WITH the JSDoc header, no markdown blocks, no explanations outside the code.
+Make it production-ready and well-commented.
+"""
+        
+        print(f"[generate-extractor] Description: {description}")
+        print(f"[generate-extractor] Data type: {data_type}")
+        print("[generate-extractor] Calling AI...")
+        
+        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+        print(f"[generate-extractor] Provider: {provider}")
+        
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai as _call_ai
+            except Exception:
+                from call_openai import call_openai as _call_ai
+        else:
+            _call_ai = call_groq
+        
+        ai_response = _call_ai([
+            {"role": "system", "content": "You are a TypeScript expert. Generate clean, production-ready DataExtractor code."},
+            {"role": "user", "content": prompt}
+        ])
+        
+        print("[generate-extractor] AI Response received")
+        
+        # Clean up response (remove markdown if present)
+        code = str(ai_response).strip()
+        
+        # Remove markdown code blocks if present
+        if code.startswith('```typescript') or code.startswith('```ts'):
+            code = code.split('\n', 1)[1] if '\n' in code else code
+        if code.startswith('```'):
+            code = code.split('\n', 1)[1] if '\n' in code else code
+        if code.endswith('```'):
+            code = code.rsplit('\n', 1)[0] if '\n' in code else code
+        
+        code = code.strip()
+        
+        if not code or len(code) < 50:
+            raise HTTPException(status_code=500, detail="AI returned invalid or empty code")
+        
+        print(f"[generate-extractor] Success! Generated {len(code)} characters of code")
+        
+        # Extract a brief explanation from comments if possible
+        explanation = "AI-generated TypeScript extractor"
+        try:
+            # Look for first multi-line comment or series of single-line comments
+            if '/*' in code:
+                start = code.index('/*')
+                end = code.index('*/', start) + 2
+                explanation = code[start:end].replace('/*', '').replace('*/', '').strip()
+            elif code.count('//') > 2:
+                lines = [l.strip()[2:].strip() for l in code.split('\n') if l.strip().startswith('//')]
+                if lines:
+                    explanation = ' '.join(lines[:3])
+        except:
+            pass
+        
+        return {
+            "success": True,
+            "code": code,
+            "explanation": explanation[:200] if len(explanation) > 200 else explanation
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[generate-extractor] ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating extractor: {str(e)}")
+
+# --- API: Refine existing TypeScript Extractor based on user comments/TODOs ---
+@app.post("/api/nlp/refine-extractor")
+def refine_extractor(body: dict = Body(...)):
+    """
+    Refine existing TypeScript DataExtractor code based on:
+    - TODO comments in the code
+    - User improvement requests
+    - Test failure notes (optional)
+    
+    Body example:
+    {
+      "code": "export const extractor = { extract(text) { /* TODO: add validation */ } }",
+      "improvements": "implement TODO comments and add Italian number support",
+      "testNotes": ["Should parse 'venti' as 20", "Failed on negative numbers"],
+      "dataType": "number"
+    }
+    
+    Returns:
+    {
+      "success": true,
+      "code": "improved TypeScript code",
+      "explanation": "what was changed"
+    }
+    """
+    print("\n[API] POST /api/nlp/refine-extractor")
+    
+    try:
+        existing_code = (body or {}).get("code", "").strip()
+        improvements = (body or {}).get("improvements", "").strip()
+        test_notes = (body or {}).get("testNotes", [])
+        data_type = (body or {}).get("dataType", "string").strip()
+        
+        if not existing_code:
+            raise HTTPException(status_code=400, detail="Existing code is required")
+        
+        if not improvements or len(improvements) < 5:
+            raise HTTPException(status_code=400, detail="Improvements description is required (min 5 characters)")
+        
+        if not (GROQ_KEY or OPENAI_KEY):
+            raise HTTPException(status_code=500, detail="missing_ai_key")
+        
+        # Build test notes section
+        test_notes_section = ""
+        if test_notes and isinstance(test_notes, list) and len(test_notes) > 0:
+            test_notes_section = "\n\nTEST FAILURE NOTES:\n" + "\n".join(f"- {note}" for note in test_notes[:10])
+        
+        prompt = f"""
+You are a TypeScript expert. Refine and improve this existing DataExtractor code.
+
+CURRENT CODE:
+{existing_code}
+
+USER IMPROVEMENT REQUESTS:
+{improvements}{test_notes_section}
+
+Your tasks:
+1. Implement any TODO or FIXME comments found in the code
+2. Address the user's improvement requests
+3. Fix issues mentioned in test failure notes (if any)
+4. Keep the existing structure and working logic intact
+5. Preserve the JSDoc header if present, or add one summarizing what you changed
+6. Add inline comments explaining what you improved
+7. Ensure the code follows the DataExtractor<T> interface:
+   interface DataExtractor<T> {{
+     extract(text: string): {{ value?: T; confidence: number; reasons?: string[] }};
+     validate(value: T): {{ ok: boolean; errors?: string[] }};
+     format(value: T): string;
+   }}
+
+8. For Italian context: support Italian language where relevant (month names, numbers, etc.)
+9. Return confidence scores: 0.9+ for exact matches, 0.7-0.8 for fuzzy, 0 for invalid
+10. Use type-safe TypeScript (proper types for T generic: {data_type})
+
+Important:
+- Do NOT rewrite the entire code from scratch unless absolutely necessary
+- Keep what works, improve what doesn't
+- Add a comment at the top summarizing your changes (if not already present)
+
+Return ONLY the improved TypeScript code, no markdown blocks, no explanations outside the code.
+"""
+        
+        print(f"[refine-extractor] Code length: {len(existing_code)} chars")
+        print(f"[refine-extractor] Improvements: {improvements[:100]}...")
+        print(f"[refine-extractor] Test notes: {len(test_notes)} items")
+        print("[refine-extractor] Calling AI...")
+        
+        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+        print(f"[refine-extractor] Provider: {provider}")
+        
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai as _call_ai
+            except Exception:
+                from call_openai import call_openai as _call_ai
+        else:
+            _call_ai = call_groq
+        
+        ai_response = _call_ai([
+            {"role": "system", "content": "You are a TypeScript expert. Improve existing code incrementally, keeping what works."},
+            {"role": "user", "content": prompt}
+        ])
+        
+        print("[refine-extractor] AI Response received")
+        
+        # Clean up response (remove markdown if present)
+        code = str(ai_response).strip()
+        
+        # Remove markdown code blocks if present
+        if code.startswith('```typescript') or code.startswith('```ts'):
+            code = code.split('\n', 1)[1] if '\n' in code else code
+        if code.startswith('```'):
+            code = code.split('\n', 1)[1] if '\n' in code else code
+        if code.endswith('```'):
+            code = code.rsplit('\n', 1)[0] if '\n' in code else code
+        
+        code = code.strip()
+        
+        if not code or len(code) < 50:
+            raise HTTPException(status_code=500, detail="AI returned invalid or empty code")
+        
+        print(f"[refine-extractor] Success! Refined code: {len(code)} characters")
+        
+        # Extract explanation from changes (look for comments at top)
+        explanation = "Code refined based on your improvements"
+        try:
+            # Look for summary comment at the top
+            if code.startswith('/**') or code.startswith('//'):
+                lines = code.split('\n')
+                comment_lines = []
+                for line in lines[:10]:  # Check first 10 lines
+                    if line.strip().startswith('*') or line.strip().startswith('//'):
+                        clean_line = line.strip().lstrip('*').lstrip('/').strip()
+                        if clean_line and not clean_line.startswith('AI-generated'):
+                            comment_lines.append(clean_line)
+                if comment_lines:
+                    explanation = ' '.join(comment_lines[:2])  # First 2 meaningful lines
+        except:
+            pass
+        
+        return {
+            "success": True,
+            "code": code,
+            "explanation": explanation[:200] if len(explanation) > 200 else explanation
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[refine-extractor] ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error refining extractor: {str(e)}")
+
 # --- step5: Generate validation scripts (generateValidationScripts) ---
 @app.post("/step5")
 def step5(constraint_json: dict = Body(...)):

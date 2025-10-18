@@ -237,15 +237,33 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
       }}
     >
       <div
-        style={{ display: 'flex', alignItems: 'center', padding: 12, gap: 8 }}
+        style={{ display: 'flex', flexDirection: 'column', padding: 12, gap: 6 }}
         onMouseEnter={() => setHoverHeader(true)}
         onMouseLeave={() => setHoverHeader(false)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+        {/* 📐 Riga 1: Label + Percentuale inline */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {!isEditingMain ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
-              <span>{renderIcon(node.icon, 16)}</span>
-              <span style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
+                <span>{renderIcon(node.icon, 16)}</span>
+                <span style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
+              </div>
+              {/* 📍 Percentuale subito dopo il testo */}
+              {(() => {
+                const path = node.label;
+                const val = progressByPath ? progressByPath[path] : undefined;
+                if (typeof val === 'number') {
+                  const percentage = Math.round(val * 100);
+                  return (
+                    <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600, marginLeft: 4 }}>
+                      {percentage}%
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+              {/* Action buttons */}
               {hoverHeader && (
                 <>
                   <button title="Edit" onClick={() => { setIsEditingMain(true); setLabelDraft(node.label || ''); setForceOpen(true); onRequestOpen?.(); }} style={iconBtn}>
@@ -262,7 +280,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                   </button>
                 </>
               )}
-            </div>
+            </>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
@@ -277,37 +295,57 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
               <button title="Cancel" onClick={cancelMain} style={iconBtn}><X size={18} color="#ef4444" /></button>
             </div>
           )}
+          {/* Chevron expand/collapse - moved to end of first row */}
+          <div style={{ marginLeft: 'auto' }}>
+            {Array.isArray(node.subData) && node.subData.length > 0 && (
+              <button
+                title={open ? 'Collapse' : 'Expand'}
+                onClick={() => { setForceOpen(!open); onRequestOpen?.(); }}
+                style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
+              >
+                {open ? <ChevronDown size={20} color="#fb923c" /> : <ChevronRight size={20} color="#fb923c" />}
+              </button>
+            )}
+          </div>
         </div>
-        {/* Inline progress bar aligned to right edge; starts right after label area */}
+        
+        {/* 📐 Riga 2: Barra di progresso sotto, full width */}
         {(() => {
           const path = node.label;
           const val = progressByPath ? progressByPath[path] : undefined;
           if (typeof val === 'number') {
+            const percentage = Math.round(val * 100);
+            const isComplete = percentage >= 100;
+            
+            // 🎨 Colors: light orange for in-progress, solid red/orange for complete
+            const barColor = isComplete ? '#ef4444' : '#fbbf24';
+            
+            // 🎨 Style: dashed for in-progress, solid for complete
+            const barStyle = isComplete 
+              ? { background: barColor }
+              : { 
+                  background: `repeating-linear-gradient(
+                    to right,
+                    ${barColor} 0px,
+                    ${barColor} 8px,
+                    transparent 8px,
+                    transparent 12px
+                  )`
+                };
+            
             return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-                <div style={{ flex: 1, height: 4, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.round(val * 100)}%`, height: '100%', background: '#fb923c', transition: 'width 0.8s ease' }} />
-                </div>
-                <span style={{ fontSize: 11, color: '#93c5fd', minWidth: 34, textAlign: 'left' }}>{Math.round(val * 100)}%</span>
+              <div style={{ width: '100%', height: 4, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
+                <div style={{ 
+                  width: `${percentage}%`, 
+                  height: '100%', 
+                  ...barStyle,
+                  transition: 'width 0.8s ease, background 0.3s ease' 
+                }} />
               </div>
             );
           }
-          return <div style={{ flex: 1 }} />;
+          return null;
         })()}
-        {/* Right-side chevron to expand/collapse when there are subs */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {Array.isArray(node.subData) && node.subData.length > 0 && (
-            <button
-              title={open ? 'Collapse' : 'Expand'}
-              onClick={() => { setForceOpen(!open); onRequestOpen?.(); }}
-              style={{ background: 'transparent', border: 'none', padding: 0, marginLeft: 6, cursor: 'pointer', lineHeight: 0 }}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: `rotate(${open ? 90 : 0}deg)`, transition: 'transform 0.15s' }} aria-hidden>
-                <polyline points="2,1 8,5 2,9" fill="none" stroke="#334155" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          )}
-        </div>
       </div>
       {open && (
         <div style={{ padding: 12, paddingTop: 0 }}>

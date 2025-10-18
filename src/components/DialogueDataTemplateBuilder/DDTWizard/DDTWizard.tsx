@@ -160,7 +160,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody });
         const ctrl = new AbortController();
-        const timeoutMs = 15000;
+        const timeoutMs = 30000; // 30 seconds - allows for AI type detection + template translation
         const timeoutId = setTimeout(() => { try { ctrl.abort(); console.warn('[DDT][DetectType][timeout]', { url: urlPrimary, timeoutMs }); } catch {} }, timeoutMs);
         let res = await fetch(urlPrimary, {
         method: 'POST',
