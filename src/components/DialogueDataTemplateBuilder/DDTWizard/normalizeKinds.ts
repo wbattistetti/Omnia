@@ -1,86 +1,87 @@
-// Normalizer for DDT Builder output – assigns canonical kinds and sub structures
-// Applies deterministic rules so extractors can run reliably.
+// ✅ NEW: AI is the single source of truth for types
+// This function ONLY provides fallback to 'generic' if type is missing
 
 type Node = any;
-
-const LABEL_TO_KIND: Array<{ test: (s: string) => boolean; kind: 'name'|'date'|'address'|'phone'|'email'|'number'|'text' }>= [
-  { test: s => /full\s*name|nome\s*completo|name\b/i.test(s), kind: 'name' },
-  { test: s => /date\s*of\s*birth|data\s*di\s*nascita|birth\s*date|dob\b/i.test(s), kind: 'date' },
-  { test: s => /address|indirizzo/i.test(s), kind: 'address' },
-  { test: s => /phone|telefono|cellulare/i.test(s), kind: 'phone' },
-  { test: s => /email|e-?mail/i.test(s), kind: 'email' },
-  { test: s => /number|numero/i.test(s), kind: 'number' },
-  { test: _ => true, kind: 'text' },
-];
 
 function ensureId(label: string, fallback: string) {
   return `${label || fallback}`;
 }
 
-function upsertSub(main: Node, label: string, type: 'text'|'number', required = true) {
-  const idx = (main.subData || []).findIndex((s: Node) => String(s?.label || '').toLowerCase() === label.toLowerCase());
-  if (idx >= 0) {
-    main.subData[idx].type = type;
-    if (required === false) main.subData[idx].required = false; else main.subData[idx].required = true;
-    return;
-  }
-  main.subData = main.subData || [];
-  main.subData.push({ id: ensureId(label, label), label, type, required });
-}
-
+/**
+ * Normalize DDT main nodes - AI is the source of truth
+ * Only adds 'generic' as fallback if type is completely missing
+ */
 export function normalizeDDTMainNodes(mains: Node[]): Node[] {
   return (mains || []).map((main) => {
     const label = String(main?.label || '').trim();
-    const existing = String(main?.kind || '').trim().toLowerCase();
-    const existingType = String(main?.type || '').trim().toLowerCase();
-    const manual = String((main as any)?._kindManual || '').trim().toLowerCase();
-    // Respect explicit kind set by the editor; only infer when missing/auto/generic
-    let kind: any;
-    if (manual) kind = manual;
-    else if (existing && existing !== 'generic' && existing !== 'auto') kind = existing;
-    else {
-      const mapped = LABEL_TO_KIND.find(r => r.test(label));
-      kind = mapped ? mapped.kind : 'text';
-      if (/telephone|phone|telefono|cellulare/i.test(label)) kind = 'phone';
+    const existingKind = String(main?.kind || '').trim();
+    const existingType = String(main?.type || '').trim();
+    const manual = String((main as any)?._kindManual || '').trim();
+    
+    // ✅ NEW: Respect AI type inference as the primary source
+    // Priority: 1. Manual override, 2. AI inferred type, 3. Fallback to 'generic'
+    let kind: string;
+    if (manual) {
+      kind = manual;
+    } else if (existingType && existingType !== 'auto') {
+      // AI inferred type from backend (this is the source of truth!)
+      kind = existingType;
+    } else if (existingKind && existingKind !== 'auto') {
+      kind = existingKind;
+    } else {
+      // ⚠️ Fallback to 'generic' only when type is missing
+      kind = 'generic';
+      console.warn('[DDT normalizeKinds] No type found for field, using generic fallback', { label });
     }
-    try { // debug mapping
+    
+    try {
       // eslint-disable-next-line no-console
-      console.log('[DDT normalizeKinds] map', { label, existing, existingType, kind });
+      console.log('[DDT normalizeKinds] AI type accepted', { 
+        label, 
+        aiType: existingType, 
+        finalKind: kind,
+        manual: manual || undefined
+      });
     } catch {}
-    const out: Node = { ...main, kind };
+    
+    // ✅ NEW: Copy structure as-is from AI, no override!
+    const out: Node = { 
+      ...main, 
+      kind,
+      type: kind  // Ensure type matches kind
+    };
+    
+    // Copy subData as-is (no upsertSub!)
     out.subData = Array.isArray(main.subData) ? [...main.subData] : [];
-    // Canonicalize subs per kind
-    if (kind === 'name') {
-      upsertSub(out, 'First name', 'text', true);
-      upsertSub(out, 'Last name', 'text', true);
-    } else if (kind === 'date') {
-      upsertSub(out, 'Day', 'number', true);
-      upsertSub(out, 'Month', 'number', true);
-      upsertSub(out, 'Year', 'number', true);
-    } else if (kind === 'address') {
-      // Default all subs to required=true; user can uncheck in the sidebar
-      upsertSub(out, 'Street', 'text', true);
-      upsertSub(out, 'House Number', 'text', true);
-      upsertSub(out, 'City', 'text', true);
-      upsertSub(out, 'Postal Code', 'text', true);
-      upsertSub(out, 'Country', 'text', true);
-      upsertSub(out, 'Region/State', 'text', true);
-    } else if (kind === 'phone') {
-      // Canonical phone structure: Number (required) + optional Prefix
-      upsertSub(out, 'Number', 'text', true);
-      upsertSub(out, 'Prefix', 'text', false);
-    }
+    
+    // ✅ NEW: Ensure each subData item has an ID and fallback type
+    out.subData = out.subData.map((sub: Node) => {
+      const subLabel = String(sub?.label || '').trim();
+      const subType = String(sub?.type || '').trim();
+      
+      return {
+        ...sub,
+        id: sub.id || ensureId(subLabel, 'subfield'),
+        type: subType || 'generic',  // Only fallback if missing
+        label: subLabel
+      };
+    });
+    
     try {
       // eslint-disable-next-line no-console
       console.log('[DDT normalizeKinds][result]', {
         label,
         chosenKind: out.kind,
-        manual: (main as any)?._kindManual || undefined,
-        existing,
-        existingType,
-        subs: (out.subData || []).map((s: any) => ({ label: s?.label, required: s?.required, type: s?.type })),
+        aiType: existingType,
+        manual: manual || undefined,
+        subs: (out.subData || []).map((s: any) => ({ 
+          label: s?.label, 
+          type: s?.type,
+          required: s?.required 
+        })),
       });
     } catch {}
+    
     return out;
   });
 }

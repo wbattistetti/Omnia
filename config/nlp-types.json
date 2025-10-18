@@ -1,0 +1,167 @@
+{
+  "version": "1.0",
+  "description": "Shared configuration for NLP data types between frontend and backend",
+  "supportedKinds": [
+    "name",
+    "email",
+    "phone",
+    "date",
+    "address",
+    "generic",
+    "number",
+    "month",
+    "taxCode",
+    "iban",
+    "vatNumber",
+    "podPdrCode",
+    "accountNumber",
+    "currency",
+    "postalCode",
+    "time",
+    "url"
+  ],
+  "aliases": {
+    "telephone": "phone",
+    "tel": "phone",
+    "mobile": "phone",
+    "cellulare": "phone",
+    "mail": "email",
+    "emailAddress": "email",
+    "dateOfBirth": "date",
+    "birthday": "date",
+    "dob": "date",
+    "fiscalCode": "taxCode",
+    "codiceFiscale": "taxCode",
+    "ssn": "taxCode",
+    "partitaIva": "vatNumber",
+    "piva": "vatNumber",
+    "vat": "vatNumber",
+    "podCode": "podPdrCode",
+    "pdrCode": "podPdrCode",
+    "contractNumber": "accountNumber",
+    "numeroContratto": "accountNumber",
+    "amount": "currency",
+    "price": "currency",
+    "importo": "currency",
+    "zipCode": "postalCode",
+    "cap": "postalCode",
+    "postcode": "postalCode",
+    "website": "url",
+    "link": "url",
+    "text": "generic",
+    "integer": "number",
+    "int": "number",
+    "age": "number",
+    "quantity": "number",
+    "count": "number",
+    "boolean": "generic",
+    "string": "generic"
+  },
+  "extractorMapping": {
+    "name": "name",
+    "email": "email",
+    "phone": "phone",
+    "date": "dateOfBirth",
+    "address": "address",
+    "generic": "generic",
+    "number": "number",
+    "month": "month",
+    "taxCode": "taxCode",
+    "iban": "iban",
+    "vatNumber": "vatNumber",
+    "podPdrCode": "podPdrCode",
+    "accountNumber": "accountNumber",
+    "currency": "currency",
+    "postalCode": "postalCode",
+    "time": "time",
+    "url": "url"
+  },
+  "typeMetadata": {
+    "name": {
+      "description": "Person's full name or name components",
+      "examples": ["Mario Rossi", "John", "Smith"],
+      "validation": "string, 2-100 chars"
+    },
+    "email": {
+      "description": "Email address",
+      "examples": ["user@example.com", "mario.rossi@gmail.com"],
+      "validation": "RFC 5322 compliant"
+    },
+    "phone": {
+      "description": "Phone number (international or national format)",
+      "examples": ["+39 333 1234567", "3331234567", "+1-555-123-4567"],
+      "validation": "E.164 format preferred"
+    },
+    "date": {
+      "description": "Date (birth date, expiry date, etc.)",
+      "examples": ["15/03/1980", "1980-03-15", "15 March 1980"],
+      "validation": "ISO 8601 or locale-specific"
+    },
+    "address": {
+      "description": "Full postal address",
+      "examples": ["Via Roma 123, 20121 Milano MI"],
+      "validation": "Street, number, city, postal code"
+    },
+    "taxCode": {
+      "description": "Tax identification code (Codice Fiscale IT, SSN US, etc.)",
+      "examples": ["RSSMRA80A01H501Z", "123-45-6789"],
+      "validation": "Country-specific format"
+    },
+    "iban": {
+      "description": "International Bank Account Number",
+      "examples": ["IT60X0542811101000000123456"],
+      "validation": "ISO 13616 compliant"
+    },
+    "vatNumber": {
+      "description": "VAT identification number (Partita IVA)",
+      "examples": ["IT12345678901", "ATU12345678"],
+      "validation": "Country code + digits"
+    },
+    "podPdrCode": {
+      "description": "Utility meter code (POD for electricity, PDR for gas)",
+      "examples": ["IT001E12345678", "12345678901234"],
+      "validation": "POD: IT + 3 digits + E + 8 digits, PDR: 14 digits"
+    },
+    "accountNumber": {
+      "description": "Account or contract number",
+      "examples": ["ACC-2024-001234", "CTR123456789"],
+      "validation": "Alphanumeric, varies by company"
+    },
+    "currency": {
+      "description": "Monetary amount",
+      "examples": ["€ 150,50", "$100.00", "1500"],
+      "validation": "Number with optional currency symbol"
+    },
+    "postalCode": {
+      "description": "Postal code / ZIP code",
+      "examples": ["20121", "10001", "SW1A 1AA"],
+      "validation": "Country-specific format"
+    },
+    "time": {
+      "description": "Time of day",
+      "examples": ["14:30", "2:30 PM", "14:30:00"],
+      "validation": "HH:MM or 12h format"
+    },
+    "url": {
+      "description": "Web URL",
+      "examples": ["https://example.com", "www.site.it"],
+      "validation": "Valid URL format"
+    },
+    "number": {
+      "description": "Integer or decimal number (age, quantity, count, etc.)",
+      "examples": ["42", "25", "100", "3.14", "-5"],
+      "validation": "Valid numeric value"
+    },
+    "month": {
+      "description": "Month (numeric 1-12 or name)",
+      "examples": ["gennaio", "12", "February", "02", "dicembre"],
+      "validation": "1-12 or month name (IT/EN)"
+    },
+    "generic": {
+      "description": "Generic text (fallback for unknown types)",
+      "examples": ["any text", "yes", "notes"],
+      "validation": "Any string"
+    }
+  }
+}
+

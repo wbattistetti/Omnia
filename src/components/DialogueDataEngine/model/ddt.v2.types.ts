@@ -1,6 +1,29 @@
 // DialogueDataEngine V2 — data model only (DDT schema and config)
 
-export type Kind = 'name' | 'email' | 'phone' | 'date' | 'address' | 'generic';
+import nlpTypesConfig from '../../../../config/nlp-types.json';
+
+// ✅ Single source of truth: read supported kinds from shared config
+export const SUPPORTED_KINDS = nlpTypesConfig.supportedKinds as readonly string[];
+
+// ✅ Type for Kind based on config (for type safety)
+export type Kind = 
+  | 'name' 
+  | 'email' 
+  | 'phone' 
+  | 'date' 
+  | 'address' 
+  | 'generic'
+  | 'number'
+  | 'month'
+  | 'taxCode'
+  | 'iban'
+  | 'vatNumber'
+  | 'podPdrCode'
+  | 'accountNumber'
+  | 'currency'
+  | 'postalCode'
+  | 'time'
+  | 'url';
 export type StepType =
   | 'ask'
   | 'confirm'

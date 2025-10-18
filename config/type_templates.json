@@ -1,0 +1,298 @@
+{
+  "version": "1.0",
+  "description": "Pre-defined templates for common data types with examples, constraints, and structure",
+  "templates": {
+    "date": {
+      "label": "Date of birth",
+      "type": "date",
+      "icon": "Calendar",
+      "subData": [
+        {
+          "label": "Day",
+          "type": "number",
+          "icon": "Hash",
+          "examples": ["16", "1", "31", "05", "28"],
+          "constraints": [
+            {"type": "required"},
+            {"type": "min", "value": 1},
+            {"type": "max", "value": 31}
+          ]
+        },
+        {
+          "label": "Month",
+          "type": "month",
+          "icon": "Calendar",
+          "examples": ["December", "12", "January", "02", "March", "3"],
+          "constraints": [
+            {"type": "required"},
+            {"type": "min", "value": 1},
+            {"type": "max", "value": 12}
+          ]
+        },
+        {
+          "label": "Year",
+          "type": "number",
+          "icon": "Hash",
+          "examples": ["1961", "2024", "95", "1980", "2000"],
+          "constraints": [
+            {"type": "required"},
+            {"type": "min", "value": 1900},
+            {"type": "max", "value": 2024}
+          ]
+        }
+      ]
+    },
+    
+    "name": {
+      "label": "Full name",
+      "type": "name",
+      "icon": "User",
+      "subData": [
+        {
+          "label": "First name",
+          "type": "generic",
+          "icon": "User",
+          "examples": ["Mario", "John", "Maria", "Anna"],
+          "constraints": [
+            {"type": "required"},
+            {"type": "minLength", "value": 2},
+            {"type": "maxLength", "value": 50}
+          ]
+        },
+        {
+          "label": "Last name",
+          "type": "generic",
+          "icon": "User",
+          "examples": ["Rossi", "Smith", "Bianchi", "Johnson"],
+          "constraints": [
+            {"type": "required"},
+            {"type": "minLength", "value": 2},
+            {"type": "maxLength", "value": 50}
+          ]
+        }
+      ]
+    },
+    
+    "email": {
+      "label": "Email address",
+      "type": "email",
+      "icon": "Mail",
+      "subData": [],
+      "examples": ["mario.rossi@example.com", "user@gmail.com", "info@company.it"],
+      "constraints": [
+        {"type": "required"},
+        {"type": "email"}
+      ]
+    },
+    
+    "phone": {
+      "label": "Phone number",
+      "type": "phone",
+      "icon": "Phone",
+      "subData": [
+        {
+          "label": "Country code",
+          "type": "number",
+          "icon": "Globe",
+          "examples": ["39", "1", "44", "33", "49"],
+          "constraints": [
+            {"type": "required"}
+          ]
+        },
+        {
+          "label": "Number",
+          "type": "number",
+          "icon": "Phone",
+          "examples": ["3331234567", "0212345678", "5551234", "3475551234"],
+          "constraints": [
+            {"type": "required"},
+            {"type": "minLength", "value": 6},
+            {"type": "maxLength", "value": 15}
+          ]
+        }
+      ]
+    },
+    
+    "address": {
+      "label": "Address",
+      "type": "address",
+      "icon": "MapPin",
+      "subData": [
+        {
+          "label": "Street",
+          "type": "generic",
+          "icon": "MapPin",
+          "examples": ["via Roma", "corso Vittorio Emanuele", "Main Street"],
+          "constraints": [{"type": "required"}]
+        },
+        {
+          "label": "Civic number",
+          "type": "generic",
+          "icon": "Hash",
+          "examples": ["25", "123", "5A", "12/B"],
+          "constraints": [{"type": "required"}]
+        },
+        {
+          "label": "Internal",
+          "type": "generic",
+          "icon": "Home",
+          "examples": ["int. 5", "scala B", "apt 3", ""],
+          "constraints": []
+        },
+        {
+          "label": "Postal code",
+          "type": "postalCode",
+          "icon": "Hash",
+          "examples": ["20121", "10001", "00100", "SW1A 1AA"],
+          "constraints": [{"type": "required"}]
+        },
+        {
+          "label": "City",
+          "type": "generic",
+          "icon": "Building",
+          "examples": ["Milano", "Roma", "New York", "London"],
+          "constraints": [{"type": "required"}]
+        },
+        {
+          "label": "Region",
+          "type": "generic",
+          "icon": "Map",
+          "examples": ["Lombardia", "Lazio", "California", ""],
+          "constraints": []
+        },
+        {
+          "label": "Country",
+          "type": "generic",
+          "icon": "Globe",
+          "examples": ["Italia", "Italy", "United States", "UK"],
+          "constraints": [{"type": "required"}]
+        }
+      ]
+    },
+    
+    "taxCode": {
+      "label": "Tax code",
+      "type": "taxCode",
+      "icon": "IdCard",
+      "subData": [],
+      "examples": ["RSSMRA80A01H501Z", "BNCLRA85M12F205K", "VRDGPP90E15L219X"],
+      "constraints": [
+        {"type": "required"},
+        {"type": "regex", "pattern": "^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$"}
+      ]
+    },
+    
+    "iban": {
+      "label": "IBAN",
+      "type": "iban",
+      "icon": "CreditCard",
+      "subData": [],
+      "examples": ["IT60X0542811101000000123456", "GB82WEST12345698765432", "DE89370400440532013000"],
+      "constraints": [
+        {"type": "required"},
+        {"type": "regex", "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]+$"}
+      ]
+    },
+    
+    "vatNumber": {
+      "label": "VAT number",
+      "type": "vatNumber",
+      "icon": "Badge",
+      "subData": [],
+      "examples": ["IT12345678901", "ATU12345678", "GB123456789"],
+      "constraints": [
+        {"type": "required"},
+        {"type": "regex", "pattern": "^[A-Z]{2}[A-Z0-9]+$"}
+      ]
+    },
+    
+    "podPdrCode": {
+      "label": "POD/PDR code",
+      "type": "podPdrCode",
+      "icon": "Zap",
+      "subData": [],
+      "examples": ["IT001E12345678", "12345678901234", "IT002E98765432"],
+      "constraints": [
+        {"type": "required"}
+      ]
+    },
+    
+    "accountNumber": {
+      "label": "Account number",
+      "type": "accountNumber",
+      "icon": "FileText",
+      "subData": [],
+      "examples": ["ACC-2024-001234", "CTR123456789", "12345678"],
+      "constraints": [
+        {"type": "required"}
+      ]
+    },
+    
+    "currency": {
+      "label": "Amount",
+      "type": "currency",
+      "icon": "DollarSign",
+      "subData": [],
+      "examples": ["€ 150,50", "$100.00", "1500", "€ 45,00"],
+      "constraints": [
+        {"type": "required"},
+        {"type": "min", "value": 0}
+      ]
+    },
+    
+    "postalCode": {
+      "label": "Postal code",
+      "type": "postalCode",
+      "icon": "Hash",
+      "subData": [],
+      "examples": ["20121", "10001", "00100", "SW1A 1AA", "75001"],
+      "constraints": [
+        {"type": "required"}
+      ]
+    },
+    
+    "time": {
+      "label": "Time",
+      "type": "time",
+      "icon": "Clock",
+      "subData": [],
+      "examples": ["14:30", "2:30 PM", "09:00", "18:45"],
+      "constraints": [
+        {"type": "required"}
+      ]
+    },
+    
+    "url": {
+      "label": "Website URL",
+      "type": "url",
+      "icon": "Globe",
+      "subData": [],
+      "examples": ["https://example.com", "www.site.it", "http://company.com"],
+      "constraints": [
+        {"type": "required"},
+        {"type": "url"}
+      ]
+    },
+    
+    "number": {
+      "label": "Number",
+      "type": "number",
+      "icon": "Hash",
+      "subData": [],
+      "examples": ["42", "100", "3.14", "1500", "-5"],
+      "constraints": [
+        {"type": "required"}
+      ]
+    },
+    
+    "generic": {
+      "label": "Text field",
+      "type": "generic",
+      "icon": "FileText",
+      "subData": [],
+      "examples": ["example text", "any value", "notes"],
+      "constraints": []
+    }
+  }
+}
+

@@ -46,6 +46,26 @@ except Exception:
     from ai_endpoints.intent_generation import router as intent_gen_router
 
 GROQ_KEY = os.environ.get("Groq_key")
+
+# ✅ Load supported types from shared config
+NLP_TYPES_CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'nlp-types.json')
+SUPPORTED_KINDS = []
+TYPE_ALIASES = {}
+
+try:
+    if os.path.exists(NLP_TYPES_CONFIG_PATH):
+        with open(NLP_TYPES_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            nlp_config = json.load(f)
+            SUPPORTED_KINDS = nlp_config.get('supportedKinds', [])
+            TYPE_ALIASES = nlp_config.get('aliases', {})
+            print(f"[NLP Config] Loaded {len(SUPPORTED_KINDS)} supported kinds:", ', '.join(SUPPORTED_KINDS))
+    else:
+        print(f"[NLP Config] WARNING: Config file not found at {NLP_TYPES_CONFIG_PATH}, using fallback types")
+        SUPPORTED_KINDS = ['name', 'email', 'phone', 'date', 'address', 'generic']
+except Exception as e:
+    print(f"[NLP Config] ERROR loading config: {e}, using fallback types")
+    SUPPORTED_KINDS = ['name', 'email', 'phone', 'date', 'address', 'generic']
+
 # Import OPENAI_KEY from call_openai to get registry fallback
 try:
     from backend.call_openai import OPENAI_KEY
@@ -297,13 +317,13 @@ def generate_condition(body: dict = Body(...)):
         "- Do not use eval, new Function, setTimeout, setInterval.\n"
         "- Capture current time once (const now=new Date()) and reuse it (avoid multiple new Date() calls).\n"
         "- Only call Date.parse after verifying the input matches the ISO regex shown in parseDate; otherwise return null.\n"
-        "- Before responding, SELF-CHECK that: (a) CONDITION.inputs contains the same key(s); and (b) the code uses ACCESSOR_ROOT[\"...\"] for each key. If the check fails → return only {\"question\":\"Key mismatch. Confirm the exact dotted key.\"}.\n"
+        "- Before responding, SELF-CHECK that: (a) CONDITION.inputs contains the same key(s); and (b) the code uses ACCESSOR_ROOT[\"...\"] for each key. If the check fails -> return only {\"question\":\"Key mismatch. Confirm the exact dotted key.\"}.\n"
         "- EXTRA SELF-CHECK: if the code contains prohibited patterns like new Date(\"dd/mm/yyyy\") or other non-deterministic date parsing, return only {\"question\":\"Bad date parsing: use parseDate.\"}.\n"
-        "- EXTRA SELF-CHECK: if the script uses getFullYear|getMonth|getDate (non-UTC) → return only {\"question\":\"Use UTC date API (getUTC*).\"}.\n"
-        "- EXTRA SELF-CHECK: if Date.parse( appears without an ISO regex test → return only {\"question\":\"Bad date parsing: ISO only.\"}.\n"
-        "- EXTRA SELF-CHECK: if const CONDITION= or function main(ctx) is missing → return only {\"question\":\"Missing CONDITION or main(ctx).\"}.\n"
-        "- EXTRA SELF-CHECK: if main(ctx) does not return a boolean on all paths → return only {\"question\":\"main(ctx) must return a boolean.\"}.\n"
-        "- EXTRA SELF-CHECK: if the set of inputs differs from the set of ACCESSOR_ROOT[\"...\"] keys used → return only {\"question\":\"Key set mismatch between inputs and code.\"}.\n"
+        "- EXTRA SELF-CHECK: if the script uses getFullYear|getMonth|getDate (non-UTC) -> return only {\"question\":\"Use UTC date API (getUTC*).\"}.\n"
+        "- EXTRA SELF-CHECK: if Date.parse( appears without an ISO regex test -> return only {\"question\":\"Bad date parsing: ISO only.\"}.\n"
+        "- EXTRA SELF-CHECK: if const CONDITION= or function main(ctx) is missing -> return only {\"question\":\"Missing CONDITION or main(ctx).\"}.\n"
+        "- EXTRA SELF-CHECK: if main(ctx) does not return a boolean on all paths -> return only {\"question\":\"main(ctx) must return a boolean.\"}.\n"
+        "- EXTRA SELF-CHECK: if the set of inputs differs from the set of ACCESSOR_ROOT[\"...\"] keys used -> return only {\"question\":\"Key set mismatch between inputs and code.\"}.\n"
         "- If the description is insufficient or ambiguous (operator/threshold/unit/variable), return only {\"question\":\"...\"}.\n\n"
         "Output (strict):\n"
         "Return ONLY JSON: {\"label\":\"...\",\"script\":\"...\"} or {\"question\":\"...\"}. No extra text.\n\n"
@@ -312,7 +332,7 @@ def generate_condition(body: dict = Body(...)):
     )
 
     # ensure a blank line before Guidelines in the composed prompt
-    
+
     GUIDELINES = (
     )
 
@@ -470,7 +490,7 @@ def repair_condition(body: dict = Body(...)):
         "role": "user",
         "content": (
             "Current code (buggy):\n\n" + script + "\n\n" +
-            "Observed failures (input → expected → got) [JSON list]:\n" + failures_json + "\n\n" +
+            "Observed failures (input -> expected -> got) [JSON list]:\n" + failures_json + "\n\n" +
             "Hard rules to apply while fixing:\n"
             "- Keep CONDITION.inputs exactly as-is.\n"
             "- Use parseDate helper as described (dd/mm/yyyy, yyyy-mm-dd, Date, timestamp in ms, ISO-only fallback).\n"
@@ -587,11 +607,11 @@ def normalize_pseudocode(body: dict = Body(...)):
     """Turn informal/pseudo code + chat intent + current code into clean JS for main(ctx).
 
     Body: {
-      chat: [{role:'user'|'assistant', content:string}] | undefined,
-      pseudo: string,
-      currentCode: string,
-      variables: string[],
-      mode: 'predicate'|'value'|'object'|'enum'
+    chat: [{role:'user'|'assistant', content:string}] | undefined,
+    pseudo: string,
+    currentCode: string,
+    variables: string[],
+    mode: 'predicate'|'value'|'object'|'enum'
     }
     Return: { script?: string, error?: string }
     """
@@ -945,13 +965,13 @@ def tune_contract(body: dict = Body(...)):
     """
     Body example:
     {
-      "kind": "date",
-      "profile": {"synonyms":[], "formatHints":[], "regex":"", "postProcess":{}},
-      "errors": [
-         {"phrase":"...","key":"day","pred":"16","gt":"15","type":"false-accept"},
-         {"phrase":"...","key":"month","pred":null,"gt":"12","type":"unmatched"}
-      ],
-      "locale": "it-IT"
+    "kind": "date",
+    "profile": {"synonyms":[], "formatHints":[], "regex":"", "postProcess":{}},
+    "errors": [
+        {"phrase":"...","key":"day","pred":"16","gt":"15","type":"false-accept"},
+        {"phrase":"...","key":"month","pred":null,"gt":"12","type":"unmatched"}
+    ],
+    "locale": "it-IT"
     }
     Returns: { "suggested": { regex?, synonyms?, formatHints?, postProcess? } }
     """
@@ -1023,7 +1043,7 @@ async def _proxy_to_express(request: Request) -> Response:
     body_bytes = await request.body()
 
     try:
-        print(f"[PROXY→EXPRESS] {method} {target_url}")
+        print(f"[PROXY->EXPRESS] {method} {target_url}")
         if headers.get("content-type", "").startswith("application/json"):
             try:
                 json_payload = await request.json()
@@ -1218,57 +1238,40 @@ def _infer_subdata_from_text(text: str):
 # --- step2: Data type recognition (detectType)
 @app.post("/step2")
 def step2(user_desc: Any = Body(...)):
-    print("\nSTEP: /step2 – Data type recognition (detectType)")
+    print("\nSTEP: /step2 – Data type recognition (detectType) with template system")
     try:
+        # Import template manager
+        try:
+            from backend.type_template_manager import get_localized_template, get_available_types, load_templates
+        except ImportError:
+            from type_template_manager import get_localized_template, get_available_types, load_templates
+        
         # Accept both plain text or an object { text, currentSchema }
         current_schema = None
+        target_lang = "it"  # Default language
+        
         if isinstance(user_desc, dict):
             text = str(user_desc.get('text') or user_desc.get('desc') or user_desc.get('user_desc') or "").strip()
             current_schema = user_desc.get('currentSchema') or user_desc.get('schema')
+            target_lang = str(user_desc.get('lang') or user_desc.get('language') or "it").lower()
         else:
             text = str(user_desc or "").strip()
-        lc = text.lower()
-        TYPE_ICON = {
-            "date": "Calendar",
-            "email": "Mail",
-            "phone": "Phone",
-            "address": "MapPin",
-            "number": "Hash",
-            "boolean": "CheckSquare",
-            "text": "Type",
-        }
-        TYPE_LABEL = {
-            "date": "Date",
-            "email": "Email address",
-            "phone": "Phone number",
-            "address": "Address",
-            "number": "Number",
-            "boolean": "Boolean",
-            "text": "Text",
-        }
-        def guess_type(s: str) -> str:
-            if re.search(r"\b(email|e-mail|mail|pec)\b", s):
-                return "email"
-            # phone if explicit OR if typical phone subparts are requested
-            if re.search(r"\b(phone|telefono|cellulare|mobile|numero\s+di\s+telefono)\b", s) or \
-               re.search(r"codice\s*del\s*paese|\bprefisso\b|prefisso\s*internazionale|area\s*code", s):
-                return "phone"
-            if re.search(r"\b(date|data|nascita|birth|birthday|dob)\b", s):
-                return "date"
-            if re.search(r"\b(address|indirizzo|via|street|avenue|rua)\b", s):
-                return "address"
-            if re.search(r"\b(number|numero|quantità|amount|cifra|cpf|cf|codice\s+fiscale)\b", s):
-                return "text"
-            if re.search(r"\b(true|false|vero|falso|sí|nao|não|yes|no)\b", s):
-                return "boolean"
-            return "text"
+        
+        # Load templates
+        load_templates()
+        available_types = get_available_types()
+        
         # Check AI key availability
         if not (GROQ_KEY or OPENAI_KEY):
             raise HTTPException(status_code=500, detail="missing_ai_key")
+
+        # ✅ NEW APPROACH: AI only detects types, templates provide structure
+        types_list = '|'.join(available_types)
         
-        EN_MEANINGS = ['date of birth', 'email', 'phone number', 'address', 'number', 'text', 'boolean']
-        ICON_LIST = ['Sparkles', 'CheckSquare', 'Hash', 'Type', 'IdCard', 'Gift', 'Phone', 'Calendar', 'Mail', 'HelpCircle', 'MapPin', 'FileQuestion']
+        print(f"[step2] Available types from templates: {types_list}")
+        print(f"[step2] Target language: {target_lang}")
         
+        # If refining existing schema, keep old behavior
         if current_schema and isinstance(current_schema, dict) and (current_schema.get('mainData') or current_schema.get('mains')):
             prompt = f"""
 You are a data structure refiner.
@@ -1281,21 +1284,21 @@ Current structure (JSON):
 
 Return ONLY a strict JSON in this exact format (no markdown/comments/trailing commas):
 {{
-  "type": "<one of: phone|email|date|address|number|text|boolean>",
-  "icon": "<Lucide icon name>",
-  "schema": {{
+"type": "<one of: {types_list}>",
+"icon": "<Lucide icon name>",
+"schema": {{
     "label": "Data",
     "mainData": [
-      {{
+    {{
         "label": "<Main label in English>",
         "type": "<repeat 'type'>",
         "icon": "<Lucide icon name>",
         "subData": [
-          {{ "label": "<Sub1>", "type": "string" }}
+        {{ "label": "<Sub1>", "type": "string" }}
         ]
-      }}
+    }}
     ]
-  }}
+}}
 }}
 
 Rules:
@@ -1304,86 +1307,65 @@ Rules:
 - Use concise English labels. No explanations.
 """
         else:
+            # ✅ NEW: Simplified prompt to detect only types, templates will provide structure
             prompt = f"""
-You are a data collection structure designer.
+You are a data type detector.
 
 User description:
 {text}
 
 Your task:
-1. Identify ALL distinct data fields/concepts mentioned (e.g., name, date of birth, phone number, email, address).
-2. For EACH distinct field, create a separate entry in "mainData".
-3. For EACH field, subdivide into logical sub-fields when semantically appropriate (even if not explicitly requested):
-   - Full name: First name, Last name
-   - Date of birth: Day, Month, Year
-   - Phone number: Country code, Area code, Number
-   - Address: Street, Civic number, Internal, Postal code, City, Region, Country
-   - Email: no subData (atomic field)
+1. Identify ALL distinct data fields/concepts mentioned.
+2. For EACH field, determine the most appropriate data type.
 
-Return ONLY strict JSON (no markdown, no comments, no trailing commas):
+Available types: {types_list}
+
+Return ONLY strict JSON (no markdown, no comments):
 {{
-  "type": "object",
-  "icon": "Folder",
-  "schema": {{
-    "label": "Data",
-    "mainData": [
-      {{
-        "label": "<Field 1 label in English>",
-        "type": "<one of: phone|email|date|address|number|text|boolean>",
-        "icon": "<Lucide icon name>",
-        "subData": [
-          {{ "label": "<Sub1>", "type": "string" }},
-          {{ "label": "<Sub2>", "type": "string" }}
-        ]
-      }},
-      {{
-        "label": "<Field 2 label in English>",
-        "type": "<type>",
-        "icon": "<icon>",
-        "subData": [ ... ]
-      }}
-    ]
-  }}
+  "fields": [
+    {{"concept": "<short English description>", "type": "<type from list above>"}},
+    {{"concept": "<concept2>", "type": "<type>"}}
+  ]
 }}
 
 Examples:
 Input: "chiedi nome e cognome"
-Output: mainData: [{{"label": "Full name", "type": "text", "icon": "User", "subData": [{{"label": "First name", "type": "string"}}, {{"label": "Last name", "type": "string"}}]}}]
+Output: {{"fields": [{{"concept": "full name", "type": "name"}}]}}
 
 Input: "chiedi data di nascita"
-Output: mainData: [{{"label": "Date of birth", "type": "date", "icon": "Calendar", "subData": [{{"label": "Day", "type": "string"}}, {{"label": "Month", "type": "string"}}, {{"label": "Year", "type": "string"}}]}}]
+Output: {{"fields": [{{"concept": "date of birth", "type": "date"}}]}}
+
+Input: "chiedi età"
+Output: {{"fields": [{{"concept": "age", "type": "number"}}]}}
 
 Input: "chiedi telefono"
-Output: mainData: [{{"label": "Phone number", "type": "phone", "icon": "Phone", "subData": [{{"label": "Country code", "type": "string"}}, {{"label": "Area code", "type": "string"}}, {{"label": "Number", "type": "string"}}]}}]
-
-Input: "chiedi indirizzo"
-Output: mainData: [{{"label": "Address", "type": "address", "icon": "MapPin", "subData": [{{"label": "Street", "type": "string"}}, {{"label": "Civic number", "type": "string"}}, {{"label": "Internal", "type": "string"}}, {{"label": "Postal code", "type": "string"}}, {{"label": "City", "type": "string"}}, {{"label": "Region", "type": "string"}}, {{"label": "Country", "type": "string"}}]}}]
+Output: {{"fields": [{{"concept": "phone number", "type": "phone"}}]}}
 
 Input: "chiedi email"
-Output: mainData: [{{"label": "Email address", "type": "email", "icon": "Mail", "subData": []}}]
+Output: {{"fields": [{{"concept": "email", "type": "email"}}]}}
 
 Input: "chiedi nome cognome data di nascita telefono e email"
-Output: mainData: [
-  {{"label": "Full name", "type": "text", "icon": "User", "subData": [{{"label": "First name", "type": "string"}}, {{"label": "Last name", "type": "string"}}]}},
-  {{"label": "Date of birth", "type": "date", "icon": "Calendar", "subData": [{{"label": "Day", "type": "string"}}, {{"label": "Month", "type": "string"}}, {{"label": "Year", "type": "string"}}]}},
-  {{"label": "Phone number", "type": "phone", "icon": "Phone", "subData": [{{"label": "Country code", "type": "string"}}, {{"label": "Area code", "type": "string"}}, {{"label": "Number", "type": "string"}}]}},
-  {{"label": "Email address", "type": "email", "icon": "Mail", "subData": []}}
-]
+Output: {{"fields": [
+  {{"concept": "full name", "type": "name"}},
+  {{"concept": "date of birth", "type": "date"}},
+  {{"concept": "phone number", "type": "phone"}},
+  {{"concept": "email", "type": "email"}}
+]}}
 
 Rules:
-- Always create MULTIPLE main entries if multiple concepts are mentioned.
-- Always subdivide structured fields (name, date, phone, address) even if not explicitly asked.
-- Use concise English labels.
-- No explanations, no extra text.
+- Be precise in type selection
+- Use "number" for numeric fields (age, quantity, count)
+- Use "generic" only when no specific type matches
+- Multiple fields = multiple entries
 """
-        
+
         print("AI PROMPT ================")
         print(prompt)
-        
+
         # Provider routing (align with /step3)
         provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
         print(f"[step2][provider]={provider} text_len={len(text)} has_current_schema={bool(current_schema)}")
-        
+
         if provider == "openai":
             try:
                 from backend.call_openai import call_openai_json as _call_json
@@ -1391,20 +1373,83 @@ Rules:
                 from call_openai import call_openai_json as _call_json
         else:
             _call_json = call_groq_json
-        
+
         ai = _call_json([
             {"role": "system", "content": "Always reply in English with strict JSON."},
             {"role": "user", "content": prompt}
         ])
-        
+
         print("AI ANSWER ================")
         print(ai)
-        
+
         ai_obj = ai if isinstance(ai, dict) else _safe_json_loads(ai)
-        
-        if isinstance(ai_obj, dict) and ai_obj.get('type') and ai_obj.get('icon'):
+
+        # ✅ NEW: Check for new format (fields array) or old format (type + schema)
+        if isinstance(ai_obj, dict) and 'fields' in ai_obj:
+            # New template-based approach
+            fields = ai_obj.get('fields', [])
+            if not fields or not isinstance(fields, list):
+                raise HTTPException(status_code=500, detail="invalid_ai_response: no fields")
+            
+            # Build mainData from templates
+            main_data_list = []
+            
+            # Get AI caller for translations
+            provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+            if provider == "openai":
+                try:
+                    from backend.call_openai import call_openai as _ai_caller
+                except Exception:
+                    from call_openai import call_openai as _ai_caller
+            else:
+                _ai_caller = None  # Groq doesn't support translation yet
+            
+            for field in fields:
+                field_type = field.get('type', 'generic')
+                field_concept = field.get('concept', 'Data field')
+                
+                print(f"[step2] Processing field: {field_concept} -> type: {field_type}")
+                
+                # Get template (with localization if needed)
+                template = get_localized_template(field_type, target_lang, _ai_caller)
+                
+                if template:
+                    # Use template structure
+                    main_entry = {
+                        'label': template.get('label', field_concept),
+                        'type': template.get('type', field_type),
+                        'icon': template.get('icon', 'FileText'),
+                        'subData': template.get('subData', [])
+                    }
+                    print(f"[step2] Using template for {field_type}: {main_entry['label']}")
+                else:
+                    # Fallback: create basic entry
+                    main_entry = {
+                        'label': field_concept.title(),
+                        'type': field_type,
+                        'icon': 'FileText',
+                        'subData': []
+                    }
+                    print(f"[step2] No template found for {field_type}, using fallback")
+                
+                main_data_list.append(main_entry)
+            
+            # Build final response
+            response = {
+                'type': 'object',
+                'icon': 'Folder',
+                'schema': {
+                    'label': 'Data',
+                    'mainData': main_data_list
+                }
+            }
+            
+            print(f"[step2] Built schema with {len(main_data_list)} fields from templates")
+            return {"ai": response}
+            
+        elif isinstance(ai_obj, dict) and ai_obj.get('type') and ai_obj.get('icon'):
+            # Old format compatibility (for refinement mode)
             inferred = _infer_subdata_from_text(text)
-            # Coerce to phone if text clearly describes phone subparts but model picked generic type
             if (ai_obj.get('type') in (None, 'text')) and inferred:
                 ai_obj['type'] = 'phone'
                 ai_obj['icon'] = 'Phone'
@@ -1412,7 +1457,7 @@ Rules:
                 ai_obj['schema'] = {
                     'label': 'Data',
                     'mainData': [{
-                        'label': TYPE_LABEL.get(str(ai_obj.get('type')).lower(), str(ai_obj.get('type'))),
+                        'label': str(ai_obj.get('type', 'Data')).title(),
                         'type': ai_obj.get('type'),
                         'icon': ai_obj.get('icon'),
                         'subData': inferred
@@ -1457,17 +1502,17 @@ Input schema (JSON):
 
 Respond ONLY with strict JSON (no markdown/comments), using this format:
 {{
-  "schema": {{
+"schema": {{
     "mainData": [
-      {{
+    {{
         "label": "<Main label>",
-        "constraints": [ ... ],
-        "subData": [
-          {{ "label": "<Sub label>", "constraints": [ ... ] }}
-        ]
-      }}
+    "constraints": [ ... ],
+    "subData": [
+        {{ "label": "<Sub label>", "constraints": [ ... ] }}
     ]
-  }}
+}}
+    ]
+}}
 }}
 """
         print("AI PROMPT ================")
@@ -1584,6 +1629,129 @@ Input DDT structure:
     print("[GROQ RESPONSE /step4]", ai_obj)
     return {"ai": ai_obj}
 
+# --- API: Generate Regex from natural language description ---
+@app.post("/api/nlp/generate-regex")
+def generate_regex(body: dict = Body(...)):
+    """
+    Generate a regex pattern from a natural language description.
+    
+    Body example:
+    {
+      "description": "numeri di telefono italiani"
+    }
+    
+    Returns:
+    {
+      "regex": "\\+39\\s?\\d{3}\\s?\\d{3}\\s?\\d{4}",
+      "explanation": "Matches Italian phone numbers with optional spaces",
+      "examples": ["+39 333 123 4567", "+393331234567"]
+    }
+    """
+    print("\n[API] POST /api/nlp/generate-regex")
+    
+    try:
+        description = (body or {}).get("description", "").strip()
+        
+        if not description:
+            raise HTTPException(status_code=400, detail="Description is required")
+        
+        # Check AI key availability
+        if not (GROQ_KEY or OPENAI_KEY):
+            raise HTTPException(status_code=500, detail="missing_ai_key")
+        
+        # Build AI prompt for regex generation
+        prompt = f"""
+You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
+
+User description: "{description}"
+
+Requirements:
+1. Generate a regex pattern that matches the described pattern
+2. Escape special characters properly for JavaScript (use \\\\ for backslashes)
+3. Provide a clear explanation of what the regex matches
+4. Include 2-3 realistic examples that match the pattern
+5. Consider edge cases and common variations
+6. For Italian contexts, consider Italian formats (phone numbers, postal codes, etc.)
+
+Return ONLY a strict JSON object with this format (no markdown, no extra text):
+{{
+  "regex": "your-regex-pattern-here",
+  "explanation": "Clear explanation of what this regex matches",
+  "examples": ["example1", "example2", "example3"],
+  "flags": "gi"
+}}
+
+Common patterns for reference:
+- Email: [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{{2,}}
+- Italian phone: \\+39\\s?\\d{{3}}\\s?\\d{{3}}\\s?\\d{{4}}
+- Italian postal code (CAP): \\d{{5}}
+- Italian tax code (CF): [A-Z]{{6}}\\d{{2}}[A-Z]\\d{{2}}[A-Z]\\d{{3}}[A-Z]
+- Date (dd/mm/yyyy): \\d{{2}}/\\d{{2}}/\\d{{4}}
+- Number: -?\\d+(?:[.,]\\d+)?
+- URL: https?://[^\\s/$.?#].[^\\s]*
+- Italian VAT (P.IVA): \\d{{11}}
+
+Be precise and practical. Test mentally that your regex works correctly.
+"""
+        
+        print(f"[generate-regex] Description: {description}")
+        print("[generate-regex] Calling AI...")
+        
+        # Provider routing
+        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+        print(f"[generate-regex] Provider: {provider}")
+        
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai_json as _call_json
+            except Exception:
+                from call_openai import call_openai_json as _call_json
+        else:
+            _call_json = call_groq_json
+        
+        # Call AI
+        ai_response = _call_json([
+            {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
+            {"role": "user", "content": prompt}
+        ])
+        
+        print("[generate-regex] AI Response:", ai_response)
+        
+        # Parse response
+        if isinstance(ai_response, dict):
+            result = ai_response
+        else:
+            result = _safe_json_loads(ai_response)
+        
+        if not result or not isinstance(result, dict) or 'regex' not in result:
+            raise HTTPException(status_code=500, detail="AI returned invalid response")
+        
+        # Validate regex can be compiled
+        try:
+            import re as regex_module
+            regex_module.compile(result.get('regex', ''))
+        except Exception as regex_error:
+            print(f"[generate-regex] WARNING: Generated regex is invalid: {regex_error}")
+            result['warning'] = f"Generated regex may be invalid: {str(regex_error)}"
+        
+        print(f"[generate-regex] Success! Regex: {result.get('regex')}")
+        
+        return {
+            "success": True,
+            "regex": result.get('regex', ''),
+            "explanation": result.get('explanation', ''),
+            "examples": result.get('examples', []),
+            "flags": result.get('flags', 'g')
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[generate-regex] ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating regex: {str(e)}")
+
 # --- step5: Generate validation scripts (generateValidationScripts) ---
 @app.post("/step5")
 def step5(constraint_json: dict = Body(...)):
@@ -1603,9 +1771,9 @@ Each script must define a **pure function** that takes one input (`value`) and r
 
 Respond ONLY with a JSON object in this exact format:
 {
-  "js": "function validate(value) { /* JavaScript code */ }",
-  "py": "def validate(value):\n    # Python code",
-  "ts": "function validate(value: any): boolean { /* TypeScript code */ }"
+"js": "function validate(value) { /* JavaScript code */ }",
+"py": "def validate(value):\n    # Python code",
+"ts": "function validate(value: any): boolean { /* TypeScript code */ }"
 }
 
 ⚠️ DO NOT:

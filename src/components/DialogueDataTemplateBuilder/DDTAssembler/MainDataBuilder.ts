@@ -3,6 +3,52 @@ import { StepGroup } from './types';
 import { enrichAndTranslateConstraints } from './ConstraintBuilder';
 import { v4 as uuidv4 } from 'uuid';
 import { buildStepsWithSubData, SubDataStepMessages } from './buildStepMessagesFromResults';
+import nlpTypesConfig from '../../../../config/nlp-types.json';
+import type { Kind } from '../../DialogueDataEngine/model/ddt.v2.types';
+
+/**
+ * Maps AI semantic types to frontend Kind values using the shared config.
+ * Falls back to 'generic' for unknown types.
+ * 
+ * @param aiType - The type returned by the AI (e.g., 'phone', 'taxCode', 'fiscalCode')
+ * @returns The corresponding frontend Kind or 'generic' as fallback
+ */
+function mapAITypeToKind(aiType: string | undefined): Kind | undefined {
+  if (!aiType) return undefined;
+  
+  const normalized = aiType.toLowerCase().trim();
+  
+  // Step 1: Check if it's a supported kind directly
+  const supportedKinds = nlpTypesConfig.supportedKinds as string[];
+  if (supportedKinds.includes(normalized)) {
+    console.log('[MainDataBuilder][mapType] Direct match', {
+      aiType,
+      mappedKind: normalized
+    });
+    return normalized as Kind;
+  }
+  
+  // Step 2: Check aliases mapping
+  const aliases = nlpTypesConfig.aliases as Record<string, string>;
+  if (aliases[normalized]) {
+    console.log('[MainDataBuilder][mapType] Alias match', {
+      aiType,
+      alias: normalized,
+      mappedKind: aliases[normalized]
+    });
+    return aliases[normalized] as Kind;
+  }
+  
+  // Step 3: Fallback to 'generic' for unknown types
+  console.log('[MainDataBuilder][mapType] Unknown type, using fallback', {
+    aiType,
+    normalized,
+    mappedKind: 'generic',
+    availableKinds: supportedKinds.join(', ')
+  });
+  
+  return 'generic';
+}
 
 // Ricorsivo: struttura identica per mainData e subData.
 export function buildMainDataNode(
@@ -83,13 +129,21 @@ export function buildMainDataNodeWithSubData(
   if (dataNode.variable) mainData.variable = dataNode.variable;
   if (dataNode.icon) mainData.icon = dataNode.icon;  // ✅ Preserve icon from AI
   
+  // ✅ Map AI type → frontend Kind with fallback to 'generic'
+  if (dataNode.type) {
+    mainData.kind = mapAITypeToKind(dataNode.type);
+  }
+  
   console.log('[MainDataBuilder][result]', {
     ddtId,
     assignedLabel: mainData.label,
+    assignedKind: mainData.kind,
+    aiType: dataNode.type,
     usedFallback: mainData.label === 'Subdata',
     hadLabel: !!dataNode.label,
     hadVariable: !!dataNode.variable,
-    hadName: !!dataNode.name
+    hadName: !!dataNode.name,
+    hadType: !!dataNode.type
   });
   
   // Final clean log for the full node (including subData)
