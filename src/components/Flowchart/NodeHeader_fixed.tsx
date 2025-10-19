@@ -7,9 +7,9 @@ import { createPortal } from 'react-dom';
  * Props per NodeHeader
  * @property title - titolo del nodo
  * @property onDelete - callback per eliminare il nodo
- * @property onToggleEdit - callback per attivare/disattivare la modalità editing
+ * @property onToggleEdit - callback per attivare/disattivare la modalit�  editing
  * @property onTitleUpdate - callback per aggiornare il titolo
- * @property isEditing - true se il nodo è in modalità editing
+ * @property isEditing - true se il nodo è in modalit�  editing
  */
 export interface NodeHeaderProps {
   title: string;
@@ -115,9 +115,9 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
     if (isEditingTitle && titleInputRef.current) {
       const updateRect = () => {
         if (!titleInputRef.current) return;
-
+        
         const inputRect = titleInputRef.current.getBoundingClientRect();
-
+        
         // Area estesa per hover (include spazio per icone a destra)
         setExtendedRect({
           top: inputRect.top - 7,
@@ -126,7 +126,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
           height: inputRect.height + 14,
         });
       };
-
+      
       updateRect();
       window.addEventListener('resize', updateRect);
       window.addEventListener('scroll', updateRect, true);
@@ -147,11 +147,11 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
   };
 
   return (
-    <div
+    <div 
       className="relative flex items-center text-white px-2 py-2 rounded-t-lg border-b"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      style={{
+      style={{ 
         background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', // Arancione pastello
         borderBottom: '1px solid rgba(0,0,0,0.1)',
         width: '100%',
@@ -218,10 +218,10 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
               }}
             />
             {/* Icone editing - position absolute, fuori dal bordo */}
-            <div style={{
-              position: 'absolute',
+            <div style={{ 
+              position: 'absolute', 
               right: -30, // Fuori dal bordo: compensa padding + spazio
-              top: '50%',
+              top: '50%', 
               transform: 'translateY(-50%)',
               display: 'flex',
               gap: 4,
@@ -231,26 +231,25 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
               {/* X rossa - appare SEMPRE durante l'editing */}
               {isEditingTitle && (
                 <button
-                  onClick={handleTitleCancel}
-                  className="p-0 text-red-500 hover:text-red-400 nodrag hover:opacity-100 hover:scale-110"
-                  title="Annulla (ESC)"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 2,
-                    cursor: 'pointer',
-                    opacity: 0.9,
-                    transition: 'opacity 120ms linear, transform 120ms ease',
-                    width: 16,
-                    height: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <X className="w-3 h-3" style={{ filter: 'drop-shadow(0 0 2px rgba(239, 68, 68, 0.6))' }} />
-                </button>
-              )}
+                onClick={handleTitleCancel}
+                className="p-0 text-red-500 hover:text-red-400 nodrag hover:opacity-100 hover:scale-110"
+                title="Annulla (ESC)"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 2,
+                  cursor: 'pointer',
+                  opacity: 0.9,
+                  transition: 'opacity 120ms linear, transform 120ms ease',
+                  width: 16,
+                  height: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X className="w-3 h-3" style={{ filter: 'drop-shadow(0 0 2px rgba(239, 68, 68, 0.6))' }} />
+              </button>
 
               {/* Check verde - appare appena comincio a scrivere */}
               {isEditingTitle && tempTitle.trim().length > 0 && (

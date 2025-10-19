@@ -560,11 +560,29 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   };
 
   const handleIntellisenseSelect = async (item: IntellisenseItem) => {
+    console.log('[🔍 INTELLISENSE] handleIntellisenseSelect called', {
+      itemName: item.name,
+      itemCategoryType: item.categoryType,
+      rowId: row.id,
+      nodeCanvasPosition,
+      timestamp: Date.now()
+    });
+    
     setCurrentText(item.name);
+    console.log('[🔍 INTELLISENSE] Closing intellisense', {
+      itemName: item.name,
+      rowId: row.id,
+      timestamp: Date.now()
+    });
     setShowIntellisense(false);
     setIntellisenseQuery('');
     // Auto-save the selection with category type (legacy path keeps row label)
     if (onUpdateWithCategory) {
+      console.log('[🔍 INTELLISENSE] Calling onUpdateWithCategory', {
+        rowId: row.id,
+        itemName: item.name,
+        categoryType: item.categoryType
+      });
       (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
         actId: item.actId,
         factoryId: item.factoryId,
@@ -575,6 +593,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         baseActId: item.actId
       });
     } else {
+      console.log('[🔍 INTELLISENSE] Calling onUpdate', {
+        rowId: row.id,
+        itemName: item.name
+      });
       onUpdate(row, item.name);
     }
     // Create instance asynchronously (best-effort)
@@ -591,6 +613,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         }
       }
     } catch (e) { try { console.warn('[Row][instance:create] failed', e); } catch {} }
+    console.log('[🔍 INTELLISENSE] Exiting editing mode', {
+      rowId: row.id,
+      itemName: item.name,
+      timestamp: Date.now()
+    });
     setIsEditing(false);
     setShowCreatePicker(false);
   };

@@ -34,11 +34,35 @@ export function useNodeManager(
    * Aggiorna un nodo per id
    */
   const updateNode = useCallback((nodeId: string, updates: Partial<NodeData>) => {
-    setNodes((nds) =>
-      nds.map((node) =>
-        node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node
-      )
-    );
+    console.log("🔄 [UPDATE_NODE] updateNode called", {
+      nodeId,
+      updates,
+      timestamp: Date.now()
+    });
+    
+    setNodes((nds) => {
+      const updatedNodes = nds.map((node) => {
+        if (node.id === nodeId) {
+          const oldPosition = node.position;
+          const updatedNode = { ...node, data: { ...node.data, ...updates } };
+          
+          // Log solo per cambiamenti significativi
+          if (updates.isTemporary !== undefined || updates.hidden !== undefined) {
+            console.log("🔄 [UPDATE_NODE] Node state changed", {
+              nodeId,
+              oldPosition,
+              newPosition: updatedNode.position,
+              positionChanged: oldPosition.x !== updatedNode.position.x || oldPosition.y !== updatedNode.position.y,
+              updates
+            });
+          }
+          
+          return updatedNode;
+        }
+        return node;
+      });
+      return updatedNodes;
+    });
   }, [setNodes]);
 
   /**

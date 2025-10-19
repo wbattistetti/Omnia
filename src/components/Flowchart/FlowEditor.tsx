@@ -176,11 +176,38 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
     if (tempNodeId && tempEdgeId) {
       const fp = (connectionMenuRef.current as any).flowPosition;
-      setNodes(nds => nds.map(n => n.id === tempNodeId ? {
-        ...n,
-        position: fp ? { x: fp.x - (NODE_WIDTH / 2), y: fp.y } : n.position,
-        data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined }
-      } : n));
+      console.log('[🔍 STABILIZE.1] Starting stabilization (first occurrence)', { 
+        tempNodeId, 
+        tempEdgeId,
+        flowPosition: fp,
+        timestamp: Date.now()
+      });
+      setNodes(nds => {
+        const stabilizedNodes = nds.map(n => {
+          if (n.id === tempNodeId) {
+            console.log('[🔍 STABILIZE.1] Stabilizing temporary node', { 
+              tempNodeId, 
+              oldPosition: n.position,
+              oldIsTemporary: (n.data as any)?.isTemporary,
+              oldHidden: (n.data as any)?.hidden,
+              timestamp: Date.now()
+            });
+            return {
+              ...n,
+              position: n.position, // Mantieni la posizione corretta del nodo temporaneo
+              data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined }
+            };
+          }
+          return n;
+        });
+        console.log('[🔍 STABILIZE.1] Node stabilization complete', { 
+          tempNodeId, 
+          totalNodes: stabilizedNodes.length,
+          timestamp: Date.now()
+        });
+        return stabilizedNodes;
+      });
+      console.log('[Conn][finalize.temp]', { tempNodeId, finalPosition: nds.find(n => n.id === tempNodeId)?.position });
       setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label, style: { ...(e.style || {}), stroke: '#8b5cf6' } } : e));
       finalizeTempPromotion(tempNodeId, tempEdgeId);
       connectionMenuRef.current.tempNodeId = null as any;
@@ -317,8 +344,60 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [nodes.length, reactFlowInstance]);
 
+  // Wrapper per setNodes con logging dettagliato e lock interno
+  const setNodesWithLog = useCallback((updater: any) => {
+    // ✅ LOCK INTERNO per prevenire chiamate duplicate in React StrictMode
+    if (isCreatingTempNode.current) {
+      console.log("🚫 [SET_NODES] BLOCKED - Node creation already in progress");
+      return;
+    }
+    
+    isCreatingTempNode.current = true;
+    
+    if (typeof updater === 'function') {
+      setNodes((currentNodes) => {
+        const newNodes = updater(currentNodes);
+        
+        // Log solo per cambiamenti di posizione significativi sui nodi temporanei
+        currentNodes.forEach((oldNode, index) => {
+          const newNode = newNodes[index];
+          if (newNode && (newNode.data as any)?.isTemporary) {
+            const positionChanged = oldNode.position.x !== newNode.position.x || oldNode.position.y !== newNode.position.y;
+            if (positionChanged) {
+              console.log("⚠️ [POSITION] Temporary node position changed", {
+                nodeId: newNode.id,
+                oldPosition: oldNode.position,
+                newPosition: newNode.position,
+                deltaX: newNode.position.x - oldNode.position.x,
+                deltaY: newNode.position.y - oldNode.position.y,
+                timestamp: Date.now()
+              });
+            }
+          }
+        });
+        
+        // ✅ UNLOCK posticipato
+        queueMicrotask(() => {
+          isCreatingTempNode.current = false;
+        });
+        
+        return newNodes;
+      });
+    } else {
+      setNodes(updater);
+      // ✅ UNLOCK posticipato
+      queueMicrotask(() => {
+        isCreatingTempNode.current = false;
+      });
+    }
+  }, [setNodes]);
+
   // Log su addNodeAtPosition e deleteNode
-  const { addNode, deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodes, setNodeIdCounter);
+  const { addNode, deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodesWithLog, setNodeIdCounter);
+  
+  // ✅ FIX: Variabile mancante per lock interno
+  const isCreatingTempNode = useRef(false);
+  
   const addNodeAtPosition = useCallback((node: Node<NodeData>, x: number, y: number) => {
     originalAddNodeAtPosition(node, x, y);
   }, [originalAddNodeAtPosition]);
@@ -353,7 +432,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       const act = projectData ? findAgentAct(projectData as any, pcRow) : null;
       if (act && (act as any)?.problem?.intents?.length) intents = (act as any).problem.intents;
 
-      // 4) fallback locale: shadow salvato dall’editor
+      // 4) fallback locale: shadow salvato dall'editor
       if (!intents || !intents.length) {
         const pid = (()=>{ try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
         const keys = [`problem.${pid}.${actId}`, `problem.${pid}.${pcRow.id}`];
@@ -462,10 +541,47 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         }
         if (tempNodeId && tempEdgeId) {
           try { console.log('[CondFix] convertTemp', { tempNodeId, tempEdgeId }); } catch {}
-          setNodes((nds) => nds.map(n => n.id === tempNodeId ? {
-            ...n,
-            data: { ...(n.data as any), isTemporary: false, hidden: false, focusRowId: '1' }
-          } : n));
+          console.log('[CondFix] SHOW FINAL NODE', {
+            tempNodeId,
+            finalPosition: nds.find(n => n.id === tempNodeId)?.position,
+            nodeData: nds.find(n => n.id === tempNodeId)?.data
+          });
+          
+          console.log('[🔍 STABILIZE_NODE] Stabilizing temporary node', {
+            tempNodeId,
+            tempEdgeId,
+            conditionName: name,
+            timestamp: Date.now()
+          });
+          
+          // ✅ FIX: Marca il nodo come stabilizzato per evitare riposizionamento
+          stabilizedTempNodes.add(tempNodeId);
+          
+          // ✅ FIX: Rimuovi il flag di creazione in corso
+          creatingTempNodes.delete(tempNodeId);
+          
+          setNodesWithLog((nds) => {
+            const updatedNodes = nds.map(n => {
+              if (n.id === tempNodeId) {
+                const oldPosition = n.position;
+                const updatedNode = {
+                  ...n,
+                  data: { ...(n.data as any), isTemporary: false, hidden: false, focusRowId: '1' }
+                };
+                console.log('[🔍 STABILIZE_NODE] Node stabilized', {
+                  nodeId: tempNodeId,
+                  oldPosition,
+                  newPosition: updatedNode.position,
+                  positionChanged: oldPosition.x !== updatedNode.position.x || oldPosition.y !== updatedNode.position.y,
+                  isTemporaryChanged: n.data?.isTemporary !== updatedNode.data?.isTemporary,
+                  markedAsStabilized: true
+                });
+                return updatedNode;
+              }
+              return n;
+            });
+            return updatedNodes;
+          });
           setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
             ...e,
             style: { stroke: '#8b5cf6' },
@@ -692,6 +808,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   function cleanupAllTempNodesAndEdges() {
     // Se è in corso una conferma (lock), non eseguire cleanup
     try { if ((connectionMenuRef.current as any)?.locked) return; } catch {}
+    
+    // ✅ FIX: Pulisci i flag di creazione in corso
+    creatingTempNodes.clear();
+    
     // 1) Rimuovi qualsiasi nodo temporaneo che non ha contenuto
     setNodes((nds) => nds.filter((n: any) => {
       const isTemp = n?.data?.isTemporary === true;
@@ -748,83 +868,171 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     cleanupAllTempNodesAndEdges();
   }
 
+  // ✅ FIX: Hook custom enterprise-ready per lock asincrono
+  function useNodeCreationLock() {
+    const isLocked = useRef(false);
+
+    const withNodeLock = useCallback(async (fn: () => Promise<void> | void) => {
+      if (isLocked.current) {
+        console.log("🚫 [LOCK] DUPLICATE BLOCKED - Node creation already in progress");
+        return;
+      }
+      
+      isLocked.current = true;
+      console.log("🔒 [LOCK] ACQUIRED - Starting node creation");
+      
+      try {
+        await fn();
+      } finally {
+        // Delay unlock to avoid race conditions
+        queueMicrotask(() => {
+          isLocked.current = false;
+          console.log("🔓 [LOCK] RELEASED - Node creation completed");
+        });
+      }
+    }, []);
+
+    return withNodeLock;
+  }
+
+  const withNodeLock = useNodeCreationLock();
+
+  // ✅ FIX: Funzione separata per creare nodo temporaneo CON LOCK INTERNO
+  const createTemporaryNode = useCallback(async (event: any) => {
+    const tempNodeId = uuidv4();
+    const tempEdgeId = uuidv4();
+    const posFlow = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    
+    // Calcola posizione corretta (punto mediano)
+    const realNodeWidth = 140;
+    const position = { x: posFlow.x - (realNodeWidth / 2), y: posFlow.y };
+    
+    console.log("🟢 [CREATE] Creating temporary node", { 
+      tempNodeId, 
+      position, 
+      mouseClient: { x: event.clientX, y: event.clientY },
+      posFlow,
+      timestamp: Date.now()
+    });
+    
+    // Crea nodo temporaneo
+    const tempNode: Node<NodeData> = {
+      id: tempNodeId,
+      type: 'custom',
+      position,
+      data: { 
+        title: '', 
+        rows: [],
+        isTemporary: true,
+        hidden: true,
+        createdAt: Date.now()
+      },
+    };
+    
+    // Crea collegamento temporaneo
+    const tempEdge: Edge<EdgeData> = {
+      id: tempEdgeId,
+      source: connectionMenuRef.current.sourceNodeId || '',
+      sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
+      target: tempNodeId,
+      style: { stroke: '#8b5cf6' },
+      type: 'custom',
+      data: { onDeleteEdge },
+      markerEnd: 'arrowhead',
+    };
+    
+    console.log("📝 [CREATE] About to add node to state", { 
+      tempNodeId, 
+      tempNodePosition: tempNode.position,
+      timestamp: Date.now()
+    });
+    
+    // Aggiungi nodo e edge (PROTETTO DAL LOCK INTERNO)
+    setNodesWithLog((nds) => {
+      const newNodes = [...nds, tempNode];
+      console.log("✅ [CREATE] Node added to state", { 
+        tempNodeId, 
+        totalNodes: newNodes.length,
+        tempNodePosition: tempNode.position,
+        timestamp: Date.now()
+      });
+      return newNodes;
+    });
+    setEdges((eds) => [...eds, tempEdge]);
+    
+    // Salva riferimenti
+    tempEdgeIdGlobal.current = tempEdgeId;
+    try { (connectionMenuRef.current as any).flowPosition = posFlow; } catch {}
+    
+    return { tempNodeId, tempEdgeId, position };
+  }, [reactFlowInstance, setNodesWithLog, setEdges, onDeleteEdge, connectionMenuRef]);
+
+  // ✅ FIX: Funzione separata per aprire intellisense
+  const openIntellisense = useCallback((tempNodeId: string, tempEdgeId: string, event: any) => {
+    console.log("🎯 [INTELLISENSE] Opening menu", { 
+      tempNodeId, 
+      tempEdgeId, 
+      mousePos: { x: event.clientX, y: event.clientY },
+      timestamp: Date.now()
+    });
+    
+    // Registra i temp
+    setTemp(tempNodeId, tempEdgeId);
+    
+    // Apri il menu
+    openMenu({ x: event.clientX, y: event.clientY }, connectionMenuRef.current.sourceNodeId, connectionMenuRef.current.sourceHandleId);
+    
+    // Registra di nuovo dopo apertura
+    setTemp(tempNodeId, tempEdgeId);
+    
+    try {
+      (connectionMenuRef.current as any).tempNodeId = tempNodeId;
+      (connectionMenuRef.current as any).tempEdgeId = tempEdgeId;
+      (window as any).__flowLastTemp = { nodeId: tempNodeId, edgeId: tempEdgeId };
+    } catch {}
+    
+    console.log("✅ [INTELLISENSE] Menu opened successfully", { 
+      tempNodeId, 
+      tempEdgeId,
+      timestamp: Date.now()
+    });
+  }, [openMenu, setTemp, connectionMenuRef]);
+
   const onConnectEnd = useCallback((event: any) => {
+    console.log("🎬 [ON_CONNECT_END] Event triggered", { 
+      target: event.target?.className,
+      hasPendingEdge: !!pendingEdgeIdRef.current,
+      hasSourceNode: !!connectionMenuRef.current.sourceNodeId,
+      timestamp: Date.now()
+    });
+    
     // Se subito prima è stata creata una edge reale (onConnect), NON creare il collegamento flottante
     if (pendingEdgeIdRef.current) {
+      console.log("⏭️ [ON_CONNECT_END] Skipping - pending edge exists");
       return;
     }
+    
     // Prima di tutto, pulisci eventuali edge/nodi temporanei rimasti
     cleanupAllTempNodesAndEdges();
     const targetIsPane = (event.target as HTMLElement)?.classList?.contains('react-flow__pane');
+    
+    console.log("🔍 [ON_CONNECT_END] Conditions check", { 
+      targetIsPane, 
+      hasSourceNode: !!connectionMenuRef.current.sourceNodeId,
+      willCreateNode: targetIsPane && !!connectionMenuRef.current.sourceNodeId
+    });
+    
     if (targetIsPane && connectionMenuRef.current.sourceNodeId) {
-      // ... (logica nodo temporaneo come ora)
-      const tempNodeId = uuidv4();
-      const tempEdgeId = uuidv4();
-      const posFlow = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][drop]', { ui:{x:event.clientX,y:event.clientY}, flow:posFlow, source: connectionMenuRef.current.sourceNodeId }); } catch {}
-      // Posiziona il nodo in modo che l'handle TOP-CENTER coincida col punto di rilascio
-      const position = { x: posFlow.x - (NODE_WIDTH / 2), y: posFlow.y };
-      // Crea nodo temporaneo invisibile
-      const tempNode: Node<NodeData> = {
-        id: tempNodeId,
-        type: 'custom',
-        position,
-        data: { 
-          title: '', 
-          rows: [],
-          isTemporary: true,
-          hidden: true,
-          createdAt: Date.now()
-        },
-      };
-      // Crea collegamento temporaneo tratteggiato
-      const tempEdge: Edge<EdgeData> = {
-        id: tempEdgeId,
-        source: connectionMenuRef.current.sourceNodeId || '',
-        sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-        target: tempNodeId,
-        style: { stroke: '#8b5cf6' }, // tratteggiato
-        type: 'custom',
-        data: { onDeleteEdge },
-        markerEnd: 'arrowhead',
-      };
-      setNodes((nds) => [...nds, tempNode]);
-      setEdges((eds) => [...eds, tempEdge]);
-      tempEdgeIdGlobal.current = tempEdgeId;
-      // salva posizione in flow per creazioni fallback
-      try { (connectionMenuRef.current as any).flowPosition = posFlow; } catch {}
-      // riallinea il temp node alla larghezza reale dopo il mount, così l'handle TOP-CENTER coincide
-      requestAnimationFrame(() => {
-        try {
-          const el = document.querySelector(`.react-flow__node[data-id='${tempNodeId}']`) as HTMLElement | null;
-          if (el) {
-            const rect = el.getBoundingClientRect();
-            const realWidth = rect.width || NODE_WIDTH;
-            const expectedLeft = posFlow.x - realWidth / 2;
-            const dx = expectedLeft - position.x;
-            if (Math.abs(dx) > 0.5) {
-              setNodes(nds => nds.map(n => n.id === tempNodeId ? { ...n, position: { x: (n.position as any).x + dx, y: (n.position as any).y } } : n));
-              try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][temp.align]', { tempNodeId, realWidth, fromX: position.x, toX: expectedLeft, dx }); } catch {}
-            }
-          }
-        } catch {}
+      console.log("🚀 [ON_CONNECT_END] Starting node creation with lock");
+      // ✅ FIX: Usa il lock asincrono enterprise-ready
+      withNodeLock(async () => {
+        const { tempNodeId, tempEdgeId } = await createTemporaryNode(event);
+        openIntellisense(tempNodeId, tempEdgeId, event);
       });
-      // registra i temp anche PRIMA di aprire (per compatibilità con logiche che leggono subito)
-      setTemp(tempNodeId, tempEdgeId);
-      // apri il menu (può resettare lo stato interno)
-      try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][popup.open]', { ui:{x:event.clientX,y:event.clientY} }); } catch {}
-      openMenu({ x: event.clientX, y: event.clientY }, connectionMenuRef.current.sourceNodeId, connectionMenuRef.current.sourceHandleId);
-      // e registrali DI NUOVO dopo l'apertura per evitare che l'open li azzeri
-      setTemp(tempNodeId, tempEdgeId);
-      try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][popup.afterOpen]', { tempNodeId, tempEdgeId, menu: connectionMenuRef.current }); } catch {}
-      try {
-        (connectionMenuRef.current as any).tempNodeId = tempNodeId;
-        (connectionMenuRef.current as any).tempEdgeId = tempEdgeId;
-        (window as any).__flowLastTemp = { nodeId: tempNodeId, edgeId: tempEdgeId };
-        if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][temp.created]', { tempNodeId, tempEdgeId, position, flow: posFlow });
-      } catch {}
+    } else {
+      console.log("❌ [ON_CONNECT_END] Not creating node - conditions not met");
     }
-  }, [reactFlowInstance, setNodes, setEdges, onDeleteEdge, openMenu, setSource, setTarget, connectionMenuRef, setTemp, edges]);
+  }, [withNodeLock, createTemporaryNode, openIntellisense, connectionMenuRef]);
 
   // Utility per rimuovere edge temporaneo
   function removeTempEdge(eds: Edge[], tempEdgeId: string | undefined) {
@@ -859,11 +1067,37 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     if (tempNodeId && tempEdgeId) {
       // Assicura che la posizione usata sia quella del drop salvata in flowPosition
       const fp = (connectionMenuRef.current as any).flowPosition;
-      setNodes(nds => nds.map(n => n.id === tempNodeId ? {
-        ...n,
-        position: fp ? { x: fp.x - (NODE_WIDTH / 2), y: fp.y } : n.position,
-        data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined }
-      } : n));
+      console.log('[🔍 STABILIZE.2] Starting stabilization (second occurrence)', { 
+        tempNodeId, 
+        tempEdgeId,
+        flowPosition: fp,
+        timestamp: Date.now()
+      });
+      setNodes(nds => {
+        const stabilizedNodes = nds.map(n => {
+          if (n.id === tempNodeId) {
+            console.log('[🔍 STABILIZE.2] Stabilizing temporary node', { 
+              tempNodeId, 
+              oldPosition: n.position,
+              oldIsTemporary: (n.data as any)?.isTemporary,
+              oldHidden: (n.data as any)?.hidden,
+              timestamp: Date.now()
+            });
+            return {
+              ...n,
+              position: n.position, // Mantieni la posizione corretta del nodo temporaneo
+              data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined }
+            };
+          }
+          return n;
+        });
+        console.log('[🔍 STABILIZE.2] Node stabilization complete', { 
+          tempNodeId, 
+          totalNodes: stabilizedNodes.length,
+          timestamp: Date.now()
+        });
+        return stabilizedNodes;
+      });
       setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label, style: { ...(e.style || {}), stroke: '#8b5cf6' } } : e));
       finalizeTempPromotion(tempNodeId, tempEdgeId);
       // azzera i riferimenti temp per evitare ulteriori cleanup
@@ -991,10 +1225,25 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     // Controlla se l'evento è iniziato da un elemento con classe 'nodrag'
     const target = event.target as Element;
     const isAnchor = target && (target.classList.contains('rigid-anchor') || target.closest('.rigid-anchor'));
+
+    console.log('[FlowEditor] NODE DRAG START ATTEMPT:', {
+      nodeId: node.id,
+      nodeType: node.type,
+      targetTag: target?.tagName,
+      targetClass: target?.className,
+      hasNodrag: target?.classList.contains('nodrag'),
+      closestNodrag: target?.closest('.nodrag'),
+      isAnchor,
+      eventType: event.type
+    });
+
     if (target && (target.classList.contains('nodrag') || target.closest('.nodrag'))) {
+      console.log('[FlowEditor] DRAG BLOCKED - nodrag element found');
       event.preventDefault();
       return false;
     }
+
+    console.log('[FlowEditor] DRAG ALLOWED - proceeding with node drag');
     // Prepara contesto per drag rigido SOLO se partito dall'ancora
     if ((window as any).__flowDragMode === 'rigid' || isAnchor) {
       const rootId = node.id;
@@ -1600,6 +1849,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
 // Ref globale per edge temporaneo
 const tempEdgeIdGlobal = { current: null as string | null };
+
+// ✅ FIX: Flag per tracciare nodi temporanei stabilizzati (per evitare riposizionamento)
+const stabilizedTempNodes = new Set<string>();
+
+// ✅ FIX: Flag per tracciare nodi temporanei in corso di creazione (per evitare creazione duplicata)
+const creatingTempNodes = new Set<string>();
+
+// ✅ FIX: Flag globale rimosso - ora usiamo useRef (thread-safe)
 
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   return (
