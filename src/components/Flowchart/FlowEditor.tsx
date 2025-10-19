@@ -26,6 +26,7 @@ import { ProjectDataService } from '../../services/ProjectDataService';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { dlog } from '../../utils/debug';
 import { findAgentAct, resolveActType } from './actVisuals';
+import { useNodeCreationLock } from './hooks/useNodeCreationLock';
 
 export type { NodeData } from '../../hooks/useNodeManager';
 
@@ -866,33 +867,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     } catch {}
     // 4) cleanup di sicurezza
     cleanupAllTempNodesAndEdges();
-  }
-
-  // ✅ FIX: Hook custom enterprise-ready per lock asincrono
-  function useNodeCreationLock() {
-    const isLocked = useRef(false);
-
-    const withNodeLock = useCallback(async (fn: () => Promise<void> | void) => {
-      if (isLocked.current) {
-        console.log("🚫 [LOCK] DUPLICATE BLOCKED - Node creation already in progress");
-        return;
-      }
-      
-      isLocked.current = true;
-      console.log("🔒 [LOCK] ACQUIRED - Starting node creation");
-      
-      try {
-        await fn();
-      } finally {
-        // Delay unlock to avoid race conditions
-        queueMicrotask(() => {
-          isLocked.current = false;
-          console.log("🔓 [LOCK] RELEASED - Node creation completed");
-        });
-      }
-    }, []);
-
-    return withNodeLock;
   }
 
   const withNodeLock = useNodeCreationLock();
