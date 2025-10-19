@@ -29,6 +29,7 @@ import { findAgentAct, resolveActType } from './actVisuals';
 import { useNodeCreationLock } from './hooks/useNodeCreationLock';
 import { useTemporaryNodes } from './hooks/useTemporaryNodes';
 import { useFlowConnect } from './hooks/useFlowConnect';
+import { useSelectionManager } from './hooks/useSelectionManager';
 import type { NodeData, EdgeData } from './types/flowTypes';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
@@ -84,9 +85,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const reactFlowInstance = useReactFlow();
   const lastClickTime = useRef(0);
   // Rimuovo tempEdgeIdState
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
-  const [selectionMenu, setSelectionMenu] = useState<{ show: boolean; x: number; y: number }>(() => ({ show: false, x: 0, y: 0 }));
+  const selection = useSelectionManager();
+  const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick, handlePaneClick } = selection;
+  // Ref per memorizzare l'ID dell'ultima edge creata (sia tra nodi esistenti che con nodo temporaneo)
+  const pendingEdgeIdRef = useRef<string | null>(null);
+  // Ref sempre aggiornato con edges correnti (evita closure stale nei deduce temp)
+  const edgesRef = useRef(edges);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
 
   // Usa l'hook edge manager
   const { addEdge: addEdgeManaged, patchEdges, deleteEdge: deleteEdgeManaged } = useEdgeManager(setEdges);
@@ -95,20 +100,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const onDeleteEdge = useCallback((edgeId: string) => {
     deleteEdgeManaged(edgeId);
   }, [deleteEdgeManaged]);
-
-  // Keep ref updated with latest connectionMenu state
-  React.useEffect(() => {
-    // connectionMenuRef.current = connectionMenu; // This is now handled by the hook
-  }, [connectionMenu]);
-  React.useEffect(() => {
-    try { if (localStorage.getItem('debug.conn')==='1') console.log('[Conn][state]', connectionMenu); } catch {}
-  }, [connectionMenu]);
-
-  // Ref per memorizzare l'ID dell'ultima edge creata (sia tra nodi esistenti che con nodo temporaneo)
-  const pendingEdgeIdRef = useRef<string | null>(null);
-  // Ref sempre aggiornato con edges correnti (evita closure stale nei deduce temp)
-  const edgesRef = useRef(edges);
-  useEffect(() => { edgesRef.current = edges; }, [edges]);
 
   // Deferred apply for labels on just-created edges (avoids race with RF state)
   const pendingApplyRef = useRef<null | { id: string; label: string; data?: any; tries: number }>(null);
@@ -1221,11 +1212,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     window.addEventListener('mousemove', onMove, { passive: true });
     return () => window.removeEventListener('mousemove', onMove as any);
   }, [setCursorTooltip]);
-
-  // Handler per selezione edge
-  const handleEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
-    setSelectedEdgeId(edge.id);
-  }, []);
 
   // Inizializza la viewport a zoom 1 solo al primissimo mount
   const initializedRef = useRef(false);
