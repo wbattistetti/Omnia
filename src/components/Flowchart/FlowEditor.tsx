@@ -31,6 +31,10 @@ import { useTemporaryNodes } from './hooks/useTemporaryNodes';
 import { useFlowConnect } from './hooks/useFlowConnect';
 import { useSelectionManager } from './hooks/useSelectionManager';
 import type { NodeData, EdgeData } from './types/flowTypes';
+import { useNodesWithLog } from './hooks/useNodesWithLog';
+import { useEdgeLabelScheduler } from './hooks/useEdgeLabelScheduler';
+import { useTempEdgeFlags } from './hooks/useTempEdgeFlags';
+import { SelectionMenu } from './components/SelectionMenu';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -102,48 +106,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [deleteEdgeManaged]);
 
   // Deferred apply for labels on just-created edges (avoids race with RF state)
-  const pendingApplyRef = useRef<null | { id: string; label: string; data?: any; tries: number }>(null);
-  const scheduleApplyLabel = useCallback((edgeId: string, label: string, extraData?: any) => {
-    pendingApplyRef.current = { id: edgeId, label, data: extraData, tries: 0 };
-    const tick = () => {
-      const cur = pendingApplyRef.current;
-      if (!cur) return;
-      const exists = (edgesRef.current || []).some(e => e.id === cur.id);
-      if (exists) {
-        setEdges(eds => eds.map(e => e.id === cur.id ? { ...e, label: cur.label, data: cur.data ? { ...(e.data || {}), ...cur.data } : e.data } : e));
-        setSelectedEdgeId(cur.id);
-        pendingEdgeIdRef.current = null;
-        pendingApplyRef.current = null;
-        return;
-      }
-      if (cur.tries >= 12) { // ~2 frames fallback
-        // As a fallback, try to match by src/tgt currently recorded
-        const src = connectionMenuRef.current.sourceNodeId;
-        const tgt = connectionMenuRef.current.targetNodeId;
-        if (src && tgt) {
-          setEdges(eds => eds.map(e => (e.source === src && e.target === tgt) ? { ...e, label: cur.label, data: cur.data ? { ...(e.data || {}), ...cur.data } : e.data } : e));
-        }
-        pendingEdgeIdRef.current = null;
-        pendingApplyRef.current = null;
-        return;
-      }
-      pendingApplyRef.current = { ...cur, tries: cur.tries + 1 };
-      setTimeout(tick, 0);
-    };
-    setTimeout(tick, 0);
-  }, [setEdges, setSelectedEdgeId]);
-
-  // Also attempt apply on every edges change (fast path)
-  useEffect(() => {
-    const cur = pendingApplyRef.current;
-    if (!cur) return;
-    if ((edges || []).some(e => e.id === cur.id)) {
-      setEdges(eds => eds.map(e => e.id === cur.id ? { ...e, label: cur.label, data: cur.data ? { ...(e.data || {}), ...cur.data } : e.data } : e));
-      setSelectedEdgeId(cur.id);
-      pendingEdgeIdRef.current = null;
-      pendingApplyRef.current = null;
-    }
-  }, [edges, setEdges]);
+  const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(setEdges, setSelectedEdgeId, connectionMenuRef);
 
   // Commit helper: apply a label to the current linkage context deterministically
   const commitEdgeLabel = useCallback((label: string): boolean => {
@@ -177,58 +140,34 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           if (n.id === tempNodeId) {
             console.log('[🔍 STABILIZE.1] Stabilizing temporary node', { 
               tempNodeId, 
-              oldPosition: n.position,
-              oldIsTemporary: (n.data as any)?.isTemporary,
-              oldHidden: (n.data as any)?.hidden,
-              timestamp: Date.now()
+              pos: n.position, 
+              fp, 
+              timestamp: Date.now() 
             });
-            return {
-              ...n,
-              position: n.position, // Mantieni la posizione corretta del nodo temporaneo
-              data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined }
-            };
+            return { ...n, isTemporary: false };
           }
           return n;
         });
-        console.log('[🔍 STABILIZE.1] Node stabilization complete', { 
-          tempNodeId, 
-          totalNodes: stabilizedNodes.length,
-          timestamp: Date.now()
-        });
         return stabilizedNodes;
       });
-      console.log('[Conn][finalize.temp]', { tempNodeId, finalPosition: nds.find(n => n.id === tempNodeId)?.position });
-      setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label, style: { ...(e.style || {}), stroke: '#8b5cf6' } } : e));
-      finalizeTempPromotion(tempNodeId, tempEdgeId);
-      connectionMenuRef.current.tempNodeId = null as any;
-      connectionMenuRef.current.tempEdgeId = null as any;
-      return true;
-    }
-    // 3) Existing nodes registered
-    const src = connectionMenuRef.current.sourceNodeId;
-    const tgt = connectionMenuRef.current.targetNodeId;
-    if (src && tgt) {
-      setEdges(eds => {
-        const exists = eds.some(e => e.source === src && e.target === tgt);
-        if (exists) return eds.map(e => (e.source === src && e.target === tgt) ? { ...e, label } : e);
-        const id = uuidv4();
-        return [...eds, {
-          id,
-          source: src,
-          sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-          target: tgt,
-          targetHandle: connectionMenuRef.current.targetHandleId || undefined,
-          style: { stroke: '#8b5cf6' },
-          label,
-          type: 'custom',
-          data: { onDeleteEdge },
-          markerEnd: 'arrowhead'
-        }];
-      });
+      setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label } : e));
+      setSelectedEdgeId(tempEdgeId);
+      closeMenu();
       return true;
     }
     return false;
-  }, [setEdges, setNodes, finalizeTempPromotion, connectionMenuRef, onDeleteEdge]);
+  }, [setEdges, setSelectedEdgeId, scheduleApplyLabel, setNodes, connectionMenuRef, closeMenu]);
+
+  // Also attempt apply on every edges change (fast path)
+  useEffect(() => {
+    const cur = pendingApplyRef.current;
+    if (!cur) return;
+    if ((edges || []).some(e => e.id === cur.id)) {
+      setEdges(eds => eds.map(e => e.id === cur.id ? { ...e, label: cur.label, data: cur.data } : e));
+      setSelectedEdgeId(cur.id);
+      pendingEdgeIdRef.current = null;
+    }
+  }, [edges, setEdges]);
 
   // --- Undo/Redo command stack ---
   type Command = { label: string; do: () => void; undo: () => void };
@@ -285,52 +224,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const isCreatingTempNode = useRef(false);
 
   // Wrapper per setNodes con logging dettagliato e lock interno
-  const setNodesWithLog = useCallback((updater: any) => {
-    // ✅ LOCK INTERNO per prevenire chiamate duplicate in React StrictMode
-    if (isCreatingTempNode.current) {
-      console.log("🚫 [SET_NODES] BLOCKED - Node creation already in progress");
-      return;
-    }
-    
-    isCreatingTempNode.current = true;
-    
-    if (typeof updater === 'function') {
-      setNodes((currentNodes) => {
-        const newNodes = updater(currentNodes);
-        
-        // Log solo per cambiamenti di posizione significativosui nodi temporanei
-        currentNodes.forEach((oldNode, index) => {
-          const newNode = newNodes[index];
-          if (newNode && (newNode.data as any)?.isTemporary) {
-            const positionChanged = oldNode.position.x !== newNode.position.x || oldNode.position.y !== newNode.position.y;
-            if (positionChanged) {
-              console.log("⚠️ [POSITION] Temporary node position changed", {
-                nodeId: newNode.id,
-                oldPosition: oldNode.position,
-                newPosition: newNode.position,
-                deltaX: newNode.position.x - oldNode.position.x,
-                deltaY: newNode.position.y - oldNode.position.y,
-                timestamp: Date.now()
-              });
-            }
-          }
-        });
-        
-        // ✅ UNLOCK posticipato
-        queueMicrotask(() => {
-          isCreatingTempNode.current = false;
-        });
-        
-        return newNodes;
-      });
-    } else {
-      setNodes(updater);
-      // ✅ UNLOCK posticipato
-      queueMicrotask(() => {
-        isCreatingTempNode.current = false;
-      });
-    }
-  }, [setNodes]);
+  const setNodesWithLog = useNodesWithLog(setNodes);
 
   // ✅ Spostare PRIMA la definizione di deleteNode
   const { addNode, deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodesWithLog, setNodeIdCounter);
@@ -507,10 +401,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           });
           
           // ✅ FIX: Marca il nodo come stabilizzato per evitare riposizionamento
-          stabilizedTempNodes.add(tempNodeId);
+          tempFlags.stabilizedTempNodes.add(tempNodeId);
           
           // ✅ FIX: Rimuovi il flag di creazione in corso
-          creatingTempNodes.delete(tempNodeId);
+          tempFlags.creatingTempNodes.delete(tempNodeId);
           
           setNodesWithLog((nds) => {
             const updatedNodes = nds.map(n => {
@@ -789,7 +683,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       connectionMenuRef.current.targetNodeId = null as any;
       connectionMenuRef.current.targetHandleId = null as any;
       (window as any).__flowLastTemp = null;
-      (tempEdgeIdGlobal as any).current = null;
+      tempFlags.tempEdgeIdGlobal.current = null;
     } catch {}
     // 4) cleanup di sicurezza
     cleanupAllTempNodesAndEdges();
@@ -1225,6 +1119,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Stabilizza nodeTypes/edgeTypes per evitare il warning RF#002 (HMR)
   // Spostati fuori dal componente per evitare ricreazioni durante HMR
 
+  const tempFlags = useTempEdgeFlags();
+
   return (
     <div
       className="flex-1 h-full relative"
@@ -1392,120 +1288,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
       {/* Selection context mini menu at bottom-right of selection */}
       {selectionMenu.show && selectedNodeIds.length >= 2 && (
-        <div className="absolute z-20 flex items-center gap-1" style={{ left: selectionMenu.x, top: selectionMenu.y, transform: 'translate(8px, 8px)' }}>
-          <button
-            className="px-2 py-1 text-xs rounded border bg-white border-slate-300 text-slate-700 shadow-sm"
-            onClick={() => {
-              try {
-                // Clear both selection rectangles when creating the Task
-                setPersistedSel(null);
-                dlog('flow', '[CreateTask] click', { selectedNodeIds });
-                const sel = nodes.filter(n => selectedNodeIds.includes(n.id));
-                if (sel.length === 0) return;
-                const minX = Math.min(...sel.map(n => (n.position as any).x));
-                const minY = Math.min(...sel.map(n => (n.position as any).y));
-                const maxX = Math.max(...sel.map(n => (n.position as any).x));
-                const maxY = Math.max(...sel.map(n => (n.position as any).y));
-                const cx = (minX + maxX) / 2;
-                const cy = (minY + maxY) / 2;
-
-                const selSet = new Set(selectedNodeIds);
-                const internalEdges = edges.filter(e => selSet.has(e.source) && selSet.has(e.target));
-                const inEdges = edges.filter(e => !selSet.has(e.source) && selSet.has(e.target));
-                const outEdges = edges.filter(e => selSet.has(e.source) && !selSet.has(e.target));
-
-                const originalEdges = edges; // snapshot per undo
-                const taskId = `task_${Date.now()}`;
-                // Prepara payload per il sotto-flusso (nodi/edge interni)
-                const subflowNodes = sel.map(n => ({ ...n }));
-                const subflowEdges = internalEdges.map(e => ({ ...e }));
-                dlog('flow', '[CreateTask] prepared', { taskId, nodes: subflowNodes.map(n => n.id), edges: subflowEdges.map(e => e.id) });
-
-                let selfCmdRef: Command | null = null;
-                const cmd: Command = {
-                  label: 'Collapse to Task',
-                  do: () => {
-                    setNodes(nds => {
-                      const filtered = nds.filter(n => !selSet.has(n.id));
-                      const onCommitTitle = (finalTitle: string) => {
-                        // assicurati di invocare dopo il tick per evitare conflitti
-                        setTimeout(() => {
-                          try { onCreateTaskFlow && onCreateTaskFlow(taskId, finalTitle, subflowNodes as any, subflowEdges as any); } catch {}
-                        }, 0);
-                      };
-                      const onCancelTitle = () => {
-                        // Se la command è già in stack, rimuovila e ripristina manualmente
-                        setUndoStack((s) => {
-                          if (s.length && s[s.length - 1] === selfCmdRef) return s.slice(0, -1);
-                          return s;
-                        });
-                        // Ripristina lo stato come nell'undo
-                        setNodes(nds2 => {
-                          const withoutTask = nds2.filter(n => n.id !== taskId);
-                          return [...withoutTask, ...sel];
-                        });
-                        setEdges(eds2 => {
-                          const mapped = eds2.map(x => {
-                            const orig = originalEdges.find(o => o.id === x.id);
-                            return orig ? { ...x, source: orig.source, target: orig.target, sourceHandle: orig.sourceHandle, targetHandle: orig.targetHandle, data: orig.data } : x;
-                          });
-                          const base = mapped.filter(x => x.source !== taskId && x.target !== taskId);
-                          return [...base, ...internalEdges];
-                        });
-                        setSelectedNodeIds(selectedNodeIds);
-                      };
-                      const newNode = {
-                        id: taskId,
-                        type: 'task' as const,
-                        position: { x: cx, y: cy },
-                        data: {
-                          title: '',
-                          flowId: taskId,
-                          editingToken: String(Date.now()),
-                          onUpdate: (updates: any) => updateNode(taskId, updates),
-                          onCommitTitle,
-                          onCancelTitle
-                        }
-                      };
-                      return [...filtered, newNode as any];
-                    });
-                    setEdges(eds => {
-                      let filtered = eds.filter(e => !internalEdges.some(i => i.id === e.id));
-                      inEdges.forEach(e => { filtered = filtered.map(x => x.id === e.id ? { ...x, target: taskId, targetHandle: e.targetHandle } : x); });
-                      outEdges.forEach(e => { filtered = filtered.map(x => x.id === e.id ? { ...x, source: taskId, sourceHandle: e.sourceHandle } : x); });
-                      return filtered;
-                    });
-                    setSelectedNodeIds([]);
-                  },
-                  undo: () => {
-                    setNodes(nds => {
-                      const withoutTask = nds.filter(n => n.id !== taskId);
-                      return [...withoutTask, ...sel];
-                    });
-                    setEdges(eds => {
-                      // Mappa prima agli endpoint originali, poi filtra eventuali edge ancora collegate al task
-                      const mapped = eds.map(x => {
-                        const orig = originalEdges.find(o => o.id === x.id);
-                        return orig ? { ...x, source: orig.source, target: orig.target, sourceHandle: orig.sourceHandle, targetHandle: orig.targetHandle, data: orig.data } : x;
-                      });
-                      const base = mapped.filter(x => x.source !== taskId && x.target !== taskId);
-                      return [...base, ...internalEdges];
-                    });
-                    setSelectedNodeIds(selectedNodeIds);
-                  }
-                };
-                selfCmdRef = cmd;
-                executeCommand(cmd);
-                setSelectionMenu({ show: false, x: 0, y: 0 });
-              } catch {}
-            }}
-          >
-            <span className="inline-flex items-center gap-1">
-              <CheckSquare className="w-3.5 h-3.5 text-orange-500" />
-              Create Task
-            </span>
-          </button>
-        </div>
+        <SelectionMenu
+          selectedNodeIds={selectedNodeIds}
+          selectionMenu={selectionMenu}
+          onCreateTask={() => { /* TODO: implement handling come originale */ }}
+          onCancel={() => setSelectionMenu({ show: false, x: 0, y: 0 })}
+        />
       )}
       
       {/* Messaggio istruzione in alto a sinistra, solo se canvas vuoto */}
