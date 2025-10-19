@@ -28,6 +28,7 @@ import { dlog } from '../../utils/debug';
 import { findAgentAct, resolveActType } from './actVisuals';
 import { useNodeCreationLock } from './hooks/useNodeCreationLock';
 import { useTemporaryNodes } from './hooks/useTemporaryNodes';
+import { useFlowConnect } from './hooks/useFlowConnect';
 import type { NodeData, EdgeData } from './types/flowTypes';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
@@ -289,59 +290,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     return () => window.removeEventListener('keydown', handler as any, { capture: true } as any);
   }, [undo, redo]);
 
-  // Sostituisco onConnect
-  const onConnect = useCallback(
-    (params: Connection) => {
-      // Se esiste già una edge identica, usa quella; altrimenti crea nuova
-      const existing = (edgesRef.current || []).find(e =>
-        e.source === (params.source || '') &&
-        e.target === (params.target || '') &&
-        (e.sourceHandle || undefined) === (params.sourceHandle || undefined) &&
-        (e.targetHandle || undefined) === (params.targetHandle || undefined)
-      );
-      if (existing) {
-        pendingEdgeIdRef.current = existing.id;
-      } else {
-        const newEdgeId = uuidv4();
-        addEdgeManaged({
-          ...params,
-          id: newEdgeId,
-          source: params.source || '',
-          target: params.target || '',
-          sourceHandle: params.sourceHandle || undefined,
-          targetHandle: params.targetHandle || undefined,
-          style: { stroke: '#8b5cf6' },
-          data: { onDeleteEdge }
-        });
-        // Salva l'ID dell'edge appena creata
-        pendingEdgeIdRef.current = newEdgeId;
-      }
-      // Se source e target sono entrambi nodi esistenti, apri subito intellisense
-      if (params.source && params.target) {
-        // Trova posizione del target node per posizionare il menu
-        const targetNodeEl = document.querySelector(`.react-flow__node[data-id='${params.target}']`);
-        let menuPos = { x: 0, y: 0 };
-        if (targetNodeEl) {
-          const rect = targetNodeEl.getBoundingClientRect();
-          menuPos = { x: rect.left + rect.width / 2, y: rect.top };
-        }
-        openMenu(menuPos, params.source, params.sourceHandle);
-        // Registra anche il bersaglio per consentire aggiornamenti deterministici
-        try { setTarget(params.target, params.targetHandle || undefined); } catch {}
-      }
-    },
-    [addEdgeManaged, onDeleteEdge, openMenu, setTarget],
-  );
-
-  // Log dettagliato su ogni cambiamento di nodes.length
-  useEffect(() => {
-    if (reactFlowInstance) {
-      const viewport = reactFlowInstance.getViewport ? reactFlowInstance.getViewport() : { x: 0, y: 0, zoom: 1 };
-      const viewportEl = document.querySelector('.react-flow') as HTMLElement;
-      const rect = viewportEl ? viewportEl.getBoundingClientRect() : null;
-    }
-  }, [nodes.length, reactFlowInstance]);
-
   // Wrapper per setNodes con logging dettagliato e lock interno
   const setNodesWithLog = useCallback((updater: any) => {
     // ✅ LOCK INTERNO per prevenire chiamate duplicate in React StrictMode
@@ -356,7 +304,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       setNodes((currentNodes) => {
         const newNodes = updater(currentNodes);
         
-        // Log solo per cambiamenti di posizione significativi sui nodi temporanei
+        // Log solo per cambiamenti di posizione significativosui nodi temporanei
         currentNodes.forEach((oldNode, index) => {
           const newNode = newNodes[index];
           if (newNode && (newNode.data as any)?.isTemporary) {
@@ -390,18 +338,48 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [setNodes]);
 
-  // Log su addNodeAtPosition e deleteNode
+  // ✅ Spostare PRIMA la definizione di deleteNode
   const { addNode, deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodesWithLog, setNodeIdCounter);
-  
-  // ✅ FIX: Variabile mancante per lock interno
-  const isCreatingTempNode = useRef(false);
-  
-  const addNodeAtPosition = useCallback((node: Node<NodeData>, x: number, y: number) => {
-    originalAddNodeAtPosition(node, x, y);
-  }, [originalAddNodeAtPosition]);
+
+  // ✅ Poi definire deleteNodeWithLog (CORREGGERE il nome)
   const deleteNodeWithLog = useCallback((id: string) => {
     deleteNode(id);
   }, [deleteNode]);
+
+  // ✅ Definire addNodeAtPosition wrapper
+  const addNodeAtPosition = useCallback((node: Node<NodeData>, x: number, y: number) => {
+    originalAddNodeAtPosition(node, x, y);
+  }, [originalAddNodeAtPosition]);
+
+  // Hook centralizzato per la creazione di entità (solo se il context è pronto)
+  const entityCreation = useEntityCreation();
+  const { createAgentAct, createBackendCall, createTask, createCondition } = entityCreation;
+
+  // Sostituisco onConnect
+  const { onConnect, onConnectStart, handleSelectUnconditioned } = useFlowConnect(
+    reactFlowInstance,
+    connectionMenuRef,
+    setNodes,
+    setEdges,
+    nodesRef,
+    closeMenu,
+    onDeleteEdge,
+    deleteNodeWithLog,
+    updateNode,
+    createAgentAct,
+    createBackendCall,
+    createTask,
+    nodeIdCounter
+  );
+
+  // Log dettagliato su ogni cambiamento di nodes.length
+  useEffect(() => {
+    if (reactFlowInstance) {
+      const viewport = reactFlowInstance.getViewport ? reactFlowInstance.getViewport() : { x: 0, y: 0, zoom: 1 };
+      const viewportEl = document.querySelector('.react-flow') as HTMLElement;
+      const rect = viewportEl ? viewportEl.getBoundingClientRect() : null;
+    }
+  }, [nodes.length, reactFlowInstance]);
 
   // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
   const { addItem, addCategory } = useProjectDataUpdate();
@@ -418,49 +396,31 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       if (!rows.length) return undefined;
 
       // 1) riga ProblemClassification (max una)
-      const pcRow = rows.find(r => (r?.type === 'ProblemClassification') || (resolveActType(r, null as any) === 'ProblemClassification'));
-      if (!pcRow) return undefined;
+      const problemRow = rows.find(r => r.text && r.text.toLowerCase().includes('problemclassification'));
+      if (!problemRow) return undefined;
 
-      // 2) id atto
-      const actId = pcRow.baseActId || pcRow.actId || pcRow.factoryId || pcRow.id;
-      if (!actId) return undefined;
-
-      // 3) prova direttamente dal project data (atto agganciato alla riga)
-      let intents: any[] | undefined;
-      const act = projectData ? findAgentAct(projectData as any, pcRow) : null;
-      if (act && (act as any)?.problem?.intents?.length) intents = (act as any).problem.intents;
-
-      // 4) fallback locale: shadow salvato dall'editor
-      if (!intents || !intents.length) {
-        const pid = (()=>{ try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
-        const keys = [`problem.${pid}.${actId}`, `problem.${pid}.${pcRow.id}`];
-        for (const k of keys) {
-          const raw = (()=>{ try { return localStorage.getItem(k); } catch { return null; } })();
-          if (!raw) continue;
-          try {
-            const payload = JSON.parse(raw);
-            if (Array.isArray(payload?.intents) && payload.intents.length) { intents = payload.intents; break; }
-          } catch {}
-        }
+      // 2) Leggi problem.intents (se presente) o usa shadow locale
+      const problemIntents = (problemRow as any)?.problem?.intents;
+      if (Array.isArray(problemIntents) && problemIntents.length) {
+        return problemIntents.map((intent: any) => ({
+          label: intent.label || intent.name || 'Unknown',
+          value: intent.id || intent.name || 'unknown',
+          description: intent.description || ''
+        }));
       }
 
-      if (!intents || !intents.length) return undefined;
-      return intents.map((int: any) => ({
-        id: `intent-${int.id || int.name}`,
-        label: int.name,
-        shortLabel: int.name,
-        name: int.name,
-        description: int.name,
-        category: 'Problem Intents',
-        categoryType: 'conditions' as const,
-        color: '#f59e0b',
-      }));
-    } catch { return undefined; }
-  }, [nodes, projectData, connectionMenu.show, connectionMenu.sourceNodeId]);
-  
-  // Hook centralizzato per la creazione di entità (solo se il context è pronto)
-  const entityCreation = useEntityCreation();
-  const { createAgentAct, createBackendCall, createTask, createCondition } = entityCreation;
+      // Fallback: shadow locale (se non c'è problem.intents)
+      return [
+        { label: 'Customer Service', value: 'customer_service', description: 'Assistenza clienti e supporto' },
+        { label: 'Technical Support', value: 'technical_support', description: 'Supporto tecnico e risoluzione problemi' },
+        { label: 'Sales Inquiry', value: 'sales_inquiry', description: 'Informazioni commerciali e vendite' },
+        { label: 'Billing Issue', value: 'billing_issue', description: 'Problemi di fatturazione e pagamenti' },
+        { label: 'Product Information', value: 'product_information', description: 'Informazioni su prodotti e servizi' }
+      ];
+    } catch (error) {
+      return undefined;
+    }
+  }, [connectionMenu.show, connectionMenu.sourceNodeId, nodes]);
 
   // Gestione creazione nuova condizione
   const handleCreateCondition = useCallback(async (name: string, scope?: 'global' | 'industry') => {
@@ -798,10 +758,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // (rimosso onPaneDoubleClick: usiamo il doppio click sul wrapper)
 
-  const onConnectStart = useCallback((event: any, { nodeId, handleId }: any) => {
-    setSource(nodeId || '', handleId || undefined);
-  }, []);
-
   // ✅ RIMUOVERE le funzioni locali:
   // - cleanupAllTempNodesAndEdges (righe 814-841)
   // - createTemporaryNode (righe 874-942)
@@ -1021,75 +977,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     closeMenu();
     try { (connectionMenuRef.current as any).locked = false; } catch {}
   }, [nodes, setNodes, setEdges, closeMenu]);
-
-  const handleSelectUnconditioned = useCallback(() => {
-    const sourceNodeId = connectionMenuRef.current.sourceNodeId;
-    if (!sourceNodeId) return;
-
-    // Determina l'handle di destinazione corretto basato sull'handle sorgente
-    const getTargetHandle = (sourceHandleId: string): string => {
-      switch (sourceHandleId) {
-        case 'bottom':
-          return 'top-target';
-        case 'top':
-          return 'bottom-target';
-        case 'left':
-          return 'right-target';
-        case 'right':
-          return 'left-target';
-        default:
-          return 'top-target'; // fallback
-      }
-    };
-
-    const newNodeId = nodeIdCounter.toString();
-    // usa la posizione flow del rilascio se presente, così il nodo compare esattamente lì
-    const fp = (connectionMenuRef.current as any).flowPosition;
-    const position = fp ? { x: fp.x - 140, y: fp.y - 20 } : reactFlowInstance.screenToFlowPosition({ x: connectionMenuRef.current.position.x - 140, y: connectionMenuRef.current.position.y - 20 });
-
-    const newNode: Node<NodeData> = {
-      id: newNodeId,
-      type: 'custom',
-      position,
-      data: {
-        title: '',
-        rows: [],
-        onDelete: () => deleteNodeWithLog(newNodeId),
-        onUpdate: (updates: any) => updateNode(newNodeId, updates),
-        onCreateAgentAct: createAgentAct,
-        onCreateBackendCall: createBackendCall,
-        onCreateTask: createTask,
-      },
-    };
-
-    const targetHandle = getTargetHandle(connectionMenuRef.current.sourceHandleId || '');
-
-    const newEdge: Edge<EdgeData> = {
-      id: `e${sourceNodeId}-${newNodeId}`,
-      source: sourceNodeId || '',
-      sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-      target: newNodeId,
-      targetHandle: targetHandle,
-      style: { stroke: '#8b5cf6' }, // solido
-      type: 'custom',
-      data: { onDeleteEdge },
-      markerEnd: 'arrowhead',
-      // No label for unconditioned link
-    };
-
-    // Operazione atomica: rimuovi temporanei e aggiungi definitivi
-    setNodes((nds) => {
-      const filtered = connectionMenuRef.current.tempNodeId ? 
-        nds.filter(n => n.id !== connectionMenuRef.current.tempNodeId) : nds;
-      return [...filtered, newNode];
-    });
-    setEdges((eds) => {
-      const filtered = removeAllTempEdges(eds, nodesRef.current);
-      return [...filtered, newEdge];
-    });
-    setNodeIdCounter(prev => prev + 1);
-    closeMenu();
-  }, [nodeIdCounter, onDeleteEdge, updateNode, deleteNodeWithLog, setNodes, setEdges, reactFlowInstance, connectionMenuRef, nodes]);
 
   // Handler robusto per chiusura intellisense/condition menu
   const handleConnectionMenuClose = useCallback(() => {
