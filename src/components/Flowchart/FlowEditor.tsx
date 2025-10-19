@@ -18,24 +18,21 @@ import { TaskNode } from './TaskNode';
 import { EdgeConditionSelector } from './EdgeConditionSelector';
 import { v4 as uuidv4 } from 'uuid';
 import { CustomEdge } from './CustomEdge';
-import { useEdgeManager, EdgeData } from '../../hooks/useEdgeManager';
+import { useEdgeManager } from '../../hooks/useEdgeManager';
 import { useConnectionMenu } from '../../hooks/useConnectionMenu';
-import { useNodeManager, NodeData } from '../../hooks/useNodeManager';
+import { useNodeManager } from '../../hooks/useNodeManager';
 import { useProjectDataUpdate, useProjectData } from '../../context/ProjectDataContext';
 import { ProjectDataService } from '../../services/ProjectDataService';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { dlog } from '../../utils/debug';
 import { findAgentAct, resolveActType } from './actVisuals';
 import { useNodeCreationLock } from './hooks/useNodeCreationLock';
+import { useTemporaryNodes } from './hooks/useTemporaryNodes';
+import type { NodeData, EdgeData } from './types/flowTypes';
 
-export type { NodeData } from '../../hooks/useNodeManager';
-
-// Definizione stabile di nodeTypes e edgeTypes per evitare warning React Flow
+// Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
 const edgeTypes = { custom: CustomEdge };
-export type { EdgeData } from '../../hooks/useEdgeManager';
-
-// nodeTypes/edgeTypes memoized below
 
 interface FlowEditorProps {
   flowId?: string;
@@ -805,40 +802,18 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setSource(nodeId || '', handleId || undefined);
   }, []);
 
-  // Rimuove TUTTI i nodi temporanei senza contenuto e i relativi edge (ESC/chiusura menu)
-  function cleanupAllTempNodesAndEdges() {
-    // Se è in corso una conferma (lock), non eseguire cleanup
-    try { if ((connectionMenuRef.current as any)?.locked) return; } catch {}
-    
-    // ✅ FIX: Pulisci i flag di creazione in corso
-    creatingTempNodes.clear();
-    
-    // 1) Rimuovi qualsiasi nodo temporaneo che non ha contenuto
-    setNodes((nds) => nds.filter((n: any) => {
-      const isTemp = n?.data?.isTemporary === true;
-      if (!isTemp) return true;
-      const rows = Array.isArray(n?.data?.rows) ? n.data.rows : [];
-      const hasContent = rows.some((r: any) => (r?.text || '').trim().length > 0);
-      return hasContent; // mantieni solo i temporanei che hanno già contenuto
-    }));
-
-    // 2) Rimuovi tutti gli edge collegati a nodi ancora temporanei
-    setEdges((eds) => {
-      const currentNodes = nodesRef.current;
-      return eds.filter((e) => {
-        const target = currentNodes.find((n) => n.id === e.target);
-        return !(target && target.data && target.data.isTemporary === true);
-      });
-    });
-
-    // 3) Azzera i riferimenti temporanei per evitare riusi inconsistenti
-    try {
-      connectionMenuRef.current.tempNodeId = null as any;
-      connectionMenuRef.current.tempEdgeId = null as any;
-      (window as any).__flowLastTemp = null;
-      (tempEdgeIdGlobal as any).current = null;
-    } catch {}
-  }
+  // ✅ RIMUOVERE le funzioni locali:
+  // - cleanupAllTempNodesAndEdges (righe 814-841)
+  // - createTemporaryNode (righe 874-942)
+  // e sostituire con:
+  const { cleanupAllTempNodesAndEdges, createTemporaryNode } = useTemporaryNodes(
+    setNodes,
+    setEdges,
+    reactFlowInstance,
+    connectionMenuRef,
+    onDeleteEdge,
+    setNodesWithLog
+  );
 
   // Promuove il nodo/edge temporanei a definitivi e rimuove ogni altro temporaneo residuo
   function finalizeTempPromotion(keepNodeId: string, keepEdgeId?: string) {
@@ -870,76 +845,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }
 
   const withNodeLock = useNodeCreationLock();
-
-  // ✅ FIX: Funzione separata per creare nodo temporaneo CON LOCK INTERNO
-  const createTemporaryNode = useCallback(async (event: any) => {
-    const tempNodeId = uuidv4();
-    const tempEdgeId = uuidv4();
-    const posFlow = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    
-    // Calcola posizione corretta (punto mediano)
-    const realNodeWidth = 140;
-    const position = { x: posFlow.x - (realNodeWidth / 2), y: posFlow.y };
-    
-    console.log("🟢 [CREATE] Creating temporary node", { 
-      tempNodeId, 
-      position, 
-      mouseClient: { x: event.clientX, y: event.clientY },
-      posFlow,
-      timestamp: Date.now()
-    });
-    
-    // Crea nodo temporaneo
-    const tempNode: Node<NodeData> = {
-      id: tempNodeId,
-      type: 'custom',
-      position,
-      data: { 
-        title: '', 
-        rows: [],
-        isTemporary: true,
-        hidden: true,
-        createdAt: Date.now()
-      },
-    };
-    
-    // Crea collegamento temporaneo
-    const tempEdge: Edge<EdgeData> = {
-      id: tempEdgeId,
-      source: connectionMenuRef.current.sourceNodeId || '',
-      sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-      target: tempNodeId,
-      style: { stroke: '#8b5cf6' },
-      type: 'custom',
-      data: { onDeleteEdge },
-      markerEnd: 'arrowhead',
-    };
-    
-    console.log("📝 [CREATE] About to add node to state", { 
-      tempNodeId, 
-      tempNodePosition: tempNode.position,
-      timestamp: Date.now()
-    });
-    
-    // Aggiungi nodo e edge (PROTETTO DAL LOCK INTERNO)
-    setNodesWithLog((nds) => {
-      const newNodes = [...nds, tempNode];
-      console.log("✅ [CREATE] Node added to state", { 
-        tempNodeId, 
-        totalNodes: newNodes.length,
-        tempNodePosition: tempNode.position,
-        timestamp: Date.now()
-      });
-      return newNodes;
-    });
-    setEdges((eds) => [...eds, tempEdge]);
-    
-    // Salva riferimenti
-    tempEdgeIdGlobal.current = tempEdgeId;
-    try { (connectionMenuRef.current as any).flowPosition = posFlow; } catch {}
-    
-    return { tempNodeId, tempEdgeId, position };
-  }, [reactFlowInstance, setNodesWithLog, setEdges, onDeleteEdge, connectionMenuRef]);
 
   // ✅ FIX: Funzione separata per aprire intellisense
   const openIntellisense = useCallback((tempNodeId: string, tempEdgeId: string, event: any) => {
