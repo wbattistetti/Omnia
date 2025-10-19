@@ -1,16 +1,8 @@
 import { useCallback, Dispatch, SetStateAction } from 'react';
 import { Node } from 'reactflow';
+import { NodeData } from '../components/Flowchart/types/flowTypes';
 
-// Tipo base per i dati custom del nodo
-export type NodeData = {
-  title: string;
-  rows: Array<{ id: string; text: string; [key: string]: any }>;
-  isTemporary?: boolean;
-  onDelete?: () => void;
-  onUpdate?: (updates: any) => void;
-  [key: string]: any;
-};
-
+// Rimuovi la definizione duplicata di NodeData e usa quella importata
 export function useNodeManager(
   setNodes: Dispatch<SetStateAction<Node<NodeData>[]>>,
   setNodeIdCounter: Dispatch<SetStateAction<number>>

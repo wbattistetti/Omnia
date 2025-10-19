@@ -212,6 +212,16 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
   }, [data.focusRowId, editingRowId, nodeRows.length]);
 
+  // ✅ Auto-attiva editing per nodi temporanei (solo una volta)
+  const hasActivatedRef = useRef(false);
+  useEffect(() => {
+    if (data.isTemporary && !isEditingNode && nodeTitle.trim() === '' && !hasActivatedRef.current) {
+      console.log("🎯 [TEMP_NODE] Auto-activating title editing for temporary node", { nodeId: id });
+      hasActivatedRef.current = true;
+      setIsEditingNode(true);
+    }
+  }, [data.isTemporary, isEditingNode, nodeTitle, id]);
+
   // Stati per il drag-and-drop
   const drag = useNodeRowDrag(nodeRows);
 
@@ -505,8 +515,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             updates: { rows: stabilizedRows, isTemporary: false, hidden: false },
             timestamp: Date.now()
           });
-          setNodeRows(stabilizedRows);
-          data.onUpdate?.({ rows: stabilizedRows, isTemporary: false, hidden: false });
+          
+          // Delay stabilization to avoid conflicts with node creation lock
+          setTimeout(() => {
+            setNodeRows(stabilizedRows);
+            data.onUpdate?.({ rows: stabilizedRows, isTemporary: false, hidden: false });
+          }, 100);
         } else {
           console.log("🗑️ [STABILIZE] No valid rows, deleting node", {
             nodeId: id

@@ -3,19 +3,16 @@ import ReactFlow, {
   ReactFlowProvider,
   Controls,
   Background,
-  Connection,
-  Node,
   Edge,
+  Node,
   BackgroundVariant,
   useReactFlow,
   applyNodeChanges,
   applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { CheckSquare } from 'lucide-react';
 import { CustomNode } from './CustomNode';
 import { TaskNode } from './TaskNode';
-import { EdgeConditionSelector } from './EdgeConditionSelector';
 import { v4 as uuidv4 } from 'uuid';
 import { CustomEdge } from './CustomEdge';
 import { useEdgeManager } from '../../hooks/useEdgeManager';
@@ -25,16 +22,17 @@ import { useProjectDataUpdate, useProjectData } from '../../context/ProjectDataC
 import { ProjectDataService } from '../../services/ProjectDataService';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { dlog } from '../../utils/debug';
-import { findAgentAct, resolveActType } from './actVisuals';
 import { useNodeCreationLock } from './hooks/useNodeCreationLock';
 import { useTemporaryNodes } from './hooks/useTemporaryNodes';
 import { useFlowConnect } from './hooks/useFlowConnect';
 import { useSelectionManager } from './hooks/useSelectionManager';
 import type { NodeData, EdgeData } from './types/flowTypes';
 import { useNodesWithLog } from './hooks/useNodesWithLog';
+import { useUndoRedoManager } from './hooks/useUndoRedoManager';
 import { useEdgeLabelScheduler } from './hooks/useEdgeLabelScheduler';
 import { useTempEdgeFlags } from './hooks/useTempEdgeFlags';
 import { SelectionMenu } from './components/SelectionMenu';
+import { EdgeConditionMenu } from './components/EdgeConditionMenu';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -42,10 +40,6 @@ const edgeTypes = { custom: CustomEdge };
 
 interface FlowEditorProps {
   flowId?: string;
-  testPanelOpen: boolean;
-  setTestPanelOpen: (open: boolean) => void;
-  testNodeId: string | null;
-  setTestNodeId: (id: string | null) => void;
   onPlayNode: (nodeId: string, nodeRows: any[]) => void;
   nodes: Node<NodeData>[];
   setNodes: React.Dispatch<React.SetStateAction<Node<NodeData>[]>>;
@@ -53,44 +47,37 @@ interface FlowEditorProps {
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>;
   currentProject: any;
   setCurrentProject: (project: any) => void;
-  onCreateTaskFlow?: (flowId: string, title: string, nodes: any[], edges: any[]) => void;
   onOpenTaskFlow?: (flowId: string, title: string) => void;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
   flowId,
-  testPanelOpen,
-  setTestPanelOpen,
-  testNodeId,
-  setTestNodeId,
   onPlayNode,
   nodes,
   setNodes,
   edges,
   setEdges,
-  onCreateTaskFlow,
   onOpenTaskFlow
 }) => {
   // Ref sempre aggiornata con lo stato dei nodi
   const nodesRef = useRef(nodes);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   const [nodeIdCounter, setNodeIdCounter] = useState(3);
+  // Crea un ref per nodeIdCounter per matchare la signature expected
+  const nodeIdCounterRef = useRef(nodeIdCounter);
+  useEffect(() => { nodeIdCounterRef.current = nodeIdCounter; }, [nodeIdCounter]);
   // Sostituisco la gestione connectionMenu con l'hook
   const {
     connectionMenu,
     openMenu,
     closeMenu,
-    setSource,
-    setTarget,
     setTemp,
-    setPosition,
     connectionMenuRef
   } = useConnectionMenu();
   const reactFlowInstance = useReactFlow();
-  const lastClickTime = useRef(0);
   // Rimuovo tempEdgeIdState
   const selection = useSelectionManager();
-  const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick, handlePaneClick } = selection;
+  const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick } = selection;
   // Ref per memorizzare l'ID dell'ultima edge creata (sia tra nodi esistenti che con nodo temporaneo)
   const pendingEdgeIdRef = useRef<string | null>(null);
   // Ref sempre aggiornato con edges correnti (evita closure stale nei deduce temp)
@@ -98,11 +85,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
   // Usa l'hook edge manager
-  const { addEdge: addEdgeManaged, patchEdges, deleteEdge: deleteEdgeManaged } = useEdgeManager(setEdges);
+  const { patchEdges, deleteEdge: deleteEdgeManaged } = useEdgeManager(setEdges);
 
   // Sostituisco onDeleteEdge
-  const onDeleteEdge = useCallback((edgeId: string) => {
-    deleteEdgeManaged(edgeId);
+  const onDeleteEdge = useCallback((edgeId?: string) => {
+    if (edgeId) deleteEdgeManaged(edgeId);
   }, [deleteEdgeManaged]);
 
   // Deferred apply for labels on just-created edges (avoids race with RF state)
@@ -170,36 +157,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [edges, setEdges]);
 
   // --- Undo/Redo command stack ---
-  type Command = { label: string; do: () => void; undo: () => void };
-  const [undoStack, setUndoStack] = useState<Command[]>([]);
-  const [redoStack, setRedoStack] = useState<Command[]>([]);
-  const executeCommand = useCallback((cmd: Command) => {
-    try { cmd.do(); } finally { setUndoStack((s) => [...s, cmd]); setRedoStack([]); }
-  }, []);
-  const undo = useCallback(() => {
-    let toUndo: Command | null = null;
-    setUndoStack((s) => {
-      if (s.length === 0) return s;
-      toUndo = s[s.length - 1];
-      return s.slice(0, -1);
-    });
-    if (toUndo) {
-      try { toUndo.undo(); } catch {}
-      setRedoStack((r) => [...r, toUndo as Command]);
-    }
-  }, []);
-  const redo = useCallback(() => {
-    let toDo: Command | null = null;
-    setRedoStack((r) => {
-      if (r.length === 0) return r;
-      toDo = r[r.length - 1];
-      return r.slice(0, -1);
-    });
-    if (toDo) {
-      try { toDo.do(); } catch {}
-      setUndoStack((s) => [...s, toDo as Command]);
-    }
-  }, []);
+  const { undo, redo } = useUndoRedoManager();
   // Keyboard shortcuts: Ctrl/Cmd+Z, Ctrl/Cmd+Y or Ctrl+Shift+Z
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -227,7 +185,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const setNodesWithLog = useNodesWithLog(setNodes);
 
   // ✅ Spostare PRIMA la definizione di deleteNode
-  const { addNode, deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodesWithLog, setNodeIdCounter);
+  const { deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodesWithLog, setNodeIdCounter);
 
   // ✅ Poi definire deleteNodeWithLog (CORREGGERE il nome)
   const deleteNodeWithLog = useCallback((id: string) => {
@@ -243,8 +201,21 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const entityCreation = useEntityCreation();
   const { createAgentAct, createBackendCall, createTask, createCondition } = entityCreation;
 
+  // Adapter functions per matchare le signature expected da useFlowConnect
+  const createAgentActAdapter = useCallback(() => {
+    createAgentAct(''); // Solo name, scope opzionale
+  }, [createAgentAct]);
+
+  const createBackendCallAdapter = useCallback(() => {
+    createBackendCall(''); // Solo name, scope opzionale
+  }, [createBackendCall]);
+
+  const createTaskAdapter = useCallback(() => {
+    createTask(''); // Solo name, scope opzionale
+  }, [createTask]);
+
   // Sostituisco onConnect
-  const { onConnect, onConnectStart, handleSelectUnconditioned } = useFlowConnect(
+  const { onConnect, onConnectStart } = useFlowConnect(
     reactFlowInstance,
     connectionMenuRef,
     setNodes,
@@ -254,18 +225,23 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     onDeleteEdge,
     deleteNodeWithLog,
     updateNode,
-    createAgentAct,
-    createBackendCall,
-    createTask,
-    nodeIdCounter
+    createAgentActAdapter,
+    createBackendCallAdapter,
+    createTaskAdapter,
+    nodeIdCounterRef
   );
 
   // Log dettagliato su ogni cambiamento di nodes.length
   useEffect(() => {
+    console.log("📊 [NODES_CHANGE] Nodes array changed", { 
+      count: nodes.length,
+      nodeIds: nodes.map(n => n.id),
+      tempNodes: nodes.filter(n => n.data?.isTemporary).map(n => n.id),
+      timestamp: Date.now()
+    });
+    
     if (reactFlowInstance) {
-      const viewport = reactFlowInstance.getViewport ? reactFlowInstance.getViewport() : { x: 0, y: 0, zoom: 1 };
-      const viewportEl = document.querySelector('.react-flow') as HTMLElement;
-      const rect = viewportEl ? viewportEl.getBoundingClientRect() : null;
+      // Rimuovi completamente codice non utilizzato
     }
   }, [nodes.length, reactFlowInstance]);
 
@@ -389,8 +365,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           try { console.log('[CondFix] convertTemp', { tempNodeId, tempEdgeId }); } catch {}
           console.log('[CondFix] SHOW FINAL NODE', {
             tempNodeId,
-            finalPosition: nds.find(n => n.id === tempNodeId)?.position,
-            nodeData: nds.find(n => n.id === tempNodeId)?.data
+            finalPosition: nodesRef.current.find(n => n.id === tempNodeId)?.position,
+            nodeData: nodesRef.current.find(n => n.id === tempNodeId)?.data
           });
           
           console.log('[🔍 STABILIZE_NODE] Stabilizing temporary node', {
@@ -401,13 +377,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           });
           
           // ✅ FIX: Marca il nodo come stabilizzato per evitare riposizionamento
-          tempFlags.stabilizedTempNodes.add(tempNodeId);
+          tempFlags.stabilizedTempNodes.current.add(tempNodeId);
           
           // ✅ FIX: Rimuovi il flag di creazione in corso
-          tempFlags.creatingTempNodes.delete(tempNodeId);
+          tempFlags.creatingTempNodes.current.delete(tempNodeId);
           
-          setNodesWithLog((nds) => {
-            const updatedNodes = nds.map(n => {
+          setNodesWithLog((nds: Node<NodeData>[]) => {
+            const updatedNodes = nds.map((n: Node<NodeData>) => {
               if (n.id === tempNodeId) {
                 const oldPosition = n.position;
                 const updatedNode = {
@@ -693,34 +669,62 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // ✅ FIX: Funzione separata per aprire intellisense
   const openIntellisense = useCallback((tempNodeId: string, tempEdgeId: string, event: any) => {
-    console.log("🎯 [INTELLISENSE] Opening menu", { 
+    console.log("🎯 [INTELLISENSE] Starting node editing", { 
       tempNodeId, 
       tempEdgeId, 
       mousePos: { x: event.clientX, y: event.clientY },
       timestamp: Date.now()
     });
     
+    // Apri il menu di connessione per mostrare l'intellisense
+    console.log("🔍 [INTELLISENSE] Opening menu with:", {
+      position: { x: event.clientX, y: event.clientY },
+      sourceNodeId: connectionMenuRef.current.sourceNodeId,
+      sourceHandleId: connectionMenuRef.current.sourceHandleId,
+      currentMenuState: connectionMenuRef.current
+    });
+    
+    openMenu(
+      { x: event.clientX, y: event.clientY },
+      connectionMenuRef.current.sourceNodeId,
+      connectionMenuRef.current.sourceHandleId
+    );
+    
+    console.log("🔍 [INTELLISENSE] Menu state after openMenu:", connectionMenuRef.current);
+    
     // Registra i temp
-    setTemp(tempNodeId, tempEdgeId);
-    
-    // Apri il menu
-    openMenu({ x: event.clientX, y: event.clientY }, connectionMenuRef.current.sourceNodeId, connectionMenuRef.current.sourceHandleId);
-    
-    // Registra di nuovo dopo apertura
     setTemp(tempNodeId, tempEdgeId);
     
     try {
       (connectionMenuRef.current as any).tempNodeId = tempNodeId;
       (connectionMenuRef.current as any).tempEdgeId = tempEdgeId;
+      (connectionMenuRef.current as any).flowPosition = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
       (window as any).__flowLastTemp = { nodeId: tempNodeId, edgeId: tempEdgeId };
-    } catch {}
+      console.log("💾 [INTELLISENSE] Saved temporary references");
+    } catch (error) {
+      console.error("❌ [INTELLISENSE] Error saving temporary references:", error);
+    }
     
-    console.log("✅ [INTELLISENSE] Menu opened successfully", { 
+    // Attiva l'editing del titolo sul nodo temporaneo dopo un tick
+    setTimeout(() => {
+      const tempNode = nodesRef.current.find(n => n.id === tempNodeId);
+      if (tempNode && tempNode.data) {
+        console.log("✅ [INTELLISENSE] Triggering title edit on temp node", { tempNodeId });
+        // Trigger startEditingTitle se disponibile
+        if (typeof tempNode.data.startEditingTitle === 'function') {
+          tempNode.data.startEditingTitle();
+        }
+      } else {
+        console.warn("⚠️ [INTELLISENSE] Temp node not found for editing", { tempNodeId });
+      }
+    }, 100);
+    
+    console.log("✅ [INTELLISENSE] Node editing setup completed", { 
       tempNodeId, 
       tempEdgeId,
       timestamp: Date.now()
     });
-  }, [openMenu, setTemp, connectionMenuRef]);
+  }, [setTemp, openMenu, connectionMenuRef, reactFlowInstance, nodesRef]);
 
   const onConnectEnd = useCallback((event: any) => {
     console.log("🎬 [ON_CONNECT_END] Event triggered", { 
@@ -736,8 +740,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       return;
     }
     
-    // Prima di tutto, pulisci eventuali edge/nodi temporanei rimasti
-    cleanupAllTempNodesAndEdges();
     const targetIsPane = (event.target as HTMLElement)?.classList?.contains('react-flow__pane');
     
     console.log("🔍 [ON_CONNECT_END] Conditions check", { 
@@ -750,13 +752,22 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       console.log("🚀 [ON_CONNECT_END] Starting node creation with lock");
       // ✅ FIX: Usa il lock asincrono enterprise-ready
       withNodeLock(async () => {
-        const { tempNodeId, tempEdgeId } = await createTemporaryNode(event);
-        openIntellisense(tempNodeId, tempEdgeId, event);
+        try {
+          console.log("📍 [ON_CONNECT_END] About to call createTemporaryNode");
+          const result = await createTemporaryNode(event);
+          console.log("✅ [ON_CONNECT_END] createTemporaryNode returned", result);
+          const { tempNodeId, tempEdgeId } = result;
+          openIntellisense(tempNodeId, tempEdgeId, event);
+        } catch (error) {
+          console.error("❌ [ON_CONNECT_END] Error creating temporary node:", error);
+        }
       });
     } else {
-      console.log("❌ [ON_CONNECT_END] Not creating node - conditions not met");
+      // Solo se NON stiamo creando un nodo, pulisci i temporanei
+      console.log("❌ [ON_CONNECT_END] Not creating node - conditions not met, cleaning up");
+      cleanupAllTempNodesAndEdges();
     }
-  }, [withNodeLock, createTemporaryNode, openIntellisense, connectionMenuRef]);
+  }, [withNodeLock, createTemporaryNode, openIntellisense, connectionMenuRef, cleanupAllTempNodesAndEdges, pendingEdgeIdRef]);
 
   // Utility per rimuovere edge temporaneo
   function removeTempEdge(eds: Edge[], tempEdgeId: string | undefined) {
@@ -1307,10 +1318,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       )}
       
       {connectionMenu.show && (
-        <EdgeConditionSelector
+        <EdgeConditionMenu
+          isOpen={connectionMenu.show}
           position={connectionMenu.position}
           onSelectCondition={handleSelectCondition}
-          onSelectUnconditioned={handleSelectUnconditioned}
           onSelectElse={() => {
             if (pendingEdgeIdRef.current) {
               setEdges((eds) => eds.map(e => e.id === pendingEdgeIdRef.current ? { ...e, label: 'Else', data: { ...(e.data||{}), isElse: true, onDeleteEdge } } : e));
@@ -1373,8 +1384,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             closeMenu();
           }}
           onClose={handleConnectionMenuClose}
-          seedItems={problemIntentSeedItems}
-          extraItems={problemIntentSeedItems}
+          seedItems={problemIntentSeedItems || []}
+          extraItems={problemIntentSeedItems || []}
           sourceNodeId={connectionMenuRef.current.sourceNodeId as any}
           sourceRows={(() => {
             try {

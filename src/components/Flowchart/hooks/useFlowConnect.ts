@@ -10,12 +10,12 @@ export function useFlowConnect(
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>,
   nodesRef: React.MutableRefObject<Node<NodeData>[]>,
   closeMenu: () => void,
-  onDeleteEdge: () => void,
+  onDeleteEdge: (edgeId?: string) => void,
   deleteNodeWithLog: (nodeId: string) => void,
   updateNode: (nodeId: string, updates: Partial<NodeData>) => void,
-  createAgentAct: (nodeId: string, nodeRows: any[]) => void,
-  createBackendCall: (nodeId: string, nodeRows: any[]) => void,
-  createTask: (nodeId: string, nodeRows: any[]) => void,
+  createAgentAct: () => void,
+  createBackendCall: () => void,
+  createTask: () => void,
   nodeIdCounter: React.MutableRefObject<number>
 ) {
   // Gestisce la connessione tra due nodi esistenti
@@ -80,7 +80,7 @@ export function useFlowConnect(
     const fp = (connectionMenuRef.current as any).flowPosition;
     const position = fp ? 
       { x: fp.x - 140, y: fp.y - 20 } : 
-      reactFlowInstance.screen极FlowPosition({ 
+      reactFlowInstance.screenToFlowPosition({ 
         x: connectionMenuRef.current.position.x - 140, 
         y: connectionMenuRef.current.position.y - 20 
       });

@@ -6,15 +6,36 @@ export function useNodesWithLog(setNodes: (updater: any) => void) {
   const isCreatingTempNode = useRef(false);
 
   const setNodesWithLog = useCallback((updater: any) => {
+    // Allow stabilization updates (removing isTemporary flag) even if lock is active
     if (isCreatingTempNode.current) {
-      console.log("🚫 [SET_NODES] BLOCKED - Node creation already in progress");
-      return;
+      if (typeof updater === 'function') {
+        // Check if this update is for stabilization (removing isTemporary)
+        const currentNodes = []; // We can't access current nodes here, so we need a different approach
+        console.log("⚠️ [SET_NODES] Lock active, but allowing potential stabilization update");
+      } else {
+        console.log("🚫 [SET_NODES] BLOCKED - Node creation already in progress");
+        return;
+      }
     }
+    
     isCreatingTempNode.current = true;
 
     if (typeof updater === 'function') {
       setNodes((currentNodes: Node<NodeData>[]) => {
         const newNodes = updater(currentNodes);
+        
+        // Check if this is a stabilization update (removing isTemporary flag)
+        const isStabilizationUpdate = currentNodes.some(node => 
+          (node.data as any)?.isTemporary && 
+          newNodes.find(n => n.id === node.id && !(n.data as any)?.isTemporary)
+        );
+        
+        // If this is a stabilization update, release the lock immediately
+        if (isStabilizationUpdate) {
+          console.log("✅ [SET_NODES] Stabilization update detected, releasing lock");
+          isCreatingTempNode.current = false;
+        }
+        
         // Logging posizione temporanei
         currentNodes.forEach((oldNode, index) => {
           const newNode = newNodes[index];
@@ -32,9 +53,14 @@ export function useNodesWithLog(setNodes: (updater: any) => void) {
             }
           }
         });
-        queueMicrotask(() => {
-          isCreatingTempNode.current = false;
-        });
+        
+        // Release lock after microtask unless it's already been released for stabilization
+        if (!isStabilizationUpdate) {
+          queueMicrotask(() => {
+            isCreatingTempNode.current = false;
+          });
+        }
+        
         return newNodes;
       });
     } else {

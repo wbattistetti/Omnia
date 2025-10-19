@@ -55,7 +55,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
                 console.log('[NodeDragHeader] MOVE ICON - Mouse DOWN - DRAG START', {
                   button: e.button,
                   type: e.type,
-                  target: e.target.tagName,
+                  target: (e.target as HTMLElement)?.tagName,
                   currentTarget: e.currentTarget.tagName
                 });
               }}
@@ -78,7 +78,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
                 console.log('[NodeDragHeader] ANCHOR ICON - Mouse DOWN - RIGID DRAG START', {
                   button: e.button,
                   type: e.type,
-                  target: e.target.tagName
+                  target: (e.target as HTMLElement)?.tagName
                 });
                 try {
                   (window as any).__flowDragMode = 'rigid';
