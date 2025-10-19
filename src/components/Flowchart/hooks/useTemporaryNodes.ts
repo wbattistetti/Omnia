@@ -9,7 +9,8 @@ export function useTemporaryNodes(
   reactFlowInstance: any,
   connectionMenuRef: React.MutableRefObject<any>,
   onDeleteEdge: () => void,
-  setNodesWithLog: (updater: any) => void
+  setNodesWithLog: (updater: any) => void,
+  isCreatingTempNode?: React.MutableRefObject<boolean>
 ) {
   // Pulisce tutti i nodi e edge temporanei
   const cleanupAllTempNodesAndEdges = useCallback(() => {
@@ -32,6 +33,11 @@ export function useTemporaryNodes(
 
   // Crea un nodo temporaneo
   const createTemporaryNode = useCallback(async (event: any) => {
+    // Protezione ulteriore: se disponibile un lock esterno, rispettalo
+    if (isCreatingTempNode && isCreatingTempNode.current) {
+      console.log("🚫 [CREATE] BLOCKED by external lock");
+      return Promise.reject(new Error('creation-locked'));
+    }
     const tempNodeId = uuidv4();
     const tempEdgeId = uuidv4();
     const posFlow = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });

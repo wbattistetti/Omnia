@@ -290,6 +290,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     return () => window.removeEventListener('keydown', handler as any, { capture: true } as any);
   }, [undo, redo]);
 
+  // Lock interno per prevenire duplicazioni durante la creazione dei nodi
+  const isCreatingTempNode = useRef(false);
+
   // Wrapper per setNodes con logging dettagliato e lock interno
   const setNodesWithLog = useCallback((updater: any) => {
     // ✅ LOCK INTERNO per prevenire chiamate duplicate in React StrictMode
@@ -768,7 +771,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     reactFlowInstance,
     connectionMenuRef,
     onDeleteEdge,
-    setNodesWithLog
+    setNodesWithLog,
+    isCreatingTempNode
   );
 
   // Promuove il nodo/edge temporanei a definitivi e rimuove ogni altro temporaneo residuo
