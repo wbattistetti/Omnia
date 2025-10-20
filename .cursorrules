@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "match": "**/*.ts",
+      "promptPrefix": "// Please write clean, production-grade TypeScript code.\n// Avoid non-ASCII characters, Chinese symbols, or multilingual output.\n"
+    },
+    {
+      "match": "**/*.js",
+      "promptPrefix": "// Please write clean, production-grade JavaScript code.\n// Avoid non-ASCII characters, Chinese symbols, or multilingual output.\n"
+    }
+  ]
+}

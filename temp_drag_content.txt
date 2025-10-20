@@ -1,0 +1,80 @@
+  const onNodeDragStart = useCallback((event: any, node: Node) => {
+    // Controlla se l'evento è iniziato da un elemento con classe 'nodrag'
+    const target = event.target as Element;
+    const isAnchor = target && (target.classList.contains('rigid-anchor') || target.closest('.rigid-anchor'));
+
+    console.log('[FlowEditor] NODE DRAG START ATTEMPT:', {
+      nodeId: node.id,
+      nodeType: node.type,
+      targetTag: target?.tagName,
+      targetClass: target?.className,
+      hasNodrag: target?.classList.contains('nodrag'),
+      closestNodrag: target?.closest('.nodrag'),
+      isAnchor,
+      eventType: event.type
+    });
+
+    if (target && (target.classList.contains('nodrag') || target.closest('.nodrag'))) {
+      console.log('[FlowEditor] DRAG BLOCKED - nodrag element found');
+      event.preventDefault();
+      return false;
+    }
+
+    console.log('[FlowEditor] DRAG ALLOWED - proceeding with node drag');
+    // Prepara contesto per drag rigido SOLO se partito dall'ancora
+    if ((window as any).__flowDragMode === 'rigid' || isAnchor) {
+      const rootId = node.id;
+      // BFS su edges per raccogliere tutti i discendenti
+      const visited = new Set<string>();
+      const q: string[] = [rootId];
+      visited.add(rootId);
+      while (q.length) {
+        const cur = q.shift() as string;
+        edges.forEach(e => {
+          if (e.source === cur && !visited.has(e.target)) {
+            visited.add(e.target);
+            q.push(e.target);
+          }
+        });
+      }
+      // Mappa posizioni iniziali
+      const startPositions = new Map<string, { x: number; y: number }>();
+      nodes.forEach(n => {
+        if (visited.has(n.id)) startPositions.set(n.id, { x: (n.position as any).x, y: (n.position as any).y });
+      });
+      rigidDragCtxRef.current = {
+        rootId,
+        ids: visited,
+        startPositions,
+        rootStart: { x: (node.position as any).x, y: (node.position as any).y },
+        rootLast: { x: (node.position as any).x, y: (node.position as any).y },
+      };
+      // debug logs removed
+    } else {
+      rigidDragCtxRef.current = null;
+    }
+  }, []);
+
+  // Rigid drag: se il drag parte con __flowDragMode = 'rigid', muovi anche i discendenti
+  const rigidDragCtxRef = useRef<null | { rootId: string; ids: Set<string>; startPositions: Map<string, {x:number;y:number}>; rootStart: {x:number;y:number}; rootLast: {x:number;y:number} }>(null);
+
+  const onNodeDrag = useCallback((event: any, draggedNode: Node) => {
+    if (!rigidDragCtxRef.current) return;
+    const ctx = rigidDragCtxRef.current;
+    if (draggedNode.id !== ctx.rootId) return; // gestiamo solo il root per coerenza delta
+    const curX = (draggedNode.position as any).x;
+    const curY = (draggedNode.position as any).y;
+    const incDx = curX - ctx.rootLast.x;
+    const incDy = curY - ctx.rootLast.y;
+    // debug logs removed
+    if (incDx === 0 && incDy === 0) return;
+    setNodes((nds) => nds.map(n => {
+      if (!ctx.ids.has(n.id)) return n;
+      if (n.id === draggedNode.id) return draggedNode; // root già gestito da RF
+      const pos = n.position as any;
+      return { ...n, position: { x: pos.x + incDx, y: pos.y + incDy } } as any;
+    }));
+    ctx.rootLast = { x: curX, y: curY };
+  }, [setNodes]);
+
+  const onNodeDragStop = useCallback(() => {
