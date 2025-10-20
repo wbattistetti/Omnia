@@ -96,6 +96,42 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Deferred apply for labels on just-created edges (avoids race with RF state)
   const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(setEdges, setSelectedEdgeId, connectionMenuRef);
 
+  // Helper functions for edge label logic
+  const handleExistingEdgeLabel = useCallback((pid: string, label: string) => {
+    setEdges(eds => eds.map(e => e.id === pid ? { ...e, label } : e));
+    setSelectedEdgeId(pid);
+    pendingEdgeIdRef.current = null;
+  }, [setEdges, setSelectedEdgeId]);
+
+  const handleTempEdgeStabilization = useCallback((tempNodeId: string, tempEdgeId: string, label: string, fp: any) => {
+    console.log('[🔍 STABILIZE.1] Starting stabilization (first occurrence)', { 
+      tempNodeId, 
+      tempEdgeId,
+      flowPosition: fp,
+      timestamp: Date.now()
+    });
+    
+    setNodes(nds => {
+      const stabilizedNodes = nds.map(n => {
+        if (n.id === tempNodeId) {
+          console.log('[🔍 STABILIZE.1] Stabilizing temporary node', { 
+            tempNodeId, 
+            pos: n.position, 
+            fp, 
+            timestamp: Date.now() 
+          });
+          return { ...n, isTemporary: false };
+        }
+        return n;
+      });
+      return stabilizedNodes;
+    });
+    
+    setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label } : e));
+    setSelectedEdgeId(tempEdgeId);
+    closeMenu();
+  }, [setNodes, setEdges, setSelectedEdgeId, closeMenu]);
+
   // Commit helper: apply a label to the current linkage context deterministically
   const commitEdgeLabel = useCallback((label: string): boolean => {
     // 1) Just-created edge between existing nodes
@@ -104,47 +140,24 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       // If not yet present in state, defer until it appears
       const exists = (edgesRef.current || []).some(e => e.id === pid);
       if (exists) {
-        setEdges(eds => eds.map(e => e.id === pid ? { ...e, label } : e));
-        setSelectedEdgeId(pid);
-        pendingEdgeIdRef.current = null;
+        handleExistingEdgeLabel(pid, label);
       } else {
         scheduleApplyLabel(pid, label);
       }
       return true;
     }
+    
     // 2) Promote temp node/edge if present
     const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
     const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
     if (tempNodeId && tempEdgeId) {
       const fp = (connectionMenuRef.current as any).flowPosition;
-      console.log('[🔍 STABILIZE.1] Starting stabilization (first occurrence)', { 
-        tempNodeId, 
-        tempEdgeId,
-        flowPosition: fp,
-        timestamp: Date.now()
-      });
-      setNodes(nds => {
-        const stabilizedNodes = nds.map(n => {
-          if (n.id === tempNodeId) {
-            console.log('[🔍 STABILIZE.1] Stabilizing temporary node', { 
-              tempNodeId, 
-              pos: n.position, 
-              fp, 
-              timestamp: Date.now() 
-            });
-            return { ...n, isTemporary: false };
-          }
-          return n;
-        });
-        return stabilizedNodes;
-      });
-      setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label } : e));
-      setSelectedEdgeId(tempEdgeId);
-      closeMenu();
+      handleTempEdgeStabilization(tempNodeId, tempEdgeId, label, fp);
       return true;
     }
+    
     return false;
-  }, [setEdges, setSelectedEdgeId, scheduleApplyLabel, setNodes, connectionMenuRef, closeMenu]);
+  }, [scheduleApplyLabel, handleExistingEdgeLabel, handleTempEdgeStabilization]);
 
   // Also attempt apply on every edges change (fast path)
   useEffect(() => {
@@ -654,47 +667,55 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Rigid drag: se il drag parte con __flowDragMode = 'rigid', muovi anche i discendenti
   const rigidDragCtxRef = useRef<null | { rootId: string; ids: Set<string>; startPositions: Map<string, {x:number;y:number}>; rootStart: {x:number;y:number}; rootLast: {x:number;y:number} }>(null);
 
-  const onNodeDrag = useCallback((event: any, draggedNode: Node) => {
-    if (!rigidDragCtxRef.current) return;
-    const ctx = rigidDragCtxRef.current;
-    if (draggedNode.id !== ctx.rootId) return; // gestiamo solo il root per coerenza delta
+  // Helper functions for rigid drag logic
+  const applyRigidDragMovement = useCallback((ctx: any, draggedNode: Node, setNodes: any) => {
+    if (draggedNode.id !== ctx.rootId) return;
     const curX = (draggedNode.position as any).x;
     const curY = (draggedNode.position as any).y;
     const incDx = curX - ctx.rootLast.x;
     const incDy = curY - ctx.rootLast.y;
-    // debug logs removed
     if (incDx === 0 && incDy === 0) return;
-    setNodes((nds) => nds.map(n => {
+    
+    setNodes((nds: Node<NodeData>[]) => nds.map(n => {
       if (!ctx.ids.has(n.id)) return n;
-      if (n.id === draggedNode.id) return draggedNode; // root già gestito da RF
+      if (n.id === draggedNode.id) return draggedNode;
       const pos = n.position as any;
       return { ...n, position: { x: pos.x + incDx, y: pos.y + incDy } } as any;
     }));
+    
     ctx.rootLast = { x: curX, y: curY };
-  }, [setNodes]);
+  }, []);
+
+  const applyFinalRigidDragOffset = useCallback((ctx: any, nodesRef: any, setNodes: any) => {
+    const rootNow = nodesRef.current.find((n: Node) => n.id === ctx.rootId);
+    if (rootNow) {
+      const finalDx = (rootNow.position as any).x - ctx.rootLast.x;
+      const finalDy = (rootNow.position as any).y - ctx.rootLast.y;
+      if (finalDx !== 0 || finalDy !== 0) {
+        setNodes((nds: Node<NodeData>[]) => nds.map(n => {
+          if (!ctx.ids.has(n.id)) return n;
+          if (n.id === ctx.rootId) return n;
+          const pos = n.position as any;
+          return { ...n, position: { x: pos.x + finalDx, y: pos.y + finalDy } } as any;
+        }));
+      }
+    }
+  }, []);
+
+  const onNodeDrag = useCallback((event: any, draggedNode: Node) => {
+    if (!rigidDragCtxRef.current) return;
+    const ctx = rigidDragCtxRef.current;
+    applyRigidDragMovement(ctx, draggedNode, setNodes);
+  }, [setNodes, applyRigidDragMovement]);
 
   const onNodeDragStop = useCallback(() => {
     try { (window as any).__flowDragMode = undefined; } catch {}
     const ctx = rigidDragCtxRef.current;
     if (ctx) {
-      // debug logs removed
-      // Applica l'offset finale anche se non sono arrivati tick drag
-      const rootNow = nodesRef.current.find(n => n.id === ctx.rootId);
-      if (rootNow) {
-        const finalDx = (rootNow.position as any).x - ctx.rootLast.x;
-        const finalDy = (rootNow.position as any).y - ctx.rootLast.y;
-        if (finalDx !== 0 || finalDy !== 0) {
-          setNodes(nds => nds.map(n => {
-            if (!ctx.ids.has(n.id)) return n;
-            if (n.id === ctx.rootId) return n;
-            const pos = n.position as any;
-            return { ...n, position: { x: pos.x + finalDx, y: pos.y + finalDy } } as any;
-          }));
-        }
-      }
+      applyFinalRigidDragOffset(ctx, nodesRef, setNodes);
     }
     rigidDragCtxRef.current = null;
-  }, [setNodes]);
+  }, [setNodes, applyFinalRigidDragOffset]);
 
   // Wheel handler: zoom only when CTRL is pressed
   const handleWheel = useCallback((e: React.WheelEvent) => {
