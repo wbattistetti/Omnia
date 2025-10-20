@@ -34,6 +34,7 @@ import { useTempEdgeFlags } from './hooks/useTempEdgeFlags';
 import { SelectionMenu } from './components/SelectionMenu';
 // RIMOSSO: import { EdgeConditionMenu } from './components/EdgeConditionMenu';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
+import { useConditionCreation } from './hooks/useConditionCreation';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -247,7 +248,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [nodes.length, reactFlowInstance]);
 
   // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
-  const { addItem, addCategory } = useProjectDataUpdate();
+  // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation
   const { data: projectData } = useProjectData();
   
   // ✅ NUOVO STATO per IntellisenseMenu originale
@@ -275,189 +276,43 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [projectData]);
 
-  // Gestione creazione nuova condizione
-  const handleCreateCondition = useCallback(async (name: string, scope?: 'global' | 'industry') => {
-    try {
-      try { console.log('[CondFlow] service.enter', { name, scope }); } catch {}
-      // Se stiamo etichettando un edge appena creato tra due nodi esistenti,
-      // aggiorna subito quell'edge per non perdere la selezione dell'utente.
-      let attachToEdgeId: string | null = null;
-      if (pendingEdgeIdRef.current) {
-        attachToEdgeId = pendingEdgeIdRef.current;
-        setEdges((eds) => eds.map(e => e.id === attachToEdgeId ? { ...e, label: name } : e));
-        setSelectedEdgeId(attachToEdgeId);
-        pendingEdgeIdRef.current = null;
-        // non chiudere qui: continuiamo a creare la condition e poi attacchiamo l'id
-      }
-      let categoryId = '';
-      const conditions = (projectData as any)?.conditions || [];
+  // ✅ PRIMA: Inizializza tempFlags (necessario per useConditionCreation)
+  const tempFlags = useTempEdgeFlags();
 
-      if (conditions.length > 0) {
-        categoryId = conditions[0].id;
-      } else {
-        await addCategory('conditions', 'Default Conditions');
-        const updatedData = await ProjectDataService.loadProjectData();
-        const updatedConditions = (updatedData as any)?.conditions || [];
-        categoryId = updatedConditions[0]?.id || '';
-      }
+  // ✅ PRIMA: Definisci removeAllTempEdges (necessario per useConditionCreation)
+  const removeAllTempEdges = useCallback((eds: Edge[], currentNodes: Node[]) => {
+    const filtered = eds.filter(e => {
+      const targetNode = currentNodes.find(n => n.id === e.target);
+      const isTemp = !!(targetNode && targetNode.data && targetNode.data.isTemporary);
+      return !isTemp;
+    });
+    return filtered;
+  }, []);
 
-      if (categoryId) {
-        // Apri il pannello conditions nel sidebar
-        try { (await import('../../ui/events')).emitSidebarOpenAccordion('conditions'); } catch {}
-
-        // Aggiungi la nuova condizione
-        await addItem('conditions', categoryId, name, '', scope);
-        try { console.log('[CondFlow] service.created', { categoryId, name }); } catch {}
-
-        // Ricarica dati per ottenere l'ID della nuova condizione
-        const refreshed = await ProjectDataService.loadProjectData();
-        const refCat = (refreshed as any)?.conditions?.find((c:any)=>c.id===categoryId);
-        const created = refCat?.items?.find((i:any)=>i.name===name);
-        const conditionId = created?._id || created?.id;
-
-        // Evidenzia nel sidebar e aggiorna UI (non blocca il flusso)
-        setTimeout(async () => { try { (await import('../../ui/events')).emitSidebarHighlightItem('conditions', name); } catch {} }, 100);
-        try { (await import('../../ui/events')).emitSidebarForceRender(); } catch {}
-
-        // Se avevamo un edge esistente, attacca ora il conditionId e chiudi
-        if (attachToEdgeId) {
-          setEdges((eds) => eds.map(e => e.id === attachToEdgeId ? { ...e, data: { ...(e.data || {}), onDeleteEdge, conditionId }, label: name } : e));
-          closeMenu();
-          return;
-        }
-
-        // Crea/promuovi nodo collegato
-        const getTargetHandle = (sourceHandleId: string): string => {
-          switch (sourceHandleId) {
-            case 'bottom': return 'top-target';
-            case 'top': return 'bottom-target';
-            case 'left': return 'right-target';
-            case 'right': return 'left-target';
-            default: return 'top-target';
-          }
-        };
-
-        // Stabilizza il nodo temporaneo esistente se presente, altrimenti crea nuovo nodo
-        let tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
-        let tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
-        if (!tempNodeId || !tempEdgeId) {
-          try {
-            const sourceId = connectionMenuRef.current.sourceNodeId || '';
-            const maybeTemp = nodesRef.current.find(n => (n as any)?.data?.isTemporary === true);
-            if (maybeTemp) {
-              const linking = edges.find(e => e.target === maybeTemp.id && e.source === sourceId);
-              if (linking) { tempNodeId = maybeTemp.id; tempEdgeId = linking.id; }
-            }
-          } catch {}
-        }
-        if (tempNodeId && tempEdgeId) {
-          try { console.log('[CondFix] convertTemp', { tempNodeId, tempEdgeId }); } catch {}
-          console.log('[CondFix] SHOW FINAL NODE', {
-            tempNodeId,
-            finalPosition: nodesRef.current.find(n => n.id === tempNodeId)?.position,
-            nodeData: nodesRef.current.find(n => n.id === tempNodeId)?.data
-          });
-          
-          console.log('[🔍 STABILIZE_NODE] Stabilizing temporary node', {
-            tempNodeId,
-            tempEdgeId,
-            conditionName: name,
-            timestamp: Date.now()
-          });
-          
-          // ✅ FIX: Marca il nodo come stabilizzato per evitare riposizionamento
-          tempFlags.stabilizedTempNodes.current.add(tempNodeId);
-          
-          // ✅ FIX: Rimuovi il flag di creazione in corso
-          tempFlags.creatingTempNodes.current.delete(tempNodeId);
-          
-          setNodesWithLog((nds: Node<NodeData>[]) => {
-            const updatedNodes = nds.map((n: Node<NodeData>) => {
-              if (n.id === tempNodeId) {
-                const oldPosition = n.position;
-                const updatedNode = {
-                  ...n,
-                  data: { ...(n.data as any), isTemporary: false, hidden: false, focusRowId: '1' }
-                };
-                console.log('[🔍 STABILIZE_NODE] Node stabilized', {
-                  nodeId: tempNodeId,
-                  oldPosition,
-                  newPosition: updatedNode.position,
-                  positionChanged: oldPosition.x !== updatedNode.position.x || oldPosition.y !== updatedNode.position.y,
-                  isTemporaryChanged: n.data?.isTemporary !== updatedNode.data?.isTemporary,
-                  markedAsStabilized: true
-                });
-                return updatedNode;
-              }
-              return n;
-            });
-            return updatedNodes;
-          });
-          setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
-            ...e,
-            style: { stroke: '#8b5cf6' },
-            label: name,
-            data: { ...(e.data || {}), onDeleteEdge, conditionId }
-          } : e));
-          // azzera i ref temporanei per evitare doppie creazioni successive
-          connectionMenuRef.current.tempNodeId = null as any;
-          connectionMenuRef.current.tempEdgeId = null as any;
-        } else {
-          const newNodeId = nodeIdCounter.toString();
-          const position = reactFlowInstance.screenToFlowPosition({
-            x: connectionMenuRef.current.position.x - 140,
-            y: connectionMenuRef.current.position.y - 20
-          });
-          const newEdgeId = uuidv4();
-          const newNode: Node<NodeData> = {
-            id: newNodeId,
-            type: 'custom',
-            position,
-            data: {
-              title: '',
-              rows: [],
-              onDelete: () => deleteNodeWithLog(newNodeId),
-              onUpdate: (updates: any) => updateNode(newNodeId, updates),
-              onCreateAgentAct: createAgentAct,
-              onCreateBackendCall: createBackendCall,
-              onCreateTask: createTask,
-              onCreateCondition: createCondition,
-              focusRowId: '1'
-            },
-          };
-          const targetHandle = getTargetHandle(connectionMenuRef.current.sourceHandleId || '');
-          const newEdge: Edge<EdgeData> = {
-            id: newEdgeId,
-            source: connectionMenuRef.current.sourceNodeId || '',
-            sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-            target: newNodeId,
-            targetHandle: targetHandle,
-            style: { stroke: '#8b5cf6' },
-            label: name,
-            type: 'custom',
-            data: { onDeleteEdge },
-            markerEnd: 'arrowhead',
-          };
-          setNodes((nds) => nds);
-          setNodes((nds) => {
-            const filtered = connectionMenuRef.current.tempNodeId ? nds.filter(n => n.id !== connectionMenuRef.current.tempNodeId) : nds;
-            return [...filtered, newNode];
-          });
-          setEdges((eds) => {
-            const filtered = removeAllTempEdges(eds, nodesRef.current);
-            return [...filtered, newEdge];
-          });
-          setNodeIdCounter(prev => prev + 1);
-          try { console.log('[CondFix] createNew', { newNodeId, newEdgeId }); } catch {}
-        }
-
-        // Chiudi il menu dopo aver stabilizzato nodi/edge
-        setTimeout(() => closeMenu(), 0);
-      }
-    } catch (error) {
-      try { console.error('[CondFlow] error', error); } catch {}
-    }
-  }, [projectData, addItem, addCategory, closeMenu, nodeIdCounter, reactFlowInstance, connectionMenuRef, deleteNodeWithLog, updateNode, onDeleteEdge, setNodes, setEdges, nodesRef, setNodeIdCounter, createAgentAct, createBackendCall, createTask]);
+  // ✅ Usa hook per gestione creazione nuova condizione
+  const { handleCreateCondition } = useConditionCreation(
+    setEdges,
+    setSelectedEdgeId,
+    connectionMenuRef,
+    reactFlowInstance,
+    nodesRef,
+    setNodes,
+    deleteNodeWithLog,
+    updateNode,
+    createAgentAct,
+    createBackendCall,
+    createTask,
+    createCondition,
+    nodeIdCounter,
+    setNodeIdCounter,
+    pendingEdgeIdRef,
+    closeMenu,
+    tempFlags,
+    setNodesWithLog,
+    removeAllTempEdges,
+    edges,
+    onDeleteEdge
+  );
 
   // Patch all edges after mount
   React.useEffect(() => {
@@ -763,14 +618,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }
 
   // Una edge è temporanea se il suo target è un nodo temporaneo (usando lo stato più recente dei nodi)
-  const removeAllTempEdges = (eds: Edge[], currentNodes: Node[]) => {
-    const filtered = eds.filter(e => {
-      const targetNode = currentNodes.find(n => n.id === e.target);
-      const isTemp = !!(targetNode && targetNode.data && targetNode.data.isTemporary);
-      return !isTemp;
-    });
-    return filtered;
-  };
+  // ✅ RIMOSSO: removeAllTempEdges - ora definito prima per useConditionCreation
 
   // Rimuovi completamente handleSelectCondition e handleConnectionMenuClose
   // Queste funzioni erano legate a EdgeConditionMenu che è stato rimosso
@@ -1026,8 +874,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Stabilizza nodeTypes/edgeTypes per evitare il warning RF#002 (HMR)
   // Spostati fuori dal componente per evitare ricreazioni durante HMR
-
-  const tempFlags = useTempEdgeFlags();
 
   // ✅ Handler per gestire selezione items nell'IntellisenseMenu
   const handleIntellisenseSelect = useCallback((item: any) => {
@@ -1291,13 +1137,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 // Ref globale per edge temporaneo
 const tempEdgeIdGlobal = { current: null as string | null };
 
-// ✅ FIX: Flag per tracciare nodi temporanei stabilizzati (per evitare riposizionamento)
+// Flag per tracciare nodi temporanei stabilizzati (per evitare riposizionamento)
 const stabilizedTempNodes = new Set<string>();
 
-// ✅ FIX: Flag per tracciare nodi temporanei in corso di creazione (per evitare creazione duplicata)
+// Flag per tracciare nodi temporanei in corso di creazione (per evitare creazione duplicata)
 const creatingTempNodes = new Set<string>();
 
-// ✅ FIX: Flag globale rimosso - ora usiamo useRef (thread-safe)
+// Flag globale rimosso - ora usiamo useRef (thread-safe)
 
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   return (
