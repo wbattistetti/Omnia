@@ -40,7 +40,7 @@ export function useConditionCreation(
       let attachToEdgeId: string | null = null;
       if (pendingEdgeIdRef.current) {
         attachToEdgeId = pendingEdgeIdRef.current;
-        setEdges((eds) => eds.map(e => e.id === attachToEdgeId ? { ...e, label: name } : e));
+        setEdges((eds: any) => eds.map((e: any) => e.id === attachToEdgeId ? { ...e, label: name } : e));
         setSelectedEdgeId(attachToEdgeId);
         pendingEdgeIdRef.current = null;
         // non chiudere qui: continuiamo a creare la condition e poi attacchiamo l'id
@@ -77,7 +77,7 @@ export function useConditionCreation(
 
         // Se avevamo un edge esistente, attacca ora il conditionId e chiudi
         if (attachToEdgeId) {
-          setEdges((eds) => eds.map(e => e.id === attachToEdgeId ? { ...e, data: { ...(e.data || {}), onDeleteEdge, conditionId }, label: name } : e));
+          setEdges((eds: any) => eds.map((e: any) => e.id === attachToEdgeId ? { ...e, data: { ...(e.data || {}), onDeleteEdge, conditionId }, label: name } : e));
           closeMenu();
           return;
         }
@@ -99,7 +99,7 @@ export function useConditionCreation(
         if (!tempNodeId || !tempEdgeId) {
           try {
             const sourceId = connectionMenuRef.current.sourceNodeId || '';
-            const maybeTemp = nodesRef.current.find(n => (n as any)?.data?.isTemporary === true);
+            const maybeTemp = nodesRef.current.find((n: any) => (n as any)?.data?.is极Temporary === true);
             if (maybeTemp) {
               const linking = edges.find(e => e.target === maybeTemp.id && e.source === sourceId);
               if (linking) { tempNodeId = maybeTemp.id; tempEdgeId = linking.id; }
@@ -110,8 +110,8 @@ export function useConditionCreation(
           try { console.log('[CondFix] convertTemp', { tempNodeId, tempEdgeId }); } catch {}
           console.log('[CondFix] SHOW FINAL NODE', {
             tempNodeId,
-            finalPosition: nodesRef.current.find(n => n.id === tempNodeId)?.position,
-            nodeData: nodesRef.current.find(n => n.id === tempNodeId)?.data
+            finalPosition: nodesRef.current.find((n: any) => n.id === tempNodeId)?.position,
+            nodeData: nodesRef.current.find((n: any) => n.id === tempNodeId)?.data
           });
           
           console.log('[🔍 STABILIZE_NODE] Stabilizing temporary node', {
@@ -127,29 +127,26 @@ export function useConditionCreation(
           // ✅ FIX: Rimuovi il flag di creazione in corso
           tempFlags.creatingTempNodes.current.delete(tempNodeId);
           
-          setNodesWithLog((nds: Node<NodeData>[]) => {
-            const updatedNodes = nds.map((n: Node<NodeData>) => {
-              if (n.id === tempNodeId) {
-                const oldPosition = n.position;
-                const updatedNode = {
-                  ...n,
-                  data: { ...(n.data as any), isTemporary: false, hidden: false, focusRowId: '1' }
-                };
-                console.log('[🔍 STABILIZE_NODE] Node stabilized', {
-                  nodeId: tempNodeId,
-                  oldPosition,
-                  newPosition: updatedNode.position,
-                  positionChanged: oldPosition.x !== updatedNode.position.x || oldPosition.y !== updatedNode.position.y,
-                  isTemporaryChanged: n.data?.isTemporary !== updatedNode.data?.isTemporary,
-                  markedAsStabilized: true
-                });
-                return updatedNode;
-              }
-              return n;
-            });
-            return updatedNodes;
-          });
-          setEdges((eds) => eds.map(e => e.id === tempEdgeId ? {
+          setNodesWithLog((nds: Node<NodeData>[]) => nds.map((n: Node<NodeData>) => {
+            if (n.id === tempNodeId) {
+              const oldPosition = n.position;
+              const updatedNode = {
+                ...n,
+                data: { ...(n.data as any), isTemporary: false, hidden: false, focusRowId: '1' }
+              };
+              console.log('[🔍 STABILIZE_NODE] Node stabilized', {
+                nodeId: tempNodeId,
+                oldPosition,
+                newPosition: updatedNode.position,
+                positionChanged: oldPosition.x !== updatedNode.position.x || oldPosition.y !== updatedNode.position.y,
+                isTemporaryChanged: n.data?.isTemporary !== updatedNode.data?.isTemporary,
+                markedAsStabilized: true
+              });
+              return updatedNode;
+            }
+            return n;
+          }));
+          setEdges((eds: any) => eds.map((e: any) => e.id === tempEdgeId ? {
             ...e,
             style: { stroke: '#8b5cf6' },
             label: name,
@@ -194,16 +191,16 @@ export function useConditionCreation(
             data: { onDeleteEdge },
             markerEnd: 'arrowhead',
           };
-          setNodes((nds) => nds);
-          setNodes((nds) => {
-            const filtered = connectionMenuRef.current.tempNodeId ? nds.filter(n => n.id !== connectionMenuRef.current.tempNodeId) : nds;
+          setNodes((nds: any) => nds);
+          setNodes((nds: any) => {
+            const filtered = connectionMenuRef.current.tempNodeId ? nds.filter((n: any) => n.id !== connectionMenuRef.current.tempNodeId) : nds;
             return [...filtered, newNode];
           });
-          setEdges((eds) => {
+          setEdges((eds: any) => {
             const filtered = removeAllTempEdges(eds, nodesRef.current);
             return [...filtered, newEdge];
           });
-          setNodeIdCounter(prev => prev + 1);
+          setNodeIdCounter((prev: any) => prev + 1);
           try { console.log('[CondFix] createNew', { newNodeId, newEdgeId }); } catch {}
         }
 

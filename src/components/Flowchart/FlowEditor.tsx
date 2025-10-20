@@ -541,7 +541,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     const sourceId = connectionMenuRef.current.sourceNodeId;
     const srcNode = nodes.find(n => n.id === sourceId);
     const rows = Array.isArray((srcNode?.data as any)?.rows) ? (srcNode!.data as any).rows : [];
-    const problemRow = rows.find(r => r.text && r.text.toLowerCase().includes('problemclassification'));
+    const problemRow = rows.find((r: any) => r.text && r.text.toLowerCase().includes('problemclassification'));
     const problemIntents = problemRow ? (problemRow as any)?.problem?.intents : null;
     
     const combinedItems = [
