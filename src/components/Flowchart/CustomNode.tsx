@@ -212,15 +212,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     }
   }, [data.focusRowId, editingRowId, nodeRows.length]);
 
-  // ✅ Auto-attiva editing per nodi temporanei (solo una volta)
-  const hasActivatedRef = useRef(false);
-  useEffect(() => {
-    if (data.isTemporary && !isEditingNode && nodeTitle.trim() === '' && !hasActivatedRef.current) {
-      console.log("🎯 [TEMP_NODE] Auto-activating title editing for temporary node", { nodeId: id });
-      hasActivatedRef.current = true;
-      setIsEditingNode(true);
-    }
-  }, [data.isTemporary, isEditingNode, nodeTitle, id]);
+  // ✅ Rimuovi auto-editing del titolo per nodi temporanei
+  // (Mantieni solo l'auto-focus sulla prima riga)
 
   // Stati per il drag-and-drop
   const drag = useNodeRowDrag(nodeRows);

@@ -32,7 +32,8 @@ import { useUndoRedoManager } from './hooks/useUndoRedoManager';
 import { useEdgeLabelScheduler } from './hooks/useEdgeLabelScheduler';
 import { useTempEdgeFlags } from './hooks/useTempEdgeFlags';
 import { SelectionMenu } from './components/SelectionMenu';
-import { EdgeConditionMenu } from './components/EdgeConditionMenu';
+// RIMOSSO: import { EdgeConditionMenu } from './components/EdgeConditionMenu';
+import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -248,43 +249,31 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
   const { addItem, addCategory } = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
+  
+  // ✅ NUOVO STATO per IntellisenseMenu originale
+  const [showNodeIntellisense, setShowNodeIntellisense] = useState(false);
+  const [nodeIntellisensePosition, setNodeIntellisensePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [nodeIntellisenseItems, setNodeIntellisenseItems] = useState<any[]>([]);
+  const [nodeIntellisenseTarget, setNodeIntellisenseTarget] = useState<string | null>(null);
 
-  // Prepara seed items leggendo SOLO dal nodo sorgente: ProblemClassification → problem.intents (con fallback shadow locale)
-  const problemIntentSeedItems = React.useMemo(() => {
+  // ✅ RIMOSSO: problemIntentSeedItems - ora calcolato manualmente in openIntellisense
+
+  // Ottieni tutte le condizioni disponibili dal project data
+  const allConditions = React.useMemo(() => {
     try {
-      if (!connectionMenu.show) return undefined;
-      const sourceId = connectionMenu.sourceNodeId as string | null;
-      if (!sourceId) return undefined;
-      const srcNode = nodes.find(n => n.id === sourceId);
-      const rows: any[] = Array.isArray((srcNode?.data as any)?.rows) ? (srcNode!.data as any).rows : [];
-      if (!rows.length) return undefined;
-
-      // 1) riga ProblemClassification (max una)
-      const problemRow = rows.find(r => r.text && r.text.toLowerCase().includes('problemclassification'));
-      if (!problemRow) return undefined;
-
-      // 2) Leggi problem.intents (se presente) o usa shadow locale
-      const problemIntents = (problemRow as any)?.problem?.intents;
-      if (Array.isArray(problemIntents) && problemIntents.length) {
-        return problemIntents.map((intent: any) => ({
-          label: intent.label || intent.name || 'Unknown',
-          value: intent.id || intent.name || 'unknown',
-          description: intent.description || ''
-        }));
-      }
-
-      // Fallback: shadow locale (se non c'è problem.intents)
-      return [
-        { label: 'Customer Service', value: 'customer_service', description: 'Assistenza clienti e supporto' },
-        { label: 'Technical Support', value: 'technical_support', description: 'Supporto tecnico e risoluzione problemi' },
-        { label: 'Sales Inquiry', value: 'sales_inquiry', description: 'Informazioni commerciali e vendite' },
-        { label: 'Billing Issue', value: 'billing_issue', description: 'Problemi di fatturazione e pagamenti' },
-        { label: 'Product Information', value: 'product_information', description: 'Informazioni su prodotti e servizi' }
-      ];
+      const conditions = (projectData as any)?.conditions || [];
+      const conditionItems = conditions.flatMap((category: any) => 
+        (category.items || []).map((item: any) => ({
+          label: item.name || 'Unknown',
+          value: item.id || 'unknown',
+          description: item.description || ''
+        }))
+      );
+      return conditionItems.length > 0 ? conditionItems : undefined;
     } catch (error) {
       return undefined;
     }
-  }, [connectionMenu.show, connectionMenu.sourceNodeId, nodes]);
+  }, [projectData]);
 
   // Gestione creazione nuova condizione
   const handleCreateCondition = useCallback(async (name: string, scope?: 'global' | 'industry') => {
@@ -667,64 +656,60 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   const withNodeLock = useNodeCreationLock();
 
-  // ✅ FIX: Funzione separata per aprire intellisense
+  // ✅ FIX: Funzione per aprire l'IntellisenseMenu CORRETTO
   const openIntellisense = useCallback((tempNodeId: string, tempEdgeId: string, event: any) => {
-    console.log("🎯 [INTELLISENSE] Starting node editing", { 
+    console.log("🎯 [INTELLISENSE] Opening proper IntellisenseMenu", { 
       tempNodeId, 
       tempEdgeId, 
       mousePos: { x: event.clientX, y: event.clientY },
       timestamp: Date.now()
     });
     
-    // Apri il menu di connessione per mostrare l'intellisense
-    console.log("🔍 [INTELLISENSE] Opening menu with:", {
-      position: { x: event.clientX, y: event.clientY },
-      sourceNodeId: connectionMenuRef.current.sourceNodeId,
-      sourceHandleId: connectionMenuRef.current.sourceHandleId,
-      currentMenuState: connectionMenuRef.current
-    });
-    
+    // ✅ FORZA l'apertura del connection menu PRIMA di calcolare gli intents
     openMenu(
       { x: event.clientX, y: event.clientY },
       connectionMenuRef.current.sourceNodeId,
       connectionMenuRef.current.sourceHandleId
     );
     
-    console.log("🔍 [INTELLISENSE] Menu state after openMenu:", connectionMenuRef.current);
-    
-    // Registra i temp
-    setTemp(tempNodeId, tempEdgeId);
-    
+    // Salva riferimenti temporanei
     try {
       (connectionMenuRef.current as any).tempNodeId = tempNodeId;
       (connectionMenuRef.current as any).tempEdgeId = tempEdgeId;
       (connectionMenuRef.current as any).flowPosition = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
       (window as any).__flowLastTemp = { nodeId: tempNodeId, edgeId: tempEdgeId };
-      console.log("💾 [INTELLISENSE] Saved temporary references");
     } catch (error) {
-      console.error("❌ [INTELLISENSE] Error saving temporary references:", error);
+      console.error("❌ Error saving temporary references:", error);
     }
+
+    // ✅ Calcola gli intents MANUALMENTE ora che il menu è aperto
+    const sourceId = connectionMenuRef.current.sourceNodeId;
+    const srcNode = nodes.find(n => n.id === sourceId);
+    const rows = Array.isArray((srcNode?.data as any)?.rows) ? (srcNode!.data as any).rows : [];
+    const problemRow = rows.find(r => r.text && r.text.toLowerCase().includes('problemclassification'));
+    const problemIntents = problemRow ? (problemRow as any)?.problem?.intents : null;
     
-    // Attiva l'editing del titolo sul nodo temporaneo dopo un tick
-    setTimeout(() => {
-      const tempNode = nodesRef.current.find(n => n.id === tempNodeId);
-      if (tempNode && tempNode.data) {
-        console.log("✅ [INTELLISENSE] Triggering title edit on temp node", { tempNodeId });
-        // Trigger startEditingTitle se disponibile
-        if (typeof tempNode.data.startEditingTitle === 'function') {
-          tempNode.data.startEditingTitle();
-        }
-      } else {
-        console.warn("⚠️ [INTELLISENSE] Temp node not found for editing", { tempNodeId });
-      }
-    }, 100);
-    
-    console.log("✅ [INTELLISENSE] Node editing setup completed", { 
-      tempNodeId, 
-      tempEdgeId,
-      timestamp: Date.now()
+    const combinedItems = [
+      ...(allConditions || []),
+      ...(Array.isArray(problemIntents) ? problemIntents.map((intent: any) => ({
+        label: intent.label || intent.name || 'Unknown',
+        value: intent.id || intent.name || 'unknown', 
+        description: intent.description || ''
+      })) : [])
+    ];
+
+    // Apri l'IntellisenseMenu originale
+    setShowNodeIntellisense(true);
+    setNodeIntellisensePosition({ x: event.clientX, y: event.clientY });
+    setNodeIntellisenseItems(combinedItems);
+    setNodeIntellisenseTarget(tempNodeId);
+
+    console.log("✅ IntellisenseMenu opened with:", {
+      conditionsCount: allConditions?.length || 0,
+      intentsCount: Array.isArray(problemIntents) ? problemIntents.length : 0,
+      totalItems: combinedItems.length
     });
-  }, [setTemp, openMenu, connectionMenuRef, reactFlowInstance, nodesRef]);
+  }, [connectionMenuRef, reactFlowInstance, allConditions, nodes, openMenu]);
 
   const onConnectEnd = useCallback((event: any) => {
     console.log("🎬 [ON_CONNECT_END] Event triggered", { 
@@ -787,97 +772,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     return filtered;
   };
 
-  const handleSelectCondition = useCallback((item: any) => {
-    // Attiva un lock per evitare cleanup concorrenti durante la conferma
-    try { (connectionMenuRef.current as any).locked = true; } catch {}
-    const label = item?.description || item?.name || '';
-
-    // Commit via unified helper
-    const handled = commitEdgeLabel(label);
-    if (handled) { closeMenu(); try { (connectionMenuRef.current as any).locked = false; } catch {} return; }
-
-    // A) Promuovi temp se presente
-    const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
-    const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
-    if (tempNodeId && tempEdgeId) {
-      // Assicura che la posizione usata sia quella del drop salvata in flowPosition
-      const fp = (connectionMenuRef.current as any).flowPosition;
-      console.log('[🔍 STABILIZE.2] Starting stabilization (second occurrence)', { 
-        tempNodeId, 
-        tempEdgeId,
-        flowPosition: fp,
-        timestamp: Date.now()
-      });
-      setNodes(nds => {
-        const stabilizedNodes = nds.map(n => {
-          if (n.id === tempNodeId) {
-            console.log('[🔍 STABILIZE.2] Stabilizing temporary node', { 
-              tempNodeId, 
-              oldPosition: n.position,
-              oldIsTemporary: (n.data as any)?.isTemporary,
-              oldHidden: (n.data as any)?.hidden,
-              timestamp: Date.now()
-            });
-            return {
-              ...n,
-              position: n.position, // Mantieni la posizione corretta del nodo temporaneo
-              data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined }
-            };
-          }
-          return n;
-        });
-        console.log('[🔍 STABILIZE.2] Node stabilization complete', { 
-          tempNodeId, 
-          totalNodes: stabilizedNodes.length,
-          timestamp: Date.now()
-        });
-        return stabilizedNodes;
-      });
-      setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label, style: { ...(e.style || {}), stroke: '#8b5cf6' } } : e));
-      finalizeTempPromotion(tempNodeId, tempEdgeId);
-      // azzera i riferimenti temp per evitare ulteriori cleanup
-      connectionMenuRef.current.tempNodeId = null as any;
-      connectionMenuRef.current.tempEdgeId = null as any;
-      closeMenu();
-      try { (connectionMenuRef.current as any).locked = false; } catch {}
-      return;
-    }
-
-    // B) Collega due nodi esistenti o aggiorna edge (fallback)
-    const src = connectionMenuRef.current.sourceNodeId;
-    const tgt = connectionMenuRef.current.targetNodeId;
-    if (src && tgt) {
-      setEdges(eds => {
-        const id = uuidv4();
-        // Se esiste già una edge tra src e tgt, aggiorna label; altrimenti crea nuova
-        const exists = eds.some(e => e.source === src && e.target === tgt);
-        if (exists) {
-          return eds.map(e => (e.source === src && e.target === tgt) ? { ...e, label } : e);
-        }
-        return [...eds, {
-          id,
-          source: src,
-          sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
-          target: tgt,
-          targetHandle: connectionMenuRef.current.targetHandleId || undefined,
-          style: { stroke: '#8b5cf6' },
-          label,
-          type: 'custom',
-          data: { onDeleteEdge },
-          markerEnd: 'arrowhead'
-        }];
-      });
-      closeMenu();
-      try { (connectionMenuRef.current as any).locked = false; } catch {}
-      return;
-    }
-
-    // C) Altrimenti abort pulito (niente creazione nuovi nodi qui)
-    // Non fare cleanup aggressivo qui: lascia stato invariato, solo chiudi menu
-    closeMenu();
-    try { (connectionMenuRef.current as any).locked = false; } catch {}
-  }, [nodes, setNodes, setEdges, closeMenu]);
-
+  // Rimuovi completamente handleSelectCondition e handleConnectionMenuClose
+  // Queste funzioni erano legate a EdgeConditionMenu che è stato rimosso
+  
   // Handler robusto per chiusura intellisense/condition menu
   const handleConnectionMenuClose = useCallback(() => {
     // Se è in corso una conferma, non fare cleanup
@@ -1132,6 +1029,49 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   const tempFlags = useTempEdgeFlags();
 
+  // ✅ Handler per gestire selezione items nell'IntellisenseMenu
+  const handleIntellisenseSelect = useCallback((item: any) => {
+    if (!nodeIntellisenseTarget) return;
+    
+    console.log("✅ [INTELLISENSE] Item selected:", { 
+      item, 
+      targetNode: nodeIntellisenseTarget,
+      timestamp: Date.now()
+    });
+    
+    // Aggiorna la prima riga del nodo temporaneo con l'item selezionato
+    setNodes(nds => nds.map(n => {
+      if (n.id === nodeIntellisenseTarget) {
+        const updatedRows = [{ 
+          id: `${nodeIntellisenseTarget}-1`, 
+          text: item.label || item.value || item,
+          included: true,
+          mode: 'Message'
+        }];
+        
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            rows: updatedRows
+          }
+        };
+      }
+      return n;
+    }));
+    
+    // Chiudi il menu
+    setShowNodeIntellisense(false);
+    setNodeIntellisenseTarget(null);
+    
+  }, [nodeIntellisenseTarget, setNodes]);
+  
+  // Handler per chiudere l'IntellisenseMenu
+  const handleIntellisenseClose = useCallback(() => {
+    setShowNodeIntellisense(false);
+    setNodeIntellisenseTarget(null);
+  }, []);
+
   return (
     <div
       className="flex-1 h-full relative"
@@ -1318,84 +1258,30 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       )}
       
       {connectionMenu.show && (
-        <EdgeConditionMenu
-          isOpen={connectionMenu.show}
-          position={connectionMenu.position}
-          onSelectCondition={handleSelectCondition}
-          onSelectElse={() => {
-            if (pendingEdgeIdRef.current) {
-              setEdges((eds) => eds.map(e => e.id === pendingEdgeIdRef.current ? { ...e, label: 'Else', data: { ...(e.data||{}), isElse: true, onDeleteEdge } } : e));
-              setSelectedEdgeId(pendingEdgeIdRef.current);
-              pendingEdgeIdRef.current = null;
-              closeMenu();
-              return;
-            }
-            // Create a new node and connect with Else label (like handleSelectCondition)
-            const sourceNodeId = connectionMenuRef.current.sourceNodeId || undefined;
-            const sourceHandleId = connectionMenuRef.current.sourceHandleId || undefined;
-            if (!sourceNodeId) { try { console.warn('[FlowEditor][Else] missing sourceNodeId'); } catch {} return; }
-
-            const getTargetHandle = (sourceHandleId: string): string => {
-              switch (sourceHandleId) {
-                case 'bottom': return 'top-target';
-                case 'top': return 'bottom-target';
-                case 'left': return 'right-target';
-                case 'right': return 'left-target';
-                default: return 'top-target';
-              }
-            };
-
-            const newNodeId = nodeIdCounter.toString();
-            const position = reactFlowInstance.screenToFlowPosition({
-              x: connectionMenuRef.current.position.x - 140,
-              y: connectionMenuRef.current.position.y - 20
-            });
-            const newEdgeId = uuidv4();
-            const newNode: Node<NodeData> = {
-              id: newNodeId,
-              type: 'custom',
-              position,
-              data: { title: '', rows: [] }
-            } as any;
-            const newEdge = {
-              id: newEdgeId,
-              source: sourceNodeId,
-              sourceHandle: sourceHandleId,
-              target: newNodeId,
-              targetHandle: getTargetHandle(sourceHandleId || ''),
-              style: { stroke: '#8b5cf6' },
-              label: 'Else',
-              type: 'custom',
-              data: { onDeleteEdge, isElse: true },
-              markerEnd: 'arrowhead',
-            } as Edge;
-            // Operazione atomica: rimuovi temporanei e aggiungi definitivi
-            setNodes((nds) => {
-              const filtered = connectionMenuRef.current.tempNodeId ? 
-                nds.filter(n => n.id !== connectionMenuRef.current.tempNodeId) : nds;
-              return [...filtered, newNode];
-            });
-            setEdges((eds) => {
-              const filtered = removeAllTempEdges(eds, nodesRef.current);
-              return [...filtered, newEdge];
-            });
-            setNodeIdCounter(prev => prev + 1);
-            setSelectedEdgeId(newEdgeId);
-            closeMenu();
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: connectionMenu.position.x,
+            top: connectionMenu.position.y,
+            width: 0,
+            height: 0,
+            backgroundColor: 'rgba(125, 211, 252, 0.18)',
+            border: '1px solid rgba(56, 189, 248, 0.9)',
+            boxShadow: '0 0 0 1px rgba(56,189,248,0.25) inset',
+            zIndex: 5
           }}
-          onClose={handleConnectionMenuClose}
-          seedItems={problemIntentSeedItems || []}
-          extraItems={problemIntentSeedItems || []}
-          sourceNodeId={connectionMenuRef.current.sourceNodeId as any}
-          sourceRows={(() => {
-            try {
-              const id = connectionMenuRef.current.sourceNodeId as string | null;
-              if (!id) return [] as any[];
-              const node = nodesRef.current.find(n => n.id === id);
-              return Array.isArray((node as any)?.data?.rows) ? (node as any).data.rows : [];
-            } catch { return [] as any[]; }
-          })()}
-          onCreateCondition={handleCreateCondition}
+        />
+      )}
+
+      {showNodeIntellisense && nodeIntellisenseTarget && (
+        <IntellisenseMenu
+          isOpen={showNodeIntellisense}
+          query=""
+          position={nodeIntellisensePosition}
+          referenceElement={null}
+          onSelect={handleIntellisenseSelect}
+          onClose={handleIntellisenseClose}
+          seedItems={nodeIntellisenseItems}
         />
       )}
     </div>
