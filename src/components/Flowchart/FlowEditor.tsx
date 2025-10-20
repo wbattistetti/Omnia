@@ -13,13 +13,10 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { CustomNode } from './CustomNode';
 import { TaskNode } from './TaskNode';
-import { v4 as uuidv4 } from 'uuid';
-import { CustomEdge } from './CustomEdge';
 import { useEdgeManager } from '../../hooks/useEdgeManager';
 import { useConnectionMenu } from '../../hooks/useConnectionMenu';
 import { useNodeManager } from '../../hooks/useNodeManager';
-import { useProjectDataUpdate, useProjectData } from '../../context/ProjectDataContext';
-import { ProjectDataService } from '../../services/ProjectDataService';
+import { useProjectData } from '../../context/ProjectDataContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { dlog } from '../../utils/debug';
 import { useNodeCreationLock } from './hooks/useNodeCreationLock';
@@ -35,6 +32,7 @@ import { SelectionMenu } from './components/SelectionMenu';
 // RIMOSSO: import { EdgeConditionMenu } from './components/EdgeConditionMenu';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
+import { CustomEdge } from './CustomEdge';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -481,33 +479,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   );
 
   // Promuove il nodo/edge temporanei a definitivi e rimuove ogni altro temporaneo residuo
-  function finalizeTempPromotion(keepNodeId: string, keepEdgeId?: string) {
-    // rispetto lock: funzione chiamata in fase di conferma
-    // 1) marca il nodo da tenere come non temporaneo e rimuovi tutti i temporanei residui
-    setNodes((nds) => nds
-      .map(n => n.id === keepNodeId ? { ...n, data: { ...(n.data as any), isTemporary: false, hidden: false, batchId: undefined } } : n)
-      .filter(n => !(n as any)?.data?.isTemporary)
-    );
-    // 2) rimuovi eventuali edge che puntano a nodi temporanei (che sono appena stati rimossi)
-    setEdges((eds) => {
-      const current = nodesRef.current;
-      return eds.filter(e => {
-        const tgt = current.find(n => n.id === e.target);
-        return !(tgt && (tgt.data as any)?.isTemporary);
-      });
-    });
-    // 3) azzera i riferimenti temporanei e bersagli
-    try {
-      connectionMenuRef.current.tempNodeId = null as any;
-      connectionMenuRef.current.tempEdgeId = null as any;
-      connectionMenuRef.current.targetNodeId = null as any;
-      connectionMenuRef.current.targetHandleId = null as any;
-      (window as any).__flowLastTemp = null;
-      tempFlags.tempEdgeIdGlobal.current = null;
-    } catch {}
-    // 4) cleanup di sicurezza
-    cleanupAllTempNodesAndEdges();
-  }
+  // ✅ RIMOSSA: function finalizeTempPromotion - non utilizzata
 
   const withNodeLock = useNodeCreationLock();
 
@@ -610,12 +582,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [withNodeLock, createTemporaryNode, openIntellisense, connectionMenuRef, cleanupAllTempNodesAndEdges, pendingEdgeIdRef]);
 
   // Utility per rimuovere edge temporaneo
-  function removeTempEdge(eds: Edge[], tempEdgeId: string | undefined) {
-    if (tempEdgeId) {
-      return eds.filter(e => e.id !== tempEdgeId);
-    }
-    return eds;
-  }
+  // ✅ RIMOSSA: function removeTempEdge - non utilizzata
 
   // Una edge è temporanea se il suo target è un nodo temporaneo (usando lo stato più recente dei nodi)
   // ✅ RIMOSSO: removeAllTempEdges - ora definito prima per useConditionCreation
@@ -624,13 +591,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Queste funzioni erano legate a EdgeConditionMenu che è stato rimosso
   
   // Handler robusto per chiusura intellisense/condition menu
-  const handleConnectionMenuClose = useCallback(() => {
-    // Se è in corso una conferma, non fare cleanup
-    try { if ((connectionMenuRef.current as any)?.locked) { closeMenu(); return; } } catch {}
-    // Rimuovi nodo e collegamento temporanei se esistono
-    cleanupAllTempNodesAndEdges();
-    closeMenu();
-  }, [closeMenu]);
+  // ✅ RIMOSSA: const handleConnectionMenuClose - non utilizzata
 
   const onNodeDragStart = useCallback((event: any, node: Node) => {
     // Controlla se l'evento è iniziato da un elemento con classe 'nodrag'
@@ -1135,15 +1096,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 };
 
 // Ref globale per edge temporaneo
-const tempEdgeIdGlobal = { current: null as string | null };
+// ✅ RIMOSSO: const tempEdgeIdGlobal - non utilizzato
 
 // Flag per tracciare nodi temporanei stabilizzati (per evitare riposizionamento)
-const stabilizedTempNodes = new Set<string>();
+// ✅ RIMOSSO: const stabilizedTempNodes - non utilizzato
 
 // Flag per tracciare nodi temporanei in corso di creazione (per evitare creazione duplicata)
-const creatingTempNodes = new Set<string>();
-
-// Flag globale rimosso - ora usiamo useRef (thread-safe)
+// ✅ RIMOSSO: const creatingTempNodes - non utilizzato
 
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
   return (
