@@ -11,7 +11,7 @@ import re
 # Ensure this file's directory (backend/) is on sys.path so local imports work
 _CURR_DIR = os.path.dirname(__file__)
 if _CURR_DIR and _CURR_DIR not in sys.path:
-    sys.path.insert(0, _CURR_DIR)
+	sys.path.insert(0, _CURR_DIR)
 
 # Support running either from project root (package imports) or from backend/ (local imports)
 try:
@@ -76,16 +76,16 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"  # PATCH: endpoint 
 MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-70b-instruct")
 
 MEANINGS = [
-    "date", "email", "phone", "address", "number", "text", "boolean"
+	"date", "email", "phone", "address", "number", "text", "boolean"
 ]
 
 app = FastAPI()
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+	CORSMiddleware,
+	allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "*"],
+	allow_credentials=True,
+	allow_methods=["*"],
+	allow_headers=["*"],
 )
 # --- Lint endpoint for editor diagnostics ---
 @app.post("/api/conditions/lint")
@@ -174,20 +174,20 @@ def lint_condition(body: dict = Body(...)):
 # Simple request/response logger (silence noisy paths)
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    path = request.url.path
-    # Silence frequent frontend fetches/polling
-    if path.startswith("/projects"):
-        return await call_next(request)
-    try:
-        print(f"[REQ] {request.method} {path}")
-    except Exception:
-        pass
-    response = await call_next(request)
-    try:
-        print(f"[RES] {response.status_code} {path}")
-    except Exception:
-        pass
-    return response
+	path = request.url.path
+	# Silence frequent frontend fetches/polling
+	if path.startswith("/projects"):
+		return await call_next(request)
+	try:
+		print(f"[REQ] {request.method} {path}")
+	except Exception:
+		pass
+	response = await call_next(request)
+	try:
+		print(f"[RES] {response.status_code} {path}")
+	except Exception:
+		pass
+	return response
 
 # ---- Global error logging handlers ----
 @app.exception_handler(HTTPException)
@@ -332,7 +332,7 @@ def generate_condition(body: dict = Body(...)):
     )
 
     # ensure a blank line before Guidelines in the composed prompt
-
+    
     GUIDELINES = (
     )
 
@@ -353,7 +353,7 @@ def generate_condition(body: dict = Body(...)):
             "role": "system",
             "content": (
                 'Example (age >= 18): NL "utente maggiorenne"; Vars include "agents asks for personal data.Date of Birth" -> '
-                '{"label":"Utente maggiorenne","script":"const CONDITION={label:\"Utente maggiorenne\",type:\"predicate\",inputs:[\"agents asks for personal data.Date of Birth\"]};function main(ctx){const k=\"agents asks for personal data.Date of Birth\";if(!ctx||!Object.prototype.hasOwnProperty.call(ctx,k))return false;const d=parseDate(ctx[k]);if(!d)return false;const t=new Date();let a=t.getUTCFullYear()-d.getUTCFullYear();const m=t.getUTCMonth()-d.getUTCMonth();if(m<0||(m===0&&t.getUTCDate()<d.getUTCDate()))a--;return a>=18;}function parseDate(v){if(v instanceof Date&&!Number.isNaN(v.valueOf()))return v;if(typeof v===\\\"number\\\"&&Number.isFinite(v))return new Date(v);if(typeof v===\\\"string\\\"){const s=v.trim();let m=s.match(/^(\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{2,4})$/);if(m){let d=parseInt(m[1],10),mo=parseInt(m[2],10)-1,y=parseInt(m[3],10);if(y<100)y+=2000;const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}m=s.match(/^(\\\\d{4})[\\\\\/\\\\\-](\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{1,2})$/);if(m){const y=parseInt(m[1],10),mo=parseInt(m[2],10)-1,d=parseInt(m[3],10);const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}const tt=Date.parse(s);if(!Number.isNaN(tt))return new Date(tt);}return null;}"}'
+                '{"label":"Utente maggiorenne","script":"const CONDITION={label:\"Utente maggiorenne\",type:\"predicate\",inputs:[\"agents asks for personal data.Date of Birth\"]};function main(ctx){const k=\"agents asks for personal data.Date of Birth\";if(!ctx||!Object.prototype.hasOwnProperty.call(ctx,k))return false;const d=parseDate(ctx[k]);if(!d)return false;const t=new Date();let a=t.getUTCFullYear()-d.getUTCFullYear();const m=t.getUTCMonth()-d.getUTCMonth();if(m<0||(m===0&&t.getUTCDate()<d.getUTCDate()))a--;return a>=18;}function parseDate(v){if(v instanceof Date&&!Number.isNaN(v.valueOf()))return v;if(typeof v===\"number\"&&Number.isFinite(v))return new Date(v);if(typeof v===\"string\"){const s=v.trim();let m=s.match(/^(\\d{1,2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{2,4})$/);if(m){let d=parseInt(m[1],10),mo=parseInt(m[2],10)-1,y=parseInt(m[3],10);if(y<100)y+=2000;const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}m=s.match(/^(\\d{4})[\\/\\-](\\d{1,2})[\\/\\-](\\d{1,2})$/);if(m){const y=parseInt(m[1],10),mo=parseInt(m[2],10)-1,d=parseInt(m[3],10);const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}const tt=Date.parse(s);if(!Number.isNaN(tt))return new Date(tt);}return null;}"}'
             )
         }
     ]
@@ -607,11 +607,11 @@ def normalize_pseudocode(body: dict = Body(...)):
     """Turn informal/pseudo code + chat intent + current code into clean JS for main(ctx).
 
     Body: {
-    chat: [{role:'user'|'assistant', content:string}] | undefined,
-    pseudo: string,
-    currentCode: string,
-    variables: string[],
-    mode: 'predicate'|'value'|'object'|'enum'
+      chat: [{role:'user'|'assistant', content:string}] | undefined,
+      pseudo: string,
+      currentCode: string,
+      variables: string[],
+      mode: 'predicate'|'value'|'object'|'enum'
     }
     Return: { script?: string, error?: string }
     """
@@ -965,13 +965,13 @@ def tune_contract(body: dict = Body(...)):
     """
     Body example:
     {
-    "kind": "date",
-    "profile": {"synonyms":[], "formatHints":[], "regex":"", "postProcess":{}},
-    "errors": [
-        {"phrase":"...","key":"day","pred":"16","gt":"15","type":"false-accept"},
-        {"phrase":"...","key":"month","pred":null,"gt":"12","type":"unmatched"}
-    ],
-    "locale": "it-IT"
+      "kind": "date",
+      "profile": {"synonyms":[], "formatHints":[], "regex":"", "postProcess":{}},
+      "errors": [
+         {"phrase":"...","key":"day","pred":"16","gt":"15","type":"false-accept"},
+         {"phrase":"...","key":"month","pred":null,"gt":"12","type":"unmatched"}
+      ],
+      "locale": "it-IT"
     }
     Returns: { "suggested": { regex?, synonyms?, formatHints?, postProcess? } }
     """
@@ -1035,187 +1035,187 @@ EXPRESS_BASE = os.environ.get("EXPRESS_BASE", "http://localhost:3100")
 
 # Simple reverse proxy to Express so the frontend can hit only port 8000
 async def _proxy_to_express(request: Request) -> Response:
-    method = request.method.upper()
-    query = ("?" + request.url.query) if request.url.query else ""
-    target_url = f"{EXPRESS_BASE}{request.url.path}{query}"
+	method = request.method.upper()
+	query = ("?" + request.url.query) if request.url.query else ""
+	target_url = f"{EXPRESS_BASE}{request.url.path}{query}"
 
-    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
-    body_bytes = await request.body()
+	headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+	body_bytes = await request.body()
 
-    try:
-        print(f"[PROXY->EXPRESS] {method} {target_url}")
-        if headers.get("content-type", "").startswith("application/json"):
-            try:
-                json_payload = await request.json()
-            except Exception:
-                json_payload = None
-            resp = requests.request(method, target_url, headers=headers, json=json_payload)
-        else:
-            resp = requests.request(method, target_url, headers=headers, data=body_bytes)
-    except Exception as e:
-        print(f"[PROXY ERROR] {method} {target_url} -> {e}")
-        return Response(content=str(e), status_code=502)
+	try:
+		print(f"[PROXY->EXPRESS] {method} {target_url}")
+		if headers.get("content-type", "").startswith("application/json"):
+			try:
+				json_payload = await request.json()
+			except Exception:
+				json_payload = None
+			resp = requests.request(method, target_url, headers=headers, json=json_payload)
+		else:
+			resp = requests.request(method, target_url, headers=headers, data=body_bytes)
+	except Exception as e:
+		print(f"[PROXY ERROR] {method} {target_url} -> {e}")
+		return Response(content=str(e), status_code=502)
 
-    try:
-        print(f"[PROXY←EXPRESS] {resp.status_code} {method} {target_url}")
-    except Exception:
-        pass
-    return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
+	try:
+		print(f"[PROXY←EXPRESS] {resp.status_code} {method} {target_url}")
+	except Exception:
+		pass
+	return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
 
 # Proxy routes for Express endpoints
 @app.api_route("/api/factory/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_factory(full_path: str, request: Request):
-    return await _proxy_to_express(request)
+	return await _proxy_to_express(request)
 
 @app.api_route("/api/projects", methods=["GET", "POST"])
 async def proxy_projects_root(request: Request):
-    return await _proxy_to_express(request)
+	return await _proxy_to_express(request)
 
 @app.api_route("/api/projects/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_projects(full_path: str, request: Request):
-    return await _proxy_to_express(request)
+	return await _proxy_to_express(request)
 
 @app.api_route("/projects", methods=["GET", "POST"])
 async def proxy_projects_alias_root(request: Request):
-    return await _proxy_to_express(request)
+	return await _proxy_to_express(request)
 
 @app.api_route("/projects/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_projects_alias(full_path: str, request: Request):
-    return await _proxy_to_express(request)
+	return await _proxy_to_express(request)
 
 def call_groq(messages):
-    headers = {
-        "Authorization": f"Bearer {GROQ_KEY}",
-        "Content-Type": "application/json"
-    }
-    # Build candidate model list: configured MODEL, env fallbacks, and a small built-in list
-    candidates_env = os.environ.get("GROQ_MODEL_FALLBACKS", "")
-    candidates = [m.strip() for m in candidates_env.split(",") if m.strip()]
-    builtins = ["llama-3.1-70b-instruct", "llama-3.1-8b-instant", "llama-3.1-405b-instruct"]
-    models_to_try = []
-    for m in [MODEL, *candidates, *builtins]:
-        if m and m not in models_to_try:
-            models_to_try.append(m)
+	headers = {
+		"Authorization": f"Bearer {GROQ_KEY}",
+		"Content-Type": "application/json"
+	}
+	# Build candidate model list: configured MODEL, env fallbacks, and a small built-in list
+	candidates_env = os.environ.get("GROQ_MODEL_FALLBACKS", "")
+	candidates = [m.strip() for m in candidates_env.split(",") if m.strip()]
+	builtins = ["llama-3.1-70b-instruct", "llama-3.1-8b-instant", "llama-3.1-405b-instruct"]
+	models_to_try = []
+	for m in [MODEL, *candidates, *builtins]:
+		if m and m not in models_to_try:
+			models_to_try.append(m)
 
-    last_error = None
-    for model in models_to_try:
-        data = {"model": model, "messages": messages}
-        resp = requests.post(GROQ_URL, headers=headers, json=data)
-        try:
-            print(f"[GROQ][REQ] model={model} url={GROQ_URL} messages={len(messages)}")
-            print(f"[GROQ][RES] status={resp.status_code} body_snippet={(resp.text or '')[:280]!r}")
-        except Exception:
-            pass
-        if resp.status_code >= 400:
-            txt = resp.text or ""
-            if "model" in txt.lower() and ("decommissioned" in txt.lower() or "invalid" in txt.lower()):
-                last_error = f"Groq API error {resp.status_code}: {txt}"
-                try: print("[GROQ][FALLBACK] switching model due to error -> trying next")
-                except Exception: pass
-                continue
-            raise requests.HTTPError(f"Groq API error {resp.status_code}: {txt}")
-        try:
-            j = resp.json()
-        except Exception:
-            raise requests.HTTPError(f"Groq API: invalid JSON response: {(resp.text or '')[:200]}")
-        return j.get("choices", [{}])[0].get("message", {}).get("content", "")
+	last_error = None
+	for model in models_to_try:
+		data = {"model": model, "messages": messages}
+		resp = requests.post(GROQ_URL, headers=headers, json=data)
+		try:
+			print(f"[GROQ][REQ] model={model} url={GROQ_URL} messages={len(messages)}")
+			print(f"[GROQ][RES] status={resp.status_code} body_snippet={(resp.text or '')[:280]!r}")
+		except Exception:
+			pass
+		if resp.status_code >= 400:
+			txt = resp.text or ""
+			if "model" in txt.lower() and ("decommissioned" in txt.lower() or "invalid" in txt.lower()):
+				last_error = f"Groq API error {resp.status_code}: {txt}"
+				try: print("[GROQ][FALLBACK] switching model due to error -> trying next")
+				except Exception: pass
+				continue
+			raise requests.HTTPError(f"Groq API error {resp.status_code}: {txt}")
+		try:
+			j = resp.json()
+		except Exception:
+			raise requests.HTTPError(f"Groq API: invalid JSON response: {(resp.text or '')[:200]}")
+		return j.get("choices", [{}])[0].get("message", {}).get("content", "")
 
-    raise requests.HTTPError(last_error or "Groq API: all model candidates failed")
+	raise requests.HTTPError(last_error or "Groq API: all model candidates failed")
 
 def call_groq_json(messages):
-    headers = {
-        "Authorization": f"Bearer {GROQ_KEY}",
-        "Content-Type": "application/json"
-    }
-    candidates_env = os.environ.get("GROQ_MODEL_FALLBACKS", "")
-    candidates = [m.strip() for m in candidates_env.split(",") if m.strip()]
-    builtins = ["llama-3.1-70b-instruct", "llama-3.1-8b-instant"]
-    models_to_try = []
-    for m in [MODEL, *candidates, *builtins]:
-        if m and m not in models_to_try:
-            models_to_try.append(m)
+	headers = {
+		"Authorization": f"Bearer {GROQ_KEY}",
+		"Content-Type": "application/json"
+	}
+	candidates_env = os.environ.get("GROQ_MODEL_FALLBACKS", "")
+	candidates = [m.strip() for m in candidates_env.split(",") if m.strip()]
+	builtins = ["llama-3.1-70b-instruct", "llama-3.1-8b-instant"]
+	models_to_try = []
+	for m in [MODEL, *candidates, *builtins]:
+		if m and m not in models_to_try:
+			models_to_try.append(m)
 
-    last_error = None
-    for model in models_to_try:
-        data = {"model": model, "messages": messages, "response_format": {"type": "json_object"}}
-        resp = requests.post(GROQ_URL, headers=headers, json=data)
-        try:
-            print(f"[GROQ][REQ][json] model={model} messages={len(messages)}")
-            print(f"[GROQ][RES] status={resp.status_code} body_snippet={(resp.text or '')[:280]!r}")
-        except Exception:
-            pass
-        if resp.status_code >= 400:
-            # Attempt salvage if Groq returns a json_validate_failed with a failed_generation payload
-            try:
-                err = resp.json().get("error")
-            except Exception:
-                err = None
-            if err and isinstance(err, dict) and "failed_generation" in err:
-                raw_failed = err.get("failed_generation") or ""
-                try:
-                    cleaned = _clean_json_like(raw_failed)
-                    obj = _safe_json_loads(cleaned) or {}
-                    label = obj.get("label") or "Condition"
-                    script_val = obj.get("script")
-                    script_str = None
-                    if isinstance(script_val, str):
-                        script_str = script_val
-                    elif isinstance(script_val, dict):
-                        m = re.search(r"function\s+main\s*\(ctx\)[\s\S]*?\}\s*$", raw_failed, flags=re.M)
-                        if m:
-                            script_str = m.group(0)
-                    if not script_str:
-                        m2 = re.search(r"try\s*\{[\s\S]*?\}\s*catch[\s\S]*?\}", raw_failed, flags=re.I)
-                        script_str = m2.group(0) if m2 else "try { return false; } catch { return false; }"
-                    salvage = {"label": label, "script": script_str}
-                    return json.dumps(salvage)
-                except Exception:
-                    pass
-            txt = resp.text or ""
-            if "model" in txt.lower() and ("decommissioned" in txt.lower() or "invalid" in txt.lower() or "not exist" in txt.lower()):
-                last_error = f"Groq API error {resp.status_code}: {txt}"
-                continue
-            raise requests.HTTPError(f"Groq API error {resp.status_code}: {txt}")
-        try:
-            j = resp.json()
-        except Exception:
-            raise requests.HTTPError(f"Groq API: invalid JSON response: {(resp.text or '')[:200]}")
-        return j.get("choices", [{}])[0].get("message", {}).get("content", "")
+	last_error = None
+	for model in models_to_try:
+		data = {"model": model, "messages": messages, "response_format": {"type": "json_object"}}
+		resp = requests.post(GROQ_URL, headers=headers, json=data)
+		try:
+			print(f"[GROQ][REQ][json] model={model} messages={len(messages)}")
+			print(f"[GROQ][RES] status={resp.status_code} body_snippet={(resp.text or '')[:280]!r}")
+		except Exception:
+			pass
+		if resp.status_code >= 400:
+			# Attempt salvage if Groq returns a json_validate_failed with a failed_generation payload
+			try:
+				err = resp.json().get("error")
+			except Exception:
+				err = None
+			if err and isinstance(err, dict) and "failed_generation" in err:
+				raw_failed = err.get("failed_generation") or ""
+				try:
+					cleaned = _clean_json_like(raw_failed)
+					obj = _safe_json_loads(cleaned) or {}
+					label = obj.get("label") or "Condition"
+					script_val = obj.get("script")
+					script_str = None
+					if isinstance(script_val, str):
+						script_str = script_val
+					elif isinstance(script_val, dict):
+						m = re.search(r"function\s+main\s*\(ctx\)[\s\S]*?\}\s*$", raw_failed, flags=re.M)
+						if m:
+							script_str = m.group(0)
+					if not script_str:
+						m2 = re.search(r"try\s*\{[\s\S]*?\}\s*catch[\s\S]*?\}", raw_failed, flags=re.I)
+						script_str = m2.group(0) if m2 else "try { return false; } catch { return false; }"
+					salvage = {"label": label, "script": script_str}
+					return json.dumps(salvage)
+				except Exception:
+					pass
+			txt = resp.text or ""
+			if "model" in txt.lower() and ("decommissioned" in txt.lower() or "invalid" in txt.lower() or "not exist" in txt.lower()):
+				last_error = f"Groq API error {resp.status_code}: {txt}"
+				continue
+			raise requests.HTTPError(f"Groq API error {resp.status_code}: {txt}")
+		try:
+			j = resp.json()
+		except Exception:
+			raise requests.HTTPError(f"Groq API: invalid JSON response: {(resp.text or '')[:200]}")
+		return j.get("choices", [{}])[0].get("message", {}).get("content", "")
 
-    raise requests.HTTPError(last_error or "Groq API: all model candidates failed")
+	raise requests.HTTPError(last_error or "Groq API: all model candidates failed")
 
 # Helpers: sanitize and safely parse JSON from AI
 
 def _clean_json_like(s: str) -> str:
-    try:
-        t = s.strip()
-        if t.startswith("```"):
-            # remove starting fence (and optional language)
-            t = re.sub(r"^```[a-zA-Z]*\n", "", t)
-            # remove ending fence
-            t = re.sub(r"\n```\s*$", "", t)
-        # clip to outermost JSON block
-        first_candidates = [i for i in [t.find('{'), t.find('[')] if i != -1]
-        if first_candidates:
-            first = min(first_candidates)
-            last = max(t.rfind('}'), t.rfind(']'))
-            if last > first:
-                t = t[first:last+1]
-        # remove trailing commas before } or ]
-        t = re.sub(r",\s*(\}|\])", r"\1", t)
-        return t.strip()
-    except Exception:
-        return s
+	try:
+		t = s.strip()
+		if t.startswith("```"):
+			# remove starting fence (and optional language)
+			t = re.sub(r"^```[a-zA-Z]*\n", "", t)
+			# remove ending fence
+			t = re.sub(r"\n```\s*$", "", t)
+		# clip to outermost JSON block
+		first_candidates = [i for i in [t.find('{'), t.find('[')] if i != -1]
+		if first_candidates:
+			first = min(first_candidates)
+			last = max(t.rfind('}'), t.rfind(']'))
+			if last > first:
+				t = t[first:last+1]
+		# remove trailing commas before } or ]
+		t = re.sub(r",\s*(\}|\])", r"\1", t)
+		return t.strip()
+	except Exception:
+		return s
 
 def _safe_json_loads(text: str):
-    try:
-        return json.loads(text)
-    except Exception:
-        clean = _clean_json_like(text)
-        try:
-            return json.loads(clean)
-        except Exception:
-            return None
+	try:
+		return json.loads(text)
+	except Exception:
+		clean = _clean_json_like(text)
+		try:
+			return json.loads(clean)
+		except Exception:
+			return None
 
 def _infer_subdata_from_text(text: str):
     try:
@@ -1273,7 +1273,7 @@ def step2(user_desc: Any = Body(...)):
         
         # If refining existing schema, keep old behavior
         if current_schema and isinstance(current_schema, dict) and (current_schema.get('mainData') or current_schema.get('mains')):
-            prompt = f"""
+				prompt = f"""
 You are a data structure refiner.
 
 Input (natural-language refinement):
@@ -1359,8 +1359,8 @@ Rules:
 - Multiple fields = multiple entries
 """
 
-        print("AI PROMPT ================")
-        print(prompt)
+				print("AI PROMPT ================")
+				print(prompt)
 
         # Provider routing (align with /step3)
         provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
@@ -1376,11 +1376,11 @@ Rules:
 
         ai = _call_json([
             {"role": "system", "content": "Always reply in English with strict JSON."},
-            {"role": "user", "content": prompt}
-        ])
+					{"role": "user", "content": prompt}
+				])
 
-        print("AI ANSWER ================")
-        print(ai)
+				print("AI ANSWER ================")
+				print(ai)
 
         ai_obj = ai if isinstance(ai, dict) else _safe_json_loads(ai)
 
@@ -1453,22 +1453,22 @@ Rules:
             if (ai_obj.get('type') in (None, 'text')) and inferred:
                 ai_obj['type'] = 'phone'
                 ai_obj['icon'] = 'Phone'
-            if 'schema' not in ai_obj:
-                ai_obj['schema'] = {
-                    'label': 'Data',
-                    'mainData': [{
+					if 'schema' not in ai_obj:
+						ai_obj['schema'] = {
+							'label': 'Data',
+							'mainData': [{
                         'label': str(ai_obj.get('type', 'Data')).title(),
-                        'type': ai_obj.get('type'),
-                        'icon': ai_obj.get('icon'),
+								'type': ai_obj.get('type'),
+								'icon': ai_obj.get('icon'),
                         'subData': inferred
-                    }]
-                }
-            return {"ai": ai_obj}
+							}]
+						}
+					return {"ai": ai_obj}
         else:
             raise HTTPException(status_code=500, detail="invalid_ai_response")
     except HTTPException:
         raise
-    except Exception as e:
+			except Exception as e:
         print("[step2][fatal]", str(e))
         raise HTTPException(status_code=500, detail=f"step2_error: {str(e)}")
 
@@ -1492,7 +1492,7 @@ def step3(schema: dict = Body(...)):
             desc_text = ''
         _designer_prefix = (f"Designer description:\n{desc_text}\n\n" if desc_text else '')
 
-        prompt = f"""
+    prompt = f"""
 You are a data validation assistant.
 
 {_designer_prefix}Given the following data structure, suggest appropriate validation constraints for each field and its subfields (if any).
@@ -1510,7 +1510,7 @@ Respond ONLY with strict JSON (no markdown/comments), using this format:
     "subData": [
         {{ "label": "<Sub label>", "constraints": [ ... ] }}
     ]
-}}
+  }}
     ]
 }}
 }}
@@ -1530,12 +1530,12 @@ Respond ONLY with strict JSON (no markdown/comments), using this format:
 
         ai = _call_json([
             {"role": "system", "content": "Always reply in English with strict JSON."},
-            {"role": "user", "content": prompt}
-        ])
-        print("AI ANSWER ================")
-        print(ai)
+                {"role": "user", "content": prompt}
+            ])
+            print("AI ANSWER ================")
+            print(ai)
         ai_obj = ai if isinstance(ai, dict) else _safe_json_loads(ai)
-        if ai_obj is None:
+            if ai_obj is None:
             return {"ai": {"schema": {"mainData": []}}, "error": "Failed to parse AI JSON"}
         print("[AI RESPONSE /step3]", ai_obj)
         # Ensure shape always includes 'schema'
@@ -1550,24 +1550,24 @@ Respond ONLY with strict JSON (no markdown/comments), using this format:
 # --- step3b: Parse user constraints (optional, sub-step)
 @app.post("/step3b")
 def step3b(user_constraints: str = Body(...), meaning: str = Body(...), desc: str = Body(...)):
-    print("\nSTEP: /step3b – Parse user constraints (optional, sub-step)")
-    prompt = (
-        f"Rispondi in {IDE_LANGUE}. Interpreta e formalizza la risposta utente '{user_constraints}' in una lista di constraint chiari e strutturati per il dato '{meaning}' ({desc})."
-    )
-    print("AI PROMPT ================")
-    print(prompt)
-    ai = call_groq([
-        {"role": "system", "content": f"Rispondi sempre in {IDE_LANGUE}."},
-        {"role": "user", "content": prompt}
-    ])
-    print("AI ANSWER ================")
-    print(ai)
-    return {"ai": ai}
+	print("\nSTEP: /step3b – Parse user constraints (optional, sub-step)")
+	prompt = (
+		f"Rispondi in {IDE_LANGUE}. Interpreta e formalizza la risposta utente '{user_constraints}' in una lista di constraint chiari e strutturati per il dato '{meaning}' ({desc})."
+	)
+	print("AI PROMPT ================")
+	print(prompt)
+	ai = call_groq([
+		{"role": "system", "content": f"Rispondi sempre in {IDE_LANGUE}."},
+		{"role": "user", "content": prompt}
+	])
+	print("AI ANSWER ================")
+	print(ai)
+	return {"ai": ai}
 
 # --- step4: Generate DDT messages (generateMessages)
 @app.post("/step4")
 def step4(ddt_structure: dict = Body(...)):
-    print("\nSTEP: /step4 – Generate DDT messages (generateMessages)")
+	print("\nSTEP: /step4 – Generate DDT messages (generateMessages)")
     prompt = """
 You are writing for a voice (phone) customer‑care agent.
 Generate the agent's spoken messages to collect the data described by the DDT structure.
@@ -1615,19 +1615,19 @@ IMPORTANT:
 
 Input DDT structure:
 """ + str(ddt_structure)
-    print("AI PROMPT ================")
-    print(prompt)
-    ai = call_groq([
-        {"role": "system", "content": "Always reply in English."},
-        {"role": "user", "content": prompt}
-    ])
-    print("AI ANSWER ================")
-    print(ai)
-    ai_obj = _safe_json_loads(ai)
-    if ai_obj is None:
-        return {"ai": {}, "error": "Failed to parse AI JSON"}
-    print("[GROQ RESPONSE /step4]", ai_obj)
-    return {"ai": ai_obj}
+	print("AI PROMPT ================")
+	print(prompt)
+	ai = call_groq([
+		{"role": "system", "content": "Always reply in English."},
+		{"role": "user", "content": prompt}
+	])
+	print("AI ANSWER ================")
+	print(ai)
+	ai_obj = _safe_json_loads(ai)
+	if ai_obj is None:
+		return {"ai": {}, "error": "Failed to parse AI JSON"}
+	print("[GROQ RESPONSE /step4]", ai_obj)
+	return {"ai": ai_obj}
 
 # --- API: Generate Regex from natural language description ---
 @app.post("/api/nlp/generate-regex")
@@ -1712,8 +1712,8 @@ Be precise and practical. Test mentally that your regex works correctly.
         # Call AI
         ai_response = _call_json([
             {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
-            {"role": "user", "content": prompt}
-        ])
+		{"role": "user", "content": prompt}
+	])
         
         print("[generate-regex] AI Response:", ai_response)
         
@@ -1746,7 +1746,7 @@ Be precise and practical. Test mentally that your regex works correctly.
         
     except HTTPException:
         raise
-    except Exception as e:
+	except Exception as e:
         print(f"[generate-regex] ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
@@ -1886,8 +1886,8 @@ Make it production-ready and well-commented.
         
         ai_response = _call_ai([
             {"role": "system", "content": "You are a TypeScript expert. Generate clean, production-ready DataExtractor code."},
-            {"role": "user", "content": prompt}
-        ])
+		{"role": "user", "content": prompt}
+	])
         
         print("[generate-extractor] AI Response received")
         
@@ -1924,7 +1924,7 @@ Make it production-ready and well-commented.
         except:
             pass
         
-        return {
+	return {
             "success": True,
             "code": code,
             "explanation": explanation[:200] if len(explanation) > 200 else explanation
@@ -1984,7 +1984,7 @@ def refine_extractor(body: dict = Body(...)):
         if test_notes and isinstance(test_notes, list) and len(test_notes) > 0:
             test_notes_section = "\n\nTEST FAILURE NOTES:\n" + "\n".join(f"- {note}" for note in test_notes[:10])
         
-        prompt = f"""
+    prompt = f"""
 You are a TypeScript expert. Refine and improve this existing DataExtractor code.
 
 CURRENT CODE:
@@ -2037,8 +2037,8 @@ Return ONLY the improved TypeScript code, no markdown blocks, no explanations ou
         
         ai_response = _call_ai([
             {"role": "system", "content": "You are a TypeScript expert. Improve existing code incrementally, keeping what works."},
-            {"role": "user", "content": prompt}
-        ])
+                {"role": "user", "content": prompt}
+            ])
         
         print("[refine-extractor] AI Response received")
         
