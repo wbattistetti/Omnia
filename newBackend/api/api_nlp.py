@@ -1,14 +1,23 @@
 from fastapi import APIRouter, Body
 from newBackend.services import svc_nlp
+from typing import Any
 
 router = APIRouter(tags=["nlp"])
 
 @router.post("/step2")
-def step2(body: dict = Body(...)): 
-    return svc_nlp.step2(body)
+def step2(body: Any = Body(...)):
+    # Handle both string and dictionary input
+    if isinstance(body, str):
+        # Convert string to expected dictionary format
+        return svc_nlp.step2({"text": body})
+    elif isinstance(body, dict):
+        return svc_nlp.step2(body)
+    else:
+        # Handle other types by converting to string
+        return svc_nlp.step2({"text": str(body)})
 
-@router.post("/step3")  
-def step极(body: dict = Body(...)):
+@router.post("/step3")
+def step3(body: dict = Body(...)):
     return svc_nlp.step3(body)
 
 @router.post("/step4")
