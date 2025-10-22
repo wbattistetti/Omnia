@@ -576,7 +576,7 @@ export default function NLPExtractorProfileEditor({
     // set initial running state
     update({ running: true, detRunning: true, nerRunning: true, llmRunning: true, regex: '—', deterministic: '—', ner: '—', llm: '—' });
 
-    // Regex (sync)
+    // Regex (sync) - always runs
     const t0Regex = performance.now();
     const regexRes = extractRegexOnly(phrase);
     update({ regex: regexRes.summary, regexMs: Math.round(performance.now() - t0Regex), spans: regexRes.spans });
@@ -591,83 +591,86 @@ export default function NLPExtractorProfileEditor({
       examples: examplesList
     });
 
-    // Deterministic async task
-    const detTask = (async () => {
+    // Deterministic async task - only if enabled
+    const detTask = enabledMethods.deterministic ? (async () => {
       const t0 = performance.now();
-    try {
-      const det = await extractField<any>(field, phrase);
-      console.log('[NLP_TESTER] Deterministic extraction result:', det);
-      let detSummary = det.status === 'accepted' && det.value ? `value=${det.value}` : '—';
-      let detSpans: Array<{ start: number; end: number }> = [];
-      if (det.status === 'accepted') {
-        if (field === 'dateOfBirth') {
-          const v: any = det.value || {};
-          detSummary = summarizeVars({ day: v.day, month: v.month, year: v.year }, v.day && v.month && v.year ? `${String(v.day).padStart(2,'0')}/${String(v.month).padStart(2,'0')}/${v.year}` : undefined);
-          detSpans = spansFromDate(phrase, v);
-        } else if (field === 'phone') {
-          const v: any = det.value || {};
-          detSummary = v.e164 ? `value=${v.e164}` : '—';
-          detSpans = spansFromScalar(phrase, v.e164 || v.value);
-        } else if (field === 'email') {
-          detSummary = det.value ? `value=${String(det.value)}` : '—';
-          detSpans = spansFromScalar(phrase, det.value);
-        } else if (det.value) {
-          detSpans = spansFromScalar(phrase, det.value);
+      update({ detRunning: true });
+      try {
+        const det = await extractField<any>(field, phrase);
+        console.log('[NLP_TESTER] Deterministic extraction result:', det);
+        let detSummary = det.status === 'accepted' && det.value ? `value=${det.value}` : '—';
+        let detSpans: Array<{ start: number; end: number }> = [];
+        if (det.status === 'accepted') {
+          if (field === 'dateOfBirth') {
+            const v: any = det.value || {};
+            detSummary = summarizeVars({ day: v.day, month: v.month, year: v.year }, v.day && v.month && v.year ? `${String(v.day).padStart(2,'0')}/${String(v.month).padStart(2,'0')}/${v.year}` : undefined);
+            detSpans = spansFromDate(phrase, v);
+          } else if (field === 'phone') {
+            const v: any = det.value || {};
+            detSummary = v.e164 ? `value=${v.e164}` : '—';
+            detSpans = spansFromScalar(phrase, v.e164 || v.value);
+          } else if (field === 'email') {
+            detSummary = det.value ? `value=${String(det.value)}` : '—';
+            detSpans = spansFromScalar(phrase, det.value);
+          } else if (det.value) {
+            detSpans = spansFromScalar(phrase, det.value);
+          }
+        } else if (det.status === 'ask-more' && det.value) {
+          if (field === 'dateOfBirth') {
+            const v: any = det.value || {};
+            detSummary = summarizeVars({ day: v.day, month: v.month, year: v.year });
+            detSpans = spansFromDate(phrase, v);
+          }
         }
-      } else if (det.status === 'ask-more' && det.value) {
-        if (field === 'dateOfBirth') {
-          const v: any = det.value || {};
-          detSummary = summarizeVars({ day: v.day, month: v.month, year: v.year });
-          detSpans = spansFromDate(phrase, v);
+          setRowResults(prev => {
+            const next = [...prev];
+            const base = ((next[idx] || {}) as any).spans || [];
+            next[idx] = { ...(next[idx] || {}), deterministic: detSummary, detMs: Math.round(performance.now() - t0), detRunning: false, spans: mergeSpans(base, detSpans) } as any;
+            return next;
+          });
+        } catch {
+          update({ deterministic: '—', detMs: Math.round(performance.now() - t0), detRunning: false });
         }
-      }
-        setRowResults(prev => {
-          const next = [...prev];
-          const base = ((next[idx] || {}) as any).spans || [];
-          next[idx] = { ...(next[idx] || {}), deterministic: detSummary, detMs: Math.round(performance.now() - t0), detRunning: false, spans: mergeSpans(base, detSpans) } as any;
-          return next;
-        });
-      } catch {
-        update({ deterministic: '—', detMs: Math.round(performance.now() - t0), detRunning: false });
-      }
-    })();
+      })() : Promise.resolve();
 
-    // NER async task
-    const nerTask = (async () => {
+    // NER async task - only if enabled
+    const nerTask = enabledMethods.ner ? (async () => {
       const t0 = performance.now();
-    try {
-      const ner = await nerExtract<any>(field, phrase);
-        let nerSummary = '—';
-      let nerSpans: Array<{ start: number; end: number }> = [];
-      if (Array.isArray(ner?.candidates) && ner.candidates.length > 0) {
-        const c = ner.candidates[0];
-        if (field === 'dateOfBirth') {
-          nerSummary = summarizeVars({ day: c?.value?.day, month: c?.value?.month, year: c?.value?.year });
-          nerSpans = spansFromDate(phrase, c?.value);
-        } else if (field === 'phone') {
-          nerSummary = c?.value ? `value=${String(c.value)}` : '—';
-          nerSpans = spansFromScalar(phrase, c?.value);
-        } else if (field === 'email') {
-          nerSummary = c?.value ? `value=${String(c.value)}` : '—';
-          nerSpans = spansFromScalar(phrase, c?.value);
-        } else if (c?.value) {
-          nerSpans = spansFromScalar(phrase, c?.value);
+      update({ nerRunning: true });
+      try {
+        const ner = await nerExtract<any>(field, phrase);
+          let nerSummary = '—';
+        let nerSpans: Array<{ start: number; end: number }> = [];
+        if (Array.isArray(ner?.candidates) && ner.candidates.length > 0) {
+          const c = ner.candidates[0];
+          if (field === 'dateOfBirth') {
+            nerSummary = summarizeVars({ day: c?.value?.day, month: c?.value?.month, year: c?.value?.year });
+            nerSpans = spansFromDate(phrase, c?.value);
+          } else if (field === 'phone') {
+            nerSummary = c?.value ? `value=${String(c.value)}` : '—';
+            nerSpans = spansFromScalar(phrase, c?.value);
+          } else if (field === 'email') {
+            nerSummary = c?.value ? `value=${String(c.value)}` : '—';
+            nerSpans = spansFromScalar(phrase, c?.value);
+          } else if (c?.value) {
+            nerSpans = spansFromScalar(phrase, c?.value);
+          }
         }
-      }
-        setRowResults(prev => {
-          const next = [...prev];
-          const base = ((next[idx] || {}) as any).spans || [];
-          next[idx] = { ...(next[idx] || {}), ner: nerSummary, nerMs: Math.round(performance.now() - t0), nerRunning: false, spans: mergeSpans(base, nerSpans) } as any;
-          return next;
-        });
-      } catch {
-        update({ ner: '—', nerMs: Math.round(performance.now() - t0), nerRunning: false });
-      }
-    })();
+          setRowResults(prev => {
+            const next = [...prev];
+            const base = ((next[idx] || {}) as any).spans || [];
+            next[idx] = { ...(next[idx] || {}), ner: nerSummary, nerMs: Math.round(performance.now() - t0), nerRunning: false, spans: mergeSpans(base, nerSpans) } as any;
+            return next;
+          });
+        } catch {
+          update({ ner: '—', nerMs: Math.round(performance.now() - t0), nerRunning: false });
+        }
+      })() : Promise.resolve();
 
-    // LLM async task
-    const llmTask = (async () => {
+    // LLM async task - only if enabled
+    const llmTask = enabledMethods.llm ? (async () => {
       const t0 = performance.now();
+      update({ llmRunning: true });
       try {
         const res = await fetch('/api/nlp/llm-extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ field, text: phrase, lang: 'it' }) });
         let llmSummary = '—';
@@ -699,7 +702,7 @@ export default function NLPExtractorProfileEditor({
       } catch {
         update({ llm: '—', llmMs: Math.round(performance.now() - t0), llmRunning: false });
       }
-    })();
+    })() : Promise.resolve();
 
     // When all three are done, stop overall running
     await Promise.allSettled([detTask, nerTask, llmTask]);
@@ -906,6 +909,22 @@ export default function NLPExtractorProfileEditor({
         <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2 }}>{m ? `${m} ms` : ''}</div>
       </div>
     );
+  };
+
+  // State for enabled extraction methods
+  const [enabledMethods, setEnabledMethods] = React.useState({
+    regex: true,
+    deterministic: true,
+    ner: true,
+    llm: true
+  });
+
+  // Toggle method enabled/disabled
+  const toggleMethod = (method: keyof typeof enabledMethods) => {
+    setEnabledMethods(prev => ({
+      ...prev,
+      [method]: !prev[method]
+    }));
   };
 
   return (
@@ -1252,11 +1271,19 @@ export default function NLPExtractorProfileEditor({
               <thead>
                 <tr>
                   <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: '#f9fafb' }}>Frase</th>
-                  <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.regex }} title={COLUMN_LABELS.regex.tooltip}>
+                  <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.regex, opacity: enabledMethods.regex ? 1 : 0.4 }} title={COLUMN_LABELS.regex.tooltip}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <span style={{ fontWeight: 600 }}>{COLUMN_LABELS.regex.main}</span>
-                        <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>({COLUMN_LABELS.regex.tech})</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="checkbox"
+                          checked={enabledMethods.regex}
+                          onChange={() => toggleMethod('regex')}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <div>
+                          <span style={{ fontWeight: 600, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.regex.main}</span>
+                          <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.regex.tech})</span>
+                        </div>
                       </div>
                       <button
                         onClick={() => toggleEditor('regex')}
@@ -1276,11 +1303,19 @@ export default function NLPExtractorProfileEditor({
                       </button>
                     </div>
                   </th>
-                  <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.deterministic }} title={COLUMN_LABELS.deterministic.tooltip}>
+                  <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.deterministic, opacity: enabledMethods.deterministic ? 1 : 0.4 }} title={COLUMN_LABELS.deterministic.tooltip}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <span style={{ fontWeight: 600 }}>{COLUMN_LABELS.deterministic.main}</span>
-                        <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>({COLUMN_LABELS.deterministic.tech})</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="checkbox"
+                          checked={enabledMethods.deterministic}
+                          onChange={() => toggleMethod('deterministic')}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <div>
+                          <span style={{ fontWeight: 600, color: enabledMethods.deterministic ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.deterministic.main}</span>
+                          <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.deterministic ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.deterministic.tech})</span>
+                        </div>
                       </div>
                       <button
                         onClick={() => toggleEditor('extractor')}
@@ -1300,11 +1335,19 @@ export default function NLPExtractorProfileEditor({
                       </button>
                     </div>
                   </th>
-                  <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.ner }} title={COLUMN_LABELS.ner.tooltip}>
+                  <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.ner, opacity: enabledMethods.ner ? 1 : 0.4 }} title={COLUMN_LABELS.ner.tooltip}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <span style={{ fontWeight: 600 }}>{COLUMN_LABELS.ner.main}</span>
-                        <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>({COLUMN_LABELS.ner.tech})</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="checkbox"
+                          checked={enabledMethods.ner}
+                          onChange={() => toggleMethod('ner')}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <div>
+                          <span style={{ fontWeight: 600, color: enabledMethods.ner ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.ner.main}</span>
+                          <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.ner ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.ner.tech})</span>
+                        </div>
                       </div>
                       <button
                         onClick={() => toggleEditor('ner')}
@@ -1324,11 +1367,19 @@ export default function NLPExtractorProfileEditor({
                       </button>
                     </div>
                   </th>
-                  <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.llm }} title={COLUMN_LABELS.llm.tooltip}>
+                  <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.llm, opacity: enabledMethods.llm ? 1 : 0.4 }} title={COLUMN_LABELS.llm.tooltip}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <span style={{ fontWeight: 600 }}>{COLUMN_LABELS.llm.main}</span>
-                        <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4 }}>({COLUMN_LABELS.llm.tech})</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="checkbox"
+                          checked={enabledMethods.llm}
+                          onChange={() => toggleMethod('llm')}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <div>
+                          <span style={{ fontWeight: 600, color: enabledMethods.llm ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.llm.main}</span>
+                          <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.llm ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.llm.tech})</span>
+                        </div>
                       </div>
                       <button
                         onClick={() => toggleEditor('llm')}
@@ -1385,22 +1436,22 @@ export default function NLPExtractorProfileEditor({
                         ) : ex}
                       </td>
                       <td 
-                        style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.regex, position: 'relative', verticalAlign: 'top' }}
+                        style={{ padding: 8, fontSize: 15, color: enabledMethods.regex ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.regex, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.regex ? 1 : 0.6 }}
                         onMouseEnter={() => setHovered(i, 'regex')}
                         onMouseLeave={() => setHovered(null, null)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ flex: 1 }}>
-                            {(rr.regex || '—') + ms(rr.regexMs)}
+                            {enabledMethods.regex ? (rr.regex || '—') + ms(rr.regexMs) : '—'}
                           </div>
-                          {(isHovered(i, 'regex') || hasNote(i, 'regex')) && (
+                          {(isHovered(i, 'regex') || hasNote(i, 'regex')) && enabledMethods.regex && (
                             <NoteButton
                               hasNote={hasNote(i, 'regex')}
                               onClick={() => isEditing(i, 'regex') ? stopEditing() : startEditing(i, 'regex')}
                             />
                           )}
                         </div>
-                        {(getNote(i, 'regex') || isEditing(i, 'regex')) && (
+                        {(getNote(i, 'regex') || isEditing(i, 'regex')) && enabledMethods.regex && (
                           <>
                             <NoteSeparator />
                             {isEditing(i, 'regex') ? (
@@ -1417,24 +1468,28 @@ export default function NLPExtractorProfileEditor({
                         )}
                       </td>
                       <td 
-                        style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.deterministic, position: 'relative', verticalAlign: 'top' }}
+                        style={{ padding: 8, fontSize: 15, color: enabledMethods.deterministic ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.deterministic, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.deterministic ? 1 : 0.6 }}
                         onMouseEnter={() => setHovered(i, 'deterministic')}
                         onMouseLeave={() => setHovered(null, null)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ flex: 1 }}>
-                        {rr.detRunning && <span title="Deterministic" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                        {renderStackedSummary(rr.deterministic, i, 'det')}
-                        {renderTimeBar(rr.detMs, maxMs)}
+                            {enabledMethods.deterministic ? (
+                              <>
+                                {rr.detRunning && <span title="Deterministic" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
+                                {renderStackedSummary(rr.deterministic, i, 'det')}
+                                {renderTimeBar(rr.detMs, maxMs)}
+                              </>
+                            ) : '—'}
                           </div>
-                          {(isHovered(i, 'deterministic') || hasNote(i, 'deterministic')) && (
+                          {(isHovered(i, 'deterministic') || hasNote(i, 'deterministic')) && enabledMethods.deterministic && (
                             <NoteButton
                               hasNote={hasNote(i, 'deterministic')}
                               onClick={() => isEditing(i, 'deterministic') ? stopEditing() : startEditing(i, 'deterministic')}
                             />
                           )}
                         </div>
-                        {(getNote(i, 'deterministic') || isEditing(i, 'deterministic')) && (
+                        {(getNote(i, 'deterministic') || isEditing(i, 'deterministic')) && enabledMethods.deterministic && (
                           <>
                             <NoteSeparator />
                             {isEditing(i, 'deterministic') ? (
@@ -1451,24 +1506,28 @@ export default function NLPExtractorProfileEditor({
                         )}
                       </td>
                       <td 
-                        style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.ner, position: 'relative', verticalAlign: 'top' }}
+                        style={{ padding: 8, fontSize: 15, color: enabledMethods.ner ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.ner, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.ner ? 1 : 0.6 }}
                         onMouseEnter={() => setHovered(i, 'ner')}
                         onMouseLeave={() => setHovered(null, null)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ flex: 1 }}>
-                        {rr.nerRunning && <span title="NER" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #34d399', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                        {renderStackedSummary(rr.ner, i, 'ner')}
-                        {renderTimeBar(rr.nerMs, maxMs)}
+                            {enabledMethods.ner ? (
+                              <>
+                                {rr.nerRunning && <span title="NER" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #34d399', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
+                                {renderStackedSummary(rr.ner, i, 'ner')}
+                                {renderTimeBar(rr.nerMs, maxMs)}
+                              </>
+                            ) : '—'}
                           </div>
-                          {(isHovered(i, 'ner') || hasNote(i, 'ner')) && (
+                          {(isHovered(i, 'ner') || hasNote(i, 'ner')) && enabledMethods.ner && (
                             <NoteButton
                               hasNote={hasNote(i, 'ner')}
                               onClick={() => isEditing(i, 'ner') ? stopEditing() : startEditing(i, 'ner')}
                             />
                           )}
                         </div>
-                        {(getNote(i, 'ner') || isEditing(i, 'ner')) && (
+                        {(getNote(i, 'ner') || isEditing(i, 'ner')) && enabledMethods.ner && (
                           <>
                             <NoteSeparator />
                             {isEditing(i, 'ner') ? (
@@ -1485,24 +1544,28 @@ export default function NLPExtractorProfileEditor({
                         )}
                       </td>
                       <td 
-                        style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.llm, position: 'relative', verticalAlign: 'top' }}
+                        style={{ padding: 8, fontSize: 15, color: enabledMethods.llm ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.llm, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.llm ? 1 : 0.6 }}
                         onMouseEnter={() => setHovered(i, 'llm')}
                         onMouseLeave={() => setHovered(null, null)}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                           <div style={{ flex: 1 }}>
-                        {rr.llmRunning && <span title="LLM" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #fbbf24', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                        {renderStackedSummary(rr.llm, i, 'llm')}
-                        {renderTimeBar(rr.llmMs, maxMs)}
+                            {enabledMethods.llm ? (
+                              <>
+                                {rr.llmRunning && <span title="LLM" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #fbbf24', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
+                                {renderStackedSummary(rr.llm, i, 'llm')}
+                                {renderTimeBar(rr.llmMs, maxMs)}
+                              </>
+                            ) : '—'}
                           </div>
-                          {(isHovered(i, 'llm') || hasNote(i, 'llm')) && (
+                          {(isHovered(i, 'llm') || hasNote(i, 'llm')) && enabledMethods.llm && (
                             <NoteButton
                               hasNote={hasNote(i, 'llm')}
                               onClick={() => isEditing(i, 'llm') ? stopEditing() : startEditing(i, 'llm')}
                             />
                           )}
                         </div>
-                        {(getNote(i, 'llm') || isEditing(i, 'llm')) && (
+                        {(getNote(i, 'llm') || isEditing(i, 'llm')) && enabledMethods.llm && (
                           <>
                             <NoteSeparator />
                             {isEditing(i, 'llm') ? (
