@@ -2,13 +2,16 @@ import { registry } from './index';
 import { THRESHOLDS } from './thresholds';
 import type { SlotDecision } from './types';
 import { nerExtract } from './services/nerClient';
+import { mapFieldToExtractor } from './fieldMapper';
 
 export async function extractField<T>(field: string, text: string, prev?: Partial<T>): Promise<SlotDecision<T>> {
-  const ex = registry[field];
+  const extractorName = await mapFieldToExtractor(field);
+  const ex = registry[extractorName];
+  
   if (!ex) return { status: 'reject', reasons: ['unknown-field'] } as any;
 
   // eslint-disable-next-line no-console
-  console.log('[NLP][pipeline] start', { field, text });
+  console.log('[NLP][pipeline] start', { field, text, extractorName });
   const r = ex.extract(text, prev);
   // eslint-disable-next-line no-console
   console.log('[NLP][pipeline] deterministic', { field, hasValue: Boolean(r.value), confidence: r.confidence, reasons: r.reasons });
