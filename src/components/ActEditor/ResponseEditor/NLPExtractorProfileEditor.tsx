@@ -955,6 +955,40 @@ export default function NLPExtractorProfileEditor({
     }
   };
 
+  // Function to save current config to global database
+  const saveToGlobal = async () => {
+    try {
+      // Create config from current profile
+      const globalConfig: NLPConfigDB = {
+        supportedKinds: [profile.kind],
+        aliases: {},
+        extractorMapping: { [profile.kind]: profile.kind },
+        typeMetadata: {
+          [profile.kind]: {
+            description: profile.description || `Extractor for ${profile.kind}`,
+            examples: profile.examples || [],
+            regex: profile.regex ? [profile.regex] : undefined,
+            // TODO: Add more fields from profile
+          }
+        },
+        version: "1.0.0",
+        lastUpdated: new Date().toISOString(),
+        permissions: { canEdit: true, canCreate: true, canDelete: false },
+        auditLog: true
+      };
+
+      const success = await databaseService.saveNLPConfig(globalConfig);
+      if (success) {
+        alert('Configuration saved to global database!');
+      } else {
+        alert('Failed to save configuration.');
+      }
+    } catch (error) {
+      console.error('Error saving to global:', error);
+      alert('Error saving configuration: ' + error.message);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Header compatto + tab editor */}
@@ -1657,6 +1691,28 @@ export default function NLPExtractorProfileEditor({
       )}
 
       {/* Details panel rimosso */}
+
+      {/* Save to Global Button */}
+      <div style={{ marginTop: '20px', textAlign: 'center' }}>
+        <button
+          onClick={saveToGlobal}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: '500'
+          }}
+        >
+          💾 Save to Global Database
+        </button>
+        <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>
+          Save this configuration to the global database for all projects
+        </p>
+      </div>
     </div>
   );
 }
