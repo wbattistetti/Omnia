@@ -391,3 +391,157 @@ def step5(constraint_json: dict) -> dict:
     print("\nSTEP: /step5 – Generate validation scripts (generateValidationScripts)")
     # [Logica step5...]
     return {"scripts": []}
+
+
+def ner_extract(body: dict) -> dict:
+    """
+    NER extraction service - extract entities from text using rule-based methods
+    """
+    field = body.get("field", "")
+    text = body.get("text", "")
+    
+    print(f"[NER_SERVICE] Extracting {field} from text: {repr(text)}")
+    
+    candidates = []
+    
+    # Basic rule-based extraction for common fields
+    if field == "dateOfBirth":
+        # Simple date pattern matching for Italian dates
+        import re
+        
+        # Pattern for Italian date formats: dd/mm/yyyy, dd-mm-yyyy, dd mm yyyy
+        date_patterns = [
+            r"\b(\d{1,2})[/-\s](\d{1,2})[/-\s](\d{4})\b",  # dd/mm/yyyy, dd-mm-yyyy, dd mm yyyy
+            r"\b(\d{1,2})[/-\s](\d{1,2})[/-\s](\d{2})\b",  # dd/mm/yy, dd-mm-yy, dd mm yy
+        ]
+        
+        for pattern in date_patterns:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                day, month, year = match.groups()
+                if len(year) == 2:
+                    # Convert 2-digit year to 4-digit (assume 20xx for years < 50, 19xx otherwise)
+                    year_int = int(year)
+                    year = f"{1900 + year_int if year_int >= 50 else 2000 + year_int}"
+                
+                candidates.append({
+                    "value": {"day": int(day), "month": int(month), "year": int(year)},
+                    "confidence": 0.7
+                })
+    
+    elif field == "email":
+        # Email pattern matching
+        import re
+        email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+        matches = re.finditer(email_pattern, text)
+        for match in matches:
+            candidates.append({
+                "value": match.group(0),
+                "confidence": 0.9
+            })
+    
+    elif field == "phone":
+        # Phone number pattern matching (Italian format)
+        import re
+        phone_patterns = [
+            r"\+39\s?\d{3}\s?\d{3}\s?\d{4}",  # +39 333 123 4567
+            r"\b\d{3}\s?\d{3}\s?\d{4}\b",     # 333 123 4567
+            r"\b\d{10}\b"                       # 3331234567
+        ]
+        
+        for pattern in phone_patterns:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                candidates.append({
+                    "value": match.group(0),
+                    "confidence": 0.8
+                })
+    
+    elif field == "age":
+        # Age extraction from text
+        import re
+        age_pattern = r"\b(\d{1,3})\s?(anni|anno|years|year)?\b"
+        matches = re.finditer(age_pattern, text, re.IGNORECASE)
+        for match in matches:
+            age = int(match.group(1))
+            if 1 <= age <= 120:  # Reasonable age range
+                candidates.append({
+                    "value": age,
+                    "confidence": 0.8
+                })
+    
+    print(f"[NER_SERVICE] Found {len(candidates)} candidates for field {field}")
+    return {"candidates": candidates}
+
+
+def llm_extract(body: dict) -> dict:
+    """
+    LLM extraction service - extract information using AI
+    """
+    from newBackend.services.svc_ai_client import chat_json
+    from newBackend.core.core_settings import OPENAI_KEY
+    
+    field = body.get("field", "generic")
+    text = body.get("text", "")
+    lang = body.get("lang", "it")
+    
+    print(f"[LLM_SERVICE] Extracting {field} from text: {repr(text)}")
+    
+    if not OPENAI_KEY:
+        return {"error": "OPENAI_KEY not configured"}
+    
+    # Field-specific prompts
+    prompts = {
+        "dateOfBirth": "Extract the date of birth from the text. Return only the date in YYYY-MM-DD format or an empty string if not found.",
+        "email": "Extract the email address from the text. Return only the email or an empty string if not found.",
+        "phone": "Extract the phone number from the text. Return only the phone number or an empty string if not found.",
+        "age": "Extract the age from the text. Return only the number or an empty string if not found.",
+        "generic": "Extract the most relevant information from the text based on the context."
+    }
+    
+    prompt = f"""{prompts.get(field, prompts["generic"])}
+    
+    Text: "{text}"
+    
+    Return ONLY the extracted value or an empty string if nothing is found.
+    Do not include any explanations or additional text.
+    Return your response as valid JSON.
+    """
+    
+    try:
+        response = chat_json([
+            {"role": "system", "content": "You are an information extraction assistant. Return only the extracted value or empty string."},
+            {"role": "user", "content": prompt}
+        ], provider="openai")
+        
+        # Clean up the response
+        extracted_value = str(response).strip()
+        
+        # Validate if we actually got a value
+        if extracted_value and extracted_value != "" and extracted_value != "empty string":
+            confidence = 0.8
+            
+            # Additional validation based on field type
+            if field == "age":
+                try:
+                    age = int(extracted_value)
+                    if not (1 <= age <= 120):
+                        extracted_value = ""
+                        confidence = 0.0
+                except ValueError:
+                    extracted_value = ""
+                    confidence = 0.0
+            
+            if extracted_value:
+                candidates = [{"value": extracted_value, "confidence": confidence}]
+            else:
+                candidates = []
+        else:
+            candidates = []
+        
+        print(f"[LLM_SERVICE] Extracted value: {repr(extracted_value)}")
+        return {"candidates": candidates}
+        
+    except Exception as e:
+        print(f"[LLM_SERVICE] Error: {str(e)}")
+        return {"error": f"LLM extraction failed: {str(e)}"}

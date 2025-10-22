@@ -114,3 +114,19 @@ Be precise and practical. Test mentally that your regex works correctly.
         
     except Exception as e:
         return {"error": f"Error generating regex: {str(e)}"}
+
+@router.post("/api/ner/extract")
+def ner_extract(body: dict = Body(...)):
+    """
+    NER extraction endpoint - extract entities from text using rule-based methods
+    """
+    from newBackend.services.svc_nlp import ner_extract as ner_service
+    return ner_service(body)
+
+@router.post("/api/nlp/llm-extract")
+def llm_extract(body: dict = Body(...)):
+    """
+    LLM extraction endpoint - extract information using AI
+    """
+    from newBackend.services.svc_nlp import llm_extract as llm_service
+    return llm_service(body)

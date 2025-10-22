@@ -6,25 +6,22 @@ from newBackend.api.api_proxy_express import router as proxy_router
 import os
 import sys
 
-# Add path to old backend for imports
+# Add path to old backend for imports - keep for potential future use
 old_backend_path = os.path.join(os.path.dirname(__file__), '..', 'backend')
 if old_backend_path not in sys.path:
     sys.path.insert(0, old_backend_path)
 
-# Import routers from old backend
+# Import real DDT wizard routers from old backend
 try:
-    from ai_steps.startPrompt import router as startPrompt_router
-    from ai_steps.stepNoMatch import router as stepNoMatch_router
-    from ai_steps.stepNoInput import router as stepNoInput_router
-    from ai_steps.stepConfirmation import router as stepConfirmation_router
-    from ai_steps.stepSuccess import router as stepSuccess_router
-    from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
-    from ner_spacy import router as ner_router
-    from ai_steps.nlp_extract import router as llm_extract_router
-    print("Successfully imported old backend routers")
+    from backend.ai_steps.startPrompt import router as startPrompt_router
+    from backend.ai_steps.stepNoMatch import router as stepNoMatch_router
+    from backend.ai_steps.stepNoInput import router as stepNoInput_router
+    from backend.ai_steps.stepConfirmation import router as stepConfirmation_router
+    from backend.ai_steps.stepSuccess import router as stepSuccess_router
+    from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
 except ImportError as e:
-    print(f"Failed to import old backend routers: {e}")
-    # Create empty routers as fallback
+    print(f"Warning: Could not import DDT wizard routers: {e}")
+    # Fallback to empty routers
     from fastapi import APIRouter
     startPrompt_router = APIRouter()
     stepNoMatch_router = APIRouter()
@@ -32,8 +29,11 @@ except ImportError as e:
     stepConfirmation_router = APIRouter()
     stepSuccess_router = APIRouter()
     stepNotConfirmed_router = APIRouter()
-    ner_router = APIRouter()
-    llm_extract_router = APIRouter()
+
+# Create empty routers for NER and LLM extract (will be implemented in api_nlp)
+from fastapi import APIRouter
+ner_router = APIRouter()
+llm_extract_router = APIRouter()
 
 app = FastAPI()
 
@@ -51,7 +51,7 @@ app.include_router(cond_router)
 app.include_router(nlp_router)
 app.include_router(proxy_router)
 
-# Include DDT wizard step routers
+# Include DDT wizard step routers (empty for now)
 app.include_router(startPrompt_router)
 app.include_router(stepNoMatch_router)
 app.include_router(stepNoInput_router)
@@ -59,6 +59,6 @@ app.include_router(stepConfirmation_router)
 app.include_router(stepSuccess_router)
 app.include_router(stepNotConfirmed_router)
 
-# Include NER and LLM extract routers
+# Include NER and LLM extract routers (empty for now - will be implemented in api_nlp)
 app.include_router(ner_router)
 app.include_router(llm_extract_router)

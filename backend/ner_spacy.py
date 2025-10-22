@@ -89,9 +89,12 @@ def _parse_dob(text: str):
 def ner_extract(body: dict = Body(...)):
     field = (body or {}).get("field") or ""
     text = (body or {}).get("text") or ""
+    
+    print(f"[NER_EXTRACT] Request received - field: {field}, text: {repr(text)}")
 
     nlp = _get_nlp()
     if nlp is None:
+        print(f"[NER_EXTRACT] ERROR: spaCy not available - {_load_error}")
         return Response(
             content=json.dumps({
                 "error": "spaCy not available",
@@ -105,34 +108,53 @@ def ner_extract(body: dict = Body(...)):
             status_code=501,
         )
 
+    print(f"[NER_EXTRACT] spaCy loaded successfully, processing text...")
     doc = nlp(text)
+    
+    print(f"[NER_EXTRACT] Document entities found: {[(e.text, e.label_) for e in doc.ents]}")
+    
     candidates = []
 
     if field == "dateOfBirth":
+        print("[NER_EXTRACT] Processing dateOfBirth field")
         # from doc ents
         for e in doc.ents:
             if e.label_.upper() == "DATE":
+                print(f"[NER_EXTRACT] Found DATE entity: {e.text}")
                 for c in _parse_dob(e.text):
                     candidates.append({"value": {"day": c.get("day"), "month": c.get("month"), "year": c.get("year")}, "confidence": c.get("_conf", 0.6)})
+                    print(f"[NER_EXTRACT] Added date candidate: {c}")
         # also try whole text if no candidates
         if not candidates:
+            print("[NER_EXTRACT] No entities found, trying whole text parsing")
             for c in _parse_dob(text):
                 candidates.append({"value": {"day": c.get("day"), "month": c.get("month"), "year": c.get("year")}, "confidence": c.get("_conf", 0.6)})
+                print(f"[NER_EXTRACT] Added date candidate from text: {c}")
 
     elif field == "email":
+        print("[NER_EXTRACT] Processing email field")
         m = re.search(r"[^\s]+@[^\s]+\.[^\s]+", text)
         if m:
             candidates.append({"value": m.group(0), "confidence": 0.7})
+            print(f"[NER_EXTRACT] Found email: {m.group(0)}")
+        else:
+            print("[NER_EXTRACT] No email found")
 
     elif field == "phone":
+        print("[NER_EXTRACT] Processing phone field")
         # very naive: longest digit-ish chunk
         digs = re.findall(r"\+?\d[\d\s\-]{5,}\d", text)
         if digs:
             # pick the longest
             v = max(digs, key=len)
             candidates.append({"value": v, "confidence": 0.65})
+            print(f"[NER_EXTRACT] Found phone: {v}")
+        else:
+            print("[NER_EXTRACT] No phone found")
+    else:
+        print(f"[NER_EXTRACT] Unknown field: {field}")
 
-    # generic: return empty if unknown field
+    print(f"[NER_EXTRACT] Final candidates: {candidates}")
     return {"candidates": candidates}
 
 

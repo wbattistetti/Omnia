@@ -596,42 +596,40 @@ export default function NLPExtractorProfileEditor({
       const t0 = performance.now();
       update({ detRunning: true });
       try {
-        const det = await extractField<any>(field, phrase);
-        console.log('[NLP_TESTER] Deterministic extraction result:', det);
-        let detSummary = det.status === 'accepted' && det.value ? `value=${det.value}` : '—';
-        let detSpans: Array<{ start: number; end: number }> = [];
-        if (det.status === 'accepted') {
-          if (field === 'dateOfBirth') {
-            const v: any = det.value || {};
-            detSummary = summarizeVars({ day: v.day, month: v.month, year: v.year }, v.day && v.month && v.year ? `${String(v.day).padStart(2,'0')}/${String(v.month).padStart(2,'0')}/${v.year}` : undefined);
-            detSpans = spansFromDate(phrase, v);
-          } else if (field === 'phone') {
-            const v: any = det.value || {};
-            detSummary = v.e164 ? `value=${v.e164}` : '—';
-            detSpans = spansFromScalar(phrase, v.e164 || v.value);
-          } else if (field === 'email') {
-            detSummary = det.value ? `value=${String(det.value)}` : '—';
-            detSpans = spansFromScalar(phrase, det.value);
-          } else if (det.value) {
-            detSpans = spansFromScalar(phrase, det.value);
-          }
-        } else if (det.status === 'ask-more' && det.value) {
-          if (field === 'dateOfBirth') {
-            const v: any = det.value || {};
-            detSummary = summarizeVars({ day: v.day, month: v.month, year: v.year });
-            detSpans = spansFromDate(phrase, v);
-          }
-        }
-          setRowResults(prev => {
-            const next = [...prev];
-            const base = ((next[idx] || {}) as any).spans || [];
-            next[idx] = { ...(next[idx] || {}), deterministic: detSummary, detMs: Math.round(performance.now() - t0), detRunning: false, spans: mergeSpans(base, detSpans) } as any;
-            return next;
-          });
-        } catch {
-          update({ deterministic: '—', detMs: Math.round(performance.now() - t0), detRunning: false });
-        }
-      })() : Promise.resolve();
+        // Run extraction for this row
+        const finalResult = await extractField<any>(field, phrase);
+        
+        // Use individual results for each column
+        const detSummary = finalResult.allResults?.deterministic ? summarizeResult(finalResult.allResults.deterministic, field) : "—";
+        const nerSummary = finalResult.allResults?.ner ? summarizeResult(finalResult.allResults.ner, field) : "—";
+        const llmSummary = finalResult.allResults?.llm ? summarizeResult(finalResult.allResults.llm, field) : "—";
+        
+        // eslint-disable-next-line no-console
+        console.log('[NLP_TESTER] Extraction results:', {
+          deterministic: finalResult.allResults?.deterministic,
+          ner: finalResult.allResults?.ner,
+          llm: finalResult.allResults?.llm
+        });
+        
+        // eslint-disable-next-line no-console
+        console.log('[NLP_TESTER] summarizeResult output:', {
+          deterministic: detSummary,
+          ner: nerSummary, 
+          llm: llmSummary
+        });
+        
+        update({
+          deterministic: detSummary,
+          ner: nerSummary,
+          llm: llmSummary,
+          status: 'done',
+          detMs: Math.round(performance.now() - t0),
+          detRunning: false
+        });
+      } catch {
+        update({ deterministic: '—', detMs: Math.round(performance.now() - t0), detRunning: false });
+      }
+    })() : Promise.resolve();
 
     // NER async task - only if enabled
     const nerTask = enabledMethods.ner ? (async () => {
@@ -925,6 +923,31 @@ export default function NLPExtractorProfileEditor({
       ...prev,
       [method]: !prev[method]
     }));
+  };
+
+  // Helper function to summarize extraction results
+  const summarizeResult = (result: any, currentField: string): string => {
+    if (!result || result.status !== 'accepted' || result.value === undefined || result.value === null) 
+      return "—";
+    
+    // For age (number), show the value directly
+    if (currentField === 'age') {
+      return `value=${result.value}`;
+    }
+    
+    // For other fields, use existing logic
+    if (currentField === 'dateOfBirth') {
+      const v: any = result.value || {};
+      return summarizeVars({ day: v.day, month: v.month, year: v.year }, 
+        v.day && v.month && v.year ? `${String(v.day).padStart(2,'0')}/${String(v.month).padStart(2,'0')}/${v.year}` : undefined);
+    } else if (currentField === 'phone') {
+      const v: any = result.value || {};
+      return v.e164 ? `value=${v.e164}` : '—';
+    } else if (currentField === 'email') {
+      return result.value ? `value=${String(result.value)}` : '—';
+    } else {
+      return result.value ? `value=${String(result.value)}` : '—';
+    }
   };
 
   return (

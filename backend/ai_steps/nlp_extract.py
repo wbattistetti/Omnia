@@ -73,6 +73,8 @@ def llm_extract(body: dict = Body(...)):
     field = (body or {}).get("field") or "generic"
     text = (body or {}).get("text") or ""
     lang = (body or {}).get("lang") or "it"
+    
+    print(f"[LLM_EXTRACT] Request received - field: {field}, text: {repr(text)}, lang: {lang}")
 
     instructions = {
         "dateOfBirth": (
@@ -97,6 +99,8 @@ def llm_extract(body: dict = Body(...)):
         "{\n  \"candidates\": [ { \"value\": <value>, \"confidence\": <number between 0 and 1> } ]\n}"
         f"\nInput: '{text}'\n"
     )
+    
+    print(f"[LLM_EXTRACT] Prompt: {repr(prompt[:300])}...")
 
     # Small in-memory cache to avoid repeating identical extractions shortly
     cache_ttl_s = 60
@@ -115,6 +119,7 @@ def llm_extract(body: dict = Body(...)):
         setattr(llm_extract, "_cache", cache)  # type: ignore
 
     if key in cache:
+        print(f"[LLM_EXTRACT] Cache hit for key: {key}")
         return cache[key][1]
 
     try:
@@ -159,18 +164,27 @@ def llm_extract(body: dict = Body(...)):
 
         try:
             obj = json.loads(ai)
-        except Exception:
+            print(f"[LLM_EXTRACT] Parsed JSON successfully: {obj}")
+        except Exception as e:
+            print(f"[LLM_EXTRACT] JSON parse error: {e}")
             start = ai.find('{')
             end = ai.rfind('}')
             if start != -1 and end != -1 and end > start:
                 obj = json.loads(ai[start:end+1])
+                print(f"[LLM_EXTRACT] Extracted JSON from response: {obj}")
             else:
                 obj = None
+                print("[LLM_EXTRACT] No valid JSON found in response")
         if isinstance(obj, dict) and isinstance(obj.get("candidates"), list):
             cache[key] = (now, obj)
+            print(f"[LLM_EXTRACT] Success - candidates: {obj}")
             return obj
+        print("[LLM_EXTRACT] No valid candidates found, returning empty")
         return {"candidates": []}
     except Exception as e:
+        print(f"[LLM_EXTRACT] Exception: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return Response(
             content=json.dumps({"error": str(e)}),
             media_type="application/json",
