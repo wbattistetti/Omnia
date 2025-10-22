@@ -25,4 +25,27 @@ export type DOB = { day?: number; month?: number; year?: number };
 export type Phone = { e164: string };
 export type Email = string;
 
+export interface Validator {
+  type: 'range' | 'format' | 'regex' | 'length' | 'custom';
+  value?: any;
+  min?: number;
+  max?: number;
+  pattern?: string;
+  reason: string;
+}
+
+export interface NLPConfigDB {
+  supportedKinds: string[];
+  aliases: Record<string, string>;
+  extractorMapping: Record<string, string>;
+  typeMetadata: Record<string, {
+    description: string;
+    examples: string[];
+    regex?: string[];
+    validators?: Validator[];
+    llmPrompt?: string;
+  }>;
+  aiPrompts?: Record<string, any>;
+}
+
 
