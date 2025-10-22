@@ -513,12 +513,35 @@ export default function NLPExtractorProfileEditor({
   // removed unused helper
 
   const mapKindToField = (k: string): string => {
+    console.log('[NLP_TESTER] mapKindToField called with:', k);
     const s = (k || '').toLowerCase();
+    console.log('[NLP_TESTER] s value after lowercase:', s);
     
-    // ✅ Use extractorMapping from config
+    // ✅ SPECIAL MAPPING: number → age (per estrazione età) - PRIMA di tutto!
+    if (s === 'number') {
+      console.log('[NLP_TESTER] Entering number special mapping block');
+      // Controlla se il contesto suggerisce "age"
+      const synonyms = toCommaList(fromCommaList(synonymsText)).toLowerCase();
+      const examplesText = (examplesList || []).join(' ').toLowerCase();
+      
+      const hasAgeWords = /(età|age|anni|vecchio|giovane)/i.test(synonyms);
+      const hasAgeExamples = /(18|21|30|40|50|60|70|80|90|100)/.test(examplesText);
+      
+      console.log('[NLP_TESTER] Age detection debug:', {
+        synonyms: synonymsText,
+        examples: examplesList,
+        hasAgeWords,
+        hasAgeExamples
+      });
+      
+      if (hasAgeWords || hasAgeExamples) {
+        console.log('[NLP_TESTER] auto-map number → age (age context detected)');
+        return 'age';
+      }
+    }
+    
+    // ✅ Use extractorMapping from config (DOPO il controllo speciale)
     const extractorMapping = nlpTypesConfig.extractorMapping as Record<string, string>;
-    
-    // Direct mapping from config
     if (extractorMapping[s]) {
       return extractorMapping[s];
     }
@@ -558,14 +581,23 @@ export default function NLPExtractorProfileEditor({
     const regexRes = extractRegexOnly(phrase);
     update({ regex: regexRes.summary, regexMs: Math.round(performance.now() - t0Regex), spans: regexRes.spans });
 
-    const field = mapKindToField(profile.kind);
+    const field = mapKindToField(kind);
+
+    console.log('[NLP_TESTER] Field mapping:', { 
+      originalKind: kind,
+      mappedField: field,
+      profileKind: profile.kind,
+      synonyms: synonymsText,
+      examples: examplesList
+    });
 
     // Deterministic async task
     const detTask = (async () => {
       const t0 = performance.now();
     try {
       const det = await extractField<any>(field, phrase);
-        let detSummary = '—';
+      console.log('[NLP_TESTER] Deterministic extraction result:', det);
+      let detSummary = det.status === 'accepted' && det.value ? `value=${det.value}` : '—';
       let detSpans: Array<{ start: number; end: number }> = [];
       if (det.status === 'accepted') {
         if (field === 'dateOfBirth') {

@@ -65,6 +65,7 @@
     "address": "address",
     "generic": "generic",
     "number": "number",
+    "age": "number",
     "month": "month",
     "taxCode": "taxCode",
     "iban": "iban",
