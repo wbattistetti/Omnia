@@ -927,26 +927,31 @@ export default function NLPExtractorProfileEditor({
 
   // Helper function to summarize extraction results
   const summarizeResult = (result: any, currentField: string): string => {
-    if (!result || result.status !== 'accepted' || result.value === undefined || result.value === null) 
+    try {
+      if (!result || result.status !== 'accepted' || result.value === undefined || result.value === null) 
+        return "—";
+      
+      // For age (number), show the value directly
+      if (currentField === 'age') {
+        return `value=${result.value}`;
+      }
+      
+      // For other fields, use existing logic
+      if (currentField === 'dateOfBirth') {
+        const v: any = result.value || {};
+        return summarizeVars({ day: v.day, month: v.month, year: v.year }, 
+          v.day && v.month && v.year ? `${String(v.day).padStart(2,'0')}/${String(v.month).padStart(2,'0')}/${v.year}` : undefined);
+      } else if (currentField === 'phone') {
+        const v: any = result.value || {};
+        return v.e164 ? `value=${v.e164}` : '—';
+      } else if (currentField === 'email') {
+        return result.value ? `value=${String(result.value)}` : '—';
+      } else {
+        return result.value ? `value=${String(result.value)}` : '—';
+      }
+    } catch (error) {
+      console.error('[NLP_TESTER] summarizeResult error:', error, { result, currentField });
       return "—";
-    
-    // For age (number), show the value directly
-    if (currentField === 'age') {
-      return `value=${result.value}`;
-    }
-    
-    // For other fields, use existing logic
-    if (currentField === 'dateOfBirth') {
-      const v: any = result.value || {};
-      return summarizeVars({ day: v.day, month: v.month, year: v.year }, 
-        v.day && v.month && v.year ? `${String(v.day).padStart(2,'0')}/${String(v.month).padStart(2,'0')}/${v.year}` : undefined);
-    } else if (currentField === 'phone') {
-      const v: any = result.value || {};
-      return v.e164 ? `value=${v.e164}` : '—';
-    } else if (currentField === 'email') {
-      return result.value ? `value=${String(result.value)}` : '—';
-    } else {
-      return result.value ? `value=${String(result.value)}` : '—';
     }
   };
 

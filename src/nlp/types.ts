@@ -36,7 +36,7 @@ export interface Validator {
 
 export interface NLPConfigDB {
   supportedKinds: string[];
-  aliases: Record<string, string>;
+  aliases: Record<string, string[]>;  // Changed to string[] for multiple aliases
   extractorMapping: Record<string, string>;
   typeMetadata: Record<string, {
     description: string;
@@ -44,8 +44,20 @@ export interface NLPConfigDB {
     regex?: string[];
     validators?: Validator[];
     llmPrompt?: string;
+    constraints?: any[];  // Additional constraints
+    defaultValue?: any;   // Default value for the type
+    formatHint?: string;  // Format guidance for UI
   }>;
   aiPrompts?: Record<string, any>;
+  version: string;        // Config version
+  lastUpdated: string;    // Last update timestamp
+  // Enterprise features
+  permissions?: {
+    canEdit: boolean;
+    canCreate: boolean;
+    canDelete: boolean;
+  };
+  auditLog?: boolean;     // Enable audit logging
 }
 
 
