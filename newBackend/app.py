@@ -19,6 +19,8 @@ try:
     from ai_steps.stepConfirmation import router as stepConfirmation_router
     from ai_steps.stepSuccess import router as stepSuccess_router
     from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
+    from ner_spacy import router as ner_router
+    from ai_steps.nlp_extract import router as llm_extract_router
     print("Successfully imported old backend routers")
 except ImportError as e:
     print(f"Failed to import old backend routers: {e}")
@@ -30,6 +32,8 @@ except ImportError as e:
     stepConfirmation_router = APIRouter()
     stepSuccess_router = APIRouter()
     stepNotConfirmed_router = APIRouter()
+    ner_router = APIRouter()
+    llm_extract_router = APIRouter()
 
 app = FastAPI()
 
@@ -54,3 +58,7 @@ app.include_router(stepNoInput_router)
 app.include_router(stepConfirmation_router)
 app.include_router(stepSuccess_router)
 app.include_router(stepNotConfirmed_router)
+
+# Include NER and LLM extract routers
+app.include_router(ner_router)
+app.include_router(llm_extract_router)

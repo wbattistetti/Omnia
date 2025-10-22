@@ -118,10 +118,45 @@ def llm_extract(body: dict = Body(...)):
         return cache[key][1]
 
     try:
-        ai = call_groq([
-            {"role": "system", "content": "Always reply with RFC8259-compliant JSON only."},
-            {"role": "user", "content": prompt},
-        ])
+        # Use OpenAI instead of Groq
+        import requests
+        from newBackend.core.core_settings import OPENAI_KEY, OPENAI_URL, OPENAI_MODEL
+        
+        # Debug: Check if OpenAI key is configured
+        if not OPENAI_KEY:
+            print(f"[LLM_EXTRACT][ERROR] OPENAI_KEY not configured")
+            return Response(
+                content=json.dumps({"error": "OPENAI_KEY not configured"}),
+                media_type="application/json",
+                status_code=502,
+            )
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENAI_KEY}"
+        }
+        
+        payload = {
+            "model": OPENAI_MODEL,
+            "messages": [
+                {"role": "system", "content": "Always reply with RFC8259-compliant JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1
+        }
+        
+        print(f"[LLM_EXTRACT][DEBUG] Calling OpenAI: {OPENAI_URL}")
+        print(f"[LLM_EXTRACT][DEBUG] Model: {OPENAI_MODEL}")
+        print(f"[LLM_EXTRACT][DEBUG] Prompt: {repr(prompt[:200])}...")
+        
+        response = requests.post(OPENAI_URL, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        ai_response = response.json()
+        ai = ai_response.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        print(f"[LLM_EXTRACT][DEBUG] AI response: {repr(ai[:200])}...")
+
         try:
             obj = json.loads(ai)
         except Exception:

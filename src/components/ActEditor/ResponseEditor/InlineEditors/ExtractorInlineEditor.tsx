@@ -104,8 +104,8 @@ export default function ExtractorInlineEditor({
       
       const data = await response.json();
       
-      if (data.success && data.code) {
-        setExtractorCode(data.code);
+      if (data.ok && data.result?.refined_code) {
+        setExtractorCode(data.result.refined_code);
       } else {
         alert('AI refinement failed. Please try again.');
       }

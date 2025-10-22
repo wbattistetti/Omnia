@@ -6,6 +6,141 @@ from newBackend.aiprompts.prm_registry import render
 import sys
 import os
 import json
+import re
+import difflib
+import logging
+
+# Setup logging
+log = logging.getLogger(__name__)
+
+# System message for refine extractor
+REFINE_SYSTEM_MSG = (
+    "You are a senior TypeScript engineer. Refine the user's extractor code. "
+    "Keep the public API identical unless requested. Preserve types, avoid new deps. "
+    "Return ONLY a single JSON object with the schema provided, no prose."
+)
+
+def _build_refine_prompt(code: str, language: str = "typescript", goals: list = None, 
+                         constraints: list = None, style: str = None, user_notes: str = None) -> str:
+    """Build prompt for code refinement"""
+    goals = goals or []
+    constraints = constraints or []
+    goals_s = "\n".join(f"- {g}" for g in goals) or "- Keep behavior and types stable."
+    constraints_s = "\n".join(f"- {c}" for c in constraints) or "- No external dependencies."
+    style_s = f"- Style preference: {style}" if style else "- Keep existing style unless harmful."
+    notes_s = f"\nAdditional notes:\n{user_notes}" if user_notes else ""
+    
+    return (
+        f"Language: {language}\n\n"
+        "Original code (between <<<CODE and CODE>>>):\n"
+        "<<<CODE\n"
+        f"{code}\n"
+        "CODE>>>\n\n"
+        "Goals:\n"
+        f"{goals_s}\n"
+        "Constraints:\n"
+        f"{constraints_s}\n"
+        f"{style_s}\n"
+        f"{notes_s}\n\n"
+        "Return strict JSON with keys: refined_code (string), changes_summary (string[]), "
+        "diffs (string, unified diff against original), suggested_tests (string[]), "
+        "warnings (string[]), confidence (number 0..1), metadata (object)."
+    )
+
+def _unified_diff(a: str, b: str) -> str:
+    """Generate unified diff between two code versions"""
+    a_lines = a.splitlines(keepends=True)
+    b_lines = b.splitlines(keepends=True)
+    return "".join(difflib.unified_diff(a_lines, b_lines, fromfile="original.ts", tofile="refined.ts"))
+
+def refine_extractor(payload: dict) -> dict:
+    """
+    Refine TypeScript extractor code - compatible with existing architecture
+    """
+    code = payload.get("code") or ""
+    language = payload.get("language") or "typescript"
+    goals = payload.get("goals") or []
+    constraints = payload.get("constraints") or []
+    style = payload.get("style")
+    user_notes = payload.get("user_notes")
+    provider = payload.get("provider") or "openai"
+    
+    if not code.strip():
+        return {
+            "ok": False,
+            "provider": provider,
+            "result": {
+                "refined_code": "",
+                "changes_summary": [],
+                "diffs": "",
+                "suggested_tests": [],
+                "warnings": ["Missing 'code' in request body"],
+                "confidence": 0.0,
+                "metadata": {"fallback": True}
+            }
+        }
+    
+    user_prompt = _build_refine_prompt(code, language, goals, constraints, style, user_notes)
+    
+    try:
+        # Use existing chat_json function
+        ai_response = chat_json([
+            {"role": "system", "content": REFINE_SYSTEM_MSG},
+            {"role": "user", "content": user_prompt}
+        ], provider=provider)
+        
+        # Parse AI response - FIXED: chat_json returns string, not dict
+        if isinstance(ai_response, str):
+            data = _safe_json_loads(ai_response)  # Parse JSON string to dict
+        else:
+            data = ai_response  # Fallback if already dict
+            
+    except Exception as e:
+        log.error(f"refine_extractor AI call failed: {e}")
+        return {
+            "ok": False,
+            "provider": provider,
+            "result": {
+                "refined_code": code,
+                "changes_summary": ["AI fallback: unable to refine, returning original code."],
+                "diffs": _unified_diff(code, code),
+                "suggested_tests": [],
+                "warnings": [f"Refine failure: {str(e)}"],
+                "confidence": 0.0,
+                "metadata": {"fallback": True}
+            }
+        }
+    
+    # Extract and normalize response
+    refined_code = data.get("refined_code") or code
+    changes_summary = list(data.get("changes_summary") or [])
+    suggested_tests = list(data.get("suggested_tests") or [])
+    warnings = list(data.get("warnings") or [])
+    
+    # Generate diff if not provided
+    diffs = data.get("diffs") or _unified_diff(code, refined_code)
+    
+    # Handle confidence score
+    try:
+        confidence = float(data.get("confidence") or 0.7)
+    except (ValueError, TypeError):
+        confidence = 0.7
+        
+    metadata = dict(data.get("metadata") or {})
+    
+    return {
+        "ok": True,
+        "provider": provider,
+        "result": {
+            "refined_code": refined_code,
+            "changes_summary": changes_summary,
+            "diffs": diffs,
+            "suggested_tests": suggested_tests,
+            "warnings": warnings,
+            "confidence": confidence,
+            "metadata": metadata
+        }
+    }
 
 def step2(user_desc: Any) -> dict:
     """Step 2: Data type recognition with template system"""
