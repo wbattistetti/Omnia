@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from newBackend.api.api_codegen import router as cond_router
 from newBackend.api.api_nlp import router as nlp_router
 from newBackend.api.api_proxy_express import router as proxy_router
+from newBackend.api.api_nlp_config import router as nlp_config_router
 import os
 import sys
 
@@ -50,6 +51,7 @@ app.add_middleware(
 app.include_router(cond_router)
 app.include_router(nlp_router)
 app.include_router(proxy_router)
+app.include_router(nlp_config_router)
 
 # Include DDT wizard step routers (empty for now)
 app.include_router(startPrompt_router)
@@ -62,3 +64,14 @@ app.include_router(stepNotConfirmed_router)
 # Include NER and LLM extract routers (empty for now - will be implemented in api_nlp)
 app.include_router(ner_router)
 app.include_router(llm_extract_router)
+
+# Include factory router with error handling
+try:
+    from newBackend.api.api_factory import router as api_factory_router
+    app.include_router(api_factory_router)
+    print("[INFO] Factory router loaded successfully")
+except Exception as e:
+    print(f"[WARNING] Factory router failed to load: {e}")
+    # Create empty router as fallback
+    from fastapi import APIRouter
+    api_factory_router = APIRouter()

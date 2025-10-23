@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, Wand2, MessageCircle } from 'lucide-react';
 import { extractField } from '../../../nlp/pipeline';
 import { nerExtract } from '../../../nlp/services/nerClient';
+import { databaseService } from '../../../nlp/services/databaseService';
 import RegexEditor from './RegexEditor';
 import NLPCompactEditor from './NLPCompactEditor';
 import PostProcessEditor from './PostProcessEditor';
@@ -971,6 +972,7 @@ export default function NLPExtractorProfileEditor({
             // TODO: Add more fields from profile
           }
         },
+        aiPrompts: {},  // Required field
         version: "1.0.0",
         lastUpdated: new Date().toISOString(),
         permissions: { canEdit: true, canCreate: true, canDelete: false },

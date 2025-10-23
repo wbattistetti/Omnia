@@ -1,4 +1,5 @@
 from typing import Any
+from pydantic import BaseModel
 from fastapi import Body, HTTPException
 from newBackend.services.svc_ai_client import chat_json, chat_text
 from newBackend.core.core_json_utils import _safe_json_loads
@@ -10,6 +11,32 @@ import re
 import difflib
 import logging
 
+# NLP Configuration Interface - Pydantic BaseModel for proper validation
+class NLPConfigDB(BaseModel):
+    supportedKinds: list[str]
+    aliases: dict[str, list[str]]
+    extractorMapping: dict[str, str]
+    typeMetadata: dict[str, dict[str, Any]]
+    aiPrompts: dict[str, Any]
+    version: str
+    lastUpdated: str
+    permissions: dict[str, bool]
+    auditLog: bool
+
+# Factory Type for database storage
+class FactoryType(BaseModel):
+    id: str
+    name: str
+    extractorCode: str
+    regexPatterns: list[str]
+    llmPrompt: str
+    nerRules: str
+    validators: list[Any]
+    examples: list[str]
+    metadata: dict
+    permissions: dict
+    auditLog: bool
+
 # Setup logging
 log = logging.getLogger(__name__)
 
@@ -20,7 +47,7 @@ REFINE_SYSTEM_MSG = (
     "Return ONLY a single JSON object with the schema provided, no prose."
 )
 
-def _build_refine_prompt(code: str, language: str = "typescript", goals: list = None, 
+def _build_refine_prompt(code: str, language: str = "typescript", goals: list = None,
                          constraints: list = None, style: str = None, user_notes: str = None) -> str:
     """Build prompt for code refinement"""
     goals = goals or []
@@ -29,7 +56,7 @@ def _build_refine_prompt(code: str, language: str = "typescript", goals: list = 
     constraints_s = "\n".join(f"- {c}" for c in constraints) or "- No external dependencies."
     style_s = f"- Style preference: {style}" if style else "- Keep existing style unless harmful."
     notes_s = f"\nAdditional notes:\n{user_notes}" if user_notes else ""
-    
+
     return (
         f"Language: {language}\n\n"
         "Original code (between <<<CODE and CODE>>>):\n"
@@ -64,7 +91,7 @@ def refine_extractor(payload: dict) -> dict:
     style = payload.get("style")
     user_notes = payload.get("user_notes")
     provider = payload.get("provider") or "openai"
-    
+
     if not code.strip():
         return {
             "ok": False,
@@ -79,22 +106,22 @@ def refine_extractor(payload: dict) -> dict:
                 "metadata": {"fallback": True}
             }
         }
-    
+
     user_prompt = _build_refine_prompt(code, language, goals, constraints, style, user_notes)
-    
+
     try:
         # Use existing chat_json function
         ai_response = chat_json([
             {"role": "system", "content": REFINE_SYSTEM_MSG},
             {"role": "user", "content": user_prompt}
         ], provider=provider)
-        
+
         # Parse AI response - FIXED: chat_json returns string, not dict
         if isinstance(ai_response, str):
             data = _safe_json_loads(ai_response)  # Parse JSON string to dict
         else:
             data = ai_response  # Fallback if already dict
-            
+
     except Exception as e:
         log.error(f"refine_extractor AI call failed: {e}")
         return {
@@ -110,24 +137,24 @@ def refine_extractor(payload: dict) -> dict:
                 "metadata": {"fallback": True}
             }
         }
-    
+
     # Extract and normalize response
     refined_code = data.get("refined_code") or code
     changes_summary = list(data.get("changes_summary") or [])
     suggested_tests = list(data.get("suggested_tests") or [])
     warnings = list(data.get("warnings") or [])
-    
+
     # Generate diff if not provided
     diffs = data.get("diffs") or _unified_diff(code, refined_code)
-    
+
     # Handle confidence score
     try:
         confidence = float(data.get("confidence") or 0.7)
     except (ValueError, TypeError):
         confidence = 0.7
-        
+
     metadata = dict(data.get("metadata") or {})
-    
+
     return {
         "ok": True,
         "provider": provider,
@@ -150,11 +177,11 @@ def step2(user_desc: Any) -> dict:
             sys.stdout.reconfigure(encoding='utf-8')
         except:
             pass
-    
+
     print("\n=== STEP2 DEBUG LOG ===")
     print(f"Input user_desc type: {type(user_desc)}")
     print(f"Input user_desc: {repr(user_desc)}")  # Use repr to avoid encoding issues
-    
+
     try:
         # Import template manager
         print("Attempting to import template manager...")
@@ -165,13 +192,13 @@ def step2(user_desc: Any) -> dict:
             print(f"Import from backend failed: {e}")
             from type_template_manager import get_localized_template, get_available_types, load_templates
             print("Import from type_template_manager successful")
-        
+
         # Extract parameters with proper encoding handling
         print("Extracting parameters...")
         text = ""
         current_schema = None
         target_lang = "it"
-        
+
         if isinstance(user_desc, dict):
             print("user_desc is a dictionary")
             raw_text = user_desc.get('text') or user_desc.get('desc') or user_desc.get('user_desc') or ""
@@ -193,13 +220,13 @@ def step2(user_desc: Any) -> dict:
             else:
                 text = str(user_desc or "").strip()
             print(f"Extracted text: '{repr(text)}'")  # Use repr to avoid encoding issues
-        
+
         # Load templates and available types
         print("Loading templates...")
         load_templates()
         available_types = get_available_types()
         print(f"Available types: {len(available_types)} types loaded")
-        
+
         # CORRECT PROMPT for step2: Simple type recognition
         prompt = f"""
 Analyze this user description and determine what type of data they want to collect.
@@ -224,33 +251,33 @@ Examples:
 
 Return only valid JSON, no additional text.
 """
-        
+
         print("AI PROMPT ================")
         print(prompt)
-        
+
         # Use only OpenAI - no fallback to Groq
         openai_key = os.environ.get('OPENAI_KEY')
-        
+
         if not openai_key:
             raise HTTPException(status_code=500, detail="OpenAI API key not configured. Please set OPENAI_KEY environment variable.")
-        
+
         try:
             # Use OpenAI with the new provider parameter
             ai = chat_json([
                 {"role": "system", "content": "Return only valid JSON for data type recognition."},
                 {"role": "user", "content": prompt}
             ], provider="openai")
-            
+
             print("AI ANSWER ================")
             print(ai)
-            
+
             # Parse the AI response
             ai_obj = _safe_json_loads(ai)
             if ai_obj is None:
                 return {"error": "Failed to parse AI JSON"}
-            
+
             print("[AI RESPONSE /step2]", ai_obj)
-            
+
             # Normalize the response format to match frontend expectations
             if isinstance(ai_obj, dict):
                 # Ensure proper structure with schema.mainData for frontend compatibility
@@ -265,22 +292,22 @@ Return only valid JSON, no additional text.
                         }
                     ]
                 }
-                
+
                 # Create the final response structure expected by frontend
                 final_response = {
                     'type': ai_obj.get('type') or 'text',
                     'icon': ai_obj.get('icon') or 'HelpCircle',
                     'schema': schema
                 }
-                
+
                 return {"ai": final_response}
             else:
                 return {"error": "unrecognized_data_type"}
-            
+
         except Exception as e:
             print(f"[step2][AI error] {type(e).__name__}: {str(e)}")
             return {"error": "unrecognized_data_type"}
-        
+
     except Exception as e:
         print(f"[step2][fatal] {type(e).__name__}: {str(e)}")
         import traceback
@@ -296,7 +323,7 @@ def step3(schema: dict) -> dict:
 def step4(ddt_structure: dict) -> dict:
     """Step 4: Generate DDT messages"""
     print("\nSTEP: /step4 – Generate DDT messages (generateMessages)")
-    
+
     # Build the prompt for message generation
     prompt = """
 You are writing for a voice (phone) customer‑care agent.
@@ -345,14 +372,14 @@ IMPORTANT:
 
 Input DDT structure:
 """ + str(ddt_structure)
-    
+
     print("AI PROMPT ================")
     print(prompt)
-    
+
     # Get API keys - prefer OpenAI
     openai_key = os.environ.get('OpenAI_key') or os.environ.get('OPENAI_KEY') or os.environ.get('openai_key')
     groq_key = os.environ.get('Groq_key') or os.environ.get('GROQ_API_KEY')
-    
+
     try:
         if openai_key:
             # Use OpenAI first
@@ -368,18 +395,18 @@ Input DDT structure:
             ], provider="groq")
         else:
             raise HTTPException(status_code=500, detail="No AI provider configured")
-        
+
         print("AI ANSWER ================")
         print(ai)
-        
+
         # Parse the AI response
         ai_obj = _safe_json_loads(ai)
         if ai_obj is None:
             return {"ai": {}, "error": "Failed to parse AI JSON"}
-        
+
         print("[AI RESPONSE /step4]", ai_obj)
         return {"ai": ai_obj}
-        
+
     except Exception as e:
         print(f"[step4][fatal] {type(e).__name__}: {str(e)}")
         import traceback
@@ -399,22 +426,22 @@ def ner_extract(body: dict) -> dict:
     """
     field = body.get("field", "")
     text = body.get("text", "")
-    
+
     print(f"[NER_SERVICE] Extracting {field} from text: {repr(text)}")
-    
+
     candidates = []
-    
+
     # Basic rule-based extraction for common fields
     if field == "dateOfBirth":
         # Simple date pattern matching for Italian dates
         import re
-        
+
         # Pattern for Italian date formats: dd/mm/yyyy, dd-mm-yyyy, dd mm yyyy
         date_patterns = [
             r"\b(\d{1,2})[/-\s](\d{1,2})[/-\s](\d{4})\b",  # dd/mm/yyyy, dd-mm-yyyy, dd mm yyyy
             r"\b(\d{1,2})[/-\s](\d{1,2})[/-\s](\d{2})\b",  # dd/mm/yy, dd-mm-yy, dd mm yy
         ]
-        
+
         for pattern in date_patterns:
             matches = re.finditer(pattern, text)
             for match in matches:
@@ -423,12 +450,12 @@ def ner_extract(body: dict) -> dict:
                     # Convert 2-digit year to 4-digit (assume 20xx for years < 50, 19xx otherwise)
                     year_int = int(year)
                     year = f"{1900 + year_int if year_int >= 50 else 2000 + year_int}"
-                
+
                 candidates.append({
                     "value": {"day": int(day), "month": int(month), "year": int(year)},
                     "confidence": 0.7
                 })
-    
+
     elif field == "email":
         # Email pattern matching
         import re
@@ -439,7 +466,7 @@ def ner_extract(body: dict) -> dict:
                 "value": match.group(0),
                 "confidence": 0.9
             })
-    
+
     elif field == "phone":
         # Phone number pattern matching (Italian format)
         import re
@@ -448,7 +475,7 @@ def ner_extract(body: dict) -> dict:
             r"\b\d{3}\s?\d{3}\s?\d{4}\b",     # 333 123 4567
             r"\b\d{10}\b"                       # 3331234567
         ]
-        
+
         for pattern in phone_patterns:
             matches = re.finditer(pattern, text)
             for match in matches:
@@ -456,7 +483,7 @@ def ner_extract(body: dict) -> dict:
                     "value": match.group(0),
                     "confidence": 0.8
                 })
-    
+
     elif field == "age":
         # Age extraction from text
         import re
@@ -469,7 +496,7 @@ def ner_extract(body: dict) -> dict:
                     "value": age,
                     "confidence": 0.8
                 })
-    
+
     print(f"[NER_SERVICE] Found {len(candidates)} candidates for field {field}")
     return {"candidates": candidates}
 
@@ -480,16 +507,16 @@ def llm_extract(body: dict) -> dict:
     """
     from newBackend.services.svc_ai_client import chat_json
     from newBackend.core.core_settings import OPENAI_KEY
-    
+
     field = body.get("field", "generic")
     text = body.get("text", "")
     lang = body.get("lang", "it")
-    
+
     print(f"[LLM_SERVICE] Extracting {field} from text: {repr(text)}")
-    
+
     if not OPENAI_KEY:
         return {"error": "OPENAI_KEY not configured"}
-    
+
     # Field-specific prompts
     prompts = {
         "dateOfBirth": "Extract the date of birth from the text. Return only the date in YYYY-MM-DD format or an empty string if not found.",
@@ -498,29 +525,29 @@ def llm_extract(body: dict) -> dict:
         "age": "Extract the age from the text. Return only the number or an empty string if not found.",
         "generic": "Extract the most relevant information from the text based on the context."
     }
-    
+
     prompt = f"""{prompts.get(field, prompts["generic"])}
-    
+
     Text: "{text}"
-    
+
     Return ONLY the extracted value or an empty string if nothing is found.
     Do not include any explanations or additional text.
     Return your response as valid JSON.
     """
-    
+
     try:
         response = chat_json([
             {"role": "system", "content": "You are an information extraction assistant. Return only the extracted value or empty string."},
             {"role": "user", "content": prompt}
         ], provider="openai")
-        
+
         # Clean up the response
         extracted_value = str(response).strip()
-        
+
         # Validate if we actually got a value
         if extracted_value and extracted_value != "" and extracted_value != "empty string":
             confidence = 0.8
-            
+
             # Additional validation based on field type
             if field == "age":
                 try:
@@ -531,17 +558,40 @@ def llm_extract(body: dict) -> dict:
                 except ValueError:
                     extracted_value = ""
                     confidence = 0.0
-            
+
             if extracted_value:
                 candidates = [{"value": extracted_value, "confidence": confidence}]
             else:
                 candidates = []
         else:
             candidates = []
-        
+
         print(f"[LLM_SERVICE] Extracted value: {repr(extracted_value)}")
         return {"candidates": candidates}
-        
+
     except Exception as e:
         print(f"[LLM_SERVICE] Error: {str(e)}")
         return {"error": f"LLM extraction failed: {str(e)}"}
+
+async def extract_with_factory(extractor_name: str, text: str):
+    """
+    Extract using factory extractor from database
+    """
+    from newBackend.services.database_service import databaseService
+
+    # Get extractor from database
+    factory_types = await databaseService.getFactoryTypes()
+    extractor = next((t for t in factory_types if t.id == extractor_name), None)
+
+    if not extractor:
+        raise ValueError(f"Extractor {extractor_name} not found in database")
+
+    # Here you would execute the extractor code
+    # This is a placeholder - you need to implement the actual execution
+    return {
+        "extractor": extractor_name,
+        "text": text,
+        "status": "Extraction would happen here",
+        "note": "Need to implement code execution from extractorCode field",
+        "extractor_code_length": len(extractor.extractorCode)
+    }

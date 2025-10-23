@@ -60,4 +60,36 @@ export interface NLPConfigDB {
   auditLog?: boolean;     // Enable audit logging
 }
 
+export interface FactoryType {
+  id: string;
+  name: string; // "number", "email", "phone"
+  extractorCode: string; // Complete TypeScript code
+  regexPatterns: string[];
+  llmPrompt: string;
+  nerRules: string;
+  validators: any[];
+  examples: string[];
+  metadata: {
+    description: string;
+    version: string;
+    lastUpdated: string;
+    author?: string;
+    tags?: string[];
+  };
+  permissions?: {
+    canEdit: boolean;
+    canCreate: boolean;
+    canDelete: boolean;
+    canShare: boolean;
+  };
+  auditLog?: boolean;
+}
+
+export interface FactoryDatabase {
+  types: Record<string, FactoryType>; // name -> FactoryType
+  version: string;
+  lastUpdated: string;
+  description: string;
+}
+
 

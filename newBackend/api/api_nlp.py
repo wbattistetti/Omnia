@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, HTTPException
 from newBackend.services import svc_nlp
 from typing import Any
 import re
@@ -43,14 +43,14 @@ def generate_regex(body: dict = Body(...)):
     """
     from newBackend.services.svc_ai_client import chat_json
     from newBackend.core.core_settings import OPENAI_KEY
-    
+
     description = (body or {}).get("description", "").strip()
     if not description:
         return {"error": "Description is required"}
-    
+
     if not OPENAI_KEY:
         return {"error": "OPENAI_KEY not configured"}
-    
+
     prompt = f"""
 You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
 
@@ -84,26 +84,26 @@ Common patterns for reference:
 
 Be precise and practical. Test mentally that your regex works correctly.
 """
-    
+
     try:
         ai_response = chat_json([
             {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
             {"role": "user", "content": prompt}
         ], provider="openai")
-        
+
         # Parse response
         if isinstance(ai_response, str):
             import json
             result = json.loads(ai_response)
         else:
             result = ai_response
-        
+
         # Validate regex can be compiled
         try:
             re.compile(result.get('regex', ''))
         except Exception as regex_error:
             result['warning'] = f"Generated regex may be invalid: {str(regex_error)}"
-        
+
         return {
             "success": True,
             "regex": result.get('regex', ''),
@@ -111,7 +111,7 @@ Be precise and practical. Test mentally that your regex works correctly.
             "examples": result.get('examples', []),
             "flags": result.get('flags', 'g')
         }
-        
+
     except Exception as e:
         return {"error": f"Error generating regex: {str(e)}"}
 
@@ -130,3 +130,17 @@ def llm_extract(body: dict = Body(...)):
     """
     from newBackend.services.svc_nlp import llm_extract as llm_service
     return llm_service(body)
+
+# Add extract endpoint
+@router.post("/extract")
+async def extract_value(body: dict = Body(...)):
+    """
+    Extract value using factory-based extractors from database
+    """
+    try:
+        text = body.get("text", "")
+        extractorName = body.get("extractorName", "")
+        result = await svc_nlp.extract_with_factory(extractorName, text)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
