@@ -6,25 +6,24 @@ interface ExtractorInlineEditorProps {
   onClose: () => void;
 }
 
-const TEMPLATE_CODE = `// AI-generated extractor will appear here
-// Click the magic wand (🪄) to generate code from a description
+const TEMPLATE_CODE = `// Estrazione non configurata
+// Clicca la bacchetta magica (🪄) per generare il codice estrattore da una descrizione
 
 export const customExtractor: DataExtractor<string> = {
   extract(text: string) {
-    // Parse input text
-    const value = text.trim();
-    return { value, confidence: 0.8 };
+    return {
+      confidence: 0,
+      reasons: ['estrattore-non-configurato'],
+      error: '❌ Estrazione non configurata. Clicca la bacchetta magica (🪄) per generare il codice estrattore.'
+    };
   },
-  
+
   validate(value: string) {
-    // Validate extracted value
-    if (!value) return { ok: false, errors: ['empty-value'] };
-    return { ok: true };
+    return { ok: false, errors: ['estrattore-non-configurato'] };
   },
-  
+
   format(value: string) {
-    // Format for display
-    return value;
+    return '⚠️ Configura estrazione cliccando 🪄';
   }
 };`;
 
@@ -47,17 +46,17 @@ export default function ExtractorInlineEditor({
   const isCodeModified = React.useMemo(() => {
     const normalized = extractorCode.trim();
     const templateNormalized = TEMPLATE_CODE.trim();
-    
+
     // Code is modified if:
     // 1. Not empty
     // 2. Different from template
     // 3. Has meaningful content (not just comments)
     if (!normalized || normalized === templateNormalized) return false;
-    
+
     // Check if there's actual code beyond comments
     const codeWithoutComments = normalized.replace(/\/\/.*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
     const hasCode = codeWithoutComments.length > 50;
-    
+
     return hasCode;
   }, [extractorCode]);
 
@@ -86,7 +85,7 @@ export default function ExtractorInlineEditor({
   // 🔄 Auto-start refinement without user input (uses TODOs/comments)
   const handleRefineAutoStart = async () => {
     setGenerating(true);
-    
+
     try {
       const response = await fetch('/api/nlp/refine-extractor', {
         method: 'POST',
@@ -97,13 +96,13 @@ export default function ExtractorInlineEditor({
           dataType: 'string'
         })
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.ok && data.result?.refined_code) {
         setExtractorCode(data.result.refined_code);
       } else {
@@ -125,39 +124,39 @@ export default function ExtractorInlineEditor({
 
   const handleGenerate = async () => {
     if (aiPrompt.trim().length < 5) return;
-    
+
     setGenerating(true);
     setLastAiPrompt(aiPrompt); // Remember for next time
-    
+
     try {
       // Choose endpoint based on mode
-      const endpoint = isCodeModified 
+      const endpoint = isCodeModified
         ? '/api/nlp/refine-extractor'   // REFINE: improve existing code
         : '/api/nlp/generate-extractor'; // CREATE: generate from scratch
-      
-      const body = isCodeModified 
+
+      const body = isCodeModified
         ? {
-            code: extractorCode,        // Send existing code
-            improvements: aiPrompt,     // User's improvement requests
-            dataType: 'string'
-          }
+          code: extractorCode,        // Send existing code
+          improvements: aiPrompt,     // User's improvement requests
+          dataType: 'string'
+        }
         : {
-            description: aiPrompt,      // Natural language description
-            dataType: 'string'
-          };
-      
+          description: aiPrompt,      // Natural language description
+          dataType: 'string'
+        };
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.success && data.code) {
         setExtractorCode(data.code);
         setAiMode(false);
@@ -226,7 +225,7 @@ export default function ExtractorInlineEditor({
         <label style={{ display: 'block', marginBottom: 8, fontWeight: 500, fontSize: 14 }}>
           TypeScript Extractor Code
         </label>
-        
+
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
           {/* Monaco or AI Prompt Textarea */}
           <div style={{ flex: 1, position: 'relative' }}>
@@ -256,8 +255,8 @@ export default function ExtractorInlineEditor({
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={isCodeModified 
-                    ? "Describe improvements (e.g., 'implement TODOs', 'add validation for...', 'support Italian numbers')..." 
+                  placeholder={isCodeModified
+                    ? "Describe improvements (e.g., 'implement TODOs', 'add validation for...', 'support Italian numbers')..."
                     : "Describe what you want to extract... (min 5 characters)"
                   }
                   style={{
@@ -324,8 +323,8 @@ export default function ExtractorInlineEditor({
           {!aiMode && !generating && (
             <button
               onClick={handleWandClick}
-              title={isCodeModified 
-                ? "🔄 Refine: Improve existing code based on your comments/TODOs" 
+              title={isCodeModified
+                ? "🔄 Refine: Improve existing code based on your comments/TODOs"
                 : "🪄 Create: Generate new extractor from description"
               }
               style={{

@@ -20,9 +20,11 @@ function newUid() {
 }
 
 // Helper per inizializzazione lazy delle righe
-function initRows(nodeId: string, rows?: NodeRowData[]): NodeRowData[] {
+function initRows(nodeId: string, rows?: NodeRowData[], nodeData?: any): NodeRowData[] {
   if (!Array.isArray(rows) || rows.length === 0) {
-    return [{ id: `${nodeId}-${newUid()}`, text: '', included: true, mode: 'Message' as const }];
+    // Se c'è un focusRowId specificato, usalo per la prima riga
+    const rowId = nodeData?.focusRowId || `${nodeId}-${newUid()}`;
+    return [{ id: rowId, text: '', included: true, mode: 'Message' as const }];
   }
   return rows.map(r =>
     r.id?.startsWith(`${nodeId}-`) ? r : { ...r, id: `${nodeId}-${r.id || newUid()}` }
@@ -54,10 +56,10 @@ export interface CustomNodeData {
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
 
-export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ 
+export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   id,
-  data, 
-  isConnectable, 
+  data,
+  isConnectable,
   selected
 }) => {
   const [isEditingNode, setIsEditingNode] = useState(false);
@@ -79,7 +81,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Traccia ultima posizione del mouse per ripristinare correttamente l'hover post-edit
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      try { (window as any).__lastMouseX = e.clientX; (window as any).__lastMouseY = e.clientY; } catch {}
+      try { (window as any).__lastMouseX = e.clientX; (window as any).__lastMouseY = e.clientY; } catch { }
     };
     window.addEventListener('mousemove', onMove, { passive: true });
     return () => window.removeEventListener('mousemove', onMove);
@@ -104,7 +106,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         const inside = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
         setIsHoveredNode(inside);
       }
-    } catch {}
+    } catch { }
   };
 
   // Se l'header viene nascosto, azzera sempre lo stato hover header
@@ -116,7 +118,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Calcola area estesa per toolbar nodo (include nodo + toolbar + padding)
   useEffect(() => {
     const shouldShowToolbar = showPermanentHeader && (isHoveredNode || selected) && !isEditingNode;
-    
+
     if (shouldShowToolbar && rootRef.current) {
       const updateRect = () => {
         if (!rootRef.current) return;
@@ -125,7 +127,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         const toolbarHeight = 20;
         const toolbarMargin = 8;
         const padding = 7;
-        
+
         // Area estesa: da 7px sopra toolbar fino al fondo del nodo, con padding laterale
         setNodeBufferRect({
           top: nodeRect.top - toolbarHeight - toolbarMargin - padding,
@@ -134,7 +136,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           height: nodeRect.height + toolbarHeight + toolbarMargin + padding,
         });
       };
-      
+
       updateRect();
       // Ricalcola su resize/scroll
       window.addEventListener('resize', updateRect);
@@ -178,7 +180,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ CORREZIONE 1: Lazy state initialization con ID stabili
   const [nodeRows, setNodeRows] = useState<NodeRowData[]>(() => {
-    return initRows(id, data.rows);
+    return initRows(id, data.rows, data);
   });
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
 
@@ -252,7 +254,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const next = (latestRowsRef.current || []).map(r => (r as any)?.instanceId === d.instanceId ? { ...r, message: { ...(r as any)?.message, text: d.text } } : r);
       setNodeRows(next);
       // Schedule parent update outside render/setState to avoid warnings
-      try { Promise.resolve().then(() => data.onUpdate?.({ rows: next })); } catch {}
+      try { Promise.resolve().then(() => data.onUpdate?.({ rows: next })); } catch { }
     };
     document.addEventListener('rowMessage:update', handler as any);
     return () => document.removeEventListener('rowMessage:update', handler as any);
@@ -328,17 +330,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     if (editingRowId) {
       // ✅ CORREZIONE 6: Mappa esplicitamente i campi ammessi invece di ...item
       const baseRows = nodeRows.map(row =>
-        row.id === editingRowId 
-          ? { 
-              ...row, 
-              text: item.name,
-              categoryType: item.categoryType as any, 
-              userActs: item.userActs, 
-              mode: (item as any)?.mode || 'Message' as const,
-              type: (item as any)?.type || ((item as any)?.mode === 'DataRequest' ? 'DataRequest' : 'Message'), 
-              actId: item.actId, 
-              factoryId: item.factoryId 
-            } 
+        row.id === editingRowId
+          ? {
+            ...row,
+            text: item.name,
+            categoryType: item.categoryType as any,
+            userActs: item.userActs,
+            mode: (item as any)?.mode || 'Message' as const,
+            type: (item as any)?.type || ((item as any)?.mode === 'DataRequest' ? 'DataRequest' : 'Message'),
+            actId: item.actId,
+            factoryId: item.factoryId
+          }
           : row
       );
       setNodeRows(baseRows);
@@ -490,7 +492,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         nodeRowsCount: nodeRows.length,
         timestamp: Date.now()
       });
-      
+
       // Esci dall'editing e stabilizza il nodo se è temporaneo
       exitEditing();
       if (data.isTemporary) {
@@ -498,7 +500,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           nodeId: id,
           originalRowsCount: nodeRows.length
         });
-        
+
         // Filtra via tutte le righe vuote/non stabilizzate
         const stabilizedRows = nodeRows.filter(row => row.text && row.text.trim().length > 0);
         if (stabilizedRows.length > 0) {
@@ -508,7 +510,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             updates: { rows: stabilizedRows, isTemporary: false, hidden: false },
             timestamp: Date.now()
           });
-          
+
           // Delay stabilization to avoid conflicts with node creation lock
           setTimeout(() => {
             setNodeRows(stabilizedRows);
@@ -535,9 +537,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Calcola lo stile per la riga trascinata
   const draggedRowStyle = useMemo(() => {
-    if (!draggedItem || !drag.draggedRowInitialRect || drag.draggedRowInitialClientX === null || 
-        drag.draggedRowInitialClientY === null || drag.draggedRowCurrentClientX === null || 
-        drag.draggedRowCurrentClientY === null) {
+    if (!draggedItem || !drag.draggedRowInitialRect || drag.draggedRowInitialClientX === null ||
+      drag.draggedRowInitialClientY === null || drag.draggedRowCurrentClientX === null ||
+      drag.draggedRowCurrentClientY === null) {
       return {};
     }
 
@@ -546,8 +548,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       left: drag.draggedRowInitialRect.left + (drag.draggedRowCurrentClientX - drag.draggedRowInitialClientX) + drag.visualSnapOffset.x,
       width: drag.draggedRowInitialRect.width
     };
-  }, [draggedItem, drag.draggedRowInitialRect, drag.draggedRowInitialClientX, drag.draggedRowInitialClientY, 
-      drag.draggedRowCurrentClientX, drag.draggedRowCurrentClientY, drag.visualSnapOffset]);
+  }, [draggedItem, drag.draggedRowInitialRect, drag.draggedRowInitialClientX, drag.draggedRowInitialClientY,
+    drag.draggedRowCurrentClientX, drag.draggedRowCurrentClientY, drag.visualSnapOffset]);
 
   // ✅ RIMOSSO: I nodi temporanei ora sono visibili e funzionanti
 
@@ -621,7 +623,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           // Se stai interagendo con l'input riga, non trascinare
           e.stopPropagation();
         }}
-        
+
         onMouseUpCapture={(e) => {
           if (!editingRowId) return;
           const t = e.target as HTMLElement;
@@ -630,155 +632,155 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         }}
         onFocusCapture={() => { /* no-op: lasciamo passare focus per drag header */ }}
       >
-      {/* Toolbar sopra il nodo: visibile solo quando c'è header permanente + hover */}
-      {/* NON ha più onMouseEnter/Leave: l'area buffer gestisce tutto */}
-      {showPermanentHeader && (isHoveredNode || selected) && !isEditingNode && (
+        {/* Toolbar sopra il nodo: visibile solo quando c'è header permanente + hover */}
+        {/* NON ha più onMouseEnter/Leave: l'area buffer gestisce tutto */}
+        {showPermanentHeader && (isHoveredNode || selected) && !isEditingNode && (
+          <div
+            style={{
+              position: 'absolute',
+              right: 0,
+              bottom: '100%',
+              marginBottom: 8,
+              zIndex: 500,
+              pointerEvents: 'auto'
+            }}
+          >
+            <NodeDragHeader
+              onEditTitle={() => setIsEditingNode(true)}
+              onDelete={handleDeleteNode}
+              compact={true}
+              showDragHandle={false}
+            />
+          </div>
+        )}
+
+        {/* Header permanente: DENTRO il nodo come fascia colorata in alto */}
+        {showPermanentHeader && (
+          <div
+            onMouseEnter={() => setIsHoverHeader(true)}
+            onMouseLeave={() => setIsHoverHeader(false)}
+          >
+            <NodeHeader
+              title={nodeTitle}
+              onDelete={handleDeleteNode}
+              onToggleEdit={handleEndTitleEditing}
+              onTitleUpdate={handleTitleUpdate}
+              isEditing={isEditingNode}
+              startEditingTitle={isEditingNode}
+              hasUnchecked={nodeRows.some(r => r.included === false)}
+              hideUnchecked={(data as any)?.hideUncheckedRows === true}
+              onToggleHideUnchecked={() => {
+                if (typeof data.onUpdate === 'function') {
+                  data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+                }
+              }}
+            />
+          </div>
+        )}
+
+        {/* Header drag: sempre presente ma invisibile durante editing per evitare rimozione DOM */}
         <div
-          style={{ 
-            position: 'absolute', 
-            right: 0, 
-            bottom: '100%', 
+          style={{
+            position: 'absolute',
+            right: 0,
+            bottom: '100%',
             marginBottom: 8,
-            zIndex: 500,
-            pointerEvents: 'auto'
+            zIndex: 600,
+            pointerEvents: showDragHeader ? 'auto' : 'none',
+            opacity: showDragHeader ? 1 : 0,
+            userSelect: 'none',
+            transition: 'opacity 0.2s ease'
+          }}
+          onMouseEnter={() => {
+            if (showDragHeader) {
+              console.log('[🎯 DRAG HEADER] Mouse entered - DRAG AREA ACTIVE');
+              setIsHoveredNode(true);
+            }
+          }}
+          onMouseLeave={() => {
+            if (showDragHeader) {
+              console.log('[🎯 DRAG HEADER] Mouse left - DRAG AREA INACTIVE');
+              setIsHoveredNode(false);
+            }
+          }}
+          onMouseDown={(e) => {
+            if (showDragHeader) {
+              console.log('[🎯 DRAG HEADER] Mouse DOWN - DRAG ATTEMPT', {
+                button: e.button,
+                ctrlKey: e.ctrlKey,
+                shiftKey: e.shiftKey,
+                target: e.target
+              });
+            }
+          }}
+          onClick={(e) => {
+            if (showDragHeader) {
+              console.log('[🎯 DRAG HEADER] CLICK - should not happen if drag works');
+              e.stopPropagation();
+            }
           }}
         >
           <NodeDragHeader
             onEditTitle={() => setIsEditingNode(true)}
             onDelete={handleDeleteNode}
             compact={true}
-            showDragHandle={false}
+            showDragHandle={true}
           />
         </div>
-      )}
-
-      {/* Header permanente: DENTRO il nodo come fascia colorata in alto */}
-      {showPermanentHeader && (
-        <div
-          onMouseEnter={() => setIsHoverHeader(true)}
-          onMouseLeave={() => setIsHoverHeader(false)}
-        >
-          <NodeHeader
-            title={nodeTitle}
-            onDelete={handleDeleteNode}
-            onToggleEdit={handleEndTitleEditing}
-            onTitleUpdate={handleTitleUpdate}
-            isEditing={isEditingNode}
-            startEditingTitle={isEditingNode}
-            hasUnchecked={nodeRows.some(r => r.included === false)}
-            hideUnchecked={(data as any)?.hideUncheckedRows === true}
-            onToggleHideUnchecked={() => {
-              if (typeof data.onUpdate === 'function') {
-                data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+        <div className="px-1.5" ref={rowsContainerRef}>
+          <NodeRowList
+            rows={((data as any)?.hideUncheckedRows === true) ? displayRows.filter(r => r.included !== false) : displayRows}
+            editingRowId={editingRowId}
+            hoveredInserter={hoveredInserter}
+            setHoveredInserter={setHoveredInserter}
+            handleInsertRow={handleInsertRow}
+            nodeTitle={nodeTitle}
+            onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included })}
+            onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included, ...(meta || {}) })}
+            onDelete={(row) => handleDeleteRow(row.id)}
+            onKeyDown={(e) => {
+              // Non auto-aggiungere righe su Enter: la creazione avviene solo dopo scelta tipo
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                return;
+              } else if (e.key === 'Escape') {
+                const singleEmpty = nodeRows.length === 1 && nodeRows[0].text.trim() === '';
+                singleEmpty ? data.onDelete?.() : exitEditing();
               }
             }}
+            onDragStart={handleRowDragStart}
+            canDelete={() => nodeRows.length > 1}
+            totalRows={nodeRows.length}
+            onCreateAgentAct={data.onCreateAgentAct}
+            onCreateBackendCall={data.onCreateBackendCall}
+            onCreateTask={data.onCreateTask}
+            getProjectId={() => {
+              try { return (window as any).__omniaRuntime?.getCurrentProjectId?.() || null; } catch { return null; }
+            }}
+            hoveredRowIndex={drag.hoveredRowIndex}
+            draggedRowId={drag.draggedRowId}
+            draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
+            draggedItem={draggedItem ?? null}
+            draggedRowStyle={draggedRowStyle}
+            onEditingEnd={exitEditing}
           />
+          {/* Renderizza la riga trascinata separatamente */}
+          {/* Do not render an extra floating NodeRow; use ghost element only to avoid layout shift */}
         </div>
-      )}
-
-      {/* Header drag: sempre presente ma invisibile durante editing per evitare rimozione DOM */}
-      <div
-        style={{
-          position: 'absolute',
-          right: 0,
-          bottom: '100%',
-          marginBottom: 8,
-          zIndex: 600,
-          pointerEvents: showDragHeader ? 'auto' : 'none',
-          opacity: showDragHeader ? 1 : 0,
-          userSelect: 'none',
-          transition: 'opacity 0.2s ease'
-        }}
-        onMouseEnter={() => {
-          if (showDragHeader) {
-            console.log('[🎯 DRAG HEADER] Mouse entered - DRAG AREA ACTIVE');
-            setIsHoveredNode(true);
-          }
-        }}
-        onMouseLeave={() => {
-          if (showDragHeader) {
-            console.log('[🎯 DRAG HEADER] Mouse left - DRAG AREA INACTIVE');
-            setIsHoveredNode(false);
-          }
-        }}
-        onMouseDown={(e) => {
-          if (showDragHeader) {
-            console.log('[🎯 DRAG HEADER] Mouse DOWN - DRAG ATTEMPT', {
-              button: e.button,
-              ctrlKey: e.ctrlKey,
-              shiftKey: e.shiftKey,
-              target: e.target
-            });
-          }
-        }}
-        onClick={(e) => {
-          if (showDragHeader) {
-            console.log('[🎯 DRAG HEADER] CLICK - should not happen if drag works');
-            e.stopPropagation();
-          }
-        }}
-      >
-        <NodeDragHeader
-          onEditTitle={() => setIsEditingNode(true)}
-          onDelete={handleDeleteNode}
-          compact={true}
-          showDragHandle={true}
-        />
+        <NodeHandles isConnectable={isConnectable} />
+        {/* Mock Intellisense Menu */}
+        {showIntellisense && (
+          <IntellisenseMenu
+            isOpen={showIntellisense}
+            query={editingRowId ? nodeRows.find(row => row.id === editingRowId)?.text || '' : ''}
+            position={intellisensePosition}
+            referenceElement={null}
+            onSelect={handleIntellisenseSelectItem}
+            onClose={() => setShowIntellisense(false)}
+            filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
+          />
+        )}
       </div>
-      <div className="px-1.5" ref={rowsContainerRef}>
-        <NodeRowList
-          rows={((data as any)?.hideUncheckedRows === true) ? displayRows.filter(r => r.included !== false) : displayRows}
-          editingRowId={editingRowId}
-          hoveredInserter={hoveredInserter}
-          setHoveredInserter={setHoveredInserter}
-          handleInsertRow={handleInsertRow}
-          nodeTitle={nodeTitle}
-          onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included })}
-          onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included, ...(meta || {}) })}
-          onDelete={(row) => handleDeleteRow(row.id)}
-          onKeyDown={(e) => {
-            // Non auto-aggiungere righe su Enter: la creazione avviene solo dopo scelta tipo
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              return;
-            } else if (e.key === 'Escape') {
-              const singleEmpty = nodeRows.length === 1 && nodeRows[0].text.trim() === '';
-              singleEmpty ? data.onDelete?.() : exitEditing();
-            }
-          }}
-          onDragStart={handleRowDragStart}
-          canDelete={() => nodeRows.length > 1}
-          totalRows={nodeRows.length}
-          onCreateAgentAct={data.onCreateAgentAct}
-          onCreateBackendCall={data.onCreateBackendCall}
-          onCreateTask={data.onCreateTask}
-          getProjectId={() => {
-            try { return (window as any).__omniaRuntime?.getCurrentProjectId?.() || null; } catch { return null; }
-          }}
-          hoveredRowIndex={drag.hoveredRowIndex}
-          draggedRowId={drag.draggedRowId}
-          draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
-          draggedItem={draggedItem ?? null}
-          draggedRowStyle={draggedRowStyle}
-          onEditingEnd={exitEditing}
-        />
-        {/* Renderizza la riga trascinata separatamente */}
-        {/* Do not render an extra floating NodeRow; use ghost element only to avoid layout shift */}
-      </div>
-      <NodeHandles isConnectable={isConnectable} />
-      {/* Mock Intellisense Menu */}
-      {showIntellisense && (
-        <IntellisenseMenu
-          isOpen={showIntellisense}
-          query={editingRowId ? nodeRows.find(row => row.id === editingRowId)?.text || '' : ''}
-          position={intellisensePosition}
-          referenceElement={null}
-          onSelect={handleIntellisenseSelectItem}
-          onClose={() => setShowIntellisense(false)}
-          filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
-        />
-      )}
-    </div>
     </div>
   );
 };

@@ -4,6 +4,7 @@ from newBackend.api.api_codegen import router as cond_router
 from newBackend.api.api_nlp import router as nlp_router
 from newBackend.api.api_proxy_express import router as proxy_router
 from newBackend.api.api_nlp_config import router as nlp_config_router
+from newBackend.api.api_factory import router as factory_router
 import os
 import sys
 
@@ -51,6 +52,7 @@ app.add_middleware(
 app.include_router(cond_router)
 app.include_router(nlp_router)
 app.include_router(proxy_router)
+app.include_router(factory_router)
 app.include_router(nlp_config_router)
 
 # Include DDT wizard step routers (empty for now)

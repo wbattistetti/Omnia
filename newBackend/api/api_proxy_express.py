@@ -58,4 +58,4 @@ async def proxy_projects(suffix: str, request: Request):
 
 @router.api_route("/projects{suffix:path}", methods=["GET","POST","PUT","PATCH","DELETE"])
 async def proxy_projects_alias(suffix: str, request: Request):
-    return awa
+    return await _proxy_to_express(request)

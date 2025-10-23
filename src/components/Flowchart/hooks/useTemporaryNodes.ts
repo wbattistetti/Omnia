@@ -17,8 +17,8 @@ export function useTemporaryNodes(
     console.log("🧹 [CLEANUP] Starting cleanup of all temporary nodes and edges");
     setNodes((nds) => {
       const filtered = nds.filter(n => !(n.data as any)?.isTemporary);
-      console.log("🧹 [CLEANUP] Filtered nodes", { 
-        before: nds.length, 
+      console.log("🧹 [CLEANUP] Filtered nodes", {
+        before: nds.length,
         after: filtered.length,
         tempNodesRemoved: nds.length - filtered.length
       });
@@ -30,8 +30,8 @@ export function useTemporaryNodes(
         const target = currentNodes.find(n => n.id === e.target);
         return !(target && target.data && target.data.isTemporary === true);
       });
-      console.log("🧹 [CLEANUP] Filtered edges", { 
-        before: eds.length, 
+      console.log("🧹 [CLEANUP] Filtered edges", {
+        before: eds.length,
         after: filtered.length,
         tempEdgesRemoved: eds.length - filtered.length
       });
@@ -52,49 +52,50 @@ export function useTemporaryNodes(
   // Crea un nodo temporaneo
   const createTemporaryNode = useCallback(async (event: any) => {
     console.log("🎯 [CREATE_TEMP] Starting temporary node creation");
-    
+
     // ✅ FIX: Check if we're already creating a node to prevent duplicates
     if (isCreatingTempNode && isCreatingTempNode.current) {
       console.log("🚫 [CREATE_TEMP] BLOCKED - Node creation already in progress");
       return Promise.reject("Node creation already in progress");
     }
-    
+
     // Set the lock flag
     if (isCreatingTempNode) {
       isCreatingTempNode.current = true;
       console.log("🔒 [CREATE_TEMP] Lock acquired");
     }
-    
+
     try {
       const tempNodeId = uuidv4();
       const tempEdgeId = uuidv4();
       const posFlow = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      
+
       // Calcola posizione corretta (punto mediano)
       const realNodeWidth = 140;
       const position = { x: posFlow.x - (realNodeWidth / 2), y: posFlow.y };
-      
-      console.log("🟢 [CREATE_TEMP] Creating temporary node", { 
-        tempNodeId, 
-        position, 
+
+      console.log("🟢 [CREATE_TEMP] Creating temporary node", {
+        tempNodeId,
+        position,
         mouseClient: { x: event.clientX, y: event.clientY },
         posFlow,
         timestamp: Date.now()
       });
-      
+
       // Crea nodo temporaneo
       const tempNode: Node<NodeData> = {
         id: tempNodeId,
         type: 'custom',
         position,
-        data: { 
-          title: '', 
+        data: {
+          title: '',
           rows: [],
           isTemporary: true,
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          focusRowId: `${tempNodeId}-${uuidv4()}` // Aggiungi questa riga
         },
       };
-      
+
       // Crea collegamento temporaneo
       const tempEdge: Edge<EdgeData> = {
         id: tempEdgeId,
@@ -106,18 +107,18 @@ export function useTemporaryNodes(
         data: { onDeleteEdge },
         markerEnd: 'arrowhead',
       };
-      
-      console.log("📝 [CREATE_TEMP] About to add node to state", { 
-        tempNodeId, 
+
+      console.log("📝 [CREATE_TEMP] About to add node to state", {
+        tempNodeId,
         tempNodePosition: tempNode.position,
         timestamp: Date.now()
       });
-      
+
       // Aggiungi nodo e edge
       setNodesWithLog((nds) => {
         const newNodes = [...nds, tempNode];
-        console.log("✅ [CREATE_TEMP] Node added to state", { 
-          tempNodeId, 
+        console.log("✅ [CREATE_TEMP] Node added to state", {
+          tempNodeId,
           totalNodes: newNodes.length,
           tempNodePosition: tempNode.position,
           tempNodeData: tempNode.data,
@@ -127,33 +128,33 @@ export function useTemporaryNodes(
         });
         return newNodes;
       });
-      
+
       setEdges((eds) => {
         const newEdges = [...eds, tempEdge];
-        console.log("✅ [CREATE_TEMP] Edge added to state", { 
-          tempEdgeId, 
+        console.log("✅ [CREATE_TEMP] Edge added to state", {
+          tempEdgeId,
           totalEdges: newEdges.length,
           timestamp: Date.now()
         });
         return newEdges;
       });
-      
+
       // Salva riferimenti
-      try { 
-        (connectionMenuRef.current as any).flowPosition = posFlow; 
+      try {
+        (connectionMenuRef.current as any).flowPosition = posFlow;
         connectionMenuRef.current.tempNodeId = tempNodeId;
         connectionMenuRef.current.tempEdgeId = tempEdgeId;
-        console.log("💾 [CREATE_TEMP] Saved references", { 
-          tempNodeId, 
+        console.log("💾 [CREATE_TEMP] Saved references", {
+          tempNodeId,
           tempEdgeId,
           flowPosition: posFlow
         });
       } catch (error) {
         console.error("❌ [CREATE_TEMP] Error saving references:", error);
       }
-      
+
       return { tempNodeId, tempEdgeId, position };
-      
+
     } catch (error) {
       console.error("❌ [CREATE_TEMP] Error creating temporary node:", error);
       throw error;

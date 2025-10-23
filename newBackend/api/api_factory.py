@@ -1,31 +1,35 @@
-from fastapi import APIRouter
-from newBackend.services.svc_nlp import FactoryType
+from fastapi import APIRouter, Body, HTTPException
 from newBackend.services.database_service import databaseService
+from typing import Any
 
-router = APIRouter()
+router = APIRouter(prefix="/factory", tags=["factory"])
 
-@router.post("/api/nlp/factory/types")
-async def save_factory_type(factory_type: FactoryType):
-    """Save a factory type to the database"""
-    success = await databaseService.saveFactoryType(factory_type)
-    return {"success": success, "message": "Factory type saved successfully"}
-
-@router.get("/api/nlp/factory/types")
-async def get_factory_types():
-    """Get all factory types from database"""
+@router.post("/dialogue-templates")
+async def save_dialogue_template(template: dict = Body(...)):
+    """
+    Save dialogue template to database
+    """
     try:
-        print("[DEBUG][FACTORY] get_factory_types called")
-        types = await databaseService.getFactoryTypes()
-        print(f"[DEBUG][FACTORY] Types from DB: {types}")
+        # Qui implementerai il salvataggio vero nel database
+        # Per ora placeholder per testing
+        print(f"[FACTORY] Saving dialogue template: {template.get('name', 'unnamed')}")
 
-        # Converti gli oggetti Pydantic in dict
-        result = {"types": [t.dict() for t in types]}
-        print("[DEBUG][FACTORY] Conversion successful")
-
-        return result
-
+        return {
+            "success": True,
+            "message": "Template saved successfully",
+            "id": f"temp_{hash(str(template))}",  # Placeholder ID
+            "template": template
+        }
     except Exception as e:
-        print(f"[DEBUG][FACTORY] ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"types": []}
+        raise HTTPException(status_code=500, detail=f"Error saving template: {str(e)}")
+
+@router.get("/dialogue-templates")
+async def get_dialogue_templates():
+    """
+    Get all dialogue templates from database
+    """
+    try:
+        # Placeholder - da implementare
+        return {"templates": [], "count": 0}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting templates: {str(e)}")
