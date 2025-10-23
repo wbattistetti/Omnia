@@ -7,7 +7,7 @@ export interface EntityCreationConfig {
   entityType: 'agentActs' | 'backendActions' | 'tasks' | 'conditions';
   defaultCategoryName: string;
   ddtEditorType: 'agentAct' | 'backendAction' | 'task';
-  sidebarEventType: 'agentActs' | 'backendActions' | 'tasks';
+  sidebarEventType: 'agentActs' | 'backendActions' | 'tasks' | 'conditions';
 }
 
 export interface CreatedEntity {
@@ -15,7 +15,7 @@ export interface CreatedEntity {
   name: string;
   categoryType: string;
   actId: string;
-  factoryId: string;
+  factoryId: string | null;
   mode?: string;
   ddtId?: string | undefined;
   testPassed?: boolean;
@@ -76,12 +76,12 @@ export class EntityCreationService {
       throw new Error(`Unknown entity type: ${entityType}`);
     }
 
-    try { console.log('[CreateFlow] service.enter', { entityType, name: options.name, scope: options.scope, categoryName: options.categoryName, hasOnRowUpdate: !!options.onRowUpdate }); } catch {}
+    try { console.log('[CreateFlow] service.enter', { entityType, name: options.name, scope: options.scope, categoryName: options.categoryName, hasOnRowUpdate: !!options.onRowUpdate }); } catch { }
 
     // 1. Determina lo scope (utente o automatico)
     let finalScope: Scope;
     let finalIndustry: Industry | undefined;
-    
+
     if (options.scope) {
       // Scope fornito dall'utente
       finalScope = options.scope;
@@ -166,7 +166,7 @@ export class EntityCreationService {
 
     // 6. Aggiorna la riga del nodo se il callback è fornito
     if (options.onRowUpdate) {
-      try { console.log('[CreateFlow] service.rowUpdateCallback', { id: rowItem.id, type: (rowItem as any)?.type, mode: (rowItem as any)?.mode }); } catch {}
+      try { console.log('[CreateFlow] service.rowUpdateCallback', { id: rowItem.id, type: (rowItem as any)?.type, mode: (rowItem as any)?.mode }); } catch { }
       options.onRowUpdate(rowItem);
     }
 
@@ -181,8 +181,8 @@ export class EntityCreationService {
     setTimeout(() => {
       try {
         // Lazy import to avoid circular deps during SSR
-        import('../ui/events').then(m => { m.emitSidebarRefresh(); m.emitSidebarForceRender(); }).catch(() => {});
-      } catch {}
+        import('../ui/events').then(m => { m.emitSidebarRefresh(); m.emitSidebarForceRender(); }).catch(() => { });
+      } catch { }
     }, 50);
 
     return rowItem;
@@ -198,10 +198,10 @@ export class EntityCreationService {
     projectIndustry?: Industry
   ): Promise<any> {
     const config = ENTITY_CONFIGS[entityType];
-    
+
     // Mappa i tipi di entità agli endpoint
     const endpointMap: { [key: string]: string } = {
-      'agentActs': '/api/factory/agent-acts',
+      'agentActs': 'http://localhost:8000/api/agent-acts-from-cache',
       'backendActions': '/api/factory/backend-calls',
       'tasks': '/api/factory/tasks'
     };
@@ -213,7 +213,7 @@ export class EntityCreationService {
 
     // Determina scope e industry finali
     const finalScope = scopeGuess.scope;
-    const finalIndustry = scopeGuess.scope === 'industry' 
+    const finalIndustry = scopeGuess.scope === 'industry'
       ? (scopeGuess.industry || projectIndustry || 'utility-gas')
       : undefined;
 
@@ -228,7 +228,7 @@ export class EntityCreationService {
       category: 'Default',
       createdAt: new Date(),
       updatedAt: new Date(),
-      ...(entityType === 'agentActs' && { 
+      ...(entityType === 'agentActs' && {
         mode: classifyActMode(name),
         data: {},
         prompts: {},
@@ -263,7 +263,7 @@ export class EntityCreationService {
       .replace(/[^a-zA-Z0-9\s]/g, '')
       .replace(/\s+/g, '_')
       .toUpperCase();
-    
+
     const timestamp = Date.now().toString().slice(-6);
     return `${type.toUpperCase()}_${cleanName}_${timestamp}`;
   }
@@ -278,14 +278,14 @@ export class EntityCreationService {
   ): string | null {
     const config = ENTITY_CONFIGS[entityType];
     const entities = (projectData as any)?.[config.entityType] || [];
-    
+
     // Se è specificata una categoria, cerca quella
     if (categoryName) {
       const existingCategory = entities.find((cat: any) => cat.name === categoryName);
       if (existingCategory) {
         return existingCategory.id;
       }
-      
+
       // Crea la nuova categoria
       const newCategoryId = `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const newCategory = {
@@ -293,7 +293,7 @@ export class EntityCreationService {
         name: categoryName,
         items: []
       };
-      
+
       // Inserisci la categoria in ordine alfabetico
       const norm = (s: string) => (s || '').toLocaleLowerCase();
       let inserted = false;
@@ -308,10 +308,10 @@ export class EntityCreationService {
       if (!inserted) {
         entities.push(newCategory);
       }
-      
+
       return newCategoryId;
     }
-    
+
     // Se non è specificata una categoria, usa la prima disponibile o crea "Categorize Later"
     if (entities.length > 0) {
       return entities[0].id;
@@ -324,10 +324,10 @@ export class EntityCreationService {
       name: 'Categorize Later',
       items: []
     };
-    
+
     // Aggiungi la categoria al progetto locale
     (projectData as any)[config.entityType] = [newCategory];
-    
+
     return newCategoryId;
   }
 
@@ -410,7 +410,7 @@ export class EntityCreationService {
       } else {
         // No direct reference found; the returned newItem already has updated fields
       }
-    } catch {}
+    } catch { }
   }
 
   /**
@@ -423,7 +423,7 @@ export class EntityCreationService {
   ): Promise<string | null> {
     const config = ENTITY_CONFIGS[entityType];
     const entities = (projectData as any)?.[config.entityType] || [];
-    
+
     if (entities.length > 0) {
       return entities[0].id;
     }
@@ -432,7 +432,7 @@ export class EntityCreationService {
     await addCategory(config.entityType, config.defaultCategoryName);
     const updatedData = await ProjectDataService.loadProjectData();
     const updatedEntities = (updatedData as any)?.[config.entityType] || [];
-    
+
     return updatedEntities[0]?.id || null;
   }
 
@@ -441,11 +441,11 @@ export class EntityCreationService {
    */
   private static async handleUIEvents(config: EntityCreationConfig, name: string): Promise<void> {
     // Apri il pannello nel sidebar
-    try { (await import('../ui/events')).emitSidebarOpenAccordion(config.sidebarEventType); } catch {}
+    try { (await import('../ui/events')).emitSidebarOpenAccordion(config.sidebarEventType); } catch { }
 
     // Evidenzia l'elemento nel sidebar
     setTimeout(async () => {
-      try { (await import('../ui/events')).emitSidebarHighlightItem(config.sidebarEventType, name); } catch {}
+      try { (await import('../ui/events')).emitSidebarHighlightItem(config.sidebarEventType, name); } catch { }
     }, 100);
 
     // Apri il DDT Editor
@@ -508,7 +508,7 @@ export class EntityCreationService {
       // Trova l'elemento nel progetto locale
       const entities = (projectData as any)?.[config.entityType] || [];
       const item = entities.find((e: any) => e.id === itemId);
-      
+
       if (!item) {
         throw new Error(`Item ${itemId} not found in project data`);
       }

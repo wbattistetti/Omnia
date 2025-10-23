@@ -9,7 +9,7 @@ function dbgEnabled(): boolean {
   try { return Boolean(localStorage.getItem('debug.mode')); } catch { return false; }
 }
 
-.Sei in grado di modificareexport function findAgentAct(projectData: any, row: any) {
+export function findAgentAct(projectData: any, row: any) {
   try {
     const id = row?.actId || row?.baseActId || row?.factoryId || row?.instanceId;
     if (!id || !projectData?.agentActs) return null;

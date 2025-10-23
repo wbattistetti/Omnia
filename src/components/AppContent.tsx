@@ -93,26 +93,26 @@ export const AppContent: React.FC<AppContentProps> = ({
     );
   };
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
-  let refreshData: () => Promise<void> = async () => {};
+  let refreshData: () => Promise<void> = async () => { };
   try {
     const ctx = useProjectDataUpdate();
     refreshData = ctx.refreshData;
   } catch (e) {
     // Provider not available yet; use no-op and rely on provider after mount
-    refreshData = async () => {};
+    refreshData = async () => { };
   }
   // Access full project data for static variables extraction
   let projectData: any = null;
   try {
     projectData = useProjectData().data;
-  } catch {}
+  } catch { }
   const ddtContext = useDDTContext();
   const getTranslationsForDDT = ddtContext.getTranslationsForDDT;
   // const setTranslationsForDDT = ddtContext.setTranslationsForDDT;
 
   // Usa il nuovo hook per DDT
   const { selectedDDT, closeDDT } = useDDTManager();
-  const [nonInteractiveEditor, setNonInteractiveEditor] = useState<null | { title?: string; value: { template: string; vars?: string[]; samples?: Record<string,string> }; accentColor?: string }>(null);
+  const [nonInteractiveEditor, setNonInteractiveEditor] = useState<null | { title?: string; value: { template: string; vars?: string[]; samples?: Record<string, string> }; accentColor?: string }>(null);
   const [niSource, setNiSource] = useState<null | { instanceId?: string }>(null);
 
   // Listen to open event for non-interactive acts (open bottom panel like ResponseEditor)
@@ -132,10 +132,10 @@ export const AppContent: React.FC<AppContentProps> = ({
       try {
         const d = (e && e.detail) || {};
         const { open } = (require('./ActEditor/EditorHost/ActEditorContext') as any);
-      } catch {}
+      } catch { }
     };
     // We use context in overlay; simply set a flag by dispatching through context in NodeRow
-    return () => {};
+    return () => { };
   }, []);
 
   // Stato globale per nodi e edge
@@ -194,7 +194,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             }
           }
         }
-      } catch {}
+      } catch { }
       return vars;
     };
 
@@ -227,7 +227,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             acts.push({ label: actName, color: actColor, Icon, mains: mainsOut });
           }
         }
-      } catch {}
+      } catch { }
       return acts;
     };
 
@@ -331,11 +331,19 @@ export const AppContent: React.FC<AppContentProps> = ({
       const tempId = (crypto?.randomUUID ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2));
       pdUpdate.setDraft(true);
       pdUpdate.setTempId(tempId);
-      try { localStorage.setItem('current.projectId', tempId); } catch {}
+      try { localStorage.setItem('current.projectId', tempId); } catch { }
       const boot = { projectId: tempId } as any;
 
       // Carica atti direttamente dalla Factory (mode deterministico) rispettando industry
-      await ProjectDataService.loadActsFromFactory(projectInfo.industry);
+      console.log('[AppContent] Loading acts from factory...');
+
+      try {
+        await ProjectDataService.loadActsFromFactory(projectInfo.industry);
+        console.log('[AppContent] Factory acts loaded successfully');
+      } catch (error) {
+        console.error('[AppContent] Error loading factory acts:', error);
+      }
+
       const data = await ProjectDataService.loadProjectData();
 
       // 3) Inizializza stato UI
@@ -351,12 +359,12 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
-      try { localStorage.setItem('project.lang', String(projectInfo.language || 'pt')); } catch {}
-      try { pdUpdate.setCurrentProjectId(boot.projectId); console.log('[Bootstrap][projectId][DRAFT]', boot.projectId); } catch {}
+      try { localStorage.setItem('project.lang', String(projectInfo.language || 'pt')); } catch { }
+      try { pdUpdate.setCurrentProjectId(boot.projectId); console.log('[Bootstrap][projectId][DRAFT]', boot.projectId); } catch { }
       setNodes([]);
       setEdges([]);
-    await refreshData();
-    setAppState('mainApp');
+      await refreshData();
+      setAppState('mainApp');
       return true;
     } catch (e) {
       setCreateError('Errore nella creazione del progetto');
@@ -380,7 +388,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
       pdUpdate.setDraft(false);
       pdUpdate.setCurrentProjectId(id);
-      try { localStorage.setItem('current.projectId', id); } catch {}
+      try { localStorage.setItem('current.projectId', id); } catch { }
       // Carica atti dal DB progetto
       await ProjectDataService.loadActsFromProject(id);
       // Carica flow (nodi/edge)
@@ -399,9 +407,9 @@ export const AppContent: React.FC<AppContentProps> = ({
               edges: loadedEdges.length,
               sampleNodeIds: (loadedNodes || []).slice(0, 3).map((n: any) => n?.id)
             });
-          } catch {}
+          } catch { }
         }
-      } catch {}
+      } catch { }
       const data = await ProjectDataService.loadProjectData();
       const newProject: any = {
         id,
@@ -417,7 +425,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
-      try { if (meta && meta.language) localStorage.setItem('project.lang', String(meta.language)); } catch {}
+      try { if (meta && meta.language) localStorage.setItem('project.lang', String(meta.language)); } catch { }
       setNodes(loadedNodes as any);
       setEdges(loadedEdges as any);
       await refreshData();
@@ -473,194 +481,216 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   return (
     <ActEditorProvider>
-    <div className="min-h-screen" style={{ position: 'relative' }}>
-      {/* overlay ricarico rimosso per test */}
-      {/* Toast feedback */}
-      {toast && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-700 text-white px-6 py-3 rounded shadow-lg z-50 animate-fade-in">
-          {toast}
-        </div>
-      )}
-      {/* Landing Page + New Project Modal */}
-      {(appState === 'landing' || appState === 'creatingProject') && (
-        <>
-          <LandingPage
-            onNewProject={handleLandingNewProject}
-            recentProjects={recentProjects}
-            allProjects={allProjects}
-            onDeleteProject={handleDeleteProject}
-            onDeleteAllProjects={handleDeleteAllProjects}
-            showAllProjectsModal={showAllProjectsModal}
-            setShowAllProjectsModal={setShowAllProjectsModal}
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            onSelectProject={async (id: string) => {
-              await handleOpenProjectById(id);
-              setAppState('mainApp');
-            }}
-          />
-          <NewProjectModal
-            isOpen={appState === 'creatingProject'}
-            onClose={handleCloseNewProjectModal}
-            onCreateProject={handleCreateProject}
-            onLoadProject={handleShowRecentProjects}
-            duplicateNameError={createError}
-            onProjectNameChange={handleProjectNameChange}
-            isLoading={isCreatingProject}
-            onFactoryTemplatesLoaded={() => { /* templates loaded; proxied via 8000 now */ }}
-          />
-        </>
-      )}
-      {/* Main App: Sidebar + FlowEditor */}
-      {appState === 'mainApp' && (
-        <div className="min-h-screen flex">
-          <SidebarThemeProvider>
-            <Sidebar />
-          </SidebarThemeProvider>
-          <div className="flex-1 flex flex-col">
-            <Toolbar
-              onNewProject={() => alert('Nuovo progetto')}
-              onOpenProject={() => alert('Apri progetto')}
-              isSaving={isCreatingProject}
-              onSave={async () => {
-                try {
-                  // show spinner in toolbar while saving
-                  setIsCreatingProject(true);
-                  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  const dataSvc: any = (ProjectDataService as any);
-                  // 1) bootstrap (solo se siamo in draft)
-                  let pid = pdUpdate.getCurrentProjectId();
-                  if (pdUpdate.isDraft()) {
-                    const tb = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    const resp = await fetch('/api/projects/bootstrap', {
-                      method: 'POST', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        clientName: (currentProject as any)?.clientName || (currentProject as any)?.name || 'Client',
-                        projectName: (currentProject as any)?.name || 'Project',
-                        industry: (currentProject as any)?.template || 'utility_gas',
-                        tenantId: 'tenant_default'
-                      })
-                    });
-                    if (!resp.ok) throw new Error('bootstrap_failed');
-                    const boot = await resp.json();
-                    // Aggiorna sia il context che la variabile locale da usare in questo save
-                    pdUpdate.setCurrentProjectId(boot.projectId);
-                    pid = boot.projectId;
-                    try { localStorage.setItem('current.projectId', boot.projectId); } catch {}
-                    pdUpdate.setDraft(false);
-                    // Nota: non chiamare /api/projects/catalog qui; il bootstrap registra già nel catalogo
-                    const te = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    try { console.log('[Save][timing] bootstrap ms', Math.round(te - tb)); } catch {}
-                  }
-                  // Usa sempre la variabile locale pid (aggiornata sopra se bootstrap)
-                  try { console.log('[Save][begin]', { pid, draft: pdUpdate.isDraft() }); } catch {}
-                  // 2) persisti tutte le istanze dal draft store (se esistono)
-                  const key = pdUpdate.getTempId();
-                  const draft = (dataSvc as any).__draftInstances?.get?.(key);
-                  if (draft && pid) {
-                    const tI0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    const items: any[] = [];
-                    for (const [, inst] of draft.entries()) {
-                      items.push({ baseActId: inst.baseActId, mode: inst.mode, message: inst.message, overrides: inst.overrides });
-                    }
-                    if (items.length) {
-                      try { console.log('[Save][instances][bulk]', { pid, count: items.length }); } catch {}
-                      await (ProjectDataService as any).bulkCreateInstances(pid, items);
-                    }
-                    (dataSvc as any).__draftInstances.delete(key);
-                    const tI1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    try { console.log('[Save][timing] instances ms', Math.round(tI1 - tI0), 'count', items.length); } catch {}
-                  }
-                  // 2b) persisti gli Agent Acts creati al volo nel DB progetto (solo su Save esplicito)
-                  try {
-                    if (pid && projectData) {
-                      try {
-                        const flows = (window as any).__flows || {};
-                        const main = flows?.main || { nodes, edges };
-                        console.log('[Save][precheck]', { pid, mainNodes: main.nodes?.length || 0, mainEdges: main.edges?.length || 0 });
-                      } catch {}
-                      const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
-                      // Reload fresh project data so act.problem is populated from DB
-                      try {
-                        const fresh = await (ProjectDataService as any).loadProjectData?.();
-                        if (fresh) {
-                          try { pdUpdate.setData && (pdUpdate as any).setData(fresh); } catch {}
-                        }
-                      } catch {}
-                      const tA1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      try { console.log('[Save][timing] acts ms', Math.round(tA1 - tA0)); } catch {}
-                    }
-                  } catch {}
-                  // 3) salva flusso (nodi/edge) - stato così com'è, senza guard
-                  if (pid) {
-                    try {
-                      const tf0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      try {
-                        const flows = (window as any).__flows || {};
-                        const main = flows?.main || { nodes, edges };
-                        console.log('[Flow][save][begin]', { pid, flowId: 'main', nodes: main.nodes?.length || 0, edges: main.edges?.length || 0 });
-                      } catch {}
-                      const svc = await import('../services/FlowPersistService');
-                      await svc.flushFlowPersist();
-                      // Final PUT immediate (explicit Save)
-                      const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
-                        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes, edges })
-                      });
-                      const tf1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      if (!putRes.ok) {
-                        try { console.warn('[Flow][save][error]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0), status: putRes.status, statusText: putRes.statusText, body: await putRes.text() }); } catch {}
-                      } else {
-                        try { console.log('[Flow][save][ok]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0) }); } catch {}
-                      }
-                      // Reload automatico e overlay rimossi per test semplificato
-                    } catch {}
-                  }
-                  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  try { console.log('[Save][end]', { totalMs: Math.round(t1 - t0) }); } catch {}
-                  // Removed noisy meta POST; language is already stored during bootstrap
-                } catch (e) {
-                  console.error('[SaveProject] commit error', e);
-                } finally {
-                  setIsCreatingProject(false);
-                }
+      <div className="min-h-screen" style={{ position: 'relative' }}>
+        {/* overlay ricarico rimosso per test */}
+        {/* Toast feedback */}
+        {toast && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-700 text-white px-6 py-3 rounded shadow-lg z-50 animate-fade-in">
+            {toast}
+          </div>
+        )}
+        {/* Landing Page + New Project Modal */}
+        {(appState === 'landing' || appState === 'creatingProject') && (
+          <>
+            <LandingPage
+              onNewProject={handleLandingNewProject}
+              recentProjects={recentProjects}
+              allProjects={allProjects}
+              onDeleteProject={handleDeleteProject}
+              onDeleteAllProjects={handleDeleteAllProjects}
+              showAllProjectsModal={showAllProjectsModal}
+              setShowAllProjectsModal={setShowAllProjectsModal}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onSelectProject={async (id: string) => {
+                await handleOpenProjectById(id);
+                setAppState('mainApp');
               }}
-              onRun={() => setShowGlobalDebugger(s => !s)}
-              onSettings={() => setShowBackendBuilder(true)}
-              projectName={currentProject?.name}
             />
-            <div id="flow-canvas-host" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? '1fr 380px' : '1fr', position: 'relative' }}>
-              {showBackendBuilder ? (
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
-                </div>
-              ) : (
-                <div style={{ position: 'relative' }}>
-                  {currentPid ? (
-                    <FlowWorkspaceProvider>
-                      <DockManager
-                        root={dockTree}
-                        setRoot={setDockTree}
-                      renderTabContent={(tab) => (<FlowTabContent tab={tab} />)}
+            <NewProjectModal
+              isOpen={appState === 'creatingProject'}
+              onClose={handleCloseNewProjectModal}
+              onCreateProject={handleCreateProject}
+              onLoadProject={handleShowRecentProjects}
+              duplicateNameError={createError}
+              onProjectNameChange={handleProjectNameChange}
+              isLoading={isCreatingProject}
+              onFactoryTemplatesLoaded={() => { /* templates loaded; proxied via 8000 now */ }}
+            />
+          </>
+        )}
+        {/* Main App: Sidebar + FlowEditor */}
+        {appState === 'mainApp' && (
+          <div className="min-h-screen flex">
+            <SidebarThemeProvider>
+              <Sidebar />
+            </SidebarThemeProvider>
+            <div className="flex-1 flex flex-col">
+              <Toolbar
+                onNewProject={() => alert('Nuovo progetto')}
+                onOpenProject={() => alert('Apri progetto')}
+                isSaving={isCreatingProject}
+                onSave={async () => {
+                  try {
+                    // show spinner in toolbar while saving
+                    setIsCreatingProject(true);
+                    const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    const dataSvc: any = (ProjectDataService as any);
+                    // 1) bootstrap (solo se siamo in draft)
+                    let pid = pdUpdate.getCurrentProjectId();
+                    if (pdUpdate.isDraft()) {
+                      const tb = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                      const resp = await fetch('/api/projects/bootstrap', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          clientName: (currentProject as any)?.clientName || (currentProject as any)?.name || 'Client',
+                          projectName: (currentProject as any)?.name || 'Project',
+                          industry: (currentProject as any)?.template || 'utility_gas',
+                          tenantId: 'tenant_default'
+                        })
+                      });
+                      if (!resp.ok) throw new Error('bootstrap_failed');
+                      const boot = await resp.json();
+                      // Aggiorna sia il context che la variabile locale da usare in questo save
+                      pdUpdate.setCurrentProjectId(boot.projectId);
+                      pid = boot.projectId;
+                      try { localStorage.setItem('current.projectId', boot.projectId); } catch { }
+                      pdUpdate.setDraft(false);
+                      // Nota: non chiamare /api/projects/catalog qui; il bootstrap registra già nel catalogo
+                      const te = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                      try { console.log('[Save][timing] bootstrap ms', Math.round(te - tb)); } catch { }
+                    }
+                    // Usa sempre la variabile locale pid (aggiornata sopra se bootstrap)
+                    try { console.log('[Save][begin]', { pid, draft: pdUpdate.isDraft() }); } catch { }
+                    // 2) persisti tutte le istanze dal draft store (se esistono)
+                    const key = pdUpdate.getTempId();
+                    const draft = (dataSvc as any).__draftInstances?.get?.(key);
+                    if (draft && pid) {
+                      const tI0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                      const items: any[] = [];
+                      for (const [, inst] of draft.entries()) {
+                        items.push({ baseActId: inst.baseActId, mode: inst.mode, message: inst.message, overrides: inst.overrides });
+                      }
+                      if (items.length) {
+                        try { console.log('[Save][instances][bulk]', { pid, count: items.length }); } catch { }
+                        await (ProjectDataService as any).bulkCreateInstances(pid, items);
+                      }
+                      (dataSvc as any).__draftInstances.delete(key);
+                      const tI1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                      try { console.log('[Save][timing] instances ms', Math.round(tI1 - tI0), 'count', items.length); } catch { }
+                    }
+                    // 2b) persisti gli Agent Acts creati al volo nel DB progetto (solo su Save esplicito)
+                    try {
+                      if (pid && projectData) {
+                        try {
+                          const flows = (window as any).__flows || {};
+                          const main = flows?.main || { nodes, edges };
+                          console.log('[Save][precheck]', { pid, mainNodes: main.nodes?.length || 0, mainEdges: main.edges?.length || 0 });
+                        } catch { }
+                        const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                        await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
+                        // Reload fresh project data so act.problem is populated from DB
+                        try {
+                          const fresh = await (ProjectDataService as any).loadProjectData?.();
+                          if (fresh) {
+                            try { pdUpdate.setData && (pdUpdate as any).setData(fresh); } catch { }
+                          }
+                        } catch { }
+                        const tA1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                        try { console.log('[Save][timing] acts ms', Math.round(tA1 - tA0)); } catch { }
+                      }
+                    } catch { }
+                    // 3) salva flusso (nodi/edge) - stato così com'è, senza guard
+                    if (pid) {
+                      try {
+                        const tf0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                        try {
+                          const flows = (window as any).__flows || {};
+                          const main = flows?.main || { nodes, edges };
+                          console.log('[Flow][save][begin]', { pid, flowId: 'main', nodes: main.nodes?.length || 0, edges: main.edges?.length || 0 });
+                        } catch { }
+                        const svc = await import('../services/FlowPersistService');
+                        await svc.flushFlowPersist();
+                        // Final PUT immediate (explicit Save)
+                        const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
+                          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes, edges })
+                        });
+                        const tf1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                        if (!putRes.ok) {
+                          try { console.warn('[Flow][save][error]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0), status: putRes.status, statusText: putRes.statusText, body: await putRes.text() }); } catch { }
+                        } else {
+                          try { console.log('[Flow][save][ok]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0) }); } catch { }
+                        }
+                        // Reload automatico e overlay rimossi per test semplificato
+                      } catch { }
+                    }
+                    const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    try { console.log('[Save][end]', { totalMs: Math.round(t1 - t0) }); } catch { }
+                    // Removed noisy meta POST; language is already stored during bootstrap
+                  } catch (e) {
+                    console.error('[SaveProject] commit error', e);
+                  } finally {
+                    setIsCreatingProject(false);
+                  }
+                }}
+                onRun={() => setShowGlobalDebugger(s => !s)}
+                onSettings={() => setShowBackendBuilder(true)}
+                projectName={currentProject?.name}
+              />
+              <div id="flow-canvas-host" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? '1fr 380px' : '1fr', position: 'relative' }}>
+                {showBackendBuilder ? (
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
+                  </div>
+                ) : (
+                  <div style={{ position: 'relative' }}>
+                    {currentPid ? (
+                      <FlowWorkspaceProvider>
+                        <DockManager
+                          root={dockTree}
+                          setRoot={setDockTree}
+                          renderTabContent={(tab) => (<FlowTabContent tab={tab} />)}
+                        />
+                      </FlowWorkspaceProvider>
+                    ) : (
+                      <FlowEditor
+                        nodes={nodes}
+                        setNodes={setNodes}
+                        edges={edges}
+                        setEdges={setEdges}
+                        currentProject={currentProject}
+                        setCurrentProject={setCurrentProject}
+                        onPlayNode={onPlayNode}
+                        testPanelOpen={testPanelOpen}
+                        setTestPanelOpen={setTestPanelOpen}
+                        testNodeId={testNodeId}
+                        setTestNodeId={setTestNodeId}
                       />
-                    </FlowWorkspaceProvider>
-                  ) : (
-                  <FlowEditor
-                  nodes={nodes}
-                  setNodes={setNodes}
-                  edges={edges}
-                  setEdges={setEdges}
-                  currentProject={currentProject}
-                  setCurrentProject={setCurrentProject}
-                  onPlayNode={onPlayNode}
-                  testPanelOpen={testPanelOpen}
-                  setTestPanelOpen={setTestPanelOpen}
-                  testNodeId={testNodeId}
-                  setTestNodeId={setTestNodeId}
-                  />
-                  )}
-                  {!showGlobalDebugger && (
+                    )}
+                    {!showGlobalDebugger && (
+                      <ConditionEditor
+                        open={conditionEditorOpen}
+                        onClose={() => setConditionEditorOpen(false)}
+                        variables={conditionVars}
+                        initialScript={conditionScript}
+                        variablesTree={conditionVarsTree}
+                        label={conditionLabel}
+                        dockWithinParent={true}
+                        onRename={(next) => {
+                          setConditionLabel(next);
+                          try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
+                        }}
+                        onSave={(script) => {
+                          try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+                {showGlobalDebugger && (
+                  <div style={{ position: 'relative' }}>
+                    <FlowRunner nodes={nodes} edges={edges} />
                     <ConditionEditor
                       open={conditionEditorOpen}
                       onClose={() => setConditionEditorOpen(false)}
@@ -671,96 +701,74 @@ export const AppContent: React.FC<AppContentProps> = ({
                       dockWithinParent={true}
                       onRename={(next) => {
                         setConditionLabel(next);
-                        try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch {}
+                        try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
                       }}
                       onSave={(script) => {
-                        try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch {}
+                        try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
                       }}
                     />
-                  )}
-                </div>
-              )}
-              {showGlobalDebugger && (
-                <div style={{ position: 'relative' }}>
-                  <FlowRunner nodes={nodes} edges={edges} />
-                  <ConditionEditor
-                    open={conditionEditorOpen}
-                    onClose={() => setConditionEditorOpen(false)}
-                    variables={conditionVars}
-                    initialScript={conditionScript}
-                    variablesTree={conditionVarsTree}
-                    label={conditionLabel}
-                    dockWithinParent={true}
-                    onRename={(next) => {
-                      setConditionLabel(next);
-                      try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch {}
-                    }}
-                    onSave={(script) => {
-                      try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch {}
-                    }}
+                  </div>
+                )}
+              </div>
+              {/* Act Editor Host overlay (always listens via context) */}
+              <ActEditorOverlay />
+
+              {selectedDDT && (() => {
+                const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);
+                const fallback = selectedDDT.translations;
+                const translationsToUse = Object.keys(t || {}).length > 0 ? t : fallback;
+                return (
+                  <ResizableResponseEditor
+                    ddt={selectedDDT}
+                    translations={translationsToUse}
+                    lang="it"
+                    onClose={closeDDT}
                   />
-                </div>
+                );
+              })()}
+              {!selectedDDT && nonInteractiveEditor && (
+                <ResizableNonInteractiveEditor
+                  title={nonInteractiveEditor.title}
+                  value={nonInteractiveEditor.value}
+                  onChange={(next) => {
+                    // Only update local draft; persist on close
+                    setNonInteractiveEditor({ title: nonInteractiveEditor.title, value: next, accentColor: (nonInteractiveEditor as any).accentColor });
+                  }}
+                  onClose={async () => {
+                    const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    try {
+                      const svc = await import('../services/ProjectDataService');
+                      const dataSvc: any = (svc as any).ProjectDataService;
+                      const pid = pdUpdate.getCurrentProjectId() || undefined;
+                      if (pid && niSource?.instanceId) {
+                        // fire-and-forget: non bloccare la chiusura del pannello
+                        const text = nonInteractiveEditor?.value?.template || '';
+                        void dataSvc.updateInstance(pid, niSource.instanceId, { message: { text } })
+                          .then(() => { try { console.log('[NI][close][PUT ok]', { instanceId: niSource?.instanceId }); } catch { } })
+                          .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
+                        // broadcast per aggiornare la riga che ha questa istanza
+                        try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: niSource.instanceId, text } })); } catch { }
+                      }
+                    } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch { } }
+                    // chiudi SUBITO il pannello (render immediato)
+                    setNonInteractiveEditor(null);
+                    setNiSource(null);
+                    const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                    try { console.log('[NI][close] panel closed in', Math.round(t1 - t0), 'ms'); } catch { }
+                  }}
+                  accentColor={(nonInteractiveEditor as any).accentColor}
+                />
               )}
             </div>
-            {/* Act Editor Host overlay (always listens via context) */}
-            <ActEditorOverlay />
-
-            {selectedDDT && (() => {
-              const t = getTranslationsForDDT(selectedDDT.id || selectedDDT._id);
-              const fallback = selectedDDT.translations;
-              const translationsToUse = Object.keys(t || {}).length > 0 ? t : fallback;
-              return (
-                <ResizableResponseEditor
-                  ddt={selectedDDT}
-                  translations={translationsToUse}
-                  lang="it"
-                  onClose={closeDDT}
-                />
-              );
-            })()}
-            {!selectedDDT && nonInteractiveEditor && (
-              <ResizableNonInteractiveEditor
-                title={nonInteractiveEditor.title}
-                value={nonInteractiveEditor.value}
-                onChange={(next) => {
-                  // Only update local draft; persist on close
-                  setNonInteractiveEditor({ title: nonInteractiveEditor.title, value: next, accentColor: (nonInteractiveEditor as any).accentColor });
-                }}
-                onClose={async () => {
-                  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  try {
-                    const svc = await import('../services/ProjectDataService');
-                    const dataSvc: any = (svc as any).ProjectDataService;
-                    const pid = pdUpdate.getCurrentProjectId() || undefined;
-                    if (pid && niSource?.instanceId) {
-                      // fire-and-forget: non bloccare la chiusura del pannello
-                      const text = nonInteractiveEditor?.value?.template || '';
-                      void dataSvc.updateInstance(pid, niSource.instanceId, { message: { text } })
-                        .then(() => { try { console.log('[NI][close][PUT ok]', { instanceId: niSource?.instanceId }); } catch {} })
-                        .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch {} });
-                      // broadcast per aggiornare la riga che ha questa istanza
-                      try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: niSource.instanceId, text } })); } catch {}
-                    }
-                  } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch {} }
-                  // chiudi SUBITO il pannello (render immediato)
-                  setNonInteractiveEditor(null);
-                  setNiSource(null);
-                  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  try { console.log('[NI][close] panel closed in', Math.round(t1 - t0), 'ms'); } catch {}
-                }}
-                accentColor={(nonInteractiveEditor as any).accentColor}
-              />
-            )}
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     </ActEditorProvider>
   );
 };
 
 // Overlay that renders the ActEditorHost when an act is selected via context
-function ActEditorOverlay(){
+function ActEditorOverlay() {
   const ctx = useActEditor();
   const [hostRect, setHostRect] = React.useState<DOMRect | null>(null);
   // Bridge DOM event → context.open to allow callers to emit without importing the hook

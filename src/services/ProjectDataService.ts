@@ -124,34 +124,56 @@ export const ProjectDataService = {
     };
   },
   async loadActsFromFactory(projectIndustry?: string): Promise<void> {
-    // If industry is explicitly 'undefined', return empty dictionaries
-    if (String(projectIndustry || '').toLowerCase() === 'undefined') {
+    console.log('[ProjectDataService] loadActsFromFactory CALLED with industry:', projectIndustry, typeof projectIndustry);
+
+    try {
+      // If industry is undefined (value or string), load GLOBAL agent acts
+      if (projectIndustry === 'undefined' || projectIndustry === undefined) {
+        console.log('[ProjectDataService] Loading GLOBAL agent acts for undefined industry');
+        // Procedi normalmente a caricare la cache - NON return early!
+      }
+
+      console.log('[ProjectDataService] DOPO IF - proceeding to cache load');
+      console.log('[ProjectDataService] Loading acts from FastAPI cache...');
+
+      // Use FastAPI cache instead of Express factory
+      console.log('[ProjectDataService] Step 1 - Before fetch');
+      const res = await fetch(`http://localhost:8000/api/agent-acts-from-cache`);
+      console.log('[ProjectDataService] Step 2 - After fetch, status:', res.status);
+
+      if (!res.ok) throw new Error('Failed to load cached agent acts');
+
+      console.log('[ProjectDataService] Step 3 - Before json()');
+      const json = await res.json();
+      console.log('[ProjectDataService] Step 4 - After json(), status:', json.status);
+
+      // Extract agent acts from cache response
+      const items = json.status === 'success' && Array.isArray(json.agent_acts) ? json.agent_acts : [];
+      console.log('[ProjectDataService] Step 5 - Items extracted, count:', items.length);
+
+      console.log('[ProjectDataService] Loaded from cache:', {
+        status: json.status,
+        count: items.length,
+        sampleItem: items[0]
+      });
+
+      console.log('[ProjectDataService] Step 6 - Before convertToCategories');
       projectData = {
         name: projectData.name || '',
-        industry: projectIndustry || '',
-        agentActs: [],
+        industry: projectData.industry || '',
+        agentActs: this.convertToCategories(items, 'agentActs'),
         userActs: [],
         backendActions: [],
         conditions: [],
         tasks: [],
         macrotasks: []
       };
-      return;
+      console.log('[ProjectDataService] Step 7 - Method completed successfully');
+
+    } catch (error) {
+      console.error('[ProjectDataService] loadActsFromFactory FAILED:', error);
+      throw error; // Rilancia per far vedere l'errore in AppContent
     }
-    const res = await fetch(`/api/factory/agent-acts`);
-    if (!res.ok) throw new Error('Failed to load factory agent acts');
-    const json = await res.json();
-    const items = Array.isArray(json?.items) ? json.items : [];
-    projectData = {
-      name: projectData.name || '',
-      industry: projectData.industry || '',
-      agentActs: this.convertToCategories(items, 'agentActs'),
-      userActs: [],
-      backendActions: [],
-      conditions: [],
-      tasks: [],
-      macrotasks: []
-    };
   },
 
   // --- Instances API helpers ---
@@ -732,6 +754,8 @@ export const ProjectDataService = {
       };
       return;
     }
+
+    console.log('[ProjectDataService] Loading factory data from FastAPI cache...');
 
     // Use FastAPI cache instead of Express factory
     const res = await fetch(`http://localhost:8000/api/agent-acts-from-cache`);

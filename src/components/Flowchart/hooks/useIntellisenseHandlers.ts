@@ -37,6 +37,11 @@ export function useIntellisenseHandlers(
       const initialIntents = templateAct?.problem?.intents || [];
 
       // Crea istanza nel repository
+      if (!actId) {
+        console.error('[INTELLISENSE] Cannot create instance: actId is undefined');
+        return;
+      }
+
       const instance = instanceRepository.createInstance(actId, initialIntents);
       instanceId = instance.instanceId;
 
