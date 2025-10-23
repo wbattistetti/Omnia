@@ -56,7 +56,7 @@ export type ProjectData = {
 };
 
 // ---- ProblemClassification (Intent Editor) Act-owned model ----
-export type Lang = 'it'|'en'|'pt';
+export type Lang = 'it' | 'en' | 'pt';
 
 export type ProblemIntentPhrase = { id: string; text: string; lang: Lang };
 
@@ -71,7 +71,7 @@ export type ProblemIntent = {
   };
 };
 
-export type ProblemEditorTest = { id: string; text: string; status: 'unknown'|'correct'|'wrong' };
+export type ProblemEditorTest = { id: string; text: string; status: 'unknown' | 'correct' | 'wrong' };
 
 export type ProblemEditorState = {
   selectedIntentId?: string;
@@ -96,28 +96,11 @@ export interface ProjectInfo {
 
 /**
  * Rappresenta una riga/azione di un nodo del flowchart
+ * Tutti gli altri dati (type, templateId, intents) vengono dall'istanza
  */
 export interface NodeRowData {
-  id: string;
-  text: string;
-  userActs?: string[];
-  categoryType?: EntityType;
-  actId?: string;
-  factoryId?: string;
-  // New: explicit type for the act row (primary)
-  type?: ActType;
-  // Legacy/back-compat: old 'mode' still present until all code migrates
-  mode?: 'DataRequest' | 'DataConfirmation' | 'Message';
-  // Per-row instance linkage (project-scoped)
-  baseActId?: string;
-  instanceId?: string;
-  // Local content for Message rows (preview/cache)
-  message?: { text?: string };
-  // Optional compact label for chips (fallback to name/text when absent)
-  shortLabel?: string;
-  isNew?: boolean;
-  bgColor?: string;
-  textColor?: string;
+  id: string;     // UUID della riga = instanceId
+  text: string;   // Testo visualizzato
   included?: boolean; // true se la row è inclusa nel flusso
 }
 
