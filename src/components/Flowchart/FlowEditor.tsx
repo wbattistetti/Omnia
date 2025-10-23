@@ -36,6 +36,7 @@ import { CustomEdge } from './CustomEdge';
 import { useIntellisenseHandlers } from './hooks/useIntellisenseHandlers';
 import { v4 as uuidv4 } from 'uuid';
 import { findAgentAct } from './actVisuals';
+import { instanceRepository } from '../../services/InstanceRepository';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -590,89 +591,54 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       timestamp: Date.now()
     });
 
-    // ✅ SOLUZIONE: Recupera gli intents dal projectData usando instanceId
+    // ✅ NUOVO: Recupera gli intents dal repository usando instanceId
     let problemIntents: any[] = [];
     if (problemRow) {
       const instanceId = (problemRow as any)?.instanceId;
-      const actId = (problemRow as any)?.actId || (problemRow as any)?.factoryId;
+      const actId = (problemRow as any)?.actId;
 
-      console.log("🔍 [INTELLISENSE_DEBUG] Looking for act in projectData", {
+      console.log("🔍 [INTELLISENSE_NEW] Looking for instance in repository", {
         instanceId,
         actId,
-        hasProjectData: !!projectData,
         timestamp: Date.now()
       });
 
-      // DEBUG: Log completa struttura della riga per vedere se ha problemIntents
-      console.log("🔍 [ROW_STRUCTURE] Full row inspection:", {
-        instanceId: problemRow?.instanceId,
-        actId: problemRow?.actId,
-        factoryId: problemRow?.factoryId,
-        baseActId: problemRow?.baseActId,
-        hasProblemIntents: !!(problemRow as any)?.problemIntents,
-        problemIntents: (problemRow as any)?.problemIntents,
-        problemProperty: (problemRow as any)?.problem,
-        allProperties: Object.keys(problemRow || {}),
-        rowType: problemRow?.type,
-        rowMode: problemRow?.mode,
-        timestamp: Date.now()
-      });
+      // Cerca l'istanza nel repository
+      if (instanceId) {
+        const instance = instanceRepository.getInstance(instanceId);
 
-      // Cerca l'act nel projectData usando instanceId
-      if (projectData && instanceId) {
-        // DEBUG: Log della struttura projectData.agentActs
-        console.log("🔍 [INTELLISENSE_DEBUG] ProjectData structure", {
-          hasAgentActs: !!projectData?.agentActs,
-          agentActsCount: projectData?.agentActs?.length,
-          firstCategoryItems: projectData?.agentActs?.[0]?.items?.length,
-          sampleActIds: projectData?.agentActs?.[0]?.items?.slice(0, 3).map((it: any) => ({
-            _id: it._id,
-            id: it.id,
-            name: it.name,
-            type: it.type,
-            hasProblem: !!(it as any)?.problem,
-            problemIntentsCount: it?.problem?.intents?.length || 0
-          })),
-          timestamp: Date.now()
-        });
+        if (instance) {
+          problemIntents = instance.problemIntents || [];
+          console.log("✅ [INTELLISENSE_NEW] Found intents in repository!", {
+            instanceId,
+            intentsCount: problemIntents.length,
+            timestamp: Date.now()
+          });
+        } else {
+          console.log("⚠️ [INTELLISENSE_NEW] Instance not found in repository", {
+            instanceId,
+            willTryFallback: !!actId,
+            timestamp: Date.now()
+          });
 
-        // Cerca l'act usando instanceId direttamente
-        let act: any = null;
-        try {
-          if (projectData?.agentActs) {
-            for (const cat of projectData.agentActs) {
-              const found = (cat.items || []).find(
-                (it: any) => it._id === instanceId || it.id === instanceId
-              );
-              if (found) {
-                act = found;
-                console.log("✅ Found matching act!", { actId: found._id || found.id, actName: found.name });
-                break;
-              }
+          // Fallback: se l'istanza non esiste, prova a usare il template
+          if (actId && projectData) {
+            const templateAct = findAgentAct(projectData, { actId });
+            if (templateAct && Array.isArray((templateAct as any)?.problem?.intents)) {
+              problemIntents = (templateAct as any).problem.intents;
+              console.log("✅ [INTELLISENSE_NEW] Using template intents as fallback", {
+                actId,
+                intentsCount: problemIntents.length,
+                timestamp: Date.now()
+              });
             }
           }
-        } catch (e) {
-          console.error("Error searching for act:", e);
         }
-
-        console.log("🔍 [INTELLISENSE_DEBUG] Found act from projectData", {
-          actFound: !!act,
-          actId: act?._id || act?.id,
-          hasProblem: act && !!(act as any)?.problem,
-          hasIntents: act && Array.isArray((act as any)?.problem?.intents),
-          intentsCount: act && Array.isArray((act as any)?.problem?.intents) ? (act as any).problem.intents.length : 0,
-          act: act,
+      } else {
+        console.log("❌ [INTELLISENSE_NEW] No instanceId in row", {
+          rowHasActId: !!actId,
           timestamp: Date.now()
         });
-
-        if (act && Array.isArray((act as any)?.problem?.intents)) {
-          problemIntents = (act as any).problem.intents;
-          console.log("✅ Found intents in projectData act");
-        } else {
-          // ❌ RIMOSSO: Fallback localStorage - non usiamo hack!
-          console.log("❌ No intents found in projectData - returning empty array");
-          problemIntents = [];
-        }
       }
     }
 
