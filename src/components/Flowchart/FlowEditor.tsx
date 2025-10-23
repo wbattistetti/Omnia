@@ -34,6 +34,7 @@ import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
 import { CustomEdge } from './CustomEdge';
 import { useIntellisenseHandlers } from './hooks/useIntellisenseHandlers';
+import { v4 as uuidv4 } from 'uuid';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -104,21 +105,21 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [setEdges, setSelectedEdgeId]);
 
   const handleTempEdgeStabilization = useCallback((tempNodeId: string, tempEdgeId: string, label: string, fp: any) => {
-    console.log('[🔍 STABILIZE.1] Starting stabilization (first occurrence)', { 
-      tempNodeId, 
+    console.log('[🔍 STABILIZE.1] Starting stabilization (first occurrence)', {
+      tempNodeId,
       tempEdgeId,
       flowPosition: fp,
       timestamp: Date.now()
     });
-    
+
     setNodes(nds => {
       const stabilizedNodes = nds.map(n => {
         if (n.id === tempNodeId) {
-          console.log('[🔍 STABILIZE.1] Stabilizing temporary node', { 
-            tempNodeId, 
-            pos: n.position, 
-            fp, 
-            timestamp: Date.now() 
+          console.log('[🔍 STABILIZE.1] Stabilizing temporary node', {
+            tempNodeId,
+            pos: n.position,
+            fp,
+            timestamp: Date.now()
           });
           return { ...n, isTemporary: false };
         }
@@ -126,7 +127,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       });
       return stabilizedNodes;
     });
-    
+
     setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label } : e));
     setSelectedEdgeId(tempEdgeId);
     closeMenu();
@@ -146,7 +147,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       }
       return true;
     }
-    
+
     // 2) Promote temp node/edge if present
     const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
     const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
@@ -155,7 +156,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       handleTempEdgeStabilization(tempNodeId, tempEdgeId, label, fp);
       return true;
     }
-    
+
     return false;
   }, [scheduleApplyLabel, handleExistingEdgeLabel, handleTempEdgeStabilization]);
 
@@ -176,7 +177,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((window as any).__debugCanvas) {
-        try { console.log('[CanvasDbg][doc.capture]', { key: e.key, target: (e.target as HTMLElement)?.className, defaultPrevented: e.defaultPrevented }); } catch {}
+        try { console.log('[CanvasDbg][doc.capture]', { key: e.key, target: (e.target as HTMLElement)?.className, defaultPrevented: e.defaultPrevented }); } catch { }
       }
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
@@ -247,13 +248,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Log dettagliato su ogni cambiamento di nodes.length
   useEffect(() => {
-    console.log("📊 [NODES_CHANGE] Nodes array changed", { 
+    console.log("📊 [NODES_CHANGE] Nodes array changed", {
       count: nodes.length,
       nodeIds: nodes.map(n => n.id),
       tempNodes: nodes.filter(n => n.data?.isTemporary).map(n => n.id),
       timestamp: Date.now()
     });
-    
+
     if (reactFlowInstance) {
       // Rimuovi completamente codice non utilizzato
     }
@@ -262,7 +263,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
   // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation
   const { data: projectData } = useProjectData();
-  
+
   // ✅ NUOVO STATO per IntellisenseMenu originale
   const [showNodeIntellisense, setShowNodeIntellisense] = useState(false);
   const [nodeIntellisensePosition, setNodeIntellisensePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -275,7 +276,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const allConditions = React.useMemo(() => {
     try {
       const conditions = (projectData as any)?.conditions || [];
-      const conditionItems = conditions.flatMap((category: any) => 
+      const conditionItems = conditions.flatMap((category: any) =>
         (category.items || []).map((item: any) => ({
           label: item.name || 'Unknown',
           value: item.id || 'unknown',
@@ -358,24 +359,24 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setEdges(eds => eds.map(e =>
       e.type === 'custom'
         ? {
-            ...e,
-            data: {
-              ...e.data,
-              onDeleteEdge,
-              onUpdate: (updates: any) => {
-                let safeUpdates = { ...updates };
-                if (typeof updates.label === 'object' && updates.label !== null) {
-                  safeUpdates.label = updates.label.description || updates.label.name || '';
-                }
-                setEdges(prevEdges => {
-                  const updated = prevEdges.map(edge =>
-                    edge.id === e.id ? { ...edge, ...safeUpdates } : edge
-                  );
-                  return updated;
-                });
+          ...e,
+          data: {
+            ...e.data,
+            onDeleteEdge,
+            onUpdate: (updates: any) => {
+              let safeUpdates = { ...updates };
+              if (typeof updates.label === 'object' && updates.label !== null) {
+                safeUpdates.label = updates.label.description || updates.label.name || '';
               }
+              setEdges(prevEdges => {
+                const updated = prevEdges.map(edge =>
+                  edge.id === e.id ? { ...edge, ...safeUpdates } : edge
+                );
+                return updated;
+              });
             }
           }
+        }
         : e
     ));
   }, [onDeleteEdge, setEdges]);
@@ -417,14 +418,25 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [nodes]);
 
   const createNodeAt = useCallback((clientX: number, clientY: number) => {
-    // debug removed
-    const newNodeId = nodeIdCounter.toString();
+    // Usa UUID invece del contatore per evitare conflitti
+    const newNodeId = uuidv4();
+
     let x = 0, y = 0;
     if (reactFlowInstance) {
       const pos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
       x = pos.x - NODE_WIDTH / 2;
       y = pos.y - NODE_HEIGHT / 2;
     }
+
+    const focusRowId = `${newNodeId}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log("🎯 [CREATE_NODE_AT] Creating node with UUID", {
+      newNodeId,
+      focusRowId,
+      position: { x, y },
+      clientPos: { clientX, clientY },
+      timestamp: Date.now()
+    });
+
     const node: Node<NodeData> = {
       id: newNodeId,
       type: 'custom',
@@ -435,7 +447,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
         hidden: true,
-        focusRowId: '1',
+        focusRowId: focusRowId,
         isTemporary: true,
       },
     };
@@ -444,8 +456,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     requestAnimationFrame(() => {
       try {
         const el = document.querySelector(`.react-flow__node[data-id='${newNodeId}']`) as HTMLElement | null;
-        if (!el) { try { console.warn('[DC][mount] node element not found'); } catch {} return; }
-        if (!reactFlowInstance || !(reactFlowInstance as any).getViewport) { try { console.warn('[DC][mount] no reactFlowInstance viewport'); } catch {} return; }
+        if (!el) { try { console.warn('[DC][mount] node element not found'); } catch { } return; }
+        if (!reactFlowInstance || !(reactFlowInstance as any).getViewport) { try { console.warn('[DC][mount] no reactFlowInstance viewport'); } catch { } return; }
         const { zoom } = (reactFlowInstance as any).getViewport();
         const rect = el.getBoundingClientRect();
         const centerNowX = rect.left + rect.width / 2;
@@ -460,20 +472,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           setNodes((nds) => nds.map(n => n.id === newNodeId ? { ...n, data: { ...(n.data as any), hidden: false } } : n));
           // debug logs removed
         });
-      } catch {}
+      } catch { }
     });
   }, [addNodeAtPosition, nodeIdCounter, reactFlowInstance, setNodes, deleteNodeWithLog, updateNode]);
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
     setSelectedEdgeId(null);
-    
+
     // Disabilitata la cancellazione automatica dei nodi al click canvas (gestita da CustomNode)
     // nodes.forEach(() => {});
-    
+
     try {
       const ev = new CustomEvent('flow:canvas:click', { bubbles: true });
       window.dispatchEvent(ev);
-    } catch {}
+    } catch { }
   }, [nodes, deleteNodeWithLog]);
 
   // (rimosso onPaneDoubleClick: usiamo il doppio click sul wrapper)
@@ -499,20 +511,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // ✅ FIX: Funzione per aprire l'IntellisenseMenu CORRETTO
   const openIntellisense = useCallback((tempNodeId: string, tempEdgeId: string, event: any) => {
-    console.log("🎯 [INTELLISENSE] Opening proper IntellisenseMenu", { 
-      tempNodeId, 
-      tempEdgeId, 
+    console.log("🎯 [INTELLISENSE] Opening proper IntellisenseMenu", {
+      tempNodeId,
+      tempEdgeId,
       mousePos: { x: event.clientX, y: event.clientY },
       timestamp: Date.now()
     });
-    
+
     // ✅ FORZA l'apertura del connection menu PRIMA di calcolare gli intents
     openMenu(
       { x: event.clientX, y: event.clientY },
       connectionMenuRef.current.sourceNodeId,
       connectionMenuRef.current.sourceHandleId
     );
-    
+
     // Salva riferimenti temporanei
     try {
       (connectionMenuRef.current as any).tempNodeId = tempNodeId;
@@ -529,12 +541,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     const rows = Array.isArray((srcNode?.data as any)?.rows) ? (srcNode!.data as any).rows : [];
     const problemRow = rows.find((r: any) => r.text && r.text.toLowerCase().includes('problemclassification'));
     const problemIntents = problemRow ? (problemRow as any)?.problem?.intents : null;
-    
+
     const combinedItems = [
       ...(allConditions || []),
       ...(Array.isArray(problemIntents) ? problemIntents.map((intent: any) => ({
         label: intent.label || intent.name || 'Unknown',
-        value: intent.id || intent.name || 'unknown', 
+        value: intent.id || intent.name || 'unknown',
         description: intent.description || ''
       })) : [])
     ];
@@ -553,27 +565,27 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [connectionMenuRef, reactFlowInstance, allConditions, nodes, openMenu]);
 
   const onConnectEnd = useCallback((event: any) => {
-    console.log("🎬 [ON_CONNECT_END] Event triggered", { 
+    console.log("🎬 [ON_CONNECT_END] Event triggered", {
       target: event.target?.className,
       hasPendingEdge: !!pendingEdgeIdRef.current,
       hasSourceNode: !!connectionMenuRef.current.sourceNodeId,
       timestamp: Date.now()
     });
-    
+
     // Se subito prima è stata creata una edge reale (onConnect), NON creare il collegamento flottante
     if (pendingEdgeIdRef.current) {
       console.log("⏭️ [ON_CONNECT_END] Skipping - pending edge exists");
       return;
     }
-    
+
     const targetIsPane = (event.target as HTMLElement)?.classList?.contains('react-flow__pane');
-    
-    console.log("🔍 [ON_CONNECT_END] Conditions check", { 
-      targetIsPane, 
+
+    console.log("🔍 [ON_CONNECT_END] Conditions check", {
+      targetIsPane,
       hasSourceNode: !!connectionMenuRef.current.sourceNodeId,
       willCreateNode: targetIsPane && !!connectionMenuRef.current.sourceNodeId
     });
-    
+
     if (targetIsPane && connectionMenuRef.current.sourceNodeId) {
       console.log("🚀 [ON_CONNECT_END] Starting node creation with lock");
       // ✅ FIX: Usa il lock asincrono enterprise-ready
@@ -603,7 +615,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Rimuovi completamente handleSelectCondition e handleConnectionMenuClose
   // Queste funzioni erano legate a EdgeConditionMenu che è stato rimosso
-  
+
   // Handler robusto per chiusura intellisense/condition menu
   // ✅ RIMOSSA: const handleConnectionMenuClose - non utilizzata
 
@@ -665,7 +677,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, []);
 
   // Rigid drag: se il drag parte con __flowDragMode = 'rigid', muovi anche i discendenti
-  const rigidDragCtxRef = useRef<null | { rootId: string; ids: Set<string>; startPositions: Map<string, {x:number;y:number}>; rootStart: {x:number;y:number}; rootLast: {x:number;y:number} }>(null);
+  const rigidDragCtxRef = useRef<null | { rootId: string; ids: Set<string>; startPositions: Map<string, { x: number; y: number }>; rootStart: { x: number; y: number }; rootLast: { x: number; y: number } }>(null);
 
   // Helper functions for rigid drag logic
   const applyRigidDragMovement = useCallback((ctx: any, draggedNode: Node, setNodes: any) => {
@@ -675,14 +687,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     const incDx = curX - ctx.rootLast.x;
     const incDy = curY - ctx.rootLast.y;
     if (incDx === 0 && incDy === 0) return;
-    
+
     setNodes((nds: Node<NodeData>[]) => nds.map(n => {
       if (!ctx.ids.has(n.id)) return n;
       if (n.id === draggedNode.id) return draggedNode;
       const pos = n.position as any;
       return { ...n, position: { x: pos.x + incDx, y: pos.y + incDy } } as any;
     }));
-    
+
     ctx.rootLast = { x: curX, y: curY };
   }, []);
 
@@ -709,7 +721,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [setNodes, applyRigidDragMovement]);
 
   const onNodeDragStop = useCallback(() => {
-    try { (window as any).__flowDragMode = undefined; } catch {}
+    try { (window as any).__flowDragMode = undefined; } catch { }
     const ctx = rigidDragCtxRef.current;
     if (ctx) {
       applyFinalRigidDragOffset(ctx, nodesRef, setNodes);
@@ -839,7 +851,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         try {
           const txt = cursorTooltipRef.current?.textContent || '';
           if (txt === 'Click to insert here...') setCursorTooltip(null);
-        } catch {}
+        } catch { }
       }
     };
     window.addEventListener('mousemove', onMove, { passive: true });
@@ -850,7 +862,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const initializedRef = useRef(false);
   useEffect(() => {
     if (reactFlowInstance && !initializedRef.current) {
-      try { (reactFlowInstance as any).setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 0 }); } catch {}
+      try { (reactFlowInstance as any).setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 0 }); } catch { }
       initializedRef.current = true;
     }
   }, [reactFlowInstance]);
@@ -866,7 +878,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setShowNodeIntellisense,
     setNodeIntellisenseTarget
   );
-  
+
   return (
     <div
       className="flex-1 h-full relative"
@@ -889,7 +901,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       }}
     >
       {/* Expose nodes/edges to GlobalDebuggerPanel (bridge) */}
-      {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; if (flowId) { (window as any).__flows = (window as any).__flows || {}; (window as any).__flows[flowId] = { nodes, edges }; } } catch {} return null; })()}
+      {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; if (flowId) { (window as any).__flows = (window as any).__flows || {}; (window as any).__flows[flowId] = { nodes, edges }; } } catch { } return null; })()}
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
@@ -901,7 +913,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             const draft = applyNodeChanges(changes, nodes);
             draft.forEach(n => { if ((n as any).selected) selected.add(n.id); });
             setSelectedNodeIds(Array.from(selected));
-          } catch {}
+          } catch { }
         }}
         onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
         onConnect={onConnect}
@@ -943,9 +955,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
                   const cs = getComputedStyle(el);
                   dlog('flow', '[selectionRect]', { bg: cs.backgroundColor });
                 }
-              } catch {}
+              } catch { }
             }, 0);
-          } catch {}
+          } catch { }
         }}
         panOnDrag={[2]}
         zoomOnScroll={false}
@@ -963,7 +975,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             const effSelected = liveSelectedIds.length ? liveSelectedIds : selectedNodeIds;
             if (effSelected.length < 2) { setSelectionMenu({ show: false, x: 0, y: 0 }); return; }
             // sincronizza anche lo state locale, per coerenza
-            try { if (liveSelectedIds.length) setSelectedNodeIds(liveSelectedIds); } catch {}
+            try { if (liveSelectedIds.length) setSelectedNodeIds(liveSelectedIds); } catch { }
             // Use mouse release point relative to the FlowEditor container (account for scroll)
             const host = canvasRef.current;
             const rect = host ? host.getBoundingClientRect() : { left: 0, top: 0 } as any;
@@ -972,7 +984,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             const x = (e.clientX - rect.left) + scrollX;
             const y = (e.clientY - rect.top) + scrollY;
             setSelectionMenu({ show: true, x, y });
-          } catch {}
+          } catch { }
           // Persist the selection rectangle exactly as drawn
           try {
             const start = dragStartRef.current;
@@ -988,11 +1000,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
               const h = Math.abs(ey - start.y);
               if (w > 3 && h > 3) setPersistedSel({ x, y, w, h }); else setPersistedSel(null);
             }
-          } catch {}
+          } catch { }
         }}
       >
         <Controls className="bg-white shadow-lg border border-slate-200" />
-        <Background 
+        <Background
           variant={BackgroundVariant.Dots}
           gap={22}
           size={1.5}
@@ -1041,17 +1053,17 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           onCancel={() => setSelectionMenu({ show: false, x: 0, y: 0 })}
         />
       )}
-      
+
       {/* Messaggio istruzione in alto a sinistra, solo se canvas vuoto */}
       {nodes.length === 0 && (
         <div
           className="pointer-events-none absolute z-10 text-[10px]"
           style={{ position: 'fixed' as any }}
         >
-          
+
         </div>
       )}
-      
+
       {connectionMenu.show && (
         <div
           className="absolute pointer-events-none"

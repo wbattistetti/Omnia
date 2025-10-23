@@ -205,10 +205,27 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ PATCH 1: Focus per nodi nuovi (semplificato)
   useEffect(() => {
+    console.log("🔍 [AUTO_FOCUS] Checking focus conditions", {
+      nodeId: id,
+      hasFocusRowId: !!data.focusRowId,
+      focusRowId: data.focusRowId,
+      editingRowId,
+      nodeRowsCount: nodeRows.length,
+      isTemporary: data.isTemporary,
+      timestamp: Date.now()
+    });
+
     // Se abbiamo focusRowId (nodo nuovo) e non c'è editingRowId, impostalo
     if (data.focusRowId && !editingRowId && nodeRows.length > 0) {
       const firstRow = nodeRows[0];
       if (firstRow && firstRow.text.trim() === '') {
+        console.log("✅ [AUTO_FOCUS] Setting editingRowId", {
+          nodeId: id,
+          focusRowId: data.focusRowId,
+          firstRowId: firstRow.id,
+          match: firstRow.id === data.focusRowId,
+          timestamp: Date.now()
+        });
         setEditingRowId(firstRow.id);
       }
     }
