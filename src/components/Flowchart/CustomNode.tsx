@@ -297,6 +297,16 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const finalType: any = (typeof incoming.type !== 'undefined') ? incoming.type : existingType;
       const existingMode: any = (row as any).mode;
       const finalMode: any = (typeof incoming.mode !== 'undefined') ? incoming.mode : (existingMode || (finalType ? typeToMode(finalType as any) : undefined));
+
+      console.log('[🔍 CUSTOM_NODE] handleUpdateRow', {
+        rowId,
+        incomingInstanceId: incoming.instanceId,
+        existingInstanceId: (row as any).instanceId,
+        hasMeta: !!meta,
+        metaKeys: meta ? Object.keys(meta) : [],
+        timestamp: Date.now()
+      });
+
       return {
         ...row,
         ...incoming,

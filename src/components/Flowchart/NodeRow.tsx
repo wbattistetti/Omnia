@@ -22,6 +22,7 @@ import { useRowToolbar } from './hooks/useRowToolbar';
 import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from './actVisuals';
 import { inferActType, heuristicToInternal } from '../../nlp/actType';
 import { modeToType, typeToMode } from '../../utils/normalizers';
+import { idMappingService } from '../../services/IdMappingService';
 // Keyboard navigable type picker toolbar
 const TYPE_OPTIONS = [
   { key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
@@ -39,16 +40,16 @@ function TypePickerToolbar({ left, top, onPick, rootRef, currentType, onRequestC
   React.useEffect(() => {
     setFocusIdx(0);
     setTimeout(() => btnRefs.current[0]?.focus(), 0);
-    return () => {};
+    return () => { };
   }, []);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const key = e.key;
     const lower = (key || '').toLowerCase();
-    const block = ['ArrowDown','ArrowUp','Enter','Escape'];
+    const block = ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'];
     if (block.includes(key)) { e.preventDefault(); e.stopPropagation(); }
     if (lower.length === 1 && /[a-z]/.test(lower)) {
-      const map: Record<string, string> = { m:'Message', d:'DataRequest', c:'Confirmation', p:'ProblemClassification', s:'Summarizer', b:'BackendCall' };
+      const map: Record<string, string> = { m: 'Message', d: 'DataRequest', c: 'Confirmation', p: 'ProblemClassification', s: 'Summarizer', b: 'BackendCall' };
       const match = map[lower];
       if (match && match !== currentType) { onPick(match); return; }
     }
@@ -76,14 +77,14 @@ function TypePickerToolbar({ left, top, onPick, rootRef, currentType, onRequestC
       aria-label="Pick act type"
       ref={rootRef as any}
       onPointerDown={(e) => { e.stopPropagation(); }}
-      onPointerLeave={() => { setTimeout(() => { try { onRequestClose && onRequestClose(); } catch {} }, 100); }}
+      onPointerLeave={() => { setTimeout(() => { try { onRequestClose && onRequestClose(); } catch { } }, 100); }}
     >
       <div
         style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
-        onMouseEnter={() => { try { console.log('[Picker][enter]'); } catch {} }}
+        onMouseEnter={() => { try { console.log('[Picker][enter]'); } catch { } }}
         onMouseLeave={() => {
-          try { console.log('[Picker][leave]'); } catch {}
-          setTimeout(() => { try { onRequestClose && onRequestClose(); } catch {} }, 100);
+          try { console.log('[Picker][leave]'); } catch { }
+          setTimeout(() => { try { onRequestClose && onRequestClose(); } catch { } }, 100);
         }}
       >
         {TYPE_OPTIONS.map((opt, i) => {
@@ -181,7 +182,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   };
   const [showIcons, setShowIcons] = useState(false);
   const labelRef = useRef<HTMLSpanElement>(null);
-  const [iconPos, setIconPos] = useState<{top: number, left: number} | null>(null);
+  const [iconPos, setIconPos] = useState<{ top: number, left: number } | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   // State machine for toolbar/picker visibility (after refs are initialized)
   const toolbarSM = useRowToolbar({ rowRef: nodeContainerRef as any, overlayRef: overlayRef as any, pickerRef: typeToolbarRef as any });
@@ -227,7 +228,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       try {
         e.preventDefault();
         e.stopPropagation();
-      } catch {}
+      } catch { }
       setShowCreatePicker(false);
       setAllowCreatePicker(false);
       suppressIntellisenseRef.current = true;
@@ -240,7 +241,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           const val = el.value || '';
           el.setSelectionRange(val.length, val.length);
         }
-      } catch {}
+      } catch { }
     };
     document.addEventListener('keydown', onEsc, true);
     return () => document.removeEventListener('keydown', onEsc, true);
@@ -316,7 +317,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   useEffect(() => {
     if (!showCreatePicker) return;
     const onGlobalKeyDown = (ev: KeyboardEvent) => {
-      const keys = ['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Enter','Escape'];
+      const keys = ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape'];
       if (keys.includes(ev.key)) {
         const t = ev.target as Node | null;
         if (typeToolbarRef.current && t instanceof Node && typeToolbarRef.current.contains(t)) {
@@ -405,19 +406,19 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       if (onUpdateWithCategory) {
         (onUpdateWithCategory as any)(row, label, (row as any)?.categoryType, { message: { text: label } });
       }
-    } catch {}
+    } catch { }
     setIsEditing(false);
     setShowIntellisense(false);
     setIntellisenseQuery('');
     // PUT non-bloccante: salva in background
     try {
       let pid: string | undefined = undefined;
-      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch {}
+      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch { }
       if (pid && (row as any)?.instanceId && ((row as any)?.mode === 'Message' || !(row as any)?.mode)) {
         void ProjectDataService.updateInstance(pid, (row as any).instanceId, { message: { text: label } })
-          .catch((e) => { try { console.warn('[Row][save][instance:update] failed', e); } catch {} });
+          .catch((e) => { try { console.warn('[Row][save][instance:update] failed', e); } catch { } });
       }
-    } catch {}
+    } catch { }
     if (typeof onEditingEnd === 'function') {
       onEditingEnd();
     }
@@ -476,38 +477,38 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             setIsEditing(false);
             setShowIntellisense(false);
             setIntellisenseQuery('');
-            try { emitSidebarRefresh(); } catch {}
+            try { emitSidebarRefresh(); } catch { }
           }
         } catch (err) {
-          try { console.warn('[CondFlow] quick-create failed', err); } catch {}
+          try { console.warn('[CondFlow] quick-create failed', err); } catch { }
         }
         return;
       }
 
       // Alt+Enter: apri la toolbar manuale dei tipi
       if (e.altKey) {
-        if (dbg) {}
+        if (dbg) { }
         setIntellisenseQuery(q);
         setShowIntellisense(false);
         setAllowCreatePicker(true);
         setShowCreatePicker(true);
-        try { inputRef.current?.blur(); } catch {}
+        try { inputRef.current?.blur(); } catch { }
         return;
       }
       // Heuristica multilingua: IT/EN/PT con fallback a Message
       try {
-        const inf = inferActType(q, { languageOrder: ['IT','EN','PT'] as any });
+        const inf = inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
         const internal = heuristicToInternal(inf.type as any);
-        if (dbg) {}
+        if (dbg) { }
         await handlePickType(internal);
         return;
       } catch (err) {
-        try { console.warn('[Heuristics] failed, fallback to picker', err); } catch {}
+        try { console.warn('[Heuristics] failed, fallback to picker', err); } catch { }
         setIntellisenseQuery(q);
         setShowIntellisense(false);
         setAllowCreatePicker(true);
         setShowCreatePicker(true);
-        try { inputRef.current?.blur(); } catch {}
+        try { inputRef.current?.blur(); } catch { }
         return;
       }
     }
@@ -556,7 +557,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       onImmediateRowUpdate: immediate,
       getProjectId: () => (getProjectId ? getProjectId() : null)
     });
-    try { emitSidebarRefresh(); } catch {}
+    try { emitSidebarRefresh(); } catch { }
   };
 
   const handleIntellisenseSelect = async (item: IntellisenseItem) => {
@@ -567,7 +568,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       nodeCanvasPosition,
       timestamp: Date.now()
     });
-    
+
     setCurrentText(item.name);
     console.log('[🔍 INTELLISENSE] Closing intellisense', {
       itemName: item.name,
@@ -602,17 +603,136 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // Create instance asynchronously (best-effort)
     try {
       let pid: string | undefined = undefined;
-      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch {}
+      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch { }
+      let backendInstanceId: string | undefined = undefined;
       if (pid && item.actId && item.categoryType === 'agentActs') {
-    // Avoid require in browser; import mapping helpers at top-level
-    const chosenType = (item as any)?.type || modeToType((item as any)?.mode);
-    const modeFromType = typeToMode(chosenType);
+        // Avoid require in browser; import mapping helpers at top-level
+        const chosenType = (item as any)?.type || modeToType((item as any)?.mode);
+        const modeFromType = typeToMode(chosenType);
         const inst = await ProjectDataService.createInstance(pid, { baseActId: item.actId, mode: (item as any)?.mode || (modeFromType as any) });
+
+        console.log('[🔍 INTELLISENSE] ProjectDataService.createInstance result', {
+          success: !!inst,
+          instance: inst,
+          backendId: inst?._id,
+          hasActId: !!item.actId,
+          timestamp: Date.now()
+        });
+
         if (inst && (onUpdateWithCategory as any)) {
-          (onUpdateWithCategory as any)(row, item.name, item.categoryType, { instanceId: inst._id, baseActId: item.actId, type: chosenType, mode: (item as any)?.mode || modeFromType });
+          // Usa il mapping service per convertire l'ID backend in UUID frontend
+          const frontendInstanceId = idMappingService.mapBackendToFrontend(inst._id);
+          backendInstanceId = frontendInstanceId;
+
+          console.log('[🔍 INTELLISENSE] ID Mapping result', {
+            backendId: inst._id,
+            frontendId: frontendInstanceId,
+            timestamp: Date.now()
+          });
+
+          (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
+            instanceId: frontendInstanceId,
+            baseActId: item.actId,
+            type: chosenType,
+            mode: (item as any)?.mode || modeFromType
+          });
+        } else {
+          console.log('[⚠️ INTELLISENSE] createInstance failed or returned null', {
+            pid,
+            itemActId: item.actId,
+            itemCategoryType: item.categoryType,
+            timestamp: Date.now()
+          });
         }
       }
-    } catch (e) { try { console.warn('[Row][instance:create] failed', e); } catch {} }
+    } catch (e) { try { console.warn('[Row][instance:create] failed', e); } catch { } }
+
+    // Create instance in InstanceRepository for ProblemClassification
+    try {
+      const itemCategoryType = (item as any)?.categoryType;
+      const itemType = (item as any)?.type;
+      const rowType = row.type;
+
+      const isProblemClassification = itemCategoryType === 'agentActs' &&
+        (itemType === 'ProblemClassification' || rowType === 'ProblemClassification');
+
+      console.log('[🔍 INTELLISENSE] Checking if should create instance', {
+        isProblemClassification,
+        itemCategoryType,
+        itemType,
+        rowType,
+        rowInstanceId: row.instanceId,
+        itemActId: item.actId,
+        categoryMatch: itemCategoryType === 'agentActs',
+        typeMatch: itemType === 'ProblemClassification' || rowType === 'ProblemClassification',
+        timestamp: Date.now()
+      });
+
+      if (isProblemClassification) {
+        // Use existing instanceId, backend instance ID, or generate a new one
+        const instanceIdToUse = row.instanceId || backendInstanceId || (await import('uuid')).v4();
+        const actIdToUse = item.actId || 'problem-classification-fallback';
+
+        console.log('[🔍 INTELLISENSE] Creating instance in InstanceRepository', {
+          rowId: row.id,
+          instanceId: instanceIdToUse,
+          actId: actIdToUse,
+          hadExistingInstanceId: !!row.instanceId,
+          backendInstanceId,
+          timestamp: Date.now()
+        });
+
+        // Import InstanceRepository
+        const { instanceRepository } = await import('../../services/InstanceRepository');
+
+        // Try to find the template act to get intents
+        let initialIntents: any[] = [];
+        try {
+          if (projectDataCtx) {
+            const { findAgentAct } = await import('./actVisuals');
+            const templateAct = findAgentAct(projectDataCtx, { actId: actIdToUse });
+            if (templateAct?.problem?.intents) {
+              initialIntents = templateAct.problem.intents;
+            }
+          }
+        } catch (err) {
+          console.warn('[🔍 INTELLISENSE] Could not load template intents:', err);
+        }
+
+        // Create instance with intents
+        (instanceRepository as any).createInstanceWithId(
+          instanceIdToUse,
+          actIdToUse,
+          initialIntents
+        );
+
+        console.log('[✅ INTELLISENSE] Instance created in repository', {
+          instanceId: instanceIdToUse,
+          actId: actIdToUse,
+          intentsCount: initialIntents.length,
+          timestamp: Date.now()
+        });
+
+        // Update row with instanceId if it didn't have one
+        if (!row.instanceId && onUpdateWithCategory) {
+          console.log('[🔍 INTELLISENSE] Updating row with instanceId', {
+            rowId: row.id,
+            instanceId: instanceIdToUse,
+            timestamp: Date.now()
+          });
+
+          (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
+            instanceId: instanceIdToUse,
+            actId: actIdToUse,
+            baseActId: actIdToUse,
+            type: (item as any)?.type,
+            mode: (item as any)?.mode
+          });
+        }
+      }
+    } catch (e) {
+      try { console.warn('[Row][InstanceRepository:create] failed', e); } catch { }
+    }
     console.log('[🔍 INTELLISENSE] Exiting editing mode', {
       rowId: row.id,
       itemName: item.name,
@@ -864,7 +984,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         />,
         document.body
       )}
-      <div 
+      <div
         ref={nodeContainerRef}
         className={`node-row-outer flex items-center group transition-colors ${conditionalClasses}`}
         style={{ ...conditionalStyles, backgroundColor: 'transparent', border: 'none', outline: 'none', boxShadow: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 4, paddingBottom: 4, minHeight: 0, height: 'auto', width: '100%' }}
@@ -873,17 +993,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         onMouseLeave={(e) => toolbarSM.row.onLeave(e as any)}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
-      {isEditing ? (
-        <div style={{ flex: 1, minWidth: 0 }}>
-        <NodeRowEditor
-          value={currentText}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDownInternal}
-          inputRef={inputRef}
-          placeholder="Type what you need here..."
-        />
-        </div>
-      ) : (
+        {isEditing ? (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <NodeRowEditor
+              value={currentText}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDownInternal}
+              inputRef={inputRef}
+              placeholder="Type what you need here..."
+            />
+          </div>
+        ) : (
           <NodeRowLabel
             row={row}
             included={included}
@@ -897,32 +1017,32 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             Icon={Icon}
             iconSize={Math.max(10, Math.min(18, Math.round(12 * getZoom())))}
             showIcons={toolbarSM.showIcons}
-                iconPos={iconPos}
-                canDelete={canDelete}
-                onEdit={() => enterEditing()}
-                onDelete={() => onDelete(row)}
-                onDrag={handleMouseDown}
-                onLabelDragStart={handleMouseDown}
-                isEditing={isEditing}
-                setIsEditing={setIsEditing}
+            iconPos={iconPos}
+            canDelete={canDelete}
+            onEdit={() => enterEditing()}
+            onDelete={() => onDelete(row)}
+            onDrag={handleMouseDown}
+            onLabelDragStart={handleMouseDown}
+            isEditing={isEditing}
+            setIsEditing={setIsEditing}
             bgColor={bgColor}
             labelTextColor={labelTextColor}
             hasDDT={hasActDDT(row as any, actFound)}
             gearColor={labelTextColor}
-          onOpenDDT={async () => {
-            try {
-              console.log('[DDT][open] request', { rowId: row.id, text: row.text });
-            } catch {}
-            try {
-              // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType
-              const baseId = (row as any).baseActId || (row as any).actId || (row as any).factoryId || row.id;
-              const type = resolveActType(row as any, actFound) as any;
-              // Host present → open deterministically
-              actEditorCtx.open({ id: String(baseId), type, label: row.text });
-              console.log('[DDT][open] done', { baseId, type });
-              return;
-            } catch (e) { console.warn('[Row][openDDT] failed', e); }
-          }}
+            onOpenDDT={async () => {
+              try {
+                console.log('[DDT][open] request', { rowId: row.id, text: row.text });
+              } catch { }
+              try {
+                // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType
+                const baseId = (row as any).baseActId || (row as any).actId || (row as any).factoryId || row.id;
+                const type = resolveActType(row as any, actFound) as any;
+                // Host present → open deterministically
+                actEditorCtx.open({ id: String(baseId), type, label: row.text });
+                console.log('[DDT][open] done', { baseId, type });
+                return;
+              } catch (e) { console.warn('[Row][openDDT] failed', e); }
+            }}
             onDoubleClick={handleDoubleClick}
             onIconsHoverChange={(v: boolean) => { v ? toolbarSM.overlay.onEnter() : toolbarSM.overlay.onLeave(); }}
             onLabelHoverChange={(v: boolean) => { v ? toolbarSM.row.onEnter() : toolbarSM.row.onLeave({ relatedTarget: null } as any); }}
@@ -931,8 +1051,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             overlayRef={overlayRef}
           />
         )}
-        </div>
-      
+      </div>
+
       <NodeRowIntellisense
         showIntellisense={showIntellisense}
         isEditing={isEditing}

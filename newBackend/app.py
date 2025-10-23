@@ -7,6 +7,9 @@ from newBackend.api.api_nlp_config import router as nlp_config_router
 from newBackend.api.api_factory import router as factory_router
 import os
 import sys
+import httpx
+from typing import Dict, List, Optional
+import asyncio
 
 # Add path to old backend for imports - keep for potential future use
 old_backend_path = os.path.join(os.path.dirname(__file__), '..', 'backend')
@@ -36,6 +39,106 @@ except ImportError as e:
 from fastapi import APIRouter
 ner_router = APIRouter()
 llm_extract_router = APIRouter()
+
+# Cache in memoria per tutti gli agent acts disponibili
+all_agent_acts_cache: Dict[str, dict] = {}
+is_cache_loaded = False
+
+async def load_all_agent_acts():
+    """Carica tutti gli agent acts disponibili in memoria"""
+    global all_agent_acts_cache, is_cache_loaded
+
+    try:
+        # Chiamata al backend Express per ottenere tutti gli agent acts
+        express_url = "http://localhost:3100/api/factory/agent-acts"
+        print(f"[DEBUG] Loading agent acts from: {express_url}")
+
+        async with httpx.AsyncClient(timeout=10.0) as client:  # Timeout di 10 secondi
+            try:
+                response = await client.get(express_url)
+                print(f"[DEBUG] Response status: {response.status_code}")
+
+                if response.status_code == 200:
+                    all_agent_acts_cache.clear()
+
+                    # DEBUG: stampa cosa restituisce realmente l'endpoint
+                    response_text = response.text
+                    print(f"[DEBUG] Response text (first 500 chars): {response_text[:500]}...")
+
+                    # Prova a parsare come JSON
+                    try:
+                        response_data = response.json()
+                        print(f"[DEBUG] Parsed JSON type: {type(response_data)}")
+
+                        # Estrai gli agent acts dalla proprietà 'items'
+                        if isinstance(response_data, dict) and 'items' in response_data:
+                            agent_acts = response_data['items']
+                            print(f"[DEBUG] Found {len(agent_acts)} items in response")
+
+                            for i, act in enumerate(agent_acts[:5]):  # Log primi 5
+                                print(f"[DEBUG] Item {i}: {act}")
+
+                            for act in agent_acts:
+                                if isinstance(act, dict):
+                                    # Usa 'label' come ID se non c'è 'id'
+                                    act_id = act.get('id') or act.get('label', 'unknown')
+                                    all_agent_acts_cache[act_id] = act
+                                else:
+                                    print(f"[WARN] Skipping invalid act: {act}")
+
+                            is_cache_loaded = True
+                            print(f"[OK] Caricati {len(all_agent_acts_cache)} agent acts totali")
+                        else:
+                            print(f"[ERROR] Expected dict with 'items' property but got: {type(response_data)}")
+                            print(f"[DEBUG] Response data: {response_data}")
+
+                    except Exception as json_error:
+                        print(f"[ERROR] Error parsing JSON: {json_error}")
+                        print(f"[DEBUG] Raw response: {response_text}")
+                else:
+                    print(f"[WARN] Status code non 200: {response.status_code}")
+
+            except httpx.ConnectError:
+                print("[WARN] Backend Express non raggiungibile. Skipping cache loading.")
+                return  # Esci senza errori
+            except httpx.TimeoutException:
+                print("[WARN] Timeout connessione a Express. Skipping cache loading.")
+                return  # Esci senza errori
+
+    except Exception as e:
+        print(f"[ERROR] Errore caricamento agent acts: {e}")
+    finally:
+        print(f"[DEBUG] Cache loaded status: {is_cache_loaded}")
+
+# Funzioni per Intellisense in memoria
+def find_intents_from_memory(instance_id: str) -> List[dict]:
+    """Cerca intents dalla cache in memoria - SOSTITUISCE endpoint"""
+    if not is_cache_loaded:
+        return []
+
+    # Cerca l'agent act per instanceId
+    agent_act = all_agent_acts_cache.get(instance_id)
+    if not agent_act:
+        return []
+
+    # Estrae gli intents direttamente dalla cache
+    return agent_act.get('problem', {}).get('intents', [])
+
+def find_agent_act_from_memory(act_id: str) -> Optional[dict]:
+    """Cerca agent act dalla cache - SOSTITUISCE endpoint"""
+    if not is_cache_loaded:
+        return None
+    return all_agent_acts_cache.get(act_id)
+
+def get_agent_acts_by_type_from_memory(act_type: str) -> List[dict]:
+    """Filtra agent acts per tipo - SOSTITUISCE endpoint"""
+    if not is_cache_loaded:
+        return []
+
+    return [
+        act for act in all_agent_acts_cache.values()
+        if act.get('type') == act_type
+    ]
 
 app = FastAPI()
 
@@ -77,3 +180,95 @@ except Exception as e:
     # Create empty router as fallback
     from fastapi import APIRouter
     api_factory_router = APIRouter()
+
+# Endpoint per verificare lo stato della cache
+@app.get("/api/cache/status")
+async def get_cache_status():
+    """Restituisce lo stato della cache"""
+    return {
+        "is_loaded": is_cache_loaded,
+        "agent_acts_count": len(all_agent_acts_cache),
+        "loaded_at": "on_startup"
+    }
+
+# Endpoint per forzare il reload della cache
+@app.post("/api/cache/reload")
+async def reload_cache():
+    """Forza il reload della cache"""
+    await load_all_agent_acts()
+    return {"success": True, "message": "Cache reloaded"}
+
+@app.on_event("startup")
+async def startup_event():
+    """Carica tutti gli agent acts all'avvio dell'app"""
+    await load_all_agent_acts()
+
+@app.get("/api/agent-acts-from-cache")
+async def get_all_agent_acts_from_cache():
+    """Restituisce tutti gli agent acts dalla cache in memoria"""
+    if not is_cache_loaded:
+        return {"status": "cache_not_loaded", "message": "Cache non ancora caricata"}
+
+    return {
+        "status": "success",
+        "count": len(all_agent_acts_cache),
+        "agent_acts": list(all_agent_acts_cache.values())
+    }
+
+@app.get("/api/agent-acts-by-type/{act_type}")
+async def get_agent_acts_by_type(act_type: str):
+    """Restituisce agent acts filtrati per tipo"""
+    if not is_cache_loaded:
+        return {"status": "cache_not_loaded", "message": "Cache non ancora caricata"}
+
+    filtered_acts = [
+        act for act in all_agent_acts_cache.values()
+        if act.get('type') == act_type
+    ]
+
+    return {
+        "status": "success",
+        "type": act_type,
+        "count": len(filtered_acts),
+        "agent_acts": filtered_acts
+    }
+
+@app.get("/api/find-agent-act/{act_id}")
+async def find_agent_act(act_id: str):
+    """Cerca un agent act specifico per ID"""
+    if not is_cache_loaded:
+        return {"status": "cache_not_loaded", "message": "Cache non ancora caricata"}
+
+    agent_act = all_agent_acts_cache.get(act_id)
+
+    if agent_act:
+        return {"status": "success", "agent_act": agent_act}
+    else:
+        return {"status": "not_found", "message": f"Agent act con ID {act_id} non trovato"}
+
+@app.get("/api/debug/reload-cache")
+async def debug_reload_cache():
+    """Endpoint di debug per forzare il reload della cache"""
+    global all_agent_acts_cache, is_cache_loaded
+
+    # Resetta lo stato
+    all_agent_acts_cache.clear()
+    is_cache_loaded = False
+
+    # Forza il reload
+    await load_all_agent_acts()
+
+    return {
+        "status": "reloaded",
+        "cache_loaded": is_cache_loaded,
+        "cache_size": len(all_agent_acts_cache)
+    }
+
+@app.get("/api/debug/cache-status")
+async def debug_cache_status():
+    """Endpoint di debug per vedere lo stato della cache"""
+    return {
+        "cache_loaded": is_cache_loaded,
+        "cache_size": len(all_agent_acts_cache),
+        "cache_keys": list(all_agent_acts_cache.keys())[:10]  # primi 10 keys
+    }

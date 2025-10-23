@@ -6,6 +6,7 @@ import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
 import { isDraft as runtimeIsDraft, getTempId as runtimeGetTempId } from '../state/runtime';
 import { modeToType } from '../utils/normalizers';
+import { generateId } from '../utils/idGenerator';
 
 // Import template data
 import agentActsEn from '../../data/templates/utility_gas/agent_acts/en.json';
@@ -154,7 +155,7 @@ export const ProjectDataService = {
   },
 
   // --- Instances API helpers ---
-  async createInstance(projectId: string, payload: { baseActId: string; mode: 'Message'|'DataRequest'|'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
+  async createInstance(projectId: string, payload: { baseActId: string; mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
     if (this.isDraft()) {
       const key = this.getDraftKey();
       const store = this.getDraftStore(key);
@@ -205,7 +206,7 @@ export const ProjectDataService = {
     }
   },
 
-  async bulkCreateInstances(projectId: string, items: Array<{ baseActId: string; mode: 'Message'|'DataRequest'|'DataConfirmation'; message?: any; overrides?: any }>): Promise<any> {
+  async bulkCreateInstances(projectId: string, items: Array<{ baseActId: string; mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }>): Promise<any> {
     if (!items || items.length === 0) return { ok: true, inserted: 0 };
     if (this.isDraft()) {
       const key = this.getDraftKey();
@@ -239,21 +240,21 @@ export const ProjectDataService = {
     return s;
   },
   makeId(): string {
-    try { return (crypto as any).randomUUID(); } catch { return Math.random().toString(36).slice(2); }
+    return generateId();
   },
   async initializeProjectData(templateName: string, language: string, projectIndustry?: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     // Try to load from separate collections with scope filtering first
     try {
       console.log('>>> [ProjectDataService] Loading from separate collections with scope filtering...');
-      
+
       const industry = projectIndustry || templateName;
       const scopeQuery = {
         industry: industry,
         scope: ['global', 'industry']
       };
-      
+
       // Load from each collection separately
       const [agentActsRes, backendCallsRes, conditionsRes, tasksRes, macroTasksRes] = await Promise.all([
         fetch('/api/factory/agent-acts', {
@@ -282,7 +283,7 @@ export const ProjectDataService = {
           body: JSON.stringify(scopeQuery)
         })
       ]);
-      
+
       const [agentActs, backendCalls, conditions, tasks, macroTasks] = await Promise.all([
         agentActsRes.ok ? agentActsRes.json() : [],
         backendCallsRes.ok ? backendCallsRes.json() : [],
@@ -290,7 +291,7 @@ export const ProjectDataService = {
         tasksRes.ok ? tasksRes.json() : [],
         macroTasksRes.ok ? macroTasksRes.json() : []
       ]);
-      
+
       const totalItems = agentActs.length + backendCalls.length + conditions.length + tasks.length + macroTasks.length;
       console.log('>>> [ProjectDataService] Received items:', {
         agentActs: agentActs.length,
@@ -300,7 +301,7 @@ export const ProjectDataService = {
         macroTasks: macroTasks.length,
         total: totalItems
       });
-      
+
       if (totalItems > 0) {
         // Convert to categories format
         const groupedData = {
@@ -311,20 +312,20 @@ export const ProjectDataService = {
           tasks: this.convertToCategories(tasks, 'tasks'),
           macrotasks: this.convertToCategories(macroTasks, 'macrotasks')
         };
-        
+
         projectData = {
           name: '',
           industry: industry,
           ...groupedData
         };
-        
+
         console.log('>>> [ProjectDataService] Successfully loaded from separate collections');
         return;
       }
     } catch (error) {
       console.warn('>>> [ProjectDataService] Separate collections system not available, falling back to legacy system:', error);
     }
-    
+
     // Fallback to legacy template system
     const template = templateData[templateName as keyof typeof templateData];
     if (!template) {
@@ -359,15 +360,15 @@ export const ProjectDataService = {
     }
 
     // Legacy fallback to bundled JSON
-          projectData = {
-            name: '',
+    projectData = {
+      name: '',
       industry: projectIndustry || templateName,
-        agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
-        userActs: convertTemplateDataToCategories(languageData.userActs),
-        backendActions: convertTemplateDataToCategories(languageData.backendActions),
-        conditions: convertTemplateDataToCategories(languageData.conditions),
-        tasks: convertTemplateDataToCategories(languageData.tasks),
-        macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
+      agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
+      userActs: convertTemplateDataToCategories(languageData.userActs),
+      backendActions: convertTemplateDataToCategories(languageData.backendActions),
+      conditions: convertTemplateDataToCategories(languageData.conditions),
+      tasks: convertTemplateDataToCategories(languageData.tasks),
+      macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
     };
   },
 
@@ -393,11 +394,11 @@ export const ProjectDataService = {
     // Convert each type to categories
     Object.entries(itemsByType).forEach(([type, items]) => {
       const categoriesMap: { [key: string]: Category } = {};
-      
+
       items.forEach(item => {
         const categoryName = item.category || 'Uncategorized';
         const key = categoryName.replace(/\s+/g, '_').toLowerCase();
-        
+
         if (!categoriesMap[key]) {
           categoriesMap[key] = {
             id: uuidv4(),
@@ -443,11 +444,11 @@ export const ProjectDataService = {
     }
 
     const categoriesMap: { [key: string]: Category } = {};
-    
+
     items.forEach((item: any) => {
       const categoryName = item.category || 'Uncategorized';
       const key = categoryName.replace(/\s+/g, '_').toLowerCase();
-      
+
       if (!categoriesMap[key]) {
         categoriesMap[key] = {
           id: uuidv4(),
@@ -485,7 +486,7 @@ export const ProjectDataService = {
 
   // Create a FlowTask entity and return it
   async addTask(name: string, description = '', payload: { nodes: FlowTaskPayloadNode[]; edges: FlowTaskPayloadEdge[] },
-                meta?: { nodeIds?: string[]; edgeIds?: string[]; entryEdges?: string[]; exitEdges?: string[]; bounds?: { x: number; y: number; w: number; h: number } }): Promise<FlowTask> {
+    meta?: { nodeIds?: string[]; edgeIds?: string[]; entryEdges?: string[]; exitEdges?: string[]; bounds?: { x: number; y: number; w: number; h: number } }): Promise<FlowTask> {
     const cat = findOrCreateTaskCategory('Tasks');
     const task: FlowTask = {
       id: uuidv4(),
@@ -524,10 +525,10 @@ export const ProjectDataService = {
 
   async addCategory(type: EntityType, name: string): Promise<Category> {
     await new Promise(resolve => setTimeout(resolve, 50));
-    const newCategory: Category = { 
-      id: uuidv4(), 
-      name, 
-      items: [] 
+    const newCategory: Category = {
+      id: uuidv4(),
+      name,
+      items: []
     };
     const arr = (projectData as ProjectData)[type];
     if (!arr) throw new Error(`Entity type ${type} is not defined in projectData`);
@@ -558,11 +559,11 @@ export const ProjectDataService = {
     if (!arr) throw new Error(`Entity type ${type} is not defined in projectData`);
     const category = arr.find(c => c.id === categoryId);
     if (!category) throw new Error('Category not found');
-    
-    const newItem: ProjectEntityItem = { 
-      id: uuidv4(), 
-      name, 
-      description 
+
+    const newItem: ProjectEntityItem = {
+      id: uuidv4(),
+      name,
+      description
     };
     // Insert alphabetically (case-insensitive, locale-aware)
     const items = category.items as any[];
@@ -625,7 +626,7 @@ export const ProjectDataService = {
           }
         }
       }
-    } catch {}
+    } catch { }
   },
 
   /** Persist Agent Acts created in-memory into the project's DB (idempotent upsert). Called only on explicit Save. */
@@ -671,9 +672,9 @@ export const ProjectDataService = {
           console.warn('[Acts][bulk][error.no-body]', { status: res.status, statusText: res.statusText });
         }
       } else {
-        try { console.log('[Acts][bulk][ok]', { count: itemsToPersist.length }); } catch {}
+        try { console.log('[Acts][bulk][ok]', { count: itemsToPersist.length }); } catch { }
       }
-    } catch {}
+    } catch { }
   },
 
   async importProjectData(jsonData: string): Promise<void> {
@@ -742,7 +743,7 @@ export async function getAllDialogueTemplates() {
     const snap = Array.isArray(data) ? data.map((d: any) => ({ label: d?.label, mains: (d?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) })) : [];
     // eslint-disable-next-line no-console
     console.log('[KindPersist][ProjectDataService][load templates]', snap);
-  } catch {}
+  } catch { }
   return data;
 }
 
@@ -780,7 +781,7 @@ export function prepareIntellisenseData(
   data: ProjectData
 ): IntellisenseItem[] {
   const intellisenseItems: IntellisenseItem[] = [];
-  
+
   // Process each entity type
   Object.entries(data).forEach(([entityType, _categories]) => {
     const Icon = SIDEBAR_TYPE_ICONS[entityType as EntityType];
@@ -815,6 +816,6 @@ export function prepareIntellisenseData(
       });
     });
   });
-  
+
   return intellisenseItems;
 };

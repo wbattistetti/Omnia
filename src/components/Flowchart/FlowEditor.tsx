@@ -35,8 +35,8 @@ import { useConditionCreation } from './hooks/useConditionCreation';
 import { CustomEdge } from './CustomEdge';
 import { useIntellisenseHandlers } from './hooks/useIntellisenseHandlers';
 import { v4 as uuidv4 } from 'uuid';
-import { findAgentAct } from './actVisuals';
 import { instanceRepository } from '../../services/InstanceRepository';
+import { idMappingService } from '../../services/IdMappingService';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -512,7 +512,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const withNodeLock = useNodeCreationLock();
 
   // ✅ FIX: Funzione per aprire l'IntellisenseMenu CORRETTO
-  const openIntellisense = useCallback((tempNodeId: string, tempEdgeId: string, event: any) => {
+  const openIntellisense = useCallback(async (tempNodeId: string, tempEdgeId: string, event: any) => {
     console.log("🎯 [INTELLISENSE] Opening proper IntellisenseMenu", {
       tempNodeId,
       tempEdgeId,
@@ -603,42 +603,135 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         timestamp: Date.now()
       });
 
+      console.log("🔍 [INTELLISENSE_DETAILED] Problem row details", {
+        problemRow: {
+          id: problemRow.id,
+          text: problemRow.text,
+          type: problemRow.type,
+          instanceId: (problemRow as any).instanceId,
+          actId: (problemRow as any).actId,
+          mode: (problemRow as any).mode,
+          categoryType: (problemRow as any).categoryType
+        },
+        timestamp: Date.now()
+      });
+
       // Cerca l'istanza nel repository
       if (instanceId) {
-        const instance = instanceRepository.getInstance(instanceId);
+        // Prova prima con l'ID diretto, poi con il mapping se è un ID backend
+        let instance = instanceRepository.getInstance(instanceId);
+
+        // Se non trovato, potrebbe essere un ID backend che va mappato
+        if (!instance) {
+          const frontendId = idMappingService.getFrontendId(instanceId);
+          if (frontendId) {
+            console.log("🔍 [INTELLISENSE_MAPPING] Using mapped ID", {
+              backendId: instanceId,
+              frontendId,
+              timestamp: Date.now()
+            });
+            instance = instanceRepository.getInstance(frontendId);
+          } else {
+            // Se non esiste mapping, crealo ora (auto-mapping per legacy rows)
+            console.log("🔧 [INTELLISENSE_MAPPING] Creating auto-mapping for legacy row", {
+              backendId: instanceId,
+              timestamp: Date.now()
+            });
+            const newFrontendId = idMappingService.mapBackendToFrontend(instanceId);
+
+            // Prova a caricare gli intents da projectData se disponibili
+            try {
+              const { findAgentAct } = await import('./actVisuals');
+              if (projectData) {
+                const act = findAgentAct(projectData, { instanceId });
+                if (act?.problem?.intents) {
+                  instanceRepository.createInstanceWithId(
+                    newFrontendId,
+                    actId || 'problem-classification',
+                    act.problem.intents
+                  );
+                  instance = instanceRepository.getInstance(newFrontendId);
+                  console.log("✅ [INTELLISENSE_MAPPING] Auto-created instance with intents", {
+                    frontendId: newFrontendId,
+                    intentsCount: act.problem.intents.length,
+                    timestamp: Date.now()
+                  });
+                }
+              }
+            } catch (err) {
+              console.warn('[INTELLISENSE_MAPPING] Could not auto-create instance:', err);
+            }
+          }
+        }
+
+        console.log("🔍 [INTELLISENSE_DETAILED] Repository lookup result", {
+          instanceId,
+          instanceFound: !!instance,
+          instanceData: instance ? {
+            instanceId: instance.instanceId,
+            actId: instance.actId,
+            problemIntentsCount: instance.problemIntents?.length || 0,
+            problemIntents: instance.problemIntents,
+            createdAt: instance.createdAt,
+            updatedAt: instance.updatedAt
+          } : null,
+          timestamp: Date.now()
+        });
 
         if (instance) {
           problemIntents = instance.problemIntents || [];
           console.log("✅ [INTELLISENSE_NEW] Found intents in repository!", {
             instanceId,
             intentsCount: problemIntents.length,
+            intents: problemIntents,
             timestamp: Date.now()
           });
         } else {
           console.log("⚠️ [INTELLISENSE_NEW] Instance not found in repository", {
             instanceId,
-            willTryFallback: !!actId,
             timestamp: Date.now()
           });
-
-          // Fallback: se l'istanza non esiste, prova a usare il template
-          if (actId && projectData) {
-            const templateAct = findAgentAct(projectData, { actId });
-            if (templateAct && Array.isArray((templateAct as any)?.problem?.intents)) {
-              problemIntents = (templateAct as any).problem.intents;
-              console.log("✅ [INTELLISENSE_NEW] Using template intents as fallback", {
-                actId,
-                intentsCount: problemIntents.length,
-                timestamp: Date.now()
-              });
-            }
-          }
         }
       } else {
         console.log("❌ [INTELLISENSE_NEW] No instanceId in row", {
           rowHasActId: !!actId,
           timestamp: Date.now()
         });
+
+        // Prova a creare un'istanza al volo se abbiamo almeno actId
+        if (actId) {
+          try {
+            console.log("🔧 [INTELLISENSE_NEW] Creating instance on-the-fly", {
+              actId,
+              timestamp: Date.now()
+            });
+
+            const newInstanceId = (await import('uuid')).v4();
+            const { findAgentAct } = await import('./actVisuals');
+
+            if (projectData) {
+              const act = findAgentAct(projectData, { actId });
+              const intents = act?.problem?.intents || [];
+
+              instanceRepository.createInstanceWithId(
+                newInstanceId,
+                actId,
+                intents
+              );
+
+              problemIntents = intents;
+
+              console.log("✅ [INTELLISENSE_NEW] Created instance on-the-fly", {
+                instanceId: newInstanceId,
+                actId,
+                intentsCount: intents.length,
+                timestamp: Date.now()
+              });
+            }
+          } catch (err) {
+            console.warn('[INTELLISENSE_NEW] Could not create instance on-the-fly:', err);
+          }
+        }
       }
     }
 

@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ProblemIntent } from '../types/project';
+import { generateId } from '../utils/idGenerator';
 
 /**
  * Rappresenta un'istanza di un Agent Act con intents personalizzati
@@ -26,7 +27,7 @@ class InstanceRepository {
      * @returns La nuova istanza creata
      */
     createInstance(actId: string, initialIntents?: ProblemIntent[]): ActInstance {
-        const instanceId = uuidv4();
+        const instanceId = generateId();
 
         const instance: ActInstance = {
             instanceId,
@@ -39,6 +40,34 @@ class InstanceRepository {
         this.instances.set(instanceId, instance);
 
         console.log('✅ [InstanceRepository] Created new instance:', {
+            instanceId,
+            actId,
+            initialIntentsCount: initialIntents?.length || 0
+        });
+
+        return instance;
+    }
+
+    /**
+     * Crea una nuova istanza con un ID specifico
+     * Utile per migrare istanze esistenti o per sincronizzare con il backend
+     * @param instanceId ID specifico da usare per l'istanza
+     * @param actId ID del template dal catalogo
+     * @param initialIntents Intents iniziali (opzionale)
+     * @returns La nuova istanza creata
+     */
+    createInstanceWithId(instanceId: string, actId: string, initialIntents?: ProblemIntent[]): ActInstance {
+        const instance: ActInstance = {
+            instanceId,
+            actId,
+            problemIntents: initialIntents || [],
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        this.instances.set(instanceId, instance);
+
+        console.log('✅ [InstanceRepository] Created instance with specific ID:', {
             instanceId,
             actId,
             initialIntentsCount: initialIntents?.length || 0
