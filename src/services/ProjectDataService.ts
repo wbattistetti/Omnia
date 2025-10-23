@@ -257,11 +257,7 @@ export const ProjectDataService = {
 
       // Load from each collection separately
       const [agentActsRes, backendCallsRes, conditionsRes, tasksRes, macroTasksRes] = await Promise.all([
-        fetch('/api/factory/agent-acts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(scopeQuery)
-        }),
+        fetch('http://localhost:8000/api/agent-acts-from-cache'),
         fetch('/api/factory/backend-calls', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -284,17 +280,20 @@ export const ProjectDataService = {
         })
       ]);
 
-      const [agentActs, backendCalls, conditions, tasks, macroTasks] = await Promise.all([
-        agentActsRes.ok ? agentActsRes.json() : [],
+      // Process agent acts from cache
+      const agentActsJson = await agentActsRes.json();
+      const agentActsItems = agentActsJson.status === 'success' && Array.isArray(agentActsJson.agent_acts) ? agentActsJson.agent_acts : [];
+
+      const [backendCalls, conditions, tasks, macroTasks] = await Promise.all([
         backendCallsRes.ok ? backendCallsRes.json() : [],
         conditionsRes.ok ? conditionsRes.json() : [],
         tasksRes.ok ? tasksRes.json() : [],
         macroTasksRes.ok ? macroTasksRes.json() : []
       ]);
 
-      const totalItems = agentActs.length + backendCalls.length + conditions.length + tasks.length + macroTasks.length;
+      const totalItems = agentActsItems.length + backendCalls.length + conditions.length + tasks.length + macroTasks.length;
       console.log('>>> [ProjectDataService] Received items:', {
-        agentActs: agentActs.length,
+        agentActs: agentActsItems.length,
         backendCalls: backendCalls.length,
         conditions: conditions.length,
         tasks: tasks.length,
@@ -305,7 +304,7 @@ export const ProjectDataService = {
       if (totalItems > 0) {
         // Convert to categories format
         const groupedData = {
-          agentActs: this.convertToCategories(agentActs, 'agentActs'),
+          agentActs: this.convertToCategories(agentActsItems, 'agentActs'),
           userActs: [], // Will be loaded from legacy system
           backendActions: this.convertToCategories(backendCalls, 'backendActions'),
           conditions: this.convertToCategories(conditions, 'conditions'),
@@ -717,6 +716,41 @@ export const ProjectDataService = {
       }
     }
     return { saved: count };
+  },
+
+  async loadFactoryData(projectData: any): Promise<void> {
+    if (!projectData) {
+      projectData = {
+        name: '',
+        industry: '',
+        agentActs: [],
+        userActs: [],
+        backendActions: [],
+        conditions: [],
+        tasks: [],
+        macrotasks: []
+      };
+      return;
+    }
+
+    // Use FastAPI cache instead of Express factory
+    const res = await fetch(`http://localhost:8000/api/agent-acts-from-cache`);
+    if (!res.ok) throw new Error('Failed to load cached agent acts');
+    const json = await res.json();
+
+    // Extract agent acts from cache response
+    const items = json.status === 'success' && Array.isArray(json.agent_acts) ? json.agent_acts : [];
+
+    projectData = {
+      name: projectData.name || '',
+      industry: projectData.industry || '',
+      agentActs: this.convertToCategories(items, 'agentActs'),
+      userActs: [],
+      backendActions: [],
+      conditions: [],
+      tasks: [],
+      macrotasks: []
+    };
   }
 };
 

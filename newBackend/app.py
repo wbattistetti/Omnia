@@ -45,70 +45,88 @@ all_agent_acts_cache: Dict[str, dict] = {}
 is_cache_loaded = False
 
 async def load_all_agent_acts():
-    """Carica tutti gli agent acts disponibili in memoria"""
+    """Carica tutti gli agent acts disponibili in memoria con retry e backoff esponenziale"""
     global all_agent_acts_cache, is_cache_loaded
 
-    try:
-        # Chiamata al backend Express per ottenere tutti gli agent acts
-        express_url = "http://localhost:3100/api/factory/agent-acts"
-        print(f"[DEBUG] Loading agent acts from: {express_url}")
+    max_retries = 3
+    base_delay = 2  # secondi per il primo retry
 
-        async with httpx.AsyncClient(timeout=10.0) as client:  # Timeout di 10 secondi
-            try:
-                response = await client.get(express_url)
-                print(f"[DEBUG] Response status: {response.status_code}")
+    for attempt in range(max_retries):
+        try:
+            # Calcola delay esponenziale: 2s, 4s, 8s
+            retry_delay = base_delay * (2 ** attempt)
 
-                if response.status_code == 200:
-                    all_agent_acts_cache.clear()
+            # Chiamata al backend Express per ottenere tutti gli agent acts
+            express_url = "http://localhost:3100/api/factory/agent-acts"
+            print(f"[DEBUG] Attempt {attempt + 1}/{max_retries} - Loading from: {express_url}")
 
-                    # DEBUG: stampa cosa restituisce realmente l'endpoint
-                    response_text = response.text
-                    print(f"[DEBUG] Response text (first 500 chars): {response_text[:500]}...")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                try:
+                    response = await client.get(express_url)
+                    print(f"[DEBUG] Response status: {response.status_code}")
 
-                    # Prova a parsare come JSON
-                    try:
-                        response_data = response.json()
-                        print(f"[DEBUG] Parsed JSON type: {type(response_data)}")
+                    if response.status_code == 200:
+                        all_agent_acts_cache.clear()
 
-                        # Estrai gli agent acts dalla proprietà 'items'
-                        if isinstance(response_data, dict) and 'items' in response_data:
-                            agent_acts = response_data['items']
-                            print(f"[DEBUG] Found {len(agent_acts)} items in response")
+                        # DEBUG: stampa cosa restituisce realmente l'endpoint
+                        response_text = response.text
+                        print(f"[DEBUG] Response text (first 500 chars): {response_text[:500]}...")
 
-                            for i, act in enumerate(agent_acts[:5]):  # Log primi 5
-                                print(f"[DEBUG] Item {i}: {act}")
+                        # Prova a parsare come JSON
+                        try:
+                            response_data = response.json()
+                            print(f"[DEBUG] Parsed JSON type: {type(response_data)}")
 
-                            for act in agent_acts:
-                                if isinstance(act, dict):
-                                    # Usa 'label' come ID se non c'è 'id'
-                                    act_id = act.get('id') or act.get('label', 'unknown')
-                                    all_agent_acts_cache[act_id] = act
-                                else:
-                                    print(f"[WARN] Skipping invalid act: {act}")
+                            # Estrai gli agent acts dalla proprietà 'items'
+                            if isinstance(response_data, dict) and 'items' in response_data:
+                                agent_acts = response_data['items']
+                                print(f"[DEBUG] Found {len(agent_acts)} items in response")
 
-                            is_cache_loaded = True
-                            print(f"[OK] Caricati {len(all_agent_acts_cache)} agent acts totali")
-                        else:
-                            print(f"[ERROR] Expected dict with 'items' property but got: {type(response_data)}")
-                            print(f"[DEBUG] Response data: {response_data}")
+                                for i, act in enumerate(agent_acts[:3]):  # Log primi 3
+                                    print(f"[DEBUG] Item {i}: {type(act)} - {str(act)[:100]}...")
 
-                    except Exception as json_error:
-                        print(f"[ERROR] Error parsing JSON: {json_error}")
-                        print(f"[DEBUG] Raw response: {response_text}")
-                else:
-                    print(f"[WARN] Status code non 200: {response.status_code}")
+                                for act in agent_acts:
+                                    if isinstance(act, dict):
+                                        # Usa 'label' come ID se non c'è 'id'
+                                        act_id = act.get('id') or act.get('label', 'unknown')
+                                        all_agent_acts_cache[act_id] = act
+                                    else:
+                                        print(f"[WARN] Skipping invalid act: {act}")
 
-            except httpx.ConnectError:
-                print("[WARN] Backend Express non raggiungibile. Skipping cache loading.")
-                return  # Esci senza errori
-            except httpx.TimeoutException:
-                print("[WARN] Timeout connessione a Express. Skipping cache loading.")
-                return  # Esci senza errori
+                                is_cache_loaded = True
+                                print(f"[SUCCESS] Loaded {len(all_agent_acts_cache)} agent acts after {attempt + 1} attempts")
+                                return  # Successo, esci dalla funzione
+                            else:
+                                print(f"[ERROR] Expected dict with 'items' property but got: {type(response_data)}")
+                                print(f"[DEBUG] Response data: {response_data}")
 
-    except Exception as e:
-        print(f"[ERROR] Errore caricamento agent acts: {e}")
-    finally:
-        print(f"[DEBUG] Cache loaded status: {is_cache_loaded}")
+                        except Exception as json_error:
+                            print(f"[ERROR] Error parsing JSON: {json_error}")
+                            print(f"[DEBUG] Raw response: {response_text}")
+                    else:
+                        print(f"[WARN] Status code not 200: {response.status_code}")
+
+                except httpx.ConnectError:
+                    print(f"[WARN] Backend Express not reachable (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        print(f"[INFO] Retrying in {retry_delay} seconds with exponential backoff...")
+                        await asyncio.sleep(retry_delay)
+                    continue
+                except httpx.TimeoutException:
+                    print(f"[WARN] Connection timeout to Express (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        print(f"[INFO] Retrying in {retry_delay} seconds with exponential backoff...")
+                        await asyncio.sleep(retry_delay)
+                    continue
+
+        except Exception as e:
+            print(f"[ERROR] Unexpected error during attempt {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                print(f"[INFO] Retrying in {retry_delay} seconds...")
+                await asyncio.sleep(retry_delay)
+
+    print("[ERROR] Failed to load agent acts after all retries - proceeding without cache")
+    print("[INFO] Cache will remain empty until manual reload via /api/debug/reload-cache")
 
 # Funzioni per Intellisense in memoria
 def find_intents_from_memory(instance_id: str) -> List[dict]:
