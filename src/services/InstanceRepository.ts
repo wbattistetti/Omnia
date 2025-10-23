@@ -1,0 +1,123 @@
+import { v4 as uuidv4 } from 'uuid';
+import type { ProblemIntent } from '../types/project';
+
+/**
+ * Rappresenta un'istanza di un Agent Act con intents personalizzati
+ */
+export interface ActInstance {
+    instanceId: string;           // ID unico dell'istanza
+    actId: string;                // Riferimento al template nel catalogo
+    problemIntents: ProblemIntent[]; // Intents personalizzati di questa istanza
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+/**
+ * Repository centrale per la gestione delle istanze degli acts
+ * Mantiene una mappa di tutte le istanze create nel sistema
+ */
+class InstanceRepository {
+    private instances = new Map<string, ActInstance>();
+
+    /**
+     * Crea una nuova istanza di un Agent Act
+     * @param actId ID del template dal catalogo
+     * @param initialIntents Intents iniziali (opzionale, default dal template)
+     * @returns La nuova istanza creata
+     */
+    createInstance(actId: string, initialIntents?: ProblemIntent[]): ActInstance {
+        const instanceId = uuidv4();
+
+        const instance: ActInstance = {
+            instanceId,
+            actId,
+            problemIntents: initialIntents || [], // Gli intents del template verranno aggiunti dopo
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        this.instances.set(instanceId, instance);
+
+        console.log('✅ [InstanceRepository] Created new instance:', {
+            instanceId,
+            actId,
+            initialIntentsCount: initialIntents?.length || 0
+        });
+
+        return instance;
+    }
+
+    /**
+     * Recupera un'istanza per ID
+     * @param instanceId ID dell'istanza da recuperare
+     * @returns L'istanza trovata o undefined
+     */
+    getInstance(instanceId: string): ActInstance | undefined {
+        const instance = this.instances.get(instanceId);
+
+        if (!instance) {
+            console.log('❌ [InstanceRepository] Instance not found:', instanceId);
+        }
+
+        return instance;
+    }
+
+    /**
+     * Aggiorna gli intents di un'istanza
+     * @param instanceId ID dell'istanza da aggiornare
+     * @param intents Nuovi intents da impostare
+     * @returns True se aggiornata con successo, false altrimenti
+     */
+    updateIntents(instanceId: string, intents: ProblemIntent[]): boolean {
+        const instance = this.getInstance(instanceId);
+
+        if (instance) {
+            instance.problemIntents = intents;
+            instance.updatedAt = new Date();
+
+            console.log('✅ [InstanceRepository] Updated intents for instance:', {
+                instanceId,
+                intentsCount: intents.length
+            });
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Elimina un'istanza
+     * @param instanceId ID dell'istanza da eliminare
+     * @returns True se eliminata con successo, false altrimenti
+     */
+    deleteInstance(instanceId: string): boolean {
+        const deleted = this.instances.delete(instanceId);
+
+        if (deleted) {
+            console.log('✅ [InstanceRepository] Deleted instance:', instanceId);
+        } else {
+            console.log('❌ [InstanceRepository] Instance not found for deletion:', instanceId);
+        }
+
+        return deleted;
+    }
+
+    /**
+     * Restituisce tutte le istanze (per debugging)
+     */
+    getAllInstances(): ActInstance[] {
+        return Array.from(this.instances.values());
+    }
+
+    /**
+     * Pulisce tutte le istanze (per testing)
+     */
+    clearAll(): void {
+        this.instances.clear();
+        console.log('✅ [InstanceRepository] Cleared all instances');
+    }
+}
+
+// Esporta un'istanza singleton del repository
+export const instanceRepository = new InstanceRepository();

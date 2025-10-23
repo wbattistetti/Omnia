@@ -35,6 +35,7 @@ import { useConditionCreation } from './hooks/useConditionCreation';
 import { CustomEdge } from './CustomEdge';
 import { useIntellisenseHandlers } from './hooks/useIntellisenseHandlers';
 import { v4 as uuidv4 } from 'uuid';
+import { findAgentAct } from './actVisuals';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -538,18 +539,205 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     // ✅ Calcola gli intents MANUALMENTE ora che il menu è aperto
     const sourceId = connectionMenuRef.current.sourceNodeId;
     const srcNode = nodes.find(n => n.id === sourceId);
+
+    console.log("🔍 [INTELLISENSE_DEBUG] Source node analysis", {
+      sourceId,
+      srcNodeFound: !!srcNode,
+      srcNodeRows: srcNode ? (srcNode.data as any)?.rows : null,
+      timestamp: Date.now()
+    });
+
     const rows = Array.isArray((srcNode?.data as any)?.rows) ? (srcNode!.data as any).rows : [];
-    const problemRow = rows.find((r: any) => r.text && r.text.toLowerCase().includes('problemclassification'));
-    const problemIntents = problemRow ? (problemRow as any)?.problem?.intents : null;
+
+    // Log tutte le righe per vedere il contenuto effettivo
+    console.log("🔍 [INTELLISENSE_DEBUG] All rows content", {
+      rows: rows.map((r: any) => ({
+        text: r.text,
+        type: r.type,
+        mode: r.mode,
+        hasProblem: !!(r as any)?.problem
+      })),
+      timestamp: Date.now()
+    });
+
+    // Cerca righe con problem classification (SOLO per tipo specifico)
+    const problemRow = rows.find((r: any) => {
+      const type = (r.type || '').toLowerCase();
+      const mode = (r.mode || '').toLowerCase();
+      const hasProblemProp = !!(r as any)?.problem;
+
+      // Cerca SOLO per tipo specifico o proprietà problem
+      return hasProblemProp ||
+        type === 'problemclassification' ||
+        type === 'intentclassification' ||
+        type === 'problem' ||
+        type === 'intent' ||
+        mode === 'problemclassification' ||
+        mode === 'intentclassification' ||
+        mode === 'problem' ||
+        mode === 'intent';
+    });
+
+    console.log("🔍 [INTELLISENSE_DEBUG] Problem row search", {
+      rowsCount: rows.length,
+      problemRowFound: !!problemRow,
+      problemRow: problemRow,
+      problemRowText: problemRow ? problemRow.text : null,
+      problemRowType: problemRow ? problemRow.type : null,
+      problemRowMode: problemRow ? problemRow.mode : null,
+      problemRowFullStructure: problemRow, // Mostra TUTTA la struttura della riga
+      problemIntents: problemRow ? (problemRow as any)?.problem?.intents : null,
+      timestamp: Date.now()
+    });
+
+    // ✅ SOLUZIONE: Recupera gli intents dal projectData usando instanceId
+    let problemIntents: any[] = [];
+    if (problemRow) {
+      const instanceId = (problemRow as any)?.instanceId;
+      const actId = (problemRow as any)?.actId || (problemRow as any)?.factoryId;
+
+      console.log("🔍 [INTELLISENSE_DEBUG] Looking for act in projectData", {
+        instanceId,
+        actId,
+        hasProjectData: !!projectData,
+        timestamp: Date.now()
+      });
+
+      // DEBUG: Log completa struttura della riga per vedere se ha problemIntents
+      console.log("🔍 [ROW_STRUCTURE] Full row inspection:", {
+        instanceId: problemRow?.instanceId,
+        actId: problemRow?.actId,
+        factoryId: problemRow?.factoryId,
+        baseActId: problemRow?.baseActId,
+        hasProblemIntents: !!(problemRow as any)?.problemIntents,
+        problemIntents: (problemRow as any)?.problemIntents,
+        problemProperty: (problemRow as any)?.problem,
+        allProperties: Object.keys(problemRow || {}),
+        rowType: problemRow?.type,
+        rowMode: problemRow?.mode,
+        timestamp: Date.now()
+      });
+
+      // Cerca l'act nel projectData usando instanceId
+      if (projectData && instanceId) {
+        // DEBUG: Log della struttura projectData.agentActs
+        console.log("🔍 [INTELLISENSE_DEBUG] ProjectData structure", {
+          hasAgentActs: !!projectData?.agentActs,
+          agentActsCount: projectData?.agentActs?.length,
+          firstCategoryItems: projectData?.agentActs?.[0]?.items?.length,
+          sampleActIds: projectData?.agentActs?.[0]?.items?.slice(0, 3).map((it: any) => ({
+            _id: it._id,
+            id: it.id,
+            name: it.name,
+            type: it.type,
+            hasProblem: !!(it as any)?.problem,
+            problemIntentsCount: it?.problem?.intents?.length || 0
+          })),
+          timestamp: Date.now()
+        });
+
+        // Cerca l'act usando instanceId direttamente
+        let act: any = null;
+        try {
+          if (projectData?.agentActs) {
+            for (const cat of projectData.agentActs) {
+              const found = (cat.items || []).find(
+                (it: any) => it._id === instanceId || it.id === instanceId
+              );
+              if (found) {
+                act = found;
+                console.log("✅ Found matching act!", { actId: found._id || found.id, actName: found.name });
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error searching for act:", e);
+        }
+
+        console.log("🔍 [INTELLISENSE_DEBUG] Found act from projectData", {
+          actFound: !!act,
+          actId: act?._id || act?.id,
+          hasProblem: act && !!(act as any)?.problem,
+          hasIntents: act && Array.isArray((act as any)?.problem?.intents),
+          intentsCount: act && Array.isArray((act as any)?.problem?.intents) ? (act as any).problem.intents.length : 0,
+          act: act,
+          timestamp: Date.now()
+        });
+
+        if (act && Array.isArray((act as any)?.problem?.intents)) {
+          problemIntents = (act as any).problem.intents;
+          console.log("✅ Found intents in projectData act");
+        } else {
+          // ❌ RIMOSSO: Fallback localStorage - non usiamo hack!
+          console.log("❌ No intents found in projectData - returning empty array");
+          problemIntents = [];
+        }
+      }
+    }
+
+    // Log dettagliato per esplorare dove sono gli intents
+    if (problemRow && !problemIntents) {
+      // LOGGING COMPLETO - usa console.dir per vedere la struttura completa
+      console.log("🔍 [INTELLISENSE_DEBUG] ===== PROBLEM ROW FULL INSPECTION =====");
+      console.log("🔍 [INTELLISENSE_DEBUG] All property keys:", Object.keys(problemRow));
+      console.log("🔍 [INTELLISENSE_DEBUG] All property entries:");
+      Object.entries(problemRow).forEach(([key, value]) => {
+        console.log(`  - ${key}:`, value);
+      });
+
+      // Usa console.dir per vedere la struttura completa espansa
+      console.dir(problemRow, { depth: 10 });
+
+      console.log("🔍 [INTELLISENSE_DEBUG] Exploring problem row structure", {
+        hasProblemProperty: !!(problemRow as any)?.problem,
+        problemProperty: (problemRow as any)?.problem,
+        allProperties: Object.keys(problemRow),
+        propertyValues: {
+          text: problemRow.text,
+          type: problemRow.type,
+          mode: problemRow.mode,
+          categoryType: (problemRow as any)?.categoryType,
+          intents: (problemRow as any)?.intents,
+          problem: (problemRow as any)?.problem,
+          classification: (problemRow as any)?.classification,
+        },
+        rowStructure: problemRow,
+        timestamp: Date.now()
+      });
+    }
+
+    // Log dettagliato degli intents se trovati
+    if (problemIntents) {
+      console.log("🔍 [INTELLISENSE_DEBUG] Problem intents details", {
+        isArray: Array.isArray(problemIntents),
+        intentsCount: Array.isArray(problemIntents) ? problemIntents.length : 'not array',
+        firstIntent: Array.isArray(problemIntents) && problemIntents.length > 0 ? problemIntents[0] : null,
+        intentsStructure: problemIntents,
+        timestamp: Date.now()
+      });
+    }
 
     const combinedItems = [
       ...(allConditions || []),
-      ...(Array.isArray(problemIntents) ? problemIntents.map((intent: any) => ({
-        label: intent.label || intent.name || 'Unknown',
+      ...(Array.isArray(problemIntents) && problemIntents.length > 0 ? problemIntents.map((intent: any) => ({
+        id: `intent-${intent.id || intent.name}`,
+        label: intent.name || intent.label || 'Unknown',
+        name: intent.name || intent.label || 'Unknown',
         value: intent.id || intent.name || 'unknown',
-        description: intent.description || ''
+        description: intent.description || intent.name || '',
+        category: 'Problem Intents',
+        categoryType: 'conditions',
+        kind: 'intent'
       })) : [])
     ];
+
+    console.log("🔍 [INTELLISENSE_DEBUG] Combined items", {
+      allConditionsCount: allConditions?.length || 0,
+      problemIntentsCount: Array.isArray(problemIntents) ? problemIntents.length : 0,
+      combinedItemsCount: combinedItems.length,
+      timestamp: Date.now()
+    });
 
     // Apri l'IntellisenseMenu originale
     setShowNodeIntellisense(true);
@@ -559,8 +747,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
     console.log("✅ IntellisenseMenu opened with:", {
       conditionsCount: allConditions?.length || 0,
-      intentsCount: Array.isArray(problemIntents) ? problemIntents.length : 0,
-      totalItems: combinedItems.length
+      intentsCount: problemIntents.length,
+      totalItems: combinedItems.length,
+      intentsFound: problemIntents.length > 0
     });
   }, [connectionMenuRef, reactFlowInstance, allConditions, nodes, openMenu]);
 

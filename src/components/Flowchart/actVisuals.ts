@@ -11,7 +11,7 @@ function dbgEnabled(): boolean {
 
 export function findAgentAct(projectData: any, row: any) {
   try {
-    const id = row?.actId || row?.baseActId || row?.factoryId;
+    const id = row?.actId || row?.baseActId || row?.factoryId || row?.instanceId;
     if (!id || !projectData?.agentActs) return null;
     for (const cat of projectData.agentActs) {
       const f = (cat.items || []).find(
@@ -23,29 +23,29 @@ export function findAgentAct(projectData: any, row: any) {
       );
       if (f) return f;
     }
-  } catch {}
+  } catch { }
   return null;
 }
 
 export function resolveActMode(row: any, act: any): ActMode {
   // 1) Fonte primaria: il mode passato dall'Intellisense (row.mode)
   if (row?.mode) {
-    try { if (dbgEnabled()) console.log('[Mode][resolve]', { source: 'row.mode(primary)', rowMode: row.mode, rowText: row?.text }); } catch {}
+    try { if (dbgEnabled()) console.log('[Mode][resolve]', { source: 'row.mode(primary)', rowMode: row.mode, rowText: row?.text }); } catch { }
     return row.mode as ActMode;
   }
   // 2) Fallback: mode dell'Act (se non-Message)
   if (act?.mode && act.mode !== 'Message') {
-    try { if (dbgEnabled()) console.log('[Mode][resolve]', { source: 'act.mode(non-Message)', actMode: act.mode, rowText: row?.text }); } catch {}
+    try { if (dbgEnabled()) console.log('[Mode][resolve]', { source: 'act.mode(non-Message)', actMode: act.mode, rowText: row?.text }); } catch { }
     return act.mode as ActMode;
   }
   // 3) Heuristics sull'Act: userActs presenti ⇒ richiesta dati
   if (Array.isArray(act?.userActs) && act.userActs.length > 0) {
-    try { if (dbgEnabled()) console.log('[Mode][resolve]', { source: 'act.userActs', decided: 'DataRequest', rowText: row?.text }); } catch {}
+    try { if (dbgEnabled()) console.log('[Mode][resolve]', { source: 'act.userActs', decided: 'DataRequest', rowText: row?.text }); } catch { }
     return 'DataRequest';
   }
   // 4) Classificazione dal titolo/label
   const guess = classifyActMode(act?.name || act?.label || row?.text || row?.name);
-  try { if (dbgEnabled()) console.log('[Mode][resolve]', { source: 'classifyActMode', guess, actName: act?.name || act?.label, rowText: row?.text }); } catch {}
+  try { if (dbgEnabled()) console.log('[Mode][resolve]', { source: 'classifyActMode', guess, actName: act?.name || act?.label, rowText: row?.text }); } catch { }
   return guess as ActMode;
 }
 
