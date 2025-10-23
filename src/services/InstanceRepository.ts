@@ -21,26 +21,27 @@ class InstanceRepository {
     private instances = new Map<string, ActInstance>();
 
     /**
-     * Crea una nuova istanza di un Agent Act
+     * Crea una nuova istanza di AgentAct
      * @param actId ID del template dal catalogo
      * @param initialIntents Intents iniziali (opzionale, default dal template)
+     * @param instanceId ID specifico per l'istanza (opzionale, se non fornito viene generato)
      * @returns La nuova istanza creata
      */
-    createInstance(actId: string, initialIntents?: ProblemIntent[]): ActInstance {
-        const instanceId = generateId();
+    createInstance(actId: string, initialIntents?: ProblemIntent[], instanceId?: string): ActInstance {
+        const finalInstanceId = instanceId || generateId();
 
         const instance: ActInstance = {
-            instanceId,
+            instanceId: finalInstanceId,
             actId,
             problemIntents: initialIntents || [], // Gli intents del template verranno aggiunti dopo
             createdAt: new Date(),
             updatedAt: new Date()
         };
 
-        this.instances.set(instanceId, instance);
+        this.instances.set(finalInstanceId, instance);
 
         console.log('✅ [InstanceRepository] Created new instance:', {
-            instanceId,
+            instanceId: finalInstanceId,
             actId,
             initialIntentsCount: initialIntents?.length || 0
         });

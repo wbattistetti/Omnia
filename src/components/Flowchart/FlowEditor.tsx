@@ -594,7 +594,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     // ✅ NUOVO: Recupera gli intents dal repository usando instanceId
     let problemIntents: any[] = [];
     if (problemRow) {
-      const instanceId = (problemRow as any)?.instanceId;
+      const instanceId = problemRow.id; // ✅ ID riga = instanceId
       const actId = (problemRow as any)?.actId;
 
       console.log("🔍 [INTELLISENSE_NEW] Looking for instance in repository", {
@@ -608,61 +608,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           id: problemRow.id,
           text: problemRow.text,
           type: problemRow.type,
-          instanceId: (problemRow as any).instanceId,
-          actId: (problemRow as any).actId,
-          mode: (problemRow as any).mode,
-          categoryType: (problemRow as any).categoryType
+          // instanceId REMOVED - non serve più
+          // actId REMOVED - non serve più
+          // mode REMOVED - non serve più
+          // categoryType REMOVED - non serve più
         },
         timestamp: Date.now()
       });
 
       // Cerca l'istanza nel repository
       if (instanceId) {
-        // Prova prima con l'ID diretto, poi con il mapping se è un ID backend
+        console.log("🔍 [INTELLISENSE] Looking for instance:", instanceId);
         let instance = instanceRepository.getInstance(instanceId);
-
-        // Se non trovato, potrebbe essere un ID backend che va mappato
-        if (!instance) {
-          const frontendId = idMappingService.getFrontendId(instanceId);
-          if (frontendId) {
-            console.log("🔍 [INTELLISENSE_MAPPING] Using mapped ID", {
-              backendId: instanceId,
-              frontendId,
-              timestamp: Date.now()
-            });
-            instance = instanceRepository.getInstance(frontendId);
-          } else {
-            // Se non esiste mapping, crealo ora (auto-mapping per legacy rows)
-            console.log("🔧 [INTELLISENSE_MAPPING] Creating auto-mapping for legacy row", {
-              backendId: instanceId,
-              timestamp: Date.now()
-            });
-            const newFrontendId = idMappingService.mapBackendToFrontend(instanceId);
-
-            // Prova a caricare gli intents da projectData se disponibili
-            try {
-              const { findAgentAct } = await import('./actVisuals');
-              if (projectData) {
-                const act = findAgentAct(projectData, { instanceId });
-                if (act?.problem?.intents) {
-                  instanceRepository.createInstanceWithId(
-                    newFrontendId,
-                    actId || 'problem-classification',
-                    act.problem.intents
-                  );
-                  instance = instanceRepository.getInstance(newFrontendId);
-                  console.log("✅ [INTELLISENSE_MAPPING] Auto-created instance with intents", {
-                    frontendId: newFrontendId,
-                    intentsCount: act.problem.intents.length,
-                    timestamp: Date.now()
-                  });
-                }
-              }
-            } catch (err) {
-              console.warn('[INTELLISENSE_MAPPING] Could not auto-create instance:', err);
-            }
-          }
-        }
+        console.log("🔍 [INTELLISENSE] Instance found:", instance);
+        console.log("🔍 [INTELLISENSE] Problem intents:", instance?.problemIntents);
 
         console.log("🔍 [INTELLISENSE_DETAILED] Repository lookup result", {
           instanceId,
@@ -1115,6 +1074,15 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [reactFlowInstance]);
 
+  // Debug logging per IntellisenseMenu rendering conditions
+  useEffect(() => {
+    console.log('🔍 [RENDER_DEBUG] IntellisenseMenu conditions:', {
+      showNodeIntellisense,
+      nodeIntellisenseTarget,
+      shouldRender: showNodeIntellisense && nodeIntellisenseTarget
+    });
+  }, [showNodeIntellisense, nodeIntellisenseTarget]);
+
   // Stabilizza nodeTypes/edgeTypes per evitare il warning RF#002 (HMR)
   // Spostati fuori dal componente per evitare ricreazioni durante HMR
 
@@ -1327,6 +1295,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           }}
         />
       )}
+      {/* DEBUG: Check why IntellisenseMenu is not rendering */}
+      {null}
 
       {showNodeIntellisense && nodeIntellisenseTarget && (
         <IntellisenseMenu

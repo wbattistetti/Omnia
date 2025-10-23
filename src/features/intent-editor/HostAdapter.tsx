@@ -44,6 +44,7 @@ function fromEditorState(): ProblemPayload {
 }
 
 export default function IntentHostAdapter(props: { act: { id: string; type: string; label?: string; problem?: ProblemPayload }, onClose?: () => void }) {
+  console.log('IntentHostAdapter props:', props);
   // Hydrate from act.problem (if available) or from local shadow
   useEffect(() => {
     const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
@@ -59,12 +60,14 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
     try {
       const instanceId = (props.act as any)?.instanceId;
       if (instanceId) {
-        const problemIntents = outIntents.map(it => ({
+        console.log('✅ [IntentEditor] Extracted instanceId:', instanceId);
+        const problemIntents = fromEditorState().intents.map(it => ({
           id: it.id,
           name: it.name,
           threshold: it.threshold,
           phrases: it.phrases
         }));
+        console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents);
         instanceRepository.updateIntents(instanceId, problemIntents);
         console.log('✅ [IntentEditor] Updated InstanceRepository with intents', {
           instanceId,
@@ -89,12 +92,14 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           try {
             const instanceId = (props.act as any)?.instanceId;
             if (instanceId) {
+              console.log('✅ [IntentEditor] Extracted instanceId:', instanceId);
               const problemIntents = next.intents.map(it => ({
                 id: it.id,
                 name: it.name,
                 threshold: it.threshold,
                 phrases: it.phrases
               }));
+              console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents);
               instanceRepository.updateIntents(instanceId, problemIntents);
               console.log('✅ [IntentEditor] Updated InstanceRepository with new intents', {
                 instanceId,
@@ -118,12 +123,14 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           try {
             const instanceId = (props.act as any)?.instanceId;
             if (instanceId) {
+              console.log('✅ [IntentEditor] Extracted instanceId:', instanceId);
               const problemIntents = next.intents.map(it => ({
                 id: it.id,
                 name: it.name,
                 threshold: it.threshold,
                 phrases: it.phrases
               }));
+              console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents);
               instanceRepository.updateIntents(instanceId, problemIntents);
             }
           } catch (err) {

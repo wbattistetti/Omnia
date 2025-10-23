@@ -4,6 +4,7 @@ export type ActMeta = {
   id: string;
   type: string;
   label?: string;
+  instanceId?: string;
 };
 
 export type EditorProps = {

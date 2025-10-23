@@ -23,6 +23,8 @@ import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType,
 import { inferActType, heuristicToInternal } from '../../nlp/actType';
 import { modeToType, typeToMode } from '../../utils/normalizers';
 import { idMappingService } from '../../services/IdMappingService';
+import { generateId } from '../../utils/idGenerator';
+import { instanceRepository } from '../../services/InstanceRepository'; // ✅ Add this import
 // Keyboard navigable type picker toolbar
 const TYPE_OPTIONS = [
   { key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
@@ -549,13 +551,31 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       }
     };
     setIsEditing(false);
+
+    // ✅ Create instance when type is determined (Intellisense or inference)
+    console.log('🎯 [INSTANCE_CREATION] Creating instance for type:', key);
+    const instanceId = row.id; // ✅ Use existing row ID as instance ID
+    console.log('🎯 [INSTANCE_CREATION] Instance ID:', instanceId);
+
+    instanceRepository.createInstance(key, [], instanceId);
+    console.log('🎯 [INSTANCE_CREATION] Instance created successfully');
+
+    console.log('🎯 [INSTANCE_CREATION] Row will be updated with ID:', instanceId);
+
     await createAndAttachAct({
       name: label,
       type: key,
       scope: 'industry',
       projectData,
-      onImmediateRowUpdate: immediate,
-      getProjectId: () => (getProjectId ? getProjectId() : null)
+      onImmediateRowUpdate: (patch: any) => {
+        // Include instanceId in the row update
+        console.log('🎯 [INSTANCE_CREATION] Updating row with patch:', { ...patch, id: instanceId });
+        immediate({ ...patch, id: instanceId });
+      },
+      getProjectId: () => {
+        const id = getProjectId ? getProjectId() : null;
+        return id ?? undefined;
+      }
     });
     try { emitSidebarRefresh(); } catch { }
   };
@@ -604,6 +624,16 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     try {
       let pid: string | undefined = undefined;
       try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch { }
+
+      console.log('[🔍 ROW_CREATION] Item details:', {
+        pid,
+        itemActId: item.actId,
+        itemCategoryType: item.categoryType,
+        hasActId: !!item.actId,
+        hasCategoryType: item.categoryType === 'agentActs',
+        willCreateInstance: pid && item.actId && item.categoryType === 'agentActs'
+      });
+
       let backendInstanceId: string | undefined = undefined;
       if (pid && item.actId && item.categoryType === 'agentActs') {
         // Avoid require in browser; import mapping helpers at top-level
@@ -651,7 +681,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     try {
       const itemCategoryType = (item as any)?.categoryType;
       const itemType = (item as any)?.type;
-      const rowType = row.type;
+      // Get row type from instance repository (since we removed it from NodeRowData)
+      const rowInstance = instanceRepository.getInstance(row.id);
+      const rowType = rowInstance?.actId;
 
       const isProblemClassification = itemCategoryType === 'agentActs' &&
         (itemType === 'ProblemClassification' || rowType === 'ProblemClassification');
@@ -661,7 +693,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         itemCategoryType,
         itemType,
         rowType,
-        rowInstanceId: row.instanceId,
+        rowInstanceId: row.id, // row.id IS the instanceId now
         itemActId: item.actId,
         categoryMatch: itemCategoryType === 'agentActs',
         typeMatch: itemType === 'ProblemClassification' || rowType === 'ProblemClassification',
@@ -669,16 +701,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       });
 
       if (isProblemClassification) {
-        // Use existing instanceId, backend instance ID, or generate a new one
-        const instanceIdToUse = row.instanceId || backendInstanceId || (await import('uuid')).v4();
+        // Use row.id as instanceId (they are the same now)
+        const instanceIdToUse = row.id || (await import('uuid')).v4();
         const actIdToUse = item.actId || 'problem-classification-fallback';
 
         console.log('[🔍 INTELLISENSE] Creating instance in InstanceRepository', {
           rowId: row.id,
           instanceId: instanceIdToUse,
           actId: actIdToUse,
-          hadExistingInstanceId: !!row.instanceId,
-          backendInstanceId,
+          hadExistingInstanceId: !!row.id, // row.id IS the instanceId now
           timestamp: Date.now()
         });
 
@@ -700,22 +731,19 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         }
 
         // Create instance with intents
-        (instanceRepository as any).createInstanceWithId(
-          instanceIdToUse,
-          actIdToUse,
-          initialIntents
-        );
+        const instanceId = generateId(); // Stesso ID per riga e istanza
+        instanceRepository.createInstance(actIdToUse, initialIntents, instanceId);
 
         console.log('[✅ INTELLISENSE] Instance created in repository', {
-          instanceId: instanceIdToUse,
+          instanceId: instanceId,
           actId: actIdToUse,
           intentsCount: initialIntents.length,
           timestamp: Date.now()
         });
 
-        // Update row with instanceId if it didn't have one
-        if (!row.instanceId && onUpdateWithCategory) {
-          console.log('[🔍 INTELLISENSE] Updating row with instanceId', {
+        // Update row (row.id is already the instanceId)
+        if (onUpdateWithCategory) {
+          console.log('[🔍 INTELLISENSE] Updating row', {
             rowId: row.id,
             instanceId: instanceIdToUse,
             timestamp: Date.now()
@@ -726,7 +754,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             actId: actIdToUse,
             baseActId: actIdToUse,
             type: (item as any)?.type,
-            mode: (item as any)?.mode
+            mode: (item as any)?.mode,
+            instanceId: instanceIdToUse // Added instanceId to the patch
           });
         }
       }
@@ -936,14 +965,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     Icon = visuals.Icon;
     labelTextColor = visuals.color;
   } else {
-    const c = row.categoryType ? (SIDEBAR_TYPE_COLORS as any)[row.categoryType] : null;
-    labelTextColor = (c && (c.color || '#111')) || (typeof propTextColor === 'string' ? propTextColor : '');
+    // Since we removed categoryType and userActs from NodeRowData, use defaults
+    labelTextColor = (typeof propTextColor === 'string' ? propTextColor : '#111');
     if (!labelTextColor) {
-      const colorObj = getLabelColor(row.categoryType || '', row.userActs);
+      const colorObj = getLabelColor('', []);
       labelTextColor = colorObj.text;
     }
-    const iconKey = row.categoryType ? (SIDEBAR_TYPE_ICONS as any)[row.categoryType] : null;
-    Icon = iconKey ? getSidebarIconComponent(iconKey) : null;
+    Icon = null;
   }
 
   // LOG: stampa id, forceEditing, isEditing
@@ -1038,7 +1066,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 const baseId = (row as any).baseActId || (row as any).actId || (row as any).factoryId || row.id;
                 const type = resolveActType(row as any, actFound) as any;
                 // Host present → open deterministically
-                actEditorCtx.open({ id: String(baseId), type, label: row.text });
+                actEditorCtx.open({ id: String(baseId), type, label: row.text, instanceId: row.id });
                 console.log('[DDT][open] done', { baseId, type });
                 return;
               } catch (e) { console.warn('[Row][openDDT] failed', e); }
