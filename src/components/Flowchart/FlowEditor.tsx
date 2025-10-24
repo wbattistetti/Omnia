@@ -99,6 +99,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Deferred apply for labels on just-created edges (avoids race with RF state)
   const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(setEdges, setSelectedEdgeId, connectionMenuRef);
 
+  // ✅ Esporta scheduleApplyLabel e setEdges per l'Intellisense
+  useEffect(() => {
+    (window as any).__scheduleApplyLabel = scheduleApplyLabel;
+    (window as any).__setEdges = setEdges;
+    return () => {
+      delete (window as any).__scheduleApplyLabel;
+      delete (window as any).__setEdges;
+    };
+  }, [scheduleApplyLabel, setEdges]);
+
   // Helper functions for edge label logic
   const handleExistingEdgeLabel = useCallback((pid: string, label: string) => {
     setEdges(eds => eds.map(e => e.id === pid ? { ...e, label } : e));

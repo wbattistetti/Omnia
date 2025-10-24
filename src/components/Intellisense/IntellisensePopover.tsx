@@ -140,9 +140,64 @@ export const IntellisensePopover: React.FC = () => {
 
     // Handler per selezione
     const handleSelect = (item: IntellisenseItem) => {
-        // TODO: Implement selection logic
         console.log("Item selected:", item);
+
+        // ✅ 1. Chiudi Intellisense
         actions.close();
+
+        // ✅ 2. Se è un edge, rendi visibile il nodo temporaneo e aggiorna l'edge
+        if (state.target?.edgeId) {
+            console.log("🎯 [IntellisensePopover] Processing edge selection:", {
+                edgeId: state.target.edgeId,
+                selectedItem: item
+            });
+
+            // ✅ 3. Aggiorna l'edge con la label (caption sul link)
+            const edgeId = state.target.edgeId;
+            const label = item.label || "Condition";
+
+            // Cerca la funzione scheduleApplyLabel o setEdges nel window object
+            const scheduleApplyLabel = (window as any).__scheduleApplyLabel;
+            const setEdges = (window as any).__setEdges;
+
+            if (scheduleApplyLabel) {
+                // Usa la funzione esistente di scheduling
+                scheduleApplyLabel(edgeId, label);
+                console.log("🎯 [IntellisensePopover] Edge label scheduled:", label);
+            } else if (setEdges) {
+                // Aggiorna direttamente gli edges con la caption
+                setEdges((eds: any[]) => eds.map(e =>
+                    e.id === edgeId ? { ...e, label, data: { ...(e.data || {}), label } } : e
+                ));
+                console.log("🎯 [IntellisensePopover] Edge label applied:", label);
+            }
+
+            // ✅ 4. Rendi visibile il nodo temporaneo (SENZA modificare il titolo)
+            const flowEdges = (window as any).__flowEdges || [];
+            const edge = flowEdges.find((e: any) => e.id === edgeId);
+
+            if (edge && edge.target) {
+                const flowNodes = (window as any).__flowNodes || [];
+                const tempNode = flowNodes.find((n: any) => n.id === edge.target);
+
+                if (tempNode && tempNode.data) {
+                    // ✅ Rimuovi solo hidden, NON modificare il titolo
+                    tempNode.data.hidden = false;
+
+                    console.log("🎯 [IntellisensePopover] Node made visible:", {
+                        nodeId: tempNode.id
+                    });
+
+                    // Aggiorna anche il nodo nello stato (solo hidden)
+                    const setNodes = (window as any).__setNodes;
+                    if (setNodes) {
+                        setNodes((nds: any[]) => nds.map(n =>
+                            n.id === tempNode.id ? { ...n, data: { ...n.data, hidden: false } } : n
+                        ));
+                    }
+                }
+            }
+        }
     };
 
     if (!state.isOpen || !rect || !referenceElement) return null;
