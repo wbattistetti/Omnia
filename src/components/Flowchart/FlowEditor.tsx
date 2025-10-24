@@ -507,7 +507,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const withNodeLock = useNodeCreationLock();
 
   // ✅ NUOVO: Hook per aprire intellisense
-  const { actions: intellisenseActions } = useIntellisense();
+  const { state, actions: intellisenseActions } = useIntellisense();
+  console.debug('[FlowEditor] useIntellisense returned:', {
+    hasActions: !!intellisenseActions,
+    hasOpenForEdge: !!intellisenseActions?.openForEdge,
+    openForEdgeType: typeof intellisenseActions?.openForEdge,
+    isFunction: typeof intellisenseActions?.openForEdge === 'function'
+  });
 
 
   const onConnectEnd = useCallback((event: any) => {
@@ -542,9 +548,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           console.log("✅ [ON_CONNECT_END] createTemporaryNode returned", result);
           const { tempNodeId, tempEdgeId } = result;
           console.log("🎯 [ON_CONNECT_END] About to call openForEdge with EDGE:", { edgeId: tempEdgeId });
-          // ✅ FIX: Usa la nuova architettura pulita con service layer
-          intellisenseActions.openForEdge(tempEdgeId);
-          console.log("🎯 [ON_CONNECT_END] openForEdge() call completed");
+          // ✅ FIX: Verifica che la funzione esista prima di chiamarla
+          if (intellisenseActions?.openForEdge) {
+            intellisenseActions.openForEdge(tempEdgeId);
+            console.log("🎯 [ON_CONNECT_END] openForEdge() call completed");
+          } else {
+            console.error("❌ [ON_CONNECT_END] intellisenseActions.openForEdge is undefined!");
+          }
         } catch (error) {
           console.error("❌ [ON_CONNECT_END] Error creating temporary node:", error);
         }
@@ -1032,12 +1042,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 // ✅ RIMOSSO: const creatingTempNodes - non utilizzato
 
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
+  console.debug('[FlowEditor] Component mounted');
+
+  const { data: projectData } = useProjectData();
+
   // Providers per IntellisenseService
   const intellisenseProviders = React.useMemo(() => ({
-    getProjectData: () => (window as any).__projectData,
+    getProjectData: () => projectData,
     getFlowNodes: () => (window as any).__flowNodes || [],
     getFlowEdges: () => (window as any).__flowEdges || [],
-  }), []);
+  }), [projectData]);
 
   return (
     <NodeRegistryProvider>

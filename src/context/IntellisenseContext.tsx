@@ -60,9 +60,14 @@ export const IntellisenseProvider: React.FC<{ providers: GraphProviders; childre
 
     // Actions → tieni il reducer puro, chiama il service FUORI dal reducer
     const openForEdge = useCallback((edgeId: string) => {
-        console.debug('[IntellisenseContext] openForEdge called:', edgeId);
-        const items: IntellisenseItem[] = service.getEdgeItems(edgeId);
-        console.debug('[IntellisenseContext] service.getEdgeItems returned:', items.length, 'items');
+        console.log("🎯 [IntellisenseContext] openForEdge called with edgeId:", edgeId);
+
+        const items = service.getEdgeItems(edgeId);
+        console.log("🎯 [IntellisenseContext] Items from service:", {
+            totalItems: items.length,
+            items: items.map(i => ({ id: i.id, label: i.label, kind: i.kind }))
+        });
+
         dispatch({ type: "OPEN_WITH_ITEMS", target: { edgeId }, items });
     }, [service]);
 

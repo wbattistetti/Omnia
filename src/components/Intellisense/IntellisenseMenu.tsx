@@ -10,6 +10,7 @@ import { IntellisenseItem, IntellisenseResult, IntellisenseLayoutConfig } from '
 import { useProjectData } from '../../context/ProjectDataContext';
 import { prepareIntellisenseData } from '../../services/ProjectDataService';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
+import { useIntellisense } from "../../context/IntellisenseContext"; // ✅ AGGIUNGI IMPORT
 
 const defaultLayoutConfig: IntellisenseLayoutConfig = {
   maxVisibleItems: 12,
@@ -37,6 +38,7 @@ interface IntellisenseMenuProps {
   // Unified item list (conditions + intents) already prepared by caller. If provided, overrides project data.
   extraItems?: IntellisenseItem[];
   allowedKinds?: Array<'condition' | 'intent'>;
+  mode?: 'inline' | 'standalone'; // ✅ NUOVA PROP: 'inline' per righe nodo, 'standalone' per edge
 }
 
 export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?: boolean; navSignal?: { seq: number; dir: 1 | -1 }; onEnterSelected?: (item: IntellisenseItem | null) => void }> = ({
@@ -57,7 +59,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   allowedKinds,
   inlineAnchor = false,
   navSignal,
-  onEnterSelected
+  onEnterSelected,
+  mode = 'inline', // ✅ Default: inline (caso 1 - righe nodo)
 }) => {
   const ErrorBoundary = React.useMemo(() => (
     class EB extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -77,10 +80,32 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [allIntellisenseItems, setAllIntellisenseItems] = useState<IntellisenseItem[]>([]);
+  // ❌ RIMUOVI: const [query, setQuery] = useState(''); // query è già una prop!
+
   // Include 'conditions' by default so condition items are not filtered out
   const defaultCats = ['agentActs', 'userActs', 'backendActions', 'conditions', 'tasks'];
   const [activeCats, setActiveCats] = useState<string[]>(filterCategoryTypes && filterCategoryTypes.length ? filterCategoryTypes : defaultCats);
   const loggedThisOpenRef = useRef(false);
+
+  // ✅ Ottieni actions dal contesto Intellisense
+  const { actions } = useIntellisense();
+
+  // ✅ Aggiungi un ref per la textbox
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // ✅ Forza il focus quando il menu si apre in modalità standalone
+  useEffect(() => {
+    if (mode === 'standalone' && isOpen && inputRef.current) {
+      inputRef.current.focus();
+      console.log("🎯 [IntellisenseMenu] Focus forced on input");
+    }
+  }, [mode, isOpen]);
+
+  // ✅ Handler per tracciare gli input
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("🎯 [IntellisenseMenu] Input change:", e.target.value);
+    actions.setQuery(e.target.value); // ✅ Aggiorna la query nel contesto
+  };
 
   // Remove noisy logs: keep hook for future metrics if needed
   useEffect(() => {
@@ -175,7 +200,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       window.removeEventListener('scroll', updatePosition, true);
       try { ro && ro.disconnect(); } catch { }
     };
-  }, [isOpen, referenceElement, totalItems]);
+  }, [isOpen, referenceElement, totalItems, query]);
 
   // Handle click outside
   useEffect(() => {
@@ -495,108 +520,67 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   // If no results, still render the shell to avoid blink/hide issues during updates
   const noResults = totalItems === 0;
 
+  // ✅ RENDER DIFFERENTE PER I DUE CASI
   return (
     <ErrorBoundary>
-      <div
-        ref={menuRef}
-        style={inlineAnchor ? {
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          background: '#fff',
-          color: '#111',
-          border: '1px solid #d1d5db',
-          boxShadow: '0 4px 24px rgba(30,41,59,0.10)',
-          borderRadius: 12,
-          padding: 0,
-          width: 320,
-          maxHeight: 320,
-          zIndex: 9999
-        } : {
-          ...menuStyle,
-          background: '#fff',
-          color: '#111',
-          border: '1px solid #d1d5db', // gray-300
-          boxShadow: '0 4px 24px 0 rgba(30,41,59,0.10)',
-          borderRadius: 12,
-          padding: 0,
-          width: 320,
-          maxHeight: 320,
-          zIndex: 99999,
-          position: 'fixed',
-          top: position?.y || 0,
-          left: position?.x || 0
-        }}
-        className="bg-white rounded-lg shadow-xl border border-gray-300"
-        onMouseEnter={() => console.log('🔍 [INTELLISENSE_MOUSE_ENTER] Menu mouse enter')}
-        onMouseLeave={() => console.log('🔍 [INTELLISENSE_MOUSE_LEAVE] Menu mouse leave')}
-      >
-        {/* Compact header: only category filter bar (no result/hints text) */}
-        {false && totalItems > 0 && (
-          <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">
-            {/* Category filter bar */}
-            <div className="mt-2 flex items-center gap-2">
-              {[
-                { key: 'agentActs', iconKey: SIDEBAR_TYPE_ICONS.agentActs, label: 'Agent' },
-                { key: 'userActs', iconKey: SIDEBAR_TYPE_ICONS.userActs, label: 'User' },
-                { key: 'backendActions', iconKey: SIDEBAR_TYPE_ICONS.backendActions, label: 'Backend' },
-                { key: 'tasks', iconKey: SIDEBAR_TYPE_ICONS.tasks, label: 'Tasks' },
-              ].map(({ key, iconKey, label }) => {
-                const active = activeCats.includes(key);
-                const Icon = SIDEBAR_ICON_COMPONENTS[iconKey];
-                const col = (SIDEBAR_TYPE_COLORS as Record<string, { color: string }>)[key]?.color || '#e5e7eb';
-                return (
-                  <button
-                    key={key}
-                    onClick={(e) => { e.stopPropagation(); setActiveCats(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]); }}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] border"
-                    style={{
-                      background: active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)',
-                      color: col,
-                      borderColor: active ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)'
-                    }}
-                    title={`Toggle ${label}`}
-                  >
-                    {Icon ? <Icon className="w-3 h-3" style={{ color: col }} /> : null}
-                    {label}
-                  </button>
-                );
-              })}
-              {isLoading && (
-                <span className="ml-auto flex items-center text-[10px] text-slate-300">
-                  <div className="animate-spin w-3 h-3 border border-slate-400 border-t-transparent rounded-full mr-2"></div>
-                  AI…
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Results */}
-        <IntellisenseRenderer
-          fuzzyResults={fuzzyResults}
-          semanticResults={semanticResults}
-          selectedIndex={selectedIndex}
-          layoutConfig={defaultLayoutConfig}
-          categoryConfig={{}}
-          onItemSelect={(result) => onSelect(result.item)}
-          onItemHover={(index) => {
-            if (Date.now() < suppressHoverUntilRef.current) return;
-            setSelectedIndex(index);
-          }}
-          onCreateNew={onCreateNew}
-          onCreateAgentAct={onCreateAgentAct}
-          onCreateBackendCall={onCreateBackendCall}
-          onCreateTask={onCreateTask}
-          query={query}
-          filterCategoryTypes={[...new Set(['conditions', ...(filterCategoryTypes || [])])]}
-          projectIndustry={data?.industry}
-          projectData={data}
-          allowCreatePicker={allowCreatePicker}
-        />
-
-        {debugIntellisenseUi && null}
-      </div>
+      {mode === 'standalone' ? (
+        // ✅ CASO 2: Edge - Crea textbox + lista
+        <div style={menuStyle} ref={menuRef} className="intellisense-menu-standalone">
+          {/* Textbox per edge */}
+          <input
+            type="text"
+            value={query}
+            onChange={handleInputChange}
+            autoFocus
+            placeholder="Cerca condizioni o intenti..."
+            className="intellisense-search-input"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '2px solid #3b82f6', // bordo blu
+              borderRadius: '6px',
+              fontSize: '14px',
+              marginBottom: '8px',
+              outline: 'none',
+              boxSizing: 'border-box'
+            }}
+            ref={inputRef}
+          />
+          {/* Lista dei risultati (stessa del caso 1) */}
+          <IntellisenseRenderer
+            fuzzyResults={fuzzyResults}
+            semanticResults={semanticResults}
+            selectedIndex={selectedIndex}
+            query={query}
+            onSelect={onSelect}
+            onCreateNew={onCreateNew}
+            onCreateAgentAct={onCreateAgentAct}
+            onCreateBackendCall={onCreateBackendCall}
+            onCreateTask={onCreateTask}
+            allowCreatePicker={allowCreatePicker}
+            layoutConfig={defaultLayoutConfig} // ✅ OBBLIGATORIO
+            categoryConfig={{}} // ✅ OBBLIGATORIO
+          />
+        </div>
+      ) : (
+        // ✅ CASO 1: Riga nodo - Solo lista (comportamento attuale)
+        <div style={menuStyle} ref={menuRef} className="intellisense-menu-inline">
+          <IntellisenseRenderer
+            fuzzyResults={fuzzyResults}
+            semanticResults={semanticResults}
+            selectedIndex={selectedIndex}
+            query={query}
+            onSelect={onSelect}
+            onCreateNew={onCreateNew}
+            onCreateAgentAct={onCreateAgentAct}
+            onCreateBackendCall={onCreateBackendCall}
+            onCreateTask={onCreateTask}
+            allowCreatePicker={allowCreatePicker}
+            layoutConfig={defaultLayoutConfig} // ✅ OBBLIGATORIO
+            categoryConfig={{}} // ✅ OBBLIGATORIO
+          />
+        </div>
+      )}
     </ErrorBoundary>
   );
 };
