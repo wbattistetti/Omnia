@@ -18,7 +18,10 @@ import { SIDEBAR_TYPE_COLORS } from '../../../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
 import { RowTypePickerToolbar } from './RowTypePickerToolbar';
+import { RowBufferArea } from './RowBufferArea';
 import { useRowToolbar } from '../../hooks/useRowToolbar';
+import { useRowState } from './hooks/useRowState';
+import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from '../../utils/actVisuals';
 import { inferActType, heuristicToInternal } from '../../../../nlp/actType';
 import { modeToType, typeToMode } from '../../../../utils/normalizers';
@@ -62,61 +65,35 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const { data: projectDataCtx } = useProjectData();
   // Debug gate for icon/flow logs (enable with localStorage.setItem('debug.flowIcons','1'))
   const debugFlowIcons = (() => { try { return Boolean(localStorage.getItem('debug.flowIcons')); } catch { return false; } })();
-  const [isEditing, setIsEditing] = useState(forceEditing);
-  const [hasEverBeenEditing, setHasEverBeenEditing] = useState(forceEditing);
-  const [currentText, setCurrentText] = useState(row.text);
-  const [included, setIncluded] = useState(row.included !== false); // default true
-  const [showIntellisense, setShowIntellisense] = useState(false);
-  const [intellisenseQuery, setIntellisenseQuery] = useState('');
-  const [allowCreatePicker, setAllowCreatePicker] = useState(false);
-  const [showCreatePicker, setShowCreatePicker] = useState(false);
-  const typeToolbarRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [nodeOverlayPosition, setNodeOverlayPosition] = useState<{ left: number; top: number } | null>(null);
-  const nodeContainerRef = useRef<HTMLDivElement>(null);
+
+  // Extract all state management to custom hook
+  const rowState = useRowState({ row, forceEditing });
+  const {
+    isEditing, setIsEditing,
+    hasEverBeenEditing, setHasEverBeenEditing,
+    currentText, setCurrentText,
+    included, setIncluded,
+    showIntellisense, setShowIntellisense,
+    intellisenseQuery, setIntellisenseQuery,
+    suppressIntellisenseRef, intellisenseTimerRef,
+    allowCreatePicker, setAllowCreatePicker,
+    showCreatePicker, setShowCreatePicker,
+    nodeOverlayPosition, setNodeOverlayPosition,
+    showIcons, setShowIcons,
+    iconPos, setIconPos,
+    typeToolbarRef, inputRef, nodeContainerRef, labelRef, overlayRef, mousePosRef
+  } = rowState;
+
   const reactFlowInstance = useReactFlow();
   const getZoom = () => {
     try { return (reactFlowInstance as any)?.getViewport?.().zoom || 1; } catch { return 1; }
   };
-  const [showIcons, setShowIcons] = useState(false);
-  const labelRef = useRef<HTMLSpanElement>(null);
-  const [iconPos, setIconPos] = useState<{ top: number, left: number } | null>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
+
   // State machine for toolbar/picker visibility (after refs are initialized)
   const toolbarSM = useRowToolbar({ rowRef: nodeContainerRef as any, overlayRef: overlayRef as any, pickerRef: typeToolbarRef as any });
-  const suppressIntellisenseRef = useRef<boolean>(false);
-  const intellisenseTimerRef = useRef<number | null>(null);
-
-  // Track global mouse position to implement a stability buffer between row and toolbar
-  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; };
-    window.addEventListener('mousemove', onMove, { passive: true });
-    return () => window.removeEventListener('mousemove', onMove);
-  }, []);
-
-  function isInsideWithPadding(pt: { x: number; y: number }, rect: DOMRect | null | undefined, pad = 16): boolean {
-    if (!rect) return false;
-    return pt.x >= rect.left - pad && pt.x <= rect.right + pad && pt.y >= rect.top - pad && pt.y <= rect.bottom + pad;
-  }
-
-  // Rough estimation of the overlay toolbar bounds next to the label/icon
-  function getToolbarRect(left: number, top: number, labelEl: HTMLElement | null, estWidth = 160): DOMRect | null {
-    if (!labelEl) return null;
-    const h = labelEl.getBoundingClientRect().height || 18;
-    return ({ left, top: top + 3, right: left + estWidth, bottom: top + 3 + h, width: estWidth, height: h } as any);
-  }
-
-  // Hide action overlay while editing to avoid ghost bars
-  useEffect(() => {
-    if (isEditing) setShowIcons(false);
-  }, [isEditing]);
 
   // Compute buffer after deps are defined - passa overlayRef per calcolo preciso
   const bufferRect = useOverlayBuffer(labelRef, iconPos, showIcons, overlayRef);
-  // Debug: log overlay area changes safely (guard undefined)
-  useEffect(() => {
-  }, [bufferRect, showIcons]);
 
   // ESC: when type toolbar is open, close it and refocus textbox without propagating to canvas
   useEffect(() => {
@@ -882,32 +859,21 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   return (
     <>
-      {/* Zona buffer ESTESA per tolleranza spaziale: riga + toolbar + 7px padding */}
-      {bufferRect && showIcons && !showCreatePicker && !isEditing && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            top: bufferRect.top,
-            left: bufferRect.left,
-            width: bufferRect.width,
-            height: bufferRect.height,
-            zIndex: 499, // Sotto la toolbar (1000) ma sopra il contenuto normale
-            pointerEvents: 'auto', // Cattura hover per mantenere toolbar visibile
-            background: 'transparent',
-            // Debug: mostra l'area (rimuovere in produzione)
-            // border: '1px dashed rgba(0, 255, 0, 0.3)',
-          }}
-          onMouseEnter={() => {
-            console.log('[HoverArea] Mouse entered extended area');
-            toolbarSM.row.onEnter(); // Mantieni toolbar visibile
-          }}
-          onMouseLeave={(e) => {
-            console.log('[HoverArea] Mouse left extended area');
-            toolbarSM.row.onLeave(e as any);
-          }}
-        />,
-        document.body
-      )}
+      {/* Extended buffer area for hover tolerance */}
+      <RowBufferArea
+        bufferRect={bufferRect}
+        showIcons={showIcons}
+        showCreatePicker={showCreatePicker}
+        isEditing={isEditing}
+        onMouseEnter={() => {
+          console.log('[HoverArea] Mouse entered extended area');
+          toolbarSM.row.onEnter();
+        }}
+        onMouseLeave={(e) => {
+          console.log('[HoverArea] Mouse left extended area');
+          toolbarSM.row.onLeave(e as any);
+        }}
+      />
       <div
         ref={nodeContainerRef}
         className={`node-row-outer flex items-center group transition-colors ${conditionalClasses}`}
