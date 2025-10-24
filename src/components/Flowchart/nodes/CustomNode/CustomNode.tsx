@@ -261,7 +261,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     });
   }, [nodeRows]);
 
-  // ✅ PATCH 1: Focus per nodi nuovi (semplificato)
+  // ✅ PATCH 1: Focus per nodi nuovi (semplificato) - NON per nodi hidden!
   useEffect(() => {
     console.log("🔍 [AUTO_FOCUS] Checking focus conditions", {
       nodeId: id,
@@ -270,8 +270,15 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       editingRowId,
       nodeRowsCount: nodeRows.length,
       isTemporary: data.isTemporary,
+      hidden: data.hidden,
       timestamp: Date.now()
     });
+
+    // ✅ SKIP auto-focus se il nodo è hidden (temporaneo per edge)
+    if (data.hidden) {
+      console.log("⏭️ [AUTO_FOCUS] Skipping - node is hidden (temporary for edge)");
+      return;
+    }
 
     // Se abbiamo focusRowId (nodo nuovo) e non c'è editingRowId, impostalo
     if (data.focusRowId && !editingRowId && nodeRows.length > 0) {
@@ -287,7 +294,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         setEditingRowId(firstRow.id);
       }
     }
-  }, [data.focusRowId, editingRowId, nodeRows.length]);
+  }, [data.focusRowId, data.hidden, editingRowId, nodeRows.length, id]);
 
   // ✅ Rimuovi auto-editing del titolo per nodi temporanei
   // (Mantieni solo l'auto-focus sulla prima riga)

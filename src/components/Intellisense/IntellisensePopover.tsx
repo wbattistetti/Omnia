@@ -58,31 +58,6 @@ export const IntellisensePopover: React.FC = () => {
 
         const el = getEl(elementId);
 
-        // ✅ DEBUG CRITICO: Verifica quale nodo stiamo realmente prendendo
-        console.log("🎯 [IntellisensePopover] getEl() result:", {
-            elementId,
-            el,
-            elFound: !!el,
-            isEdge: !!state.target.edgeId
-        });
-
-        if (el) {
-            console.log("🎯 [IntellisensePopover] ACTUAL ELEMENT FOUND:", {
-                elementId,
-                elementTag: el.tagName,
-                elementClass: el.className,
-                elementRect: el.getBoundingClientRect(),
-                elementDataId: el.getAttribute('data-id'),
-                isDestinationNode: elementId === state.target?.edgeId ? 'DESTINATION' : 'OTHER'
-            });
-        } else {
-            console.error("❌ [IntellisensePopover] ELEMENT NOT FOUND IN REGISTRY:", {
-                elementId,
-                isEdge: !!state.target.edgeId,
-                targetEdgeId: state.target.edgeId
-            });
-        }
-
         if (!el) {
             setRect(null);
             setReferenceElement(null);
@@ -146,6 +121,31 @@ export const IntellisensePopover: React.FC = () => {
         };
     }, [state.isOpen, state.target, getEl]);
 
+    // ✅ Click fuori → Chiudi e cleanup
+    useEffect(() => {
+        if (!state.isOpen || !state.target?.edgeId) return;
+
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as Element;
+            // ✅ Ignora click dentro il wrapper Intellisense
+            if (target.closest('.intellisense-standalone-wrapper')) {
+                return;
+            }
+            // ✅ Click fuori → Chiudi e cleanup
+            console.log("🎯 [IntellisensePopover] Click outside - closing and cleanup");
+            actions.close();
+
+            // ✅ CLEANUP: Cancella nodo temporaneo e edge
+            const cleanupTempNodesAndEdges = (window as any).__cleanupAllTempNodesAndEdges;
+            if (cleanupTempNodesAndEdges) {
+                cleanupTempNodesAndEdges();
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [state.isOpen, state.target, actions]);
+
     // Handler per chiudere
     const handleClose = () => {
         actions.close();
@@ -160,32 +160,52 @@ export const IntellisensePopover: React.FC = () => {
 
         // ✅ 2. Se è un edge, rendi visibile il nodo temporaneo e aggiorna l'edge
         if (state.target?.edgeId) {
-            console.log("🎯 [IntellisensePopover] Processing edge selection:", {
-                edgeId: state.target.edgeId,
-                selectedItem: item,
-                query: state.query
-            });
-
-            // ✅ 3. Aggiorna l'edge con la label (caption sul link)
             const edgeId = state.target.edgeId;
 
-            // ✅ DETERMINA LA LABEL: se item esiste usa item.label, altrimenti usa il testo della query
-            const label = item ? item.label : (state.query || "Condition");
+            // ✅ GESTISCI CASI SPECIALI
+            let label: string | undefined;
+            let isElse = false;
 
-            // Cerca la funzione scheduleApplyLabel o setEdges nel window object
+            if (item && (item as any).id === '__else__') {
+                // ✅ Caso Else
+                label = 'Else';
+                isElse = true;
+                console.log("🎯 [IntellisensePopover] Else button clicked");
+            } else if (item && (item as any).id === '__unlinked__') {
+                // ✅ Caso Unlinked (nessuna label)
+                label = undefined;
+                console.log("🎯 [IntellisensePopover] Unlinked button clicked");
+            } else if (item) {
+                // ✅ Condizione normale dall'Intellisense
+                label = item.label;
+                console.log("🎯 [IntellisensePopover] Condition selected:", label);
+            } else {
+                // ✅ Testo digitato (Enter senza selezione)
+                label = state.query || "Condition";
+                console.log("🎯 [IntellisensePopover] Custom text entered:", label);
+            }
+
+            console.log("🎯 [IntellisensePopover] Processing edge selection:", {
+                edgeId,
+                label,
+                isElse,
+                selectedItem: item
+            });
+
+            // ✅ 3. Aggiorna l'edge
             const scheduleApplyLabel = (window as any).__scheduleApplyLabel;
             const setEdges = (window as any).__setEdges;
 
-            if (scheduleApplyLabel) {
-                // Usa la funzione esistente di scheduling
+            if (scheduleApplyLabel && label !== undefined) {
                 scheduleApplyLabel(edgeId, label);
                 console.log("🎯 [IntellisensePopover] Edge label scheduled:", label);
             } else if (setEdges) {
-                // Aggiorna direttamente gli edges con la caption
                 setEdges((eds: any[]) => eds.map(e =>
-                    e.id === edgeId ? { ...e, label, data: { ...(e.data || {}), label } } : e
+                    e.id === edgeId
+                        ? { ...e, label, data: { ...(e.data || {}), label, isElse } }
+                        : e
                 ));
-                console.log("🎯 [IntellisensePopover] Edge label applied:", label);
+                console.log("🎯 [IntellisensePopover] Edge updated:", { label, isElse });
             }
 
             // ✅ 4. Rendi visibile il nodo temporaneo (SENZA modificare il titolo)
@@ -230,15 +250,44 @@ export const IntellisensePopover: React.FC = () => {
     }
 
     // ✅ Calcola posizione centrata sul nodo di DESTINAZIONE (hidden)
-    const wrapperWidth = 320;
-    const wrapperHeight = 200;
+    // La freccia deve puntare al CENTRO della textbox!
+    // Formula: textbox_left = arrowX - (textbox_width / 2)
     const centeredPosition = state.target?.edgeId && rect
-        ? {
-            // Centra orizzontalmente rispetto al nodo di destinazione
-            x: rect.left + (rect.width / 2) - (wrapperWidth / 2),
-            // ✅ CORRETTO: Posiziona il top del wrapper 8px sopra il top del nodo
-            y: rect.top - 8
-        }
+        ? (() => {
+            // ✅ Larghezze fisse dei pulsanti (come definito in IntellisenseStandalone)
+            const elseButtonWidth = 40; // circa (padding 3px 8px + testo "Else" 8px)
+            const iconButtonWidth = 20; // LinkOff button
+            const cancelButtonWidth = 20; // X button
+            const gap = 6; // gap tra elementi
+
+            // Larghezza totale dei pulsanti + gap
+            const buttonsTotalWidth = elseButtonWidth + iconButtonWidth + cancelButtonWidth + (gap * 2);
+
+            // La textbox ha flex: 0.5, quindi occupa circa la metà dello spazio rimanente
+            // Wrapper totale è 420px - padding 24px = 396px disponibili
+            const availableWidth = 396; // 420px wrapper - 24px padding
+            const textboxWidth = (availableWidth - buttonsTotalWidth) * 0.5; // flex: 0.5
+
+            // ✅ FORMULA CORRETTA: textbox_left = arrowX - (textbox_width / 2)
+            const arrowX = rect.left + (rect.width / 2);
+            const textboxLeft = arrowX - (textboxWidth / 2);
+
+            // Il wrapper inizia a: textboxLeft - padding (12px)
+            const wrapperX = textboxLeft - 12;
+
+            console.log("🎯 [IntellisensePopover] Centering calculation:", {
+                arrowX,
+                textboxWidth,
+                textboxLeft,
+                wrapperX,
+                rect: { left: rect.left, width: rect.width, center: rect.left + (rect.width / 2) }
+            });
+
+            return {
+                x: wrapperX,
+                y: rect.top - 8
+            };
+        })()
         : null;
 
     // ✅ Log solo UNA VOLTA (non nel render loop)

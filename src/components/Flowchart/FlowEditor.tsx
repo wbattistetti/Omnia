@@ -513,6 +513,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     isCreatingTempNode
   );
 
+  // ✅ Esporta cleanup per l'Intellisense (DOPO la definizione)
+  useEffect(() => {
+    (window as any).__cleanupAllTempNodesAndEdges = cleanupAllTempNodesAndEdges;
+    return () => {
+      delete (window as any).__cleanupAllTempNodesAndEdges;
+    };
+  }, [cleanupAllTempNodesAndEdges]);
+
   // Promuove il nodo/edge temporanei a definitivi e rimuove ogni altro temporaneo residuo
   // ✅ RIMOSSA: function finalizeTempPromotion - non utilizzata
 
