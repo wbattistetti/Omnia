@@ -38,21 +38,30 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
   return (
     <>
       {showIntellisense && isEditing && nodeOverlayPosition && createPortal(
-        <IntellisenseMenu
-          isOpen={showIntellisense}
-          query={intellisenseQuery}
-          position={nodeOverlayPosition ? { x: nodeOverlayPosition.left, y: nodeOverlayPosition.top } : { x: 0, y: 0 }}
-          referenceElement={inputRef.current}
-          onSelect={handleIntellisenseSelect}
-          onClose={handleIntellisenseClose}
-          allowCreatePicker={!!allowCreatePicker}
-          filterCategoryTypes={['agentActs', 'backendActions', 'tasks']}
-          onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
-            return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);
-          } : undefined}
-          onCreateBackendCall={onCreateBackendCall ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateBackendCall(name, createRowUpdateCallback, scope, categoryName) : undefined}
-          onCreateTask={onCreateTask ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateTask(name, createRowUpdateCallback, scope, categoryName) : undefined}
-        />,
+        <>
+          {console.log("🎯 [NodeRowIntellisense] INDIVIDUAL ROW INTELLISENSE OPENED", {
+            query: intellisenseQuery,
+            timestamp: Date.now()
+          })}
+          <IntellisenseMenu
+            isOpen={showIntellisense}
+            query={intellisenseQuery}
+            position={nodeOverlayPosition ? { x: nodeOverlayPosition.left, y: nodeOverlayPosition.top } : { x: 0, y: 0 }}
+            referenceElement={inputRef.current}
+            onSelect={handleIntellisenseSelect}
+            onClose={() => {
+              console.log("🎯 [NodeRowIntellisense] INDIVIDUAL ROW INTELLISENSE CLOSED");
+              handleIntellisenseClose();
+            }}
+            allowCreatePicker={!!allowCreatePicker}
+            filterCategoryTypes={['agentActs', 'backendActions', 'tasks']}
+            onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
+              return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);
+            } : undefined}
+            onCreateBackendCall={onCreateBackendCall ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateBackendCall(name, createRowUpdateCallback, scope, categoryName) : undefined}
+            onCreateTask={onCreateTask ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateTask(name, createRowUpdateCallback, scope, categoryName) : undefined}
+          />
+        </>,
         document.body
       )}
     </>

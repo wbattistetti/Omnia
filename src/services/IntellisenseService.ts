@@ -84,7 +84,7 @@ export class IntellisenseService {
 
     /** API principale: items da mostrare quando il target è un EDGE */
     getEdgeItems(edgeId: string): IntellisenseItem[] {
-        console.log("🔥 [IntellisenseService] getEdgeItems called for edgeId:", edgeId);
+        console.log("🔥 [IntellisenseService] getEdgeItems called for edgeId:", edgeId, "at", new Date().toISOString());
 
         const projectData = this.providers.getProjectData();
         const conditions = this.buildConditionItems(projectData);
@@ -163,6 +163,7 @@ export class IntellisenseService {
         ];
 
         let intents: IntellisenseItem[] = [...TEST_INTENTS]; // Start with test intents
+        console.log("🔥 [IntellisenseService] Using TEST_INTENTS:", TEST_INTENTS.map(t => t.label));
 
         if (sourceNode) {
             const problemRows = collectProblemRows(sourceNode);
@@ -185,7 +186,8 @@ export class IntellisenseService {
 
         console.log("🔥 [IntellisenseService] Final intents:", {
             totalIntents: intents.length,
-            intents: intents.map(i => ({ id: i.id, label: i.label }))
+            intents: intents.map(i => ({ id: i.id, label: i.label })),
+            timestamp: new Date().toISOString()
         });
 
         console.log("🔥 [IntellisenseService] Conditions found:", {

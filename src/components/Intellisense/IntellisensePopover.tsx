@@ -11,22 +11,23 @@ export const IntellisensePopover: React.FC = () => {
     const [rect, setRect] = useState<DOMRect | null>(null);
     const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
 
-    // Log quando lo stato cambia
+    // Log quando lo stato cambia - solo quando si apre/chiude
     useEffect(() => {
-        console.log("🎯 [IntellisensePopover] State changed:", {
-            isOpen: state.isOpen,
-            target: state.target,
-            catalogLength: state.catalog.length,
-            query: state.query
-        });
-    }, [state.isOpen, state.target, state.catalog, state.query]);
+        if (state.isOpen) {
+            console.log("🎯 [IntellisensePopover] OPENED:", {
+                targetNodeId: state.target?.nodeId,
+                targetEdgeId: state.target?.edgeId,
+                catalogLength: state.catalog.length,
+                firstItems: state.catalog.slice(0, 3).map(item => ({ id: item.id, label: item.label })),
+                timestamp: Date.now()
+            });
+        } else {
+            console.log("🎯 [IntellisensePopover] CLOSED");
+        }
+    }, [state.isOpen]);
 
     // Calcola anchor quando si apre o cambia target - NO POLLING!
     useLayoutEffect(() => {
-        console.log("🎯 [IntellisensePopover useLayoutEffect] TRIGGERED", {
-            isOpen: state.isOpen,
-            target: state.target
-        });
 
         if (!state.isOpen || !state.target) {
             setRect(null);
@@ -68,24 +69,7 @@ export const IntellisensePopover: React.FC = () => {
         const nodeRect = el.getBoundingClientRect();
         setRect(nodeRect);
 
-        // ✅ Log dettagliato per debug posizione
-        if (state.target.edgeId) {
-            console.log("🎯 [IntellisensePopover useLayoutEffect] Dest node rect:", {
-                elementId,
-                isEdge: !!state.target.edgeId,
-                rect: {
-                    left: nodeRect.left,
-                    top: nodeRect.top,
-                    width: nodeRect.width,
-                    height: nodeRect.height,
-                    centerX: nodeRect.left + (nodeRect.width / 2)
-                },
-                wrapperWillBeAt: {
-                    x: nodeRect.left + (nodeRect.width / 2) - 160,
-                    y: nodeRect.top - 200 - 8
-                }
-            });
-        }
+        // ✅ Log rimosso per evitare spam
     }, [state.isOpen, state.target, getEl]);
 
     // Aggiorna su resize/scroll
@@ -236,18 +220,11 @@ export const IntellisensePopover: React.FC = () => {
         }
     };
 
-    if (!state.isOpen || !rect || !referenceElement) return null;
-
-    // ✅ Log solo quando cambiano i valori importanti (riduci rumore)
-    const shouldLog = state.catalog.length > 0 || state.query !== '';
-    if (shouldLog) {
-        console.debug("🎯 [IntellisensePopover] Rendering with:", {
-            catalogSize: state.catalog.length,
-            targetNodeId: state.target?.nodeId,
-            targetEdgeId: state.target?.edgeId,
-            query: state.query
-        });
+    if (!state.isOpen || !rect || !referenceElement) {
+        return null;
     }
+
+    // ✅ Log rimosso per evitare spam
 
     // ✅ Calcola posizione centrata sul nodo di DESTINAZIONE (hidden)
     // La freccia deve puntare al CENTRO della textbox!
@@ -275,13 +252,13 @@ export const IntellisensePopover: React.FC = () => {
             // Il wrapper inizia a: textboxLeft - padding (12px)
             const wrapperX = textboxLeft - 12;
 
-            console.log("🎯 [IntellisensePopover] Centering calculation:", {
-                arrowX,
-                textboxWidth,
-                textboxLeft,
-                wrapperX,
-                rect: { left: rect.left, width: rect.width, center: rect.left + (rect.width / 2) }
-            });
+            // console.log("🎯 [IntellisensePopover] Centering calculation:", {
+            //     arrowX,
+            //     textboxWidth,
+            //     textboxLeft,
+            //     wrapperX,
+            //     rect: { left: rect.left, width: rect.width, center: rect.left + (rect.width / 2) }
+            // });
 
             return {
                 x: wrapperX,

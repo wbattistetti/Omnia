@@ -279,6 +279,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
     if (e.key === '/' && !showIntellisense) {
       // Activate intellisense with slash
+      // Log rimosso per evitare spam
       setIntellisenseQuery('');
       setShowIntellisense(true);
       setAllowCreatePicker(false);
@@ -362,7 +363,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     if (q.length >= 2) {
       setIntellisenseQuery(newText);
       intellisenseTimerRef.current = window.setTimeout(() => {
-        if (!suppressIntellisenseRef.current) setShowIntellisense(true);
+        if (!suppressIntellisenseRef.current) {
+          // Log rimosso per evitare spam
+          setShowIntellisense(true);
+        }
       }, 100);
     } else {
       setShowIntellisense(false);

@@ -251,6 +251,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       intellisenseData = [...intellisenseData, ...seedItems];
     }
 
+    // ✅ Log rimosso per evitare spam
+
     // Applica filtri SOLO se richiesti dai chiamanti
     if (Array.isArray(filterCategoryTypes) && filterCategoryTypes.length) {
       intellisenseData = intellisenseData.filter(item => filterCategoryTypes.includes((item as any)?.categoryType));
@@ -269,13 +271,8 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     setIsInitialized(true);
     // Immediately compute results for current query so new items appear right away
     if (!query.trim()) {
-      // Show the full dataset
-      const baseItems = intellisenseData;
-      const allResults: IntellisenseResult[] = baseItems.map(item => ({ item } as IntellisenseResult));
-      // Flat category: avoid any category-based filtering downstream
-      const flat = new Map<string, IntellisenseResult[]>();
-      flat.set('conditions', allResults);
-      setFuzzyResults(flat);
+      // ✅ NON mostrare nulla se query è vuota (comportamento corretto)
+      setFuzzyResults(new Map());
       setSemanticResults([]);
       setSelectedIndex(0);
     } else {
@@ -517,8 +514,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     return null;
   }
 
-  // If no results, still render the shell to avoid blink/hide issues during updates
+  // ✅ Log rimossi per evitare spam
   const noResults = totalItems === 0;
+
+  // If no results, still render the shell to avoid blink/hide issues during updates
 
   // ✅ RENDER DIFFERENTE PER I DUE CASI
   return (
@@ -551,13 +550,21 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             fuzzyResults={fuzzyResults}
             semanticResults={semanticResults}
             selectedIndex={selectedIndex}
+            layoutConfig={{ showCategories: true, maxItems: 10 }}
+            categoryConfig={{}}
             query={query}
-            onSelect={onSelect}
+            onItemSelect={(result) => {
+              console.log("🎯 [IntellisenseMenu] Item selected:", result.item);
+              onSelect(result.item);
+            }}
+            onItemHover={(index) => setSelectedIndex(index)}
             onCreateNew={onCreateNew}
             onCreateAgentAct={onCreateAgentAct}
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
             allowCreatePicker={allowCreatePicker}
+            projectIndustry="utility-gas"
+            projectData={data}
             layoutConfig={defaultLayoutConfig} // ✅ OBBLIGATORIO
             categoryConfig={{}} // ✅ OBBLIGATORIO
           />
@@ -569,13 +576,21 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             fuzzyResults={fuzzyResults}
             semanticResults={semanticResults}
             selectedIndex={selectedIndex}
+            layoutConfig={{ showCategories: true, maxItems: 10 }}
+            categoryConfig={{}}
             query={query}
-            onSelect={onSelect}
+            onItemSelect={(result) => {
+              console.log("🎯 [IntellisenseMenu] Item selected:", result.item);
+              onSelect(result.item);
+            }}
+            onItemHover={(index) => setSelectedIndex(index)}
             onCreateNew={onCreateNew}
             onCreateAgentAct={onCreateAgentAct}
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
             allowCreatePicker={allowCreatePicker}
+            projectIndustry="utility-gas"
+            projectData={data}
             layoutConfig={defaultLayoutConfig} // ✅ OBBLIGATORIO
             categoryConfig={{}} // ✅ OBBLIGATORIO
           />

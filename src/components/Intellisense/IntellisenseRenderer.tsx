@@ -48,7 +48,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   projectData,
   allowCreatePicker = false
 }) => {
-  // Debug logging removed to prevent excessive console output
+  // ✅ Log rimosso per evitare spam
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [isCreating, setIsCreating] = useState(false);

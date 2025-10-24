@@ -21,21 +21,23 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   onMouseEnter
 }) => {
   const { item, matches } = result;
-  
+
+  // ✅ Log rimosso per evitare spam
+
   // Find matches for name and description
   const nameMatches = matches?.filter(match => match.key === 'name');
   const descriptionMatches = matches?.filter(match => match.key === 'description');
-  
+
   const iconKey = item.iconComponent ? undefined : SIDEBAR_TYPE_ICONS[item.categoryType as string];
   const IconFromSidebar = iconKey ? SIDEBAR_ICON_COMPONENTS[iconKey] : null;
   // Foreground color: use getAgentActIconColor for Agent Acts with mode="DataRequest"
   const baseColor = (item.categoryType === 'agentActs')
     ? ((item as any)?.mode === 'DataRequest' ? getAgentActIconColor(item as any) : ((item as any)?.mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e'))
     : (SIDEBAR_TYPE_COLORS[item.categoryType as string]?.color);
-  const foreColor = (item.categoryType === 'agentActs') 
+  const foreColor = (item.categoryType === 'agentActs')
     ? (baseColor || item.textColor || item.color || undefined)
     : (item.textColor || item.color || baseColor || undefined);
-  
+
   // Debug logging removed to prevent excessive console output
 
   return (
@@ -67,7 +69,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
           <Circle className="w-4 h-4 text-gray-400" />
         )}
       </div>
-      
+
       {/* Content */}
       <div className="flex-1 min-w-0">
         {/* Label principale con tooltip se description */}
@@ -78,7 +80,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
         >
           {highlightMatches(item.label || item.name, nameMatches)}
         </div>
-        
+
         {/* AI Badge */}
         {isFromAI && (
           <div className="mt-1">

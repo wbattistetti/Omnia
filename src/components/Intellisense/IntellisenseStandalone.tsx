@@ -110,6 +110,8 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         console.log("🎯 [IntellisenseStandalone] Wrapper click - preventing close");
     };
 
+    // ✅ Log rimosso per evitare spam
+
     return (
         <div
             className="intellisense-standalone-wrapper"
@@ -225,7 +227,10 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                 query={state.query}
                 position={position}
                 referenceElement={referenceElement}
-                onSelect={onSelect}
+                onSelect={(item) => {
+                    console.log("🎯 [IntellisenseStandalone] Item selected from menu:", item);
+                    onSelect(item);
+                }}
                 onClose={onClose}
                 extraItems={extraItems}
                 allowedKinds={allowedKinds}

@@ -286,13 +286,21 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
                   top: intellisensePosition.y,
                   zIndex: 9999,
                 }}>
+                  {console.log("🎯 [NodeHeader] TITLE INTELLISENSE OPENED", {
+                    nodeId: nodeId,
+                    title: title,
+                    timestamp: Date.now()
+                  })}
                   <IntellisenseMenu
                     isOpen={showIntellisense}
                     query={tempTitle}
                     position={{ x: 0, y: 0 }}
                     referenceElement={null}
                     onSelect={handleIntellisenseSelect}
-                    onClose={() => setShowIntellisense(false)}
+                    onClose={() => {
+                      console.log("🎯 [NodeHeader] TITLE INTELLISENSE CLOSED", { nodeId: nodeId });
+                      setShowIntellisense(false);
+                    }}
                     filterCategoryTypes={['tasks', 'macroTasks']}
                   />
                 </div>,

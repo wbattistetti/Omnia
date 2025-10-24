@@ -263,20 +263,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ PATCH 1: Focus per nodi nuovi (semplificato) - NON per nodi hidden!
   useEffect(() => {
-    console.log("🔍 [AUTO_FOCUS] Checking focus conditions", {
-      nodeId: id,
-      hasFocusRowId: !!data.focusRowId,
-      focusRowId: data.focusRowId,
-      editingRowId,
-      nodeRowsCount: nodeRows.length,
-      isTemporary: data.isTemporary,
-      hidden: data.hidden,
-      timestamp: Date.now()
-    });
-
-    // ✅ SKIP auto-focus se il nodo è hidden (temporaneo per edge)
+    // ✅ SKIP auto-focus solo se il nodo è hidden (per edge temporanei)
+    // ✅ PERMETTI auto-focus se isTemporary ma non hidden (nodi creati con doppio click)
     if (data.hidden) {
-      console.log("⏭️ [AUTO_FOCUS] Skipping - node is hidden (temporary for edge)");
       return;
     }
 
@@ -284,17 +273,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     if (data.focusRowId && !editingRowId && nodeRows.length > 0) {
       const firstRow = nodeRows[0];
       if (firstRow && firstRow.text.trim() === '') {
-        console.log("✅ [AUTO_FOCUS] Setting editingRowId", {
-          nodeId: id,
-          focusRowId: data.focusRowId,
-          firstRowId: firstRow.id,
-          match: firstRow.id === data.focusRowId,
-          timestamp: Date.now()
-        });
         setEditingRowId(firstRow.id);
       }
     }
-  }, [data.focusRowId, data.hidden, editingRowId, nodeRows.length, id]);
+  }, [data.focusRowId, data.hidden, data.isTemporary, editingRowId, nodeRows.length, id]);
 
   // ✅ Rimuovi auto-editing del titolo per nodi temporanei
   // (Mantieni solo l'auto-focus sulla prima riga)
@@ -855,15 +837,27 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         <NodeHandles isConnectable={isConnectable} />
         {/* Mock Intellisense Menu */}
         {showIntellisense && (
-          <IntellisenseMenu
-            isOpen={showIntellisense}
-            query={editingRowId ? nodeRows.find(row => row.id === editingRowId)?.text || '' : ''}
-            position={intellisensePosition}
-            referenceElement={null}
-            onSelect={handleIntellisenseSelectItem}
-            onClose={() => setShowIntellisense(false)}
-            filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
-          />
+          <>
+            {console.log("🎯 [CustomNode] ROW INTELLISENSE OPENED", {
+              nodeId: id,
+              isTemporary: data.isTemporary,
+              hidden: data.hidden,
+              editingRowId,
+              timestamp: Date.now()
+            })}
+            <IntellisenseMenu
+              isOpen={showIntellisense}
+              query={editingRowId ? nodeRows.find(row => row.id === editingRowId)?.text || '' : ''}
+              position={intellisensePosition}
+              referenceElement={null}
+              onSelect={handleIntellisenseSelectItem}
+              onClose={() => {
+                console.log("🎯 [CustomNode] ROW INTELLISENSE CLOSED", { nodeId: id });
+                setShowIntellisense(false);
+              }}
+              filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
+            />
+          </>
         )}
       </div>
     </div>

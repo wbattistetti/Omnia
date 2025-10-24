@@ -27,6 +27,11 @@ function reducer(s: IntellisenseState, a: IntellisenseAction): IntellisenseState
         case "CLOSE":
             return { ...s, isOpen: false, target: null, query: "", catalog: [], highlighted: 0 };
         case "SET_QUERY":
+            console.log("🎯 [IntellisenseContext] SET_QUERY:", {
+                oldQuery: s.query,
+                newQuery: a.query,
+                timestamp: Date.now()
+            });
             return { ...s, query: a.query, highlighted: 0 };
         case "MOVE_HIGHLIGHT": {
             const n = s.catalog.length || 1;
@@ -69,7 +74,8 @@ export const IntellisenseProvider: React.FC<{ providers: GraphProviders; childre
         const items = service.getEdgeItems(edgeId);
         console.log("🎯 [IntellisenseContext] Items from service:", {
             totalItems: items.length,
-            items: items.map(i => ({ id: i.id, label: i.label, kind: i.kind }))
+            items: items.map(i => ({ id: i.id, label: i.label, kind: i.kind })),
+            timestamp: Date.now()
         });
 
         dispatch({
