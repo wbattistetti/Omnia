@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import { typeToMode } from '../../../../utils/normalizers';
 import { NodeProps } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
@@ -10,6 +9,9 @@ import { IntellisenseItem } from '../../../Intellisense/IntellisenseTypes';
 import { NodeRowData, EntityType } from '../../../../types/project';
 import { useNodeRowDrag } from '../../../../hooks/useNodeRowDrag';
 import { NodeRowList } from '../../rows/shared/NodeRowList';
+import { useNodeState } from './hooks/useNodeState';
+import { useNodeEventHandlers } from './hooks/useNodeEventHandlers';
+import { NodeBufferArea } from './NodeBufferArea';
 
 // Helper per ID robusti
 function newUid() {
@@ -62,52 +64,37 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   isConnectable,
   selected
 }) => {
-  const [isEditingNode, setIsEditingNode] = useState(false);
-  const [nodeTitle, setNodeTitle] = useState(data.title || '');
-  const [isHoveredNode, setIsHoveredNode] = useState(false);
-  const [isHoverHeader, setIsHoverHeader] = useState(false);
-  const [nodeBufferRect, setNodeBufferRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
-  const hideToolbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Extract all state management to custom hook
+  const nodeState = useNodeState({ data });
+  const {
+    isEditingNode, setIsEditingNode,
+    nodeTitle, setNodeTitle,
+    isHoveredNode, setIsHoveredNode,
+    isHoverHeader, setIsHoverHeader,
+    nodeBufferRect, setNodeBufferRect,
+    hideToolbarTimeoutRef,
+    hasTitle, showPermanentHeader, showDragHeader
+  } = nodeState;
 
-  // 🔍 DEBUG: Monitor hover state changes (rimosso per ridurre spam)
-
-  const hasTitle = (nodeTitle || '').trim().length > 0;
-  // Header permanente visibile se c'è un titolo oppure se l'utente ha richiesto l'editing del titolo
-  const showPermanentHeader = hasTitle || isEditingNode;
-  // Header drag visibile al hover (esclude completamente l'editing)
-  // Durante l'editing del titolo, NON mostrare l'area di drag per evitare conflitti
-  const showDragHeader = isHoveredNode && !isEditingNode && !isHoverHeader;
-
-  // Traccia ultima posizione del mouse per ripristinare correttamente l'hover post-edit
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      try { (window as any).__lastMouseX = e.clientX; (window as any).__lastMouseY = e.clientY; } catch { }
-    };
-    window.addEventListener('mousemove', onMove, { passive: true });
-    return () => window.removeEventListener('mousemove', onMove);
-  }, []);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hideToolbarTimeoutRef.current) {
-        clearTimeout(hideToolbarTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const handleEndTitleEditing = () => {
-    setIsEditingNode(false);
-    setIsHoverHeader(false);
-    try {
-      const rect = rootRef.current?.getBoundingClientRect();
-      const mx = (window as any).__lastMouseX; const my = (window as any).__lastMouseY;
-      if (rect && typeof mx === 'number' && typeof my === 'number') {
-        const inside = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
-        setIsHoveredNode(inside);
-      }
-    } catch { }
-  };
+  // Extract all event handlers to custom hook
+  const handlers = useNodeEventHandlers({
+    data,
+    nodeTitle,
+    setNodeTitle,
+    setIsEditingNode,
+    setIsHoverHeader,
+    hideToolbarTimeoutRef,
+    setIsHoveredNode
+  });
+  const {
+    handleEndTitleEditing,
+    handleTitleUpdate,
+    handleDeleteNode,
+    handleNodeMouseEnter,
+    handleNodeMouseLeave,
+    handleBufferMouseEnter,
+    handleBufferMouseLeave
+  } = handlers;
 
   // Se l'header viene nascosto, azzera sempre lo stato hover header
   useEffect(() => { if (!showPermanentHeader) setIsHoverHeader(false); }, [showPermanentHeader]);
@@ -248,12 +235,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Inizio stato per overlay azioni
   // const [showActions, setShowActions] = useState(false);
 
-  const handleDeleteNode = () => {
-    if (data.onDelete) {
-      data.onDelete();
-    }
-  };
-
   // Ref al contenitore delle righe per calcoli DnD locali
   const rowsContainerRef = useRef<HTMLDivElement | null>(null);
   // ✅ CORREZIONE 4: Ref per il container root del nodo
@@ -374,13 +355,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       data.onUpdate?.({ rows: baseRows, focusRowId: undefined, isTemporary: data.isTemporary });
     }
     setShowIntellisense(false);
-  };
-
-  const handleTitleUpdate = (newTitle: string) => {
-    setNodeTitle(newTitle);
-    if (data.onUpdate) {
-      data.onUpdate({ title: newTitle });
-    }
   };
 
   // Funzione per inserire una riga in una posizione specifica
@@ -585,60 +559,21 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       {/* Area hover estesa per toolbar nodo - mantiene toolbar visibile */}
-      {nodeBufferRect && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            top: nodeBufferRect.top,
-            left: nodeBufferRect.left,
-            width: nodeBufferRect.width,
-            height: nodeBufferRect.height,
-            zIndex: 499, // Sotto toolbar (500) ma sopra contenuto normale
-            pointerEvents: 'auto',
-            background: 'transparent',
-            // Debug: mostra l'area (commentato)
-            // border: '2px dashed rgba(255, 0, 0, 0.5)',
-          }}
-          onMouseEnter={() => {
-            // Cancella timeout se stavi uscendo
-            if (hideToolbarTimeoutRef.current) {
-              clearTimeout(hideToolbarTimeoutRef.current);
-              hideToolbarTimeoutRef.current = null;
-            }
-            setIsHoveredNode(true);
-          }}
-          onMouseLeave={() => {
-            // Uscito dall'area estesa = hide immediato (senza delay)
-            if (hideToolbarTimeoutRef.current) {
-              clearTimeout(hideToolbarTimeoutRef.current);
-              hideToolbarTimeoutRef.current = null;
-            }
-            setIsHoveredNode(false);
-          }}
-        />,
-        document.body
-      )}
+      <NodeBufferArea
+        bufferRect={nodeBufferRect}
+        isHoveredNode={isHoveredNode}
+        isEditingNode={isEditingNode}
+        onMouseEnter={handleBufferMouseEnter}
+        onMouseLeave={handleBufferMouseLeave}
+      />
 
       <div
         ref={rootRef}
         className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
         style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content', position: 'relative', zIndex: 1 }}
         tabIndex={-1}
-        onMouseEnter={() => {
-          // Cancella eventuali timeout pendenti
-          if (hideToolbarTimeoutRef.current) {
-            clearTimeout(hideToolbarTimeoutRef.current);
-            hideToolbarTimeoutRef.current = null;
-          }
-          setIsHoveredNode(true);
-        }}
-        onMouseLeave={() => {
-          // Delay di 100ms per dare tempo all'area buffer di catturare il mouse
-          hideToolbarTimeoutRef.current = setTimeout(() => {
-            setIsHoveredNode(false);
-            hideToolbarTimeoutRef.current = null;
-          }, 100);
-        }}
+        onMouseEnter={handleNodeMouseEnter}
+        onMouseLeave={handleNodeMouseLeave}
         onMouseDownCapture={(e) => {
           // Permetti di trascinare il nodo prendendo il corpo (evita solo l'input riga)
           const t = e.target as HTMLElement;
