@@ -679,13 +679,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
       <div
         ref={(el) => {
-          // Assign to both rootRef and registry
+          // ✅ Assign to ALL three refs in a single callback
           (rootRef as any).current = el;
           (nodeRegistryRef as any).current = el;
+          (nodeContainerRef as any).current = el;
         }}
         data-id={id}
         className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
-        ref={nodeContainerRef}
         style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content', position: 'relative', zIndex: 1 }}
         tabIndex={-1}
         onMouseEnter={handleNodeMouseEnter}

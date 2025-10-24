@@ -59,6 +59,13 @@ export const IntellisensePopover: React.FC = () => {
         const el = getEl(elementId);
 
         // ✅ DEBUG CRITICO: Verifica quale nodo stiamo realmente prendendo
+        console.log("🎯 [IntellisensePopover] getEl() result:", {
+            elementId,
+            el,
+            elFound: !!el,
+            isEdge: !!state.target.edgeId
+        });
+
         if (el) {
             console.log("🎯 [IntellisensePopover] ACTUAL ELEMENT FOUND:", {
                 elementId,
@@ -67,6 +74,12 @@ export const IntellisensePopover: React.FC = () => {
                 elementRect: el.getBoundingClientRect(),
                 elementDataId: el.getAttribute('data-id'),
                 isDestinationNode: elementId === state.target?.edgeId ? 'DESTINATION' : 'OTHER'
+            });
+        } else {
+            console.error("❌ [IntellisensePopover] ELEMENT NOT FOUND IN REGISTRY:", {
+                elementId,
+                isEdge: !!state.target.edgeId,
+                targetEdgeId: state.target.edgeId
             });
         }
 
@@ -233,7 +246,7 @@ export const IntellisensePopover: React.FC = () => {
 
     // Usa il componente appropriato in base al target
     return createPortal(
-        <div style={{ border: '2px solid red', backgroundColor: 'rgba(255, 0, 0, 0.1)' }}>
+        <>
             {state.target?.edgeId && centeredPosition ? (
                 // ✅ CASO EDGE: usa il wrapper standalone con posizione centrata
                 <IntellisenseStandalone
@@ -258,7 +271,7 @@ export const IntellisensePopover: React.FC = () => {
                     mode="inline"
                 />
             )}
-        </div>,
+        </>,
         document.body
     );
 };
