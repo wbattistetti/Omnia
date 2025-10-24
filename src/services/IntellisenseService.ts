@@ -62,27 +62,9 @@ export class IntellisenseService {
         const instance = instanceRepository.getInstance(instanceId);
 
         if (!instance) {
-            // L'istanza non esiste ancora - restituiamo i test intents per far aprire l'Intellisense
-            return [
-                {
-                    id: 'test-confirm-intent',
-                    label: 'Test Confirm',
-                    name: 'Test Confirm',
-                    value: 'test-confirm-intent',
-                    category: "Test Intents",
-                    categoryType: "intents" as const,
-                    kind: "intent" as const,
-                },
-                {
-                    id: 'test-reject-intent',
-                    label: 'Test Reject',
-                    name: 'Test Reject',
-                    value: 'test-reject-intent',
-                    category: "Test Intents",
-                    categoryType: "intents" as const,
-                    kind: "intent" as const,
-                }
-            ];
+            // L'istanza non esiste ancora - restituiamo array vuoto
+            console.log('[IntellisenseService] Instance not found, returning empty intents');
+            return [];
         }
 
         // Prendi gli intent dall'istanza

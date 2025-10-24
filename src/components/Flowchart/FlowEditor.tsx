@@ -51,6 +51,7 @@ interface FlowEditorProps {
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>;
   currentProject: any;
   setCurrentProject: (project: any) => void;
+  onCreateTaskFlow?: (flowId: string, title: string, nodes: Node<NodeData>[], edges: Edge<EdgeData>[]) => void;
   onOpenTaskFlow?: (flowId: string, title: string) => void;
 }
 
@@ -61,6 +62,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   setNodes,
   edges,
   setEdges,
+  onCreateTaskFlow,
   onOpenTaskFlow
 }) => {
   // Ref sempre aggiornata con lo stato dei nodi
@@ -1010,7 +1012,81 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         <SelectionMenu
           selectedNodeIds={selectedNodeIds}
           selectionMenu={selectionMenu}
-          onCreateTask={() => { /* TODO: implement handling come originale */ }}
+          onCreateTask={() => {
+            if (selectedNodeIds.length < 2) return;
+
+            console.log('🎯 [CREATE_TASK] Starting task creation from', selectedNodeIds.length, 'selected nodes');
+
+            // 1. Calcola la posizione media dei nodi selezionati per posizionare il task node
+            const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+            const avgX = selectedNodes.reduce((sum, n) => sum + n.position.x, 0) / selectedNodes.length;
+            const avgY = selectedNodes.reduce((sum, n) => sum + n.position.y, 0) / selectedNodes.length;
+
+            // 2. Crea ID unico per il task flow e il task node
+            const newFlowId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const taskNodeId = `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const editingToken = `edit_${Date.now()}`; // Token immutabile per triggare editing
+
+            console.log('🎯 [CREATE_TASK] Task node will be created at:', { x: avgX, y: avgY, id: taskNodeId, flowId: newFlowId });
+
+            // 3. Prendi edges selezionati
+            const selectedEdges = edges.filter(e =>
+              selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target)
+            );
+
+            // 4. Salva i nodi selezionati nel nuovo flow (se la callback è disponibile)
+            if (onCreateTaskFlow) {
+              console.log('🎯 [CREATE_TASK] Saving selected nodes to new flow:', newFlowId);
+              onCreateTaskFlow(newFlowId, '', selectedNodes, selectedEdges);
+            }
+
+            // 5. Crea il nodo Task nel flow corrente
+            const taskNode: Node<any> = {
+              id: taskNodeId,
+              type: 'task',
+              position: { x: avgX, y: avgY },
+              data: {
+                title: '', // Vuoto all'inizio, sarà editato dall'utente
+                flowId: newFlowId,
+                editingToken, // Token immutabile per triggare editing immediato
+                onUpdate: (updates: any) => {
+                  console.log('🎯 [TASK_UPDATE] Task node data updated:', updates);
+                  setNodes(nds => nds.map(n =>
+                    n.id === taskNodeId
+                      ? { ...n, data: { ...n.data, ...updates } }
+                      : n
+                  ));
+                },
+                onCommitTitle: (title: string) => {
+                  console.log('🎯 [TASK_COMMIT] Task title committed:', title);
+                  // Quando il titolo viene confermato, crea la tab
+                  if (onCreateTaskFlow && onOpenTaskFlow) {
+                    // Aggiorna il titolo del flow già creato
+                    onOpenTaskFlow(newFlowId, title);
+                  }
+                },
+                onCancelTitle: () => {
+                  console.log('🎯 [TASK_CANCEL] Task creation cancelled, removing node');
+                  // Se l'utente cancella, rimuovi il task node
+                  setNodes(nds => nds.filter(n => n.id !== taskNodeId));
+                }
+              }
+            };
+
+            console.log('🎯 [CREATE_TASK] Adding task node to flow');
+            setNodes(nds => [...nds.filter(n => !selectedNodeIds.includes(n.id)), taskNode]);
+
+            // 6. Rimuovi edges che connettevano i nodi collassati
+            setEdges(eds => eds.filter(e =>
+              !selectedNodeIds.includes(e.source) && !selectedNodeIds.includes(e.target)
+            ));
+
+            // 7. Chiudi il menu di selezione
+            setSelectionMenu({ show: false, x: 0, y: 0 });
+            setSelectedNodeIds([]);
+
+            console.log('🎯 [CREATE_TASK] Task creation complete');
+          }}
           onCancel={() => setSelectionMenu({ show: false, x: 0, y: 0 })}
         />
       )}
