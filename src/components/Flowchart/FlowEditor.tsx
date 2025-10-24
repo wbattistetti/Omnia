@@ -1017,8 +1017,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
             console.log('🎯 [CREATE_TASK] Starting task creation from', selectedNodeIds.length, 'selected nodes');
 
-            // 1. Calcola la posizione media dei nodi selezionati per posizionare il task node
+            // 1. SALVA la selezione originale per rollback
             const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
+            const selectedEdges = edges.filter(e =>
+              selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target)
+            );
             const avgX = selectedNodes.reduce((sum, n) => sum + n.position.x, 0) / selectedNodes.length;
             const avgY = selectedNodes.reduce((sum, n) => sum + n.position.y, 0) / selectedNodes.length;
 
@@ -1028,19 +1031,23 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             const editingToken = `edit_${Date.now()}`; // Token immutabile per triggare editing
 
             console.log('🎯 [CREATE_TASK] Task node will be created at:', { x: avgX, y: avgY, id: taskNodeId, flowId: newFlowId });
+            console.log('🎯 [CREATE_TASK] Saved original selection:', { nodes: selectedNodes.length, edges: selectedEdges.length });
 
-            // 3. Prendi edges selezionati
-            const selectedEdges = edges.filter(e =>
-              selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target)
-            );
+            // 3. NASCONDE i nodi selezionati (ma non li elimina ancora)
+            setNodes(nds => nds.map(n =>
+              selectedNodeIds.includes(n.id)
+                ? { ...n, hidden: true }
+                : n
+            ));
 
-            // 4. Salva i nodi selezionati nel nuovo flow (se la callback è disponibile)
-            if (onCreateTaskFlow) {
-              console.log('🎯 [CREATE_TASK] Saving selected nodes to new flow:', newFlowId);
-              onCreateTaskFlow(newFlowId, '', selectedNodes, selectedEdges);
-            }
+            // 4. NASCONDE gli edges selezionati
+            setEdges(eds => eds.map(e =>
+              (selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target))
+                ? { ...e, hidden: true }
+                : e
+            ));
 
-            // 5. Crea il nodo Task nel flow corrente
+            // 5. Crea il nodo Task in editing (NON crea ancora il flow)
             const taskNode: Node<any> = {
               id: taskNodeId,
               type: 'task',
@@ -1057,35 +1064,64 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
                       : n
                   ));
                 },
+                onCancelTitle: () => {
+                  console.log('🎯 [TASK_CANCEL] Task creation cancelled, restoring original selection');
+
+                  // ✅ ROLLBACK: Rimuovi il task node
+                  setNodes(nds => nds.filter(n => n.id !== taskNodeId));
+
+                  // ✅ ROLLBACK: Ripristina i nodi nascosti
+                  setNodes(nds => nds.map(n =>
+                    selectedNodeIds.includes(n.id)
+                      ? { ...n, hidden: false }
+                      : n
+                  ));
+
+                  // ✅ ROLLBACK: Ripristina gli edges nascosti
+                  setEdges(eds => eds.map(e =>
+                    (selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target))
+                      ? { ...e, hidden: false }
+                      : e
+                  ));
+
+                  console.log('🎯 [TASK_CANCEL] Original selection restored');
+                },
                 onCommitTitle: (title: string) => {
                   console.log('🎯 [TASK_COMMIT] Task title committed:', title);
-                  // Quando il titolo viene confermato, crea la tab
-                  if (onCreateTaskFlow && onOpenTaskFlow) {
-                    // Aggiorna il titolo del flow già creato
+
+                  // ✅ FINALIZZA: SOLO ORA elimina i nodi nascosti
+                  setNodes(nds => nds.filter(n => !selectedNodeIds.includes(n.id)));
+
+                  // ✅ FINALIZZA: SOLO ORA elimina gli edges
+                  setEdges(eds => eds.filter(e =>
+                    !selectedNodeIds.includes(e.source) && !selectedNodeIds.includes(e.target)
+                  ));
+
+                  // ✅ FINALIZZA: SOLO ORA crea il flow
+                  if (onCreateTaskFlow) {
+                    console.log('🎯 [TASK_COMMIT] Creating task flow:', newFlowId);
+                    onCreateTaskFlow(newFlowId, title, selectedNodes, selectedEdges);
+                  }
+
+                  // ✅ FINALIZZA: SOLO ORA apre la tab
+                  if (onOpenTaskFlow) {
+                    console.log('🎯 [TASK_COMMIT] Opening task flow tab:', title);
                     onOpenTaskFlow(newFlowId, title);
                   }
-                },
-                onCancelTitle: () => {
-                  console.log('🎯 [TASK_CANCEL] Task creation cancelled, removing node');
-                  // Se l'utente cancella, rimuovi il task node
-                  setNodes(nds => nds.filter(n => n.id !== taskNodeId));
+
+                  console.log('🎯 [TASK_COMMIT] Task finalized successfully');
                 }
               }
             };
 
-            console.log('🎯 [CREATE_TASK] Adding task node to flow');
-            setNodes(nds => [...nds.filter(n => !selectedNodeIds.includes(n.id)), taskNode]);
+            console.log('🎯 [CREATE_TASK] Adding task node to flow (in editing mode)');
+            setNodes(nds => [...nds, taskNode]);
 
-            // 6. Rimuovi edges che connettevano i nodi collassati
-            setEdges(eds => eds.filter(e =>
-              !selectedNodeIds.includes(e.source) && !selectedNodeIds.includes(e.target)
-            ));
-
-            // 7. Chiudi il menu di selezione
+            // 6. Chiudi il menu di selezione
             setSelectionMenu({ show: false, x: 0, y: 0 });
             setSelectedNodeIds([]);
 
-            console.log('🎯 [CREATE_TASK] Task creation complete');
+            console.log('🎯 [CREATE_TASK] Task node created, waiting for user input');
           }}
           onCancel={() => setSelectionMenu({ show: false, x: 0, y: 0 })}
         />

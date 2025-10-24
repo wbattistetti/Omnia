@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Trash2, Edit3, Check, X, Anchor, Play, Eye, EyeOff } from 'lucide-react';
 import { IntellisenseMenu } from '../../../Intellisense/IntellisenseMenu';
 import { createPortal } from 'react-dom';
+import { FONT_SIZES } from '../../../../theme/fontSizes';
 
 /**
  * Props per NodeHeader
@@ -206,9 +207,9 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
                 }
               }}
               autoFocus
-              className="node-title-input flex-1 min-w-0 bg-white text-slate-900 text-[10px] px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-amber-500 border border-amber-400 nodrag"
+              className="node-title-input flex-1 min-w-0 bg-white text-slate-900 px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-amber-500 border border-amber-400 nodrag"
               data-node-id={nodeId || ''}
-              style={{ width: '100%' }}
+              style={{ width: '100%', fontSize: FONT_SIZES.NODE_TITLE }}
               onFocus={() => {
                 if (titleInputRef.current) {
                   const rect = titleInputRef.current.getBoundingClientRect();
@@ -301,7 +302,8 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
           </div>
         ) : (
           <h3
-            className="text-white text-[8px] font-semibold cursor-text hover:text-amber-100 transition-colors truncate flex-1"
+            className="text-white font-semibold cursor-text hover:text-amber-100 transition-colors truncate flex-1"
+            style={{ fontSize: FONT_SIZES.NODE_TITLE }}
             onMouseDown={(e) => {
               // Approximate caret index from click X over title width
               try {

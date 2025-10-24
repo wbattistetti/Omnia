@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
 import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDataContext';
 import { ProjectDataService } from '../../../services/ProjectDataService';
+import { FONT_SIZE_PRESETS } from '../../../theme/fontSizes';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -480,7 +481,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             border: 'none',
             borderRadius: 4,
             padding: '2px 8px',
-            fontSize: 12 * zoom,
+            fontSize: FONT_SIZE_PRESETS.edgeCaption(zoom),
             pointerEvents: 'auto',
             zIndex: 10,
             boxShadow: '0 2px 8px rgba(139,92,246,0.10)',
