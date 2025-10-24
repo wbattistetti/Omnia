@@ -139,8 +139,8 @@ export const IntellisensePopover: React.FC = () => {
     };
 
     // Handler per selezione
-    const handleSelect = (item: IntellisenseItem) => {
-        console.log("Item selected:", item);
+    const handleSelect = (item: IntellisenseItem | null) => {
+        console.log("Item selected or text entered:", item ? item.label : "TEXT_INPUT");
 
         // ✅ 1. Chiudi Intellisense
         actions.close();
@@ -149,12 +149,15 @@ export const IntellisensePopover: React.FC = () => {
         if (state.target?.edgeId) {
             console.log("🎯 [IntellisensePopover] Processing edge selection:", {
                 edgeId: state.target.edgeId,
-                selectedItem: item
+                selectedItem: item,
+                query: state.query
             });
 
             // ✅ 3. Aggiorna l'edge con la label (caption sul link)
             const edgeId = state.target.edgeId;
-            const label = item.label || "Condition";
+
+            // ✅ DETERMINA LA LABEL: se item esiste usa item.label, altrimenti usa il testo della query
+            const label = item ? item.label : (state.query || "Condition");
 
             // Cerca la funzione scheduleApplyLabel o setEdges nel window object
             const scheduleApplyLabel = (window as any).__scheduleApplyLabel;

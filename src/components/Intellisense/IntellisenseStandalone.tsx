@@ -8,7 +8,7 @@ interface IntellisenseStandaloneProps {
     referenceElement: HTMLElement | null;
     extraItems: IntellisenseItem[];
     allowedKinds?: Array<'condition' | 'intent'>;
-    onSelect: (item: IntellisenseItem) => void;
+    onSelect: (item: IntellisenseItem | null) => void;
     onClose: () => void;
 }
 
@@ -34,6 +34,22 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         console.log("🎯 [IntellisenseStandalone] Input change:", e.target.value);
         actions.setQuery(e.target.value);
+    };
+
+    // ✅ Handler per Enter: applica il testo digitato se non c'è selezione
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("🎯 [IntellisenseStandalone] Enter pressed - applying text:", state.query);
+            // Chiama onSelect con null per applicare il testo della query
+            onSelect(null);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("🎯 [IntellisenseStandalone] Escape pressed - closing without applying");
+            onClose();
+        }
     };
 
     // ✅ Aggiungi un handler per prevenire la propagazione del click
@@ -65,6 +81,7 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                 type="text"
                 value={state.query}
                 onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
                 placeholder="Cerca condizioni o intenti..."
                 style={{
                     width: '100%',
