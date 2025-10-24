@@ -846,7 +846,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         {...(onMouseMove ? { onMouseMove } : {})}
       >
         {isEditing ? (
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }} data-row-id={row.id}>
             <NodeRowEditor
               value={currentText}
               onChange={handleTextChange}

@@ -175,11 +175,68 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   });
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
 
+  // ✅ Guardia per sopprimere exitEditing durante auto-append
+  const autoAppendGuard = useRef(0);
+  const inAutoAppend = () => autoAppendGuard.current > 0;
+  const beginAutoAppendGuard = () => {
+    autoAppendGuard.current += 1;
+    // Rilascio dopo due frame per coprire setState + focus programmato
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      autoAppendGuard.current = Math.max(0, autoAppendGuard.current - 1);
+    }));
+  };
+
+  // ✅ Fallback per relatedTarget null (focus programmatico) - pointerdown copre mouse+touch+pen
+  const nextPointerTargetRef = useRef<EventTarget | null>(null);
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => { nextPointerTargetRef.current = e.target; };
+    window.addEventListener("pointerdown", onPointerDown, { capture: true, passive: true });
+    return () => window.removeEventListener("pointerdown", onPointerDown, { capture: true } as any);
+  }, []);
+
+  // ✅ Ref per il container del nodo per controllo blur interno
+  const nodeContainerRef = useRef<HTMLDivElement>(null);
+
+  // ✅ Macchina a stati: isEmpty=true durante popolamento sequenziale, false dopo stabilizzazione
+  const [isEmpty, setIsEmpty] = useState(() => {
+    const initial = initRows(id, data.rows, data);
+    return initial.length === 0 || initial.every(r => !r.text || r.text.trim() === '');
+  });
+
+  // Funzione unica per calcolare lo stato isEmpty
+  const computeIsEmpty = (rows: NodeRowData[]): boolean => {
+    return rows.length === 0 || rows.every(r => !r.text || r.text.trim() === '');
+  };
+
   // ✅ CORREZIONE 2: Evita isNewNode stale - usa stato corrente invece di flag globale
 
   // Funzione per uscire dall'editing con pulizia righe non valide
-  const exitEditing = () => {
+  const exitEditing = (nativeEvt?: Event | null) => {
+    if (inAutoAppend()) {
+      console.log('🔒 [AUTO_APPEND_GUARD] Soppresso exitEditing durante auto-append');
+      return; // sopprimi durante l'auto-append
+    }
+
+    // ✅ Determina il nextTarget considerando tutti i casi
+    const nextTarget =
+      (nativeEvt as any)?.relatedTarget ||
+      (nativeEvt as any)?.target || // per onBlur(nativeEvent)
+      (nextPointerTargetRef.current as Node | null) ||
+      document.activeElement;
+
+    // ✅ Controlla se il blur è interno al nodo
+    if (nextTarget && nodeContainerRef.current?.contains(nextTarget as Node)) {
+      console.log('🔒 [BLUR_INTERNO] Blur interno, non uscire dall\'editing');
+      nextPointerTargetRef.current = null; // Azzera dopo l'uso
+      return;
+    }
+
     setEditingRowId(null);
+    // Transizione vuoto → popolato: quando esci dall'editing, se c'è testo, non è più empty
+    if (!computeIsEmpty(nodeRows)) {
+      console.log('🔄 [STATE] Transizione: isEmpty false (nodo stabilizzato)', { nodeId: id });
+      setIsEmpty(false);
+    }
     // Pulisci righe senza testo o senza tipo (o mode)
     const isValidRow = (r: NodeRowData) => {
       const hasText = Boolean((r.text || '').trim().length > 0);
@@ -189,10 +246,20 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     const cleaned = nodeRows.filter(isValidRow);
     if (cleaned.length !== nodeRows.length) {
       setNodeRows(cleaned);
+      setIsEmpty(computeIsEmpty(cleaned));
       data.onUpdate?.({ rows: cleaned, isTemporary: data.isTemporary });
     }
   };
 
+  // ✅ Effetto per mantenere isEmpty allineato alle righe (fuori dalla finestra auto-append)
+  useEffect(() => {
+    if (inAutoAppend()) return; // evita transizioni spurie durante auto-append
+
+    setIsEmpty(prev => {
+      const next = computeIsEmpty(nodeRows);
+      return next === prev ? prev : next;
+    });
+  }, [nodeRows]);
 
   // ✅ PATCH 1: Focus per nodi nuovi (semplificato)
   useEffect(() => {
@@ -306,21 +373,60 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     });
 
     const isLast = idx === prev.length - 1;
-    const shouldAutoAppend = data.isTemporary && isLast && wasEmpty && nowFilled;
+    // ✅ Logica semplice: auto-append solo se nodo è in stato isEmpty
+    const shouldAutoAppend = isEmpty && isLast && wasEmpty && nowFilled;
+
+    console.log('🔍 [AUTO_APPEND] Checking conditions', {
+      nodeId: id,
+      rowId,
+      isLast,
+      wasEmpty,
+      nowFilled,
+      isEmpty,
+      shouldAutoAppend,
+      timestamp: Date.now()
+    });
 
     if (shouldAutoAppend) {
+      console.log('✅ [AUTO_APPEND] Adding new row', {
+        nodeId: id,
+        currentRowsCount: updatedRows.length,
+        isEmpty,
+        timestamp: Date.now()
+      });
+
+      // ✅ AVVIA GUARD PRIMA del batch (fondamentale!)
+      beginAutoAppendGuard();
+
       const { nextRows, newRowId } = appendEmptyRow(updatedRows);
       updatedRows = nextRows;
       setEditingRowId(newRowId);
+
+      // ✅ Focus robusto dopo il render con requestAnimationFrame
+      requestAnimationFrame(() => {
+        const textareas = document.querySelectorAll('.node-row-input');
+        const newTextarea = textareas[textareas.length - 1] as HTMLTextAreaElement;
+        if (newTextarea) {
+          console.log('✅ [AUTO_APPEND] Focus impostato sulla nuova riga');
+          newTextarea.focus();
+          newTextarea.select();
+        } else {
+          console.warn('⚠️ [AUTO_APPEND] Textarea non trovato');
+        }
+      });
     }
 
     setNodeRows(updatedRows);
+    // ❌ RIMOSSO - isEmpty si aggiorna SOLO in exitEditing() per mantenere auto-append continuo
+    // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
     data.onUpdate?.({ rows: updatedRows, isTemporary: data.isTemporary });
   };
 
   const handleDeleteRow = (rowId: string) => {
     const updatedRows = nodeRows.filter(row => row.id !== rowId);
     setNodeRows(updatedRows);
+    // ✅ Aggiorna isEmpty: se tutte le righe sono vuote dopo la cancellazione, torna isEmpty=true
+    setIsEmpty(computeIsEmpty(updatedRows));
     data.onUpdate?.({ rows: updatedRows });
 
     if (updatedRows.length === 0 && data.isTemporary) {
@@ -579,6 +685,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         }}
         data-id={id}
         className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
+        ref={nodeContainerRef}
         style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content', position: 'relative', zIndex: 1 }}
         tabIndex={-1}
         onMouseEnter={handleNodeMouseEnter}
