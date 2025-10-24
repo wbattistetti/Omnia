@@ -11,8 +11,8 @@ import ReactFlow, {
   applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { CustomNode } from './CustomNode';
-import { TaskNode } from './TaskNode';
+import { CustomNode } from './nodes/CustomNode/CustomNode';
+import { TaskNode } from './nodes/TaskNode/TaskNode';
 import { useEdgeManager } from '../../hooks/useEdgeManager';
 import { useConnectionMenu } from '../../hooks/useConnectionMenu';
 import { useNodeManager } from '../../hooks/useNodeManager';
@@ -32,7 +32,7 @@ import { SelectionMenu } from './components/SelectionMenu';
 // RIMOSSO: import { EdgeConditionMenu } from './components/EdgeConditionMenu';
 import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
-import { CustomEdge } from './CustomEdge';
+import { CustomEdge } from './edges/CustomEdge';
 import { useIntellisenseHandlers } from './hooks/useIntellisenseHandlers';
 import { v4 as uuidv4 } from 'uuid';
 import { instanceRepository } from '../../services/InstanceRepository';
@@ -667,7 +667,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             });
 
             const newInstanceId = (await import('uuid')).v4();
-            const { findAgentAct } = await import('./actVisuals');
+            const { findAgentAct } = await import('./utils/actVisuals');
 
             if (projectData) {
               const act = findAgentAct(projectData, { actId });

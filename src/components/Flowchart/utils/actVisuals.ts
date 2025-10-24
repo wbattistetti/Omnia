@@ -1,6 +1,6 @@
 import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server } from 'lucide-react';
-import { SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
-import { classifyActMode } from '../../nlp/actInteractivity';
+import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
+import { classifyActMode } from '../../../nlp/actInteractivity';
 import type { ActType } from '../../types/project';
 
 export type ActMode = 'Message' | 'DataRequest' | 'DataConfirmation';

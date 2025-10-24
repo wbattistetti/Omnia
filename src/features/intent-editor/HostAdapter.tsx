@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import EditorHeader from '../../components/common/EditorHeader';
-import { getAgentActVisualsByType } from '../../components/Flowchart/actVisuals';
+import { getAgentActVisualsByType } from '../../components/Flowchart/utils/actVisuals';
 import IntentEditorShell from './IntentEditorShell';
 import { useIntentStore } from './state/intentStore';
 import { useTestStore } from './state/testStore';

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { instanceRepository } from '../../../services/InstanceRepository';
 import { useProjectData } from '../../../context/ProjectDataContext';
-import { findAgentAct } from '../actVisuals';
+import { findAgentAct } from '../utils/actVisuals';
 
 export function useIntellisenseHandlers(
   nodeIntellisenseTarget: string | null,

@@ -115,7 +115,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
               console.log('[TypePicker][labelIcon][click]', { rect, labelRect: labelRef.current?.getBoundingClientRect() });
               onTypeChangeRequest && onTypeChangeRequest(rect);
-            } catch (err) { try { console.warn('[TypePicker][labelIcon][err]', err); } catch {} }
+            } catch (err) { try { console.warn('[TypePicker][labelIcon][err]', err); } catch { } }
           }}
           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', padding: 0, marginRight: 4, cursor: 'pointer' }}
         >
@@ -132,7 +132,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       {/* Gear icon intentionally omitted next to label; shown only in the external actions strip */}
       {row.text}
       {showIcons && iconPos && createPortal(
-          <NodeRowActionsOverlay
+        <NodeRowActionsOverlay
           iconPos={iconPos}
           showIcons={showIcons}
           canDelete={canDelete}
@@ -142,7 +142,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           isEditing={isEditing}
           setIsEditing={setIsEditing}
           labelRef={labelRef}
-           onHoverChange={(v) => { onIconsHoverChange && onIconsHoverChange(v); }}
+          onHoverChange={(v) => { onIconsHoverChange && onIconsHoverChange(v); }}
           iconSize={iconSize}
           hasDDT={hasDDT}
           gearColor={gearColor || labelTextColor}
@@ -151,17 +151,17 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           onWrenchClick={async () => {
             try {
               const variables = (window as any).__omniaVars || {};
-              (await import('../../ui/events')).emitConditionEditorOpen({ variables });
-            } catch {}
+              (await import('../../../../ui/events')).emitConditionEditorOpen({ variables });
+            } catch { }
           }}
-            ActIcon={Icon}
-            actColor={labelTextColor}
-            onTypeChangeRequest={onTypeChangeRequest}
-            onRequestClosePicker={onRequestClosePicker}
-            outerRef={overlayRef}
-        />, 
+          ActIcon={Icon}
+          actColor={labelTextColor}
+          onTypeChangeRequest={onTypeChangeRequest}
+          onRequestClosePicker={onRequestClosePicker}
+          outerRef={overlayRef}
+        />,
         document.body
       )}
     </span>
   </>
-); 
+);

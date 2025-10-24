@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { EdgeProps, getBezierPath, getSmoothStepPath } from 'reactflow';
 import { Pencil, Trash2, Link, Link2Off as LinkOff, Settings, Wrench } from 'lucide-react';
 import { normalizeMarkerEnd } from '../../utils/markerUtils';
-import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
+import { IntellisenseMenu } from '../../Intellisense/IntellisenseMenu';
 import { EdgeConditionSelector } from './EdgeConditionSelector';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
-import { useProjectDataUpdate, useProjectData } from '../../context/ProjectDataContext';
-import { ProjectDataService } from '../../services/ProjectDataService';
+import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDataContext';
+import { ProjectDataService } from '../../../services/ProjectDataService';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -69,7 +69,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Handler per selezione condizione da intellisense
   const handleIntellisenseSelect = (item: any) => {
     if (props.data && typeof props.data.onUpdate === 'function') {
-      props.data.onUpdate({ 
+      props.data.onUpdate({
         label: item.description || item.name || '',
         actType: item.categoryType // Salva il tipo di act
       });
@@ -110,7 +110,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       // Trova la prima categoria di condizioni disponibile
       const conditions = (projectData as any)?.conditions || [];
       let categoryId = '';
-      
+
       if (conditions.length > 0) {
         categoryId = conditions[0].id;
       } else {
@@ -121,25 +121,25 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         const updatedConditions = (updatedData as any)?.conditions || [];
         categoryId = updatedConditions[0]?.id || '';
       }
-      
+
       if (categoryId) {
         // Apri il pannello conditions nel sidebar
-        try { (await import('../../ui/events')).emitSidebarOpenAccordion('conditions'); } catch {}
-        
+        try { (await import('../../../ui/events')).emitSidebarOpenAccordion('conditions'); } catch { }
+
         // Aggiungi la nuova condizione
         await addItem('conditions', categoryId, name, '');
-        
+
         // Evidenzia la condizione appena creata nel sidebar
         setTimeout(async () => {
-          try { (await import('../../ui/events')).emitSidebarHighlightItem('conditions', name); } catch {}
+          try { (await import('../../../ui/events')).emitSidebarHighlightItem('conditions', name); } catch { }
         }, 100);
-        
+
         // Apri il ConditionEditor
         setTimeout(async () => {
           const variables = (window as any).__omniaVars || {};
-          try { (await import('../../ui/events')).emitConditionEditorOpen({ variables, script: '', label: name, name }); } catch {}
+          try { (await import('../../../ui/events')).emitConditionEditorOpen({ variables, script: '', label: name, name }); } catch { }
         }, 200);
-        
+
         // Chiudi il selector
         setShowConditionSelector(false);
       }
@@ -227,11 +227,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       if (svg && svg.getScreenCTM) {
         const ctm = svg.getScreenCTM();
         if (ctm) {
-        const pt = svg.createSVGPoint();
-        pt.x = point.x;
-        pt.y = point.y;
+          const pt = svg.createSVGPoint();
+          pt.x = point.x;
+          pt.y = point.y;
           const transformed = pt.matrixTransform(ctm);
-        setScreenPoint({ x: transformed.x, y: transformed.y });
+          setScreenPoint({ x: transformed.x, y: transformed.y });
         }
       }
     }
@@ -249,11 +249,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         if (svg && svg.getScreenCTM) {
           const ctm = svg.getScreenCTM();
           if (ctm) {
-          const pt = svg.createSVGPoint();
-          pt.x = point.x;
-          pt.y = point.y;
+            const pt = svg.createSVGPoint();
+            pt.x = point.x;
+            pt.y = point.y;
             const transformed = pt.matrixTransform(ctm);
-          setScreenPoint({ x: transformed.x, y: transformed.y });
+            setScreenPoint({ x: transformed.x, y: transformed.y });
           }
         }
       }
@@ -320,8 +320,8 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
                     if (typeof (props as any)?.data?.onUpdate === 'function') {
                       (props as any).data.onUpdate({ ...(props as any).data, style: key });
                     }
-                  } catch {}
-                  try { document.body.removeChild(menu); } catch {}
+                  } catch { }
+                  try { document.body.removeChild(menu); } catch { }
                 };
                 return b;
               };
@@ -330,10 +330,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
               menu.appendChild(mk('Ortogonale (step)', 'step'));
               menu.appendChild(mk('HVH', 'HVH'));
               menu.appendChild(mk('VHV', 'VHV'));
-              const close = () => { try { document.body.removeChild(menu); } catch {} };
+              const close = () => { try { document.body.removeChild(menu); } catch { } };
               setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
               document.body.appendChild(menu);
-            } catch {}
+            } catch { }
           }}
         />
         {/* Label/icone condizione al centro della linea */}
@@ -427,13 +427,13 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           <foreignObject
             x={
               sourcePosition === 'left' ? sourceX - 36 :
-              sourcePosition === 'right' ? sourceX + 12 :
-              sourceX - 12
+                sourcePosition === 'right' ? sourceX + 12 :
+                  sourceX - 12
             }
             y={
               sourcePosition === 'top' ? sourceY - 36 :
-              sourcePosition === 'bottom' ? sourceY + 12 :
-              sourceY - 12
+                sourcePosition === 'bottom' ? sourceY + 12 :
+                  sourceY - 12
             }
             width={24}
             height={24}
@@ -452,15 +452,15 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
               onMouseLeave={() => setTrashHovered(false)}
             >
               <span title="Elimina il link">
-              <Trash2
-                size={16}
-                color={trashHovered ? "#dc2626" : "#888"}
-                style={{ cursor: "pointer", opacity: 0.85, transition: 'color 0.15s', background: 'transparent', borderRadius: 0, padding: 0 }}
-                onClick={e => { e.stopPropagation(); handleDelete(id); }}
-                aria-label="Elimina collegamento"
-                tabIndex={0}
-                role="button"
-              />
+                <Trash2
+                  size={16}
+                  color={trashHovered ? "#dc2626" : "#888"}
+                  style={{ cursor: "pointer", opacity: 0.85, transition: 'color 0.15s', background: 'transparent', borderRadius: 0, padding: 0 }}
+                  onClick={e => { e.stopPropagation(); handleDelete(id); }}
+                  aria-label="Elimina collegamento"
+                  tabIndex={0}
+                  role="button"
+                />
               </span>
             </div>
           </foreignObject>
@@ -536,7 +536,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
                       const variables = (window as any).__omniaVars || {};
                       const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script: '', label: String(label || 'Condition'), name: String(label || 'Condition') }, bubbles: true });
                       document.dispatchEvent(ev);
-                    } catch {}
+                    } catch { }
                   }}
                 >
                   <Wrench size={14 * zoom} />
@@ -569,4 +569,4 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   );
 };
 
-export default CustomEdge; 
+export default CustomEdge;

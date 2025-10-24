@@ -1,7 +1,6 @@
 import { ProjectData, EntityType, Category, ProjectEntityItem, AgentActItem, FlowTask, FlowTaskPayloadNode, FlowTaskPayloadEdge } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
-// import { LABEL_COLORS } from '../components/Flowchart/labelColors';
 // import { getLabelColor } from '../utils/labelColor';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
 import { isDraft as runtimeIsDraft, getTempId as runtimeGetTempId } from '../state/runtime';

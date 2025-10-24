@@ -1,6 +1,6 @@
 import React from 'react';
 import { Node, Edge } from 'reactflow';
-import { NodeData, EdgeData } from '../Flowchart/FlowEditor';
+import { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
 // import DDTSimulatorPreview from './DDTSimulatorPreview';
 import { useProjectData } from '../../context/ProjectDataContext';
 import { useDDTManager } from '../../context/DDTManagerContext';
@@ -60,7 +60,7 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
     try {
       const nodes = (ddtTemplate?.nodes || []) as any[];
       for (const n of nodes) map[n.id] = n;
-    } catch {}
+    } catch { }
     return map;
   }, [ddtTemplate]);
 
@@ -119,17 +119,17 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
       lastPromptKeyRef.current = '';
       prevMainIndexRef.current = -1;
       ddtReadyRef.current = false;
-    } catch {}
+    } catch { }
     // Focus input when a DDT (re)mounts
-    try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch {}
+    try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch { }
   }, [ddtActive, ddtReset]);
 
   const start = React.useCallback(() => {
-    try { console.log('[FlowRunner] start'); } catch {}
+    try { console.log('[FlowRunner] start'); } catch { }
     const entries = findEntryNodes(nodes, edges);
     const ordered = entries.map(e => e.id);
     if (ordered.length === 0 && nodes.length > 0) ordered.push(nodes[0].id);
-    try { console.log('[FlowRunner] entry nodes', ordered); } catch {}
+    try { console.log('[FlowRunner] entry nodes', ordered); } catch { }
     setQueue(ordered);
     setCurrentNodeId(ordered[0] || null);
     setCurrentActIndex(0);
@@ -140,14 +140,14 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
   }, [nodes, edges]);
 
   const stop = React.useCallback(() => {
-    try { console.log('[FlowRunner] stop'); } catch {}
+    try { console.log('[FlowRunner] stop'); } catch { }
     setIsRunning(false);
     setQueue([]);
     setCurrentNodeId(null);
     setCurrentActIndex(0);
     setChat([]);
     setCurrentDDT(null);
-    try { ddtReset(); } catch {}
+    try { ddtReset(); } catch { }
     lastPromptKeyRef.current = '';
     prevMainIndexRef.current = -1;
     successTickRef.current = '';
@@ -186,12 +186,12 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
     const total = rows.length;
     let idx = startIndex;
     let emitted = false;
-    try { console.log('[FlowRunner] drain start', { nodeId: currentNodeId, total, idx }); } catch {}
+    try { console.log('[FlowRunner] drain start', { nodeId: currentNodeId, total, idx }); } catch { }
     while (idx < total && !actIsInteractive(rows[idx])) {
       const msg = actMessage(rows[idx]);
       if (msg) {
         emitted = true;
-        try { console.log('[FlowRunner] emit non-interactive', { idx, msg }); } catch {}
+        try { console.log('[FlowRunner] emit non-interactive', { idx, msg }); } catch { }
         setChat(prev => [...prev, { role: 'agent', text: msg, interactive: false, fromDDT: false }]);
       }
       idx += 1;
@@ -201,7 +201,7 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
       const it: any = resolveAct(rows[idx]);
       if (it?.ddt) {
         const assembled = toAssembled(it.ddt);
-        try { console.log('[FlowRunner] mount DDT from drain', { actIndex: idx, ddtId: assembled?.id }); } catch {}
+        try { console.log('[FlowRunner] mount DDT from drain', { actIndex: idx, ddtId: assembled?.id }); } catch { }
         setCurrentDDT(assembled);
         // Capture active context (block + act) for variable key composition
         try {
@@ -211,10 +211,10 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
           const blockName = normalizeName(title) || `blocco${blockIndex + 1}`;
           const actName = normalizeName(it?.name || it?.label || rows[idx]?.text || 'act');
           setActiveContext({ blockName, actName });
-        } catch {}
+        } catch { }
       }
     }
-    try { console.log('[FlowRunner] drain end', { nextIndex: idx, emitted }); } catch {}
+    try { console.log('[FlowRunner] drain end', { nextIndex: idx, emitted }); } catch { }
     return emitted;
   }, [currentNodeId, nodes, actIsInteractive, actMessage, resolveAct, toAssembled]);
 
@@ -234,14 +234,16 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
       const row = rows[currentActIndex];
       if (row && actIsInteractive(row)) {
         const it: any = resolveAct(row);
-        if (it?.ddt) { const assembled = toAssembled(it.ddt); try { console.log('[FlowRunner] mount DDT (no drain)', { actIndex: currentActIndex, ddtId: assembled?.id }); } catch {} setCurrentDDT(assembled); try {
-          const node = nodes.find(n => n.id === currentNodeId);
-          const title = (node?.data as any)?.title || '';
-          const blockIndex = Math.max(0, (nodes || []).findIndex(n => n.id === currentNodeId));
-          const blockName = normalizeName(title) || `blocco${blockIndex + 1}`;
-          const actName = normalizeName(it?.name || it?.label || row?.text || 'act');
-          setActiveContext({ blockName, actName });
-        } catch {} }
+        if (it?.ddt) {
+          const assembled = toAssembled(it.ddt); try { console.log('[FlowRunner] mount DDT (no drain)', { actIndex: currentActIndex, ddtId: assembled?.id }); } catch { } setCurrentDDT(assembled); try {
+            const node = nodes.find(n => n.id === currentNodeId);
+            const title = (node?.data as any)?.title || '';
+            const blockIndex = Math.max(0, (nodes || []).findIndex(n => n.id === currentNodeId));
+            const blockName = normalizeName(title) || `blocco${blockIndex + 1}`;
+            const actName = normalizeName(it?.name || it?.label || row?.text || 'act');
+            setActiveContext({ blockName, actName });
+          } catch { }
+        }
       }
     }
   }, [currentNodeId, currentActIndex, nodes, drainSequentialNonInteractive, actIsInteractive, resolveAct, toAssembled]);
@@ -286,7 +288,7 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
   // Auto-run non-interactive acts on Start
   React.useEffect(() => {
     if (!isRunning || !currentNodeId) return;
-    try { console.log('[FlowRunner] effect start: drain initial', { nodeId: currentNodeId, isRunning }); } catch {}
+    try { console.log('[FlowRunner] effect start: drain initial', { nodeId: currentNodeId, isRunning }); } catch { }
     // At start, drain the initial non-interactive sequence (e.g., due messaggi)
     drainSequentialNonInteractive();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -312,19 +314,19 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
           n.subs.forEach((sid: string) => { map[sid] = n.id; });
         }
       });
-    } catch {}
+    } catch { }
     return map;
   }, [planById]);
 
   // Expose variables globally for ConditionEditor and other panels
   React.useEffect(() => {
-    try { (window as any).__omniaVars = { ...(variableStore || {}) }; } catch {}
+    try { (window as any).__omniaVars = { ...(variableStore || {}) }; } catch { }
   }, [variableStore]);
 
   React.useEffect(() => {
-    try { console.log('[FlowRunner] ddtActive', { ddtActive }); } catch {}
+    try { console.log('[FlowRunner] ddtActive', { ddtActive }); } catch { }
     if (ddtActive) {
-      try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch {}
+      try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch { }
     }
   }, [ddtActive]);
 
@@ -332,7 +334,7 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
     if (!ddtActive) return;
     const plan = ddtState.plan;
     const currentMainId = plan?.order?.[ddtState.currentIndex];
-    try { console.log('[FlowRunner][DDT] state', { mode: ddtState.mode, currentIndex: ddtState.currentIndex, currentMainId, currentSubId: ddtState.currentSubId }); } catch {}
+    try { console.log('[FlowRunner][DDT] state', { mode: ddtState.mode, currentIndex: ddtState.currentIndex, currentMainId, currentSubId: ddtState.currentSubId }); } catch { }
 
     // Persist memory values into variable store
     try {
@@ -358,10 +360,10 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
         });
         if (Object.keys(writes).length) {
           setVariableStore(prev => ({ ...prev, ...writes }));
-          try { console.log('[FlowRunner][vars.write]', writes); } catch {}
+          try { console.log('[FlowRunner][vars.write]', writes); } catch { }
         }
       }
-    } catch {}
+    } catch { }
 
     // On main index change → ask next main
     if (ddtState.currentIndex !== prevMainIndexRef.current && currentMainId) {
@@ -369,11 +371,11 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
       if (mainAsk) {
         const key = `main:${currentMainId}:ask`;
         if (lastPromptKeyRef.current !== key) {
-          try { console.log('[FlowRunner][DDT] ask main', { currentMainId, text: mainAsk }); } catch {}
+          try { console.log('[FlowRunner][DDT] ask main', { currentMainId, text: mainAsk }); } catch { }
           setChat((m) => [...m, { role: 'agent', text: mainAsk, interactive: true, fromDDT: true }]);
           lastPromptKeyRef.current = key;
           prevMainIndexRef.current = ddtState.currentIndex;
-          try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch {}
+          try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch { }
         }
       }
     }
@@ -384,10 +386,10 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
       if (subAsk) {
         const key = `sub:${ddtState.currentSubId}:ask`;
         if (lastPromptKeyRef.current !== key) {
-          try { console.log('[FlowRunner][DDT] ask sub', { subId: ddtState.currentSubId, text: subAsk }); } catch {}
+          try { console.log('[FlowRunner][DDT] ask sub', { subId: ddtState.currentSubId, text: subAsk }); } catch { }
           setChat((m) => [...m, { role: 'agent', text: subAsk, interactive: true, fromDDT: true }]);
           lastPromptKeyRef.current = key;
-          try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch {}
+          try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch { }
         }
       }
     }
@@ -415,11 +417,11 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
               valueStr = stringifyValue(val);
             }
             if (valueStr) resolved = resolved.replace('{input}', valueStr);
-          } catch {}
-          try { console.log('[FlowRunner][DDT] confirm main', { currentMainId, text: resolved }); } catch {}
+          } catch { }
+          try { console.log('[FlowRunner][DDT] confirm main', { currentMainId, text: resolved }); } catch { }
           setChat((m) => [...m, { role: 'agent', text: resolved, interactive: true, fromDDT: true }]);
           lastPromptKeyRef.current = key;
-          try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch {}
+          try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch { }
         }
       }
     }
@@ -432,7 +434,7 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
       if (msg) {
         const key = `main:${currentMainId}:success`;
         if (lastPromptKeyRef.current !== key) {
-          try { console.log('[FlowRunner][DDT] success main', { currentMainId, text: msg }); } catch {}
+          try { console.log('[FlowRunner][DDT] success main', { currentMainId, text: msg }); } catch { }
           setChat((m) => [...m, { role: 'agent', text: msg, interactive: true, fromDDT: true }]);
           lastPromptKeyRef.current = key;
         }
@@ -441,7 +443,7 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
       const tickKey = `${currentMainId}:${ddtState.currentIndex}`;
       if (successTickRef.current !== tickKey) {
         successTickRef.current = tickKey;
-        try { console.log('[FlowRunner][DDT] success -> auto advance tick'); } catch {}
+        try { console.log('[FlowRunner][DDT] success -> auto advance tick'); } catch { }
         setTimeout(() => { void ddtSend(''); }, 0);
       }
     }
@@ -449,10 +451,10 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
     // Completed → advance flow (ignore spurious Completed right after mount/reset until ready)
     if (ddtState.mode === 'Completed') {
       if (!ddtReadyRef.current) {
-        try { console.log('[FlowRunner][DDT] Completed ignored (engine not ready yet)'); } catch {}
+        try { console.log('[FlowRunner][DDT] Completed ignored (engine not ready yet)'); } catch { }
         return;
       }
-      try { console.log('[FlowRunner][DDT] completed → nextAct'); } catch {}
+      try { console.log('[FlowRunner][DDT] completed → nextAct'); } catch { }
       // clear current DDT and advance to next act
       setCurrentDDT(null);
       lastPromptKeyRef.current = '';
@@ -477,21 +479,21 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
         lastPromptKeyRef.current = key;
         ddtReadyRef.current = true;
         // Mark first main index as already asked to avoid duplicate ask from state effect
-        try { prevMainIndexRef.current = 0; } catch {}
+        try { prevMainIndexRef.current = 0; } catch { }
       }
-    } catch {}
+    } catch { }
   }, [ddtActive, ddtTemplate, resolveTxt, ddtLocalTranslations]);
 
   const onSend = React.useCallback(() => {
     const text = (inputText || '').trim();
     if (!text) return;
-    try { console.log('[FlowRunner] user send', { text, ddtActive }); } catch {}
+    try { console.log('[FlowRunner] user send', { text, ddtActive }); } catch { }
     setChat((m) => [...m, { role: 'user', text }]);
     setInputText('');
     if (ddtActive) {
       void ddtSend(text);
     }
-    try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch {}
+    try { setTimeout(() => { inputRef.current?.focus({ preventScroll: true } as any); }, 0); } catch { }
   }, [inputText, ddtActive, ddtSend]);
 
   // Auto-scroll transcript to bottom on new messages
@@ -500,7 +502,7 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
       const el = chatRef.current;
       if (!el) return;
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    } catch {}
+    } catch { }
   }, [chat]);
 
   return (
@@ -513,7 +515,7 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
             try {
               const ev: any = new CustomEvent('debugger:close', { bubbles: true });
               document.dispatchEvent(ev);
-            } catch {}
+            } catch { }
           }}
           title="Chiudi"
           style={{ background: 'transparent', border: '1px solid var(--sidebar-border, #334155)', borderRadius: 6, padding: '4px 8px', color: 'var(--sidebar-content-text, #f1f5f9)' }}
@@ -540,8 +542,8 @@ export default function FlowRunner({ nodes, edges }: FlowRunnerProps) {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}
-            onFocus={() => { try { console.log('[FlowRunner][input] focus', { ddtActive }); } catch {} }}
-            onBlur={() => { try { console.log('[FlowRunner][input] blur'); } catch {} }}
+            onFocus={() => { try { console.log('[FlowRunner][input] focus', { ddtActive }); } catch { } }}
+            onBlur={() => { try { console.log('[FlowRunner][input] blur'); } catch { } }}
             placeholder={ddtActive ? 'Scrivi qui…' : 'In attesa di atto interattivo…'}
             style={{ flex: 1, border: '1px solid #334155', padding: 8, borderRadius: 6, background: 'transparent', color: 'var(--sidebar-content-text, #f1f5f9)' }}
           />

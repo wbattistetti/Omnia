@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link2Off as LinkOff } from 'lucide-react';
-import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
-import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
-import { useProjectData } from '../../context/ProjectDataContext';
-import { findAgentAct } from './actVisuals';
+import { IntellisenseMenu } from '../../Intellisense/IntellisenseMenu';
+import { IntellisenseItem } from '../../Intellisense/IntellisenseTypes';
+import { useProjectData } from '../../../context/ProjectDataContext';
+import { findAgentAct } from '../utils/actVisuals';
 
 /**
  * Props per EdgeConditionSelector
@@ -55,7 +55,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       inputRef.current.focus();
       // Apri sempre: se seedItems è presente, verranno mostrati anche senza dati globali
       setShowIntellisense(true);
-      try { if (localStorage.getItem('debug.condUI')==='1') console.log('[CondUI][mount] focus + showIntellisense', { extraCount: Array.isArray(extraItems) ? extraItems.length : 0 }); } catch {}
+      try { if (localStorage.getItem('debug.condUI') === '1') console.log('[CondUI][mount] focus + showIntellisense', { extraCount: Array.isArray(extraItems) ? extraItems.length : 0 }); } catch { }
     }
   }, [extraItems]);
 
@@ -86,7 +86,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       setNavDir(dir);
       setNavSeq(s => {
         const next = s + 1;
-        try { console.log('[CondUI][nav]', { key: e.key, dir, seq: next }); } catch {}
+        try { console.log('[CondUI][nav]', { key: e.key, dir, seq: next }); } catch { }
         return next;
       });
     } else if (e.key === 'Enter') {
@@ -94,7 +94,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       if (showIntellisense) {
         e.preventDefault();
         e.stopPropagation();
-        try { document.dispatchEvent(new CustomEvent('intelli-enter')); } catch {}
+        try { document.dispatchEvent(new CustomEvent('intelli-enter')); } catch { }
         return;
       }
       // Altrimenti: crea/usa condizione con la label digitata
@@ -102,7 +102,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       e.preventDefault();
       e.stopPropagation();
       if (!name) return;
-      try { console.log('[CondFlow] enter', { name }); } catch {}
+      try { console.log('[CondFlow] enter', { name }); } catch { }
       if (onCreateCondition) onCreateCondition(name, 'industry');
       setShowIntellisense(false);
     }
@@ -114,12 +114,12 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
     setInputValue(newValue);
     // mantieni aperto; il provider interno filtrerà i risultati
     setShowIntellisense(true);
-    try { console.log('[CondUI][input]', { value: newValue }); } catch {}
+    try { console.log('[CondUI][input]', { value: newValue }); } catch { }
   };
 
   // Selezione da intellisense
   const handleIntellisenseSelect = (item: IntellisenseItem) => {
-    try { console.log('[CondUI][select]', item); } catch {}
+    try { console.log('[CondUI][select]', item); } catch { }
     // If user picked an intent, materialize a new condition with the intent name
     if ((item as any)?.kind === 'intent') {
       const intentName = item.label || item.name;
@@ -141,7 +141,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   useEffect(() => {
     try {
       const out: IntellisenseItem[] = [];
-      const pid = (()=>{ try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+      const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
       const rows = Array.isArray(sourceRows) ? sourceRows : [];
       // 1) Prefer intents from the Problem act present in the source node rows
       for (const r of rows) {
@@ -151,7 +151,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
         if (!actId) continue;
         const key = `problem.${pid}.${actId}`;
         let payload: any = null;
-        try { const raw = localStorage.getItem(key); payload = raw ? JSON.parse(raw) : null; } catch {}
+        try { const raw = localStorage.getItem(key); payload = raw ? JSON.parse(raw) : null; } catch { }
         let intentsSrc: any[] = Array.isArray(payload?.intents) ? payload.intents : [];
         if (intentsSrc.length === 0) {
           // fallback: scan projectData
@@ -201,13 +201,13 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       try {
         const labels = out.map(i => i.label);
         console.log('[CondUI][extraItems]', { count: out.length, labels });
-      } catch {}
-    } catch {}
+      } catch { }
+    } catch { }
   }, [projectData, sourceNodeId, Array.isArray(sourceRows) ? sourceRows.length : 0]);
 
   // Gestione creazione nuova condizione
   const handleCreateCondition = (name: string, scope?: 'global' | 'industry') => {
-    try { console.log('[CondUI][create]', { name, scope }); } catch {}
+    try { console.log('[CondUI][create]', { name, scope }); } catch { }
     if (onCreateCondition) {
       onCreateCondition(name, scope);
       setShowIntellisense(false);
@@ -298,14 +298,14 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
               filterCategoryTypes={[]}
               onCreateNew={handleCreateCondition}
               extraItems={extraItemsFromCaller || extraItems}
-              allowedKinds={['condition','intent']}
+              allowedKinds={['condition', 'intent']}
               inlineAnchor={true}
               navSignal={{ seq: navSeq, dir: navDir }}
               onEnterSelected={(sel) => {
-                try { console.log('[CondUI][enterSelected]', sel); } catch {}
+                try { console.log('[CondUI][enterSelected]', sel); } catch { }
                 if (sel) {
                   // riflette la scelta nella textbox per chiarezza
-                  try { setInputValue(sel.label || (sel as any).name || ''); } catch {}
+                  try { setInputValue(sel.label || (sel as any).name || ''); } catch { }
                   handleIntellisenseSelect(sel as any);
                 }
               }}

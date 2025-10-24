@@ -112,7 +112,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         <GripVertical className="text-slate-300 hover:text-amber-300 transition-colors" style={{ width: size, height: size, filter: 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' }} />
       </span>
       {/* Matita (edit) */}
-      <button 
+      <button
         onClick={onEdit}
         className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110"
         title="Edit row"
@@ -135,19 +135,18 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       )}
       {/* Gear (DDT) */}
       <button
-        onClick={onOpenDDT}
         title={hasDDT ? 'Open DDT' : 'No DDT linked'}
         style={{ display: 'flex', alignItems: 'center', padding: 2, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
         className="hover:opacity-100 hover:scale-110"
         onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
-        onMouseDown={(e) => { try { console.log('[DDT][gear][mouseDown]', { x: e.clientX, y: e.clientY }); } catch {} }}
-        onClick={(e) => { try { console.log('[DDT][gear][click]', { x: e.clientX, y: e.clientY }); } catch {} onOpenDDT(); }}
+        onMouseDown={(e) => { try { console.log('[DDT][gear][mouseDown]', { x: e.clientX, y: e.clientY }); } catch { } }}
+        onClick={(e) => { try { console.log('[DDT][gear][click]', { x: e.clientX, y: e.clientY }); } catch { } onOpenDDT(); }}
       >
         <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
       </button>
       {/* Cestino (delete) */}
       {canDelete && (
-        <button 
+        <button
           onClick={onDelete}
           className="text-red-400 hover:text-red-500 transition-colors hover:opacity-100 hover:scale-110"
           title="Delete row"
@@ -159,4 +158,4 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       )}
     </div>
   );
-}; 
+};

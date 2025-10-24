@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
+import { IntellisenseMenu } from '../../../Intellisense/IntellisenseMenu';
 
 interface NodeRowIntellisenseProps {
   showIntellisense: boolean;

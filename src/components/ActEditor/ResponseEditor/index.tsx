@@ -10,7 +10,7 @@ import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
 // import SynonymsEditor from './SynonymsEditor';
 import NLPExtractorProfileEditor from './NLPExtractorProfileEditor';
 import EditorHeader from '../../common/EditorHeader';
-import { getAgentActVisualsByType } from '../../Flowchart/actVisuals';
+import { findAgentAct } from '../../Flowchart/utils/actVisuals';
 import ActionDragLayer from './ActionDragLayer';
 import {
   getMainDataList,
@@ -44,8 +44,8 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         }
       }
       const after = mains.map((m: any) => ({ label: m?.label, kind: (m?.kind || '').toString(), manual: (m as any)?._kindManual }));
-      try { console.log('[KindPersist][ResponseEditor][coercePhoneKind]', { before, after }); } catch {}
-    } catch {}
+      try { console.log('[KindPersist][ResponseEditor][coercePhoneKind]', { before, after }); } catch { }
+    } catch { }
     return clone;
   };
   // Local editable copies (initialize with coerced phone kind)
@@ -53,12 +53,12 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const { ideTranslations, dataDialogueTranslations, replaceSelectedDDT } = useDDTManager();
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
-    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log(...args); } catch {}
+    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log(...args); } catch { }
   };
   // Ensure debug flag is set once to avoid asking again
   useEffect(() => {
-    try { localStorage.setItem('debug.responseEditor', '1'); } catch {}
-    try { localStorage.setItem('debug.reopen', '1'); } catch {}
+    try { localStorage.setItem('debug.responseEditor', '1'); } catch { }
+    try { localStorage.setItem('debug.reopen', '1'); } catch { }
   }, []);
   const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
   const [localTranslations, setLocalTranslations] = useState<any>({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
@@ -129,16 +129,16 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     const nextId = (ddt && (ddt.id || ddt._id)) as any;
     const isSameDDT = prevId && nextId && prevId === nextId;
     const coerced = coercePhoneKind(ddt);
-    
+
     // Sync ONLY if it's a different DDT (ID changed) or first load
     const shouldSync = !prevId || !nextId || !isSameDDT;
-    
+
     if (shouldSync && localDDT !== coerced) {
       try {
         const mainsBefore = Array.isArray((localDDT || {}).mainData) ? (localDDT as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
         const mainsAfter = Array.isArray((coerced || {}).mainData) ? (coerced as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
         console.log('[KindPersist][ResponseEditor][loadDDT->setLocalDDT]', { mainsBefore, mainsAfter });
-      } catch {}
+      } catch { }
       // Preserve steps from previous in-memory DDT when reopening same template; ensure steps from messages if missing
       const enriched = preserveStepsFromPrev(localDDT, coerced);
       setLocalDDT(enriched);
@@ -150,8 +150,8 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     });
     // Reset selection when a different DDT is opened (new session)
     if (!isSameDDT) {
-    setSelectedMainIndex(0);
-    setSelectedSubIndex(undefined);
+      setSelectedMainIndex(0);
+      setSelectedSubIndex(undefined);
     }
     try {
       const counts = {
@@ -164,8 +164,8 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       log('[ResponseEditor][DDT load]', { prevId, nextId, isSameDDT, selectedMainIndex, selectedSubIndex });
       const mains = getMainDataList(ddt) || [];
       log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map((m: any) => m?.label));
-    } catch {}
-  // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
+    } catch { }
+    // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
   }, [ddt, mergedBase, localDDT?.id, localDDT?._id]);
 
   // Note: do not persist on unmount to avoid re-opening the editor after close.
@@ -185,25 +185,25 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   // Wizard/general layout flags
   const [showWizard, setShowWizard] = useState<boolean>(() => isDDTEmpty(localDDT));
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
-  
+
   // Header: icon, title, and toolbar
   const actType = (act?.type || 'DataRequest') as any;
-  const { Icon, color: iconColor } = getAgentActVisualsByType(actType, true);
+  const { Icon, color: iconColor } = findAgentAct(actType, true);
   // Priority: _sourceAct.label (preserved act info) > act.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
   // NOTE: Do NOT use localDDT.label here - that's the DDT root label (e.g. "Age") which belongs in the TreeView, not the header
   const sourceAct = (localDDT as any)?._sourceAct;
   const headerTitle = sourceAct?.label || act?.label || (localDDT as any)?._userLabel || 'Response Editor';
-  
+
   const saveRightMode = (m: RightPanelMode) => {
     setRightMode(m);
-    try { localStorage.setItem('responseEditor.rightMode', m); } catch {}
+    try { localStorage.setItem('responseEditor.rightMode', m); } catch { }
   };
-  
+
   // Toolbar buttons (empty during wizard, full after)
   const toolbarButtons = !showWizard ? [
-    { icon: <Undo2 size={16} />, onClick: () => {}, title: "Undo" },
-    { icon: <Redo2 size={16} />, onClick: () => {}, title: "Redo" },
-    { icon: <Plus size={16} />, label: "Add constraint", onClick: () => {}, primary: true },
+    { icon: <Undo2 size={16} />, onClick: () => { }, title: "Undo" },
+    { icon: <Redo2 size={16} />, onClick: () => { }, title: "Redo" },
+    { icon: <Plus size={16} />, label: "Add constraint", onClick: () => { }, primary: true },
     { icon: <Rocket size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('actions'); }, title: "Actions", active: rightMode === 'actions' },
     { icon: <Code2 size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('validator'); }, title: "Validator", active: rightMode === 'validator' },
     { icon: <FileText size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('testset'); }, title: "Test set", active: rightMode === 'testset' },
@@ -211,10 +211,10 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     { icon: <Sparkles size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('styles'); }, title: "Dialogue style presets", active: rightMode === 'styles' },
     { icon: <BookOpen size={16} />, onClick: () => setShowSynonyms(v => !v), title: showSynonyms ? 'Close contract editor' : 'Open contract editor', active: showSynonyms },
   ] : [];
-  
+
   useEffect(() => {
     const empty = isDDTEmpty(localDDT);
-    
+
     if (empty && !wizardOwnsDataRef.current) {
       // DDT is empty → open wizard and take ownership
       setShowWizard(true);
@@ -263,7 +263,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       if (localStorage.getItem('debug.reopen') === '1') {
         // Selection changed, could track analytics here if needed
       }
-    } catch {}
+    } catch { }
   }, [mainList, selectedMainIndex, selectedSubIndex, selectedStepKey, stepKeys]);
 
   // Callback per Sidebar
@@ -320,9 +320,9 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         try {
           const mainsKinds = (getMainDataList(next) || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual }));
           console.log('[KindPersist][ResponseEditor][updateSelectedNode->replaceSelectedDDT]', mainsKinds);
-        } catch {}
-      } catch {}
-      try { replaceSelectedDDT(next); } catch {}
+        } catch { }
+      } catch { }
+      try { replaceSelectedDDT(next); } catch { }
       return next;
     });
   };
@@ -408,7 +408,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   // Layout
   return (
     <div ref={rootRef} style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
-      
+
       {/* Header sempre visibile (minimale durante wizard, completo dopo) */}
       <EditorHeader
         icon={<Icon size={18} style={{ color: iconColor }} />}
@@ -417,274 +417,274 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         onClose={onClose}
         color="orange"
       />
-      
+
       {/* Contenuto */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-      {showWizard ? (
-        /* Full-screen wizard without RightPanel */
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          <DDTWizard
-            initialDDT={localDDT}
-            onCancel={onClose || (() => {})}
-            onComplete={(finalDDT) => {
-              const coerced = coercePhoneKind(finalDDT);
-              
-              // If parent provided onWizardComplete, delegate to it (DDTHostAdapter case)
-              if (onWizardComplete) {
-                onWizardComplete(coerced);
-                return;
-              }
-              
-              // Otherwise, handle locally (direct DDTManager case)
-              // Set flag to prevent auto-reopen
-              wizardOwnsDataRef.current = true;
-              
-              setLocalDDT(coerced);
-              try { replaceSelectedDDT(coerced); } catch {}
-              
-              // Release ownership after a brief delay
-              setTimeout(() => {
-                wizardOwnsDataRef.current = false;
-              }, 100);
-              
-              // Close wizard and reset UI to show StepEditor (not MessageReview)
-              setShowWizard(false);
-              setRightMode('actions'); // Force show ActionList
-              setSelectedStepKey('start'); // Start with first step
-            }}
-            startOnStructure={false}
-          />
-        </div>
-      ) : (
-        /* Normal editor layout with 3 panels (no header, already shown above) */
-      <>
-        {/* Always visible left navigation */}
-        <Sidebar
-          ref={sidebarRef}
-          mainList={mainList}
-          selectedMainIndex={selectedMainIndex}
-          onSelectMain={handleSelectMain}
-          selectedSubIndex={selectedSubIndex}
-          onSelectSub={handleSelectSub}
-          aggregated={isAggregatedAtomic}
-          rootLabel={localDDT?.label || 'Data'}
-          onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
-            // Persist required flag on the exact sub (by indices), independent of current selection
-            setLocalDDT((prev: any) => {
-              if (!prev) return prev;
-              const next = JSON.parse(JSON.stringify(prev));
-              const mains = getMainDataList(next);
-              const main = mains[mIdx];
-              if (!main) return prev;
-              const subList = Array.isArray(main.subData) ? main.subData : [];
-              if (sIdx < 0 || sIdx >= subList.length) return prev;
-              subList[sIdx] = { ...subList[sIdx], required };
-              main.subData = subList;
-              mains[mIdx] = main;
-              next.mainData = mains;
-              try {
-                const subs = getSubDataList(main) || [];
-                const target = subs[sIdx];
-                if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
-              } catch {}
-              try { replaceSelectedDDT(next); } catch {}
-              return next;
-            });
-          }}
-          onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
-            setLocalDDT((prev: any) => {
-              if (!prev) return prev;
-              const next = JSON.parse(JSON.stringify(prev));
-              const mains = getMainDataList(next);
-              const main = mains[mIdx];
-              if (!main) return prev;
-              const subList = Array.isArray(main.subData) ? main.subData : [];
-              if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return prev;
-              const [moved] = subList.splice(fromIdx, 1);
-              subList.splice(toIdx, 0, moved);
-              main.subData = subList;
-              mains[mIdx] = main;
-              next.mainData = mains;
-              try { if (localStorage.getItem('debug.responseEditor')==='1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch {}
-              try { replaceSelectedDDT(next); } catch {}
-              return next;
-            });
-          }}
-          onAddMain={(label: string) => {
-            setLocalDDT((prev: any) => {
-              if (!prev) return prev;
-              const next = JSON.parse(JSON.stringify(prev));
-              const mains = getMainDataList(next);
-              mains.push({ label, subData: [] });
-              next.mainData = mains;
-              try { replaceSelectedDDT(next); } catch {}
-              return next;
-            });
-          }}
-          onRenameMain={(mIdx: number, label: string) => {
-            setLocalDDT((prev: any) => {
-              if (!prev) return prev;
-              const next = JSON.parse(JSON.stringify(prev));
-              const mains = getMainDataList(next);
-              if (!mains[mIdx]) return prev;
-              mains[mIdx].label = label;
-              next.mainData = mains;
-              try { replaceSelectedDDT(next); } catch {}
-              return next;
-            });
-          }}
-          onDeleteMain={(mIdx: number) => {
-            setLocalDDT((prev: any) => {
-              if (!prev) return prev;
-              const next = JSON.parse(JSON.stringify(prev));
-              const mains = getMainDataList(next);
-              if (mIdx < 0 || mIdx >= mains.length) return prev;
-              mains.splice(mIdx, 1);
-              next.mainData = mains;
-              try { replaceSelectedDDT(next); } catch {}
-              return next;
-            });
-          }}
-          onAddSub={(mIdx: number, label: string) => {
-            setLocalDDT((prev: any) => {
-              if (!prev) return prev;
-              const next = JSON.parse(JSON.stringify(prev));
-              const mains = getMainDataList(next);
-              const main = mains[mIdx];
-              if (!main) return prev;
-              const list = Array.isArray(main.subData) ? main.subData : [];
-              list.push({ label, required: true });
-              main.subData = list;
-              mains[mIdx] = main;
-              next.mainData = mains;
-              try { replaceSelectedDDT(next); } catch {}
-              return next;
-            });
-          }}
-          onRenameSub={(mIdx: number, sIdx: number, label: string) => {
-            setLocalDDT((prev: any) => {
-              if (!prev) return prev;
-              const next = JSON.parse(JSON.stringify(prev));
-              const mains = getMainDataList(next);
-              const main = mains[mIdx];
-              if (!main) return prev;
-              const list = Array.isArray(main.subData) ? main.subData : [];
-              if (sIdx < 0 || sIdx >= list.length) return prev;
-              list[sIdx] = { ...(list[sIdx] || {}), label };
-              main.subData = list;
-              mains[mIdx] = main;
-              next.mainData = mains;
-              try { replaceSelectedDDT(next); } catch {}
-              return next;
-            });
-          }}
-          onDeleteSub={(mIdx: number, sIdx: number) => {
-            setLocalDDT((prev: any) => {
-              if (!prev) return prev;
-              const next = JSON.parse(JSON.stringify(prev));
-              const mains = getMainDataList(next);
-              const main = mains[mIdx];
-              if (!main) return prev;
-              const list = Array.isArray(main.subData) ? main.subData : [];
-              if (sIdx < 0 || sIdx >= list.length) return prev;
-              list.splice(sIdx, 1);
-              main.subData = list;
-              mains[mIdx] = main;
-              next.mainData = mains;
-              try { replaceSelectedDDT(next); } catch {}
-              return next;
-            });
-          }}
-          onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
-        />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* Steps toolbar hidden during NLP editor */}
-          {!showSynonyms && (
-            <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
-              <StepsStrip
-                stepKeys={uiStepKeys}
-                selectedStepKey={selectedStepKey}
-                onSelectStep={setSelectedStepKey}
-                node={selectedNode}
-              />
-            </div>
-          )}
-          {/* Content */}
-          <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: '16px 16px 0 16px' }}>
-              <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                {showSynonyms ? (
-                  <div style={{ padding: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 }}>
-                      <h4 style={{ margin: 0 }}>Data Extractor: {selectedNode?.label || ''}</h4>
-                    </div>
-                    <NLPExtractorProfileEditor
-                      node={selectedNode}
-                      locale={'it-IT'}
-                      onChange={(profile) => {
-                        // Always log critical kind changes to diagnose persistence
-                        console.log('[KindChange][onChange]', {
-                          nodeLabel: (selectedNode as any)?.label,
-                          profileKind: profile?.kind,
-                          examples: (profile?.examples || []).length,
-                        });
-                        updateSelectedNode((node) => {
-                          const next: any = { ...(node || {}), nlpProfile: profile };
-                          if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }
-                          if (Array.isArray(profile.synonyms)) next.synonyms = profile.synonyms;
-                          return next;
-                        });
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <StepEditor
+        {showWizard ? (
+          /* Full-screen wizard without RightPanel */
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <DDTWizard
+              initialDDT={localDDT}
+              onCancel={onClose || (() => { })}
+              onComplete={(finalDDT) => {
+                const coerced = coercePhoneKind(finalDDT);
+
+                // If parent provided onWizardComplete, delegate to it (DDTHostAdapter case)
+                if (onWizardComplete) {
+                  onWizardComplete(coerced);
+                  return;
+                }
+
+                // Otherwise, handle locally (direct DDTManager case)
+                // Set flag to prevent auto-reopen
+                wizardOwnsDataRef.current = true;
+
+                setLocalDDT(coerced);
+                try { replaceSelectedDDT(coerced); } catch { }
+
+                // Release ownership after a brief delay
+                setTimeout(() => {
+                  wizardOwnsDataRef.current = false;
+                }, 100);
+
+                // Close wizard and reset UI to show StepEditor (not MessageReview)
+                setShowWizard(false);
+                setRightMode('actions'); // Force show ActionList
+                setSelectedStepKey('start'); // Start with first step
+              }}
+              startOnStructure={false}
+            />
+          </div>
+        ) : (
+          /* Normal editor layout with 3 panels (no header, already shown above) */
+          <>
+            {/* Always visible left navigation */}
+            <Sidebar
+              ref={sidebarRef}
+              mainList={mainList}
+              selectedMainIndex={selectedMainIndex}
+              onSelectMain={handleSelectMain}
+              selectedSubIndex={selectedSubIndex}
+              onSelectSub={handleSelectSub}
+              aggregated={isAggregatedAtomic}
+              rootLabel={localDDT?.label || 'Data'}
+              onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
+                // Persist required flag on the exact sub (by indices), independent of current selection
+                setLocalDDT((prev: any) => {
+                  if (!prev) return prev;
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return prev;
+                  const subList = Array.isArray(main.subData) ? main.subData : [];
+                  if (sIdx < 0 || sIdx >= subList.length) return prev;
+                  subList[sIdx] = { ...subList[sIdx], required };
+                  main.subData = subList;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try {
+                    const subs = getSubDataList(main) || [];
+                    const target = subs[sIdx];
+                    if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
+                  } catch { }
+                  try { replaceSelectedDDT(next); } catch { }
+                  return next;
+                });
+              }}
+              onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
+                setLocalDDT((prev: any) => {
+                  if (!prev) return prev;
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return prev;
+                  const subList = Array.isArray(main.subData) ? main.subData : [];
+                  if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return prev;
+                  const [moved] = subList.splice(fromIdx, 1);
+                  subList.splice(toIdx, 0, moved);
+                  main.subData = subList;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
+                  try { replaceSelectedDDT(next); } catch { }
+                  return next;
+                });
+              }}
+              onAddMain={(label: string) => {
+                setLocalDDT((prev: any) => {
+                  if (!prev) return prev;
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const mains = getMainDataList(next);
+                  mains.push({ label, subData: [] });
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
+                  return next;
+                });
+              }}
+              onRenameMain={(mIdx: number, label: string) => {
+                setLocalDDT((prev: any) => {
+                  if (!prev) return prev;
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const mains = getMainDataList(next);
+                  if (!mains[mIdx]) return prev;
+                  mains[mIdx].label = label;
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
+                  return next;
+                });
+              }}
+              onDeleteMain={(mIdx: number) => {
+                setLocalDDT((prev: any) => {
+                  if (!prev) return prev;
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const mains = getMainDataList(next);
+                  if (mIdx < 0 || mIdx >= mains.length) return prev;
+                  mains.splice(mIdx, 1);
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
+                  return next;
+                });
+              }}
+              onAddSub={(mIdx: number, label: string) => {
+                setLocalDDT((prev: any) => {
+                  if (!prev) return prev;
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return prev;
+                  const list = Array.isArray(main.subData) ? main.subData : [];
+                  list.push({ label, required: true });
+                  main.subData = list;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
+                  return next;
+                });
+              }}
+              onRenameSub={(mIdx: number, sIdx: number, label: string) => {
+                setLocalDDT((prev: any) => {
+                  if (!prev) return prev;
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return prev;
+                  const list = Array.isArray(main.subData) ? main.subData : [];
+                  if (sIdx < 0 || sIdx >= list.length) return prev;
+                  list[sIdx] = { ...(list[sIdx] || {}), label };
+                  main.subData = list;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
+                  return next;
+                });
+              }}
+              onDeleteSub={(mIdx: number, sIdx: number) => {
+                setLocalDDT((prev: any) => {
+                  if (!prev) return prev;
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return prev;
+                  const list = Array.isArray(main.subData) ? main.subData : [];
+                  if (sIdx < 0 || sIdx >= list.length) return prev;
+                  list.splice(sIdx, 1);
+                  main.subData = list;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
+                  return next;
+                });
+              }}
+              onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
+            />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              {/* Steps toolbar hidden during NLP editor */}
+              {!showSynonyms && (
+                <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
+                  <StepsStrip
+                    stepKeys={uiStepKeys}
+                    selectedStepKey={selectedStepKey}
+                    onSelectStep={setSelectedStepKey}
                     node={selectedNode}
-                    stepKey={selectedStepKey}
+                  />
+                </div>
+              )}
+              {/* Content */}
+              <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: '16px 16px 0 16px' }}>
+                  <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                      {showSynonyms ? (
+                        <div style={{ padding: 12 }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 }}>
+                            <h4 style={{ margin: 0 }}>Data Extractor: {selectedNode?.label || ''}</h4>
+                          </div>
+                          <NLPExtractorProfileEditor
+                            node={selectedNode}
+                            locale={'it-IT'}
+                            onChange={(profile) => {
+                              // Always log critical kind changes to diagnose persistence
+                              console.log('[KindChange][onChange]', {
+                                nodeLabel: (selectedNode as any)?.label,
+                                profileKind: profile?.kind,
+                                examples: (profile?.examples || []).length,
+                              });
+                              updateSelectedNode((node) => {
+                                const next: any = { ...(node || {}), nlpProfile: profile };
+                                if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }
+                                if (Array.isArray(profile.synonyms)) next.synonyms = profile.synonyms;
+                                return next;
+                              });
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <StepEditor
+                          node={selectedNode}
+                          stepKey={selectedStepKey}
+                          translations={localTranslations}
+                          onDeleteEscalation={(idx) => updateSelectedNode((node) => {
+                            const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                            const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                            st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
+                            next.steps[selectedStepKey] = st;
+                            return next;
+                          })}
+                          onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
+                            const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                            const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                            const esc = (st.escalations || [])[escIdx];
+                            if (!esc) return next;
+                            esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
+                            st.escalations[escIdx] = esc;
+                            next.steps[selectedStepKey] = st;
+                            return next;
+                          })}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {!showSynonyms && (
+                  <RightPanel
+                    mode={rightMode}
+                    width={rightWidth}
+                    onWidthChange={setRightWidth}
+                    onStartResize={() => setDragging(true)}
+                    dragging={dragging}
+                    ddt={localDDT}
                     translations={localTranslations}
-                    onDeleteEscalation={(idx) => updateSelectedNode((node) => {
-                      const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                      const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                      st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
-                      next.steps[selectedStepKey] = st;
-                      return next;
-                    })}
-                    onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
-                      const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                      const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                      const esc = (st.escalations || [])[escIdx];
-                      if (!esc) return next;
-                      esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
-                      st.escalations[escIdx] = esc;
-                      next.steps[selectedStepKey] = st;
-                      return next;
-                    })}
+                    selectedNode={selectedNode}
                   />
                 )}
-                </div>
               </div>
             </div>
-            {!showSynonyms && (
-                <RightPanel
-                  mode={rightMode}
-                  width={rightWidth}
-                  onWidthChange={setRightWidth}
-                  onStartResize={() => setDragging(true)}
-                  dragging={dragging}
-                  ddt={localDDT}
-                  translations={localTranslations}
-                  selectedNode={selectedNode}
-                />
-            )}
-          </div>
-        </div>
-      </>
-      )}
+          </>
+        )}
       </div>
-      
+
       {/* Drag layer for visual feedback when dragging actions */}
       <ActionDragLayer />
     </div>
   );
-} 
+}

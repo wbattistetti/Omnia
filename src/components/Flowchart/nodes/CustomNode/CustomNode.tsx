@@ -1,15 +1,15 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { typeToMode } from '../../utils/normalizers';
+import { typeToMode } from '../../../../utils/normalizers';
 import { NodeProps } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
-import { NodeDragHeader } from './NodeDragHeader';
-import { NodeHandles } from './NodeHandles';
-import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
-import { IntellisenseItem } from '../Intellisense/IntellisenseTypes';
-import { NodeRowData, EntityType } from '../../types/project';
-import { useNodeRowDrag } from '../../hooks/useNodeRowDrag';
-import { NodeRowList } from './NodeRowList';
+import { NodeDragHeader } from '../shared/NodeDragHeader';
+import { NodeHandles } from '../../NodeHandles';
+import { IntellisenseMenu } from '../../../Intellisense/IntellisenseMenu';
+import { IntellisenseItem } from '../../../Intellisense/IntellisenseTypes';
+import { NodeRowData, EntityType } from '../../../../types/project';
+import { useNodeRowDrag } from '../../../../hooks/useNodeRowDrag';
+import { NodeRowList } from '../../rows/shared/NodeRowList';
 
 // Helper per ID robusti
 function newUid() {

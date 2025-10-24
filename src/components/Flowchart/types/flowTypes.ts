@@ -1,9 +1,9 @@
-import type { EdgeData as BaseEdgeData } from '../../hooks/useNodeManager';
+import type { EdgeData as BaseEdgeData } from '../../hooks/useEdgeManager';
 
 // Definizione completa di NodeData senza dipendenze circolari
 export interface NodeData {
   title: string;
-  rows: Array<{ id: string; text: string; [key: string]: any }>;
+  rows: Array<{ id: string; text: string;[key: string]: any }>;
   isTemporary?: boolean;
   hidden?: boolean;
   createdAt?: number;

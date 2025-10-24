@@ -7,7 +7,7 @@ import Sidebar from './Sidebar/Sidebar';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
-import { NodeData, EdgeData } from './Flowchart/FlowEditor';
+import { NodeData, EdgeData } from './Flowchart/types/flowTypes';
 import { ProjectInfo } from '../types/project';
 import { useEffect } from 'react';
 import { ProjectService } from '../services/ProjectService';

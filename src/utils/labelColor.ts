@@ -1,4 +1,4 @@
-import { LABEL_COLORS } from '../components/Flowchart/labelColors';
+import { LABEL_COLORS } from '../components/Flowchart/nodes/shared/labelColors';
 
 /**
  * Restituisce il colore di background e testo per una label in base al tipo e alla presenza di userActs.
@@ -23,4 +23,4 @@ export function getLabelColor(categoryType: string, userActs?: string[]) {
   }
   // fallback
   return { bg: '#7a9c59', text: '#2F6D3E' };
-} 
+}

@@ -1,6 +1,6 @@
 import React from 'react';
-import { NodeRowData } from '../../types/project';
-import { NodeRow } from './NodeRow';
+import { NodeRowData } from '../../../../types/project';
+import { NodeRow } from '../NodeRow/NodeRow';
 import { RowInserter } from './RowInserter';
 
 interface NodeRowListProps {
@@ -58,7 +58,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   // Hide any visible inserter as soon as a textbox appears (editing mode)
   React.useEffect(() => {
     if (editingRowId !== null && hoveredInserter !== null) {
-      try { if (localStorage.getItem('debug.inserter')==='1') console.log('[Inserter][autoHide:onEdit]', { editingRowId, hoveredInserter }); } catch {}
+      try { if (localStorage.getItem('debug.inserter') === '1') console.log('[Inserter][autoHide:onEdit]', { editingRowId, hoveredInserter }); } catch { }
       setHoveredInserter(null);
     }
   }, [editingRowId]);
@@ -88,7 +88,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onKeyDown={onKeyDown}
             onDragStart={onDragStart}
             onMoveRow={(from, to) => {
-              try { console.log('[RowDnD][moveImmediate]', { from, to }); } catch {}
+              try { console.log('[RowDnD][moveImmediate]', { from, to }); } catch { }
               const boundedTo = Math.max(0, Math.min(totalRows - 1, to));
               if (from !== boundedTo) {
                 // delegate to CustomNode via prop callbacks? For now we expect parent to use legacy path
@@ -153,4 +153,4 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
       )}
     </>
   );
-}; 
+};
