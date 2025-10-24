@@ -43,30 +43,33 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   return (
     <div
       className={`
-        flex items-start p-2 cursor-pointer rounded-md transition-all duration-150
+        flex items-start cursor-pointer rounded-md transition-all duration-150
         ${isSelected ? 'bg-amber-200 text-black border-2 border-amber-500' : 'border border-transparent'}
       `}
+      style={{
+        padding: '4px 6px',
+        background: isSelected ? undefined : (item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined)
+      }}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
-      style={{ background: isSelected ? undefined : (item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined) }}
       data-intellisense-item
     >
       {/* Icon */}
-      <div className="mr-2 mt-0.5 flex-shrink-0">
+      <div className="mr-1 mt-0.5 flex-shrink-0">
         {item.iconComponent ? (
-          <item.iconComponent className="w-4 h-4" style={{ color: foreColor }} />
+          <item.iconComponent className="w-3 h-3" style={{ color: foreColor }} />
         ) : (item.categoryType === 'agentActs') ? (
           ((item as any)?.mode === 'DataRequest') ? (
-            <Ear className="w-4 h-4" style={{ color: foreColor }} />
+            <Ear className="w-3 h-3" style={{ color: foreColor }} />
           ) : ((item as any)?.mode === 'DataConfirmation') ? (
-            <CheckCircle2 className="w-4 h-4" style={{ color: foreColor }} />
+            <CheckCircle2 className="w-3 h-3" style={{ color: foreColor }} />
           ) : (
-            <Megaphone className="w-4 h-4" style={{ color: foreColor }} />
+            <Megaphone className="w-3 h-3" style={{ color: foreColor }} />
           )
         ) : IconFromSidebar ? (
-          <IconFromSidebar className="w-4 h-4" style={{ color: foreColor || '#94a3b8' }} />
+          <IconFromSidebar className="w-3 h-3" style={{ color: foreColor || '#94a3b8' }} />
         ) : (
-          <Circle className="w-4 h-4 text-gray-400" />
+          <Circle className="w-3 h-3 text-gray-400" />
         )}
       </div>
 
@@ -74,8 +77,12 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       <div className="flex-1 min-w-0">
         {/* Label principale con tooltip se description */}
         <div
-          className="font-normal text-sm whitespace-nowrap overflow-hidden text-ellipsis"
-          style={{ color: isSelected ? '#111' : (foreColor as any) }}
+          className="font-normal whitespace-nowrap overflow-hidden text-ellipsis"
+          style={{
+            color: isSelected ? '#111' : (foreColor as any),
+            fontSize: '8px',
+            lineHeight: 1.2
+          }}
           title={item.description && item.description.trim() !== '' ? item.description : undefined}
         >
           {highlightMatches(item.label || item.name, nameMatches)}
@@ -84,7 +91,10 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
         {/* AI Badge */}
         {isFromAI && (
           <div className="mt-1">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600 text-white">
+            <span
+              className="inline-flex items-center px-1 py-0.5 rounded-full font-medium bg-slate-600 text-white"
+              style={{ fontSize: '6px', lineHeight: 1 }}
+            >
               Suggerito AI
             </span>
           </div>
