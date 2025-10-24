@@ -12,6 +12,7 @@ import { NodeRowList } from '../../rows/shared/NodeRowList';
 import { useNodeState } from './hooks/useNodeState';
 import { useNodeEventHandlers } from './hooks/useNodeEventHandlers';
 import { NodeBufferArea } from './NodeBufferArea';
+import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 
 // Helper per ID robusti
 function newUid() {
@@ -64,6 +65,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   isConnectable,
   selected
 }) => {
+  // ✅ REGISTRY: Register node with NodeRegistry
+  const nodeRegistryRef = useRegisterAsNode(id);
+
   // Extract all state management to custom hook
   const nodeState = useNodeState({ data });
   const {
@@ -568,7 +572,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       />
 
       <div
-        ref={rootRef}
+        ref={(el) => {
+          // Assign to both rootRef and registry
+          (rootRef as any).current = el;
+          (nodeRegistryRef as any).current = el;
+        }}
+        data-id={id}
         className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
         style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content', position: 'relative', zIndex: 1 }}
         tabIndex={-1}

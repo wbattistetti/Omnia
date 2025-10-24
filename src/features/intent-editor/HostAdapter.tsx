@@ -44,7 +44,7 @@ function fromEditorState(): ProblemPayload {
 }
 
 export default function IntentHostAdapter(props: { act: { id: string; type: string; label?: string; problem?: ProblemPayload }, onClose?: () => void }) {
-  console.log('IntentHostAdapter props:', props);
+  // console.log('IntentHostAdapter props:', props); // RIMOSSO - causa spam
   // Hydrate from act.problem (if available) or from local shadow
   useEffect(() => {
     const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
@@ -60,19 +60,19 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
     try {
       const instanceId = (props.act as any)?.instanceId;
       if (instanceId) {
-        console.log('✅ [IntentEditor] Extracted instanceId:', instanceId);
+        // console.log('✅ [IntentEditor] Extracted instanceId:', instanceId); // RIMOSSO
         const problemIntents = fromEditorState().intents.map(it => ({
           id: it.id,
           name: it.name,
           threshold: it.threshold,
           phrases: it.phrases
         }));
-        console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents);
+        // console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents); // RIMOSSO
         instanceRepository.updateIntents(instanceId, problemIntents);
-        console.log('✅ [IntentEditor] Updated InstanceRepository with intents', {
-          instanceId,
-          intentsCount: problemIntents.length
-        });
+        // console.log('✅ [IntentEditor] Updated InstanceRepository with intents', { // RIMOSSO
+        //   instanceId,
+        //   intentsCount: problemIntents.length
+        // });
       }
     } catch (err) {
       console.warn('[IntentEditor] Could not update InstanceRepository:', err);
@@ -92,19 +92,19 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           try {
             const instanceId = (props.act as any)?.instanceId;
             if (instanceId) {
-              console.log('✅ [IntentEditor] Extracted instanceId:', instanceId);
+              // console.log('✅ [IntentEditor] Extracted instanceId:', instanceId); // RIMOSSO
               const problemIntents = next.intents.map(it => ({
                 id: it.id,
                 name: it.name,
                 threshold: it.threshold,
                 phrases: it.phrases
               }));
-              console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents);
+              // console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents); // RIMOSSO
               instanceRepository.updateIntents(instanceId, problemIntents);
-              console.log('✅ [IntentEditor] Updated InstanceRepository with new intents', {
-                instanceId,
-                intentsCount: problemIntents.length
-              });
+              // console.log('✅ [IntentEditor] Updated InstanceRepository with new intents', { // RIMOSSO
+              //   instanceId,
+              //   intentsCount: problemIntents.length
+              // });
             }
           } catch (err) {
             console.warn('[IntentEditor] Could not update InstanceRepository:', err);
@@ -123,14 +123,14 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           try {
             const instanceId = (props.act as any)?.instanceId;
             if (instanceId) {
-              console.log('✅ [IntentEditor] Extracted instanceId:', instanceId);
+              // console.log('✅ [IntentEditor] Extracted instanceId:', instanceId); // RIMOSSO
               const problemIntents = next.intents.map(it => ({
                 id: it.id,
                 name: it.name,
                 threshold: it.threshold,
                 phrases: it.phrases
               }));
-              console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents);
+              // console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents); // RIMOSSO
               instanceRepository.updateIntents(instanceId, problemIntents);
             }
           } catch (err) {

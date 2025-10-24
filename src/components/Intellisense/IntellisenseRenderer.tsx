@@ -56,7 +56,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   const [showCategorySelector, setShowCategorySelector] = useState<'global' | 'industry' | false>(false);
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
-  
+
   // Aggiungi uno stato per distinguere tra selezione da tastiera e da mouse
   const lastInputType = useRef<'keyboard' | 'mouse'>('keyboard');
 
@@ -163,10 +163,10 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   // Calculate total items for layout decisions
   const totalFuzzyItems = Array.from(fuzzyResults.values()).reduce((sum, items) => sum + items.length, 0);
   const totalItems = totalFuzzyItems + semanticResults.length;
-  
+
   // Per ora disabilitiamo il grid layout per semplificare la virtualizzazione
   const useGridLayout = false;
-  
+
   // Filter categories if filterCategoryTypes is provided (allow unified 'intent' kind under 'conditions')
   const filteredFuzzy = new Map<string, IntellisenseResult[]>();
   fuzzyResults.forEach((categoryResults, categoryType) => {
@@ -182,17 +182,17 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
     categoryResults.forEach(result => { allResults.push({ result, isFromAI: false }); });
   });
   semanticResults.forEach(result => { allResults.push({ result, isFromAI: true }); });
-  
+
   // Calcola quali item sono visibili
   const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER_SIZE);
   const endIndex = Math.min(allResults.length, startIndex + VISIBLE_ITEMS + (BUFFER_SIZE * 2));
   const visibleResults = allResults.slice(startIndex, endIndex);
-  
+
   // Gestisci lo scroll
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(e.currentTarget.scrollTop);
   };
-  
+
   // Modifica l'auto-scroll: solo se l'ultimo input è da tastiera
   useEffect(() => {
     if (containerRef.current && selectedIndex >= 0 && lastInputType.current === 'keyboard') {
@@ -206,13 +206,13 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
       }
     }
   }, [selectedIndex]);
-  
+
   // Modifica onItemHover per segnalare input da mouse
   const handleItemHover = (index: number) => {
     lastInputType.current = 'mouse';
     onItemHover(index);
   };
-  
+
   if (allResults.length === 0) {
     // Solo pulsanti: per i nodi mostra i tipi di Agent Act; per condizioni usa il flusso esistente
     const isForNodes = filterCategoryTypes.includes('agentActs') || filterCategoryTypes.includes('backendActions');
@@ -236,32 +236,32 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
             ))}
           </div>
         ) : (query.trim() && !isForNodes && allowCreatePicker ? (
-            <div className="flex justify-center mt-1">
-              <CreateButtons
-                context={context}
-                query={query}
-                projectIndustry={projectIndustry}
-                isCreating={isCreating}
-                creatingScope={creatingScope}
-                onEntitySelect={handleEntitySelect}
-                showCategorySelector={showCategorySelector}
-                onCategorySelectorShow={setShowCategorySelector}
-                onCreateNew={onCreateNew}
-                existingCategories={getExistingCategories()}
-                onCategorySelect={handleCategorySelect}
-                showCategoryInput={showCategoryInput}
-                newCategoryName={newCategoryName}
-                onNewCategoryNameChange={setNewCategoryName}
-                onCreateNewCategory={handleCreateNewCategory}
-                onCategoryInputKeyDown={handleCategoryInputKeyDown}
-              />
-            </div>
-          ) : null)}
+          <div className="flex justify-center mt-1">
+            <CreateButtons
+              context={context}
+              query={query}
+              projectIndustry={projectIndustry}
+              isCreating={isCreating}
+              creatingScope={creatingScope}
+              onEntitySelect={handleEntitySelect}
+              showCategorySelector={showCategorySelector}
+              onCategorySelectorShow={setShowCategorySelector}
+              onCreateNew={onCreateNew}
+              existingCategories={getExistingCategories()}
+              onCategorySelect={handleCategorySelect}
+              showCategoryInput={showCategoryInput}
+              newCategoryName={newCategoryName}
+              onNewCategoryNameChange={setNewCategoryName}
+              onCreateNewCategory={handleCreateNewCategory}
+              onCategoryInputKeyDown={handleCategoryInputKeyDown}
+            />
+          </div>
+        ) : null)}
       </div>
     );
   }
 
-  
+
   // Render flat list without virtualization to avoid hiding matched items
   return (
     <div
@@ -271,7 +271,6 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
       style={{
         maxHeight: layoutConfig.maxMenuHeight,
         maxWidth: layoutConfig.maxMenuWidth,
-        overflowY: 'auto'
       }}
     >
       {allResults.map((item, index) => (

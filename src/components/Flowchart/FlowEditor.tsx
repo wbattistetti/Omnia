@@ -28,16 +28,15 @@ import { useNodesWithLog } from './hooks/useNodesWithLog';
 import { useUndoRedoManager } from './hooks/useUndoRedoManager';
 import { useEdgeLabelScheduler } from './hooks/useEdgeLabelScheduler';
 import { useTempEdgeFlags } from './hooks/useTempEdgeFlags';
+import { NodeRegistryProvider } from '../../context/NodeRegistryContext';
+import { IntellisenseProvider } from '../../context/IntellisenseContext';
+import { IntellisensePopover } from '../Intellisense/IntellisensePopover';
 import { SelectionMenu } from './components/SelectionMenu';
 // RIMOSSO: import { EdgeConditionMenu } from './components/EdgeConditionMenu';
-import { IntellisenseMenu } from '../Intellisense/IntellisenseMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
 import { CustomEdge } from './edges/CustomEdge';
-import { useIntellisenseHandlers } from './hooks/useIntellisenseHandlers';
 import { v4 as uuidv4 } from 'uuid';
-import { instanceRepository } from '../../services/InstanceRepository';
-import { idMappingService } from '../../services/IdMappingService';
-import { createPortal } from 'react-dom';
+import { useIntellisense } from '../../context/IntellisenseContext';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -267,11 +266,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation
   const { data: projectData } = useProjectData();
 
-  // ✅ NUOVO STATO per IntellisenseMenu originale
-  const [showNodeIntellisense, setShowNodeIntellisense] = useState(false);
-  const [nodeIntellisensePosition, setNodeIntellisensePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [nodeIntellisenseItems, setNodeIntellisenseItems] = useState<any[]>([]);
-  const [nodeIntellisenseTarget, setNodeIntellisenseTarget] = useState<string | null>(null);
 
   // ✅ RIMOSSO: problemIntentSeedItems - ora calcolato manualmente in openIntellisense
 
@@ -512,270 +506,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   const withNodeLock = useNodeCreationLock();
 
-  // ✅ FIX: Funzione per aprire l'IntellisenseMenu CORRETTO
-  const openIntellisense = useCallback(async (tempNodeId: string, tempEdgeId: string, event: any) => {
-    console.log("🎯 [INTELLISENSE] Opening proper IntellisenseMenu", {
-      tempNodeId,
-      tempEdgeId,
-      mousePos: { x: event.clientX, y: event.clientY },
-      timestamp: Date.now()
-    });
+  // ✅ NUOVO: Hook per aprire intellisense
+  const { actions: intellisenseActions } = useIntellisense();
 
-    // ✅ FORZA l'apertura del connection menu PRIMA di calcolare gli intents
-    openMenu(
-      { x: event.clientX, y: event.clientY },
-      connectionMenuRef.current.sourceNodeId,
-      connectionMenuRef.current.sourceHandleId
-    );
-
-    // Salva riferimenti temporanei
-    try {
-      (connectionMenuRef.current as any).tempNodeId = tempNodeId;
-      (connectionMenuRef.current as any).tempEdgeId = tempEdgeId;
-      (connectionMenuRef.current as any).flowPosition = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      (window as any).__flowLastTemp = { nodeId: tempNodeId, edgeId: tempEdgeId };
-    } catch (error) {
-      console.error("❌ Error saving temporary references:", error);
-    }
-
-    // ✅ Calcola gli intents MANUALMENTE ora che il menu è aperto
-    const sourceId = connectionMenuRef.current.sourceNodeId;
-    const srcNode = nodes.find(n => n.id === sourceId);
-
-    console.log("🔍 [INTELLISENSE_DEBUG] Source node analysis", {
-      sourceId,
-      srcNodeFound: !!srcNode,
-      srcNodeRows: srcNode ? (srcNode.data as any)?.rows : null,
-      timestamp: Date.now()
-    });
-
-    const rows = Array.isArray((srcNode?.data as any)?.rows) ? (srcNode!.data as any).rows : [];
-
-    // Log tutte le righe per vedere il contenuto effettivo
-    console.log("🔍 [INTELLISENSE_DEBUG] All rows content", {
-      rows: rows.map((r: any) => ({
-        text: r.text,
-        type: r.type,
-        mode: r.mode,
-        hasProblem: !!(r as any)?.problem
-      })),
-      timestamp: Date.now()
-    });
-
-    // Cerca righe con problem classification (SOLO per tipo specifico)
-    const problemRow = rows.find((r: any) => {
-      const type = (r.type || '').toLowerCase();
-      const mode = (r.mode || '').toLowerCase();
-      const hasProblemProp = !!(r as any)?.problem;
-
-      // Cerca SOLO per tipo specifico o proprietà problem
-      return hasProblemProp ||
-        type === 'problemclassification' ||
-        type === 'intentclassification' ||
-        type === 'problem' ||
-        type === 'intent' ||
-        mode === 'problemclassification' ||
-        mode === 'intentclassification' ||
-        mode === 'problem' ||
-        mode === 'intent';
-    });
-
-    console.log("🔍 [INTELLISENSE_DEBUG] Problem row search", {
-      rowsCount: rows.length,
-      problemRowFound: !!problemRow,
-      problemRow: problemRow,
-      problemRowText: problemRow ? problemRow.text : null,
-      problemRowType: problemRow ? problemRow.type : null,
-      problemRowMode: problemRow ? problemRow.mode : null,
-      problemRowFullStructure: problemRow, // Mostra TUTTA la struttura della riga
-      problemIntents: problemRow ? (problemRow as any)?.problem?.intents : null,
-      timestamp: Date.now()
-    });
-
-    // ✅ NUOVO: Recupera gli intents dal repository usando instanceId
-    let problemIntents: any[] = [];
-    if (problemRow) {
-      const instanceId = problemRow.id; // ✅ ID riga = instanceId
-      const actId = (problemRow as any)?.actId;
-
-      console.log("🔍 [INTELLISENSE_NEW] Looking for instance in repository", {
-        instanceId,
-        actId,
-        timestamp: Date.now()
-      });
-
-      console.log("🔍 [INTELLISENSE_DETAILED] Problem row details", {
-        problemRow: {
-          id: problemRow.id,
-          text: problemRow.text,
-          type: problemRow.type,
-          // instanceId REMOVED - non serve più
-          // actId REMOVED - non serve più
-          // mode REMOVED - non serve più
-          // categoryType REMOVED - non serve più
-        },
-        timestamp: Date.now()
-      });
-
-      // Cerca l'istanza nel repository
-      if (instanceId) {
-        console.log("🔍 [INTELLISENSE] Looking for instance:", instanceId);
-        let instance = instanceRepository.getInstance(instanceId);
-        console.log("🔍 [INTELLISENSE] Instance found:", instance);
-        console.log("🔍 [INTELLISENSE] Problem intents:", instance?.problemIntents);
-
-        console.log("🔍 [INTELLISENSE_DETAILED] Repository lookup result", {
-          instanceId,
-          instanceFound: !!instance,
-          instanceData: instance ? {
-            instanceId: instance.instanceId,
-            actId: instance.actId,
-            problemIntentsCount: instance.problemIntents?.length || 0,
-            problemIntents: instance.problemIntents,
-            createdAt: instance.createdAt,
-            updatedAt: instance.updatedAt
-          } : null,
-          timestamp: Date.now()
-        });
-
-        if (instance) {
-          problemIntents = instance.problemIntents || [];
-          console.log("✅ [INTELLISENSE_NEW] Found intents in repository!", {
-            instanceId,
-            intentsCount: problemIntents.length,
-            intents: problemIntents,
-            timestamp: Date.now()
-          });
-        } else {
-          console.log("⚠️ [INTELLISENSE_NEW] Instance not found in repository", {
-            instanceId,
-            timestamp: Date.now()
-          });
-        }
-      } else {
-        console.log("❌ [INTELLISENSE_NEW] No instanceId in row", {
-          rowHasActId: !!actId,
-          timestamp: Date.now()
-        });
-
-        // Prova a creare un'istanza al volo se abbiamo almeno actId
-        if (actId) {
-          try {
-            console.log("🔧 [INTELLISENSE_NEW] Creating instance on-the-fly", {
-              actId,
-              timestamp: Date.now()
-            });
-
-            const newInstanceId = (await import('uuid')).v4();
-            const { findAgentAct } = await import('./utils/actVisuals');
-
-            if (projectData) {
-              const act = findAgentAct(projectData, { actId });
-              const intents = act?.problem?.intents || [];
-
-              instanceRepository.createInstanceWithId(
-                newInstanceId,
-                actId,
-                intents
-              );
-
-              problemIntents = intents;
-
-              console.log("✅ [INTELLISENSE_NEW] Created instance on-the-fly", {
-                instanceId: newInstanceId,
-                actId,
-                intentsCount: intents.length,
-                timestamp: Date.now()
-              });
-            }
-          } catch (err) {
-            console.warn('[INTELLISENSE_NEW] Could not create instance on-the-fly:', err);
-          }
-        }
-      }
-    }
-
-    // Log dettagliato per esplorare dove sono gli intents
-    if (problemRow && !problemIntents) {
-      // LOGGING COMPLETO - usa console.dir per vedere la struttura completa
-      console.log("🔍 [INTELLISENSE_DEBUG] ===== PROBLEM ROW FULL INSPECTION =====");
-      console.log("🔍 [INTELLISENSE_DEBUG] All property keys:", Object.keys(problemRow));
-      console.log("🔍 [INTELLISENSE_DEBUG] All property entries:");
-      Object.entries(problemRow).forEach(([key, value]) => {
-        console.log(`  - ${key}:`, value);
-      });
-
-      // Usa console.dir per vedere la struttura completa espansa
-      console.dir(problemRow, { depth: 10 });
-
-      console.log("🔍 [INTELLISENSE_DEBUG] Exploring problem row structure", {
-        hasProblemProperty: !!(problemRow as any)?.problem,
-        problemProperty: (problemRow as any)?.problem,
-        allProperties: Object.keys(problemRow),
-        propertyValues: {
-          text: problemRow.text,
-          type: problemRow.type,
-          mode: problemRow.mode,
-          categoryType: (problemRow as any)?.categoryType,
-          intents: (problemRow as any)?.intents,
-          problem: (problemRow as any)?.problem,
-          classification: (problemRow as any)?.classification,
-        },
-        rowStructure: problemRow,
-        timestamp: Date.now()
-      });
-    }
-
-    // Log dettagliato degli intents se trovati
-    if (problemIntents) {
-      console.log("🔍 [INTELLISENSE_DEBUG] Problem intents details", {
-        isArray: Array.isArray(problemIntents),
-        intentsCount: Array.isArray(problemIntents) ? problemIntents.length : 'not array',
-        firstIntent: Array.isArray(problemIntents) && problemIntents.length > 0 ? problemIntents[0] : null,
-        intentsStructure: problemIntents,
-        timestamp: Date.now()
-      });
-    }
-
-    const combinedItems = [
-      ...(allConditions || []),
-      ...(Array.isArray(problemIntents) && problemIntents.length > 0 ? problemIntents.map((intent: any) => ({
-        id: `intent-${intent.id || intent.name}`,
-        label: intent.name || intent.label || 'Unknown',
-        name: intent.name || intent.label || 'Unknown',
-        value: intent.id || intent.name || 'unknown',
-        description: intent.description || intent.name || '',
-        category: 'Problem Intents',
-        categoryType: 'conditions',
-        kind: 'intent'
-      })) : [])
-    ];
-
-    console.log('🔍 [ITEMS_DEBUG] Combined items details:', {
-      allConditionsCount: allConditions?.length || 0,
-      problemIntentsCount: Array.isArray(problemIntents) ? problemIntents.length : 0,
-      combinedItemsCount: combinedItems.length,
-      combinedItems: combinedItems.map(item => ({
-        label: item.label,
-        category: item.category,
-        categoryType: item.categoryType,
-        kind: item.kind
-      }))
-    });
-
-    // Apri l'IntellisenseMenu originale
-    setShowNodeIntellisense(true);
-    setNodeIntellisensePosition({ x: event.clientX, y: event.clientY });
-    setNodeIntellisenseItems(combinedItems);
-    setNodeIntellisenseTarget(tempNodeId);
-
-    console.log("✅ IntellisenseMenu opened with:", {
-      conditionsCount: allConditions?.length || 0,
-      intentsCount: problemIntents.length,
-      totalItems: combinedItems.length,
-      intentsFound: problemIntents.length > 0
-    });
-  }, [connectionMenuRef, reactFlowInstance, allConditions, nodes, openMenu]);
 
   const onConnectEnd = useCallback((event: any) => {
     console.log("🎬 [ON_CONNECT_END] Event triggered", {
@@ -808,7 +541,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           const result = await createTemporaryNode(event);
           console.log("✅ [ON_CONNECT_END] createTemporaryNode returned", result);
           const { tempNodeId, tempEdgeId } = result;
-          openIntellisense(tempNodeId, tempEdgeId, event);
+          console.log("🎯 [ON_CONNECT_END] About to call openForEdge with EDGE:", { edgeId: tempEdgeId });
+          // ✅ FIX: Usa la nuova architettura pulita con service layer
+          intellisenseActions.openForEdge(tempEdgeId);
+          console.log("🎯 [ON_CONNECT_END] openForEdge() call completed");
         } catch (error) {
           console.error("❌ [ON_CONNECT_END] Error creating temporary node:", error);
         }
@@ -818,7 +554,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       console.log("❌ [ON_CONNECT_END] Not creating node - conditions not met, cleaning up");
       cleanupAllTempNodesAndEdges();
     }
-  }, [withNodeLock, createTemporaryNode, openIntellisense, connectionMenuRef, cleanupAllTempNodesAndEdges, pendingEdgeIdRef]);
+  }, [withNodeLock, createTemporaryNode, openMenu, cleanupAllTempNodesAndEdges, pendingEdgeIdRef, intellisenseActions]);
 
   // Utility per rimuovere edge temporaneo
   // ✅ RIMOSSA: function removeTempEdge - non utilizzata
@@ -1080,53 +816,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [reactFlowInstance]);
 
-  // Debug logging per IntellisenseMenu rendering conditions
-  useEffect(() => {
-    console.log('🔍 [RENDER_DEBUG] IntellisenseMenu conditions:', {
-      showNodeIntellisense,
-      nodeIntellisenseTarget,
-      shouldRender: showNodeIntellisense && nodeIntellisenseTarget
-    });
-  }, [showNodeIntellisense, nodeIntellisenseTarget]);
-
-  // ✅ NUOVO: Aspetta che il nodo temporaneo sia renderizzato nel DOM
-  const [isTempNodeRendered, setIsTempNodeRendered] = useState(false);
-  useEffect(() => {
-    if (showNodeIntellisense && nodeIntellisenseTarget) {
-      console.log('🔍 [DOM_CHECK] Looking for temporary node in DOM:', nodeIntellisenseTarget);
-
-      const checkNodeExists = () => {
-        const nodeElement = document.querySelector(`[data-id="${nodeIntellisenseTarget}"]`);
-        if (nodeElement) {
-          console.log('✅ [DOM_CHECK] Temporary node found in DOM!', {
-            nodeId: nodeIntellisenseTarget,
-            element: nodeElement,
-            boundingRect: nodeElement.getBoundingClientRect()
-          });
-          setIsTempNodeRendered(true);
-        } else {
-          console.log('⏳ [DOM_CHECK] Temporary node not yet in DOM, retrying...');
-          setTimeout(checkNodeExists, 50);
-        }
-      };
-
-      checkNodeExists();
-    } else {
-      setIsTempNodeRendered(false);
-    }
-  }, [showNodeIntellisense, nodeIntellisenseTarget]);
-
-  // Stabilizza nodeTypes/edgeTypes per evitare il warning RF#002 (HMR)
-  // Spostati fuori dal componente per evitare ricreazioni durante HMR
-
-  // ✅ Handler per gestire selezione items nell'IntellisenseMenu
-  // Use intellisense handlers hook
-  const { handleIntellisenseSelect, handleIntellisenseClose } = useIntellisenseHandlers(
-    nodeIntellisenseTarget,
-    setNodes,
-    setShowNodeIntellisense,
-    setNodeIntellisenseTarget
-  );
 
   return (
     <div
@@ -1328,20 +1017,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           }}
         />
       )}
-      {/* DEBUG: Check why IntellisenseMenu is not rendering */}
-      {null}
-
-      {showNodeIntellisense && nodeIntellisenseTarget && isTempNodeRendered && (
-        <IntellisenseMenu
-          isOpen={showNodeIntellisense}
-          query=""
-          position={nodeIntellisensePosition}
-          referenceElement={document.querySelector(`[data-id="${nodeIntellisenseTarget}"]`)}
-          onSelect={handleIntellisenseSelect}
-          onClose={handleIntellisenseClose}
-          seedItems={nodeIntellisenseItems}
-        />
-      )}
+      {/* ✅ RIMOSSO: IntellisenseMenu inline - ora gestito da IntellisensePopover */}
     </div>
   );
 };
@@ -1356,9 +1032,21 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 // ✅ RIMOSSO: const creatingTempNodes - non utilizzato
 
 export const FlowEditor: React.FC<FlowEditorProps> = (props) => {
+  // Providers per IntellisenseService
+  const intellisenseProviders = React.useMemo(() => ({
+    getProjectData: () => (window as any).__projectData,
+    getFlowNodes: () => (window as any).__flowNodes || [],
+    getFlowEdges: () => (window as any).__flowEdges || [],
+  }), []);
+
   return (
-    <ReactFlowProvider>
-      <FlowEditorContent {...props} />
-    </ReactFlowProvider>
+    <NodeRegistryProvider>
+      <IntellisenseProvider providers={intellisenseProviders}>
+        <ReactFlowProvider>
+          <FlowEditorContent {...props} />
+          <IntellisensePopover />
+        </ReactFlowProvider>
+      </IntellisenseProvider>
+    </NodeRegistryProvider>
   );
 };

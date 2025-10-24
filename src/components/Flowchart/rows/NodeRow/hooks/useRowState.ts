@@ -25,12 +25,11 @@ export function useRowState({ row, forceEditing = false }: UseRowStateProps) {
     const suppressIntellisenseRef = useRef<boolean>(false);
     const intellisenseTimerRef = useRef<number | null>(null);
 
-    // Type picker state
-    const [allowCreatePicker, setAllowCreatePicker] = useState(false);
-    const [showCreatePicker, setShowCreatePicker] = useState(false);
-    const [nodeOverlayPosition, setNodeOverlayPosition] = useState<{ left: number; top: number } | null>(null);
+  // Type picker state
+  const [allowCreatePicker, setAllowCreatePicker] = useState(false);
+  const [showCreatePicker, setShowCreatePicker] = useState(false);
 
-    // Toolbar/icons state
+  // Toolbar/icons state
     const [showIcons, setShowIcons] = useState(false);
     const [iconPos, setIconPos] = useState<{ top: number, left: number } | null>(null);
 
@@ -87,8 +86,6 @@ export function useRowState({ row, forceEditing = false }: UseRowStateProps) {
         setAllowCreatePicker,
         showCreatePicker,
         setShowCreatePicker,
-        nodeOverlayPosition,
-        setNodeOverlayPosition,
 
         // Toolbar/icons state
         showIcons,

@@ -92,7 +92,8 @@ export function useTemporaryNodes(
           rows: [],
           isTemporary: true,
           createdAt: Date.now(),
-          focusRowId: `${tempNodeId}-${uuidv4()}` // Aggiungi questa riga
+          focusRowId: `${tempNodeId}-${uuidv4()}`, // Aggiungi questa riga
+          'data-is-temporary': 'true' // Add this attribute for IntellisenseMenu
         },
       };
 

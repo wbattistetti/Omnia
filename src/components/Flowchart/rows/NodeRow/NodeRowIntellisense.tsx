@@ -41,7 +41,7 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
         <IntellisenseMenu
           isOpen={showIntellisense}
           query={intellisenseQuery}
-          position={{ x: 0, y: 0 }}
+          position={nodeOverlayPosition ? { x: nodeOverlayPosition.left, y: nodeOverlayPosition.top } : { x: 0, y: 0 }}
           referenceElement={inputRef.current}
           onSelect={handleIntellisenseSelect}
           onClose={handleIntellisenseClose}

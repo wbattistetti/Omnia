@@ -183,6 +183,19 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
+
+      // Don't close if clicking on any temporary node or flow elements
+      const isTemporaryNode = target instanceof HTMLElement &&
+        (target.closest('[data-is-temporary="true"]') ||
+          target.closest('.react-flow__node-temporary'));
+
+      const isFlowElement = target instanceof HTMLElement &&
+        target.closest('.react-flow__pane, .react-flow__node, .react-flow__edge');
+
+      if (isTemporaryNode || isFlowElement) {
+        return;
+      }
+
       if (
         menuRef.current &&
         !menuRef.current.contains(target) &&
@@ -498,7 +511,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
           padding: 0,
           width: 320,
           maxHeight: 320,
-          overflowY: 'auto',
           zIndex: 9999
         } : {
           ...menuStyle,
@@ -510,7 +522,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
           padding: 0,
           width: 320,
           maxHeight: 320,
-          overflowY: 'auto',
           zIndex: 99999,
           position: 'fixed',
           top: position?.y || 0,

@@ -21,6 +21,7 @@ import { RowTypePickerToolbar } from './RowTypePickerToolbar';
 import { RowBufferArea } from './RowBufferArea';
 import { useRowToolbar } from '../../hooks/useRowToolbar';
 import { useRowState } from './hooks/useRowState';
+import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from '../../utils/actVisuals';
 import { inferActType, heuristicToInternal } from '../../../../nlp/actType';
@@ -78,11 +79,16 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     suppressIntellisenseRef, intellisenseTimerRef,
     allowCreatePicker, setAllowCreatePicker,
     showCreatePicker, setShowCreatePicker,
-    nodeOverlayPosition, setNodeOverlayPosition,
     showIcons, setShowIcons,
     iconPos, setIconPos,
     typeToolbarRef, inputRef, nodeContainerRef, labelRef, overlayRef, mousePosRef
   } = rowState;
+
+  // Use stable intellisense positioning hook
+  const nodeOverlayPosition = useIntellisensePosition({
+    isEditing,
+    inputRef
+  });
 
   const reactFlowInstance = useReactFlow();
   const getZoom = () => {
@@ -142,51 +148,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     setShowCreatePicker(false);
     setAllowCreatePicker(false);
   };
-
-  // Quando entri in editing, calcola la posizione del nodo
-  useEffect(() => {
-    if (isEditing) {
-      // mentre scrivi, assicurati che il picker resti chiuso
-      setShowCreatePicker(false);
-      setAllowCreatePicker(false);
-      let left = 0;
-      let top = 0;
-      if (nodeCanvasPosition && inputRef.current) {
-        // Ottieni offset locale dell'input rispetto al nodo
-        const inputOffset = inputRef.current.getBoundingClientRect();
-        const nodeRect = nodeContainerRef.current?.getBoundingClientRect();
-        const offsetX = nodeRect && inputOffset ? (inputOffset.left - nodeRect.left) : 0;
-        const offsetY = nodeRect && inputOffset ? (inputOffset.top - nodeRect.top) : 0;
-        // Ottieni pan/zoom
-        const { x: panX, y: panY, zoom } = reactFlowInstance.toObject().viewport;
-        // Ottieni bounding rect del container React Flow
-        const container = document.querySelector('.react-flow');
-        const containerRect = container ? container.getBoundingClientRect() : { left: 0, top: 0 };
-        // Calcola posizione schermo
-        left = containerRect.left + (nodeCanvasPosition.x + offsetX) * zoom + panX;
-        top = containerRect.top + (nodeCanvasPosition.y + offsetY) * zoom + panY;
-      } else if (nodeContainerRef.current) {
-        const rect = nodeContainerRef.current.getBoundingClientRect();
-        left = rect.left + window.scrollX;
-        top = rect.bottom + window.scrollY;
-      }
-      setNodeOverlayPosition({ left, top });
-    } else if (!isEditing) {
-      setNodeOverlayPosition(null);
-    }
-  }, [isEditing, nodeCanvasPosition, reactFlowInstance]);
-
-  // Recompute overlay position when textarea height changes (wrap).
-  useEffect(() => {
-    if (!isEditing || !inputRef.current) return;
-    const el = inputRef.current;
-    const observer = new ResizeObserver(() => {
-      const rect = el.getBoundingClientRect();
-      setNodeOverlayPosition({ left: rect.left, top: rect.bottom + window.scrollY });
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [isEditing]);
 
   // Intercetta tasti globali quando la type toolbar è aperta, per evitare che raggiungano il canvas
   useEffect(() => {
@@ -658,6 +619,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Open type picker when clicking the label icon (outside editing)
   const [pickerCurrentType, setPickerCurrentType] = useState<string | undefined>(undefined);
+  const [pickerPosition, setPickerPosition] = useState<{ left: number; top: number } | null>(null);
 
   const openTypePickerFromIcon = (anchor?: DOMRect, currentType?: string) => {
     const rect = anchor || labelRef.current?.getBoundingClientRect();
@@ -665,7 +627,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // Position menu close to icon with minimal padding to avoid right whitespace
     const finalPos = { left: rect.left, top: (rect as any).bottom } as { left: number; top: number };
     console.log('[Picker][open]', { anchor: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }, currentType });
-    setNodeOverlayPosition(finalPos);
+    setPickerPosition(finalPos);
     setShowIntellisense(false);
     setAllowCreatePicker(true);
     // keep toolbar visible while submenu is open
@@ -957,11 +919,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         onCreateTask={onCreateTask}
       />
 
-      {toolbarSM.showPicker && nodeOverlayPosition && createPortal(
+      {toolbarSM.showPicker && pickerPosition && createPortal(
         <>
           <RowTypePickerToolbar
-            left={nodeOverlayPosition.left}
-            top={nodeOverlayPosition.top}
+            left={pickerPosition.left}
+            top={pickerPosition.top}
             onPick={(key) => handlePickType(key)}
             rootRef={typeToolbarRef}
             currentType={pickerCurrentType}
