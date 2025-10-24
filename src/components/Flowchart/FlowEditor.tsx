@@ -548,10 +548,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           console.log("✅ [ON_CONNECT_END] createTemporaryNode returned", result);
           const { tempNodeId, tempEdgeId } = result;
           console.log("🎯 [ON_CONNECT_END] About to call openForEdge with EDGE:", { edgeId: tempEdgeId });
-          // ✅ FIX: Verifica che la funzione esista prima di chiamarla
+          // ✅ Pass mouse coordinates to openForEdge
           if (intellisenseActions?.openForEdge) {
-            intellisenseActions.openForEdge(tempEdgeId);
-            console.log("🎯 [ON_CONNECT_END] openForEdge() call completed");
+            intellisenseActions.openForEdge(tempEdgeId, result.mouseX, result.mouseY);
+            console.log("🎯 [ON_CONNECT_END] openForEdge() call completed with mouse coordinates:", {
+              mouseX: result.mouseX,
+              mouseY: result.mouseY
+            });
           } else {
             console.error("❌ [ON_CONNECT_END] intellisenseActions.openForEdge is undefined!");
           }

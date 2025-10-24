@@ -23,6 +23,11 @@ export const IntellisensePopover: React.FC = () => {
 
     // Calcola anchor quando si apre o cambia target - NO POLLING!
     useLayoutEffect(() => {
+        console.log("🎯 [IntellisensePopover useLayoutEffect] TRIGGERED", {
+            isOpen: state.isOpen,
+            target: state.target
+        });
+
         if (!state.isOpen || !state.target) {
             setRect(null);
             setReferenceElement(null);
@@ -31,15 +36,16 @@ export const IntellisensePopover: React.FC = () => {
 
         let elementId = state.target.nodeId;
 
-        // Se è un edge, trova il nodo temporaneo associato
+        // Se è un edge, trova il nodo di DESTINAZIONE (temporaneo)
         if (state.target.edgeId && !state.target.nodeId) {
             const flowEdges = (window as any).__flowEdges || [];
             const edge = flowEdges.find((e: any) => e.id === state.target!.edgeId);
             if (edge && edge.target) {
-                elementId = edge.target;
-                console.log("🎯 [IntellisensePopover] Found temporary node for edge:", {
+                elementId = edge.target; // ✅ Questo è il nodo di DESTINAZIONE
+                console.log("🎯 [IntellisensePopover] Found DESTINATION node for edge:", {
                     edgeId: state.target.edgeId,
-                    tempNodeId: elementId
+                    destinationNodeId: elementId,
+                    sourceNodeId: edge.source
                 });
             }
         }
@@ -52,6 +58,18 @@ export const IntellisensePopover: React.FC = () => {
 
         const el = getEl(elementId);
 
+        // ✅ DEBUG CRITICO: Verifica quale nodo stiamo realmente prendendo
+        if (el) {
+            console.log("🎯 [IntellisensePopover] ACTUAL ELEMENT FOUND:", {
+                elementId,
+                elementTag: el.tagName,
+                elementClass: el.className,
+                elementRect: el.getBoundingClientRect(),
+                elementDataId: el.getAttribute('data-id'),
+                isDestinationNode: elementId === state.target?.edgeId ? 'DESTINATION' : 'OTHER'
+            });
+        }
+
         if (!el) {
             setRect(null);
             setReferenceElement(null);
@@ -59,7 +77,27 @@ export const IntellisensePopover: React.FC = () => {
         }
 
         setReferenceElement(el);
-        setRect(el.getBoundingClientRect());
+        const nodeRect = el.getBoundingClientRect();
+        setRect(nodeRect);
+
+        // ✅ Log dettagliato per debug posizione
+        if (state.target.edgeId) {
+            console.log("🎯 [IntellisensePopover useLayoutEffect] Dest node rect:", {
+                elementId,
+                isEdge: !!state.target.edgeId,
+                rect: {
+                    left: nodeRect.left,
+                    top: nodeRect.top,
+                    width: nodeRect.width,
+                    height: nodeRect.height,
+                    centerX: nodeRect.left + (nodeRect.width / 2)
+                },
+                wrapperWillBeAt: {
+                    x: nodeRect.left + (nodeRect.width / 2) - 160,
+                    y: nodeRect.top - 200 - 8
+                }
+            });
+        }
     }, [state.isOpen, state.target, getEl]);
 
     // Aggiorna su resize/scroll
@@ -120,13 +158,28 @@ export const IntellisensePopover: React.FC = () => {
         });
     }
 
+    // ✅ Calcola posizione centrata sul nodo di DESTINAZIONE (hidden)
+    const wrapperWidth = 320;
+    const wrapperHeight = 200;
+    const centeredPosition = state.target?.edgeId && rect
+        ? {
+            // Centra orizzontalmente rispetto al nodo di destinazione
+            x: rect.left + (rect.width / 2) - (wrapperWidth / 2),
+            // ✅ CORRETTO: Posiziona il top del wrapper 8px sopra il top del nodo
+            y: rect.top - 8
+        }
+        : null;
+
+    // ✅ Log solo UNA VOLTA (non nel render loop)
+    // Spostato nel useLayoutEffect
+
     // Usa il componente appropriato in base al target
     return createPortal(
         <div style={{ border: '2px solid red', backgroundColor: 'rgba(255, 0, 0, 0.1)' }}>
-            {state.target?.edgeId ? (
-                // ✅ CASO EDGE: usa il wrapper standalone
+            {state.target?.edgeId && centeredPosition ? (
+                // ✅ CASO EDGE: usa il wrapper standalone con posizione centrata
                 <IntellisenseStandalone
-                    position={{ x: rect.left, y: rect.bottom + 8 }}
+                    position={centeredPosition}
                     referenceElement={referenceElement}
                     extraItems={state.catalog}
                     allowedKinds={['condition', 'intent']}

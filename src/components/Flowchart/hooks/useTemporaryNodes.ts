@@ -82,7 +82,7 @@ export function useTemporaryNodes(
         timestamp: Date.now()
       });
 
-      // Crea nodo temporaneo
+      // Crea nodo temporaneo HIDDEN
       const tempNode: Node<NodeData> = {
         id: tempNodeId,
         type: 'custom',
@@ -91,9 +91,10 @@ export function useTemporaryNodes(
           title: '',
           rows: [],
           isTemporary: true,
+          hidden: true, // ✅ NODO INVISIBILE
           createdAt: Date.now(),
-          focusRowId: `${tempNodeId}-${uuidv4()}`, // Aggiungi questa riga
-          'data-is-temporary': 'true' // Add this attribute for IntellisenseMenu
+          focusRowId: `${tempNodeId}-${uuidv4()}`,
+          'data-is-temporary': 'true'
         },
       };
 
@@ -154,7 +155,7 @@ export function useTemporaryNodes(
         console.error("❌ [CREATE_TEMP] Error saving references:", error);
       }
 
-      return { tempNodeId, tempEdgeId, position };
+      return { tempNodeId, tempEdgeId, position, mouseX: event.clientX, mouseY: event.clientY };
 
     } catch (error) {
       console.error("❌ [CREATE_TEMP] Error creating temporary node:", error);

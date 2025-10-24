@@ -9,7 +9,12 @@ export type IntellisenseItem = {
     kind: "condition" | "intent";
 };
 
-export type IntellisenseTarget = { nodeId?: string; edgeId?: string } | null;
+export type IntellisenseTarget = {
+    nodeId?: string;
+    edgeId?: string;
+    mouseX?: number;
+    mouseY?: number;
+} | null;
 
 export type IntellisenseState = {
     isOpen: boolean;

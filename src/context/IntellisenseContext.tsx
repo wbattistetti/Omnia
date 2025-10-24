@@ -59,8 +59,12 @@ export const IntellisenseProvider: React.FC<{ providers: GraphProviders; childre
     const service = useMemo(() => new IntellisenseService(providers), [providers]);
 
     // Actions → tieni il reducer puro, chiama il service FUORI dal reducer
-    const openForEdge = useCallback((edgeId: string) => {
-        console.log("🎯 [IntellisenseContext] openForEdge called with edgeId:", edgeId);
+    const openForEdge = useCallback((edgeId: string, mouseX?: number, mouseY?: number) => {
+        console.log("🎯 [IntellisenseContext] openForEdge called with:", {
+            edgeId,
+            mouseX,
+            mouseY
+        });
 
         const items = service.getEdgeItems(edgeId);
         console.log("🎯 [IntellisenseContext] Items from service:", {
@@ -68,7 +72,11 @@ export const IntellisenseProvider: React.FC<{ providers: GraphProviders; childre
             items: items.map(i => ({ id: i.id, label: i.label, kind: i.kind }))
         });
 
-        dispatch({ type: "OPEN_WITH_ITEMS", target: { edgeId }, items });
+        dispatch({
+            type: "OPEN_WITH_ITEMS",
+            target: { edgeId, mouseX, mouseY },
+            items
+        });
     }, [service]);
 
     const close = useCallback(() => dispatch({ type: "CLOSE" }), []);
