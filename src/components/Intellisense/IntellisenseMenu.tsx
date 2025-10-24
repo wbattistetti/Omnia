@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { IntellisenseRenderer } from './IntellisenseRenderer';
-import {  
+import {
   groupAndSortResults,
   initializeFuzzySearch,
   performFuzzySearch,
@@ -36,7 +36,7 @@ interface IntellisenseMenuProps {
   seedItems?: IntellisenseItem[];
   // Unified item list (conditions + intents) already prepared by caller. If provided, overrides project data.
   extraItems?: IntellisenseItem[];
-  allowedKinds?: Array<'condition'|'intent'>;
+  allowedKinds?: Array<'condition' | 'intent'>;
 }
 
 export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?: boolean; navSignal?: { seq: number; dir: 1 | -1 }; onEnterSelected?: (item: IntellisenseItem | null) => void }> = ({
@@ -60,10 +60,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   onEnterSelected
 }) => {
   const ErrorBoundary = React.useMemo(() => (
-    class EB extends React.Component<{ children: React.ReactNode }, { hasError: boolean }>{
+    class EB extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
       constructor(props: any) { super(props); this.state = { hasError: false }; }
       static getDerivedStateFromError() { return { hasError: true }; }
-      componentDidCatch(err: any) { try { console.warn('[IntellisenseMenu][ErrorBoundary]', err); } catch {} }
+      componentDidCatch(err: any) { try { console.warn('[IntellisenseMenu][ErrorBoundary]', err); } catch { } }
       render() { return (this.state as any).hasError ? null : (this.props as any).children; }
     }
   ), []);
@@ -99,7 +99,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       const viewportHeight = window.innerHeight;
       const viewportWidth = window.innerWidth;
       const menuWidth = 320;
-      
+
       // Altezza desiderata: più generosa per 1-2 risultati (per vedere payoff senza scroll)
       // Se non ci sono risultati ma c'è una query, calcola l'altezza per messaggio + pulsanti + 5px sotto
       const desiredHeight = totalItems === 0 && query.trim()
@@ -111,10 +111,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       // Calcola spazio disponibile sopra e sotto
       const spaceBelow = viewportHeight - rect.bottom - 10; // 10px di margine
       const spaceAbove = rect.top - 10; // 10px di margine
-      
+
       let top;
       let maxHeight;
-      
+
       if (spaceBelow >= desiredHeight || spaceBelow >= spaceAbove) {
         // Posiziona sotto
         top = rect.bottom + 5;
@@ -124,10 +124,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
         maxHeight = Math.min(desiredHeight, spaceAbove - 5);
         top = rect.top - maxHeight - 5;
       }
-      
+
       // Assicurati che il menu non vada mai fuori dalla viewport
       top = Math.max(10, Math.min(top, viewportHeight - maxHeight - 10));
-      
+
       let left = rect.left;
 
       // Aggiusta se il menu esce dallo schermo orizzontalmente
@@ -168,12 +168,12 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     try {
       ro = new ResizeObserver(() => updatePosition());
       ro.observe(referenceElement);
-    } catch {}
+    } catch { }
 
     return () => {
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
-      try { ro && ro.disconnect(); } catch {}
+      try { ro && ro.disconnect(); } catch { }
     };
   }, [isOpen, referenceElement, totalItems]);
 
@@ -184,7 +184,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
       if (
-        menuRef.current && 
+        menuRef.current &&
         !menuRef.current.contains(target) &&
         referenceElement &&
         !referenceElement.contains(target)
@@ -276,7 +276,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     // mantieni selezione se possibile
     const total = results.length;
     setSelectedIndex((prev) => (prev >= 0 && prev < total ? prev : 0));
-    
+
     // Dopo aver ottenuto fuzzyResults
   }, [query, isInitialized, allIntellisenseItems]);
 
@@ -313,7 +313,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     lastNavSeqRef.current = navSignal.seq;
     let idx = selectedIndex + (navSignal.dir > 0 ? 1 : -1);
     if (idx < 0) idx = total - 1; else if (idx >= total) idx = 0;
-    try { console.log('[Intellisense][nav]', { from: selectedIndex, to: idx, total, nav: navSignal }); } catch {}
+    try { console.log('[Intellisense][nav]', { from: selectedIndex, to: idx, total, nav: navSignal }); } catch { }
     setSelectedIndex(idx);
     // Suppress hover selection for a brief window to avoid flicker
     suppressHoverUntilRef.current = Date.now() + 200;
@@ -327,12 +327,12 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
           el.scrollIntoView({ block: 'nearest' });
         }
       }
-    } catch {}
+    } catch { }
   }, [navSignal, isOpen, fuzzyResults, semanticResults, selectedIndex]);
 
   // Log selection changes (diagnostic)
   useEffect(() => {
-    try { console.log('[Intellisense][selectedIndex]', selectedIndex); } catch {}
+    try { console.log('[Intellisense][selectedIndex]', selectedIndex); } catch { }
   }, [selectedIndex]);
 
   // Debug UI flag: render matched labels directly in the menu (no console needed)
@@ -343,7 +343,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      
+
       let newSelectedIndex = selectedIndex;
 
       switch (e.key) {
@@ -365,7 +365,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             return;
           }
           // notify parent (inline) solo se non c'è selezionato
-          try { document.dispatchEvent(new CustomEvent('intelli-enter')); } catch {}
+          try { document.dispatchEvent(new CustomEvent('intelli-enter')); } catch { }
           // If no fuzzy results and we have a query, trigger semantic search
           if (totalItems === 0 && query.trim() && allIntellisenseItems.length > 0) {
             const performSemanticOnly = async () => {
@@ -383,7 +383,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             performSemanticOnly();
             return;
           }
-          
+
           const allResults = getAllResults();
           const sel = allResults[selectedIndex]?.item || null;
           if (sel) {
@@ -440,7 +440,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     const scrollContainer = menuRef.current.querySelector('.overflow-auto') || menuRef.current;
     const containerRect = scrollContainer.getBoundingClientRect();
     const selectedRect = selectedElement.getBoundingClientRect();
-    
+
     const isAboveView = selectedRect.top < containerRect.top;
     const isBelowView = selectedRect.bottom > containerRect.bottom;
 
@@ -450,7 +450,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       const selectedElementHeight = selectedElement.clientHeight;
 
       let newScrollTop;
-      
+
       if (isAboveView) {
         newScrollTop = selectedElementTop;
       } else {
@@ -464,7 +464,18 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     }
   }, [selectedIndex, isOpen]);
 
-  if (!isOpen || !isInitialized || ((query || '').trim().length < 2)) {
+  // Log menu rendering details
+  useEffect(() => {
+    if (isOpen) {
+      console.log('🔍 [INTELLISENSE_RENDER] Menu opened at position:', {
+        x: position?.x,
+        y: position?.y,
+        reference: referenceElement?.tagName
+      });
+    }
+  }, [isOpen]); // Solo isOpen come dipendenza
+
+  if (!isOpen || !isInitialized) {
     return null;
   }
 
@@ -473,99 +484,108 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
 
   return (
     <ErrorBoundary>
-    <div
-      ref={menuRef}
-      style={inlineAnchor ? {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        background: '#fff',
-        color: '#111',
-        border: '1px solid #d1d5db',
-        boxShadow: '0 4px 24px rgba(30,41,59,0.10)',
-        borderRadius: 12,
-        padding: 0,
-        width: 320,
-        maxHeight: 320,
-        overflowY: 'auto',
-        zIndex: 9999
-      } : {
-        ...menuStyle,
-        background: '#fff',
-        color: '#111',
-        border: '1px solid #d1d5db', // gray-300
-        boxShadow: '0 4px 24px 0 rgba(30,41,59,0.10)',
-        borderRadius: 12,
-        padding: 0,
-      }}
-      className="bg-white rounded-lg shadow-xl border border-gray-300"
-    >
-      {/* Compact header: only category filter bar (no result/hints text) */}
-      {false && totalItems > 0 && (
-        <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">
-          {/* Category filter bar */}
-          <div className="mt-2 flex items-center gap-2">
-          {[
-            { key: 'agentActs', iconKey: SIDEBAR_TYPE_ICONS.agentActs, label: 'Agent' },
-            { key: 'userActs', iconKey: SIDEBAR_TYPE_ICONS.userActs, label: 'User' },
-            { key: 'backendActions', iconKey: SIDEBAR_TYPE_ICONS.backendActions, label: 'Backend' },
-            { key: 'tasks', iconKey: SIDEBAR_TYPE_ICONS.tasks, label: 'Tasks' },
-          ].map(({ key, iconKey, label }) => {
-            const active = activeCats.includes(key);
-            const Icon = SIDEBAR_ICON_COMPONENTS[iconKey];
-            const col = (SIDEBAR_TYPE_COLORS as Record<string, { color: string }>)[key]?.color || '#e5e7eb';
-            return (
-              <button
-                key={key}
-                onClick={(e) => { e.stopPropagation(); setActiveCats(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]); }}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] border"
-                style={{
-                  background: active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)',
-                  color: col,
-                  borderColor: active ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)'
-                }}
-                title={`Toggle ${label}`}
-              >
-                {Icon ? <Icon className="w-3 h-3" style={{ color: col }} /> : null}
-                {label}
-              </button>
-            );
-          })}
-          {isLoading && (
-            <span className="ml-auto flex items-center text-[10px] text-slate-300">
-              <div className="animate-spin w-3 h-3 border border-slate-400 border-t-transparent rounded-full mr-2"></div>
-              AI…
-            </span>
-          )}
-        </div>
-        </div>
-      )}
-
-      {/* Results */}
-      <IntellisenseRenderer
-        fuzzyResults={fuzzyResults}
-        semanticResults={semanticResults}
-        selectedIndex={selectedIndex}
-        layoutConfig={defaultLayoutConfig}
-        categoryConfig={{}}
-        onItemSelect={(result) => onSelect(result.item)}
-        onItemHover={(index) => {
-          if (Date.now() < suppressHoverUntilRef.current) return;
-          setSelectedIndex(index);
+      <div
+        ref={menuRef}
+        style={inlineAnchor ? {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          background: '#fff',
+          color: '#111',
+          border: '1px solid #d1d5db',
+          boxShadow: '0 4px 24px rgba(30,41,59,0.10)',
+          borderRadius: 12,
+          padding: 0,
+          width: 320,
+          maxHeight: 320,
+          overflowY: 'auto',
+          zIndex: 9999
+        } : {
+          ...menuStyle,
+          background: '#fff',
+          color: '#111',
+          border: '1px solid #d1d5db', // gray-300
+          boxShadow: '0 4px 24px 0 rgba(30,41,59,0.10)',
+          borderRadius: 12,
+          padding: 0,
+          width: 320,
+          maxHeight: 320,
+          overflowY: 'auto',
+          zIndex: 99999,
+          position: 'fixed',
+          top: position?.y || 0,
+          left: position?.x || 0
         }}
-        onCreateNew={onCreateNew}
-        onCreateAgentAct={onCreateAgentAct}
-        onCreateBackendCall={onCreateBackendCall}
-        onCreateTask={onCreateTask}
-        query={query}
-        filterCategoryTypes={[...new Set(['conditions', ...filterCategoryTypes])]} 
-        projectIndustry={data?.industry}
-        projectData={data}
-        allowCreatePicker={allowCreatePicker}
-      />
+        className="bg-white rounded-lg shadow-xl border border-gray-300"
+        onMouseEnter={() => console.log('🔍 [INTELLISENSE_MOUSE_ENTER] Menu mouse enter')}
+        onMouseLeave={() => console.log('🔍 [INTELLISENSE_MOUSE_LEAVE] Menu mouse leave')}
+      >
+        {/* Compact header: only category filter bar (no result/hints text) */}
+        {false && totalItems > 0 && (
+          <div className="px-3 py-2 border-b border-slate-700 bg-slate-900 rounded-t-lg">
+            {/* Category filter bar */}
+            <div className="mt-2 flex items-center gap-2">
+              {[
+                { key: 'agentActs', iconKey: SIDEBAR_TYPE_ICONS.agentActs, label: 'Agent' },
+                { key: 'userActs', iconKey: SIDEBAR_TYPE_ICONS.userActs, label: 'User' },
+                { key: 'backendActions', iconKey: SIDEBAR_TYPE_ICONS.backendActions, label: 'Backend' },
+                { key: 'tasks', iconKey: SIDEBAR_TYPE_ICONS.tasks, label: 'Tasks' },
+              ].map(({ key, iconKey, label }) => {
+                const active = activeCats.includes(key);
+                const Icon = SIDEBAR_ICON_COMPONENTS[iconKey];
+                const col = (SIDEBAR_TYPE_COLORS as Record<string, { color: string }>)[key]?.color || '#e5e7eb';
+                return (
+                  <button
+                    key={key}
+                    onClick={(e) => { e.stopPropagation(); setActiveCats(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]); }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] border"
+                    style={{
+                      background: active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)',
+                      color: col,
+                      borderColor: active ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.25)'
+                    }}
+                    title={`Toggle ${label}`}
+                  >
+                    {Icon ? <Icon className="w-3 h-3" style={{ color: col }} /> : null}
+                    {label}
+                  </button>
+                );
+              })}
+              {isLoading && (
+                <span className="ml-auto flex items-center text-[10px] text-slate-300">
+                  <div className="animate-spin w-3 h-3 border border-slate-400 border-t-transparent rounded-full mr-2"></div>
+                  AI…
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
-      {debugIntellisenseUi && null}
-    </div>
+        {/* Results */}
+        <IntellisenseRenderer
+          fuzzyResults={fuzzyResults}
+          semanticResults={semanticResults}
+          selectedIndex={selectedIndex}
+          layoutConfig={defaultLayoutConfig}
+          categoryConfig={{}}
+          onItemSelect={(result) => onSelect(result.item)}
+          onItemHover={(index) => {
+            if (Date.now() < suppressHoverUntilRef.current) return;
+            setSelectedIndex(index);
+          }}
+          onCreateNew={onCreateNew}
+          onCreateAgentAct={onCreateAgentAct}
+          onCreateBackendCall={onCreateBackendCall}
+          onCreateTask={onCreateTask}
+          query={query}
+          filterCategoryTypes={[...new Set(['conditions', ...(filterCategoryTypes || [])])]}
+          projectIndustry={data?.industry}
+          projectData={data}
+          allowCreatePicker={allowCreatePicker}
+        />
+
+        {debugIntellisenseUi && null}
+      </div>
     </ErrorBoundary>
   );
 };

@@ -37,6 +37,7 @@ import { useIntellisenseHandlers } from './hooks/useIntellisenseHandlers';
 import { v4 as uuidv4 } from 'uuid';
 import { instanceRepository } from '../../services/InstanceRepository';
 import { idMappingService } from '../../services/IdMappingService';
+import { createPortal } from 'react-dom';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -750,11 +751,16 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       })) : [])
     ];
 
-    console.log("🔍 [INTELLISENSE_DEBUG] Combined items", {
+    console.log('🔍 [ITEMS_DEBUG] Combined items details:', {
       allConditionsCount: allConditions?.length || 0,
       problemIntentsCount: Array.isArray(problemIntents) ? problemIntents.length : 0,
       combinedItemsCount: combinedItems.length,
-      timestamp: Date.now()
+      combinedItems: combinedItems.map(item => ({
+        label: item.label,
+        category: item.category,
+        categoryType: item.categoryType,
+        kind: item.kind
+      }))
     });
 
     // Apri l'IntellisenseMenu originale
@@ -1083,6 +1089,33 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     });
   }, [showNodeIntellisense, nodeIntellisenseTarget]);
 
+  // ✅ NUOVO: Aspetta che il nodo temporaneo sia renderizzato nel DOM
+  const [isTempNodeRendered, setIsTempNodeRendered] = useState(false);
+  useEffect(() => {
+    if (showNodeIntellisense && nodeIntellisenseTarget) {
+      console.log('🔍 [DOM_CHECK] Looking for temporary node in DOM:', nodeIntellisenseTarget);
+
+      const checkNodeExists = () => {
+        const nodeElement = document.querySelector(`[data-id="${nodeIntellisenseTarget}"]`);
+        if (nodeElement) {
+          console.log('✅ [DOM_CHECK] Temporary node found in DOM!', {
+            nodeId: nodeIntellisenseTarget,
+            element: nodeElement,
+            boundingRect: nodeElement.getBoundingClientRect()
+          });
+          setIsTempNodeRendered(true);
+        } else {
+          console.log('⏳ [DOM_CHECK] Temporary node not yet in DOM, retrying...');
+          setTimeout(checkNodeExists, 50);
+        }
+      };
+
+      checkNodeExists();
+    } else {
+      setIsTempNodeRendered(false);
+    }
+  }, [showNodeIntellisense, nodeIntellisenseTarget]);
+
   // Stabilizza nodeTypes/edgeTypes per evitare il warning RF#002 (HMR)
   // Spostati fuori dal componente per evitare ricreazioni durante HMR
 
@@ -1298,12 +1331,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       {/* DEBUG: Check why IntellisenseMenu is not rendering */}
       {null}
 
-      {showNodeIntellisense && nodeIntellisenseTarget && (
+      {showNodeIntellisense && nodeIntellisenseTarget && isTempNodeRendered && (
         <IntellisenseMenu
           isOpen={showNodeIntellisense}
           query=""
           position={nodeIntellisensePosition}
-          referenceElement={null}
+          referenceElement={document.querySelector(`[data-id="${nodeIntellisenseTarget}"]`)}
           onSelect={handleIntellisenseSelect}
           onClose={handleIntellisenseClose}
           seedItems={nodeIntellisenseItems}

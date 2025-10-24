@@ -562,21 +562,22 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
     console.log('🎯 [INSTANCE_CREATION] Row will be updated with ID:', instanceId);
 
-    await createAndAttachAct({
-      name: label,
+    // ✅ Simple row update without createAndAttachAct - ELIMINATED!
+    const mode = typeToMode(key as any);
+    console.log('🎯 [DIRECT_UPDATE] Updating row directly:', {
+      id: instanceId,
       type: key,
-      scope: 'industry',
-      projectData,
-      onImmediateRowUpdate: (patch: any) => {
-        // Include instanceId in the row update
-        console.log('🎯 [INSTANCE_CREATION] Updating row with patch:', { ...patch, id: instanceId });
-        immediate({ ...patch, id: instanceId });
-      },
-      getProjectId: () => {
-        const id = getProjectId ? getProjectId() : null;
-        return id ?? undefined;
-      }
+      mode
     });
+
+    immediate({
+      id: instanceId,
+      type: key,
+      mode,
+      actId: key, // Use type as actId for now
+      baseActId: key
+    });
+
     try { emitSidebarRefresh(); } catch { }
   };
 
