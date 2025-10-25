@@ -12,6 +12,7 @@ import { NodeRowList } from '../../rows/shared/NodeRowList';
 import { useNodeState } from './hooks/useNodeState';
 import { useNodeEventHandlers } from './hooks/useNodeEventHandlers';
 import { useNodeInitialization } from './hooks/useNodeInitialization';
+import { useNodeRowManagement } from './hooks/useNodeRowManagement';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 
 // (Helper functions moved to useNodeInitialization hook)
@@ -50,6 +51,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ INITIALIZATION: Initialize node data and rows
   const { displayRows, normalizedData } = useNodeInitialization(id, data);
+
+  // ✅ ROW MANAGEMENT: Manage all row operations
+  const rowManagement = useNodeRowManagement({ nodeId: id, normalizedData, displayRows });
+  const {
+    nodeRows, setNodeRows,
+    editingRowId, setEditingRowId,
+    isEmpty, setIsEmpty,
+    handleUpdateRow, handleDeleteRow, handleInsertRow,
+    handleExitEditing, validateRows, computeIsEmpty,
+    makeRowId, inAutoAppend, beginAutoAppendGuard
+  } = rowManagement;
 
   // Extract all state management to custom hook
   const nodeState = useNodeState({ data: normalizedData });
@@ -140,37 +152,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [showIntellisense, setShowIntellisense] = useState(false);
   const [intellisensePosition] = useState({ x: 0, y: 0 });
 
-  const makeRowId = React.useCallback(() => `${id}-${newUid()}`, [id]);
+  // (makeRowId and appendEmptyRow moved to useNodeRowManagement hook)
 
-  // ✅ NUOVO: helper puro che NON fa setState né onUpdate
-  const appendEmptyRow = React.useCallback(
-    (current: NodeRowData[]) => {
-      const newRowId = makeRowId();
-      const next = [
-        ...current,
-        { id: newRowId, text: '', included: true, mode: 'Message' as const } as NodeRowData,
-      ];
-      return { nextRows: next, newRowId };
-    },
-    [makeRowId]
-  );
+  // (nodeRows, editingRowId moved to useNodeRowManagement hook)
 
-  // ✅ CORREZIONE 1: Lazy state initialization con ID stabili
-  const [nodeRows, setNodeRows] = useState<NodeRowData[]>(() => {
-    return displayRows;
-  });
-  const [editingRowId, setEditingRowId] = useState<string | null>(null);
-
-  // ✅ Guardia per sopprimere exitEditing durante auto-append
-  const autoAppendGuard = useRef(0);
-  const inAutoAppend = () => autoAppendGuard.current > 0;
-  const beginAutoAppendGuard = () => {
-    autoAppendGuard.current += 1;
-    // Rilascio dopo due frame per coprire setState + focus programmato
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      autoAppendGuard.current = Math.max(0, autoAppendGuard.current - 1);
-    }));
-  };
+  // (autoAppendGuard, inAutoAppend, beginAutoAppendGuard moved to useNodeRowManagement hook)
 
   // ✅ Fallback per relatedTarget null (focus programmatico) - pointerdown copre mouse+touch+pen
   const nextPointerTargetRef = useRef<EventTarget | null>(null);
@@ -183,15 +169,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ Ref per il container del nodo per controllo blur interno
   const nodeContainerRef = useRef<HTMLDivElement>(null);
 
-  // ✅ Macchina a stati: isEmpty=true durante popolamento sequenziale, false dopo stabilizzazione
-  const [isEmpty, setIsEmpty] = useState(() => {
-    return displayRows.length === 0 || displayRows.every(r => !r.text || r.text.trim() === '');
-  });
-
-  // Funzione unica per calcolare lo stato isEmpty
-  const computeIsEmpty = (rows: NodeRowData[]): boolean => {
-    return rows.length === 0 || rows.every(r => !r.text || r.text.trim() === '');
-  };
+  // (isEmpty, computeIsEmpty moved to useNodeRowManagement hook)
 
   // ✅ CORREZIONE 2: Evita isNewNode stale - usa stato corrente invece di flag globale
 
@@ -216,24 +194,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       return;
     }
 
-    setEditingRowId(null);
-    // Transizione vuoto → popolato: quando esci dall'editing, se c'è testo, non è più empty
-    if (!computeIsEmpty(nodeRows)) {
-      console.log('🔄 [STATE] Transizione: isEmpty false (nodo stabilizzato)', { nodeId: id });
-      setIsEmpty(false);
-    }
-    // Pulisci righe senza testo o senza tipo (o mode)
-    const isValidRow = (r: NodeRowData) => {
-      const hasText = Boolean((r.text || '').trim().length > 0);
-      const hasType = Boolean((r as any).type || (r as any).mode);
-      return hasText && hasType;
-    };
-    const cleaned = nodeRows.filter(isValidRow);
-    if (cleaned.length !== nodeRows.length) {
-      setNodeRows(cleaned);
-      setIsEmpty(computeIsEmpty(cleaned));
-      normalizedData.onUpdate?.({ rows: cleaned, isTemporary: normalizedData.isTemporary });
-    }
+    // Usa la funzione del hook
+    handleExitEditing();
+    validateRows(nodeRows);
   };
 
   // ✅ Effetto per mantenere isEmpty allineato alle righe (fuori dalla finestra auto-append)
@@ -303,110 +266,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     return () => document.removeEventListener('rowMessage:update', handler as any);
   }, [normalizedData.onUpdate]);
 
-  const handleUpdateRow = (
-    rowId: string,
-    newText: string,
-    categoryType?: EntityType,
-    meta?: Partial<NodeRowData>
-  ) => {
-    const prev = nodeRows;
-    const idx = prev.findIndex(r => r.id === rowId);
-    if (idx === -1) return;
+  // (handleUpdateRow moved to useNodeRowManagement hook)
 
-    const wasEmpty = !(prev[idx].text || '').trim();
-    const nowFilled = (newText || '').trim().length > 0;
-
-    let updatedRows = prev.map(row => {
-      if (row.id !== rowId) return row as any;
-      const incoming: any = meta || {};
-      const existingType: any = (row as any).type;
-      const finalType: any = (typeof incoming.type !== 'undefined') ? incoming.type : existingType;
-      const existingMode: any = (row as any).mode;
-      const finalMode: any = (typeof incoming.mode !== 'undefined') ? incoming.mode : (existingMode || (finalType ? typeToMode(finalType as any) : undefined));
-
-      console.log('[🔍 CUSTOM_NODE] handleUpdateRow', {
-        rowId,
-        incomingInstanceId: incoming.instanceId,
-        existingInstanceId: (row as any).instanceId,
-        hasMeta: !!meta,
-        metaKeys: meta ? Object.keys(meta) : [],
-        timestamp: Date.now()
-      });
-
-      return {
-        ...row,
-        ...incoming,
-        type: finalType,
-        mode: finalMode,
-        text: newText,
-        categoryType:
-          (meta && (meta as any).categoryType)
-            ? (meta as any).categoryType
-            : (categoryType ?? row.categoryType)
-      } as any;
-    });
-
-    const isLast = idx === prev.length - 1;
-    // ✅ Logica semplice: auto-append solo se nodo è in stato isEmpty
-    const shouldAutoAppend = isEmpty && isLast && wasEmpty && nowFilled;
-
-    console.log('🔍 [AUTO_APPEND] Checking conditions', {
-      nodeId: id,
-      rowId,
-      isLast,
-      wasEmpty,
-      nowFilled,
-      isEmpty,
-      shouldAutoAppend,
-      timestamp: Date.now()
-    });
-
-    if (shouldAutoAppend) {
-      console.log('✅ [AUTO_APPEND] Adding new row', {
-        nodeId: id,
-        currentRowsCount: updatedRows.length,
-        isEmpty,
-        timestamp: Date.now()
-      });
-
-      // ✅ AVVIA GUARD PRIMA del batch (fondamentale!)
-      beginAutoAppendGuard();
-
-      const { nextRows, newRowId } = appendEmptyRow(updatedRows);
-      updatedRows = nextRows;
-      setEditingRowId(newRowId);
-
-      // ✅ Focus robusto dopo il render con requestAnimationFrame
-      requestAnimationFrame(() => {
-        const textareas = document.querySelectorAll('.node-row-input');
-        const newTextarea = textareas[textareas.length - 1] as HTMLTextAreaElement;
-        if (newTextarea) {
-          console.log('✅ [AUTO_APPEND] Focus impostato sulla nuova riga');
-          newTextarea.focus();
-          newTextarea.select();
-        } else {
-          console.warn('⚠️ [AUTO_APPEND] Textarea non trovato');
-        }
-      });
-    }
-
-    setNodeRows(updatedRows);
-    // ❌ RIMOSSO - isEmpty si aggiorna SOLO in exitEditing() per mantenere auto-append continuo
-    // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
-    normalizedData.onUpdate?.({ rows: updatedRows, isTemporary: normalizedData.isTemporary });
-  };
-
-  const handleDeleteRow = (rowId: string) => {
-    const updatedRows = nodeRows.filter(row => row.id !== rowId);
-    setNodeRows(updatedRows);
-    // ✅ Aggiorna isEmpty: se tutte le righe sono vuote dopo la cancellazione, torna isEmpty=true
-    setIsEmpty(computeIsEmpty(updatedRows));
-    normalizedData.onUpdate?.({ rows: updatedRows });
-
-    if (updatedRows.length === 0 && normalizedData.isTemporary) {
-      normalizedData.onDelete?.();
-    }
-  };
+  // (handleDeleteRow moved to useNodeRowManagement hook)
 
   // Funzioni rimosse - non più utilizzate
 
@@ -436,30 +298,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           : row
       );
       setNodeRows(baseRows);
-      data.onUpdate?.({ rows: baseRows, focusRowId: undefined, isTemporary: data.isTemporary });
+      normalizedData.onUpdate?.({ rows: baseRows, focusRowId: undefined, isTemporary: normalizedData.isTemporary });
     }
     setShowIntellisense(false);
   };
 
-  // Funzione per inserire una riga in una posizione specifica
-  const handleInsertRow = (index: number) => {
-    // Inserisci una riga solo se l'ultima riga è valida (non vuota e con tipo)
-    const last = nodeRows[nodeRows.length - 1];
-    const lastValid = last ? Boolean((last.text || '').trim().length > 0 && ((last as any).type || (last as any).mode)) : true;
-    if (!lastValid) return;
-    const newRow: NodeRowData = {
-      id: makeRowId(),
-      text: '',
-      isNew: true,
-      included: true,
-      mode: 'Message' as const
-    };
-    const updatedRows = [...nodeRows];
-    updatedRows.splice(index, 0, newRow);
-    setNodeRows(updatedRows);
-    setEditingRowId(newRow.id);
-    data.onUpdate?.({ rows: updatedRows });
-  };
+  // (handleInsertRow moved to useNodeRowManagement hook)
 
   // Gestione del drag-and-drop
   // Legacy drag start (kept temporarily). Prefer onMoveRow/onDropRow below.
