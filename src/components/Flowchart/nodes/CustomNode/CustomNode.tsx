@@ -13,6 +13,7 @@ import { useNodeState } from './hooks/useNodeState';
 import { useNodeEventHandlers } from './hooks/useNodeEventHandlers';
 import { useNodeInitialization } from './hooks/useNodeInitialization';
 import { useNodeRowManagement } from './hooks/useNodeRowManagement';
+import { useNodeIntellisense } from './hooks/useNodeIntellisense';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 
 // (Helper functions moved to useNodeInitialization hook)
@@ -62,6 +63,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     handleExitEditing, validateRows, computeIsEmpty,
     makeRowId, inAutoAppend, beginAutoAppendGuard
   } = rowManagement;
+
+  // ✅ INTELLISENSE: Manage intellisense functionality
+  const intellisense = useNodeIntellisense({
+    nodeRows,
+    setNodeRows,
+    editingRowId,
+    normalizedData
+  });
+  const {
+    showIntellisense, intellisensePosition,
+    handleIntellisenseSelectItem, openIntellisense, closeIntellisense
+  } = intellisense;
 
   // Extract all state management to custom hook
   const nodeState = useNodeState({ data: normalizedData });
@@ -149,8 +162,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     window.addEventListener('flow:canvas:click', hideOnCanvasClick as any);
     return () => window.removeEventListener('flow:canvas:click', hideOnCanvasClick as any);
   }, [hasTitle, id]);
-  const [showIntellisense, setShowIntellisense] = useState(false);
-  const [intellisensePosition] = useState({ x: 0, y: 0 });
+  // (showIntellisense and intellisensePosition moved to useNodeIntellisense hook)
 
   // (makeRowId and appendEmptyRow moved to useNodeRowManagement hook)
 
@@ -280,28 +292,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   //   setEditingRowIdWithLog(null);
   // };
 
-  const handleIntellisenseSelectItem = (item: IntellisenseItem) => {
-    if (editingRowId) {
-      // ✅ CORREZIONE 6: Mappa esplicitamente i campi ammessi invece di ...item
-      const baseRows = nodeRows.map(row =>
-        row.id === editingRowId
-          ? {
-            ...row,
-            text: item.name,
-            categoryType: item.categoryType as any,
-            userActs: item.userActs,
-            mode: (item as any)?.mode || 'Message' as const,
-            type: (item as any)?.type || ((item as any)?.mode === 'DataRequest' ? 'DataRequest' : 'Message'),
-            actId: item.actId,
-            factoryId: item.factoryId
-          }
-          : row
-      );
-      setNodeRows(baseRows);
-      normalizedData.onUpdate?.({ rows: baseRows, focusRowId: undefined, isTemporary: normalizedData.isTemporary });
-    }
-    setShowIntellisense(false);
-  };
+  // (handleIntellisenseSelectItem moved to useNodeIntellisense hook)
 
   // (handleInsertRow moved to useNodeRowManagement hook)
 
@@ -736,7 +727,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               onSelect={handleIntellisenseSelectItem}
               onClose={() => {
                 console.log("🎯 [CustomNode] ROW INTELLISENSE CLOSED", { nodeId: id });
-                setShowIntellisense(false);
+                closeIntellisense();
               }}
               filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
             />
