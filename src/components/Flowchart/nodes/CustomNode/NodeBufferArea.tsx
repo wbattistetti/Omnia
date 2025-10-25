@@ -20,26 +20,7 @@ export const NodeBufferArea: React.FC<NodeBufferAreaProps> = ({
   onMouseEnter,
   onMouseLeave,
 }) => {
-  if (!bufferRect || !isHoveredNode || isEditingNode) {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      style={{
-        position: 'fixed',
-        top: bufferRect.top,
-        left: bufferRect.left,
-        width: bufferRect.width,
-        height: bufferRect.height,
-        zIndex: 499,
-        pointerEvents: 'auto',
-        background: 'transparent',
-      }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    />,
-    document.body
-  );
+  // DISABILITATO: ora usiamo toolbar fullWidth
+  return null;
 };
 

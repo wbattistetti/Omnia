@@ -11,7 +11,6 @@ import { useNodeRowDrag } from '../../../../hooks/useNodeRowDrag';
 import { NodeRowList } from '../../rows/shared/NodeRowList';
 import { useNodeState } from './hooks/useNodeState';
 import { useNodeEventHandlers } from './hooks/useNodeEventHandlers';
-import { NodeBufferArea } from './NodeBufferArea';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 
 // Helper per ID robusti
@@ -108,7 +107,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Calcola area estesa per toolbar nodo (include nodo + toolbar + padding)
   useEffect(() => {
-    const shouldShowToolbar = showPermanentHeader && (isHoveredNode || selected) && !isEditingNode;
+    const shouldShowToolbar = (isHoveredNode || selected) && !isEditingNode;
+
 
     if (shouldShowToolbar && rootRef.current) {
       const updateRect = () => {
@@ -119,12 +119,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         const toolbarMargin = 8;
         const padding = 7;
 
-        // Area estesa: da 7px sopra toolbar fino al fondo del nodo, con padding laterale
+        // Area sopra il nodo per hover: stessa larghezza del nodo, altezza toolbar
         setNodeBufferRect({
-          top: nodeRect.top - toolbarHeight - toolbarMargin - padding,
-          left: nodeRect.left - padding,
-          width: nodeRect.width + (padding * 2),
-          height: nodeRect.height + toolbarHeight + toolbarMargin + padding,
+          top: nodeRect.top - toolbarHeight, // Sopra il nodo, altezza toolbar
+          left: nodeRect.left, // Stessa posizione del nodo
+          width: nodeRect.width, // Stessa larghezza del nodo
+          height: toolbarHeight, // Altezza toolbar
         });
       };
 
@@ -655,16 +655,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Do NOT auto-append an extra row at mount; start with a single textarea only.
 
+
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
-      {/* Area hover estesa per toolbar nodo - mantiene toolbar visibile */}
-      <NodeBufferArea
-        bufferRect={nodeBufferRect}
-        isHoveredNode={isHoveredNode}
-        isEditingNode={isEditingNode}
-        onMouseEnter={handleBufferMouseEnter}
-        onMouseLeave={handleBufferMouseLeave}
-      />
+      {/* Area hover gestita dalla toolbar fullWidth */}
 
       <div
         ref={(el) => {
@@ -705,18 +699,29 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           <div
             style={{
               position: 'absolute',
+              left: 0,
               right: 0,
               bottom: '100%',
-              marginBottom: 8,
-              zIndex: 500,
-              pointerEvents: 'auto'
+              marginBottom: 0, // Appoggiata al nodo
+              zIndex: 1000, // Sopra il buffer area
+              pointerEvents: 'auto',
+              width: '100%' // Larga quanto il nodo
             }}
           >
+            {console.log('🎯 [CustomNode] TOOLBAR RENDERING:', {
+              showPermanentHeader,
+              isHoveredNode,
+              selected,
+              isEditingNode,
+              zIndex: 1000,
+              position: 'absolute'
+            })}
             <NodeDragHeader
               onEditTitle={() => setIsEditingNode(true)}
               onDelete={handleDeleteNode}
               compact={true}
               showDragHandle={false}
+              fullWidth={true}
             />
           </div>
         )}
@@ -749,14 +754,16 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         <div
           style={{
             position: 'absolute',
+            left: 0,
             right: 0,
             bottom: '100%',
-            marginBottom: 8,
-            zIndex: 600,
+            marginBottom: 0, // Appoggiata al nodo
+            zIndex: 1000, // Sopra il buffer area
             pointerEvents: showDragHeader ? 'auto' : 'none',
             opacity: showDragHeader ? 1 : 0,
             userSelect: 'none',
-            transition: 'opacity 0.2s ease'
+            transition: 'opacity 0.2s ease',
+            width: '100%' // Larga quanto il nodo
           }}
           onMouseEnter={() => {
             if (showDragHeader) {
@@ -792,6 +799,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             onDelete={handleDeleteNode}
             compact={true}
             showDragHandle={true}
+            fullWidth={true}
           />
         </div>
         <div className="px-1.5" ref={rowsContainerRef}>

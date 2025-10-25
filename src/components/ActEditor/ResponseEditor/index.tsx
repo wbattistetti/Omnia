@@ -188,7 +188,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
   // Header: icon, title, and toolbar
   const actType = (act?.type || 'DataRequest') as any;
-  const { Icon, color: iconColor } = getAgentActVisualsByType(actType, !!localDDT);
+  const { Icon, color: iconColor } = getAgentActVisualsByType(actType,  !!localDDT);
   // Priority: _sourceAct.label (preserved act info) > act.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
   // NOTE: Do NOT use localDDT.label here - that's the DDT root label (e.g. "Age") which belongs in the TreeView, not the header
   const sourceAct = (localDDT as any)?._sourceAct;

@@ -11,14 +11,12 @@ import { useReactFlow } from 'reactflow';
 import { SIDEBAR_TYPE_ICONS, getSidebarIconComponent } from '../../../Sidebar/sidebarTheme';
 import { IntellisenseItem } from '../../../Intellisense/IntellisenseTypes';
 import { getLabelColor } from '../../../../utils/labelColor';
-import { useOverlayBuffer } from '../../../../hooks/useOverlayBuffer';
 import { NodeRowEditor } from '../../NodeRowEditor';
 import { NodeRowProps } from '../../../../types/NodeRowTypes';
 import { SIDEBAR_TYPE_COLORS } from '../../../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
 import { RowTypePickerToolbar } from './RowTypePickerToolbar';
-import { RowBufferArea } from './RowBufferArea';
 import { useRowToolbar } from '../../hooks/useRowToolbar';
 import { useRowState } from './hooks/useRowState';
 import { useIntellisensePosition } from './hooks/useIntellisensePosition';
@@ -98,8 +96,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // State machine for toolbar/picker visibility (after refs are initialized)
   const toolbarSM = useRowToolbar({ rowRef: nodeContainerRef as any, overlayRef: overlayRef as any, pickerRef: typeToolbarRef as any });
 
-  // Compute buffer after deps are defined - passa overlayRef per calcolo preciso
-  const bufferRect = useOverlayBuffer(labelRef, iconPos, showIcons, overlayRef);
 
   // ESC: when type toolbar is open, close it and refocus textbox without propagating to canvas
   useEffect(() => {
@@ -825,21 +821,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   return (
     <>
-      {/* Extended buffer area for hover tolerance */}
-      <RowBufferArea
-        bufferRect={bufferRect}
-        showIcons={showIcons}
-        showCreatePicker={showCreatePicker}
-        isEditing={isEditing}
-        onMouseEnter={() => {
-          console.log('[HoverArea] Mouse entered extended area');
-          toolbarSM.row.onEnter();
-        }}
-        onMouseLeave={(e) => {
-          console.log('[HoverArea] Mouse left extended area');
-          toolbarSM.row.onLeave(e as any);
-        }}
-      />
       <div
         ref={nodeContainerRef}
         className={`node-row-outer flex items-center group transition-colors ${conditionalClasses}`}
