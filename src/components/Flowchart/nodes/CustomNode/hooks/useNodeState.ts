@@ -13,22 +13,29 @@ export function useNodeState({ data }: UseNodeStateProps) {
   // Title editing state
   const [isEditingNode, setIsEditingNode] = useState(false);
   const [nodeTitle, setNodeTitle] = useState(data.title || '');
-  
+
   // Hover state
   const [isHoveredNode, setIsHoveredNode] = useState(false);
   const [isHoverHeader, setIsHoverHeader] = useState(false);
-  
+
+  // Drag state - mantiene toolbar visibile durante drag
+  const [isDragging, setIsDragging] = useState(false);
+  // Flag specifico: drag avviato dalla toolbar (Move/Anchor)
+  const [isToolbarDrag, setIsToolbarDrag] = useState(false);
+
+
+
   // Buffer area state
-  const [nodeBufferRect, setNodeBufferRect] = useState<{ 
-    top: number; 
-    left: number; 
-    width: number; 
-    height: number 
+  const [nodeBufferRect, setNodeBufferRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number
   } | null>(null);
-  
+
   // Refs
   const hideToolbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Computed states
   const hasTitle = (nodeTitle || '').trim().length > 0;
   const showPermanentHeader = hasTitle || isEditingNode;
@@ -37,9 +44,9 @@ export function useNodeState({ data }: UseNodeStateProps) {
   // Track global mouse position for hover restoration after edit
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      try { 
-        (window as any).__lastMouseX = e.clientX; 
-        (window as any).__lastMouseY = e.clientY; 
+      try {
+        (window as any).__lastMouseX = e.clientX;
+        (window as any).__lastMouseY = e.clientY;
       } catch { }
     };
     window.addEventListener('mousemove', onMove, { passive: true });
@@ -60,26 +67,60 @@ export function useNodeState({ data }: UseNodeStateProps) {
     setNodeTitle(data.title || '');
   }, [data.title]);
 
+  // Se il drag globale termina, resetta la modalità toolbar
+  useEffect(() => {
+    if (!isDragging && isToolbarDrag) {
+      console.log('🎯 [useNodeState] Auto-resetting isToolbarDrag because isDragging became false');
+      setIsToolbarDrag(false);
+    }
+  }, [isDragging, isToolbarDrag]);
+
+  // Fallback: reset isToolbarDrag on any mouse/pointer up (in case onDragEnd doesn't fire)
+  useEffect(() => {
+    if (!isToolbarDrag) return;
+
+    const resetToolbarDrag = () => {
+      console.log('🎯 [useNodeState] Fallback reset: mouse/pointer up detected, resetting isToolbarDrag');
+      setIsToolbarDrag(false);
+    };
+
+    window.addEventListener('mouseup', resetToolbarDrag, true);
+    window.addEventListener('pointerup', resetToolbarDrag, true);
+    window.addEventListener('mouseleave', resetToolbarDrag, true);
+
+    return () => {
+      window.removeEventListener('mouseup', resetToolbarDrag, true);
+      window.removeEventListener('pointerup', resetToolbarDrag, true);
+      window.removeEventListener('mouseleave', resetToolbarDrag, true);
+    };
+  }, [isToolbarDrag]);
+
   return {
     // Title editing
     isEditingNode,
     setIsEditingNode,
     nodeTitle,
     setNodeTitle,
-    
+
     // Hover state
     isHoveredNode,
     setIsHoveredNode,
     isHoverHeader,
     setIsHoverHeader,
-    
+
+    // Drag state
+    isDragging,
+    setIsDragging,
+    isToolbarDrag,
+    setIsToolbarDrag,
+
     // Buffer area
     nodeBufferRect,
     setNodeBufferRect,
-    
+
     // Refs
     hideToolbarTimeoutRef,
-    
+
     // Computed
     hasTitle,
     showPermanentHeader,

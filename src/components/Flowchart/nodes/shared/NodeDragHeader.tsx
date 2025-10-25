@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Move, Edit3, Trash2, Anchor } from 'lucide-react';
 
 interface NodeDragHeaderProps {
@@ -7,6 +7,8 @@ interface NodeDragHeaderProps {
   compact?: boolean;
   showDragHandle?: boolean; // Se true, mostra icona grip e testo "Drag"
   fullWidth?: boolean; // Se true, toolbar larga quanto il nodo
+  isToolbarDrag?: boolean; // Se true, nasconde Anchor e destra
+  onDragStart?: () => void; // Callback per attivare isDragging
 }
 
 /**
@@ -14,16 +16,27 @@ interface NodeDragHeaderProps {
  * Serve come area drag per spostare il nodo intero.
  * NON ha classe 'nodrag' quindi è draggable.
  */
-export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onDelete, compact, showDragHandle = true, fullWidth = false }) => {
+export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onDelete, compact, showDragHandle = true, fullWidth = false, isToolbarDrag = false, onDragStart }) => {
   // Quando compact=true, è usato come toolbar sopra il nodo (no border radius, più piccolo)
   const isToolbar = compact === true;
   // showDragHandle controlla se mostrare l'area drag (grip + testo)
+
+  // Log solo quando isToolbarDrag cambia
+  const prevIsToolbarDrag = useRef(isToolbarDrag);
+  useEffect(() => {
+    if (prevIsToolbarDrag.current !== isToolbarDrag) {
+      console.log('🎯 [NodeDragHeader] isToolbarDrag changed:', prevIsToolbarDrag.current, '→', isToolbarDrag);
+      prevIsToolbarDrag.current = isToolbarDrag;
+    }
+  }, [isToolbarDrag]);
+
+
 
   return (
     <div
       className="flex items-center justify-between px-2"
       style={{
-        background: isToolbar ? (fullWidth ? 'rgba(0, 191, 255, 0.3)' : 'transparent') : 'rgba(17, 24, 39, 0.85)', // Azzurrino per debug quando fullWidth
+        background: isToolbar ? 'transparent' : 'rgba(17, 24, 39, 0.85)',
         backdropFilter: isToolbar ? 'none' : 'blur(4px)',
         WebkitBackdropFilter: isToolbar ? 'none' : 'blur(4px)',
         borderBottom: isToolbar ? 'none' : '1px solid rgba(251, 191, 36, 0.3)',
@@ -44,7 +57,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
           {/* Move icon (4 frecce) - DRAG AREA (not a button) */}
           <div
             style={{
-              cursor: 'grab',
+              cursor: 'move',
               display: 'flex',
               alignItems: 'center',
               opacity: 0.85,
@@ -52,13 +65,9 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
             }}
             className="hover:opacity-100 hover:scale-110"
             title="Drag to move node"
-            onMouseDown={(e) => {
-              console.log('[NodeDragHeader] MOVE ICON - Mouse DOWN - DRAG START', {
-                button: e.button,
-                type: e.type,
-                target: (e.target as HTMLElement)?.tagName,
-                currentTarget: e.currentTarget.tagName
-              });
+            onPointerDownCapture={() => {
+              console.log('🎯 [NodeDragHeader] MOVE ICON - Pointer DOWN (capture) - isDragging=true');
+              onDragStart?.();
             }}
           >
             <Move className="w-3 h-3 text-amber-300 drop-shadow" />
@@ -67,42 +76,31 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
           {/* Anchor icon - RIGID DRAG AREA (not a button) */}
           <div
             title="Drag to move with descendants"
-            className="hover:opacity-100 hover:scale-110 nodrag"
+            className="hover:opacity-100 hover:scale-110"
             style={{
-              cursor: 'grab',
+              cursor: 'move',
               opacity: 0.85,
               transition: 'opacity 120ms linear, transform 120ms ease',
               display: 'flex',
               alignItems: 'center'
             }}
-            onMouseDown={(e) => {
-              console.log('[NodeDragHeader] ANCHOR ICON - Mouse DOWN - RIGID DRAG START', {
-                button: e.button,
-                type: e.type,
-                target: (e.target as HTMLElement)?.tagName
-              });
-              try {
-                (window as any).__flowDragMode = 'rigid';
-              } catch { }
-            }}
-            onMouseUp={() => {
-              console.log('[NodeDragHeader] ANCHOR ICON - Mouse UP - RIGID DRAG END');
-              try {
-                (window as any).__flowDragMode = undefined;
-              } catch { }
+            onPointerDownCapture={() => {
+              console.log('🎯 [NodeDragHeader] ANCHOR ICON - Pointer DOWN (capture) - rigid=true, isDragging=true');
+              try { (window as any).__flowDragMode = 'rigid'; } catch { }
+              onDragStart?.();
             }}
           >
             <Anchor className="w-3 h-3 text-slate-200 hover:text-amber-300 drop-shadow" />
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-1.5" style={{ opacity: showDragHandle ? 0.9 : 0 }}>
+        <div className="flex items-center gap-1.5" style={{ opacity: showDragHandle ? 0.9 : 0, transition: 'opacity 200ms ease' }}>
           {showDragHandle && (
             <>
               {/* Move icon (4 frecce) - DRAG AREA (not a button) */}
               <div
                 style={{
-                  cursor: 'grab',
+                  cursor: 'move',
                   display: 'flex',
                   alignItems: 'center',
                   opacity: 0.85,
@@ -111,12 +109,17 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
                 className="hover:opacity-100 hover:scale-110"
                 title="Drag to move node"
                 onMouseDown={(e) => {
-                  console.log('[NodeDragHeader] MOVE ICON - Mouse DOWN - DRAG START', {
-                    button: e.button,
-                    type: e.type,
-                    target: (e.target as HTMLElement)?.tagName,
-                    currentTarget: e.currentTarget.tagName
-                  });
+                  console.log('🎯 [NodeDragHeader] MOVE ICON (non-fullWidth) - Mouse DOWN - Starting drag');
+                  // Attiva il drag del nodo parent
+                  const nodeElement = e.currentTarget.closest('[draggable="true"]');
+                  if (nodeElement) {
+                    // Simula un drag start
+                    const dragEvent = new DragEvent('dragstart', {
+                      bubbles: true,
+                      cancelable: true
+                    });
+                    nodeElement.dispatchEvent(dragEvent);
+                  }
                 }}
               >
                 <Move className="w-3 h-3 text-amber-300 drop-shadow" />
@@ -125,29 +128,30 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               {/* Anchor icon - RIGID DRAG AREA (not a button) */}
               <div
                 title="Drag to move with descendants"
-                className="hover:opacity-100 hover:scale-110 nodrag"
+                className="hover:opacity-100 hover:scale-110"
                 style={{
-                  cursor: 'grab',
-                  opacity: 0.85,
+                  cursor: 'move',
+                  opacity: isToolbarDrag ? 0 : 0.85,
                   transition: 'opacity 120ms linear, transform 120ms ease',
                   display: 'flex',
                   alignItems: 'center'
                 }}
                 onMouseDown={(e) => {
-                  console.log('[NodeDragHeader] ANCHOR ICON - Mouse DOWN - RIGID DRAG START', {
-                    button: e.button,
-                    type: e.type,
-                    target: (e.target as HTMLElement)?.tagName
-                  });
-                  try {
-                    (window as any).__flowDragMode = 'rigid';
-                  } catch { }
-                }}
-                onMouseUp={() => {
-                  console.log('[NodeDragHeader] ANCHOR ICON - Mouse UP - RIGID DRAG END');
-                  try {
-                    (window as any).__flowDragMode = undefined;
-                  } catch { }
+                  console.log('🎯 [NodeDragHeader] ANCHOR ICON (non-fullWidth) - Mouse DOWN - Starting rigid drag');
+                  // Attiva il drag del nodo parent
+                  const nodeElement = e.currentTarget.closest('[draggable="true"]');
+                  if (nodeElement) {
+                    // Imposta modalità rigid
+                    try {
+                      (window as any).__flowDragMode = 'rigid';
+                    } catch { }
+                    // Simula un drag start
+                    const dragEvent = new DragEvent('dragstart', {
+                      bubbles: true,
+                      cancelable: true
+                    });
+                    nodeElement.dispatchEvent(dragEvent);
+                  }
                 }}
               >
                 <Anchor className="w-3 h-3 text-slate-200 hover:text-amber-300 drop-shadow" />
@@ -157,8 +161,8 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
         </div>
       )}
 
-      {/* RIGHT: ACTION BUTTONS - Always visible */}
-      <div className="flex items-center gap-1.5">
+      {/* RIGHT: ACTION BUTTONS - Invisibili durante toolbar drag */}
+      <div className="flex items-center gap-1.5" style={{ opacity: isToolbarDrag ? 0 : 1, transition: 'opacity 200ms ease' }}>
         <button
           className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
           title="Edit title"

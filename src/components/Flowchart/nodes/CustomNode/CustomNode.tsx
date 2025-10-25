@@ -74,6 +74,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     nodeTitle, setNodeTitle,
     isHoveredNode, setIsHoveredNode,
     isHoverHeader, setIsHoverHeader,
+    isDragging, setIsDragging,
+    isToolbarDrag, setIsToolbarDrag,
     nodeBufferRect, setNodeBufferRect,
     hideToolbarTimeoutRef,
     hasTitle, showPermanentHeader, showDragHeader
@@ -671,6 +673,32 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
         style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content', position: 'relative', zIndex: 1 }}
         tabIndex={-1}
+        draggable={true}
+        onDragStart={(e) => {
+          console.log('🎯 [CustomNode] Drag start - Setting isDragging = true', {
+            type: e.type,
+            target: e.target,
+            currentTarget: e.currentTarget,
+            isDragging: isDragging,
+            isToolbarDrag: isToolbarDrag,
+            timestamp: Date.now()
+          });
+          setIsDragging(true);
+          document.body.style.cursor = 'move';
+        }}
+        onDragEnd={(e) => {
+          console.log('🎯 [CustomNode] Drag end - Setting isDragging = false', {
+            type: e.type,
+            target: e.target,
+            currentTarget: e.currentTarget,
+            isDragging: isDragging,
+            isToolbarDrag: isToolbarDrag,
+            timestamp: Date.now()
+          });
+          setIsDragging(false);
+          setIsToolbarDrag(false);
+          document.body.style.cursor = 'default';
+        }}
         onMouseEnter={handleNodeMouseEnter}
         onMouseLeave={handleNodeMouseLeave}
         onMouseDownCapture={(e) => {
@@ -705,7 +733,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               marginBottom: 0, // Appoggiata al nodo
               zIndex: 1000, // Sopra il buffer area
               pointerEvents: 'auto',
-              width: '100%' // Larga quanto il nodo
+              width: '100%', // Larga quanto il nodo
+              opacity: 1,
+              transition: 'opacity 0.2s ease'
             }}
           >
             {console.log('🎯 [CustomNode] TOOLBAR RENDERING:', {
@@ -722,6 +752,15 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               compact={true}
               showDragHandle={false}
               fullWidth={true}
+              isToolbarDrag={isToolbarDrag}
+              onDragStart={() => {
+                console.log('🎯 [CustomNode] onDragStart from Move button', {
+                  isDragging: isDragging,
+                  isToolbarDrag: isToolbarDrag
+                });
+                setIsDragging(true);
+                setIsToolbarDrag(true);
+              }}
             />
           </div>
         )}
@@ -800,6 +839,15 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             compact={true}
             showDragHandle={true}
             fullWidth={true}
+            isToolbarDrag={isToolbarDrag}
+            onDragStart={() => {
+              console.log('🎯 [CustomNode] onDragStart from Move button (second)', {
+                isDragging: isDragging,
+                isToolbarDrag: isToolbarDrag
+              });
+              setIsDragging(true);
+              setIsToolbarDrag(true);
+            }}
           />
         </div>
         <div className="px-1.5" ref={rowsContainerRef}>
