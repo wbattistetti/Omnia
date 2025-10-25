@@ -11,29 +11,10 @@ import { useNodeRowDrag } from '../../../../hooks/useNodeRowDrag';
 import { NodeRowList } from '../../rows/shared/NodeRowList';
 import { useNodeState } from './hooks/useNodeState';
 import { useNodeEventHandlers } from './hooks/useNodeEventHandlers';
+import { useNodeInitialization } from './hooks/useNodeInitialization';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 
-// Helper per ID robusti
-function newUid() {
-  // fallback se crypto.randomUUID non esiste
-  return (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-    ? (crypto as any).randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-// Helper per inizializzazione lazy delle righe
-function initRows(nodeId: string, rows?: NodeRowData[], nodeData?: any): NodeRowData[] {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    // Se c'è un focusRowId specificato, usalo per la prima riga
-    const rowId = nodeData?.focusRowId || `${nodeId}-${newUid()}`;
-    return [{ id: rowId, text: '', included: true, mode: 'Message' as const }];
-  }
-  return rows.map(r =>
-    r.id?.startsWith(`${nodeId}-`) ? r : { ...r, id: `${nodeId}-${r.id || newUid()}` }
-  );
-}
-
-// (initFocus rimosso: non più utilizzato)
+// (Helper functions moved to useNodeInitialization hook)
 
 /**
  * Dati custom per un nodo del flowchart
@@ -67,8 +48,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ REGISTRY: Register node with NodeRegistry
   const nodeRegistryRef = useRegisterAsNode(id);
 
+  // ✅ INITIALIZATION: Initialize node data and rows
+  const { displayRows, normalizedData } = useNodeInitialization(id, data);
+
   // Extract all state management to custom hook
-  const nodeState = useNodeState({ data });
+  const nodeState = useNodeState({ data: normalizedData });
   const {
     isEditingNode, setIsEditingNode,
     nodeTitle, setNodeTitle,
@@ -83,7 +67,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Extract all event handlers to custom hook
   const handlers = useNodeEventHandlers({
-    data,
+    data: normalizedData,
     nodeTitle,
     setNodeTitle,
     setIsEditingNode,
@@ -173,7 +157,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ CORREZIONE 1: Lazy state initialization con ID stabili
   const [nodeRows, setNodeRows] = useState<NodeRowData[]>(() => {
-    return initRows(id, data.rows, data);
+    return displayRows;
   });
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
 
@@ -201,8 +185,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ Macchina a stati: isEmpty=true durante popolamento sequenziale, false dopo stabilizzazione
   const [isEmpty, setIsEmpty] = useState(() => {
-    const initial = initRows(id, data.rows, data);
-    return initial.length === 0 || initial.every(r => !r.text || r.text.trim() === '');
+    return displayRows.length === 0 || displayRows.every(r => !r.text || r.text.trim() === '');
   });
 
   // Funzione unica per calcolare lo stato isEmpty
@@ -249,7 +232,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     if (cleaned.length !== nodeRows.length) {
       setNodeRows(cleaned);
       setIsEmpty(computeIsEmpty(cleaned));
-      data.onUpdate?.({ rows: cleaned, isTemporary: data.isTemporary });
+      normalizedData.onUpdate?.({ rows: cleaned, isTemporary: normalizedData.isTemporary });
     }
   };
 
@@ -267,18 +250,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   useEffect(() => {
     // ✅ SKIP auto-focus solo se il nodo è hidden (per edge temporanei)
     // ✅ PERMETTI auto-focus se isTemporary ma non hidden (nodi creati con doppio click)
-    if (data.hidden) {
+    if (normalizedData.hidden) {
       return;
     }
 
     // Se abbiamo focusRowId (nodo nuovo) e non c'è editingRowId, impostalo
-    if (data.focusRowId && !editingRowId && nodeRows.length > 0) {
+    if (normalizedData.focusRowId && !editingRowId && nodeRows.length > 0) {
       const firstRow = nodeRows[0];
       if (firstRow && firstRow.text.trim() === '') {
         setEditingRowId(firstRow.id);
       }
     }
-  }, [data.focusRowId, data.hidden, data.isTemporary, editingRowId, nodeRows.length, id]);
+  }, [normalizedData.focusRowId, normalizedData.hidden, normalizedData.isTemporary, editingRowId, nodeRows.length, id]);
 
   // ✅ Rimuovi auto-editing del titolo per nodi temporanei
   // (Mantieni solo l'auto-focus sulla prima riga)
@@ -314,11 +297,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
       const next = (latestRowsRef.current || []).map(r => (r as any)?.instanceId === d.instanceId ? { ...r, message: { ...(r as any)?.message, text: d.text } } : r);
       setNodeRows(next);
       // Schedule parent update outside render/setState to avoid warnings
-      try { Promise.resolve().then(() => data.onUpdate?.({ rows: next })); } catch { }
+      try { Promise.resolve().then(() => normalizedData.onUpdate?.({ rows: next })); } catch { }
     };
     document.addEventListener('rowMessage:update', handler as any);
     return () => document.removeEventListener('rowMessage:update', handler as any);
-  }, [data.onUpdate]);
+  }, [normalizedData.onUpdate]);
 
   const handleUpdateRow = (
     rowId: string,
@@ -410,7 +393,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     setNodeRows(updatedRows);
     // ❌ RIMOSSO - isEmpty si aggiorna SOLO in exitEditing() per mantenere auto-append continuo
     // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
-    data.onUpdate?.({ rows: updatedRows, isTemporary: data.isTemporary });
+    normalizedData.onUpdate?.({ rows: updatedRows, isTemporary: normalizedData.isTemporary });
   };
 
   const handleDeleteRow = (rowId: string) => {
@@ -418,10 +401,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     setNodeRows(updatedRows);
     // ✅ Aggiorna isEmpty: se tutte le righe sono vuote dopo la cancellazione, torna isEmpty=true
     setIsEmpty(computeIsEmpty(updatedRows));
-    data.onUpdate?.({ rows: updatedRows });
+    normalizedData.onUpdate?.({ rows: updatedRows });
 
-    if (updatedRows.length === 0 && data.isTemporary) {
-      data.onDelete?.();
+    if (updatedRows.length === 0 && normalizedData.isTemporary) {
+      normalizedData.onDelete?.();
     }
   };
 
@@ -629,10 +612,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
     window.addEventListener('flow:canvas:click', onCanvasClick as any);
     return () => window.removeEventListener('flow:canvas:click', onCanvasClick as any);
-  }, [editingRowId, id, nodeRows, data]);
+  }, [editingRowId, id, nodeRows, normalizedData]);
 
   // Crea l'array di visualizzazione per il feedback visivo
-  const displayRows = useMemo(() => nodeRows, [nodeRows]);
+  const visibleRows = useMemo(() => nodeRows, [nodeRows]);
 
   // Trova la riga trascinata per il rendering separato
   const draggedItem = drag.draggedRowId ? nodeRows.find(row => row.id === drag.draggedRowId) : null;
@@ -852,7 +835,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         </div>
         <div className="px-1.5" ref={rowsContainerRef}>
           <NodeRowList
-            rows={((data as any)?.hideUncheckedRows === true) ? displayRows.filter(r => r.included !== false) : displayRows}
+            rows={((normalizedData as any)?.hideUncheckedRows === true) ? visibleRows.filter(r => r.included !== false) : visibleRows}
             editingRowId={editingRowId}
             hoveredInserter={hoveredInserter}
             setHoveredInserter={setHoveredInserter}
