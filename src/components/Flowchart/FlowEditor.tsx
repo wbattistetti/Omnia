@@ -37,6 +37,7 @@ import { useConditionCreation } from './hooks/useConditionCreation';
 import { CustomEdge } from './edges/CustomEdge';
 import { v4 as uuidv4 } from 'uuid';
 import { useIntellisense } from '../../context/IntellisenseContext';
+import { FlowchartWrapper } from './FlowchartWrapper';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -570,7 +571,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           console.log("🎯 [ON_CONNECT_END] About to call openForEdge with EDGE:", { edgeId: tempEdgeId });
           // ✅ Pass mouse coordinates to openForEdge
           if (intellisenseActions?.openForEdge) {
-            intellisenseActions.openForEdge(tempEdgeId, result.mouseX, result.mouseY);
+            intellisenseActions.openForEdge(tempEdgeId);
             console.log("🎯 [ON_CONNECT_END] openForEdge() call completed with mouse coordinates:", {
               mouseX: result.mouseX,
               mouseY: result.mouseY
@@ -854,7 +855,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     <div
       className="flex-1 h-full relative"
       ref={canvasRef}
-      style={{ overflow: 'auto' }}
       onDoubleClick={handleCanvasDoubleClick}
       onMouseLeave={() => setCursorTooltip(null)}
       onMouseDown={(e) => {
@@ -873,131 +873,140 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     >
       {/* Expose nodes/edges to GlobalDebuggerPanel (bridge) */}
       {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; if (flowId) { (window as any).__flows = (window as any).__flows || {}; (window as any).__flows[flowId] = { nodes, edges }; } } catch { } return null; })()}
-      <ReactFlow
+
+      <FlowchartWrapper
         nodes={nodes}
-        edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
-        onNodesChange={changes => {
-          setNodes(nds => applyNodeChanges(changes, nds));
-          // Track selected node ids for grouping
-          try {
-            const selected = new Set<string>();
-            const draft = applyNodeChanges(changes, nodes);
-            draft.forEach(n => { if ((n as any).selected) selected.add(n.id); });
-            setSelectedNodeIds(Array.from(selected));
-          } catch { }
-        }}
-        onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onPaneClick={onPaneClick}
-        onMouseMove={handlePaneMouseMove}
-        onEdgeClick={handleEdgeClick}
-        onConnectStart={onConnectStart}
-        onConnectEnd={onConnectEnd}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDrag={onNodeDrag}
-        onNodeDragStop={onNodeDragStop}
-        onNodeDoubleClick={(e, node) => {
-          if (node?.type === 'task') {
-            e.preventDefault();
-            e.stopPropagation();
-            const flowId = (node.data as any)?.flowId || node.id;
-            const title = (node.data as any)?.title || 'Task';
-            if (onOpenTaskFlow) onOpenTaskFlow(flowId, title);
-          }
-        }}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-        maxZoom={4}
-        className="bg-white"
-        style={{ backgroundColor: '#ffffff', width: contentSize.w ? `${contentSize.w}px` : undefined, height: contentSize.h ? `${contentSize.h}px` : undefined }}
-        selectionOnDrag={true}
-        onSelectionChange={(sel) => {
-          try {
-            const ids = Array.isArray(sel?.nodes) ? sel.nodes.map((n: any) => n.id) : [];
-            setSelectedNodeIds(ids);
-            // Debug selezione solo su flag esplicito
-            dlog('flow', '[selectionChange]', { count: ids.length });
-            // verifica presenza del rettangolo di selezione e stili calcolati
-            setTimeout(() => {
-              try {
-                const el = document.querySelector('.react-flow__selection') as HTMLElement | null;
-                if (el) {
-                  const cs = getComputedStyle(el);
-                  dlog('flow', '[selectionRect]', { bg: cs.backgroundColor });
-                }
-              } catch { }
-            }, 0);
-          } catch { }
-        }}
-        panOnDrag={[2]}
-        zoomOnScroll={false}
-        zoomOnPinch={false}
-        panOnScroll={false}
-        onWheel={handleWheel}
-        zoomOnDoubleClick={false}
-        onMouseUp={(e) => {
-          // When user finishes a drag selection, open a contextual menu near the selection centroid
-          try {
-            if (!reactFlowInstance) return;
-            // Usa la selezione live per evitare ritardi di stato
-            const liveNodes: any[] = (reactFlowInstance as any).getNodes ? (reactFlowInstance as any).getNodes() : nodes;
-            const liveSelectedIds = (liveNodes || []).filter(n => n?.selected).map(n => n.id);
-            const effSelected = liveSelectedIds.length ? liveSelectedIds : selectedNodeIds;
-            if (effSelected.length < 2) { setSelectionMenu({ show: false, x: 0, y: 0 }); return; }
-            // sincronizza anche lo state locale, per coerenza
-            try { if (liveSelectedIds.length) setSelectedNodeIds(liveSelectedIds); } catch { }
-            // Use mouse release point relative to the FlowEditor container (account for scroll)
-            const host = canvasRef.current;
-            const rect = host ? host.getBoundingClientRect() : { left: 0, top: 0 } as any;
-            const scrollX = host ? host.scrollLeft : 0;
-            const scrollY = host ? host.scrollTop : 0;
-            const x = (e.clientX - rect.left) + scrollX;
-            const y = (e.clientY - rect.top) + scrollY;
-            setSelectionMenu({ show: true, x, y });
-          } catch { }
-          // Persist the selection rectangle exactly as drawn
-          try {
-            const start = dragStartRef.current;
-            dragStartRef.current = null;
-            const host = canvasRef.current;
-            if (start && host) {
-              const rect = host.getBoundingClientRect();
-              const ex = (e.clientX - rect.left) + host.scrollLeft;
-              const ey = (e.clientY - rect.top) + host.scrollTop;
-              const x = Math.min(start.x, ex);
-              const y = Math.min(start.y, ey);
-              const w = Math.abs(ex - start.x);
-              const h = Math.abs(ey - start.y);
-              if (w > 3 && h > 3) setPersistedSel({ x, y, w, h }); else setPersistedSel(null);
-            }
-          } catch { }
-        }}
+        edges={edges}
+        padding={400}
+        minWidth={1200}
+        minHeight={800}
       >
-        <Controls className="bg-white shadow-lg border border-slate-200" />
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={22}
-          size={1.5}
-          color="#eef2f7" // puntini molto più sbiaditi
-          style={{ backgroundColor: '#ffffff', opacity: 0.6 }}
-        />
-        <svg style={{ height: 0 }}>
-          <defs>
-            <marker
-              id="arrowhead"
-              markerWidth="6"
-              markerHeight="6"
-              refX="6"
-              refY="3"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M0,0 L6,3 L0,6 Z" fill="#8b5cf6" />
-            </marker>
-          </defs>
-        </svg>
-      </ReactFlow>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges.map(e => ({ ...e, selected: e.id === selectedEdgeId }))}
+          onNodesChange={changes => {
+            setNodes(nds => applyNodeChanges(changes, nds));
+            // Track selected node ids for grouping
+            try {
+              const selected = new Set<string>();
+              const draft = applyNodeChanges(changes, nodes);
+              draft.forEach(n => { if ((n as any).selected) selected.add(n.id); });
+              setSelectedNodeIds(Array.from(selected));
+            } catch { }
+          }}
+          onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onPaneClick={onPaneClick}
+          onMouseMove={handlePaneMouseMove}
+          onEdgeClick={handleEdgeClick}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStop={onNodeDragStop}
+          onNodeDoubleClick={(e, node) => {
+            if (node?.type === 'task') {
+              e.preventDefault();
+              e.stopPropagation();
+              const flowId = (node.data as any)?.flowId || node.id;
+              const title = (node.data as any)?.title || 'Task';
+              if (onOpenTaskFlow) onOpenTaskFlow(flowId, title);
+            }
+          }}
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          maxZoom={4}
+          className="bg-white"
+          style={{ backgroundColor: '#ffffff', width: contentSize.w ? `${contentSize.w}px` : undefined, height: contentSize.h ? `${contentSize.h}px` : undefined }}
+          selectionOnDrag={true}
+          onSelectionChange={(sel) => {
+            try {
+              const ids = Array.isArray(sel?.nodes) ? sel.nodes.map((n: any) => n.id) : [];
+              setSelectedNodeIds(ids);
+              // Debug selezione solo su flag esplicito
+              dlog('flow', '[selectionChange]', { count: ids.length });
+              // verifica presenza del rettangolo di selezione e stili calcolati
+              setTimeout(() => {
+                try {
+                  const el = document.querySelector('.react-flow__selection') as HTMLElement | null;
+                  if (el) {
+                    const cs = getComputedStyle(el);
+                    dlog('flow', '[selectionRect]', { bg: cs.backgroundColor });
+                  }
+                } catch { }
+              }, 0);
+            } catch { }
+          }}
+          panOnDrag={[2]}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          panOnScroll={false}
+          onWheel={handleWheel}
+          zoomOnDoubleClick={false}
+          onMouseUp={(e) => {
+            // When user finishes a drag selection, open a contextual menu near the selection centroid
+            try {
+              if (!reactFlowInstance) return;
+              // Usa la selezione live per evitare ritardi di stato
+              const liveNodes: any[] = (reactFlowInstance as any).getNodes ? (reactFlowInstance as any).getNodes() : nodes;
+              const liveSelectedIds = (liveNodes || []).filter(n => n?.selected).map(n => n.id);
+              const effSelected = liveSelectedIds.length ? liveSelectedIds : selectedNodeIds;
+              if (effSelected.length < 2) { setSelectionMenu({ show: false, x: 0, y: 0 }); return; }
+              // sincronizza anche lo state locale, per coerenza
+              try { if (liveSelectedIds.length) setSelectedNodeIds(liveSelectedIds); } catch { }
+              // Use mouse release point relative to the FlowEditor container (account for scroll)
+              const host = canvasRef.current;
+              const rect = host ? host.getBoundingClientRect() : { left: 0, top: 0 } as any;
+              const scrollX = host ? host.scrollLeft : 0;
+              const scrollY = host ? host.scrollTop : 0;
+              const x = (e.clientX - rect.left) + scrollX;
+              const y = (e.clientY - rect.top) + scrollY;
+              setSelectionMenu({ show: true, x, y });
+            } catch { }
+            // Persist the selection rectangle exactly as drawn
+            try {
+              const start = dragStartRef.current;
+              dragStartRef.current = null;
+              const host = canvasRef.current;
+              if (start && host) {
+                const rect = host.getBoundingClientRect();
+                const ex = (e.clientX - rect.left) + host.scrollLeft;
+                const ey = (e.clientY - rect.top) + host.scrollTop;
+                const x = Math.min(start.x, ex);
+                const y = Math.min(start.y, ey);
+                const w = Math.abs(ex - start.x);
+                const h = Math.abs(ey - start.y);
+                if (w > 3 && h > 3) setPersistedSel({ x, y, w, h }); else setPersistedSel(null);
+              }
+            } catch { }
+          }}
+        >
+          <Controls className="bg-white shadow-lg border border-slate-200" />
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={22}
+            size={1.5}
+            color="#eef2f7" // puntini molto più sbiaditi
+            style={{ backgroundColor: '#ffffff', opacity: 0.6 }}
+          />
+          <svg style={{ height: 0 }}>
+            <defs>
+              <marker
+                id="arrowhead"
+                markerWidth="6"
+                markerHeight="6"
+                refX="6"
+                refY="3"
+                orient="auto"
+                markerUnits="strokeWidth"
+              >
+                <path d="M0,0 L6,3 L0,6 Z" fill="#8b5cf6" />
+              </marker>
+            </defs>
+          </svg>
+        </ReactFlow>
+      </FlowchartWrapper>
 
       {persistedSel && (
         <div

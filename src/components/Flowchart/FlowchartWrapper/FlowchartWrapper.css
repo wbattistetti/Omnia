@@ -1,0 +1,49 @@
+/* FlowchartWrapper Styles */
+.flowchart-wrapper {
+    /* Wrapper principale */
+    position: relative;
+    overflow: hidden;
+}
+
+.flowchart-panel {
+    /* Pannello principale con il contenuto */
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+/* Scrollbar personalizzate */
+.scrollbar-horizontal,
+.scrollbar-vertical {
+    background-color: #2d3748;
+    border-radius: 4px;
+}
+
+.scrollbar-horizontal:hover,
+.scrollbar-vertical:hover {
+    background-color: #374151;
+}
+
+.scrollbar-thumb-horizontal,
+.scrollbar-thumb-vertical {
+    background-color: #4a5568;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.scrollbar-thumb-horizontal:hover,
+.scrollbar-thumb-vertical:hover {
+    background-color: #718096;
+}
+
+.scrollbar-thumb-horizontal:active,
+.scrollbar-thumb-vertical:active {
+    background-color: #9ca3af;
+    cursor: grabbing;
+}
+
+/* Stili per il drag */
+.scrollbar-thumb-horizontal:active,
+.scrollbar-thumb-vertical:active {
+    cursor: grabbing !important;
+}
