@@ -292,6 +292,56 @@
       "subData": [],
       "examples": ["example text", "any value", "notes"],
       "constraints": []
+    },
+    
+    "complexAddress": {
+      "label": "Complex Address",
+      "type": "address",
+      "icon": "MapPin",
+      "subData": [
+        {
+          "label": "Street Information",
+          "type": "address",
+          "icon": "MapPin",
+          "subData": [
+            {
+              "label": "Street Name",
+              "type": "generic",
+              "icon": "MapPin",
+              "examples": ["Via Roma", "Corso Vittorio Emanuele"],
+              "constraints": [{"type": "required"}]
+            },
+            {
+              "label": "Street Number",
+              "type": "generic", 
+              "icon": "Hash",
+              "examples": ["25", "123", "5A"],
+              "constraints": [{"type": "required"}]
+            }
+          ]
+        },
+        {
+          "label": "Location Details",
+          "type": "address",
+          "icon": "Building",
+          "subData": [
+            {
+              "label": "City",
+              "type": "generic",
+              "icon": "Building", 
+              "examples": ["Milano", "Roma"],
+              "constraints": [{"type": "required"}]
+            },
+            {
+              "label": "Postal Code",
+              "type": "postalCode",
+              "icon": "Hash",
+              "examples": ["20121", "00100"],
+              "constraints": [{"type": "required"}]
+            }
+          ]
+        }
+      ]
     }
   }
 }

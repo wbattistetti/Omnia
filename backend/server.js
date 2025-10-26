@@ -77,9 +77,15 @@ async function loadTemplatesFromDB() {
   }
 }
 
-// Risolvi templateRef espandendo i riferimenti ai template
-async function resolveTemplateRefs(subData, templates) {
+// Risolvi templateRef espandendo i riferimenti ai template (ESTESO PER 3 LIVELLI)
+async function resolveTemplateRefs(subData, templates, level = 0) {
   const resolved = [];
+  
+  // Limite di sicurezza per evitare ricorsioni infinite
+  if (level > 10) {
+    console.warn(`[TEMPLATE_RESOLUTION] Livello massimo raggiunto (${level}), interrompendo ricorsione`);
+    return resolved;
+  }
 
   for (const item of subData) {
     if (item.templateRef && templates[item.templateRef]) {
@@ -88,7 +94,7 @@ async function resolveTemplateRefs(subData, templates) {
 
       if (referencedTemplate.subData && referencedTemplate.subData.length > 0) {
         // Se il template referenziato ha subData, espandili ricorsivamente
-        const expandedSubData = await resolveTemplateRefs(referencedTemplate.subData, templates);
+        const expandedSubData = await resolveTemplateRefs(referencedTemplate.subData, templates, level + 1);
         resolved.push(...expandedSubData);
       } else {
         // Se è un template atomico, aggiungilo direttamente
@@ -96,7 +102,8 @@ async function resolveTemplateRefs(subData, templates) {
           label: item.label || referencedTemplate.label,
           type: referencedTemplate.type,
           icon: referencedTemplate.icon,
-          constraints: referencedTemplate.constraints || []
+          constraints: referencedTemplate.constraints || [],
+          level: level // ✅ NUOVO: Tracciamo il livello
         });
       }
     } else {
@@ -105,12 +112,18 @@ async function resolveTemplateRefs(subData, templates) {
         label: item.label,
         type: item.type,
         icon: item.icon,
-        constraints: item.constraints || []
+        constraints: item.constraints || [],
+        level: level // ✅ NUOVO: Tracciamo il livello
       });
     }
   }
 
   return resolved;
+}
+
+// ✅ NUOVO: Funzione per gestire template con 3 livelli
+async function resolveTemplateRefsWithLevels(subData, templates) {
+  return await resolveTemplateRefs(subData, templates, 0);
 }
 
 // Carica template all'avvio del server
@@ -1495,6 +1508,7 @@ app.post('/step2', async (req, res) => {
       'email': 'email',
       'telefono': 'phone',
       'indirizzo': 'address',
+      'indirizzo complesso': 'complexAddress', // ✅ NUOVO: Mapping per il template di test
       'codice fiscale': 'taxCode',
       'iban': 'iban',
       'partita iva': 'vatNumber'
@@ -1519,8 +1533,16 @@ app.post('/step2', async (req, res) => {
 
       console.log(`[STEP2] Applied Factory template: ${matchedTemplate.name} with ${result.subData.length} sub-data`);
 
-      // Risolvi templateRef per espandere i riferimenti
-      const resolvedSubData = await resolveTemplateRefs(result.subData, templates);
+      // ✅ MODIFICATO: Usa la nuova funzione con supporto 3 livelli
+      const resolvedSubData = await resolveTemplateRefsWithLevels(result.subData, templates);
+
+      // ✅ NUOVO: Log per debug dei livelli
+      const levelCounts = resolvedSubData.reduce((acc, item) => {
+        const level = item.level || 0;
+        acc[level] = (acc[level] || 0) + 1;
+        return acc;
+      }, {});
+      console.log(`[STEP2] Template risolto con livelli:`, levelCounts);
 
       // Formato compatibile con il frontend
       const response = {
