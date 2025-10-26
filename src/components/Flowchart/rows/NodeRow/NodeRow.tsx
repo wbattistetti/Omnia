@@ -86,6 +86,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Visual states for drag & drop feedback
   const [visualState, setVisualState] = useState<'normal' | 'fade' | 'highlight'>('normal');
 
+  // Debug log per visualState changes
+  useEffect(() => {
+    console.log('🎯 [NodeRow] visualState changed:', { rowId: row.id, visualState });
+  }, [visualState, row.id]);
+
   // Registry for external access
   const { registerRow, unregisterRow } = useRowRegistry();
 
@@ -95,10 +100,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   }, []);
 
   const highlight = useCallback(() => {
+    console.log('🎯 [NodeRow] highlight() called for row:', row.id);
     setVisualState('highlight');
     // Auto-reset to normal after 1 second
-    setTimeout(() => setVisualState('normal'), 1000);
-  }, []);
+    setTimeout(() => {
+      console.log('🎯 [NodeRow] highlight() auto-reset to normal for row:', row.id);
+      setVisualState('normal');
+    }, 1000);
+  }, [row.id]);
 
   const normal = useCallback(() => {
     setVisualState('normal');
@@ -776,10 +785,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       case 'fade':
         return { opacity: 0.3, transition: 'opacity 0.2s ease' };
       case 'highlight':
-        return { 
-          backgroundColor: 'rgba(16, 185, 129, 0.3)', 
+        return {
+          backgroundColor: 'rgba(16, 185, 129, 0.6)',
           borderRadius: '8px',
-          transition: 'background-color 0.5s ease-out'
+          transition: 'background-color 0.3s ease-out',
+          border: '2px solid rgba(16, 185, 129, 0.8)',
+          boxShadow: '0 0 10px rgba(16, 185, 129, 0.5)'
         };
       default:
         return {};
@@ -810,6 +821,25 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Merge visual styles with conditional styles
   conditionalStyles = { ...conditionalStyles, ...getVisualStyles() };
+
+  // Final styles that preserve highlight but apply defaults
+  const finalStyles = visualState === 'highlight'
+    ? {} // Don't override highlight styles
+    : {
+      backgroundColor: 'transparent',
+      border: 'none',
+      outline: 'none',
+      boxShadow: 'none',
+      paddingLeft: 0,
+      paddingRight: 0,
+      marginTop: 0,
+      marginBottom: 0,
+      paddingTop: 4,
+      paddingBottom: 4,
+      minHeight: 0,
+      height: 'auto',
+      width: '100%'
+    };
 
   // Colore solo testo come in sidebar; sfondo trasparente
   let bgColor = 'transparent';
@@ -863,7 +893,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       <div
         ref={nodeContainerRef}
         className={`node-row-outer nodrag flex items-center group transition-colors ${conditionalClasses}`}
-        style={{ ...conditionalStyles, backgroundColor: 'transparent', border: 'none', outline: 'none', boxShadow: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 4, paddingBottom: 4, minHeight: 0, height: 'auto', width: '100%' }}
+        style={{ ...conditionalStyles, ...finalStyles }}
         data-index={index}
         data-being-dragged={isBeingDragged ? 'true' : 'false'}
         data-row-id={row.id}

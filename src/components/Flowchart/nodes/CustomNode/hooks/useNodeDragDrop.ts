@@ -189,8 +189,14 @@ export function useNodeDragDrop({
 
                 // ELEGANTE: Usa il componente per l'evidenziazione
                 const rowComponent = getRowComponent(draggedRow.id);
+                console.log('🎯 [SameNode] Highlighting row after drop:', {
+                    rowId: draggedRow.id,
+                    rowComponent: !!rowComponent
+                });
                 if (rowComponent) {
                     rowComponent.highlight();
+                } else {
+                    console.warn('🎯 [SameNode] Row component not found in registry:', draggedRow.id);
                 }
             }
         }

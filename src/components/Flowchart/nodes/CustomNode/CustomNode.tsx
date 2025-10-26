@@ -246,8 +246,14 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           // Aspetta un po' per assicurarsi che il componente sia stato renderizzato
           setTimeout(() => {
             const rowComponent = getRowComponent(rowData.id);
+            console.log('🎯 [CrossNode] Highlighting row after drop:', {
+              rowId: rowData.id,
+              rowComponent: !!rowComponent
+            });
             if (rowComponent) {
               rowComponent.highlight();
+            } else {
+              console.warn('🎯 [CrossNode] Row component not found in registry:', rowData.id);
             }
           }, 50);
         } else {
