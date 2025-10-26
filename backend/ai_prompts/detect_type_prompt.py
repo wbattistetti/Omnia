@@ -1,57 +1,83 @@
-def get_detect_type_prompt(user_desc):
+def get_detect_type_prompt(user_desc, available_templates=None):
+    templates_context = ""
+    if available_templates:
+        templates_context = f"""
+Available Templates:
+{json.dumps(available_templates, indent=2)}
+
+Template Intelligence Rules:
+1. EXACT MATCH: If user request matches an existing template exactly, use it
+2. COMPOSITION: If user request can be built from existing templates, compose them
+3. NEW TEMPLATE: Only create new template if no existing template fits
+
+Examples:
+- "data di nascita" → use existing "date" template
+- "dati personali" → compose "name" + "date" + "address" + "phone" + "email"
+- "dati del veicolo" → create new "vehicle" template with subData: ["brand", "model", "year", "plate"]
+"""
+    
     return f"""
-You are a data schema designer.
+You are an intelligent data structure analyzer and template creator.
 
-Goal:
-- Interpret the user's intent and create a semantic data structure.
-- Return a TREE with a MEANINGFUL, DESCRIPTIVE root label that captures the essence of the data being collected.
+User Request: "{user_desc}"
 
-Output requirements:
-- Respond with JSON ONLY, no comments, no IDs, no extra text.
-- Use this exact structure:
+{templates_context}
+
+Analysis Process:
+1. Check if existing templates match exactly
+2. Check if you can compose from existing templates
+3. If neither works, CREATE NEW TEMPLATES with complete structure
+
+Response Format:
 {{
-  "label": "<SEMANTIC ROOT LABEL>",  // CRITICAL: Use a descriptive, meaningful label based on context
-                                      // ✅ GOOD: "Personal data", "Contact information", "Shipping details", "User profile"
-                                      // ❌ AVOID: "Data", "Fields", "Information" (too generic)
-  "mains": [                         // array of top-level fields (one or many)
+  "action": "use_existing|compose|create_new",
+  "template_source": "<template_name_if_using_existing>",
+  "composed_from": ["<template1>", "<template2>"] // if creating aggregate
+  "proposed_templates": [ // if creating new templates
     {{
-      "label": "<field label>",      // English human label, Title Case
-      "type": "text|number|date|email|phone|address|boolean|object",
-      "icon": "<Lucide icon name>",  // e.g., User, MapPin, Calendar, Type, Mail, Phone, Hash, Globe, Home, Building, FileText
-      "subData": [                   // optional; present only if the field is composite
+      "name": "template_name",
+      "label": "Human Readable Label",
+      "type": "template_type",
+      "icon": "LucideIconName",
+      "description": "What this template is for",
+      "subData": [
         {{
-          "label": "<sub field label>",
-          "type": "text|number|date|email|phone|address|boolean|object",
-          "icon": "<Lucide icon name>",
-          "subData": [ ... ]         // optional deeper nesting
+          "label": "Sub Data Label",
+          "type": "data_type",
+          "icon": "IconName",
+          "constraints": [
+            {{"type": "required"}},
+            {{"type": "minLength", "value": 2}},
+            {{"type": "maxLength", "value": 50}}
+          ]
         }}
       ]
+    }}
+  ],
+  "requires_approval": true, // if creating new templates
+  "reason": "Explanation of decision and what templates are needed",
+  "label": "<Main label>",
+  "type": "<type_name>",
+  "icon": "<icon_name>",
+  "mains": [ // for backward compatibility
+    {{
+      "label": "<field label>",
+      "type": "text|number|date|email|phone|address|boolean|object",
+      "icon": "<Lucide icon name>",
+      "subData": [...]
     }}
   ]
 }}
 
 Rules:
-- **ROOT LABEL MUST BE SEMANTIC**: Analyze user intent and create a meaningful label.
-  Examples:
-    - "chiedi dati personali" → "Personal data"
-    - "chiedi informazioni di contatto" → "Contact information"
-    - "chiedi indirizzo di spedizione" → "Shipping address"
-    - "chiedi età" → "Age information" (even for single fields, create a semantic container)
-    
-- If the intent is an AGGREGATE, return MULTIPLE top-level mains. Each main can be composite.
-- Use common, meaningful composites where implied:
-  - "Full name" → subData: ["First name", "Last name"]
-  - "Date of birth" → subData: ["Day", "Month", "Year"]
-  - "Address" → subData: ["Street", "Civic number", "Internal", "Postal code", "City", "Region", "Country"]
-  - "Phone number" → subData: ["Country code", "Area code", "Number"]
-  
-- If the intent is a SINGLE FIELD, return exactly one main. Add subData ONLY if the field naturally decomposes.
-- Labels must be in English, Title Case, concise and unambiguous.
-- Prefer a compact, practical set of fields; avoid duplicates; 3–8 mains for broad aggregates is typical.
-- Do not generate any IDs, metadata, or descriptions.
-- Icons: choose a semantically appropriate Lucide icon name for each field and sub-field. 
-  Prefer among: User, MapPin, Calendar, Type, Mail, Phone, Hash, Globe, Home, Building, FileText, Folder, HelpCircle. 
-  If unsure, use FileText.
-
-User intent: '{user_desc}'
+1. ALWAYS try to reuse existing templates first
+2. Create aggregates from existing templates when possible
+3. When creating new templates, provide COMPLETE structure with:
+   - Proper labels and descriptions
+   - Appropriate icons
+   - Realistic constraints
+   - Logical sub-data structure
+4. Be creative but practical
+5. Explain why each template is needed
+6. Maintain backward compatibility with existing format
 """ 

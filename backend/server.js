@@ -38,6 +38,49 @@ const dbFactory = 'factory';
 const dbProjects = 'Projects';
 
 // -----------------------------
+// Template Cache Management
+// -----------------------------
+let templateCache = null;
+let cacheLoaded = false;
+
+async function loadTemplatesFromDB() {
+  if (cacheLoaded) {
+    return templateCache;
+  }
+
+  try {
+    console.log('[TEMPLATE_CACHE] Caricando template dal database Factory...');
+    const client = new MongoClient(uri);
+    await client.connect();
+    const db = client.db('factory');
+    const collection = db.collection('type_templates');
+
+    const templates = await collection.find({}).toArray();
+    await client.close();
+
+    // Converti in oggetto per accesso rapido
+    templateCache = {};
+    templates.forEach(template => {
+      if (template._id) {
+        delete template._id;
+      }
+      templateCache[template.name] = template;
+    });
+
+    cacheLoaded = true;
+    console.log(`[TEMPLATE_CACHE] Caricati ${Object.keys(templateCache).length} template dal database`);
+    return templateCache;
+
+  } catch (error) {
+    console.error('[TEMPLATE_CACHE] Errore nel caricamento:', error);
+    return {};
+  }
+}
+
+// Carica template all'avvio del server
+loadTemplatesFromDB().catch(console.error);
+
+// -----------------------------
 // Helpers: naming & catalog
 // -----------------------------
 function slugifyName(str) {
@@ -291,7 +334,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     let query = {};
     if (industry) {
       // se presenti metadati scope/industry nel futuro
-      query = { $or: [ { scope: 'global' }, { scope: 'industry', industry } ] };
+      query = { $or: [{ scope: 'global' }, { scope: 'industry', industry }] };
     }
     let acts = await actsColl.find(query).toArray();
     // Fallback: se il filtro scope/industry non produce risultati, copia tutti gli atti
@@ -323,8 +366,8 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     }
 
     // 5) Collezioni vuote necessarie
-    await projDb.collection('act_instances').createIndex({ baseActId: 1, updatedAt: -1 }).catch(() => {});
-    await projDb.collection('flow').createIndex({ updatedAt: -1 }).catch(() => {});
+    await projDb.collection('act_instances').createIndex({ baseActId: 1, updatedAt: -1 }).catch(() => { });
+    await projDb.collection('flow').createIndex({ updatedAt: -1 }).catch(() => { });
 
     logInfo('Projects.bootstrap', { projectId, dbName, insertedActs: inserted });
     res.json({ ok: true, projectId, dbName, counts: { project_acts: inserted } });
@@ -596,7 +639,7 @@ app.post('/api/projects/:pid/instances', async (req, res) => {
 
     // derive base ddt version/hash from project_acts when available
     let base = null;
-    try { base = await projDb.collection('project_acts').findOne({ _id: payload.baseActId }); } catch {}
+    try { base = await projDb.collection('project_acts').findOne({ _id: payload.baseActId }); } catch { }
     const instance = {
       projectId,
       baseActId: payload.baseActId,
@@ -637,7 +680,7 @@ app.post('/api/projects/:pid/instances/bulk', async (req, res) => {
     for (const it of items) {
       if (!it?.baseActId || !it?.mode) continue;
       let base = null;
-      try { base = await projDb.collection('project_acts').findOne({ _id: it.baseActId }); } catch {}
+      try { base = await projDb.collection('project_acts').findOne({ _id: it.baseActId }); } catch { }
       docs.push({
         projectId,
         baseActId: it.baseActId,
@@ -783,13 +826,13 @@ app.get('/api/factory/agent-acts', async (req, res) => {
     // Normalize returned objects with mode and isInteractive
     console.log('>>> GET /api/factory/agent-acts - Raw acts count:', acts.length);
     if (acts.length > 0) {
-    console.log('>>> First act sample:', JSON.stringify({
-      _id: acts[0]._id,
-      label: acts[0].label,
-      mode: acts[0].mode
-    }, null, 2));
+      console.log('>>> First act sample:', JSON.stringify({
+        _id: acts[0]._id,
+        label: acts[0].label,
+        mode: acts[0].mode
+      }, null, 2));
     }
-    
+
     const normalizedActs = acts.map(act => {
       const derivedMode = deriveModeFromDoc(act);
       const derivedIsInteractive = deriveIsInteractiveFromMode(derivedMode);
@@ -799,16 +842,16 @@ app.get('/api/factory/agent-acts', async (req, res) => {
         isInteractive: derivedIsInteractive
       };
     });
-    
+
     console.log('>>> Normalized acts count:', normalizedActs.length);
     if (normalizedActs.length > 0) {
-    console.log('>>> First normalized act sample:', JSON.stringify({
-      _id: normalizedActs[0]._id,
-      label: normalizedActs[0].label,
-      mode: normalizedActs[0].mode
-    }, null, 2));
+      console.log('>>> First normalized act sample:', JSON.stringify({
+        _id: normalizedActs[0]._id,
+        label: normalizedActs[0].label,
+        mode: normalizedActs[0].mode
+      }, null, 2));
     }
-    
+
     res.json(normalizedActs);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
@@ -824,33 +867,33 @@ app.post('/api/factory/agent-acts', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('AgentActs');
-    
+
     const { industry, scope } = req.body;
-    
+
     // Build query based on scope filtering
     const query = {};
-    
+
     if (scope && Array.isArray(scope)) {
       const scopeConditions = [];
-      
+
       if (scope.includes('global')) {
         scopeConditions.push({ scope: 'global' });
       }
-      
+
       if (scope.includes('industry') && industry) {
-        scopeConditions.push({ 
-          scope: 'industry', 
-          industry: industry 
+        scopeConditions.push({
+          scope: 'industry',
+          industry: industry
         });
       }
-      
+
       if (scopeConditions.length > 0) {
         query.$or = scopeConditions;
       }
     }
-    
+
     console.log('>>> AgentActs query:', JSON.stringify(query, null, 2));
-    
+
     const docs = await coll.find(query).toArray();
     console.log(`>>> Found ${docs.length} AgentActs with scope filtering`);
     res.json(docs);
@@ -887,33 +930,33 @@ app.post('/api/factory/backend-calls', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('BackendCalls');
-    
+
     const { industry, scope } = req.body;
-    
+
     // Build query based on scope filtering
     const query = {};
-    
+
     if (scope && Array.isArray(scope)) {
       const scopeConditions = [];
-      
+
       if (scope.includes('global')) {
         scopeConditions.push({ scope: 'global' });
       }
-      
+
       if (scope.includes('industry') && industry) {
-        scopeConditions.push({ 
-          scope: 'industry', 
-          industry: industry 
+        scopeConditions.push({
+          scope: 'industry',
+          industry: industry
         });
       }
-      
+
       if (scopeConditions.length > 0) {
         query.$or = scopeConditions;
       }
     }
-    
+
     console.log('>>> BackendCalls query:', JSON.stringify(query, null, 2));
-    
+
     const docs = await coll.find(query).toArray();
     console.log(`>>> Found ${docs.length} BackendCalls with scope filtering`);
     res.json(docs);
@@ -950,33 +993,33 @@ app.post('/api/factory/conditions', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Conditions');
-    
+
     const { industry, scope } = req.body;
-    
+
     // Build query based on scope filtering
     const query = {};
-    
+
     if (scope && Array.isArray(scope)) {
       const scopeConditions = [];
-      
+
       if (scope.includes('global')) {
         scopeConditions.push({ scope: 'global' });
       }
-      
+
       if (scope.includes('industry') && industry) {
-        scopeConditions.push({ 
-          scope: 'industry', 
-          industry: industry 
+        scopeConditions.push({
+          scope: 'industry',
+          industry: industry
         });
       }
-      
+
       if (scopeConditions.length > 0) {
         query.$or = scopeConditions;
       }
     }
-    
+
     console.log('>>> Conditions query:', JSON.stringify(query, null, 2));
-    
+
     const docs = await coll.find(query).toArray();
     console.log(`>>> Found ${docs.length} Conditions with scope filtering`);
     res.json(docs);
@@ -1013,33 +1056,33 @@ app.post('/api/factory/tasks', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Tasks');
-    
+
     const { industry, scope } = req.body;
-    
+
     // Build query based on scope filtering
     const query = {};
-    
+
     if (scope && Array.isArray(scope)) {
       const scopeConditions = [];
-      
+
       if (scope.includes('global')) {
         scopeConditions.push({ scope: 'global' });
       }
-      
+
       if (scope.includes('industry') && industry) {
-        scopeConditions.push({ 
-          scope: 'industry', 
-          industry: industry 
+        scopeConditions.push({
+          scope: 'industry',
+          industry: industry
         });
       }
-      
+
       if (scopeConditions.length > 0) {
         query.$or = scopeConditions;
       }
     }
-    
+
     console.log('>>> Tasks query:', JSON.stringify(query, null, 2));
-    
+
     const docs = await coll.find(query).toArray();
     console.log(`>>> Found ${docs.length} Tasks with scope filtering`);
     res.json(docs);
@@ -1076,33 +1119,33 @@ app.post('/api/factory/macro-tasks', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('MacroTasks');
-    
+
     const { industry, scope } = req.body;
-    
+
     // Build query based on scope filtering
     const query = {};
-    
+
     if (scope && Array.isArray(scope)) {
       const scopeConditions = [];
-      
+
       if (scope.includes('global')) {
         scopeConditions.push({ scope: 'global' });
       }
-      
+
       if (scope.includes('industry') && industry) {
-        scopeConditions.push({ 
-          scope: 'industry', 
-          industry: industry 
+        scopeConditions.push({
+          scope: 'industry',
+          industry: industry
         });
       }
-      
+
       if (scopeConditions.length > 0) {
         query.$or = scopeConditions;
       }
     }
-    
+
     console.log('>>> MacroTasks query:', JSON.stringify(query, null, 2));
-    
+
     const docs = await coll.find(query).toArray();
     console.log(`>>> Found ${docs.length} MacroTasks with scope filtering`);
     res.json(docs);
@@ -1192,7 +1235,7 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     const ddt = await db.collection('DataDialogueTemplates').find({}).toArray();
-    try { console.log('>>> LOAD /api/factory/dialogue-templates count =', Array.isArray(ddt) ? ddt.length : 0); } catch {}
+    try { console.log('>>> LOAD /api/factory/dialogue-templates count =', Array.isArray(ddt) ? ddt.length : 0); } catch { }
     res.json(ddt);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
@@ -1272,7 +1315,7 @@ app.post('/api/factory/data-dialogue-translations', async (req, res) => {
 // (removed) /api/ddt/step2 mock — using FastAPI /step2
 
 app.post('/api/factory/dialogue-templates', async (req, res) => {
-  try { console.log('>>> SAVE /api/factory/dialogue-templates size ~', Buffer.byteLength(JSON.stringify(req.body || {})), 'bytes'); } catch {}
+  try { console.log('>>> SAVE /api/factory/dialogue-templates size ~', Buffer.byteLength(JSON.stringify(req.body || {})), 'bytes'); } catch { }
   const client = new MongoClient(uri);
   try {
     await client.connect();
@@ -1331,6 +1374,132 @@ app.get('/api/factory/industries', async (req, res) => {
   }
 });
 
+// -----------------------------
+// Type Templates Endpoints
+// -----------------------------
+app.get('/api/factory/type-templates', async (req, res) => {
+  try {
+    const templates = await loadTemplatesFromDB();
+    res.json(templates);
+  } catch (error) {
+    logError('GET /api/factory/type-templates', error);
+    res.status(500).json({ error: 'Failed to load templates' });
+  }
+});
+
+app.post('/api/factory/reload-templates', async (req, res) => {
+  try {
+    cacheLoaded = false;
+    await loadTemplatesFromDB();
+    res.json({ message: 'Templates reloaded from database' });
+  } catch (error) {
+    logError('POST /api/factory/reload-templates', error);
+    res.status(500).json({ error: 'Failed to reload templates' });
+  }
+});
+
+// -----------------------------
+// Step2 Detect Type Endpoint
+// -----------------------------
+// Middleware per gestire text/plain
+app.use('/step2', (req, res, next) => {
+  if (req.headers['content-type'] === 'text/plain') {
+    let data = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => {
+      data += chunk;
+    });
+    req.on('end', () => {
+      req.body = data;
+      next();
+    });
+  } else {
+    next();
+  }
+});
+
+app.post('/step2', async (req, res) => {
+  try {
+    // Gestisci diversi formati di richiesta
+    let user_desc = '';
+    if (req.headers['content-type'] === 'text/plain') {
+      // Per text/plain, il body è una stringa
+      user_desc = req.body;
+    } else if (typeof req.body === 'string') {
+      user_desc = req.body;
+    } else if (req.body && typeof req.body === 'object') {
+      user_desc = req.body.user_desc || req.body.toString();
+    } else {
+      user_desc = String(req.body || '');
+    }
+    
+    console.log(`[STEP2] Raw body:`, req.body);
+    console.log(`[STEP2] Content-Type:`, req.headers['content-type']);
+    console.log(`[STEP2] Detect type for: "${user_desc}"`);
+    
+    // Carica template dalla cache
+    const templates = await loadTemplatesFromDB();
+    console.log(`[STEP2] Using ${Object.keys(templates).length} templates from Factory DB cache`);
+    
+    // Cerca template che corrisponde
+    let matchedTemplate = null;
+    const user_lower = user_desc.toLowerCase();
+    
+    // Mappatura richieste -> template
+    const request_mapping = {
+      'data di nascita': 'date',
+      'data nascita': 'date',
+      'età': 'date',
+      'nome': 'name',
+      'nome completo': 'name',
+      'nominativo': 'name',
+      'email': 'email',
+      'telefono': 'phone',
+      'indirizzo': 'address',
+      'codice fiscale': 'taxCode',
+      'iban': 'iban',
+      'partita iva': 'vatNumber'
+    };
+    
+    for (const [request_key, template_name] of Object.entries(request_mapping)) {
+      if (user_lower.includes(request_key) && templates[template_name]) {
+        matchedTemplate = templates[template_name];
+        console.log(`[STEP2] Found match: ${request_key} -> ${template_name}`);
+        break;
+      }
+    }
+    
+    if (matchedTemplate) {
+      // Usa template dal database
+      const result = {
+        type: matchedTemplate.type,
+        icon: matchedTemplate.icon,
+        label: matchedTemplate.label,
+        subData: matchedTemplate.subData || []
+      };
+      
+      console.log(`[STEP2] Applied Factory template: ${matchedTemplate.name} with ${result.subData.length} sub-data`);
+      
+      res.json({ ai: result });
+    } else {
+      // Fallback: crea template generico
+      const result = {
+        type: 'text',
+        icon: 'FileText',
+        label: user_desc.charAt(0).toUpperCase() + user_desc.slice(1),
+        subData: []
+      };
+      
+      console.log(`[STEP2] No Factory template found, using fallback`);
+      res.json({ ai: result });
+    }
+    
+  } catch (error) {
+    console.error('[STEP2] Error:', error);
+    res.status(500).json({ error: 'unrecognized_data_type' });
+  }
+});
+
 // --- INDUSTRY ENDPOINTS ---
 
 app.get('/api/industry/:industryId/templates', async (req, res) => {
@@ -1351,7 +1520,7 @@ app.get('/api/industry/:industryId/templates', async (req, res) => {
 // --- PROJECTS ENDPOINTS (API) ---
 
 app.get('/api/projects', async (req, res) => {
-	console.log('>>> CHIAMATA /api/projects');
+  console.log('>>> CHIAMATA /api/projects');
   const client = new MongoClient(uri);
   try {
     await client.connect();
@@ -1427,7 +1596,7 @@ app.post('/projects', async (req, res) => {
 });
 
 app.get('/projects/all', async (req, res) => {
-	console.log('>>> CHIAMATA /projects/all');
+  console.log('>>> CHIAMATA /projects/all');
   const client = new MongoClient(uri);
   try {
     await client.connect();
@@ -1435,7 +1604,7 @@ app.get('/projects/all', async (req, res) => {
     const projects = await db.collection('projects').find({}).sort({ _id: -1 }).toArray();
     res.json(projects);
   } catch (err) {
-	console.error('Errore in /projects/all:', err); // <--- AGGIUNGI QUESTO
+    console.error('Errore in /projects/all:', err); // <--- AGGIUNGI QUESTO
     res.status(500).json({ error: err.message, stack: err.stack });
   } finally {
     await client.close();
