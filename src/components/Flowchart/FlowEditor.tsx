@@ -607,26 +607,26 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     const target = event.target as Element;
     const isAnchor = target && (target.classList.contains('rigid-anchor') || target.closest('.rigid-anchor'));
 
-    console.log('[FlowEditor] NODE DRAG START ATTEMPT:', {
+    console.log('🚀 [DRAG DEBUG] NODE DRAG START:', {
       nodeId: node.id,
-      nodeType: node.type,
       targetTag: target?.tagName,
       targetClass: target?.className,
-      hasNodrag: target?.classList.contains('nodrag'),
-      closestNodrag: target?.closest('.nodrag'),
       isAnchor,
-      eventType: event.type
+      __flowDragMode: (window as any).__flowDragMode,
+      hasNodrag: target?.classList.contains('nodrag'),
+      closestNodrag: target?.closest('.nodrag')
     });
 
     if (target && (target.classList.contains('nodrag') || target.closest('.nodrag'))) {
-      console.log('[FlowEditor] DRAG BLOCKED - nodrag element found');
+      console.log('🚀 [DRAG DEBUG] DRAG BLOCKED - nodrag element found');
       event.preventDefault();
       return false;
     }
 
-    console.log('[FlowEditor] DRAG ALLOWED - proceeding with node drag');
+    console.log('🚀 [DRAG DEBUG] DRAG ALLOWED - proceeding with node drag');
     // Prepara contesto per drag rigido SOLO se partito dall'ancora
     if ((window as any).__flowDragMode === 'rigid' || isAnchor) {
+      console.log('🚀 [DRAG DEBUG] RIGID DRAG DETECTED - setting up rigid drag context');
       const rootId = node.id;
       // BFS su edges per raccogliere tutti i discendenti
       const visited = new Set<string>();
@@ -653,8 +653,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         rootStart: { x: (node.position as any).x, y: (node.position as any).y },
         rootLast: { x: (node.position as any).x, y: (node.position as any).y },
       };
-      // debug logs removed
+      console.log('🚀 [DRAG DEBUG] RIGID DRAG CONTEXT SET - descendants found:', visited.size);
     } else {
+      console.log('🚀 [DRAG DEBUG] NORMAL DRAG - no rigid context');
       rigidDragCtxRef.current = null;
     }
   }, []);
@@ -698,15 +699,21 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, []);
 
   const onNodeDrag = useCallback((event: any, draggedNode: Node) => {
-    if (!rigidDragCtxRef.current) return;
+    if (!rigidDragCtxRef.current) {
+      console.log('🚀 [DRAG DEBUG] onNodeDrag - no rigid context, normal drag');
+      return;
+    }
+    console.log('🚀 [DRAG DEBUG] onNodeDrag - applying rigid drag movement');
     const ctx = rigidDragCtxRef.current;
     applyRigidDragMovement(ctx, draggedNode, setNodes);
   }, [setNodes, applyRigidDragMovement]);
 
   const onNodeDragStop = useCallback(() => {
+    console.log('🚀 [DRAG DEBUG] onNodeDragStop - cleaning up');
     try { (window as any).__flowDragMode = undefined; } catch { }
     const ctx = rigidDragCtxRef.current;
     if (ctx) {
+      console.log('🚀 [DRAG DEBUG] onNodeDragStop - applying final rigid drag offset');
       applyFinalRigidDragOffset(ctx, nodesRef, setNodes);
     }
     rigidDragCtxRef.current = null;

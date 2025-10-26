@@ -78,7 +78,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
           className="hover:opacity-100 hover:scale-110"
           title="Drag to move node"
           onPointerDownCapture={() => {
-            console.log('🎯 [NodeDragHeader] MOVE ICON - Pointer DOWN (capture) - isDragging=true');
+            console.log('🚀 [DRAG DEBUG] MOVE ICON - Normal drag started');
             onDragStart?.();
           }}
         >
@@ -88,7 +88,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
         {/* Anchor icon - RIGID DRAG AREA (not a button) */}
         <div
           title="Drag to move with descendants"
-          className="hover:opacity-100 hover:scale-110"
+          className="rigid-anchor hover:opacity-100 hover:scale-110"
           style={{
             cursor: 'move',
             opacity: isToolbarDrag ? 0 : 0.85,
@@ -97,8 +97,13 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
             alignItems: 'center'
           }}
           onPointerDownCapture={() => {
-            console.log('🎯 [NodeDragHeader] ANCHOR ICON - Pointer DOWN (capture) - rigid=true, isDragging=true');
-            try { (window as any).__flowDragMode = 'rigid'; } catch { }
+            console.log('🚀 [DRAG DEBUG] ANCHOR ICON - Setting rigid mode');
+            try {
+              (window as any).__flowDragMode = 'rigid';
+              console.log('🚀 [DRAG DEBUG] __flowDragMode set to:', (window as any).__flowDragMode);
+            } catch (e) {
+              console.error('🚀 [DRAG DEBUG] Error setting __flowDragMode:', e);
+            }
             onDragStart?.();
           }}
         >
