@@ -89,7 +89,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     nodeRows,
     setNodeRows,
     data: normalizedData,
-    rowsContainerRef
+    rowsContainerRef,
+    nodeId: id
   });
   const {
     isRowDragging, draggedRowId, handleRowDragStart
@@ -198,6 +199,32 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // Stato per gestire l'inserter hover
   const [hoveredInserter, setHoveredInserter] = useState<number | null>(null);
+
+  // ✅ CROSS-NODE DRAG: Listen for cross-node row moves
+  React.useEffect(() => {
+    const handleCrossNodeMove = (event: CustomEvent) => {
+      const { fromNodeId, toNodeId, rowData } = event.detail;
+
+      if (toNodeId === id) {
+        // Questo nodo è la destinazione - aggiungi la riga
+        console.log('🎯 [CrossNode] Adding row to this node', { toNodeId, rowData });
+
+        if (rowData) {
+          const updatedRows = [...nodeRows, rowData];
+          setNodeRows(updatedRows);
+
+          if (data.onUpdate) {
+            data.onUpdate({ rows: updatedRows });
+          }
+        }
+      }
+    };
+
+    window.addEventListener('crossNodeRowMove', handleCrossNodeMove as EventListener);
+    return () => {
+      window.removeEventListener('crossNodeRowMove', handleCrossNodeMove as EventListener);
+    };
+  }, [id, nodeRows, setNodeRows, data]);
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>

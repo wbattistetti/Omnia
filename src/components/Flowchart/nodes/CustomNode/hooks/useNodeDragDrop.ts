@@ -6,6 +6,7 @@ interface UseNodeDragDropProps {
     setNodeRows: (rows: NodeRowData[]) => void;
     data: any;
     rowsContainerRef: React.RefObject<HTMLElement>;
+    nodeId: string; // ID del nodo corrente per identificare il nodo di origine
 }
 
 /**
@@ -16,7 +17,8 @@ export function useNodeDragDrop({
     nodeRows,
     setNodeRows,
     data,
-    rowsContainerRef
+    rowsContainerRef,
+    nodeId
 }: UseNodeDragDropProps) {
     // Stato per il drag personalizzato
     const [isRowDragging, setIsRowDragging] = useState(false);
@@ -24,6 +26,8 @@ export function useNodeDragDrop({
     const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
     const [dragElement, setDragElement] = useState<HTMLElement | null>(null);
+    const [draggedRowData, setDraggedRowData] = useState<NodeRowData | null>(null);
+    const [targetNodeId, setTargetNodeId] = useState<string | null>(null);
 
     // Gestione drag start personalizzato
     const handleRowDragStart = useCallback((id: string, index: number, clientX: number, clientY: number, originalElement: HTMLElement) => {
@@ -71,12 +75,17 @@ export function useNodeDragDrop({
         // Aggiungi al DOM
         document.body.appendChild(clone);
 
+        // Trova i dati della riga trascinata
+        const rowData = nodeRows.find(row => row.id === id);
+
         // Aggiorna stato
         setIsRowDragging(true);
         setDraggedRowId(id);
         setDraggedRowIndex(index);
         setMousePosition({ x: clientX, y: clientY });
         setDragElement(clone);
+        setDraggedRowData(rowData || null);
+        setTargetNodeId(null);
 
         // Cursor
         document.body.style.cursor = 'grabbing';
@@ -91,42 +100,109 @@ export function useNodeDragDrop({
         setMousePosition({ x: e.clientX, y: e.clientY });
         dragElement.style.left = e.clientX + 10 + 'px';
         dragElement.style.top = e.clientY - 10 + 'px';
-    }, [isRowDragging, dragElement]);
+
+        // Trova il nodo sotto il mouse per cross-node drag
+        const elementUnderMouse = document.elementFromPoint(e.clientX, e.clientY);
+        const targetNode = elementUnderMouse?.closest('.react-flow__node');
+
+        if (targetNode) {
+            const targetNodeId = targetNode.getAttribute('data-id');
+            const isDifferentNode = targetNodeId && targetNodeId !== nodeId;
+
+            if (isDifferentNode) {
+                // Evidenzia il nodo di destinazione
+                targetNode.style.border = '2px solid #10b981'; // Verde per indicare drop valido
+                targetNode.style.borderRadius = '8px';
+                setTargetNodeId(targetNodeId);
+            } else {
+                // Rimuovi evidenziazione se è lo stesso nodo
+                targetNode.style.border = '';
+                setTargetNodeId(null);
+            }
+        } else {
+            // Rimuovi evidenziazione se non c'è nessun nodo
+            document.querySelectorAll('.react-flow__node').forEach(node => {
+                node.style.border = '';
+            });
+            setTargetNodeId(null);
+        }
+    }, [isRowDragging, dragElement, nodeId]);
 
     // Gestione rilascio del mouse
     const handleMouseUp = useCallback(() => {
         if (!isRowDragging || !draggedRowId || draggedRowIndex === null) return;
 
-        console.log('🎯 [CustomDrag] Ending drag', { draggedRowId, draggedRowIndex });
+        console.log('🎯 [CustomDrag] Ending drag', {
+            draggedRowId,
+            draggedRowIndex,
+            targetNodeId,
+            isCrossNode: !!targetNodeId && targetNodeId !== nodeId
+        });
 
-        // Trova la posizione di drop
-        const elements = Array.from(rowsContainerRef.current?.querySelectorAll('.node-row-outer') || []) as HTMLElement[];
-        const rects = elements.map((el, idx) => ({
-            idx: Number(el.dataset.index),
-            top: el.getBoundingClientRect().top,
-            height: el.getBoundingClientRect().height
-        }));
+        // Rimuovi evidenziazione da tutti i nodi
+        document.querySelectorAll('.react-flow__node').forEach(node => {
+            node.style.border = '';
+        });
 
-        let targetIndex = draggedRowIndex;
-        for (const r of rects) {
-            if (mousePosition.y < r.top + r.height / 2) {
-                targetIndex = r.idx;
-                break;
-            }
-            targetIndex = r.idx + 1;
-        }
+        if (targetNodeId && targetNodeId !== nodeId) {
+            // CROSS-NODE DROP: Sposta la riga a un altro nodo
+            console.log('🎯 [CrossNode] Moving row to different node', {
+                from: nodeId,
+                to: targetNodeId,
+                rowId: draggedRowId,
+                rowData: draggedRowData
+            });
 
-        // Esegui il riordinamento se necessario
-        if (targetIndex !== draggedRowIndex) {
-            const updatedRows = [...nodeRows];
-            const draggedRow = updatedRows[draggedRowIndex];
-            updatedRows.splice(draggedRowIndex, 1);
-            updatedRows.splice(targetIndex, 0, draggedRow);
+            // Dispatches un evento personalizzato per notificare il cross-node move
+            const crossNodeEvent = new CustomEvent('crossNodeRowMove', {
+                detail: {
+                    fromNodeId: nodeId,
+                    toNodeId: targetNodeId,
+                    rowId: draggedRowId,
+                    rowData: draggedRowData,
+                    originalIndex: draggedRowIndex
+                }
+            });
+            window.dispatchEvent(crossNodeEvent);
 
+            // Rimuovi la riga dal nodo corrente
+            const updatedRows = nodeRows.filter(row => row.id !== draggedRowId);
             setNodeRows(updatedRows);
 
             if (data.onUpdate) {
                 data.onUpdate({ rows: updatedRows });
+            }
+
+        } else {
+            // SAME-NODE DROP: Riordinamento interno
+            const elements = Array.from(rowsContainerRef.current?.querySelectorAll('.node-row-outer') || []) as HTMLElement[];
+            const rects = elements.map((el, idx) => ({
+                idx: Number(el.dataset.index),
+                top: el.getBoundingClientRect().top,
+                height: el.getBoundingClientRect().height
+            }));
+
+            let targetIndex = draggedRowIndex;
+            for (const r of rects) {
+                if (mousePosition.y < r.top + r.height / 2) {
+                    targetIndex = r.idx;
+                    break;
+                }
+                targetIndex = r.idx + 1;
+            }
+
+            // Esegui il riordinamento se necessario
+            if (targetIndex !== draggedRowIndex) {
+                const updatedRows = [...nodeRows];
+                const draggedRow = updatedRows[draggedRowIndex];
+                updatedRows.splice(draggedRowIndex, 1);
+                updatedRows.splice(targetIndex, 0, draggedRow);
+
+                setNodeRows(updatedRows);
+
+                if (data.onUpdate) {
+                    data.onUpdate({ rows: updatedRows });
+                }
             }
         }
 
@@ -139,10 +215,12 @@ export function useNodeDragDrop({
         setDraggedRowId(null);
         setDraggedRowIndex(null);
         setDragElement(null);
+        setDraggedRowData(null);
+        setTargetNodeId(null);
 
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-    }, [isRowDragging, draggedRowId, draggedRowIndex, mousePosition, nodeRows, setNodeRows, data, dragElement, rowsContainerRef]);
+    }, [isRowDragging, draggedRowId, draggedRowIndex, mousePosition, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData]);
 
     // Event listeners
     useEffect(() => {
