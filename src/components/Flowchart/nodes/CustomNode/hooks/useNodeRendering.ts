@@ -11,14 +11,12 @@ interface UseNodeRenderingProps {
     showDragHeader: boolean;
     isDragging: boolean;
     isToolbarDrag: boolean;
-    draggedItem: NodeRowData | null;
-    draggedRowStyle: any;
     editingRowId: string | null;
     showIntellisense: boolean;
     intellisensePosition: { x: number; y: number };
     handleIntellisenseSelectItem: (item: any) => void;
     closeIntellisense: () => void;
-    handleRowDragStart: (id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => void;
+    handleRowDragStart: (id: string, index: number, clientX: number, clientY: number, originalElement: HTMLElement) => void;
     handleUpdateRow: (rowId: string, newText: string, categoryType?: any, meta?: Partial<NodeRowData>) => void;
     handleDeleteRow: (rowId: string) => void;
     handleInsertRow: (index: number) => void;
@@ -44,8 +42,6 @@ export function useNodeRendering({
     showDragHeader,
     isDragging,
     isToolbarDrag,
-    draggedItem,
-    draggedRowStyle,
     editingRowId,
     showIntellisense,
     intellisensePosition,
@@ -78,18 +74,14 @@ export function useNodeRendering({
         onUpdate: (row: any, newText: string) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included }),
         onUpdateWithCategory: (row: any, newText: string, categoryType: any, meta: any) => handleUpdateRow(row.id, newText, categoryType, { included: (row as any).included, ...(meta || {}) }),
         onDelete: (row: any) => handleDeleteRow(row.id),
-        onDragStart: handleRowDragStart,
-        draggedItem: draggedItem ?? null,
-        draggedRowStyle
+        onDragStart: handleRowDragStart
     }), [
         visibleRows,
         editingRowId,
         handleUpdateRow,
         handleDeleteRow,
         handleInsertRow,
-        handleRowDragStart,
-        draggedItem: draggedItem ?? null,
-        draggedRowStyle
+        handleRowDragStart
     ]);
 
     // Props per NodeDragHeader (toolbar permanente)

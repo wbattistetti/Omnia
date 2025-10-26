@@ -92,12 +92,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     rowsContainerRef
   });
   const {
-    drag, draggedItem: draggedItemRaw, draggedRowStyle,
-    handleRowDragStart
+    isRowDragging, draggedRowId, handleRowDragStart
   } = dragDrop;
-
-  // Force correct type for draggedItem
-  const draggedItem: NodeRowData | null = draggedItemRaw ?? null;
 
   // ✅ STATE: Extract all state management to custom hook (MUST BE FIRST)
   const nodeState = useNodeState({ data: normalizedData });
@@ -141,8 +137,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     showDragHeader,
     isDragging,
     isToolbarDrag,
-    draggedItem,
-    draggedRowStyle,
     editingRowId,
     showIntellisense,
     intellisensePosition,
@@ -372,11 +366,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             getProjectId={() => {
               try { return (window as any).__omniaRuntime?.getCurrentProjectId?.() || null; } catch { return null; }
             }}
-            hoveredRowIndex={drag.hoveredRowIndex}
-            draggedRowId={drag.draggedRowId}
-            draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
-            draggedItem={draggedItem || null}
-            draggedRowStyle={draggedRowStyle}
+            hoveredRowIndex={null}
+            draggedRowId={draggedRowId}
+            draggedRowOriginalIndex={null}
+            draggedItem={null}
+            draggedRowStyle={{}}
             onEditingEnd={exitEditing}
           />
         </div>

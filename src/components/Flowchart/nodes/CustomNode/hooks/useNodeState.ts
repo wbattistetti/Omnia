@@ -25,13 +25,7 @@ export function useNodeState({ data }: UseNodeStateProps) {
 
 
 
-  // Buffer area state
-  const [nodeBufferRect, setNodeBufferRect] = useState<{
-    top: number;
-    left: number;
-    width: number;
-    height: number
-  } | null>(null);
+  // Buffer area state - removed as no longer needed
 
   // Refs
   const hideToolbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -113,10 +107,6 @@ export function useNodeState({ data }: UseNodeStateProps) {
     setIsDragging,
     isToolbarDrag,
     setIsToolbarDrag,
-
-    // Buffer area
-    nodeBufferRect,
-    setNodeBufferRect,
 
     // Refs
     hideToolbarTimeoutRef,

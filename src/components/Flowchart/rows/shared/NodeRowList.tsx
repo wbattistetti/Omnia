@@ -91,10 +91,26 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
               try { console.log('[RowDnD][moveImmediate]', { from, to }); } catch { }
               const boundedTo = Math.max(0, Math.min(totalRows - 1, to));
               if (from !== boundedTo) {
-                // delegate to CustomNode via prop callbacks? For now we expect parent to use legacy path
+                // Implementa il riordinamento immediato
+                const newRows = [...rows];
+                const [movedRow] = newRows.splice(from, 1);
+                newRows.splice(boundedTo, 0, movedRow);
+
+                // Aggiorna le righe tramite callback
+                if (onUpdate) {
+                  // Notifica il parent del cambio
+                  console.log('[RowDnD][moveImmediate] Rows reordered', { from, to: boundedTo, newRows });
+                  // Chiama onUpdate per ogni riga per aggiornare l'ordine
+                  newRows.forEach((row, index) => {
+                    onUpdate(row, row.text);
+                  });
+                }
               }
             }}
-            onDropRow={() => { /* parent commit handled in CustomNode via legacy path */ }}
+            onDropRow={() => {
+              console.log('[RowDnD][dropRow] Drop completed');
+              // Il drop è gestito dal sistema di drag & drop globale
+            }}
             index={idx}
             canDelete={true}
             totalRows={totalRows}
@@ -127,30 +143,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
         }}
         index={rows.length}
       />
-      {/* Renderizza la riga trascinata separatamente */}
-      {draggedItem && (
-        <NodeRow
-          key={`dragged-${draggedItem.id}`}
-          row={draggedItem}
-          nodeTitle={nodeTitle}
-          nodeCanvasPosition={undefined}
-          onUpdate={onUpdate}
-          onUpdateWithCategory={onUpdateWithCategory}
-          onDelete={onDelete}
-          onKeyDown={onKeyDown}
-          onDragStart={onDragStart}
-          index={draggedRowOriginalIndex || 0}
-          canDelete={rows.length > 1}
-          totalRows={rows.length}
-          isBeingDragged={true}
-          style={draggedRowStyle}
-          forceEditing={false}
-          onCreateAgentAct={onCreateAgentAct}
-          onCreateBackendCall={onCreateBackendCall}
-          onCreateTask={onCreateTask}
-          getProjectId={getProjectId}
-        />
-      )}
+      {/* Drag & Drop personalizzato - da implementare */}
     </>
   );
 };

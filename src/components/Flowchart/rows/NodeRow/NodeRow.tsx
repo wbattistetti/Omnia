@@ -673,21 +673,29 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     window.addEventListener('mousemove', onMoveCloseIfFar, true);
   };
 
+  // Drag & Drop personalizzato
   const handleMouseDown = (e: React.MouseEvent) => {
+    console.log('🎯 [NodeRow] Mouse down - avvio drag personalizzato', {
+      rowId: row.id,
+      index,
+      clientX: e.clientX,
+      clientY: e.clientY
+    });
+
+    // Preveni il drag nativo
     e.preventDefault();
     e.stopPropagation();
 
+    // Avvia il drag personalizzato
     if (onDragStart) {
-      const fromRef = (ref && 'current' in ref && ref.current) ? ref.current.getBoundingClientRect() : null;
-      const fromNode = nodeContainerRef.current ? nodeContainerRef.current.getBoundingClientRect() : null;
-      const fallback = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const rect = fromRef || fromNode || fallback;
-      onDragStart(row.id, index, e.clientX, e.clientY, rect);
+      onDragStart(row.id, index, e.clientX, e.clientY, nodeContainerRef.current as HTMLElement);
     }
   };
 
+  // DISABILITATO TEMPORANEAMENTE - Vecchio sistema di drag che interferisce
   // Also support simple immediate reordering by dragging label vertically:
   // compute target index from cursor Y over siblings and call onMoveRow during drag; onDropRow at end.
+  /*
   useEffect(() => {
     if (!('current' in nodeContainerRef) || !nodeContainerRef.current) return;
     const el = nodeContainerRef.current;
@@ -722,33 +730,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       window.removeEventListener('mouseup', onUp as any, { capture: true } as any);
     };
   }, [index, onMoveRow, onDropRow]);
+  */
 
-  // Ghost preview while dragging
-  useEffect(() => {
-    if (!isBeingDragged) return;
-    const ghost = document.createElement('div');
-    ghost.style.position = 'fixed';
-    ghost.style.pointerEvents = 'none';
-    ghost.style.opacity = '0.75';
-    ghost.style.zIndex = '1001';
-    ghost.style.background = 'rgba(71,85,105,0.9)';
-    ghost.style.color = '#fff';
-    ghost.style.borderRadius = '6px';
-    ghost.style.padding = '2px 6px';
-    ghost.style.boxShadow = '0 4px 12px rgba(0,0,0,0.35)';
-    ghost.textContent = row.text || '';
-    document.body.appendChild(ghost);
-
-    const move = (ev: MouseEvent) => {
-      ghost.style.top = ev.clientY + 8 + 'px';
-      ghost.style.left = ev.clientX + 8 + 'px';
-    };
-    document.addEventListener('mousemove', move);
-    return () => {
-      document.removeEventListener('mousemove', move);
-      document.body.removeChild(ghost);
-    };
-  }, [isBeingDragged, row.text]);
+  // Ghost preview while dragging - DISABILITATO per evitare duplicazione
+  // Il ghost element è ora gestito da NodeRowList.tsx
 
   // Stili condizionali
   let conditionalStyles: React.CSSProperties = {};
@@ -823,9 +808,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     <>
       <div
         ref={nodeContainerRef}
-        className={`node-row-outer flex items-center group transition-colors ${conditionalClasses}`}
+        className={`node-row-outer nodrag flex items-center group transition-colors ${conditionalClasses}`}
         style={{ ...conditionalStyles, backgroundColor: 'transparent', border: 'none', outline: 'none', boxShadow: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 4, paddingBottom: 4, minHeight: 0, height: 'auto', width: '100%' }}
         data-index={index}
+        data-being-dragged={isBeingDragged ? 'true' : 'false'}
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+        onMouseDown={(e) => e.preventDefault()}
         onMouseEnter={() => toolbarSM.row.onEnter()}
         onMouseLeave={(e) => toolbarSM.row.onLeave(e as any)}
         {...(onMouseMove ? { onMouseMove } : {})}

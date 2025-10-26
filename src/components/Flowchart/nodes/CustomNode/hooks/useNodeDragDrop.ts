@@ -1,6 +1,5 @@
-import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { NodeRowData } from '../../../../../types/project';
-import { useNodeRowDrag } from '../../../../../hooks/useNodeRowDrag';
 
 interface UseNodeDragDropProps {
     nodeRows: NodeRowData[];
@@ -10,8 +9,8 @@ interface UseNodeDragDropProps {
 }
 
 /**
- * Hook per gestire la logica di drag & drop delle righe del nodo
- * Centralizza la gestione del trascinamento delle righe e il riordinamento
+ * Hook per gestire il drag & drop personalizzato delle righe
+ * Approccio: Mouse down → Crea immagine che segue il mouse → Mouse up → Inserisci/rimuovi
  */
 export function useNodeDragDrop({
     nodeRows,
@@ -19,157 +18,147 @@ export function useNodeDragDrop({
     data,
     rowsContainerRef
 }: UseNodeDragDropProps) {
-    // Hook esistente per il drag delle righe
-    const drag = useNodeRowDrag(nodeRows);
+    // Stato per il drag personalizzato
+    const [isRowDragging, setIsRowDragging] = useState(false);
+    const [draggedRowId, setDraggedRowId] = useState<string | null>(null);
+    const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
+    const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+    const [dragElement, setDragElement] = useState<HTMLElement | null>(null);
 
-    // Gestione drag start delle righe
-    const handleRowDragStart = useCallback((id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => {
-        drag.setDraggedRowId(id);
-        drag.setDraggedRowOriginalIndex(index);
-        drag.setDraggedRowInitialClientX(clientX);
-        drag.setDraggedRowInitialClientY(clientY);
-        drag.setDraggedRowInitialRect(rect);
-        drag.setDraggedRowCurrentClientX(clientX);
-        drag.setDraggedRowCurrentClientY(clientY);
-        drag.setHoveredRowIndex(index);
-        drag.setVisualSnapOffset({ x: 0, y: 0 });
+    // Gestione drag start personalizzato
+    const handleRowDragStart = useCallback((id: string, index: number, clientX: number, clientY: number, originalElement: HTMLElement) => {
+        console.log('🎯 [CustomDrag] Starting drag', { id, index, clientX, clientY });
 
+        // Trova l'icona nell'elemento originale
+        const iconElement = originalElement.querySelector('.icon, [class*="icon"], svg, .ear-icon, [data-icon], i[class*="icon"]');
+        const iconRect = iconElement?.getBoundingClientRect();
+        const originalRect = originalElement.getBoundingClientRect();
+
+        // Calcola l'offset dell'icona rispetto all'inizio dell'elemento
+        const iconOffset = iconRect ? iconRect.left - originalRect.left : 0;
+
+        console.log('🎯 [CustomDrag] Icon calculation', {
+            iconElement: !!iconElement,
+            iconOffset,
+            iconRect: iconRect ? { left: iconRect.left, width: iconRect.width } : null,
+            originalRect: { left: originalRect.left, width: originalRect.width }
+        });
+
+        // Crea clone dell'elemento originale
+        const clone = originalElement.cloneNode(true) as HTMLElement;
+
+        // Ritaglia precisamente dall'inizio dell'icona
+        clone.style.overflow = 'hidden';
+        clone.style.width = 'fit-content';
+        clone.style.maxWidth = '300px';
+        clone.style.marginLeft = `-${iconOffset}px`;
+        clone.style.paddingLeft = `${iconOffset}px`;
+
+        // Stili per l'elemento trascinato
+        clone.style.position = 'fixed';
+        clone.style.pointerEvents = 'none';
+        clone.style.zIndex = '9999';
+        clone.style.opacity = '0.9';
+        clone.style.left = clientX + 10 + 'px';
+        clone.style.top = clientY - 10 + 'px';
+        clone.style.transform = 'none';
+        clone.style.border = '2px solid #3b82f6';
+        clone.style.borderRadius = '4px';
+        clone.style.backgroundColor = '#e6f3ff'; // Azzurrino pallido
+        clone.style.padding = '8px 12px';
+        clone.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+
+        // Aggiungi al DOM
+        document.body.appendChild(clone);
+
+        // Aggiorna stato
+        setIsRowDragging(true);
+        setDraggedRowId(id);
+        setDraggedRowIndex(index);
+        setMousePosition({ x: clientX, y: clientY });
+        setDragElement(clone);
+
+        // Cursor
         document.body.style.cursor = 'grabbing';
         document.body.style.userSelect = 'none';
 
-        window.addEventListener('pointermove', handleGlobalMouseMove as any, { capture: true });
-        window.addEventListener('pointerup', handleGlobalMouseUp as any, { capture: true });
-        window.addEventListener('mousemove', handleGlobalMouseMove as any, { capture: true });
-        window.addEventListener('mouseup', handleGlobalMouseUp as any, { capture: true });
-    }, [drag]);
+    }, []);
 
-    // Gestione movimento globale del mouse durante drag
-    const handleGlobalMouseMove = useCallback((event: MouseEvent | PointerEvent) => {
-        if (!drag.draggedRowId || !drag.draggedRowInitialRect || drag.draggedRowInitialClientY === null) return;
+    // Gestione movimento del mouse
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isRowDragging || !dragElement) return;
 
-        drag.setDraggedRowCurrentClientX(event.clientX);
-        drag.setDraggedRowCurrentClientY(event.clientY);
+        setMousePosition({ x: e.clientX, y: e.clientY });
+        dragElement.style.left = e.clientX + 10 + 'px';
+        dragElement.style.top = e.clientY - 10 + 'px';
+    }, [isRowDragging, dragElement]);
 
-        // Determine hovered index using actual DOM positions of this node only
-        let newHoveredIndex = drag.draggedRowOriginalIndex || 0;
-        const scope = rowsContainerRef.current || document;
-        const elements = Array.from(scope.querySelectorAll('.node-row-outer')) as HTMLElement[];
-        const rects = elements.map((el) => ({
+    // Gestione rilascio del mouse
+    const handleMouseUp = useCallback(() => {
+        if (!isRowDragging || !draggedRowId || draggedRowIndex === null) return;
+
+        console.log('🎯 [CustomDrag] Ending drag', { draggedRowId, draggedRowIndex });
+
+        // Trova la posizione di drop
+        const elements = Array.from(rowsContainerRef.current?.querySelectorAll('.node-row-outer') || []) as HTMLElement[];
+        const rects = elements.map((el, idx) => ({
             idx: Number(el.dataset.index),
             top: el.getBoundingClientRect().top,
             height: el.getBoundingClientRect().height
         }));
-        const centerY = event.clientY;
+
+        let targetIndex = draggedRowIndex;
         for (const r of rects) {
-            if (centerY < r.top + r.height / 2) {
-                newHoveredIndex = r.idx;
+            if (mousePosition.y < r.top + r.height / 2) {
+                targetIndex = r.idx;
                 break;
             }
-            newHoveredIndex = r.idx + 1;
+            targetIndex = r.idx + 1;
         }
 
-        if (newHoveredIndex !== drag.hoveredRowIndex) {
-            drag.setHoveredRowIndex(newHoveredIndex);
-            // Snap offset for visual feedback
-            const rowHeight = 40; // approx
-            const targetY = drag.draggedRowInitialRect.top + (newHoveredIndex * rowHeight);
-            const currentMouseBasedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
-            const snapOffsetY = targetY - currentMouseBasedY;
-            drag.setVisualSnapOffset({ x: 0, y: snapOffsetY });
-        }
-    }, [drag, rowsContainerRef]);
-
-    // Gestione rilascio globale del mouse
-    const handleGlobalMouseUp = useCallback(() => {
-        const hasOriginal = drag.draggedRowOriginalIndex !== null;
-        let targetIndex = drag.hoveredRowIndex;
-
-        // Fallback: if no hovered index, infer from total delta in pixels
-        if (hasOriginal && (targetIndex === null || targetIndex === undefined)) {
-            const scope = rowsContainerRef.current || document;
-            const elements = Array.from(scope.querySelectorAll('.node-row-outer')) as HTMLElement[];
-            const rects = elements.map((el) => ({
-                idx: Number(el.dataset.index),
-                top: el.getBoundingClientRect().top,
-                height: el.getBoundingClientRect().height
-            }));
-            const centerY = (drag.draggedRowCurrentClientY ?? drag.draggedRowInitialClientY) as number;
-            let inferred = drag.draggedRowOriginalIndex as number;
-            for (const r of rects) {
-                if (centerY < r.top + r.height / 2) {
-                    inferred = r.idx;
-                    break;
-                }
-                inferred = r.idx + 1;
-            }
-            targetIndex = Math.max(0, Math.min(nodeRows.length - 1, inferred));
-        }
-
-        if (hasOriginal && targetIndex !== null && (drag.draggedRowOriginalIndex as number) !== targetIndex) {
+        // Esegui il riordinamento se necessario
+        if (targetIndex !== draggedRowIndex) {
             const updatedRows = [...nodeRows];
-            const draggedRow = updatedRows[drag.draggedRowOriginalIndex as number];
-            updatedRows.splice(drag.draggedRowOriginalIndex as number, 1);
-            updatedRows.splice(targetIndex as number, 0, draggedRow);
+            const draggedRow = updatedRows[draggedRowIndex];
+            updatedRows.splice(draggedRowIndex, 1);
+            updatedRows.splice(targetIndex, 0, draggedRow);
+
             setNodeRows(updatedRows);
-            if (data.onUpdate) data.onUpdate({ rows: updatedRows });
+
+            if (data.onUpdate) {
+                data.onUpdate({ rows: updatedRows });
+            }
         }
 
-        // Reset stati
-        drag.setDraggedRowId(null);
-        drag.setDraggedRowOriginalIndex(null);
-        drag.setDraggedRowInitialClientX(null);
-        drag.setDraggedRowInitialClientY(null);
-        drag.setDraggedRowInitialRect(null);
-        drag.setDraggedRowCurrentClientX(null);
-        drag.setDraggedRowCurrentClientY(null);
-        drag.setHoveredRowIndex(null);
-        drag.setVisualSnapOffset({ x: 0, y: 0 });
+        // Cleanup
+        if (dragElement) {
+            document.body.removeChild(dragElement);
+        }
+
+        setIsRowDragging(false);
+        setDraggedRowId(null);
+        setDraggedRowIndex(null);
+        setDragElement(null);
 
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+    }, [isRowDragging, draggedRowId, draggedRowIndex, mousePosition, nodeRows, setNodeRows, data, dragElement, rowsContainerRef]);
 
-        window.removeEventListener('pointermove', handleGlobalMouseMove as any);
-        window.removeEventListener('pointerup', handleGlobalMouseUp as any);
-        window.removeEventListener('mousemove', handleGlobalMouseMove as any);
-        window.removeEventListener('mouseup', handleGlobalMouseUp as any);
-    }, [drag, nodeRows, setNodeRows, data, rowsContainerRef, handleGlobalMouseMove]);
-
-    // Cleanup dei listener quando il componente si smonta
+    // Event listeners
     useEffect(() => {
-        return () => {
-            document.removeEventListener('mousemove', handleGlobalMouseMove);
-            document.removeEventListener('mouseup', handleGlobalMouseUp);
-        };
-    }, [handleGlobalMouseMove, handleGlobalMouseUp]);
-
-    // Trova la riga trascinata per il rendering separato
-    const draggedItem: NodeRowData | null = drag.draggedRowId ? nodeRows.find(row => row.id === drag.draggedRowId) ?? null : null;
-
-    // Calcola lo stile per la riga trascinata
-    const draggedRowStyle = useMemo(() => {
-        if (!draggedItem || !drag.draggedRowInitialRect || drag.draggedRowInitialClientX === null ||
-            drag.draggedRowInitialClientY === null || drag.draggedRowCurrentClientX === null ||
-            drag.draggedRowCurrentClientY === null) {
-            return {};
+        if (isRowDragging) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            };
         }
-
-        return {
-            top: drag.draggedRowInitialRect.top + (drag.draggedRowCurrentClientY - drag.draggedRowInitialClientY) + drag.visualSnapOffset.y,
-            left: drag.draggedRowInitialRect.left + (drag.draggedRowCurrentClientX - drag.draggedRowInitialClientX) + drag.visualSnapOffset.x,
-            width: drag.draggedRowInitialRect.width
-        };
-    }, [draggedItem, drag.draggedRowInitialRect, drag.draggedRowInitialClientX, drag.draggedRowInitialClientY,
-        drag.draggedRowCurrentClientX, drag.draggedRowCurrentClientY, drag.visualSnapOffset]);
+    }, [isRowDragging, handleMouseMove, handleMouseUp]);
 
     return {
-        // Drag state
-        drag,
-        draggedItem,
-        draggedRowStyle,
-
-        // Functions
-        handleRowDragStart,
-        handleGlobalMouseMove,
-        handleGlobalMouseUp
+        isRowDragging,
+        draggedRowId,
+        handleRowDragStart
     };
 }

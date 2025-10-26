@@ -827,7 +827,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     const onMove = (e: MouseEvent) => {
       const el = e.target as HTMLElement;
       const isInserter = el?.classList?.contains('row-inserter') || !!el?.closest?.('.row-inserter');
-      if (isInserter) {
+
+      // Disabilita il tooltip durante il drag delle righe
+      const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
+
+      // Disabilita anche se c'è un elemento trascinato fisso
+      const isDraggedElement = document.querySelector('[key*="dragged-"]');
+
+      if (isInserter && !isDraggingRow && !isDraggedElement) {
         setCursorTooltip('Click to insert here...', e.clientX, e.clientY);
       } else {
         // Hide only if this effect showed the message
@@ -849,6 +856,18 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       initializedRef.current = true;
     }
   }, [reactFlowInstance]);
+
+  // Debug: Aggiungi CSS per identificare ghost nativo
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .react-flow__node[draggable="true"] * {
+        border: 2px solid red !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
 
   return (
