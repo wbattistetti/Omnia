@@ -78,6 +78,12 @@ export function useNodeDragDrop({
         // Trova i dati della riga trascinata
         const rowData = nodeRows.find(row => row.id === id);
 
+        console.log('🎯 [CustomDrag] Row data found', {
+            rowId: id,
+            rowData: rowData,
+            hasRowData: !!rowData
+        });
+
         // Aggiorna stato
         setIsRowDragging(true);
         setDraggedRowId(id);
@@ -146,12 +152,24 @@ export function useNodeDragDrop({
 
         if (targetNodeId && targetNodeId !== nodeId) {
             // CROSS-NODE DROP: Sposta la riga a un altro nodo
+
+            // IMPORTANTE: Salva i dati della riga PRIMA di rimuoverla
+            const rowDataToMove = draggedRowData || nodeRows.find(row => row.id === draggedRowId);
+
             console.log('🎯 [CrossNode] Moving row to different node', {
                 from: nodeId,
                 to: targetNodeId,
                 rowId: draggedRowId,
-                rowData: draggedRowData
+                rowData: rowDataToMove,
+                wasInState: !!draggedRowData,
+                foundInNodeRows: !!nodeRows.find(row => row.id === draggedRowId)
             });
+
+            // Verifica che rowData sia valido
+            if (!rowDataToMove) {
+                console.error('🎯 [CrossNode] ERROR: rowData is null/undefined after all attempts');
+                return;
+            }
 
             // Dispatches un evento personalizzato per notificare il cross-node move
             const crossNodeEvent = new CustomEvent('crossNodeRowMove', {
@@ -159,11 +177,17 @@ export function useNodeDragDrop({
                     fromNodeId: nodeId,
                     toNodeId: targetNodeId,
                     rowId: draggedRowId,
-                    rowData: draggedRowData,
-                    originalIndex: draggedRowIndex
+                    rowData: rowDataToMove,
+                    originalIndex: draggedRowIndex,
+                    mousePosition: { x: mousePosition.x, y: mousePosition.y }
                 }
             });
-            window.dispatchEvent(crossNodeEvent);
+
+            // Dispatch con un piccolo delay per assicurarsi che l'evento sia processato
+            setTimeout(() => {
+                window.dispatchEvent(crossNodeEvent);
+                console.log('🎯 [CrossNode] Event dispatched');
+            }, 10);
 
             // Rimuovi la riga dal nodo corrente
             const updatedRows = nodeRows.filter(row => row.id !== draggedRowId);

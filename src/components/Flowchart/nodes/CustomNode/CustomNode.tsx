@@ -203,19 +203,59 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ CROSS-NODE DRAG: Listen for cross-node row moves
   React.useEffect(() => {
     const handleCrossNodeMove = (event: CustomEvent) => {
-      const { fromNodeId, toNodeId, rowData } = event.detail;
+      const { fromNodeId, toNodeId, rowData, mousePosition } = event.detail;
 
-      if (toNodeId === id) {
-        // Questo nodo è la destinazione - aggiungi la riga
+      console.log('🎯 [CrossNode] Event received', {
+        fromNodeId,
+        toNodeId,
+        thisNodeId: id,
+        hasRowData: !!rowData,
+        mousePosition: mousePosition,
+        rowData: rowData
+      });
+
+      if (toNodeId === id && rowData) {
         console.log('🎯 [CrossNode] Adding row to this node', { toNodeId, rowData });
 
-        if (rowData) {
-          const updatedRows = [...nodeRows, rowData];
+        // Verifica che la riga non esista già
+        const existingRow = nodeRows.find(row => row.id === rowData.id);
+        if (!existingRow) {
+          // Calcola la posizione di inserimento basata sul mouse
+          const elements = Array.from(rowsContainerRef.current?.querySelectorAll('.node-row-outer') || []) as HTMLElement[];
+          const rects = elements.map((el, idx) => ({
+            idx: Number(el.dataset.index),
+            top: el.getBoundingClientRect().top,
+            height: el.getBoundingClientRect().height
+          }));
+
+          let targetIndex = nodeRows.length; // Default: alla fine
+          if (mousePosition) {
+            for (const r of rects) {
+              if (mousePosition.y < r.top + r.height / 2) {
+                targetIndex = r.idx;
+                break;
+              }
+              targetIndex = r.idx + 1;
+            }
+          }
+
+          console.log('🎯 [CrossNode] Inserting at position', {
+            targetIndex,
+            totalRows: nodeRows.length,
+            mouseY: mousePosition?.y
+          });
+
+          // Inserisci alla posizione corretta
+          const updatedRows = [...nodeRows];
+          updatedRows.splice(targetIndex, 0, rowData);
           setNodeRows(updatedRows);
 
           if (data.onUpdate) {
             data.onUpdate({ rows: updatedRows });
           }
+          console.log('🎯 [CrossNode] Row added successfully at position', targetIndex);
+        } else {
+          console.log('🎯 [CrossNode] Row already exists, skipping');
         }
       }
     };
@@ -224,7 +264,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     return () => {
       window.removeEventListener('crossNodeRowMove', handleCrossNodeMove as EventListener);
     };
-  }, [id, nodeRows, setNodeRows, data]);
+  }, [id, nodeRows, setNodeRows, data, rowsContainerRef]);
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
