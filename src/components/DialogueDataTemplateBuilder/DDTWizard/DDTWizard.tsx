@@ -46,7 +46,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           (document.body.style as any).setProperty('--ddt-accent', accent.trim());
         }
       }
-    } catch {}
+    } catch { }
   }, []);
   const [step, setStep] = useState<string>(startOnStructure ? 'structure' : 'input');
   const [userDesc, setUserDesc] = useState('');
@@ -114,23 +114,23 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   useEffect(() => {
     if (step !== 'pipeline') return;
     if (schemaMains.length === 0) return;
-    
+
     const currentMain = schemaMains[selectedIdx];
     if (!currentMain) return;
-    
+
     const currentMainProgress = progressByPath[currentMain.label] || 0;
-    
+
     // Se il main corrente ha raggiunto 100%, cerca il prossimo non completato
     if (currentMainProgress >= 0.99) { // 0.99 per tolleranza float
-      const nextIdx = schemaMains.findIndex((m, i) => 
+      const nextIdx = schemaMains.findIndex((m, i) =>
         i > selectedIdx && (progressByPath[m.label] || 0) < 0.99
       );
-      
+
       if (nextIdx !== -1) {
         // Auto-espandi il prossimo main data
         try {
           console.log(`[DDT][auto-advance] ${currentMain.label} completed (${Math.round(currentMainProgress * 100)}%) → opening ${schemaMains[nextIdx].label}`);
-        } catch {}
+        } catch { }
         setSelectedIdx(nextIdx);
       }
     }
@@ -151,27 +151,27 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     setShowRight(true);
     setStep('loading');
-    try { dlog('[DDT][UI] step → loading'); } catch {}
+    try { dlog('[DDT][UI] step → loading'); } catch { }
     setErrorMsg(null);
     try {
-        const reqBody = userDesc.trim();
-        // Clean path via Vite proxy
-        const urlPrimary = `/step2`;
-        const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody });
-        const ctrl = new AbortController();
-        const timeoutMs = 30000; // 30 seconds - allows for AI type detection + template translation
-        const timeoutId = setTimeout(() => { try { ctrl.abort(); console.warn('[DDT][DetectType][timeout]', { url: urlPrimary, timeoutMs }); } catch {} }, timeoutMs);
-        let res = await fetch(urlPrimary, {
+      const reqBody = userDesc.trim();
+      // Clean path via Vite proxy
+      const urlPrimary = `/step2`;
+      const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody });
+      const ctrl = new AbortController();
+      const timeoutMs = 30000; // 30 seconds - allows for AI type detection + template translation
+      const timeoutId = setTimeout(() => { try { ctrl.abort(); console.warn('[DDT][DetectType][timeout]', { url: urlPrimary, timeoutMs }); } catch { } }, timeoutMs);
+      let res = await fetch(urlPrimary, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(reqBody),
-          signal: ctrl.signal as any,
+        headers: { 'Content-Type': 'text/plain' },
+        body: reqBody,
+        signal: ctrl.signal as any,
       });
-        clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
       const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
       let raw = '';
-      try { raw = await res.clone().text(); } catch {}
+      try { raw = await res.clone().text(); } catch { }
       console.log('[DDT][DetectType][response]', { status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
       if (!res.ok) throw new Error('Errore comunicazione IA');
       const result = await res.json();
@@ -196,7 +196,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type, icon: s.icon })) : [],
           } as any;
         });
-      setDetectTypeIcon(ai.icon || null);
+        setDetectTypeIcon(ai.icon || null);
         // Enrich constraints immediately, then show structure step
         console.log('[DDT][DetectType] → enrichConstraints', { root, mainsCount: mains0.length });
         const enrichedRes = await enrichConstraintsFor(root, mains0);
@@ -209,7 +209,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           if (Array.isArray(finalMains) && finalMains.length > 0 && (!finalMains[0].subData || finalMains[0].subData.length === 0) && inferred.length > 0) {
             finalMains = [{ ...finalMains[0], subData: inferred }];
           }
-        } catch {}
+        } catch { }
         // If AI returned multiple atomic mains (no subData), wrap them into a single aggregator main using the root label
         const allAtomic = Array.isArray(finalMains) && finalMains.length > 1 && finalMains.every((m: any) => !Array.isArray((m as any)?.subData) || (m as any).subData.length === 0);
         if (allAtomic) {
@@ -219,7 +219,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         setSchemaRootLabel(finalRoot);
         setSchemaMains(finalMains);
         setStep('structure');
-        try { dlog('[DDT][UI] step → structure', { root: finalRoot, mains: finalMains.length }); } catch {}
+        try { dlog('[DDT][UI] step → structure', { root: finalRoot, mains: finalMains.length }); } catch { }
         return;
       }
       console.warn('[DDT][DetectType][invalidSchema]', { schema });
@@ -229,7 +229,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const msg = (err && (err.name === 'AbortError' || err.message === 'The operation was aborted.')) ? 'Timeout step2' : (err.message || '');
       setErrorMsg('Errore IA: ' + msg);
       setStep('error');
-      try { dlog('[DDT][UI] step → error'); } catch {}
+      try { dlog('[DDT][UI] step → error'); } catch { }
     }
   };
 
@@ -261,7 +261,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     } as any;
     try {
       console.log('[DDT][Wizard][assemble]', { root, mainsCount: mains.length, mainsLabels: mains.map(m => m.label), preservedId: baseId });
-    } catch {}
+    } catch { }
     return ddt;
   };
 
@@ -285,7 +285,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const enrichConstraintsFor = async (rootLabelIn: string, mainsIn: SchemaNode[]) => {
     try {
       const schema = { label: rootLabelIn || 'Data', mains: mainsIn.map((m) => ({ label: m.label, type: m.type, icon: m.icon, subData: (m.subData || []).map(s => ({ label: s.label, type: s.type, icon: s.icon })) })), text: userDesc };
-      try { console.log('[DDT][Constraints][request]', { url: '/step3', body: schema }); } catch {}
+      try { console.log('[DDT][Constraints][request]', { url: '/step3', body: schema }); } catch { }
       const res = await fetch(`/step3`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -350,7 +350,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       setSelectedIdx(next.length - 1);
       setAutoEditIndex(next.length - 1);
       // change tracking
-      try { setChanges(p => ({ ...p, mains: new Set([...p.mains, '']) })); } catch {}
+      try { setChanges(p => ({ ...p, mains: new Set([...p.mains, '']) })); } catch { }
       return next;
     });
   };
@@ -385,8 +385,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Handler per chiusura (annulla o completamento)
   const handleClose = (result?: any, messages?: any) => {
-    console.log('[DDT][Wizard][handleClose]', { 
-      hasResult: !!result, 
+    console.log('[DDT][Wizard][handleClose]', {
+      hasResult: !!result,
       hasOnComplete: !!onComplete,
       resultId: result?.id,
       resultLabel: result?.label,
@@ -415,7 +415,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   );
   const pipelineHeadless = true; // run pipeline headlessly; show progress under structure
   const renderTogglePanel = step !== 'pipeline';
-  try { dlog('[DDT][UI] render', { step, showRight, rightHasContent, pipelineHeadless, renderTogglePanel }); } catch {}
+  try { dlog('[DDT][UI] render', { step, showRight, rightHasContent, pipelineHeadless, renderTogglePanel }); } catch { }
 
   return (
     <div
@@ -469,7 +469,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
                   <button
                     onClick={() => {
-                      try { dlog('[DDT][UI] step → pipeline'); } catch {}
+                      try { dlog('[DDT][UI] step → pipeline'); } catch { }
                       // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
                       setShowRight(true);
                       // reset progress state to avoid stale 100%
@@ -499,12 +499,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   icon: (mainItem as any)?.icon,              // ← ADD: icon for proper display
                   subData: ((mainItem as any)?.subData || []) as any[],
                 };
-                
+
                 return (
-                  <div 
+                  <div
                     key={`pipeline-${mainIdx}-${mainItem.label}`}
-                    style={{ 
-                      display: mainIdx === selectedIdx ? 'block' : 'none' 
+                    style={{
+                      display: mainIdx === selectedIdx ? 'block' : 'none'
                     }}
                   >
                     <WizardPipelineStep
@@ -518,7 +518,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                         const mainLabel = mainItem.label;
                         // Update individual main progress
                         const mainProgress = typeof (m as any)?.[mainLabel] === 'number' ? (m as any)[mainLabel] : 0;
-                        
+
                         setProgressByPath((prev) => {
                           const updated = { ...(prev || {}), ...(m || {}) };
                           // Calculate overall root progress (average of all mains)
@@ -527,7 +527,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           updated.__root__ = avgProgress;
                           return updated;
                         });
-                        
+
                         setRootProgress((prev) => {
                           const allProgress = schemaMains.map(m => (progressByPath[m.label] || 0));
                           return allProgress.reduce((sum, p) => sum + p, 0) / schemaMains.length;
@@ -539,19 +539,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           hasDDT: !!partialDDT,
                           mainsCount: Array.isArray(partialDDT?.mainData) ? partialDDT.mainData.length : 'not-array'
                         });
-                        
+
                         // Accumulate partial result
                         setPartialResults(prev => {
                           const updated = { ...prev, [mainIdx]: partialDDT };
-                          
+
                           // Check if all mains completed
                           const completedCount = Object.keys(updated).length;
                           console.log(`[DDT][Wizard][parallel] Progress: ${completedCount}/${schemaMains.length} mains completed`);
-                          
+
                           if (completedCount === schemaMains.length) {
                             // All mains completed - assemble final DDT
                             console.log('[DDT][Wizard][parallel] All mains completed, assembling final DDT...');
-                            
+
                             try {
                               // Merge all mainData from partial results
                               const allMains = schemaMains.map((schemaMain, idx) => {
@@ -562,7 +562,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 }
                                 return partial.mainData[0]; // Each partial has 1 main
                               }).filter(Boolean);
-                              
+
                               // Merge translations
                               const mergedTranslations: any = {};
                               Object.values(updated).forEach((partial: any) => {
@@ -570,7 +570,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                   Object.assign(mergedTranslations, partial.translations);
                                 }
                               });
-                              
+
                               const finalDDT = {
                                 id: schemaRootLabel || 'Data',
                                 label: schemaRootLabel || 'Data',
@@ -578,7 +578,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 translations: mergedTranslations,
                                 _fromWizard: true  // Flag to identify wizard-generated DDTs
                               };
-                              
+
                               console.log('[DDT][Wizard][parallel] Final DDT assembled:', {
                                 id: finalDDT.id,
                                 label: finalDDT.label,
@@ -586,7 +586,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 mainLabels: finalDDT.mainData.map((m: any) => m?.label),
                                 translationsCount: Object.keys(mergedTranslations).length
                               });
-                              
+
                               // Preserve _userLabel and _sourceAct
                               if ((dataNode as any)?._userLabel && !(finalDDT as any)._userLabel) {
                                 (finalDDT as any)._userLabel = (dataNode as any)._userLabel;
@@ -594,14 +594,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                               if ((dataNode as any)?._sourceAct) {
                                 (finalDDT as any)._sourceAct = (dataNode as any)._sourceAct;
                               }
-                              
+
                               console.log('[DDT][Wizard][parallel] Calling handleClose with final DDT');
                               handleClose(finalDDT, finalDDT.translations || {});
                             } catch (err) {
                               console.error('[DDT][Wizard][parallel] Failed to assemble final DDT:', err);
                             }
                           }
-                          
+
                           return updated;
                         });
                       }}
@@ -613,7 +613,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           )}
 
           {/* Contenuto “normale” del pannello destro (solo quando non in pipeline) */}
-          {(() => { try { dlog('[DDT][UI] render TogglePanel?', { render: renderTogglePanel }); } catch {}; return null; })()}
+          {(() => { try { dlog('[DDT][UI] render TogglePanel?', { render: renderTogglePanel }); } catch { }; return null; })()}
           {renderTogglePanel && <V2TogglePanel />}
           {/* CTA moved next to Cancel above */}
         </div>

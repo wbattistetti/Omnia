@@ -77,6 +77,42 @@ async function loadTemplatesFromDB() {
   }
 }
 
+// Risolvi templateRef espandendo i riferimenti ai template
+async function resolveTemplateRefs(subData, templates) {
+  const resolved = [];
+
+  for (const item of subData) {
+    if (item.templateRef && templates[item.templateRef]) {
+      // Espandi il template referenziato
+      const referencedTemplate = templates[item.templateRef];
+
+      if (referencedTemplate.subData && referencedTemplate.subData.length > 0) {
+        // Se il template referenziato ha subData, espandili ricorsivamente
+        const expandedSubData = await resolveTemplateRefs(referencedTemplate.subData, templates);
+        resolved.push(...expandedSubData);
+      } else {
+        // Se è un template atomico, aggiungilo direttamente
+        resolved.push({
+          label: item.label || referencedTemplate.label,
+          type: referencedTemplate.type,
+          icon: referencedTemplate.icon,
+          constraints: referencedTemplate.constraints || []
+        });
+      }
+    } else {
+      // Se non ha templateRef, aggiungi direttamente
+      resolved.push({
+        label: item.label,
+        type: item.type,
+        icon: item.icon,
+        constraints: item.constraints || []
+      });
+    }
+  }
+
+  return resolved;
+}
+
 // Carica template all'avvio del server
 loadTemplatesFromDB().catch(console.error);
 
@@ -1432,24 +1468,27 @@ app.post('/step2', async (req, res) => {
     } else {
       user_desc = String(req.body || '');
     }
-    
+
     console.log(`[STEP2] Raw body:`, req.body);
     console.log(`[STEP2] Content-Type:`, req.headers['content-type']);
     console.log(`[STEP2] Detect type for: "${user_desc}"`);
-    
+
     // Carica template dalla cache
     const templates = await loadTemplatesFromDB();
     console.log(`[STEP2] Using ${Object.keys(templates).length} templates from Factory DB cache`);
-    
+
     // Cerca template che corrisponde
     let matchedTemplate = null;
     const user_lower = user_desc.toLowerCase();
-    
+
     // Mappatura richieste -> template
     const request_mapping = {
       'data di nascita': 'date',
       'data nascita': 'date',
       'età': 'date',
+      'dati personali': 'personalData',
+      'informazioni personali': 'personalData',
+      'profilo utente': 'personalData',
       'nome': 'name',
       'nome completo': 'name',
       'nominativo': 'name',
@@ -1460,7 +1499,7 @@ app.post('/step2', async (req, res) => {
       'iban': 'iban',
       'partita iva': 'vatNumber'
     };
-    
+
     for (const [request_key, template_name] of Object.entries(request_mapping)) {
       if (user_lower.includes(request_key) && templates[template_name]) {
         matchedTemplate = templates[template_name];
@@ -1468,7 +1507,7 @@ app.post('/step2', async (req, res) => {
         break;
       }
     }
-    
+
     if (matchedTemplate) {
       // Usa template dal database
       const result = {
@@ -1477,10 +1516,31 @@ app.post('/step2', async (req, res) => {
         label: matchedTemplate.label,
         subData: matchedTemplate.subData || []
       };
-      
+
       console.log(`[STEP2] Applied Factory template: ${matchedTemplate.name} with ${result.subData.length} sub-data`);
-      
-      res.json({ ai: result });
+
+      // Risolvi templateRef per espandere i riferimenti
+      const resolvedSubData = await resolveTemplateRefs(result.subData, templates);
+
+      // Formato compatibile con il frontend
+      const response = {
+        ai: {
+          type: result.type,
+          icon: result.icon,
+          label: result.label,
+          schema: {
+            label: result.label,
+            mainData: [{
+              label: result.label,
+              type: result.type,
+              icon: result.icon,
+              subData: resolvedSubData
+            }]
+          }
+        }
+      };
+
+      res.json(response);
     } else {
       // Fallback: crea template generico
       const result = {
@@ -1489,11 +1549,30 @@ app.post('/step2', async (req, res) => {
         label: user_desc.charAt(0).toUpperCase() + user_desc.slice(1),
         subData: []
       };
-      
+
       console.log(`[STEP2] No Factory template found, using fallback`);
-      res.json({ ai: result });
+
+      // Formato compatibile con il frontend
+      const response = {
+        ai: {
+          type: result.type,
+          icon: result.icon,
+          label: result.label,
+          schema: {
+            label: result.label,
+            mainData: [{
+              label: result.label,
+              type: result.type,
+              icon: result.icon,
+              subData: result.subData
+            }]
+          }
+        }
+      };
+
+      res.json(response);
     }
-    
+
   } catch (error) {
     console.error('[STEP2] Error:', error);
     res.status(500).json({ error: 'unrecognized_data_type' });

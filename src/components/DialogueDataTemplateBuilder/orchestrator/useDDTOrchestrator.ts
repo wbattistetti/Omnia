@@ -25,17 +25,28 @@ async function recognizeTypeAPI(userDesc: string) {
   console.log('[DDT][Orchestrator][DetectType][request]', { url, body });
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(userDesc),
+    headers: { 'Content-Type': 'text/plain' },
+    body: userDesc,
   });
   const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
   let raw = '';
-  try { raw = await res.clone().text(); } catch {}
+  try { raw = await res.clone().text(); } catch { }
   console.log('[DDT][Orchestrator][DetectType][response]', { status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
   if (!res.ok) throw new Error('Type recognition failed');
   const data = await res.json();
   if (!data.ai || !data.ai.type || !data.ai.icon) throw new Error('Recognition response missing fields');
-  return data.ai;
+
+  // Gestisci la nuova struttura con sub-data dal Template Intelligence Service
+  const aiData = data.ai;
+  console.log('[DDT][Orchestrator][DetectType][aiData]', {
+    type: aiData.type,
+    icon: aiData.icon,
+    label: aiData.label,
+    subDataCount: aiData.subData?.length || 0,
+    hasIntelligenceAnalysis: !!aiData.intelligence_analysis
+  });
+
+  return aiData;
 }
 
 export default function useDDTOrchestrator() {
@@ -101,7 +112,7 @@ export default function useDDTOrchestrator() {
   const start = useCallback(async (userDesc: string, desc?: string) => {
     try {
       setState(s => ({ ...s, step: 'recognizeType', isOffline: false, lastUserDesc: userDesc, lastDesc: desc }));
-      // Step 0: riconoscimento tipo
+      // Step 0: riconoscimento tipo con Template Intelligence
       const recognized = await recognizeTypeAPI(userDesc);
       setState(s => ({
         ...s,
@@ -111,17 +122,40 @@ export default function useDDTOrchestrator() {
         confirmedType: recognized.type,
         error: undefined,
       }));
-      // Step 1: struttura base
-      const { ddt, messages } = await runStructure(recognized.type, desc);
-      // Step 2: arricchisci constraints
-      const ddtWithConstraints = await runConstraints(ddt);
-      // Step 3: genera scripts
-      const ddtWithScripts = await runScripts(ddtWithConstraints);
-      // Step 4: batch messages
-      const { finalMessages } = await runMessages(ddtWithScripts, messages);
-      // Step 5: assembla finale
-      const final = await runAssemble(ddtWithScripts, finalMessages);
-      setState(s => ({ ...s, step: 'done', finalDDT: final.ddt, messages: final.messages, error: undefined }));
+
+      // Se abbiamo sub-data dal Template Intelligence Service, usali direttamente
+      if (recognized.subData && recognized.subData.length > 0) {
+        console.log('[DDT][Orchestrator] Using sub-data from Template Intelligence Service:', recognized.subData);
+        // Crea DDT direttamente dai sub-data
+        const ddt = {
+          label: recognized.label || userDesc,
+          type: recognized.type,
+          icon: recognized.icon,
+          mainData: [{
+            label: recognized.label || userDesc,
+            type: recognized.type,
+            icon: recognized.icon,
+            subData: recognized.subData
+          }]
+        };
+
+        // Salta fetchStructure e vai direttamente ai constraints
+        setState(s => ({ ...s, step: 'constraints', structure: ddt, messages: {} }));
+        const ddtWithConstraints = await runConstraints(ddt);
+        const ddtWithScripts = await runScripts(ddtWithConstraints);
+        const { finalMessages } = await runMessages(ddtWithScripts, {});
+        const final = await runAssemble(ddtWithScripts, finalMessages);
+        setState(s => ({ ...s, step: 'done', finalDDT: final.ddt, messages: final.messages, error: undefined }));
+      } else {
+        // Fallback: usa il vecchio sistema
+        console.log('[DDT][Orchestrator] No sub-data from Template Intelligence, using fallback');
+        const { ddt, messages } = await runStructure(recognized.type, desc);
+        const ddtWithConstraints = await runConstraints(ddt);
+        const ddtWithScripts = await runScripts(ddtWithConstraints);
+        const { finalMessages } = await runMessages(ddtWithScripts, messages);
+        const final = await runAssemble(ddtWithScripts, finalMessages);
+        setState(s => ({ ...s, step: 'done', finalDDT: final.ddt, messages: final.messages, error: undefined }));
+      }
     } catch (err: any) {
       // Gestione errori di rete
       const isOffline = !navigator.onLine || (err && err.name === 'TypeError');
@@ -193,4 +227,4 @@ export default function useDDTOrchestrator() {
     finalDDT: state.finalDDT,
     messages: state.messages,
   };
-} 
+}
