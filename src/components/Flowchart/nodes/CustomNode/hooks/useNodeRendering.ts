@@ -161,6 +161,7 @@ export function useNodeRendering({
         position: 'absolute' as const,
         top: -20,
         left: 0,
+        width: '100%', // FISSO: Estende la toolbar per tutta la larghezza del nodo
         height: 20,
         zIndex: 1000,
         pointerEvents: showDragHeader ? 'auto' as const : 'none' as const,

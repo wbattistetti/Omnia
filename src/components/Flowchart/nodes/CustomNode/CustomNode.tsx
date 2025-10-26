@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { NodeProps } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
 import { NodeDragHeader } from '../shared/NodeDragHeader';
@@ -106,6 +106,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     setIsHoverHeader,
     isDragging, setIsDragging,
     isToolbarDrag, setIsToolbarDrag,
+    showUnchecked, setShowUnchecked,
     hideToolbarTimeoutRef,
     hasTitle, showPermanentHeader, showDragHeader
   } = nodeState;
@@ -204,6 +205,20 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Registry per accedere ai componenti NodeRow
   const { getRowComponent } = useRowRegistry();
 
+  // ✅ TOGGLE UNCHECKED ROWS: Handle eye icon click
+  const handleToggleUnchecked = useCallback(() => {
+    const newShowUnchecked = !showUnchecked;
+    setShowUnchecked(newShowUnchecked);
+
+    // Update the node data
+    if (typeof data.onUpdate === 'function') {
+      data.onUpdate({ hideUncheckedRows: !newShowUnchecked });
+    }
+  }, [showUnchecked, setShowUnchecked, data]);
+
+  // ✅ CHECK FOR UNCHECKED ROWS: Calculate if there are any unchecked rows
+  const hasUncheckedRows = nodeRows.some(row => row.included === false);
+
   // ✅ CROSS-NODE DRAG: Listen for cross-node row moves - VERSIONE SEMPLIFICATA
   React.useEffect(() => {
     const handleCrossNodeMove = (event: CustomEvent) => {
@@ -246,14 +261,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           // Aspetta un po' per assicurarsi che il componente sia stato renderizzato
           setTimeout(() => {
             const rowComponent = getRowComponent(rowData.id);
-            console.log('🎯 [CrossNode] Highlighting row after drop:', {
-              rowId: rowData.id,
-              rowComponent: !!rowComponent
-            });
             if (rowComponent) {
               rowComponent.highlight();
-            } else {
-              console.warn('🎯 [CrossNode] Row component not found in registry:', rowData.id);
             }
           }, 50);
         } else {
@@ -331,6 +340,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               showDragHandle={false}
               fullWidth={true}
               isToolbarDrag={isToolbarDrag}
+              showUnchecked={showUnchecked}
+              onToggleUnchecked={handleToggleUnchecked}
+              hasUncheckedRows={hasUncheckedRows}
               onDragStart={() => {
                 console.log('🎯 [CustomNode] onDragStart from Move button', {
                   isDragging: isDragging,
@@ -402,6 +414,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             showDragHandle={true}
             fullWidth={false}
             isToolbarDrag={isToolbarDrag}
+            showUnchecked={showUnchecked}
+            onToggleUnchecked={handleToggleUnchecked}
+            hasUncheckedRows={hasUncheckedRows}
             onDragStart={() => {
               console.log('🎯 [CustomNode] onDragStart from Move button (second)', {
                 isDragging: isDragging,
@@ -418,6 +433,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             hoveredInserter={hoveredInserter}
             setHoveredInserter={setHoveredInserter}
             nodeTitle={nodeTitle}
+            hideUnchecked={!showUnchecked}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

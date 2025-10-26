@@ -10,6 +10,7 @@ interface NodeRowListProps {
   setHoveredInserter: (idx: number | null) => void;
   handleInsertRow: (idx: number) => void;
   nodeTitle: string;
+  hideUnchecked?: boolean; // Hide rows with included=false
   onUpdate: (row: NodeRowData, newText: string) => void;
   onUpdateWithCategory: (row: NodeRowData, newText: string, categoryType?: string, meta?: any) => void;
   onDelete: (row: NodeRowData) => void;
@@ -36,6 +37,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   setHoveredInserter,
   handleInsertRow,
   nodeTitle,
+  hideUnchecked = false,
   onUpdate,
   onUpdateWithCategory,
   onDelete,
@@ -62,9 +64,15 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
       setHoveredInserter(null);
     }
   }, [editingRowId]);
+
+  // Filter rows based on hideUnchecked setting
+  const visibleRows = hideUnchecked
+    ? rows.filter(row => row.included !== false)
+    : rows;
+
   return (
     <>
-      {rows.map((row, idx) => (
+      {visibleRows.map((row, idx) => (
         <React.Fragment key={row.id}>
           {/* Inserter sopra la label */}
           <RowInserter

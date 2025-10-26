@@ -23,6 +23,9 @@ export function useNodeState({ data }: UseNodeStateProps) {
   // Flag specifico: drag avviato dalla toolbar (Move/Anchor)
   const [isToolbarDrag, setIsToolbarDrag] = useState(false);
 
+  // Visibility state for unchecked rows
+  const [showUnchecked, setShowUnchecked] = useState(data.hideUncheckedRows !== true);
+
 
 
   // Buffer area state - removed as no longer needed
@@ -107,6 +110,10 @@ export function useNodeState({ data }: UseNodeStateProps) {
     setIsDragging,
     isToolbarDrag,
     setIsToolbarDrag,
+
+    // Visibility state
+    showUnchecked,
+    setShowUnchecked,
 
     // Refs
     hideToolbarTimeoutRef,

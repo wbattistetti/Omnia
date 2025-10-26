@@ -77,7 +77,10 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           background: included ? 'transparent' : '#e5e7eb',
         }}
         title="Include this row in the flow"
-        onClick={(e) => { e.stopPropagation(); setIncluded(!included); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIncluded(!included);
+        }}
       >
         {included ? (
           <Check className="w-3 h-3" style={{ color: 'rgba(0,0,0,0.9)' }} />

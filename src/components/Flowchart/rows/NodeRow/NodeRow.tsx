@@ -86,10 +86,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Visual states for drag & drop feedback
   const [visualState, setVisualState] = useState<'normal' | 'fade' | 'highlight'>('normal');
 
-  // Debug log per visualState changes
-  useEffect(() => {
-    console.log('🎯 [NodeRow] visualState changed:', { rowId: row.id, visualState });
-  }, [visualState, row.id]);
 
   // Registry for external access
   const { registerRow, unregisterRow } = useRowRegistry();
@@ -100,18 +96,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   }, []);
 
   const highlight = useCallback(() => {
-    console.log('🎯 [NodeRow] highlight() called for row:', row.id);
     setVisualState('highlight');
     // Auto-reset to normal after 1 second
-    setTimeout(() => {
-      console.log('🎯 [NodeRow] highlight() auto-reset to normal for row:', row.id);
-      setVisualState('normal');
-    }, 1000);
-  }, [row.id]);
+    setTimeout(() => setVisualState('normal'), 1000);
+  }, []);
 
   const normal = useCallback(() => {
     setVisualState('normal');
   }, []);
+
 
   // Register component in registry
   useEffect(() => {
@@ -797,6 +790,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     }
   };
 
+  // Checkbox visual effect: always grey when unchecked
+  const getCheckboxStyles = (): React.CSSProperties => {
+    if (!included) {
+      return {
+        opacity: 0.5,
+        transition: 'opacity 0.2s ease'
+      };
+    }
+    return {};
+  };
+
   // Stili condizionali
   let conditionalStyles: React.CSSProperties = {};
   let conditionalClasses = '';
@@ -821,6 +825,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Merge visual styles with conditional styles
   conditionalStyles = { ...conditionalStyles, ...getVisualStyles() };
+
+  // Checkbox styles (always applied based on included state)
+  const checkboxStyles = getCheckboxStyles();
 
   // Final styles that preserve highlight but apply defaults
   const finalStyles = visualState === 'highlight'
@@ -893,7 +900,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       <div
         ref={nodeContainerRef}
         className={`node-row-outer nodrag flex items-center group transition-colors ${conditionalClasses}`}
-        style={{ ...conditionalStyles, ...finalStyles }}
+        style={{ ...conditionalStyles, ...checkboxStyles, ...finalStyles }}
         data-index={index}
         data-being-dragged={isBeingDragged ? 'true' : 'false'}
         data-row-id={row.id}
