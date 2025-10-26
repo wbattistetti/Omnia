@@ -143,7 +143,7 @@ export function useNodeDragDrop({
     }, [handleGlobalMouseMove, handleGlobalMouseUp]);
 
     // Trova la riga trascinata per il rendering separato
-    const draggedItem = drag.draggedRowId ? nodeRows.find(row => row.id === drag.draggedRowId) : null;
+    const draggedItem: NodeRowData | null = drag.draggedRowId ? nodeRows.find(row => row.id === drag.draggedRowId) ?? null : null;
 
     // Calcola lo stile per la riga trascinata
     const draggedRowStyle = useMemo(() => {

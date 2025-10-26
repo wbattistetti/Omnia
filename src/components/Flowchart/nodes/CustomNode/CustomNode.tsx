@@ -1,13 +1,10 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { typeToMode } from '../../../../utils/normalizers';
+import React, { useState, useRef } from 'react';
 import { NodeProps } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
 import { NodeDragHeader } from '../shared/NodeDragHeader';
 import { NodeHandles } from '../../NodeHandles';
 import { IntellisenseMenu } from '../../../Intellisense/IntellisenseMenu';
-import { IntellisenseItem } from '../../../Intellisense/IntellisenseTypes';
-import { NodeRowData, EntityType } from '../../../../types/project';
-import { useNodeRowDrag } from '../../../../hooks/useNodeRowDrag';
+import { NodeRowData } from '../../../../types/project';
 import { NodeRowList } from '../../rows/shared/NodeRowList';
 import { useNodeState } from './hooks/useNodeState';
 import { useNodeEventHandlers } from './hooks/useNodeEventHandlers';
@@ -17,9 +14,8 @@ import { useNodeIntellisense } from './hooks/useNodeIntellisense';
 import { useNodeDragDrop } from './hooks/useNodeDragDrop';
 import { useNodeRendering } from './hooks/useNodeRendering';
 import { useNodeEffects } from './hooks/useNodeEffects';
+import { useNodeExitEditing } from './hooks/useNodeExitEditing';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
-
-// (Helper functions moved to useNodeInitialization hook)
 
 /**
  * Dati custom per un nodo del flowchart
@@ -64,7 +60,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     isEmpty, setIsEmpty,
     handleUpdateRow, handleDeleteRow, handleInsertRow,
     handleExitEditing, validateRows, computeIsEmpty,
-    makeRowId, inAutoAppend, beginAutoAppendGuard
+    inAutoAppend
   } = rowManagement;
 
   // ✅ INTELLISENSE: Manage intellisense functionality
@@ -76,7 +72,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   });
   const {
     showIntellisense, intellisensePosition,
-    handleIntellisenseSelectItem, openIntellisense, closeIntellisense
+    handleIntellisenseSelectItem, closeIntellisense
   } = intellisense;
 
   // Ref al contenitore delle righe per calcoli DnD locali (dichiarato prima dell'uso)
@@ -96,9 +92,12 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     rowsContainerRef
   });
   const {
-    drag, draggedItem, draggedRowStyle,
-    handleRowDragStart, handleGlobalMouseMove, handleGlobalMouseUp
+    drag, draggedItem: draggedItemRaw, draggedRowStyle,
+    handleRowDragStart
   } = dragDrop;
+
+  // Force correct type for draggedItem
+  const draggedItem: NodeRowData | null = draggedItemRaw ?? null;
 
   // ✅ STATE: Extract all state management to custom hook (MUST BE FIRST)
   const nodeState = useNodeState({ data: normalizedData });
@@ -106,10 +105,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     isEditingNode, setIsEditingNode,
     nodeTitle, setNodeTitle,
     isHoveredNode, setIsHoveredNode,
-    isHoverHeader, setIsHoverHeader,
+    setIsHoverHeader,
     isDragging, setIsDragging,
     isToolbarDrag, setIsToolbarDrag,
-    nodeBufferRect, setNodeBufferRect,
     hideToolbarTimeoutRef,
     hasTitle, showPermanentHeader, showDragHeader
   } = nodeState;
@@ -129,9 +127,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     handleTitleUpdate,
     handleDeleteNode,
     handleNodeMouseEnter,
-    handleNodeMouseLeave,
-    handleBufferMouseEnter,
-    handleBufferMouseLeave
+    handleNodeMouseLeave
   } = handlers;
 
   // ✅ RENDERING: Manage rendering logic and props (AFTER state and handlers)
@@ -164,10 +160,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     id
   });
   const {
-    visibleRows,
     nodeRowListProps,
-    permanentToolbarProps,
-    dragHeaderProps,
     intellisenseProps,
     nodeStyles,
     toolbarStyles,
@@ -189,7 +182,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     inAutoAppend,
     computeIsEmpty,
     setIsHoverHeader,
-    setNodeBufferRect,
     setIsHoveredNode,
     setNodeRows,
     setIsEmpty,
@@ -198,129 +190,23 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     nodeContainerRef,
     exitEditing: handleExitEditing
   });
-  const { nextPointerTargetRef, latestRowsRef } = effects;
+  const { nextPointerTargetRef } = effects;
 
-  // (useEffect logic moved to useNodeEffects hook)
-  // (debug useEffect removed)
-
-  // (toolbar area calculation moved to useNodeEffects hook)
-
-  // (canvas click handler moved to useNodeEffects hook)
-  // (showIntellisense and intellisensePosition moved to useNodeIntellisense hook)
-
-  // (makeRowId and appendEmptyRow moved to useNodeRowManagement hook)
-
-  // (nodeRows, editingRowId moved to useNodeRowManagement hook)
-
-  // (autoAppendGuard, inAutoAppend, beginAutoAppendGuard moved to useNodeRowManagement hook)
-
-  // (pointer target ref moved to useNodeEffects hook)
-
-  // (nodeContainerRef moved to useNodeEffects hook)
-
-  // (isEmpty, computeIsEmpty moved to useNodeRowManagement hook)
-
-  // ✅ CORREZIONE 2: Evita isNewNode stale - usa stato corrente invece di flag globale
-
-  // Funzione per uscire dall'editing con pulizia righe non valide
-  const exitEditing = (nativeEvt?: Event | null) => {
-    if (inAutoAppend()) {
-      console.log('🔒 [AUTO_APPEND_GUARD] Soppresso exitEditing durante auto-append');
-      return; // sopprimi durante l'auto-append
-    }
-
-    // ✅ Determina il nextTarget considerando tutti i casi
-    const nextTarget =
-      (nativeEvt as any)?.relatedTarget ||
-      (nativeEvt as any)?.target || // per onBlur(nativeEvent)
-      (nextPointerTargetRef.current as Node | null) ||
-      document.activeElement;
-
-    // ✅ Controlla se il blur è interno al nodo
-    if (nextTarget && nodeContainerRef.current?.contains(nextTarget as Node)) {
-      console.log('🔒 [BLUR_INTERNO] Blur interno, non uscire dall\'editing');
-      nextPointerTargetRef.current = null; // Azzera dopo l'uso
-      return;
-    }
-
-    // Usa la funzione del hook
-    handleExitEditing();
-    validateRows(nodeRows);
-  };
-
-  // (isEmpty alignment effect moved to useNodeEffects hook)
-
-  // (focus effect moved to useNodeEffects hook)
-
-  // ✅ Rimuovi auto-editing del titolo per nodi temporanei
-  // (Mantieni solo l'auto-focus sulla prima riga)
-
-  // (drag state moved to useNodeDragDrop hook)
-
-  // ✅ PATCH 2: Rimossa variabile hasAddedNewRow non più necessaria
-
-  // Riferimenti DOM per le righe
-  // const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  // ✅ EXIT EDITING: Extract exit editing logic to custom hook
+  const { exitEditing } = useNodeExitEditing({
+    inAutoAppend,
+    nextPointerTargetRef,
+    nodeContainerRef,
+    handleExitEditing,
+    validateRows,
+    nodeRows
+  });
 
   // Stato per gestire l'inserter hover
   const [hoveredInserter, setHoveredInserter] = useState<number | null>(null);
 
-  // Inizio stato per overlay azioni
-  // const [showActions, setShowActions] = useState(false);
-
-  // (rowsContainerRef moved up before useNodeDragDrop hook)
-  // (rootRef moved up before useNodeEffects hook)
-  // (latest rows ref moved to useNodeEffects hook)
-
-  // (global message updates effect moved to useNodeEffects hook)
-
-  // (handleUpdateRow moved to useNodeRowManagement hook)
-
-  // (handleDeleteRow moved to useNodeRowManagement hook)
-
-  // Funzioni rimosse - non più utilizzate
-
-  // const handleIntellisenseSelect = (selectedText: string) => {
-  //   if (editingRowId) {
-  //     handleUpdateRow(editingRowId, selectedText);
-  //   }
-  //   setShowIntellisense(false);
-  //   setEditingRowIdWithLog(null);
-  // };
-
-  // (handleIntellisenseSelectItem moved to useNodeIntellisense hook)
-
-  // (handleInsertRow moved to useNodeRowManagement hook)
-
-  // (handleRowDragStart moved to useNodeDragDrop hook)
-
-  // React-DnD-like simple move API used by NodeRow when dragging label
-  // Funzioni drag-and-drop rimosse - gestite dal hook useNodeRowDrag
-
-  // (handleGlobalMouseMove moved to useNodeDragDrop hook)
-
-  // (handleGlobalMouseUp moved to useNodeDragDrop hook)
-
-  // (cleanup listeners moved to useNodeDragDrop hook)
-
-  // ✅ PATCH 2: Rimosso useEffect problematico che generava loop di instabilità
-  // La gestione delle righe vuote è ora gestita direttamente in handleUpdateRow
-
-
-  // (canvas click effect moved to useNodeEffects hook)
-
-  // (visibleRows moved to useNodeRendering hook)
-
-  // (draggedItem and draggedRowStyle moved to useNodeDragDrop hook)
-
-  // ✅ RIMOSSO: I nodi temporanei ora sono visibili e funzionanti
-
-  // Do NOT auto-append an extra row at mount; start with a single textarea only.
-
-
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
-      {/* Area hover gestita dalla toolbar fullWidth */}
 
       <div
         ref={(el) => {
@@ -334,27 +220,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         style={nodeStyles}
         tabIndex={-1}
         draggable={true}
-        onDragStart={(e) => {
-          console.log('🎯 [CustomNode] Drag start - Setting isDragging = true', {
-            type: e.type,
-            target: e.target,
-            currentTarget: e.currentTarget,
-            isDragging: isDragging,
-            isToolbarDrag: isToolbarDrag,
-            timestamp: Date.now()
-          });
+        onDragStart={() => {
           setIsDragging(true);
           document.body.style.cursor = 'move';
         }}
-        onDragEnd={(e) => {
-          console.log('🎯 [CustomNode] Drag end - Setting isDragging = false', {
-            type: e.type,
-            target: e.target,
-            currentTarget: e.currentTarget,
-            isDragging: isDragging,
-            isToolbarDrag: isToolbarDrag,
-            timestamp: Date.now()
-          });
+        onDragEnd={() => {
           setIsDragging(false);
           setIsToolbarDrag(false);
           document.body.style.cursor = 'default';
@@ -362,27 +232,20 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         onMouseEnter={handleNodeMouseEnter}
         onMouseLeave={handleNodeMouseLeave}
         onMouseDownCapture={(e) => {
-          // Permetti di trascinare il nodo prendendo il corpo (evita solo l'input riga)
           const t = e.target as HTMLElement;
           const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-          if (!isInput) {
-            // Non bloccare la propagazione: lascia passare a React Flow per il drag
-            return;
-          }
-          // Se stai interagendo con l'input riga, non trascinare
+          if (!isInput) return;
           e.stopPropagation();
         }}
-
         onMouseUpCapture={(e) => {
           if (!editingRowId) return;
           const t = e.target as HTMLElement;
           const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-          if (isInput) { e.stopPropagation(); }
+          if (isInput) e.stopPropagation();
         }}
-        onFocusCapture={() => { /* no-op: lasciamo passare focus per drag header */ }}
+        onFocusCapture={() => { }}
       >
-        {/* Toolbar sopra il nodo: visibile solo quando c'è header permanente + hover */}
-        {/* NON ha più onMouseEnter/Leave: l'area buffer gestisce tutto */}
+        {/* Toolbar sopra il nodo */}
         {showPermanentHeader && (isHoveredNode || selected) && !isEditingNode && (
           <div
             style={{
@@ -398,14 +261,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               transition: 'opacity 0.2s ease'
             }}
           >
-            {console.log('🎯 [CustomNode] TOOLBAR RENDERING:', {
-              showPermanentHeader,
-              isHoveredNode,
-              selected,
-              isEditingNode,
-              zIndex: 1000,
-              position: 'absolute'
-            })}
             <NodeDragHeader
               onEditTitle={() => setIsEditingNode(true)}
               onDelete={handleDeleteNode}
@@ -452,37 +307,27 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         {/* Header drag: sempre presente ma invisibile durante editing per evitare rimozione DOM */}
         <div
           style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: '100%',
-            ...dragHeaderStyles
+            ...dragHeaderStyles,
+            bottom: '100%'
           }}
           onMouseEnter={() => {
             if (showDragHeader) {
-              console.log('[🎯 DRAG HEADER] Mouse entered - DRAG AREA ACTIVE');
               setIsHoveredNode(true);
             }
           }}
           onMouseLeave={() => {
             if (showDragHeader) {
-              console.log('[🎯 DRAG HEADER] Mouse left - DRAG AREA INACTIVE');
               setIsHoveredNode(false);
             }
           }}
-          onMouseDown={(e) => {
+          onMouseDown={() => {
             if (showDragHeader) {
-              console.log('[🎯 DRAG HEADER] Mouse DOWN - DRAG ATTEMPT', {
-                button: e.button,
-                ctrlKey: e.ctrlKey,
-                shiftKey: e.shiftKey,
-                target: e.target
-              });
+              setIsDragging(true);
+              setIsToolbarDrag(true);
             }
           }}
           onClick={(e) => {
             if (showDragHeader) {
-              console.log('[🎯 DRAG HEADER] CLICK - should not happen if drag works');
               e.stopPropagation();
             }
           }}
@@ -510,11 +355,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             hoveredInserter={hoveredInserter}
             setHoveredInserter={setHoveredInserter}
             nodeTitle={nodeTitle}
-            onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included })}
-            onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included, ...(meta || {}) })}
-            onDelete={(row) => handleDeleteRow(row.id)}
             onKeyDown={(e) => {
-              // Non auto-aggiungere righe su Enter: la creazione avviene solo dopo scelta tipo
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 return;
@@ -523,7 +364,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                 singleEmpty ? data.onDelete?.() : exitEditing();
               }
             }}
-            onDragStart={handleRowDragStart}
             canDelete={() => nodeRows.length > 1}
             totalRows={nodeRows.length}
             onCreateAgentAct={data.onCreateAgentAct}
@@ -535,27 +375,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             hoveredRowIndex={drag.hoveredRowIndex}
             draggedRowId={drag.draggedRowId}
             draggedRowOriginalIndex={drag.draggedRowOriginalIndex}
-            draggedItem={draggedItem ?? null}
+            draggedItem={draggedItem || null}
             draggedRowStyle={draggedRowStyle}
             onEditingEnd={exitEditing}
           />
-          {/* Renderizza la riga trascinata separatamente */}
-          {/* Do not render an extra floating NodeRow; use ghost element only to avoid layout shift */}
         </div>
         <NodeHandles isConnectable={isConnectable} />
-        {/* Mock Intellisense Menu */}
-        {showIntellisense && (
-          <>
-            {console.log("🎯 [CustomNode] ROW INTELLISENSE OPENED", {
-              nodeId: id,
-              isTemporary: data.isTemporary,
-              hidden: data.hidden,
-              editingRowId,
-              timestamp: Date.now()
-            })}
-            <IntellisenseMenu {...intellisenseProps} />
-          </>
-        )}
+        {showIntellisense && <IntellisenseMenu {...intellisenseProps} />}
       </div>
     </div>
   );

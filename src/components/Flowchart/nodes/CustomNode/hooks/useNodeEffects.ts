@@ -18,7 +18,6 @@ interface UseNodeEffectsProps {
 
     // Setters
     setIsHoverHeader: (hovered: boolean) => void;
-    setNodeBufferRect: (rect: DOMRect | null) => void;
     setIsHoveredNode: (hovered: boolean) => void;
     setNodeRows: (rows: NodeRowData[]) => void;
     setIsEmpty: (empty: boolean) => void;
@@ -50,7 +49,6 @@ export function useNodeEffects({
     inAutoAppend,
     computeIsEmpty,
     setIsHoverHeader,
-    setNodeBufferRect,
     setIsHoveredNode,
     setNodeRows,
     setIsEmpty,
@@ -89,7 +87,7 @@ export function useNodeEffects({
                     nodeRect.height + toolbarHeight + toolbarMargin + (padding * 2)
                 );
 
-                setNodeBufferRect(extendedRect);
+                // setNodeBufferRect removed - no longer needed
             };
 
             updateRect();
@@ -99,12 +97,9 @@ export function useNodeEffects({
             return () => {
                 window.removeEventListener('resize', updateRect);
                 window.removeEventListener('scroll', updateRect, true);
-                setNodeBufferRect(null);
             };
-        } else {
-            setNodeBufferRect(null);
         }
-    }, [isHoveredNode, selected, isEditingNode, rootRef, setNodeBufferRect]);
+    }, [isHoveredNode, selected, isEditingNode, rootRef]);
 
     // Nascondi header su click canvas se il titolo è vuoto
     useEffect(() => {

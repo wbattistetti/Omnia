@@ -74,12 +74,12 @@ export function useNodeRendering({
     const nodeRowListProps = useMemo(() => ({
         rows: visibleRows,
         editingRowId,
-        onUpdateRow: handleUpdateRow,
-        onDeleteRow: handleDeleteRow,
-        onInsertRow: handleInsertRow,
-        onExitEditing: handleExitEditing,
-        onRowDragStart: handleRowDragStart,
-        draggedItem,
+        handleInsertRow: handleInsertRow,
+        onUpdate: (row: any, newText: string) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included }),
+        onUpdateWithCategory: (row: any, newText: string, categoryType: any, meta: any) => handleUpdateRow(row.id, newText, categoryType, { included: (row as any).included, ...(meta || {}) }),
+        onDelete: (row: any) => handleDeleteRow(row.id),
+        onDragStart: handleRowDragStart,
+        draggedItem: draggedItem ?? null,
         draggedRowStyle
     }), [
         visibleRows,
@@ -87,9 +87,8 @@ export function useNodeRendering({
         handleUpdateRow,
         handleDeleteRow,
         handleInsertRow,
-        handleExitEditing,
         handleRowDragStart,
-        draggedItem,
+        draggedItem: draggedItem ?? null,
         draggedRowStyle
     ]);
 
