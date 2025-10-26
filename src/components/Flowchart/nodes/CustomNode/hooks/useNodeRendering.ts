@@ -161,14 +161,12 @@ export function useNodeRendering({
         position: 'absolute' as const,
         top: -20,
         left: 0,
-        right: 0,
         height: 20,
         zIndex: 1000,
         pointerEvents: showDragHeader ? 'auto' as const : 'none' as const,
         opacity: showDragHeader ? 1 : 0,
         userSelect: 'none' as const,
-        transition: 'opacity 0.2s ease',
-        width: '100%'
+        transition: 'opacity 0.2s ease'
     }), [showDragHeader]);
 
     return {

@@ -12,6 +12,7 @@ import { useNodeInitialization } from './hooks/useNodeInitialization';
 import { useNodeRowManagement } from './hooks/useNodeRowManagement';
 import { useNodeIntellisense } from './hooks/useNodeIntellisense';
 import { useNodeDragDrop } from './hooks/useNodeDragDrop';
+import { useRowRegistry } from '../../rows/NodeRow/hooks/useRowRegistry';
 import { useNodeRendering } from './hooks/useNodeRendering';
 import { useNodeEffects } from './hooks/useNodeEffects';
 import { useNodeExitEditing } from './hooks/useNodeExitEditing';
@@ -93,7 +94,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     nodeId: id
   });
   const {
-    isRowDragging, draggedRowId, handleRowDragStart
+    draggedRowId, handleRowDragStart
   } = dragDrop;
 
   // ✅ STATE: Extract all state management to custom hook (MUST BE FIRST)
@@ -200,29 +201,22 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Stato per gestire l'inserter hover
   const [hoveredInserter, setHoveredInserter] = useState<number | null>(null);
 
-  // ✅ CROSS-NODE DRAG: Listen for cross-node row moves
+  // Registry per accedere ai componenti NodeRow
+  const { getRowComponent } = useRowRegistry();
+
+  // ✅ CROSS-NODE DRAG: Listen for cross-node row moves - VERSIONE SEMPLIFICATA
   React.useEffect(() => {
     const handleCrossNodeMove = (event: CustomEvent) => {
-      const { fromNodeId, toNodeId, rowData, mousePosition } = event.detail;
-
-      console.log('🎯 [CrossNode] Event received', {
-        fromNodeId,
-        toNodeId,
-        thisNodeId: id,
-        hasRowData: !!rowData,
-        mousePosition: mousePosition,
-        rowData: rowData
-      });
+      const { toNodeId, rowData, mousePosition } = event.detail;
 
       if (toNodeId === id && rowData) {
-        console.log('🎯 [CrossNode] Adding row to this node', { toNodeId, rowData });
 
         // Verifica che la riga non esista già
         const existingRow = nodeRows.find(row => row.id === rowData.id);
         if (!existingRow) {
           // Calcola la posizione di inserimento basata sul mouse
           const elements = Array.from(rowsContainerRef.current?.querySelectorAll('.node-row-outer') || []) as HTMLElement[];
-          const rects = elements.map((el, idx) => ({
+          const rects = elements.map((el) => ({
             idx: Number(el.dataset.index),
             top: el.getBoundingClientRect().top,
             height: el.getBoundingClientRect().height
@@ -239,12 +233,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             }
           }
 
-          console.log('🎯 [CrossNode] Inserting at position', {
-            targetIndex,
-            totalRows: nodeRows.length,
-            mouseY: mousePosition?.y
-          });
-
           // Inserisci alla posizione corretta
           const updatedRows = [...nodeRows];
           updatedRows.splice(targetIndex, 0, rowData);
@@ -253,9 +241,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           if (data.onUpdate) {
             data.onUpdate({ rows: updatedRows });
           }
-          console.log('🎯 [CrossNode] Row added successfully at position', targetIndex);
+
+          // ELEGANTE: Usa il componente per l'evidenziazione
+          // Aspetta un po' per assicurarsi che il componente sia stato renderizzato
+          setTimeout(() => {
+            const rowComponent = getRowComponent(rowData.id);
+            if (rowComponent) {
+              rowComponent.highlight();
+            }
+          }, 50);
         } else {
-          console.log('🎯 [CrossNode] Row already exists, skipping');
+          // Row already exists, skipping
         }
       }
     };
@@ -264,7 +260,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     return () => {
       window.removeEventListener('crossNodeRowMove', handleCrossNodeMove as EventListener);
     };
-  }, [id, nodeRows, setNodeRows, data, rowsContainerRef]);
+  }, [id, nodeRows, setNodeRows, data, rowsContainerRef, getRowComponent]);
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -398,7 +394,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             onDelete={handleDeleteNode}
             compact={true}
             showDragHandle={true}
-            fullWidth={true}
+            fullWidth={false}
             isToolbarDrag={isToolbarDrag}
             onDragStart={() => {
               console.log('🎯 [CustomNode] onDragStart from Move button (second)', {

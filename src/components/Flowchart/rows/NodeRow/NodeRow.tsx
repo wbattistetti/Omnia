@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useProjectData } from '../../../../context/ProjectDataContext';
 import { useDDTManager } from '../../../../context/DDTManagerContext';
 import { ProjectDataService } from '../../../../services/ProjectDataService';
@@ -20,6 +20,7 @@ import { RowTypePickerToolbar } from './RowTypePickerToolbar';
 import { useRowToolbar } from '../../hooks/useRowToolbar';
 import { useRowState } from './hooks/useRowState';
 import { useIntellisensePosition } from './hooks/useIntellisensePosition';
+import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from '../../utils/actVisuals';
 import { inferActType, heuristicToInternal } from '../../../../nlp/actType';
@@ -81,6 +82,40 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     iconPos, setIconPos,
     typeToolbarRef, inputRef, nodeContainerRef, labelRef, overlayRef, mousePosRef
   } = rowState;
+
+  // Visual states for drag & drop feedback
+  const [visualState, setVisualState] = useState<'normal' | 'fade' | 'highlight'>('normal');
+
+  // Registry for external access
+  const { registerRow, unregisterRow } = useRowRegistry();
+
+  // Visual state methods
+  const fade = useCallback(() => {
+    setVisualState('fade');
+  }, []);
+
+  const highlight = useCallback(() => {
+    setVisualState('highlight');
+    // Auto-reset to normal after 1 second
+    setTimeout(() => setVisualState('normal'), 1000);
+  }, []);
+
+  const normal = useCallback(() => {
+    setVisualState('normal');
+  }, []);
+
+  // Register component in registry
+  useEffect(() => {
+    registerRow(row.id, { fade, highlight, normal });
+    return () => unregisterRow(row.id);
+  }, [row.id, fade, highlight, normal, registerRow, unregisterRow]);
+
+  // Expose methods via ref for external access
+  React.useImperativeHandle(ref, () => ({
+    fade,
+    highlight,
+    normal
+  }), [fade, highlight, normal]);
 
   // Use stable intellisense positioning hook
   const nodeOverlayPosition = useIntellisensePosition({
@@ -735,6 +770,22 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Ghost preview while dragging - DISABILITATO per evitare duplicazione
   // Il ghost element è ora gestito da NodeRowList.tsx
 
+  // Visual state styles
+  const getVisualStyles = (): React.CSSProperties => {
+    switch (visualState) {
+      case 'fade':
+        return { opacity: 0.3, transition: 'opacity 0.2s ease' };
+      case 'highlight':
+        return { 
+          backgroundColor: 'rgba(16, 185, 129, 0.3)', 
+          borderRadius: '8px',
+          transition: 'background-color 0.5s ease-out'
+        };
+      default:
+        return {};
+    }
+  };
+
   // Stili condizionali
   let conditionalStyles: React.CSSProperties = {};
   let conditionalClasses = '';
@@ -756,6 +807,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       pointerEvents: 'auto'
     };
   }
+
+  // Merge visual styles with conditional styles
+  conditionalStyles = { ...conditionalStyles, ...getVisualStyles() };
 
   // Colore solo testo come in sidebar; sfondo trasparente
   let bgColor = 'transparent';
@@ -812,6 +866,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         style={{ ...conditionalStyles, backgroundColor: 'transparent', border: 'none', outline: 'none', boxShadow: 'none', paddingLeft: 0, paddingRight: 0, marginTop: 0, marginBottom: 0, paddingTop: 4, paddingBottom: 4, minHeight: 0, height: 'auto', width: '100%' }}
         data-index={index}
         data-being-dragged={isBeingDragged ? 'true' : 'false'}
+        data-row-id={row.id}
         draggable={false}
         onDragStart={(e) => e.preventDefault()}
         onMouseDown={(e) => e.preventDefault()}

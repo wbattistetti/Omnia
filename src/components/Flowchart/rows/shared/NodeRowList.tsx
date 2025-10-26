@@ -14,7 +14,7 @@ interface NodeRowListProps {
   onUpdateWithCategory: (row: NodeRowData, newText: string, categoryType?: string, meta?: any) => void;
   onDelete: (row: NodeRowData) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
-  onDragStart: (id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => void;
+  onDragStart: (id: string, index: number, clientX: number, clientY: number, originalElement: HTMLElement) => void;
   canDelete: (row: NodeRowData) => boolean;
   totalRows: number;
   hoveredRowIndex: number | null;

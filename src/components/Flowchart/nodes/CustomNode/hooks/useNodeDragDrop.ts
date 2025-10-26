@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { NodeRowData } from '../../../../../types/project';
+import { useRowRegistry } from '../../../rows/NodeRow/hooks/useRowRegistry';
 
 interface UseNodeDragDropProps {
     nodeRows: NodeRowData[];
@@ -20,6 +21,9 @@ export function useNodeDragDrop({
     rowsContainerRef,
     nodeId
 }: UseNodeDragDropProps) {
+    // Registry per accedere ai componenti NodeRow
+    const { getRowComponent } = useRowRegistry();
+
     // Stato per il drag personalizzato
     const [isRowDragging, setIsRowDragging] = useState(false);
     const [draggedRowId, setDraggedRowId] = useState<string | null>(null);
@@ -29,36 +33,16 @@ export function useNodeDragDrop({
     const [draggedRowData, setDraggedRowData] = useState<NodeRowData | null>(null);
     const [targetNodeId, setTargetNodeId] = useState<string | null>(null);
 
-    // Gestione drag start personalizzato
+    // Gestione drag start personalizzato - VERSIONE SEMPLIFICATA
     const handleRowDragStart = useCallback((id: string, index: number, clientX: number, clientY: number, originalElement: HTMLElement) => {
-        console.log('🎯 [CustomDrag] Starting drag', { id, index, clientX, clientY });
+        // 1. Trova il componente NodeRow e fai il fade
+        const rowComponent = getRowComponent(id);
+        if (rowComponent) {
+            rowComponent.fade();
+        }
 
-        // Trova l'icona nell'elemento originale
-        const iconElement = originalElement.querySelector('.icon, [class*="icon"], svg, .ear-icon, [data-icon], i[class*="icon"]');
-        const iconRect = iconElement?.getBoundingClientRect();
-        const originalRect = originalElement.getBoundingClientRect();
-
-        // Calcola l'offset dell'icona rispetto all'inizio dell'elemento
-        const iconOffset = iconRect ? iconRect.left - originalRect.left : 0;
-
-        console.log('🎯 [CustomDrag] Icon calculation', {
-            iconElement: !!iconElement,
-            iconOffset,
-            iconRect: iconRect ? { left: iconRect.left, width: iconRect.width } : null,
-            originalRect: { left: originalRect.left, width: originalRect.width }
-        });
-
-        // Crea clone dell'elemento originale
+        // 2. Crea clone semplice per il drag visual
         const clone = originalElement.cloneNode(true) as HTMLElement;
-
-        // Ritaglia precisamente dall'inizio dell'icona
-        clone.style.overflow = 'hidden';
-        clone.style.width = 'fit-content';
-        clone.style.maxWidth = '300px';
-        clone.style.marginLeft = `-${iconOffset}px`;
-        clone.style.paddingLeft = `${iconOffset}px`;
-
-        // Stili per l'elemento trascinato
         clone.style.position = 'fixed';
         clone.style.pointerEvents = 'none';
         clone.style.zIndex = '9999';
@@ -68,23 +52,18 @@ export function useNodeDragDrop({
         clone.style.transform = 'none';
         clone.style.border = '2px solid #3b82f6';
         clone.style.borderRadius = '4px';
-        clone.style.backgroundColor = '#e6f3ff'; // Azzurrino pallido
+        clone.style.backgroundColor = '#e6f3ff';
         clone.style.padding = '8px 12px';
         clone.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-
-        // Aggiungi al DOM
+        clone.style.width = 'auto';
+        clone.style.maxWidth = '300px';
+        clone.style.minWidth = 'fit-content';
         document.body.appendChild(clone);
 
-        // Trova i dati della riga trascinata
+        // 3. Trova i dati della riga
         const rowData = nodeRows.find(row => row.id === id);
 
-        console.log('🎯 [CustomDrag] Row data found', {
-            rowId: id,
-            rowData: rowData,
-            hasRowData: !!rowData
-        });
-
-        // Aggiorna stato
+        // 4. Aggiorna stato
         setIsRowDragging(true);
         setDraggedRowId(id);
         setDraggedRowIndex(index);
@@ -93,11 +72,11 @@ export function useNodeDragDrop({
         setDraggedRowData(rowData || null);
         setTargetNodeId(null);
 
-        // Cursor
+        // 5. Cursor
         document.body.style.cursor = 'grabbing';
         document.body.style.userSelect = 'none';
 
-    }, []);
+    }, [getRowComponent, nodeRows]);
 
     // Gestione movimento del mouse
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -134,16 +113,11 @@ export function useNodeDragDrop({
         }
     }, [isRowDragging, dragElement, nodeId]);
 
-    // Gestione rilascio del mouse
+    // Gestione rilascio del mouse - VERSIONE SEMPLIFICATA
     const handleMouseUp = useCallback(() => {
         if (!isRowDragging || !draggedRowId || draggedRowIndex === null) return;
 
-        console.log('🎯 [CustomDrag] Ending drag', {
-            draggedRowId,
-            draggedRowIndex,
-            targetNodeId,
-            isCrossNode: !!targetNodeId && targetNodeId !== nodeId
-        });
+        // Drag ended
 
         // Rimuovi evidenziazione da tutti i nodi
         document.querySelectorAll('.react-flow__node').forEach(node => {
@@ -152,26 +126,13 @@ export function useNodeDragDrop({
 
         if (targetNodeId && targetNodeId !== nodeId) {
             // CROSS-NODE DROP: Sposta la riga a un altro nodo
-
-            // IMPORTANTE: Salva i dati della riga PRIMA di rimuoverla
             const rowDataToMove = draggedRowData || nodeRows.find(row => row.id === draggedRowId);
 
-            console.log('🎯 [CrossNode] Moving row to different node', {
-                from: nodeId,
-                to: targetNodeId,
-                rowId: draggedRowId,
-                rowData: rowDataToMove,
-                wasInState: !!draggedRowData,
-                foundInNodeRows: !!nodeRows.find(row => row.id === draggedRowId)
-            });
-
-            // Verifica che rowData sia valido
             if (!rowDataToMove) {
-                console.error('🎯 [CrossNode] ERROR: rowData is null/undefined after all attempts');
                 return;
             }
 
-            // Dispatches un evento personalizzato per notificare il cross-node move
+            // Dispatch evento per cross-node move
             const crossNodeEvent = new CustomEvent('crossNodeRowMove', {
                 detail: {
                     fromNodeId: nodeId,
@@ -183,10 +144,8 @@ export function useNodeDragDrop({
                 }
             });
 
-            // Dispatch con un piccolo delay per assicurarsi che l'evento sia processato
             setTimeout(() => {
                 window.dispatchEvent(crossNodeEvent);
-                console.log('🎯 [CrossNode] Event dispatched');
             }, 10);
 
             // Rimuovi la riga dal nodo corrente
@@ -227,12 +186,24 @@ export function useNodeDragDrop({
                 if (data.onUpdate) {
                     data.onUpdate({ rows: updatedRows });
                 }
+
+                // ELEGANTE: Usa il componente per l'evidenziazione
+                const rowComponent = getRowComponent(draggedRow.id);
+                if (rowComponent) {
+                    rowComponent.highlight();
+                }
             }
         }
 
         // Cleanup
         if (dragElement) {
             document.body.removeChild(dragElement);
+        }
+
+        // Ripristina lo stato normale della riga originale
+        const originalRowComponent = getRowComponent(draggedRowId);
+        if (originalRowComponent) {
+            originalRowComponent.normal();
         }
 
         setIsRowDragging(false);
@@ -244,7 +215,7 @@ export function useNodeDragDrop({
 
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-    }, [isRowDragging, draggedRowId, draggedRowIndex, mousePosition, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData]);
+    }, [isRowDragging, draggedRowId, draggedRowIndex, mousePosition, nodeRows, setNodeRows, data, dragElement, rowsContainerRef, targetNodeId, nodeId, draggedRowData, getRowComponent]);
 
     // Event listeners
     useEffect(() => {
