@@ -14,6 +14,9 @@ import { useNodeEventHandlers } from './hooks/useNodeEventHandlers';
 import { useNodeInitialization } from './hooks/useNodeInitialization';
 import { useNodeRowManagement } from './hooks/useNodeRowManagement';
 import { useNodeIntellisense } from './hooks/useNodeIntellisense';
+import { useNodeDragDrop } from './hooks/useNodeDragDrop';
+import { useNodeRendering } from './hooks/useNodeRendering';
+import { useNodeEffects } from './hooks/useNodeEffects';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
 
 // (Helper functions moved to useNodeInitialization hook)
@@ -76,7 +79,28 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     handleIntellisenseSelectItem, openIntellisense, closeIntellisense
   } = intellisense;
 
-  // Extract all state management to custom hook
+  // Ref al contenitore delle righe per calcoli DnD locali (dichiarato prima dell'uso)
+  const rowsContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // ✅ CORREZIONE 5: Ref per il container root del nodo (dichiarato prima dell'uso)
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // ✅ CORREZIONE 6: Ref per il container del nodo (dichiarato prima dell'uso)
+  const nodeContainerRef = useRef<HTMLDivElement>(null);
+
+  // ✅ DRAG & DROP: Manage row drag and drop functionality
+  const dragDrop = useNodeDragDrop({
+    nodeRows,
+    setNodeRows,
+    data: normalizedData,
+    rowsContainerRef
+  });
+  const {
+    drag, draggedItem, draggedRowStyle,
+    handleRowDragStart, handleGlobalMouseMove, handleGlobalMouseUp
+  } = dragDrop;
+
+  // ✅ STATE: Extract all state management to custom hook (MUST BE FIRST)
   const nodeState = useNodeState({ data: normalizedData });
   const {
     isEditingNode, setIsEditingNode,
@@ -90,7 +114,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     hasTitle, showPermanentHeader, showDragHeader
   } = nodeState;
 
-  // Extract all event handlers to custom hook
+  // ✅ EVENT HANDLERS: Extract all event handlers to custom hook (BEFORE rendering)
   const handlers = useNodeEventHandlers({
     data: normalizedData,
     nodeTitle,
@@ -110,58 +134,78 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     handleBufferMouseLeave
   } = handlers;
 
-  // Se l'header viene nascosto, azzera sempre lo stato hover header
-  useEffect(() => { if (!showPermanentHeader) setIsHoverHeader(false); }, [showPermanentHeader]);
-  useEffect(() => {
-    // debug removed
-  }, [showPermanentHeader, hasTitle, isHoveredNode, isEditingNode, id]);
+  // ✅ RENDERING: Manage rendering logic and props (AFTER state and handlers)
+  const rendering = useNodeRendering({
+    nodeRows,
+    normalizedData,
+    isHoveredNode,
+    selected,
+    isEditingNode,
+    showPermanentHeader,
+    showDragHeader,
+    isDragging,
+    isToolbarDrag,
+    draggedItem,
+    draggedRowStyle,
+    editingRowId,
+    showIntellisense,
+    intellisensePosition,
+    handleIntellisenseSelectItem,
+    closeIntellisense,
+    handleRowDragStart,
+    handleUpdateRow,
+    handleDeleteRow,
+    handleInsertRow,
+    handleExitEditing,
+    setIsEditingNode,
+    handleDeleteNode,
+    setIsHoveredNode,
+    setIsHoverHeader,
+    id
+  });
+  const {
+    visibleRows,
+    nodeRowListProps,
+    permanentToolbarProps,
+    dragHeaderProps,
+    intellisenseProps,
+    nodeStyles,
+    toolbarStyles,
+    dragHeaderStyles
+  } = rendering;
 
-  // Calcola area estesa per toolbar nodo (include nodo + toolbar + padding)
-  useEffect(() => {
-    const shouldShowToolbar = (isHoveredNode || selected) && !isEditingNode;
+  // ✅ EFFECTS: Manage all useEffect logic (AFTER state)
+  const effects = useNodeEffects({
+    showPermanentHeader,
+    hasTitle,
+    isHoveredNode,
+    isEditingNode,
+    selected,
+    id,
+    nodeRows,
+    editingRowId,
+    normalizedData,
+    isEmpty,
+    inAutoAppend,
+    computeIsEmpty,
+    setIsHoverHeader,
+    setNodeBufferRect,
+    setIsHoveredNode,
+    setNodeRows,
+    setIsEmpty,
+    setEditingRowId,
+    rootRef,
+    nodeContainerRef,
+    exitEditing: handleExitEditing
+  });
+  const { nextPointerTargetRef, latestRowsRef } = effects;
 
+  // (useEffect logic moved to useNodeEffects hook)
+  // (debug useEffect removed)
 
-    if (shouldShowToolbar && rootRef.current) {
-      const updateRect = () => {
-        if (!rootRef.current) return;
-        const nodeRect = rootRef.current.getBoundingClientRect();
-        // Toolbar sopra nodo: marginBottom 8px, altezza ~18-20px
-        const toolbarHeight = 20;
-        const toolbarMargin = 8;
-        const padding = 7;
+  // (toolbar area calculation moved to useNodeEffects hook)
 
-        // Area sopra il nodo per hover: stessa larghezza del nodo, altezza toolbar
-        setNodeBufferRect({
-          top: nodeRect.top - toolbarHeight, // Sopra il nodo, altezza toolbar
-          left: nodeRect.left, // Stessa posizione del nodo
-          width: nodeRect.width, // Stessa larghezza del nodo
-          height: toolbarHeight, // Altezza toolbar
-        });
-      };
-
-      updateRect();
-      // Ricalcola su resize/scroll
-      window.addEventListener('resize', updateRect);
-      window.addEventListener('scroll', updateRect, true);
-      return () => {
-        window.removeEventListener('resize', updateRect);
-        window.removeEventListener('scroll', updateRect, true);
-      };
-    } else {
-      setNodeBufferRect(null);
-    }
-  }, [showPermanentHeader, isHoveredNode, selected, isEditingNode]);
-
-  // Nascondi header su click canvas se il titolo è vuoto
-  useEffect(() => {
-    const hideOnCanvasClick = () => {
-      if (!hasTitle) {
-        setIsHoveredNode(false);
-      }
-    };
-    window.addEventListener('flow:canvas:click', hideOnCanvasClick as any);
-    return () => window.removeEventListener('flow:canvas:click', hideOnCanvasClick as any);
-  }, [hasTitle, id]);
+  // (canvas click handler moved to useNodeEffects hook)
   // (showIntellisense and intellisensePosition moved to useNodeIntellisense hook)
 
   // (makeRowId and appendEmptyRow moved to useNodeRowManagement hook)
@@ -170,16 +214,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // (autoAppendGuard, inAutoAppend, beginAutoAppendGuard moved to useNodeRowManagement hook)
 
-  // ✅ Fallback per relatedTarget null (focus programmatico) - pointerdown copre mouse+touch+pen
-  const nextPointerTargetRef = useRef<EventTarget | null>(null);
-  useEffect(() => {
-    const onPointerDown = (e: PointerEvent) => { nextPointerTargetRef.current = e.target; };
-    window.addEventListener("pointerdown", onPointerDown, { capture: true, passive: true });
-    return () => window.removeEventListener("pointerdown", onPointerDown, { capture: true } as any);
-  }, []);
+  // (pointer target ref moved to useNodeEffects hook)
 
-  // ✅ Ref per il container del nodo per controllo blur interno
-  const nodeContainerRef = useRef<HTMLDivElement>(null);
+  // (nodeContainerRef moved to useNodeEffects hook)
 
   // (isEmpty, computeIsEmpty moved to useNodeRowManagement hook)
 
@@ -211,38 +248,14 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     validateRows(nodeRows);
   };
 
-  // ✅ Effetto per mantenere isEmpty allineato alle righe (fuori dalla finestra auto-append)
-  useEffect(() => {
-    if (inAutoAppend()) return; // evita transizioni spurie durante auto-append
+  // (isEmpty alignment effect moved to useNodeEffects hook)
 
-    setIsEmpty(prev => {
-      const next = computeIsEmpty(nodeRows);
-      return next === prev ? prev : next;
-    });
-  }, [nodeRows]);
-
-  // ✅ PATCH 1: Focus per nodi nuovi (semplificato) - NON per nodi hidden!
-  useEffect(() => {
-    // ✅ SKIP auto-focus solo se il nodo è hidden (per edge temporanei)
-    // ✅ PERMETTI auto-focus se isTemporary ma non hidden (nodi creati con doppio click)
-    if (normalizedData.hidden) {
-      return;
-    }
-
-    // Se abbiamo focusRowId (nodo nuovo) e non c'è editingRowId, impostalo
-    if (normalizedData.focusRowId && !editingRowId && nodeRows.length > 0) {
-      const firstRow = nodeRows[0];
-      if (firstRow && firstRow.text.trim() === '') {
-        setEditingRowId(firstRow.id);
-      }
-    }
-  }, [normalizedData.focusRowId, normalizedData.hidden, normalizedData.isTemporary, editingRowId, nodeRows.length, id]);
+  // (focus effect moved to useNodeEffects hook)
 
   // ✅ Rimuovi auto-editing del titolo per nodi temporanei
   // (Mantieni solo l'auto-focus sulla prima riga)
 
-  // Stati per il drag-and-drop
-  const drag = useNodeRowDrag(nodeRows);
+  // (drag state moved to useNodeDragDrop hook)
 
   // ✅ PATCH 2: Rimossa variabile hasAddedNewRow non più necessaria
 
@@ -255,28 +268,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Inizio stato per overlay azioni
   // const [showActions, setShowActions] = useState(false);
 
-  // Ref al contenitore delle righe per calcoli DnD locali
-  const rowsContainerRef = useRef<HTMLDivElement | null>(null);
-  // ✅ CORREZIONE 4: Ref per il container root del nodo
-  const rootRef = useRef<HTMLDivElement>(null);
+  // (rowsContainerRef moved up before useNodeDragDrop hook)
+  // (rootRef moved up before useNodeEffects hook)
+  // (latest rows ref moved to useNodeEffects hook)
 
-  // Keep latest rows in a ref to update safely from DOM events
-  const latestRowsRef = useRef<NodeRowData[]>(nodeRows);
-  useEffect(() => { latestRowsRef.current = nodeRows; }, [nodeRows]);
-
-  // Listen for global message text updates coming from NonInteractive editor
-  useEffect(() => {
-    const handler = (e: any) => {
-      const d = (e && e.detail) || {};
-      if (!d || !d.instanceId) return;
-      const next = (latestRowsRef.current || []).map(r => (r as any)?.instanceId === d.instanceId ? { ...r, message: { ...(r as any)?.message, text: d.text } } : r);
-      setNodeRows(next);
-      // Schedule parent update outside render/setState to avoid warnings
-      try { Promise.resolve().then(() => normalizedData.onUpdate?.({ rows: next })); } catch { }
-    };
-    document.addEventListener('rowMessage:update', handler as any);
-    return () => document.removeEventListener('rowMessage:update', handler as any);
-  }, [normalizedData.onUpdate]);
+  // (global message updates effect moved to useNodeEffects hook)
 
   // (handleUpdateRow moved to useNodeRowManagement hook)
 
@@ -296,180 +292,26 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // (handleInsertRow moved to useNodeRowManagement hook)
 
-  // Gestione del drag-and-drop
-  // Legacy drag start (kept temporarily). Prefer onMoveRow/onDropRow below.
-  const handleRowDragStart = (id: string, index: number, clientX: number, clientY: number, rect: DOMRect) => {
-    drag.setDraggedRowId(id);
-    drag.setDraggedRowOriginalIndex(index);
-    drag.setDraggedRowInitialClientX(clientX);
-    drag.setDraggedRowInitialClientY(clientY);
-    drag.setDraggedRowInitialRect(rect);
-    drag.setDraggedRowCurrentClientX(clientX);
-    drag.setDraggedRowCurrentClientY(clientY);
-    drag.setHoveredRowIndex(index);
-    drag.setVisualSnapOffset({ x: 0, y: 0 });
-
-    document.body.style.cursor = 'grabbing';
-    document.body.style.userSelect = 'none';
-
-    window.addEventListener('pointermove', handleGlobalMouseMove as any, { capture: true });
-    window.addEventListener('pointerup', handleGlobalMouseUp as any, { capture: true });
-    window.addEventListener('mousemove', handleGlobalMouseMove as any, { capture: true });
-    window.addEventListener('mouseup', handleGlobalMouseUp as any, { capture: true });
-  };
+  // (handleRowDragStart moved to useNodeDragDrop hook)
 
   // React-DnD-like simple move API used by NodeRow when dragging label
   // Funzioni drag-and-drop rimosse - gestite dal hook useNodeRowDrag
 
-  const handleGlobalMouseMove = (event: MouseEvent | PointerEvent) => {
-    if (!drag.draggedRowId || !drag.draggedRowInitialRect || drag.draggedRowInitialClientY === null) return;
+  // (handleGlobalMouseMove moved to useNodeDragDrop hook)
 
-    drag.setDraggedRowCurrentClientX(event.clientX);
-    drag.setDraggedRowCurrentClientY(event.clientY);
+  // (handleGlobalMouseUp moved to useNodeDragDrop hook)
 
-    // Determine hovered index using actual DOM positions of this node only
-    let newHoveredIndex = drag.draggedRowOriginalIndex || 0;
-    const scope = rowsContainerRef.current || document;
-    const elements = Array.from(scope.querySelectorAll('.node-row-outer')) as HTMLElement[];
-    const rects = elements.map((el) => ({ idx: Number(el.dataset.index), top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }));
-    const centerY = event.clientY;
-    for (const r of rects) {
-      if (centerY < r.top + r.height / 2) { newHoveredIndex = r.idx; break; }
-      newHoveredIndex = r.idx + 1;
-    }
-
-    if (newHoveredIndex !== drag.hoveredRowIndex) {
-      drag.setHoveredRowIndex(newHoveredIndex);
-      // Snap offset for visual feedback
-      const rowHeight = 40; // approx
-      const targetY = drag.draggedRowInitialRect.top + (newHoveredIndex * rowHeight);
-      const currentMouseBasedY = drag.draggedRowInitialRect.top + (event.clientY - drag.draggedRowInitialClientY);
-      const snapOffsetY = targetY - currentMouseBasedY;
-      drag.setVisualSnapOffset({ x: 0, y: snapOffsetY });
-    }
-  };
-
-  const handleGlobalMouseUp = () => {
-    const hasOriginal = drag.draggedRowOriginalIndex !== null;
-    let targetIndex = drag.hoveredRowIndex;
-    // Fallback: if no hovered index, infer from total delta in pixels
-    if (hasOriginal && (targetIndex === null || targetIndex === undefined)) {
-      const scope = rowsContainerRef.current || document;
-      const elements = Array.from(scope.querySelectorAll('.node-row-outer')) as HTMLElement[];
-      const rects = elements.map((el) => ({ idx: Number(el.dataset.index), top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }));
-      const centerY = (drag.draggedRowCurrentClientY ?? drag.draggedRowInitialClientY) as number;
-      let inferred = drag.draggedRowOriginalIndex as number;
-      for (const r of rects) { if (centerY < r.top + r.height / 2) { inferred = r.idx; break; } inferred = r.idx + 1; }
-      targetIndex = Math.max(0, Math.min(nodeRows.length - 1, inferred));
-    }
-    if (hasOriginal && targetIndex !== null && (drag.draggedRowOriginalIndex as number) !== targetIndex) {
-      const updatedRows = [...nodeRows];
-      const draggedRow = updatedRows[drag.draggedRowOriginalIndex as number];
-      updatedRows.splice(drag.draggedRowOriginalIndex as number, 1);
-      updatedRows.splice(targetIndex as number, 0, draggedRow);
-      setNodeRows(updatedRows);
-      if (data.onUpdate) data.onUpdate({ rows: updatedRows });
-    }
-
-    // Reset stati
-    drag.setDraggedRowId(null);
-    drag.setDraggedRowOriginalIndex(null);
-    drag.setDraggedRowInitialClientX(null);
-    drag.setDraggedRowInitialClientY(null);
-    drag.setDraggedRowInitialRect(null);
-    drag.setDraggedRowCurrentClientX(null);
-    drag.setDraggedRowCurrentClientY(null);
-    drag.setHoveredRowIndex(null);
-    drag.setVisualSnapOffset({ x: 0, y: 0 });
-
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-
-    window.removeEventListener('pointermove', handleGlobalMouseMove as any);
-    window.removeEventListener('pointerup', handleGlobalMouseUp as any);
-    window.removeEventListener('mousemove', handleGlobalMouseMove as any);
-    window.removeEventListener('mouseup', handleGlobalMouseUp as any);
-  };
-
-  // Cleanup dei listener quando il componente si smonta
-  useEffect(() => {
-    return () => {
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
-    };
-  }, []);
+  // (cleanup listeners moved to useNodeDragDrop hook)
 
   // ✅ PATCH 2: Rimosso useEffect problematico che generava loop di instabilità
   // La gestione delle righe vuote è ora gestita direttamente in handleUpdateRow
 
 
-  // ✅ PATCH 3: Canvas click semplificato - solo exit editing, niente cancellazione automatica
-  useEffect(() => {
-    const onCanvasClick = () => {
-      console.log("🎯 [CANVAS_CLICK] Canvas click detected", {
-        nodeId: id,
-        isTemporary: data.isTemporary,
-        nodeRowsCount: nodeRows.length,
-        timestamp: Date.now()
-      });
+  // (canvas click effect moved to useNodeEffects hook)
 
-      // Esci dall'editing e stabilizza il nodo se è temporaneo
-      exitEditing();
-      if (data.isTemporary) {
-        console.log("🔧 [CANVAS_CLICK] Stabilizing temporary node", {
-          nodeId: id,
-          originalRowsCount: nodeRows.length
-        });
+  // (visibleRows moved to useNodeRendering hook)
 
-        // Filtra via tutte le righe vuote/non stabilizzate
-        const stabilizedRows = nodeRows.filter(row => row.text && row.text.trim().length > 0);
-        if (stabilizedRows.length > 0) {
-          console.log("🔧 [STABILIZE] Stabilizing temporary node", {
-            nodeId: id,
-            stabilizedRowsCount: stabilizedRows.length,
-            updates: { rows: stabilizedRows, isTemporary: false, hidden: false },
-            timestamp: Date.now()
-          });
-
-          // Delay stabilization to avoid conflicts with node creation lock
-          setTimeout(() => {
-            setNodeRows(stabilizedRows);
-            data.onUpdate?.({ rows: stabilizedRows, isTemporary: false, hidden: false });
-          }, 100);
-        } else {
-          console.log("🗑️ [STABILIZE] No valid rows, deleting node", {
-            nodeId: id
-          });
-          data.onDelete?.();
-        }
-      }
-    };
-
-    window.addEventListener('flow:canvas:click', onCanvasClick as any);
-    return () => window.removeEventListener('flow:canvas:click', onCanvasClick as any);
-  }, [editingRowId, id, nodeRows, normalizedData]);
-
-  // Crea l'array di visualizzazione per il feedback visivo
-  const visibleRows = useMemo(() => nodeRows, [nodeRows]);
-
-  // Trova la riga trascinata per il rendering separato
-  const draggedItem = drag.draggedRowId ? nodeRows.find(row => row.id === drag.draggedRowId) : null;
-
-  // Calcola lo stile per la riga trascinata
-  const draggedRowStyle = useMemo(() => {
-    if (!draggedItem || !drag.draggedRowInitialRect || drag.draggedRowInitialClientX === null ||
-      drag.draggedRowInitialClientY === null || drag.draggedRowCurrentClientX === null ||
-      drag.draggedRowCurrentClientY === null) {
-      return {};
-    }
-
-    return {
-      top: drag.draggedRowInitialRect.top + (drag.draggedRowCurrentClientY - drag.draggedRowInitialClientY) + drag.visualSnapOffset.y,
-      left: drag.draggedRowInitialRect.left + (drag.draggedRowCurrentClientX - drag.draggedRowInitialClientX) + drag.visualSnapOffset.x,
-      width: drag.draggedRowInitialRect.width
-    };
-  }, [draggedItem, drag.draggedRowInitialRect, drag.draggedRowInitialClientX, drag.draggedRowInitialClientY,
-    drag.draggedRowCurrentClientX, drag.draggedRowCurrentClientY, drag.visualSnapOffset]);
+  // (draggedItem and draggedRowStyle moved to useNodeDragDrop hook)
 
   // ✅ RIMOSSO: I nodi temporanei ora sono visibili e funzionanti
 
@@ -489,7 +331,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         }}
         data-id={id}
         className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
-        style={{ opacity: data.hidden ? 0 : 1, minWidth: 140, width: 'fit-content', position: 'relative', zIndex: 1 }}
+        style={nodeStyles}
         tabIndex={-1}
         draggable={true}
         onDragStart={(e) => {
@@ -548,7 +390,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               left: 0,
               right: 0,
               bottom: '100%',
-              marginBottom: 0, // Appoggiata al nodo
+              ...toolbarStyles,
               zIndex: 1000, // Sopra il buffer area
               pointerEvents: 'auto',
               width: '100%', // Larga quanto il nodo
@@ -614,13 +456,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             left: 0,
             right: 0,
             bottom: '100%',
-            marginBottom: 0, // Appoggiata al nodo
-            zIndex: 1000, // Sopra il buffer area
-            pointerEvents: showDragHeader ? 'auto' : 'none',
-            opacity: showDragHeader ? 1 : 0,
-            userSelect: 'none',
-            transition: 'opacity 0.2s ease',
-            width: '100%' // Larga quanto il nodo
+            ...dragHeaderStyles
           }}
           onMouseEnter={() => {
             if (showDragHeader) {
@@ -670,11 +506,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         </div>
         <div className="px-1.5" ref={rowsContainerRef}>
           <NodeRowList
-            rows={((normalizedData as any)?.hideUncheckedRows === true) ? visibleRows.filter(r => r.included !== false) : visibleRows}
-            editingRowId={editingRowId}
+            {...nodeRowListProps}
             hoveredInserter={hoveredInserter}
             setHoveredInserter={setHoveredInserter}
-            handleInsertRow={handleInsertRow}
             nodeTitle={nodeTitle}
             onUpdate={(row, newText) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included })}
             onUpdateWithCategory={(row, newText, categoryType, meta) => handleUpdateRow(row.id, newText, categoryType as EntityType, { included: (row as any).included, ...(meta || {}) })}
@@ -719,18 +553,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               editingRowId,
               timestamp: Date.now()
             })}
-            <IntellisenseMenu
-              isOpen={showIntellisense}
-              query={editingRowId ? nodeRows.find(row => row.id === editingRowId)?.text || '' : ''}
-              position={intellisensePosition}
-              referenceElement={null}
-              onSelect={handleIntellisenseSelectItem}
-              onClose={() => {
-                console.log("🎯 [CustomNode] ROW INTELLISENSE CLOSED", { nodeId: id });
-                closeIntellisense();
-              }}
-              filterCategoryTypes={['agentActs', 'userActs', 'backendActions']}
-            />
+            <IntellisenseMenu {...intellisenseProps} />
           </>
         )}
       </div>
