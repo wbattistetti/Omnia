@@ -5,6 +5,10 @@ const cors = require('cors');
 const { MongoClient, ObjectId } = require('mongodb');
 const { runExtractor } = require('./extractionRegistry');
 
+// ✅ ENTERPRISE AI SERVICES
+const AIProviderService = require('./services/AIProviderService');
+const TemplateIntelligenceService = require('./services/TemplateIntelligenceService');
+
 console.log('>>> SERVER.JS AVVIATO <<<');
 
 const app = express();
