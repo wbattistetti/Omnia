@@ -1663,7 +1663,7 @@ app.get('/projects/:id', async (req, res) => {
 
 // Funzione per chiamare OpenAI
 async function callOpenAI(messages, model = 'gpt-4o-mini') {
-  const fetch = require('node-fetch');
+  const fetch = globalThis.fetch || require('node-fetch');
 
   const OPENAI_KEY = process.env.OpenAI_key || process.env.OPENAI_API_KEY;
   if (!OPENAI_KEY) {
