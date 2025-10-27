@@ -15,7 +15,8 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "mongodb": "^6.17.0"
+    "mongodb": "^6.17.0",
+    "opossum": "^9.0.0"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

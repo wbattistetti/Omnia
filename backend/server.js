@@ -9,6 +9,11 @@ const { runExtractor } = require('./extractionRegistry');
 const AIProviderService = require('./services/AIProviderService');
 const TemplateIntelligenceService = require('./services/TemplateIntelligenceService');
 
+// ✅ ENTERPRISE MIDDLEWARE
+const CircuitBreakerManager = require('./middleware/CircuitBreakerManager');
+const RateLimiter = require('./middleware/RateLimiter');
+const AIHealthChecker = require('./health/AIHealthChecker');
+
 console.log('>>> SERVER.JS AVVIATO <<<');
 
 const app = express();
@@ -136,6 +141,11 @@ loadTemplatesFromDB().catch(console.error);
 // ✅ ENTERPRISE AI SERVICES INITIALIZATION
 const aiProviderService = new AIProviderService();
 const templateIntelligenceService = new TemplateIntelligenceService(aiProviderService);
+
+// ✅ ENTERPRISE MIDDLEWARE INITIALIZATION
+const circuitBreakerManager = new CircuitBreakerManager();
+const rateLimiter = new RateLimiter();
+const healthChecker = new AIHealthChecker(aiProviderService, circuitBreakerManager, rateLimiter);
 
 console.log('>>> ENTERPRISE AI SERVICES INITIALIZED <<<');
 
@@ -1671,9 +1681,26 @@ app.get('/projects/:id', async (req, res) => {
 
 // ✅ NUOVO: Template Intelligence Service Functions
 
-// ✅ ENTERPRISE: Funzione per chiamare OpenAI (usa nuovo servizio)
+// ✅ ENTERPRISE: Funzione per chiamare OpenAI (usa nuovo servizio con enterprise features)
 async function callOpenAI(messages, model = 'gpt-4o-mini') {
-  return await aiProviderService.callAI('openai', messages, { model });
+  const provider = 'openai';
+
+  // Check rate limit
+  const rateLimitResult = rateLimiter.isAllowed(provider, 'global');
+  if (!rateLimitResult.allowed) {
+    throw new Error(`Rate limit exceeded for ${provider}: ${rateLimitResult.reason}`);
+  }
+
+  // Get or create circuit breaker
+  let breaker = circuitBreakerManager.getBreaker(provider);
+  if (!breaker) {
+    breaker = circuitBreakerManager.createBreaker(provider,
+      (msgs, opts) => aiProviderService.callAI(provider, msgs, opts)
+    );
+  }
+
+  // Execute with circuit breaker
+  return await breaker.fire(messages, { model });
 }
 
 // ✅ ENTERPRISE: Analizza la richiesta utente usando AI reale (usa nuovo servizio)
@@ -2019,6 +2046,49 @@ app.get('/api/ai-health', async (req, res) => {
 // Service status endpoint
 app.get('/api/ai-status', (req, res) => {
   res.json(aiProviderService.getStatus());
+});
+
+// ✅ ENTERPRISE ADVANCED ENDPOINTS
+
+// Circuit breaker status
+app.get('/api/ai-circuit-breakers', (req, res) => {
+  res.json(circuitBreakerManager.getAllBreakerStatuses());
+});
+
+// Rate limit status
+app.get('/api/ai-rate-limits', (req, res) => {
+  const status = {};
+  for (const provider of aiProviderService.getAvailableProviders()) {
+    status[provider] = rateLimiter.getStatus(provider, 'global');
+  }
+  res.json(status);
+});
+
+// Advanced health check
+app.get('/api/ai-health-detailed', async (req, res) => {
+  try {
+    const report = await healthChecker.getDetailedReport();
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Health trends
+app.get('/api/ai-health-trends', (req, res) => {
+  res.json(healthChecker.getHealthTrends());
+});
+
+// Reset circuit breakers
+app.post('/api/ai-reset-circuit-breakers', (req, res) => {
+  circuitBreakerManager.resetAllBreakers();
+  res.json({ message: 'All circuit breakers reset' });
+});
+
+// Reset rate limits
+app.post('/api/ai-reset-rate-limits', (req, res) => {
+  rateLimiter.resetAll();
+  res.json({ message: 'All rate limits reset' });
 });
 
 // --- Extractor endpoints (centralized contracts) ---
