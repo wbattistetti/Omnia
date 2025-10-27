@@ -11,38 +11,80 @@
           "label": "Day",
           "type": "number",
           "icon": "Hash",
-          "examples": ["16", "1", "31", "05", "28"],
+          "examples": [
+            "16",
+            "1",
+            "31",
+            "05",
+            "28"
+          ],
           "constraints": [
-            {"type": "required"},
-            {"type": "min", "value": 1},
-            {"type": "max", "value": 31}
+            {
+              "type": "required"
+            },
+            {
+              "type": "min",
+              "value": 1
+            },
+            {
+              "type": "max",
+              "value": 31
+            }
           ]
         },
         {
           "label": "Month",
           "type": "month",
           "icon": "Calendar",
-          "examples": ["December", "12", "January", "02", "March", "3"],
+          "examples": [
+            "December",
+            "12",
+            "January",
+            "02",
+            "March",
+            "3"
+          ],
           "constraints": [
-            {"type": "required"},
-            {"type": "min", "value": 1},
-            {"type": "max", "value": 12}
+            {
+              "type": "required"
+            },
+            {
+              "type": "min",
+              "value": 1
+            },
+            {
+              "type": "max",
+              "value": 12
+            }
           ]
         },
         {
           "label": "Year",
           "type": "number",
           "icon": "Hash",
-          "examples": ["1961", "2024", "95", "1980", "2000"],
+          "examples": [
+            "1961",
+            "2024",
+            "95",
+            "1980",
+            "2000"
+          ],
           "constraints": [
-            {"type": "required"},
-            {"type": "min", "value": 1900},
-            {"type": "max", "value": 2024}
+            {
+              "type": "required"
+            },
+            {
+              "type": "min",
+              "value": 1900
+            },
+            {
+              "type": "max",
+              "value": 2024
+            }
           ]
         }
       ]
     },
-    
     "name": {
       "label": "Full name",
       "type": "name",
@@ -52,39 +94,71 @@
           "label": "First name",
           "type": "generic",
           "icon": "User",
-          "examples": ["Mario", "John", "Maria", "Anna"],
+          "examples": [
+            "Mario",
+            "John",
+            "Maria",
+            "Anna"
+          ],
           "constraints": [
-            {"type": "required"},
-            {"type": "minLength", "value": 2},
-            {"type": "maxLength", "value": 50}
+            {
+              "type": "required"
+            },
+            {
+              "type": "minLength",
+              "value": 2
+            },
+            {
+              "type": "maxLength",
+              "value": 50
+            }
           ]
         },
         {
           "label": "Last name",
           "type": "generic",
           "icon": "User",
-          "examples": ["Rossi", "Smith", "Bianchi", "Johnson"],
+          "examples": [
+            "Rossi",
+            "Smith",
+            "Bianchi",
+            "Johnson"
+          ],
           "constraints": [
-            {"type": "required"},
-            {"type": "minLength", "value": 2},
-            {"type": "maxLength", "value": 50}
+            {
+              "type": "required"
+            },
+            {
+              "type": "minLength",
+              "value": 2
+            },
+            {
+              "type": "maxLength",
+              "value": 50
+            }
           ]
         }
       ]
     },
-    
     "email": {
       "label": "Email address",
       "type": "email",
       "icon": "Mail",
       "subData": [],
-      "examples": ["mario.rossi@example.com", "user@gmail.com", "info@company.it"],
+      "examples": [
+        "mario.rossi@example.com",
+        "user@gmail.com",
+        "info@company.it"
+      ],
       "constraints": [
-        {"type": "required"},
-        {"type": "email"}
+        {
+          "type": "required"
+        },
+        {
+          "type": "email"
+        }
       ]
     },
-    
     "phone": {
       "label": "Phone number",
       "type": "phone",
@@ -94,25 +168,45 @@
           "label": "Country code",
           "type": "number",
           "icon": "Globe",
-          "examples": ["39", "1", "44", "33", "49"],
+          "examples": [
+            "39",
+            "1",
+            "44",
+            "33",
+            "49"
+          ],
           "constraints": [
-            {"type": "required"}
+            {
+              "type": "required"
+            }
           ]
         },
         {
           "label": "Number",
           "type": "number",
           "icon": "Phone",
-          "examples": ["3331234567", "0212345678", "5551234", "3475551234"],
+          "examples": [
+            "3331234567",
+            "0212345678",
+            "5551234",
+            "3475551234"
+          ],
           "constraints": [
-            {"type": "required"},
-            {"type": "minLength", "value": 6},
-            {"type": "maxLength", "value": 15}
+            {
+              "type": "required"
+            },
+            {
+              "type": "minLength",
+              "value": 6
+            },
+            {
+              "type": "maxLength",
+              "value": 15
+            }
           ]
         }
       ]
     },
-    
     "address": {
       "label": "Address",
       "type": "address",
@@ -122,178 +216,304 @@
           "label": "Street",
           "type": "generic",
           "icon": "MapPin",
-          "examples": ["via Roma", "corso Vittorio Emanuele", "Main Street"],
-          "constraints": [{"type": "required"}]
+          "examples": [
+            "via Roma",
+            "corso Vittorio Emanuele",
+            "Main Street"
+          ],
+          "constraints": [
+            {
+              "type": "required"
+            }
+          ]
         },
         {
           "label": "Civic number",
           "type": "generic",
           "icon": "Hash",
-          "examples": ["25", "123", "5A", "12/B"],
-          "constraints": [{"type": "required"}]
+          "examples": [
+            "25",
+            "123",
+            "5A",
+            "12/B"
+          ],
+          "constraints": [
+            {
+              "type": "required"
+            }
+          ]
         },
         {
           "label": "Internal",
           "type": "generic",
           "icon": "Home",
-          "examples": ["int. 5", "scala B", "apt 3", ""],
+          "examples": [
+            "int. 5",
+            "scala B",
+            "apt 3",
+            ""
+          ],
           "constraints": []
         },
         {
           "label": "Postal code",
           "type": "postalCode",
           "icon": "Hash",
-          "examples": ["20121", "10001", "00100", "SW1A 1AA"],
-          "constraints": [{"type": "required"}]
+          "examples": [
+            "20121",
+            "10001",
+            "00100",
+            "SW1A 1AA"
+          ],
+          "constraints": [
+            {
+              "type": "required"
+            }
+          ]
         },
         {
           "label": "City",
           "type": "generic",
           "icon": "Building",
-          "examples": ["Milano", "Roma", "New York", "London"],
-          "constraints": [{"type": "required"}]
+          "examples": [
+            "Milano",
+            "Roma",
+            "New York",
+            "London"
+          ],
+          "constraints": [
+            {
+              "type": "required"
+            }
+          ]
         },
         {
           "label": "Region",
           "type": "generic",
           "icon": "Map",
-          "examples": ["Lombardia", "Lazio", "California", ""],
+          "examples": [
+            "Lombardia",
+            "Lazio",
+            "California",
+            ""
+          ],
           "constraints": []
         },
         {
           "label": "Country",
           "type": "generic",
           "icon": "Globe",
-          "examples": ["Italia", "Italy", "United States", "UK"],
-          "constraints": [{"type": "required"}]
+          "examples": [
+            "Italia",
+            "Italy",
+            "United States",
+            "UK"
+          ],
+          "constraints": [
+            {
+              "type": "required"
+            }
+          ]
         }
       ]
     },
-    
     "taxCode": {
       "label": "Tax code",
       "type": "taxCode",
       "icon": "IdCard",
       "subData": [],
-      "examples": ["RSSMRA80A01H501Z", "BNCLRA85M12F205K", "VRDGPP90E15L219X"],
+      "examples": [
+        "RSSMRA80A01H501Z",
+        "BNCLRA85M12F205K",
+        "VRDGPP90E15L219X"
+      ],
       "constraints": [
-        {"type": "required"},
-        {"type": "regex", "pattern": "^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$"}
+        {
+          "type": "required"
+        },
+        {
+          "type": "regex",
+          "pattern": "^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$"
+        }
       ]
     },
-    
     "iban": {
       "label": "IBAN",
       "type": "iban",
       "icon": "CreditCard",
       "subData": [],
-      "examples": ["IT60X0542811101000000123456", "GB82WEST12345698765432", "DE89370400440532013000"],
+      "examples": [
+        "IT60X0542811101000000123456",
+        "GB82WEST12345698765432",
+        "DE89370400440532013000"
+      ],
       "constraints": [
-        {"type": "required"},
-        {"type": "regex", "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]+$"}
+        {
+          "type": "required"
+        },
+        {
+          "type": "regex",
+          "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]+$"
+        }
       ]
     },
-    
     "vatNumber": {
       "label": "VAT number",
       "type": "vatNumber",
       "icon": "Badge",
       "subData": [],
-      "examples": ["IT12345678901", "ATU12345678", "GB123456789"],
+      "examples": [
+        "IT12345678901",
+        "ATU12345678",
+        "GB123456789"
+      ],
       "constraints": [
-        {"type": "required"},
-        {"type": "regex", "pattern": "^[A-Z]{2}[A-Z0-9]+$"}
+        {
+          "type": "required"
+        },
+        {
+          "type": "regex",
+          "pattern": "^[A-Z]{2}[A-Z0-9]+$"
+        }
       ]
     },
-    
     "podPdrCode": {
       "label": "POD/PDR code",
       "type": "podPdrCode",
       "icon": "Zap",
       "subData": [],
-      "examples": ["IT001E12345678", "12345678901234", "IT002E98765432"],
+      "examples": [
+        "IT001E12345678",
+        "12345678901234",
+        "IT002E98765432"
+      ],
       "constraints": [
-        {"type": "required"}
+        {
+          "type": "required"
+        }
       ]
     },
-    
     "accountNumber": {
       "label": "Account number",
       "type": "accountNumber",
       "icon": "FileText",
       "subData": [],
-      "examples": ["ACC-2024-001234", "CTR123456789", "12345678"],
+      "examples": [
+        "ACC-2024-001234",
+        "CTR123456789",
+        "12345678"
+      ],
       "constraints": [
-        {"type": "required"}
+        {
+          "type": "required"
+        }
       ]
     },
-    
     "currency": {
       "label": "Amount",
       "type": "currency",
       "icon": "DollarSign",
       "subData": [],
-      "examples": ["€ 150,50", "$100.00", "1500", "€ 45,00"],
+      "examples": [
+        "€ 150,50",
+        "$100.00",
+        "1500",
+        "€ 45,00"
+      ],
       "constraints": [
-        {"type": "required"},
-        {"type": "min", "value": 0}
+        {
+          "type": "required"
+        },
+        {
+          "type": "min",
+          "value": 0
+        }
       ]
     },
-    
     "postalCode": {
       "label": "Postal code",
       "type": "postalCode",
       "icon": "Hash",
       "subData": [],
-      "examples": ["20121", "10001", "00100", "SW1A 1AA", "75001"],
+      "examples": [
+        "20121",
+        "10001",
+        "00100",
+        "SW1A 1AA",
+        "75001"
+      ],
       "constraints": [
-        {"type": "required"}
+        {
+          "type": "required"
+        }
       ]
     },
-    
     "time": {
       "label": "Time",
       "type": "time",
       "icon": "Clock",
       "subData": [],
-      "examples": ["14:30", "2:30 PM", "09:00", "18:45"],
+      "examples": [
+        "14:30",
+        "2:30 PM",
+        "09:00",
+        "18:45"
+      ],
       "constraints": [
-        {"type": "required"}
+        {
+          "type": "required"
+        }
       ]
     },
-    
     "url": {
       "label": "Website URL",
       "type": "url",
       "icon": "Globe",
       "subData": [],
-      "examples": ["https://example.com", "www.site.it", "http://company.com"],
+      "examples": [
+        "https://example.com",
+        "www.site.it",
+        "http://company.com"
+      ],
       "constraints": [
-        {"type": "required"},
-        {"type": "url"}
+        {
+          "type": "required"
+        },
+        {
+          "type": "url"
+        }
       ]
     },
-    
     "number": {
       "label": "Number",
       "type": "number",
       "icon": "Hash",
       "subData": [],
-      "examples": ["42", "100", "3.14", "1500", "-5"],
+      "examples": [
+        "42",
+        "100",
+        "3.14",
+        "1500",
+        "-5"
+      ],
       "constraints": [
-        {"type": "required"}
+        {
+          "type": "required"
+        }
       ]
     },
-    
     "generic": {
       "label": "Text field",
       "type": "generic",
       "icon": "FileText",
       "subData": [],
-      "examples": ["example text", "any value", "notes"],
+      "examples": [
+        "example text",
+        "any value",
+        "notes"
+      ],
       "constraints": []
     },
-    
     "complexAddress": {
       "label": "Complex Address",
       "type": "address",
@@ -308,15 +528,30 @@
               "label": "Street Name",
               "type": "generic",
               "icon": "MapPin",
-              "examples": ["Via Roma", "Corso Vittorio Emanuele"],
-              "constraints": [{"type": "required"}]
+              "examples": [
+                "Via Roma",
+                "Corso Vittorio Emanuele"
+              ],
+              "constraints": [
+                {
+                  "type": "required"
+                }
+              ]
             },
             {
               "label": "Street Number",
-              "type": "generic", 
+              "type": "generic",
               "icon": "Hash",
-              "examples": ["25", "123", "5A"],
-              "constraints": [{"type": "required"}]
+              "examples": [
+                "25",
+                "123",
+                "5A"
+              ],
+              "constraints": [
+                {
+                  "type": "required"
+                }
+              ]
             }
           ]
         },
@@ -328,16 +563,105 @@
             {
               "label": "City",
               "type": "generic",
-              "icon": "Building", 
-              "examples": ["Milano", "Roma"],
-              "constraints": [{"type": "required"}]
+              "icon": "Building",
+              "examples": [
+                "Milano",
+                "Roma"
+              ],
+              "constraints": [
+                {
+                  "type": "required"
+                }
+              ]
             },
             {
               "label": "Postal Code",
               "type": "postalCode",
               "icon": "Hash",
-              "examples": ["20121", "00100"],
-              "constraints": [{"type": "required"}]
+              "examples": [
+                "20121",
+                "00100"
+              ],
+              "constraints": [
+                {
+                  "type": "required"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "personalData": {
+      "label": "Personal Data",
+      "type": "personalData",
+      "icon": "User",
+      "subData": [
+        {
+          "label": "Identity Information",
+          "type": "personalData",
+          "icon": "User",
+          "subData": [
+            {
+              "label": "Full Name",
+              "type": "name",
+              "icon": "User",
+              "examples": [
+                "Mario Rossi",
+                "John Smith"
+              ],
+              "constraints": [
+                {
+                  "type": "required"
+                }
+              ]
+            },
+            {
+              "label": "Date of Birth",
+              "type": "date",
+              "icon": "Calendar",
+              "examples": [
+                "16/12/1990",
+                "1990-12-16"
+              ],
+              "constraints": [
+                {
+                  "type": "required"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Contact Information",
+          "type": "personalData",
+          "icon": "Mail",
+          "subData": [
+            {
+              "label": "Email Address",
+              "type": "email",
+              "icon": "Mail",
+              "examples": [
+                "mario.rossi@example.com"
+              ],
+              "constraints": [
+                {
+                  "type": "required"
+                }
+              ]
+            },
+            {
+              "label": "Phone Number",
+              "type": "phone",
+              "icon": "Phone",
+              "examples": [
+                "+39 333 1234567"
+              ],
+              "constraints": [
+                {
+                  "type": "required"
+                }
+              ]
             }
           ]
         }
@@ -345,4 +669,3 @@
     }
   }
 }
-

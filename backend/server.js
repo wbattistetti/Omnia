@@ -80,7 +80,7 @@ async function loadTemplatesFromDB() {
 // Risolvi templateRef espandendo i riferimenti ai template (ESTESO PER 3 LIVELLI)
 async function resolveTemplateRefs(subData, templates, level = 0) {
   const resolved = [];
-  
+
   // Limite di sicurezza per evitare ricorsioni infinite
   if (level > 10) {
     console.warn(`[TEMPLATE_RESOLUTION] Livello massimo raggiunto (${level}), interrompendo ricorsione`);
@@ -1500,6 +1500,7 @@ app.post('/step2', async (req, res) => {
       'data nascita': 'date',
       'età': 'date',
       'dati personali': 'personalData',
+      'chiedi dati personali': 'personalData', // ✅ NUOVO: Mapping per il testo dell'interfaccia
       'informazioni personali': 'personalData',
       'profilo utente': 'personalData',
       'nome': 'name',
@@ -1508,7 +1509,7 @@ app.post('/step2', async (req, res) => {
       'email': 'email',
       'telefono': 'phone',
       'indirizzo': 'address',
-      'indirizzo complesso': 'complexAddress', // ✅ NUOVO: Mapping per il template di test
+      'indirizzo complesso': 'complexAddress',
       'codice fiscale': 'taxCode',
       'iban': 'iban',
       'partita iva': 'vatNumber'
