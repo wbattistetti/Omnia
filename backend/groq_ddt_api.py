@@ -254,7 +254,7 @@ def suggest_vars(body: dict = Body(...)):
             "Select only the variables strictly necessary."
         )
     }
-    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
     try:
         if provider == "openai":
             try:
@@ -364,7 +364,7 @@ def generate_condition(body: dict = Body(...)):
             "Natural language description:\n" + nl + "\n\nAvailable variables (dotted, exact):\n" + " | ".join([str(v) for v in variables]) + "\nReturn only JSON."
         )
     }
-    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
     try:
         if provider == "openai":
             try:
@@ -501,7 +501,7 @@ def repair_condition(body: dict = Body(...)):
         )
     }
 
-    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
     try:
         if provider == "openai":
             try:
@@ -564,7 +564,7 @@ def suggest_condition_cases(body: dict = Body(...)):
             "Respond ONLY with JSON: {\"trueCase\": {..}, \"falseCase\": {..}, \"hintTrue\": \"...\", \"hintFalse\": \"...\"}\n"
         )
     }
-    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
     try:
         if provider == "openai":
             try:
@@ -625,7 +625,7 @@ def normalize_pseudocode(body: dict = Body(...)):
     except Exception as e:
         return JSONResponse({"error": f"bad_request: {e}"}, status_code=200)
 
-    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "openai").lower()
+    provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
 
     # Build transcript string (clip to reasonable size)
     transcript_lines = []
@@ -1245,32 +1245,32 @@ def step2(user_desc: Any = Body(...)):
             from backend.type_template_manager import get_localized_template, get_available_types, load_templates
         except ImportError:
             from type_template_manager import get_localized_template, get_available_types, load_templates
-        
+
         # Accept both plain text or an object { text, currentSchema }
         current_schema = None
         target_lang = "it"  # Default language
-        
+
         if isinstance(user_desc, dict):
             text = str(user_desc.get('text') or user_desc.get('desc') or user_desc.get('user_desc') or "").strip()
             current_schema = user_desc.get('currentSchema') or user_desc.get('schema')
             target_lang = str(user_desc.get('lang') or user_desc.get('language') or "it").lower()
         else:
             text = str(user_desc or "").strip()
-        
+
         # Load templates
         load_templates()
         available_types = get_available_types()
-        
+
         # Check AI key availability
         if not (GROQ_KEY or OPENAI_KEY):
             raise HTTPException(status_code=500, detail="missing_ai_key")
 
         # ✅ NEW APPROACH: AI only detects types, templates provide structure
         types_list = '|'.join(available_types)
-        
+
         print(f"[step2] Available types from templates: {types_list}")
         print(f"[step2] Target language: {target_lang}")
-        
+
         # If refining existing schema, keep old behavior
         if current_schema and isinstance(current_schema, dict) and (current_schema.get('mainData') or current_schema.get('mains')):
             prompt = f"""
@@ -1363,7 +1363,7 @@ Rules:
         print(prompt)
 
         # Provider routing (align with /step3)
-        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+        provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
         print(f"[step2][provider]={provider} text_len={len(text)} has_current_schema={bool(current_schema)}")
 
         if provider == "openai":
@@ -1390,12 +1390,12 @@ Rules:
             fields = ai_obj.get('fields', [])
             if not fields or not isinstance(fields, list):
                 raise HTTPException(status_code=500, detail="invalid_ai_response: no fields")
-            
+
             # Build mainData from templates
             main_data_list = []
-            
+
             # Get AI caller for translations
-            provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+            provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
             if provider == "openai":
                 try:
                     from backend.call_openai import call_openai as _ai_caller
@@ -1403,16 +1403,16 @@ Rules:
                     from call_openai import call_openai as _ai_caller
             else:
                 _ai_caller = None  # Groq doesn't support translation yet
-            
+
             for field in fields:
                 field_type = field.get('type', 'generic')
                 field_concept = field.get('concept', 'Data field')
-                
+
                 print(f"[step2] Processing field: {field_concept} -> type: {field_type}")
-                
+
                 # Get template (with localization if needed)
                 template = get_localized_template(field_type, target_lang, _ai_caller)
-                
+
                 if template:
                     # Use template structure
                     main_entry = {
@@ -1431,9 +1431,9 @@ Rules:
                         'subData': []
                     }
                     print(f"[step2] No template found for {field_type}, using fallback")
-                
+
                 main_data_list.append(main_entry)
-            
+
             # Build final response
             response = {
                 'type': 'object',
@@ -1443,10 +1443,10 @@ Rules:
                     'mainData': main_data_list
                 }
             }
-            
+
             print(f"[step2] Built schema with {len(main_data_list)} fields from templates")
             return {"ai": response}
-            
+
         elif isinstance(ai_obj, dict) and ai_obj.get('type') and ai_obj.get('icon'):
             # Old format compatibility (for refinement mode)
             inferred = _infer_subdata_from_text(text)
@@ -1519,7 +1519,7 @@ Respond ONLY with strict JSON (no markdown/comments), using this format:
         print(prompt)
 
         # Provider routing: default OpenAI; override with AI_PROVIDER if set
-        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+        provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
         if provider == "openai":
             try:
                 from backend.call_openai import call_openai_json as _call_json
@@ -1634,12 +1634,12 @@ Input DDT structure:
 def generate_regex(body: dict = Body(...)):
     """
     Generate a regex pattern from a natural language description.
-    
+
     Body example:
     {
       "description": "numeri di telefono italiani"
     }
-    
+
     Returns:
     {
       "regex": "\\+39\\s?\\d{3}\\s?\\d{3}\\s?\\d{4}",
@@ -1648,17 +1648,17 @@ def generate_regex(body: dict = Body(...)):
     }
     """
     print("\n[API] POST /api/nlp/generate-regex")
-    
+
     try:
         description = (body or {}).get("description", "").strip()
-        
+
         if not description:
             raise HTTPException(status_code=400, detail="Description is required")
-        
+
         # Check AI key availability
         if not (GROQ_KEY or OPENAI_KEY):
             raise HTTPException(status_code=500, detail="missing_ai_key")
-        
+
         # Build AI prompt for regex generation
         prompt = f"""
 You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
@@ -1693,14 +1693,14 @@ Common patterns for reference:
 
 Be precise and practical. Test mentally that your regex works correctly.
 """
-        
+
         print(f"[generate-regex] Description: {description}")
         print("[generate-regex] Calling AI...")
-        
+
         # Provider routing
-        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+        provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
         print(f"[generate-regex] Provider: {provider}")
-        
+
         if provider == "openai":
             try:
                 from backend.call_openai import call_openai_json as _call_json
@@ -1708,24 +1708,24 @@ Be precise and practical. Test mentally that your regex works correctly.
                 from call_openai import call_openai_json as _call_json
         else:
             _call_json = call_groq_json
-        
+
         # Call AI
         ai_response = _call_json([
             {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
             {"role": "user", "content": prompt}
         ])
-        
+
         print("[generate-regex] AI Response:", ai_response)
-        
+
         # Parse response
         if isinstance(ai_response, dict):
             result = ai_response
         else:
             result = _safe_json_loads(ai_response)
-        
+
         if not result or not isinstance(result, dict) or 'regex' not in result:
             raise HTTPException(status_code=500, detail="AI returned invalid response")
-        
+
         # Validate regex can be compiled
         try:
             import re as regex_module
@@ -1733,9 +1733,9 @@ Be precise and practical. Test mentally that your regex works correctly.
         except Exception as regex_error:
             print(f"[generate-regex] WARNING: Generated regex is invalid: {regex_error}")
             result['warning'] = f"Generated regex may be invalid: {str(regex_error)}"
-        
+
         print(f"[generate-regex] Success! Regex: {result.get('regex')}")
-        
+
         return {
             "success": True,
             "regex": result.get('regex', ''),
@@ -1743,7 +1743,7 @@ Be precise and practical. Test mentally that your regex works correctly.
             "examples": result.get('examples', []),
             "flags": result.get('flags', 'g')
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1757,13 +1757,13 @@ Be precise and practical. Test mentally that your regex works correctly.
 def generate_extractor(body: dict = Body(...)):
     """
     Generate a TypeScript DataExtractor implementation from a natural language description.
-    
+
     Body example:
     {
       "description": "Extract age between 1-120, accept numeric or written form (uno, due, tre...)",
       "dataType": "number"
     }
-    
+
     Returns:
     {
       "success": true,
@@ -1772,17 +1772,17 @@ def generate_extractor(body: dict = Body(...)):
     }
     """
     print("\n[API] POST /api/nlp/generate-extractor")
-    
+
     try:
         description = (body or {}).get("description", "").strip()
         data_type = (body or {}).get("dataType", "string").strip()
-        
+
         if not description:
             raise HTTPException(status_code=400, detail="Description is required")
-        
+
         if not (GROQ_KEY or OPENAI_KEY):
             raise HTTPException(status_code=500, detail="missing_ai_key")
-        
+
         prompt = f"""
 You are a TypeScript expert specializing in data extraction and validation.
 
@@ -1802,7 +1802,7 @@ Requirements:
 2. The JSDoc header MUST be in this exact format:
    /**
     * {description}
-    * 
+    *
     * AI-generated extractor for semantic data extraction
     */
 3. Export a const with a descriptive name (e.g., ageExtractor, emailExtractor)
@@ -1819,19 +1819,19 @@ Example for age 1-120:
 
 /**
  * Extract age between 1-120, accept numeric or written form (uno, due, tre...)
- * 
+ *
  * AI-generated extractor for semantic data extraction
  */
 export const ageExtractor: DataExtractor<number> = {{
   extract(text) {{
     const raw = text.trim().toLowerCase();
-    
+
     // Try numeric parsing
     const num = parseInt(raw, 10);
     if (!isNaN(num)) {{
       return {{ value: num, confidence: 0.9 }};
     }}
-    
+
     // Try Italian written numbers
     const written: Record<string, number> = {{
       'uno': 1, 'due': 2, 'tre': 3, 'quattro': 4, 'cinque': 5,
@@ -1842,14 +1842,14 @@ export const ageExtractor: DataExtractor<number> = {{
       'cinquanta': 50, 'sessanta': 60, 'settanta': 70, 'ottanta': 80,
       'novanta': 90, 'cento': 100
     }};
-    
+
     if (written[raw]) {{
       return {{ value: written[raw], confidence: 0.85 }};
     }}
-    
+
     return {{ confidence: 0, reasons: ['invalid-format'] }};
   }},
-  
+
   validate(v) {{
     if (typeof v !== 'number' || isNaN(v)) {{
       return {{ ok: false, errors: ['not-a-number'] }};
@@ -1859,7 +1859,7 @@ export const ageExtractor: DataExtractor<number> = {{
     }}
     return {{ ok: true }};
   }},
-  
+
   format(v) {{
     return `${{v}} anni`;
   }}
@@ -1868,14 +1868,14 @@ export const ageExtractor: DataExtractor<number> = {{
 Return ONLY the TypeScript code WITH the JSDoc header, no markdown blocks, no explanations outside the code.
 Make it production-ready and well-commented.
 """
-        
+
         print(f"[generate-extractor] Description: {description}")
         print(f"[generate-extractor] Data type: {data_type}")
         print("[generate-extractor] Calling AI...")
-        
-        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+
+        provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
         print(f"[generate-extractor] Provider: {provider}")
-        
+
         if provider == "openai":
             try:
                 from backend.call_openai import call_openai as _call_ai
@@ -1883,17 +1883,17 @@ Make it production-ready and well-commented.
                 from call_openai import call_openai as _call_ai
         else:
             _call_ai = call_groq
-        
+
         ai_response = _call_ai([
             {"role": "system", "content": "You are a TypeScript expert. Generate clean, production-ready DataExtractor code."},
             {"role": "user", "content": prompt}
         ])
-        
+
         print("[generate-extractor] AI Response received")
-        
+
         # Clean up response (remove markdown if present)
         code = str(ai_response).strip()
-        
+
         # Remove markdown code blocks if present
         if code.startswith('```typescript') or code.startswith('```ts'):
             code = code.split('\n', 1)[1] if '\n' in code else code
@@ -1901,14 +1901,14 @@ Make it production-ready and well-commented.
             code = code.split('\n', 1)[1] if '\n' in code else code
         if code.endswith('```'):
             code = code.rsplit('\n', 1)[0] if '\n' in code else code
-        
+
         code = code.strip()
-        
+
         if not code or len(code) < 50:
             raise HTTPException(status_code=500, detail="AI returned invalid or empty code")
-        
+
         print(f"[generate-extractor] Success! Generated {len(code)} characters of code")
-        
+
         # Extract a brief explanation from comments if possible
         explanation = "AI-generated TypeScript extractor"
         try:
@@ -1923,13 +1923,13 @@ Make it production-ready and well-commented.
                     explanation = ' '.join(lines[:3])
         except:
             pass
-        
+
         return {
             "success": True,
             "code": code,
             "explanation": explanation[:200] if len(explanation) > 200 else explanation
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1946,7 +1946,7 @@ def refine_extractor(body: dict = Body(...)):
     - TODO comments in the code
     - User improvement requests
     - Test failure notes (optional)
-    
+
     Body example:
     {
       "code": "export const extractor = { extract(text) { /* TODO: add validation */ } }",
@@ -1954,7 +1954,7 @@ def refine_extractor(body: dict = Body(...)):
       "testNotes": ["Should parse 'venti' as 20", "Failed on negative numbers"],
       "dataType": "number"
     }
-    
+
     Returns:
     {
       "success": true,
@@ -1963,27 +1963,27 @@ def refine_extractor(body: dict = Body(...)):
     }
     """
     print("\n[API] POST /api/nlp/refine-extractor")
-    
+
     try:
         existing_code = (body or {}).get("code", "").strip()
         improvements = (body or {}).get("improvements", "").strip()
         test_notes = (body or {}).get("testNotes", [])
         data_type = (body or {}).get("dataType", "string").strip()
-        
+
         if not existing_code:
             raise HTTPException(status_code=400, detail="Existing code is required")
-        
+
         if not improvements or len(improvements) < 5:
             raise HTTPException(status_code=400, detail="Improvements description is required (min 5 characters)")
-        
+
         if not (GROQ_KEY or OPENAI_KEY):
             raise HTTPException(status_code=500, detail="missing_ai_key")
-        
+
         # Build test notes section
         test_notes_section = ""
         if test_notes and isinstance(test_notes, list) and len(test_notes) > 0:
             test_notes_section = "\n\nTEST FAILURE NOTES:\n" + "\n".join(f"- {note}" for note in test_notes[:10])
-        
+
         prompt = f"""
 You are a TypeScript expert. Refine and improve this existing DataExtractor code.
 
@@ -2018,15 +2018,15 @@ Important:
 
 Return ONLY the improved TypeScript code, no markdown blocks, no explanations outside the code.
 """
-        
+
         print(f"[refine-extractor] Code length: {len(existing_code)} chars")
         print(f"[refine-extractor] Improvements: {improvements[:100]}...")
         print(f"[refine-extractor] Test notes: {len(test_notes)} items")
         print("[refine-extractor] Calling AI...")
-        
-        provider = (os.environ.get("AI_PROVIDER") or "openai").lower()
+
+        provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
         print(f"[refine-extractor] Provider: {provider}")
-        
+
         if provider == "openai":
             try:
                 from backend.call_openai import call_openai as _call_ai
@@ -2034,17 +2034,17 @@ Return ONLY the improved TypeScript code, no markdown blocks, no explanations ou
                 from call_openai import call_openai as _call_ai
         else:
             _call_ai = call_groq
-        
+
         ai_response = _call_ai([
             {"role": "system", "content": "You are a TypeScript expert. Improve existing code incrementally, keeping what works."},
             {"role": "user", "content": prompt}
         ])
-        
+
         print("[refine-extractor] AI Response received")
-        
+
         # Clean up response (remove markdown if present)
         code = str(ai_response).strip()
-        
+
         # Remove markdown code blocks if present
         if code.startswith('```typescript') or code.startswith('```ts'):
             code = code.split('\n', 1)[1] if '\n' in code else code
@@ -2052,14 +2052,14 @@ Return ONLY the improved TypeScript code, no markdown blocks, no explanations ou
             code = code.split('\n', 1)[1] if '\n' in code else code
         if code.endswith('```'):
             code = code.rsplit('\n', 1)[0] if '\n' in code else code
-        
+
         code = code.strip()
-        
+
         if not code or len(code) < 50:
             raise HTTPException(status_code=500, detail="AI returned invalid or empty code")
-        
+
         print(f"[refine-extractor] Success! Refined code: {len(code)} characters")
-        
+
         # Extract explanation from changes (look for comments at top)
         explanation = "Code refined based on your improvements"
         try:
@@ -2076,13 +2076,13 @@ Return ONLY the improved TypeScript code, no markdown blocks, no explanations ou
                     explanation = ' '.join(comment_lines[:2])  # First 2 meaningful lines
         except:
             pass
-        
+
         return {
             "success": True,
             "code": code,
             "explanation": explanation[:200] if len(explanation) > 200 else explanation
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

@@ -17,7 +17,7 @@ class TemplateIntelligenceService {
    * @param {string} provider - AI provider to use
    * @returns {Promise<Object>} Analysis result
    */
-  async analyzeUserRequest(userDesc, templates, provider = 'openai') {
+  async analyzeUserRequest(userDesc, templates, provider = 'groq') {
     try {
       console.log(`[AI_ANALYSIS] 🚀 Starting AI analysis with ${provider} for: "${userDesc}"`);
 

@@ -1631,7 +1631,7 @@ app.get('/projects/:id', async (req, res) => {
 });
 
 // ✅ ENTERPRISE: Analizza la richiesta utente usando SOLO AI reale
-async function analyzeUserRequestWithAI(userDesc, templates, provider = 'openai') {
+async function analyzeUserRequestWithAI(userDesc, templates, provider = 'groq') {
   console.log(`[AI_ANALYSIS] Starting AI analysis for: "${userDesc}"`);
   console.log(`[AI_ANALYSIS] Using ${provider} provider`);
   console.log(`[AI_ANALYSIS] Available templates:`, Object.keys(templates).length);
@@ -1891,7 +1891,7 @@ app.post('/api/generateConstraint', async (req, res) => {
 // Single field analysis endpoint for auto-mapping
 app.post('/api/analyze-field', async (req, res) => {
   try {
-    const { fieldLabel, provider = 'openai' } = req.body;
+    const { fieldLabel, provider = 'groq' } = req.body;
 
     console.log('[FIELD_ANALYSIS] Analyzing field:', fieldLabel, 'with provider:', provider);
 
@@ -1915,7 +1915,7 @@ app.post('/api/analyze-field', async (req, res) => {
 // Provider selection endpoint
 app.post('/step2-with-provider', async (req, res) => {
   try {
-    const { userDesc, provider = 'openai' } = req.body;
+    const { userDesc, provider = 'groq' } = req.body;
 
     console.log('[STEP2] Raw body:', req.body);
     console.log('[STEP2] Parsed userDesc:', userDesc);

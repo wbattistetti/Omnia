@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import type { SchemaNode } from './MainDataCollection';
-import { Pencil, Trash2, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Link, ChevronDown, ChevronRight } from 'lucide-react';
+import { Pencil, Trash2, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Link, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 
 interface MainDataWizardProps {
   node: SchemaNode;
@@ -12,6 +12,14 @@ interface MainDataWizardProps {
   pathPrefix?: string;
   onChangeEvent?: (e: { type: string; path: string; payload?: any }) => void;
   onRequestOpen?: () => void;
+}
+
+// 🚀 NEW: Interface for field error state
+interface FieldErrorState {
+  fieldId: string;
+  error: string;
+  retryCount: number;
+  lastAttempt: Date;
 }
 
 const iconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' };
@@ -36,6 +44,15 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
   // no-op state for compatibility with handlers that set it
   const [, setConstraintTitleDraft] = useState<string>('');
   const [constraintPayoffDraft, setConstraintPayoffDraft] = useState('');
+
+  // 🚀 NEW: State for field errors
+  const [fieldErrors, setFieldErrors] = useState<Record<string, FieldErrorState>>({});
+
+  // 🚀 NEW: State for loading during retry
+  const [retryLoading, setRetryLoading] = useState<Record<string, boolean>>({});
+
+  // 🚀 NEW: State for loading during initial commit
+  const [commitLoading, setCommitLoading] = useState(false);
 
   const renderIcon = (name?: string, size: number = 16) => {
     const color = '#fb923c';
@@ -64,60 +81,153 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
       isChanged: (node.label || '') !== labelDraft
     });
 
-    // 🚀 NEW: Call AI for single field analysis
-    if (labelDraft.trim()) {
-      console.log('[MAIN_DATA_WIZARD] 🤖 Calling AI for field:', labelDraft);
-      try {
-        const response = await fetch('/step2-with-provider', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userDesc: labelDraft })
-        });
-        const data = await response.json();
-        console.log('[MAIN_DATA_WIZARD] 🤖 AI Response:', data);
+    // 🚀 NEW: Set loading state
+    setCommitLoading(true);
 
-        if (data.ai?.mains?.[0]) {
-          const aiField = data.ai.mains[0];
-          console.log('[MAIN_DATA_WIZARD] 🎯 Using AI field structure:', aiField);
+    try {
+      // 🚀 NEW: Call AI for single field analysis
+      if (labelDraft.trim()) {
+        const fieldId = labelDraft.trim();
+        console.log('[MAIN_DATA_WIZARD] 🤖 Calling AI for field:', fieldId);
 
-          // Update node with AI structure
-          const updatedNode = {
-            ...node,
-            label: aiField.label || labelDraft,
-            type: aiField.type || 'text',
-            icon: aiField.icon || 'FileText',
-            subData: aiField.subData || [],
-            validation: aiField.validation || {},
-            example: aiField.example || ''
-          };
+        try {
+          // 🚀 SIMULAZIONE ERRORI: Diversi tipi di errori per test
+          if (fieldId === 'test-error') {
+            throw new Error('Simulated network error for testing');
+          }
+          if (fieldId === 'test-http-500') {
+            throw new Error('HTTP 500: Internal Server Error');
+          }
+          if (fieldId === 'test-timeout') {
+            throw new Error('Request timeout after 30 seconds');
+          }
+          if (fieldId === 'test-ai-fail') {
+            throw new Error('AI service temporarily unavailable');
+          }
+          if (fieldId === 'test-network') {
+            throw new Error('Network connection failed');
+          }
+          if (fieldId === 'test-real-network') {
+            // Simula errore di rete reale
+            const fakeResponse = new Response(null, { status: 0, statusText: 'Network Error' });
+            throw new Error(`Failed to fetch: ${fakeResponse.statusText}`);
+          }
+          if (fieldId === 'test-retry-success') {
+            // Simula successo dopo alcuni tentativi
+            const error = fieldErrors[fieldId];
+            if (!error || error.retryCount < 2) {
+              throw new Error('Simulated retry error - try again');
+            }
+            // Al terzo tentativo, simula successo
+            console.log('[MAIN_DATA_WIZARD] 🎉 Simulating success after retries');
+          }
 
-          console.log('[MAIN_DATA_WIZARD] 📝 Updating node with AI structure:', updatedNode);
-          onChange(updatedNode);
-          onChangeEvent?.({ type: 'main.renamed', path: updatedNode.label, payload: { oldPath: node.label || '' } });
-          setIsEditingMain(false);
+          const response = await fetch('/step2-with-provider', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userDesc: fieldId, provider: 'groq' })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          console.log('[MAIN_DATA_WIZARD] 🤖 AI Response:', data);
+
+          if (data.ai?.mains?.[0]) {
+            const aiField = data.ai.mains[0];
+            console.log('[MAIN_DATA_WIZARD] 🎯 Using AI field structure:', aiField);
+
+            // Update node with AI structure
+            const updatedNode = {
+              ...node,
+              label: aiField.label || fieldId,
+              type: aiField.type || 'text',
+              icon: aiField.icon || 'FileText',
+              subData: aiField.subData || [],
+              validation: aiField.validation || {},
+              example: aiField.example || ''
+            };
+
+            console.log('[MAIN_DATA_WIZARD] 📝 Updating node with AI structure:', updatedNode);
+            onChange(updatedNode);
+            onChangeEvent?.({ type: 'main.renamed', path: updatedNode.label, payload: { oldPath: node.label || '' } });
+
+            // 🚀 NEW: Clear any previous errors for this field
+            setFieldErrors(prev => {
+              const { [fieldId]: removed, ...rest } = prev;
+              return rest;
+            });
+
+            setIsEditingMain(false);
+            return;
+          }
+        } catch (error) {
+          console.error('[MAIN_DATA_WIZARD] ❌ AI call failed:', error);
+
+          // 🚀 NEW: Gestisci errore per campo specifico
+          setFieldErrors(prev => ({
+            ...prev,
+            [fieldId]: {
+              fieldId,
+              error: error instanceof Error ? error.message : 'Unknown error',
+              retryCount: (prev[fieldId]?.retryCount || 0) + 1,
+              lastAttempt: new Date()
+            }
+          }));
+
+          // Non chiudere l'editing, mantieni il campo aperto per retry
+          console.log('[MAIN_DATA_WIZARD] ⚠️ Field error recorded, keeping editing mode open for retry');
           return;
         }
-      } catch (error) {
-        console.error('[MAIN_DATA_WIZARD] ❌ AI call failed:', error);
       }
-    }
 
-    // Fallback to original logic
-    setIsEditingMain(false);
-    if ((node.label || '') !== labelDraft) {
-      const old = node.label || '';
-      console.log('[MAIN_DATA_WIZARD] 📝 Updating node label from', old, 'to', labelDraft);
-      onChange({ ...node, label: labelDraft });
-      console.log('[MAIN_DATA_WIZARD] 🔔 Triggering changeEvent: main.renamed');
-      onChangeEvent?.({ type: 'main.renamed', path: labelDraft, payload: { oldPath: old } });
-    } else {
-      console.log('[MAIN_DATA_WIZARD] ⏭️ No change detected, skipping update');
+      // Fallback to original logic
+      setIsEditingMain(false);
+      if ((node.label || '') !== labelDraft) {
+        const old = node.label || '';
+        console.log('[MAIN_DATA_WIZARD] 📝 Updating node label from', old, 'to', labelDraft);
+        onChange({ ...node, label: labelDraft });
+        console.log('[MAIN_DATA_WIZARD] 🔔 Triggering changeEvent: main.renamed');
+        onChangeEvent?.({ type: 'main.renamed', path: labelDraft, payload: { oldPath: old } });
+      } else {
+        console.log('[MAIN_DATA_WIZARD] ⏭️ No change detected, skipping update');
+      }
+    } finally {
+      // 🚀 NEW: Clear loading state
+      setCommitLoading(false);
     }
   };
 
   const cancelMain = () => {
     setIsEditingMain(false);
     setLabelDraft(node.label || '');
+  };
+
+  // 🚀 NEW: Function to retry a failed field
+  const retryField = async (fieldId: string) => {
+    console.log('[MAIN_DATA_WIZARD] 🔄 Retrying field:', fieldId);
+
+    // 🚀 NEW: Set loading state
+    setRetryLoading(prev => ({ ...prev, [fieldId]: true }));
+
+    try {
+      // Rimuovi errore precedente
+      setFieldErrors(prev => {
+        const { [fieldId]: removed, ...rest } = prev;
+        return rest;
+      });
+
+      // Richiama commitMain
+      await commitMain();
+    } finally {
+      // 🚀 NEW: Clear loading state
+      setRetryLoading(prev => {
+        const { [fieldId]: removed, ...rest } = prev;
+        return rest;
+      });
+    }
   };
 
   const startEditSub = (idx: number, current: string) => {
@@ -332,32 +442,146 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
             </>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                autoFocus
-                value={labelDraft}
-                onChange={(e) => {
-                  console.log('[MAIN_DATA_WIZARD] 🔤 Label changed:', e.target.value);
-                  setLabelDraft(e.target.value);
-                }}
-                onKeyDown={async (e) => {
-                  console.log('[MAIN_DATA_WIZARD] ⌨️ Key pressed:', e.key, 'with value:', labelDraft);
-                  if (e.key === 'Enter') {
-                    console.log('[MAIN_DATA_WIZARD] ⏎ Enter pressed, committing:', labelDraft);
-                    await commitMain();
-                  }
-                  if (e.key === 'Escape') {
-                    console.log('[MAIN_DATA_WIZARD] ⎋ Escape pressed, cancelling');
-                    cancelMain();
-                  }
-                }}
-                placeholder="data label ..."
-                style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', minWidth: 260, fontWeight: 700 }}
-              />
-              <button title="Confirm" onClick={async () => {
-                console.log('[MAIN_DATA_WIZARD] ✅ Confirm clicked, committing:', labelDraft);
-                await commitMain();
-              }} style={iconBtn}><Check size={18} color="#22c55e" /></button>
-              <button title="Cancel" onClick={cancelMain} style={iconBtn}><X size={18} color="#ef4444" /></button>
+              {/* 🚀 NEW: Check if this field has an error */}
+              {fieldErrors[labelDraft.trim()] ? (
+                // 🚀 ERROR UI: Show error state with retry button
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    autoFocus
+                    value={labelDraft}
+                    onChange={(e) => {
+                      console.log('[MAIN_DATA_WIZARD] 🔤 Label changed:', e.target.value);
+                      setLabelDraft(e.target.value);
+                    }}
+                    onKeyDown={async (e) => {
+                      console.log('[MAIN_DATA_WIZARD] ⌨️ Key pressed:', e.key, 'with value:', labelDraft);
+                      if (e.key === 'Enter') {
+                        console.log('[MAIN_DATA_WIZARD] ⏎ Enter pressed, committing:', labelDraft);
+                        await commitMain();
+                      }
+                      if (e.key === 'Escape') {
+                        console.log('[MAIN_DATA_WIZARD] ⎋ Escape pressed, cancelling');
+                        cancelMain();
+                      }
+                    }}
+                    placeholder="data label ..."
+                    style={{
+                      background: '#0f172a',
+                      color: '#e2e8f0',
+                      border: '1px solid #ef4444', // 🔴 RED BORDER for error
+                      borderRadius: 6,
+                      padding: '6px 10px',
+                      minWidth: 260,
+                      fontWeight: 700,
+                      transition: 'all 0.3s ease-in-out',
+                      boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.1)'
+                    }}
+                  />
+                  <div
+                    title={`Error: ${fieldErrors[labelDraft.trim()].error}\nRetry count: ${fieldErrors[labelDraft.trim()].retryCount}\nLast attempt: ${fieldErrors[labelDraft.trim()].lastAttempt.toLocaleTimeString()}`}
+                    style={{
+                      animation: 'pulse 2s infinite',
+                      cursor: 'help',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <AlertTriangle
+                      size={16}
+                      color="#ef4444"
+                    />
+                  </div>
+                  <button
+                    onClick={() => retryField(labelDraft.trim())}
+                    disabled={retryLoading[labelDraft.trim()] || false}
+                    style={{
+                      background: retryLoading[labelDraft.trim()] ? '#64748b' : '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 4,
+                      padding: '4px 8px',
+                      cursor: retryLoading[labelDraft.trim()] ? 'not-allowed' : 'pointer',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      opacity: retryLoading[labelDraft.trim()] ? 0.7 : 1,
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                    title={`Retry field: ${labelDraft.trim()}\nAttempt: ${fieldErrors[labelDraft.trim()].retryCount + 1}`}
+                  >
+                    {retryLoading[labelDraft.trim()] ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        Retrying...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw size={12} />
+                        Retry ({fieldErrors[labelDraft.trim()].retryCount})
+                      </>
+                    )}
+                  </button>
+                  <button title="Cancel" onClick={cancelMain} style={iconBtn}><X size={18} color="#ef4444" /></button>
+                </div>
+              ) : (
+                // 🚀 NORMAL UI: Standard input without error
+                <>
+                  <input
+                    autoFocus
+                    value={labelDraft}
+                    onChange={(e) => {
+                      console.log('[MAIN_DATA_WIZARD] 🔤 Label changed:', e.target.value);
+                      setLabelDraft(e.target.value);
+                    }}
+                    onKeyDown={async (e) => {
+                      console.log('[MAIN_DATA_WIZARD] ⌨️ Key pressed:', e.key, 'with value:', labelDraft);
+                      if (e.key === 'Enter') {
+                        console.log('[MAIN_DATA_WIZARD] ⏎ Enter pressed, committing:', labelDraft);
+                        await commitMain();
+                      }
+                      if (e.key === 'Escape') {
+                        console.log('[MAIN_DATA_WIZARD] ⎋ Escape pressed, cancelling');
+                        cancelMain();
+                      }
+                    }}
+                    placeholder="data label ..."
+                    style={{
+                      background: '#0f172a',
+                      color: '#e2e8f0',
+                      border: '1px solid #334155',
+                      borderRadius: 6,
+                      padding: '6px 10px',
+                      minWidth: 260,
+                      fontWeight: 700,
+                      transition: 'all 0.3s ease-in-out',
+                      boxShadow: '0 0 0 2px rgba(51, 65, 85, 0.1)'
+                    }}
+                  />
+                  <button
+                    title="Confirm"
+                    onClick={async () => {
+                      console.log('[MAIN_DATA_WIZARD] ✅ Confirm clicked, committing:', labelDraft);
+                      await commitMain();
+                    }}
+                    disabled={commitLoading}
+                    style={{
+                      ...iconBtn,
+                      opacity: commitLoading ? 0.5 : 1,
+                      cursor: commitLoading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                  >
+                    {commitLoading ? (
+                      <Loader2 size={18} color="#22c55e" className="animate-spin" />
+                    ) : (
+                      <Check size={18} color="#22c55e" />
+                    )}
+                  </button>
+                  <button title="Cancel" onClick={cancelMain} style={iconBtn}><X size={18} color="#ef4444" /></button>
+                </>
+              )}
             </div>
           )}
           {/* Chevron expand/collapse - moved to end of first row */}
