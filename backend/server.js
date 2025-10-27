@@ -1486,86 +1486,34 @@ app.post('/step2', async (req, res) => {
     console.log(`[STEP2] Content-Type:`, req.headers['content-type']);
     console.log(`[STEP2] Detect type for: "${user_desc}"`);
 
+    // ✅ NUOVO: Template Intelligence Service integrato
+    console.log(`[STEP2] Using Template Intelligence Service`);
+
     // Carica template dalla cache
     const templates = await loadTemplatesFromDB();
     console.log(`[STEP2] Using ${Object.keys(templates).length} templates from Factory DB cache`);
 
-    // Cerca template che corrisponde
-    let matchedTemplate = null;
-    const user_lower = user_desc.toLowerCase();
+    // ✅ NUOVO: Analisi intelligente della richiesta
+    const analysis = analyzeUserRequest(user_desc, templates);
+    console.log(`[STEP2] Analysis: ${analysis.action} - ${analysis.reasoning}`);
 
-    // Mappatura richieste -> template
-    const request_mapping = {
-      'data di nascita': 'date',
-      'data nascita': 'date',
-      'età': 'date',
-      'dati personali': 'personalData',
-      'chiedi dati personali': 'personalData', // ✅ NUOVO: Mapping per il testo dell'interfaccia
-      'informazioni personali': 'personalData',
-      'profilo utente': 'personalData',
-      'nome': 'name',
-      'nome completo': 'name',
-      'nominativo': 'name',
-      'email': 'email',
-      'telefono': 'phone',
-      'indirizzo': 'address',
-      'indirizzo complesso': 'complexAddress',
-      'codice fiscale': 'taxCode',
-      'iban': 'iban',
-      'partita iva': 'vatNumber'
-    };
-
-    for (const [request_key, template_name] of Object.entries(request_mapping)) {
-      if (user_lower.includes(request_key) && templates[template_name]) {
-        matchedTemplate = templates[template_name];
-        console.log(`[STEP2] Found match: ${request_key} -> ${template_name}`);
-        break;
-      }
-    }
-
-    if (matchedTemplate) {
-      // Usa template dal database
-      const result = {
-        type: matchedTemplate.type,
-        icon: matchedTemplate.icon,
-        label: matchedTemplate.label,
-        subData: matchedTemplate.subData || []
-      };
-
-      console.log(`[STEP2] Applied Factory template: ${matchedTemplate.name} with ${result.subData.length} sub-data`);
-
-      // ✅ MODIFICATO: Usa la nuova funzione con supporto 3 livelli
-      const resolvedSubData = await resolveTemplateRefsWithLevels(result.subData, templates);
-
-      // ✅ NUOVO: Log per debug dei livelli
-      const levelCounts = resolvedSubData.reduce((acc, item) => {
-        const level = item.level || 0;
-        acc[level] = (acc[level] || 0) + 1;
-        return acc;
-      }, {});
-      console.log(`[STEP2] Template risolto con livelli:`, levelCounts);
-
-      // Formato compatibile con il frontend
-      const response = {
-        ai: {
-          type: result.type,
-          icon: result.icon,
-          label: result.label,
-          schema: {
-            label: result.label,
-            mainData: [{
-              label: result.label,
-              type: result.type,
-              icon: result.icon,
-              subData: resolvedSubData
-            }]
-          }
-        }
-      };
-
-      res.json(response);
+    if (analysis.action === 'compose') {
+      // ✅ NUOVO: Composizione intelligente di template esistenti
+      const composedResponse = await composeTemplates(analysis.composedFrom, templates, user_desc);
+      console.log(`[STEP2] Composed template from: ${analysis.composedFrom.join(', ')}`);
+      res.json(composedResponse);
+      return;
+    } else if (analysis.action === 'use_existing') {
+      // ✅ NUOVO: Usa template esistente con validazione migliorata
+      const existingResponse = await useExistingTemplate(analysis.templateName, templates, user_desc);
+      console.log(`[STEP2] Used existing template: ${analysis.templateName}`);
+      res.json(existingResponse);
+      return;
     } else {
-      // Fallback: crea template generico
+      // ✅ NUOVO: Crea nuovo template con AI
+      console.log(`[STEP2] Creating new template for: ${user_desc}`);
+
+      // Fallback finale: crea template generico con validazione migliorata
       const result = {
         type: 'text',
         icon: 'FileText',
@@ -1573,11 +1521,14 @@ app.post('/step2', async (req, res) => {
         subData: []
       };
 
-      console.log(`[STEP2] No Factory template found, using fallback`);
+      console.log(`[STEP2] No template found, using generic fallback with enhanced validation`);
 
-      // Formato compatibile con il frontend
+      // Formato compatibile con il frontend con validazione migliorata
       const response = {
         ai: {
+          action: 'create_new',
+          auditing_state: 'AI_generated',
+          reason: `Created new generic template for: "${user_desc}"`,
           type: result.type,
           icon: result.icon,
           label: result.label,
@@ -1587,7 +1538,12 @@ app.post('/step2', async (req, res) => {
               label: result.label,
               type: result.type,
               icon: result.icon,
-              subData: result.subData
+              subData: result.subData,
+              validation: {
+                description: 'This field accepts text input with basic validation rules.',
+                examples: generateTestExamples('generic', {})
+              },
+              example: generateExampleValue('generic')
             }]
           }
         }
@@ -1736,6 +1692,238 @@ app.get('/projects/:id', async (req, res) => {
     await client.close();
   }
 });
+
+// ✅ NUOVO: Template Intelligence Service Functions
+
+// Analizza la richiesta utente e determina l'azione migliore
+function analyzeUserRequest(userDesc, templates) {
+  const userLower = userDesc.toLowerCase();
+
+  // Mappatura intelligente per composizione
+  const compositionPatterns = {
+    'dati personali': ['name', 'date', 'phone', 'address', 'email'],
+    'chiedi dati personali': ['name', 'date', 'phone', 'address', 'email'],
+    'informazioni personali': ['name', 'date', 'phone', 'address', 'email'],
+    'profilo utente': ['name', 'date', 'phone', 'address', 'email'],
+    'dati di contatto': ['phone', 'email', 'address'],
+    'informazioni di contatto': ['phone', 'email', 'address'],
+    'dati anagrafici': ['name', 'date'],
+    'informazioni anagrafiche': ['name', 'date']
+  };
+
+  // Mappatura per template esistenti
+  const exactMatches = {
+    'data di nascita': 'date',
+    'data nascita': 'date',
+    'età': 'date',
+    'nome': 'name',
+    'nome completo': 'name',
+    'nominativo': 'name',
+    'email': 'email',
+    'telefono': 'phone',
+    'indirizzo': 'address',
+    'indirizzo complesso': 'complexAddress',
+    'codice fiscale': 'taxCode',
+    'iban': 'iban',
+    'partita iva': 'vatNumber'
+  };
+
+  // Controlla composizione
+  for (const [pattern, templateNames] of Object.entries(compositionPatterns)) {
+    if (userLower.includes(pattern)) {
+      // Verifica che tutti i template esistano
+      const availableTemplates = templateNames.filter(name => templates[name]);
+      if (availableTemplates.length >= 2) {
+        return {
+          action: 'compose',
+          composedFrom: availableTemplates,
+          reasoning: `User requested "${pattern}" which can be composed from existing templates: ${availableTemplates.join(', ')}`
+        };
+      }
+    }
+  }
+
+  // Controlla match esatti
+  for (const [pattern, templateName] of Object.entries(exactMatches)) {
+    if (userLower.includes(pattern) && templates[templateName]) {
+      return {
+        action: 'use_existing',
+        templateName: templateName,
+        reasoning: `High semantic match with existing "${templateName}" template`
+      };
+    }
+  }
+
+  // Fallback: crea nuovo template
+  return {
+    action: 'create_new',
+    reasoning: `No existing template matches or composes this request: "${userDesc}"`
+  };
+}
+
+// Compone template esistenti in una struttura unificata
+async function composeTemplates(templateNames, templates, userDesc) {
+  const composedMains = [];
+
+  for (const templateName of templateNames) {
+    const template = templates[templateName];
+    if (template) {
+      // Risolvi subData con supporto 3 livelli
+      const resolvedSubData = await resolveTemplateRefsWithLevels(template.subData || [], templates);
+
+      // Aggiungi validazione e esempi migliorati
+      const enhancedSubData = resolvedSubData.map(item => ({
+        ...item,
+        validation: {
+          ...item.validation,
+          description: generateValidationDescription(item.type, item.validation),
+          examples: generateTestExamples(item.type, item.validation)
+        }
+      }));
+
+      composedMains.push({
+        label: template.label,
+        type: template.type,
+        icon: template.icon,
+        subData: enhancedSubData,
+        validation: {
+          description: `This field contains ${template.label.toLowerCase()} information`,
+          examples: generateTestExamples(template.type, template.validation)
+        },
+        example: generateExampleValue(template.type)
+      });
+    }
+  }
+
+  return {
+    ai: {
+      action: 'compose',
+      composed_from: templateNames,
+      auditing_state: 'AI_generated',
+      reason: `Composed from existing templates: ${templateNames.join(', ')}`,
+      label: userDesc.charAt(0).toUpperCase() + userDesc.slice(1),
+      type: 'composite',
+      icon: 'user',
+      schema: {
+        label: userDesc.charAt(0).toUpperCase() + userDesc.slice(1),
+        mainData: composedMains
+      }
+    }
+  };
+}
+
+// Usa template esistente con miglioramenti
+async function useExistingTemplate(templateName, templates, userDesc) {
+  const template = templates[templateName];
+  if (!template) {
+    throw new Error(`Template ${templateName} not found`);
+  }
+
+  // Risolvi subData con supporto 3 livelli
+  const resolvedSubData = await resolveTemplateRefsWithLevels(template.subData || [], templates);
+
+  // Migliora con validazione e esempi
+  const enhancedSubData = resolvedSubData.map(item => ({
+    ...item,
+    validation: {
+      ...item.validation,
+      description: generateValidationDescription(item.type, item.validation),
+      examples: generateTestExamples(item.type, item.validation)
+    }
+  }));
+
+  return {
+    ai: {
+      action: 'use_existing',
+      template_source: templateName,
+      auditing_state: 'AI_generated',
+      reason: `Used existing "${templateName}" template with enhanced validation`,
+      label: template.label,
+      type: template.type,
+      icon: template.icon,
+      schema: {
+        label: template.label,
+        mainData: [{
+          label: template.label,
+          type: template.type,
+          icon: template.icon,
+          subData: enhancedSubData,
+          validation: {
+            description: `This field contains ${template.label.toLowerCase()} information`,
+            examples: generateTestExamples(template.type, template.validation)
+          },
+          example: generateExampleValue(template.type)
+        }]
+      }
+    }
+  };
+}
+
+// Genera descrizioni di validazione in linguaggio naturale
+function generateValidationDescription(type, validation) {
+  const descriptions = {
+    'name': 'The name must contain only letters, spaces, hyphens and apostrophes. It must be between 2 and 100 characters long.',
+    'date': 'The date must be in YYYY-MM-DD format and represent a valid calendar date. The year must be between 1900 and 2024.',
+    'email': 'The email must be in valid email format with a domain and local part.',
+    'phone': 'The phone number must contain only digits and be between 6 and 15 characters long.',
+    'address': 'The address must contain street information, city, and postal code.',
+    'generic': 'This field accepts text input with basic validation rules.'
+  };
+
+  return descriptions[type] || 'This field has specific validation rules that must be followed.';
+}
+
+// Genera esempi di test strutturati
+function generateTestExamples(type, validation) {
+  const examples = {
+    'name': {
+      valid: ['Mario Rossi', 'Jean-Pierre O\'Connor', 'María José'],
+      invalid: ['123', 'M', 'John@Doe'],
+      edgeCases: ['A', 'Jean-Pierre', 'O\'Connor']
+    },
+    'date': {
+      valid: ['1990-05-12', '2000-12-31', '1985-01-01'],
+      invalid: ['32-13-99', '2024-02-30', '1899-01-01'],
+      edgeCases: ['1900-01-01', '2024-12-31', '2000-02-29']
+    },
+    'email': {
+      valid: ['mario.rossi@example.com', 'user+alias@domain.co.uk', 'name@domain.it'],
+      invalid: ['plainaddress', '@missinglocal.org', 'user@.com'],
+      edgeCases: ['a@b.co', 'very.common@example.com', 'user@[192.168.1.1]']
+    },
+    'phone': {
+      valid: ['+39 333 1234567', '0212345678', '5551234'],
+      invalid: ['123', 'abc', '12345'],
+      edgeCases: ['+1 555', '1234567890123456', '+39']
+    },
+    'address': {
+      valid: ['Via Roma 10, 20100 Milano, Italia', '123 Main St, New York, NY 10001'],
+      invalid: ['', '123', 'Via Roma'],
+      edgeCases: ['Via Roma 10', 'Milano, Italia', '123 Main St']
+    },
+    'generic': {
+      valid: ['Sample text', 'Valid input', 'Test value'],
+      invalid: ['', '   ', 'a'],
+      edgeCases: ['A', 'Very long text that might exceed limits', 'Special chars: !@#$%']
+    }
+  };
+
+  return examples[type] || examples['generic'];
+}
+
+// Genera valore di esempio
+function generateExampleValue(type) {
+  const examples = {
+    'name': 'Mario Rossi',
+    'date': '1990-05-12',
+    'email': 'mario.rossi@example.com',
+    'phone': '+39 333 1234567',
+    'address': 'Via Roma 10, 20100 Milano, Italia',
+    'generic': 'Sample text'
+  };
+
+  return examples[type] || 'Example value';
+}
 
 // --- GENERATIVE CONSTRAINT ENDPOINT ---
 app.post('/api/generateConstraint', async (req, res) => {
