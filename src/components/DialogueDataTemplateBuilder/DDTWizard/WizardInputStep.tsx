@@ -7,16 +7,18 @@ interface Props {
   onNext: () => void;
   onCancel: () => void;
   dataNode?: { name?: string; subData?: string[] };
+  selectedProvider?: 'openai' | 'groq';
+  setSelectedProvider?: (provider: 'openai' | 'groq') => void;
 }
 
-const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel, dataNode }) => {
+const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel, dataNode, selectedProvider = 'openai', setSelectedProvider }) => {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   React.useEffect(() => {
-    try { console.log('[DDT][WizardInputStep][mount]'); } catch {}
+    try { console.log('[DDT][WizardInputStep][mount]'); } catch { }
     const handler = (e: any) => {
       const text = e?.detail?.text || '';
-      try { console.log('[DDT][WizardInputStep][prefill received]', text); } catch {}
-      try { setUserDesc(text); } catch {}
+      try { console.log('[DDT][WizardInputStep][prefill received]', text); } catch { }
+      try { setUserDesc(text); } catch { }
       if (textareaRef.current) {
         textareaRef.current.value = text;
       }
@@ -24,7 +26,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
     document.addEventListener('ddtWizard:prefillDesc', handler as any);
     return () => {
       document.removeEventListener('ddtWizard:prefillDesc', handler as any);
-      try { console.log('[DDT][WizardInputStep][unmount]'); } catch {}
+      try { console.log('[DDT][WizardInputStep][unmount]'); } catch { }
     };
   }, [setUserDesc]);
 
@@ -32,7 +34,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
   React.useEffect(() => {
     const initial = (dataNode?.name || '').trim();
     if (!userDesc || userDesc.trim().length === 0) {
-      try { setUserDesc(initial); } catch {}
+      try { setUserDesc(initial); } catch { }
       if (textareaRef.current) { textareaRef.current.value = initial; }
     }
   }, [dataNode?.name]);
@@ -57,7 +59,48 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         </div>
       </div>
 
-      {/* Subtitle removed as requested */}
+      {/* Provider Selector */}
+      <div style={{ marginBottom: '16px' }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: '#9ca3af', marginBottom: '8px' }}>
+          AI Provider:
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setSelectedProvider?.('openai')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              border: '1px solid',
+              background: selectedProvider === 'openai' ? '#3b82f6' : '#374151',
+              color: selectedProvider === 'openai' ? '#ffffff' : '#9ca3af',
+              borderColor: selectedProvider === 'openai' ? '#3b82f6' : '#4b5563',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            OpenAI
+          </button>
+          <button
+            onClick={() => setSelectedProvider?.('groq')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              border: '1px solid',
+              background: selectedProvider === 'groq' ? '#10b981' : '#374151',
+              color: selectedProvider === 'groq' ? '#ffffff' : '#9ca3af',
+              borderColor: selectedProvider === 'groq' ? '#10b981' : '#4b5563',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            Groq
+          </button>
+        </div>
+      </div>
 
       <textarea
         ref={textareaRef}
@@ -80,7 +123,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
           whiteSpace: 'pre-wrap',
           wordWrap: 'break-word',
         }}
-        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && userDesc.trim()) { e.preventDefault(); try { console.log('[DDT][WizardInputStep][submit][Enter]'); } catch {}; onNext(); } }}
+        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && userDesc.trim()) { e.preventDefault(); try { console.log('[DDT][WizardInputStep][submit][Enter]'); } catch { }; onNext(); } }}
         autoFocus
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -103,7 +146,7 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         </button>
         {/* 🎨 Pulsante Invia: sfondo verde, bordo verde, testo bianco */}
         <button
-          onClick={() => { try { console.log('[DDT][WizardInputStep][submit][Click]'); } catch {}; onNext(); }}
+          onClick={() => { try { console.log('[DDT][WizardInputStep][submit][Click]'); } catch { }; onNext(); }}
           disabled={!userDesc.trim()}
           style={{
             background: '#22c55e',

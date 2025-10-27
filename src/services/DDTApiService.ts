@@ -6,10 +6,10 @@ export async function ddtStep1() {
 }
 
 export async function ddtStep2(user_desc: string) {
-  const res = await fetch(`${API}/step2`, {
+  const res = await fetch(`${API}/step2-with-provider`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(user_desc)
+    body: JSON.stringify({ userDesc: user_desc, provider: 'openai' })
   });
   return (await res.json()).ai;
 }
@@ -39,4 +39,4 @@ export async function ddtStep4(meaning: string, desc: string, constraints: strin
     body: JSON.stringify({ meaning, desc, constraints })
   });
   return (await res.json()).ai;
-} 
+}

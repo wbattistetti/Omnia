@@ -38,14 +38,14 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
     subDataInfo?: DataNode;
     subDataIndex?: number;
   }> = [
-    { key: 'detectType', type: 'detectType', endpoint: '/step2', label: 'Detecting data type...', payoff: 'Identifying the type of data.' },
-    { key: 'suggestStructureAndConstraints', type: 'suggestStructureAndConstraints', endpoint: '/step3', label: 'Suggesting structure and constraints...', payoff: 'Suggesting data structure and validation rules.' },
-    { key: 'startPrompt', type: 'startPrompt', endpoint: '/api/startPrompt', label: 'Start prompt...', payoff: 'Generating start message.' },
-    { key: 'noMatchPrompts', type: 'noMatchPrompts', endpoint: '/api/stepNoMatch', label: 'No match prompts...', payoff: 'Prompts for unmatched input.' },
-    { key: 'noInputPrompts', type: 'noInputPrompts', endpoint: '/api/stepNoInput', label: 'No input prompts...', payoff: 'Prompts for missing input.' },
-    { key: 'confirmationPrompts', type: 'confirmationPrompts', endpoint: '/api/stepConfirmation', label: 'Confirmation prompts...', payoff: 'Prompts for user confirmation.' },
-    { key: 'successPrompts', type: 'successPrompts', endpoint: '/api/stepSuccess', label: 'Success prompts...', payoff: 'Prompts for successful completion.' },
-  ];
+      { key: 'detectType', type: 'detectType', endpoint: '/step2-with-provider', label: 'Detecting data type...', payoff: 'Identifying the type of data.' },
+      { key: 'suggestStructureAndConstraints', type: 'suggestStructureAndConstraints', endpoint: '/step3', label: 'Suggesting structure and constraints...', payoff: 'Suggesting data structure and validation rules.' },
+      { key: 'startPrompt', type: 'startPrompt', endpoint: '/api/startPrompt', label: 'Start prompt...', payoff: 'Generating start message.' },
+      { key: 'noMatchPrompts', type: 'noMatchPrompts', endpoint: '/api/stepNoMatch', label: 'No match prompts...', payoff: 'Prompts for unmatched input.' },
+      { key: 'noInputPrompts', type: 'noInputPrompts', endpoint: '/api/stepNoInput', label: 'No input prompts...', payoff: 'Prompts for missing input.' },
+      { key: 'confirmationPrompts', type: 'confirmationPrompts', endpoint: '/api/stepConfirmation', label: 'Confirmation prompts...', payoff: 'Prompts for user confirmation.' },
+      { key: 'successPrompts', type: 'successPrompts', endpoint: '/api/stepSuccess', label: 'Success prompts...', payoff: 'Prompts for successful completion.' },
+    ];
 
   // Add subData steps if subData exists - using same endpoints as mainData
   if (data.subData && data.subData.length > 0) {
@@ -53,50 +53,50 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
       // Use label, variable, or name for the subData identifier
       const subDataName = subData.label || subData.variable || subData.name || `subData_${index}`;
       // console.log('[DEBUG] Creating steps for subData:', subDataName, 'with data:', subData);
-      
+
       // Use the same endpoints as mainData for subData
       stepPlan.push(
-        { 
-          key: `subData_startPrompt_${subDataName}_${index}`, 
-          type: 'startPrompt', 
-          endpoint: '/api/startPrompt', 
-          label: `Generating start prompt for ${subDataName}...`, 
+        {
+          key: `subData_startPrompt_${subDataName}_${index}`,
+          type: 'startPrompt',
+          endpoint: '/api/startPrompt',
+          label: `Generating start prompt for ${subDataName}...`,
           payoff: `Creating start prompt for ${subDataName} subfield.`,
           subDataInfo: subData,
           subDataIndex: index
         },
-        { 
-          key: `subData_noMatchPrompts_${subDataName}_${index}`, 
-          type: 'noMatchPrompts', 
-          endpoint: '/api/stepNoMatch', 
-          label: `Generating no match prompts for ${subDataName}...`, 
+        {
+          key: `subData_noMatchPrompts_${subDataName}_${index}`,
+          type: 'noMatchPrompts',
+          endpoint: '/api/stepNoMatch',
+          label: `Generating no match prompts for ${subDataName}...`,
           payoff: `Creating no match prompts for ${subDataName} subfield.`,
           subDataInfo: subData,
           subDataIndex: index
         },
-        { 
-          key: `subData_noInputPrompts_${subDataName}_${index}`, 
-          type: 'noInputPrompts', 
-          endpoint: '/api/stepNoInput', 
-          label: `Generating no input prompts for ${subDataName}...`, 
+        {
+          key: `subData_noInputPrompts_${subDataName}_${index}`,
+          type: 'noInputPrompts',
+          endpoint: '/api/stepNoInput',
+          label: `Generating no input prompts for ${subDataName}...`,
           payoff: `Creating no input prompts for ${subDataName} subfield.`,
           subDataInfo: subData,
           subDataIndex: index
         },
-        { 
-          key: `subData_confirmationPrompts_${subDataName}_${index}`, 
-          type: 'confirmationPrompts', 
-          endpoint: '/api/stepConfirmation', 
-          label: `Generating confirmation prompts for ${subDataName}...`, 
+        {
+          key: `subData_confirmationPrompts_${subDataName}_${index}`,
+          type: 'confirmationPrompts',
+          endpoint: '/api/stepConfirmation',
+          label: `Generating confirmation prompts for ${subDataName}...`,
           payoff: `Creating confirmation prompts for ${subDataName} subfield.`,
           subDataInfo: subData,
           subDataIndex: index
         },
-        { 
-          key: `subData_successPrompts_${subDataName}_${index}`, 
-          type: 'successPrompts', 
-          endpoint: '/api/stepSuccess', 
-          label: `Generating success prompts for ${subDataName}...`, 
+        {
+          key: `subData_successPrompts_${subDataName}_${index}`,
+          type: 'successPrompts',
+          endpoint: '/api/stepSuccess',
+          label: `Generating success prompts for ${subDataName}...`,
           payoff: `Creating success prompts for ${subDataName} subfield.`,
           subDataInfo: subData,
           subDataIndex: index
@@ -106,7 +106,7 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
   }
 
   function makePromptStep(stepDef: { key: string; type: StepType; endpoint: string; label: string; payoff: string; subDataInfo?: DataNode; subDataIndex?: number }, data: DataNode, extraBody: Record<string, any> = {}): Step {
-      return {
+    return {
       key: stepDef.key,
       label: stepDef.label,
       payoff: stepDef.payoff,
@@ -115,33 +115,33 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
       subDataInfo: stepDef.subDataInfo,
       subDataIndex: stepDef.subDataIndex,
       run: async () => {
-          let body: any;
-          if (stepDef.key === 'detectType') {
+        let body: any;
+        if (stepDef.key === 'detectType') {
           body = JSON.stringify(data.name); // stringa pura
-                      } else if (stepDef.subDataInfo) {
-            // For subData, use main and sub labels explicitly, no hardcoded fallbacks
-            const mainDataName = data.label || data.name || '';
-            const subDataName = stepDef.subDataInfo.label || stepDef.subDataInfo.name || '';
-            body = JSON.stringify({
-                meaning: subDataName || mainDataName,
-                desc: `Generate a concise, direct message for ${subDataName || mainDataName}.`,
-                ...extraBody
-            });
-          } else {
-            body = JSON.stringify({ meaning: data.label || data.name || '', desc: '', ...extraBody });
-          }
-          try {
+        } else if (stepDef.subDataInfo) {
+          // For subData, use main and sub labels explicitly, no hardcoded fallbacks
+          const mainDataName = data.label || data.name || '';
+          const subDataName = stepDef.subDataInfo.label || stepDef.subDataInfo.name || '';
+          body = JSON.stringify({
+            meaning: subDataName || mainDataName,
+            desc: `Generate a concise, direct message for ${subDataName || mainDataName}.`,
+            ...extraBody
+          });
+        } else {
+          body = JSON.stringify({ meaning: data.label || data.name || '', desc: '', ...extraBody });
+        }
+        try {
           const url = `${stepDef.endpoint}`;
           const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
           dlog('[DDT][Plan][step][request]', { key: stepDef.key, type: stepDef.type, url, body });
           const res = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: body,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body,
           });
           const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
           let raw = '';
-          try { raw = await res.clone().text(); } catch {}
+          try { raw = await res.clone().text(); } catch { }
           dlog('[DDT][Plan][step][response]', { key: stepDef.key, type: stepDef.type, status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
           if (!res.ok) {
             throw new Error(`${stepDef.key} ${res.status}: ${raw || res.statusText}`);
@@ -150,18 +150,18 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
           // Piccola pausa tra gli step per evitare esaurimento risorse browser
           const GAP_MS = 1200;
           await new Promise(r => setTimeout(r, GAP_MS));
-          
+
           // Handle different response structures
           let payload;
           // For all steps, use result.ai
           payload = result.ai;
-          
+
           return { stepKey: stepDef.key, payload: payload };
-          } catch (err) {
+        } catch (err) {
           throw err;
-          }
+        }
       },
-      };
+    };
   }
 
   const steps: Step[] = [];
@@ -170,4 +170,4 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
     steps.push(makePromptStep({ ...stepDef, type: stepDef.type as StepType }, data));
   }
   return steps;
-} 
+}

@@ -50,6 +50,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   }, []);
   const [step, setStep] = useState<string>(startOnStructure ? 'structure' : 'input');
   const [userDesc, setUserDesc] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'groq'>('openai');
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dataNode] = useState<DataNode | null>(() => ({ name: initialDDT?.label || '' }));
@@ -156,16 +157,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     try {
       const reqBody = userDesc.trim();
       // Clean path via Vite proxy
-      const urlPrimary = `/step2`;
+      const urlPrimary = `/step2-with-provider`;
       const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody });
+      console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody, provider: selectedProvider });
       const ctrl = new AbortController();
-      const timeoutMs = 30000; // 30 seconds - allows for AI type detection + template translation
+      const timeoutMs = 60000; // 60 seconds - increased for enterprise AI
       const timeoutId = setTimeout(() => { try { ctrl.abort(); console.warn('[DDT][DetectType][timeout]', { url: urlPrimary, timeoutMs }); } catch { } }, timeoutMs);
       let res = await fetch(urlPrimary, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: reqBody,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userDesc: reqBody, provider: selectedProvider }),
         signal: ctrl.signal as any,
       });
       clearTimeout(timeoutId);
@@ -177,7 +178,22 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const result = await res.json();
       console.log('[DDT][DetectType][parsed]', result);
       const ai = result.ai || result;
-      const schema = ai.schema;
+
+      // Handle new AI response structure
+      let schema;
+      if (ai.schema && Array.isArray(ai.schema.mainData)) {
+        // Old structure: ai.schema.mainData
+        schema = ai.schema;
+      } else if (Array.isArray(ai.mains)) {
+        // New structure: ai.mains directly
+        schema = {
+          label: ai.label || 'Data',
+          mainData: ai.mains
+        };
+      } else {
+        throw new Error('Schema non valido');
+      }
+
       console.log('[DDT][DetectType][schema]', schema);
       if (schema && Array.isArray(schema.mainData)) {
         const root = schema.label || 'Data';
@@ -193,7 +209,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             label,
             type,
             icon: m.icon,
-            subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label || s.name || 'Field', type: s.type, icon: s.icon })) : [],
+            constraints: [], // TODO: Implement proper validation constraints later
+            subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+              label: s.label || s.name || 'Field',
+              type: s.type,
+              icon: s.icon,
+              constraints: [] // TODO: Implement proper validation constraints later
+            })) : [],
           } as any;
         });
         setDetectTypeIcon(ai.icon || null);
@@ -433,6 +455,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           onNext={handleDetectType}
           onCancel={handleClose}
           dataNode={stableDataNode || undefined}
+          selectedProvider={selectedProvider}
+          setSelectedProvider={setSelectedProvider}
         />
       </div>
 

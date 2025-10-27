@@ -61,17 +61,17 @@ describe('stepGenerator', () => {
 
       // 7 base steps + 6 subData steps (2 per subData: messages + scripts)
       expect(steps).toHaveLength(13);
-      
+
       // Verify base steps are still present
       expect(steps[0].key).toBe('detectType');
       expect(steps[1].key).toBe('suggestStructureAndConstraints');
-      
+
       // Verify subData steps are added
-      const subDataSteps = steps.filter(step => 
+      const subDataSteps = steps.filter(step =>
         step.key.includes('subDataMessages_') || step.key.includes('subDataScripts_')
       );
       expect(subDataSteps).toHaveLength(6);
-      
+
       // Verify specific subData steps
       expect(steps.some(step => step.key === 'subDataMessages_day_0')).toBe(true);
       expect(steps.some(step => step.key === 'subDataScripts_day_0')).toBe(true);
@@ -173,7 +173,7 @@ describe('stepGenerator', () => {
 
       const result = await detectTypeStep.run();
 
-      expect((global as any).fetch).toHaveBeenCalledWith('/step2', {
+      expect((global as any).fetch).toHaveBeenCalledWith('/step2-with-provider', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify('birthDate')
@@ -273,4 +273,4 @@ describe('stepGenerator', () => {
       });
     });
   });
-}); 
+});

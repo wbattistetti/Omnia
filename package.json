@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "be:express": "node backend/server.js",
+    "be:express": "node --watch backend/server.js",
     "be:api": "set EXPRESS_BASE=http://localhost:3100&& ./.venv/Scripts/python.exe -m uvicorn backend.groq_ddt_api:app --host 127.0.0.1 --port 8000 --reload",
     "be:apiNew": "uvicorn newBackend.app:app --host 127.0.0.1 --port 8000 --reload",
     "dev:beOld": "concurrently -n express,api -c yellow,cyan \"npm:be:express\" \"npm:be:api\"",
@@ -39,7 +39,8 @@
     "react-popper": "^2.3.0",
     "reactflow": "^11.11.4",
     "uuid": "^11.1.0",
-    "validator": "^13.15.15"
+    "validator": "^13.15.15",
+    "winreg": "^1.2.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

@@ -19,14 +19,14 @@ const stepOrder: DDTGenerationStep[] = [
 ];
 
 async function recognizeTypeAPI(userDesc: string) {
-  const url = `/step2`;
-  const body = userDesc;
+  const url = `/step2-with-provider`;
+  const body = { userDesc, provider: 'openai' };
   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   console.log('[DDT][Orchestrator][DetectType][request]', { url, body });
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: userDesc,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
   const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
   let raw = '';

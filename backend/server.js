@@ -1470,78 +1470,29 @@ app.post('/api/factory/reload-templates', async (req, res) => {
 // -----------------------------
 // Step2 Detect Type Endpoint
 // -----------------------------
-// Middleware per gestire text/plain
-app.use('/step2', (req, res, next) => {
-  if (req.headers['content-type'] === 'text/plain') {
-    let data = '';
-    req.setEncoding('utf8');
-    req.on('data', chunk => {
-      data += chunk;
-    });
-    req.on('end', () => {
-      req.body = data;
-      next();
-    });
-  } else {
-    next();
-  }
-});
+// DISABLED: Middleware for old /step2 endpoint
+// app.use('/step2', (req, res, next) => {
+//   if (req.headers['content-type'] === 'text/plain') {
+//     let data = '';
+//     req.setEncoding('utf8');
+//     req.on('data', chunk => {
+//       data += chunk;
+//     });
+//     req.on('end', () => {
+//       req.body = data;
+//       next();
+//     });
+//   } else {
+//     next();
+//   }
+// });
 
+// DISABLED: Old /step2 endpoint - use /step2-with-provider instead
 app.post('/step2', async (req, res) => {
-  try {
-    // Gestisci diversi formati di richiesta
-    let user_desc = '';
-    if (req.headers['content-type'] === 'text/plain') {
-      // Per text/plain, il body è una stringa
-      user_desc = req.body;
-    } else if (typeof req.body === 'string') {
-      user_desc = req.body;
-    } else if (req.body && typeof req.body === 'object') {
-      user_desc = req.body.user_desc || req.body.toString();
-    } else {
-      user_desc = String(req.body || '');
-    }
-
-    console.log(`[STEP2] Raw body:`, req.body);
-    console.log(`[STEP2] Content-Type:`, req.headers['content-type']);
-    console.log(`[STEP2] Detect type for: "${user_desc}"`);
-
-    // ✅ NUOVO: Template Intelligence Service integrato
-    console.log(`[STEP2] Using Template Intelligence Service`);
-
-    // Carica template dalla cache
-    const templates = await loadTemplatesFromDB();
-    console.log(`[STEP2] Using ${Object.keys(templates).length} templates from Factory DB cache`);
-
-    // ✅ NUOVO: Analisi intelligente della richiesta usando AI reale
-    const analysis = await analyzeUserRequestWithAI(user_desc, templates);
-    console.log(`[STEP2] AI Analysis: ${analysis.action} - ${analysis.reason}`);
-
-    // ✅ NUOVO: Processa la risposta AI direttamente
-    const aiResponse = {
-      ai: {
-        action: analysis.action,
-        template_source: analysis.template_source,
-        composed_from: analysis.composed_from,
-        auditing_state: analysis.auditing_state,
-        reason: analysis.reason,
-        label: analysis.label,
-        type: analysis.type,
-        icon: analysis.icon,
-        schema: {
-          label: analysis.label,
-          mainData: analysis.mains || []
-        }
-      }
-    };
-
-    console.log(`[STEP2] AI Response generated:`, aiResponse);
-    res.json(aiResponse);
-
-  } catch (error) {
-    console.error('[STEP2] Error:', error);
-    res.status(500).json({ error: 'unrecognized_data_type' });
-  }
+  res.status(410).json({
+    error: 'Endpoint deprecated. Use /step2-with-provider instead.',
+    message: 'This endpoint has been replaced with /step2-with-provider for better AI provider support.'
+  });
 });
 
 // --- INDUSTRY ENDPOINTS ---
@@ -2005,15 +1956,21 @@ app.post('/api/generateConstraint', async (req, res) => {
 // Provider selection endpoint
 app.post('/step2-with-provider', async (req, res) => {
   try {
-    const { user_desc, ai_provider = 'openai' } = req.body;
+    const { userDesc, provider = 'openai' } = req.body;
+
+    console.log('[STEP2] Raw body:', req.body);
+    console.log('[STEP2] Parsed userDesc:', userDesc);
+    console.log('[STEP2] Parsed provider:', provider);
 
     const templates = await loadTemplatesFromDB();
-    const analysis = await analyzeUserRequestWithAI(user_desc, templates, ai_provider);
+    const analysis = await analyzeUserRequestWithAI(userDesc, templates, provider);
+
+    console.log('[STEP2] AI Analysis completed, action:', analysis.action);
 
     res.json({
       ai: {
         ...analysis,
-        provider_used: ai_provider,
+        provider_used: provider,
         timestamp: new Date().toISOString()
       }
     });

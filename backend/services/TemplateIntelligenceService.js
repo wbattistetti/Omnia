@@ -24,7 +24,7 @@ class TemplateIntelligenceService {
       const prompt = this.buildAnalysisPrompt(userDesc, templates);
       const messages = [
         { role: "system", content: "You are an expert data structure analyzer. Always respond with valid JSON." },
-        { role: "user", content: prompt }
+        { role: "user", content: prompt + "\n\nPlease respond with valid JSON format." }
       ];
 
       const response = await this.aiProvider.callAI(provider, messages, {
@@ -33,7 +33,7 @@ class TemplateIntelligenceService {
 
       const analysis = JSON.parse(response.choices[0].message.content);
       console.log(`[AI_ANALYSIS] ✅ ${provider} analysis successful:`, analysis.action);
-      
+
       return analysis;
 
     } catch (error) {
@@ -63,12 +63,28 @@ Return a complete JSON structure in a single response, including:
 - Field-level validation rules with NATURAL LANGUAGE DESCRIPTIONS
 - Example values for testing with valid/invalid/edge cases
 - Auditing state
-- Up to 3 levels of nesting (no more)
+- Intelligent hierarchical structure (1-3 levels as needed)
 
 📊 DECISION ALGORITHM:
 1. If semantic match ≥ 0.95 → use_existing
 2. If semantic match ≥ 0.80 and request implies aggregation → compose
 3. If semantic match < 0.80 → create_new
+
+🏗️ HIERARCHICAL STRUCTURE RULES:
+Create hierarchical structure ONLY when the request implies logical grouping:
+
+**1 LEVEL** (Single field requests):
+- "Chiedi il nome" → Nome (text)
+- "Chiedi l'email" → Email (email)
+
+**2 LEVELS** (Related fields that belong together):
+- "Chiedi nome e cognome" → Nominativo { Nome, Cognome }
+- "Chiedi data di nascita" → Data di Nascita { Giorno, Mese, Anno }
+
+**3 LEVELS** (Complex data with multiple categories):
+- "Chiedi dati personali" → Dati Personali { Nominativo { Nome, Cognome }, Data di Nascita { Giorno, Mese, Anno }, Indirizzo { Tipo Via, Nome Via, Numero Civico } }
+
+⚠️ CRITICAL: subData must ALWAYS be an array of objects, NEVER a string!
 
 📏 RESPONSE FORMAT:
 {
@@ -85,9 +101,25 @@ Return a complete JSON structure in a single response, including:
       "label": "<Field label>",
       "type": "<Field type>",
       "icon": "<icon_name>",
-      "subData": [...],
+      "subData": [
+        {
+          "label": "<Sub-field label>",
+          "type": "<Sub-field type>",
+          "icon": "<icon_name>",
+          "subData": [],
+          "validation": {
+            "description": "<NATURAL LANGUAGE DESCRIPTION>",
+            "examples": {
+              "valid": ["<example1>", "<example2>"],
+              "invalid": ["<example1>", "<example2>"],
+              "edgeCases": ["<example1>", "<example2>"]
+            }
+          },
+          "example": "<example value>"
+        }
+      ],
       "validation": {
-        "description": "<NATURAL LANGUAGE DESCRIPTION of what this validation does>",
+        "description": "<NATURAL LANGUAGE DESCRIPTION>",
         "examples": {
           "valid": ["<example1>", "<example2>"],
           "invalid": ["<example1>", "<example2>"],
@@ -95,6 +127,62 @@ Return a complete JSON structure in a single response, including:
         }
       },
       "example": "<example value>"
+    }
+  ]
+}
+
+📋 EXAMPLE FOR "chiedi dati personali":
+{
+  "action": "create_new",
+  "label": "Dati Personali",
+  "type": "personalData",
+  "icon": "User",
+  "mains": [
+    {
+      "label": "Nominativo",
+      "type": "name",
+      "icon": "User",
+      "subData": [
+        {
+          "label": "Nome",
+          "type": "text",
+          "icon": "User",
+          "subData": [],
+          "validation": {
+            "description": "Nome di battesimo della persona",
+            "examples": {
+              "valid": ["Mario", "Giuseppe", "Anna"],
+              "invalid": ["123", "M@rio", ""],
+              "edgeCases": ["Jean-Pierre", "O'Connor"]
+            }
+          },
+          "example": "Mario"
+        },
+        {
+          "label": "Cognome",
+          "type": "text",
+          "icon": "User",
+          "subData": [],
+          "validation": {
+            "description": "Cognome di famiglia della persona",
+            "examples": {
+              "valid": ["Rossi", "Bianchi", "Verdi"],
+              "invalid": ["123", "R@ssi", ""],
+              "edgeCases": ["O'Connor", "Van Der Berg"]
+            }
+          },
+          "example": "Rossi"
+        }
+      ],
+      "validation": {
+        "description": "Nominativo completo della persona",
+        "examples": {
+          "valid": ["Mario Rossi", "Giuseppe Bianchi"],
+          "invalid": ["Mario", "Rossi", ""],
+          "edgeCases": ["Jean-Pierre Dubois", "Maria O'Connor"]
+        }
+      },
+      "example": "Mario Rossi"
     }
   ]
 }`;
@@ -108,7 +196,7 @@ Return a complete JSON structure in a single response, including:
   getModelForProvider(provider) {
     const models = {
       openai: 'gpt-4o-mini',
-      groq: 'llama3-8b-8192'
+      groq: 'llama-3.1-8b-instant'
     };
     return models[provider] || 'gpt-4o-mini';
   }

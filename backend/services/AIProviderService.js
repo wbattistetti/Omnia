@@ -15,17 +15,19 @@ class AIProviderService {
     this.providers = {};
     this.config = new AIConfig();
     this.metrics = new MetricsCollector();
+    this.initialized = false;
     this.initializeProviders();
   }
 
   /**
    * Initialize all available providers
    */
-  initializeProviders() {
+  async initializeProviders() {
     // Initialize OpenAI Provider
     try {
-      if (this.config.isProviderEnabled('openai')) {
-        this.providers.openai = new OpenAIProvider();
+      const openaiConfig = await this.config.getProviderConfig('openai');
+      if (openaiConfig && openaiConfig.apiKey) {
+        this.providers.openai = new OpenAIProvider(openaiConfig.apiKey);
         console.log('[AI_PROVIDER] ✅ OpenAI provider initialized');
       }
     } catch (error) {
@@ -34,15 +36,20 @@ class AIProviderService {
 
     // Initialize Groq Provider
     try {
-      if (this.config.isProviderEnabled('groq')) {
-        this.providers.groq = new GroqProvider();
+      const groqConfig = await this.config.getProviderConfig('groq');
+      if (groqConfig && groqConfig.apiKey) {
+        this.providers.groq = new GroqProvider(groqConfig.apiKey);
         console.log('[AI_PROVIDER] ✅ Groq provider initialized');
+      } else {
+        console.log('[AI_PROVIDER] ⚠️ Groq provider disabled in config');
       }
     } catch (error) {
-      console.warn('[AI_PROVIDER] ❌ Groq provider not available:', error.message);
+      console.error('[AI_PROVIDER] ❌ Groq provider initialization failed:', error.message);
+      console.error('[AI_PROVIDER] ❌ Groq error details:', error);
     }
 
     console.log(`[AI_PROVIDER] 🚀 Initialized ${Object.keys(this.providers).length} providers`);
+    this.initialized = true;
   }
 
   /**
@@ -54,8 +61,13 @@ class AIProviderService {
    */
   async callAI(provider, messages, options = {}) {
     const startTime = Date.now();
-    
+
     try {
+      // Wait for initialization
+      if (!this.initialized) {
+        await this.initializeProviders();
+      }
+
       // Validate provider
       const providerInstance = this.providers[provider];
       if (!providerInstance) {
@@ -63,29 +75,31 @@ class AIProviderService {
       }
 
       // Get provider configuration
-      const providerConfig = this.config.getProviderConfig(provider);
+      const providerConfig = await this.config.getProviderConfig(provider);
       const mergedOptions = {
-        model: options.model || this.config.getDefaultModel(provider),
+        model: options.model || await this.config.getDefaultModel(provider),
         timeout: options.timeout || providerConfig.timeout,
+        temperature: options.temperature || providerConfig.temperature,
+        maxTokens: options.maxTokens || providerConfig.maxTokens,
         ...options
       };
 
       console.log(`[AI_PROVIDER] 🚀 Calling ${provider} with model: ${mergedOptions.model}`);
-      
+
       // Make the call
       const result = await providerInstance.call(messages, mergedOptions);
-      
+
       // Record success metrics
       const latency = Date.now() - startTime;
       this.metrics.recordSuccess(provider, latency);
-      
+
       console.log(`[AI_PROVIDER] ✅ ${provider} call successful (${latency}ms)`);
       return result;
-      
+
     } catch (error) {
       const latency = Date.now() - startTime;
       this.metrics.recordError(provider, error, latency);
-      
+
       console.error(`[AI_PROVIDER] ❌ ${provider} call failed:`, error.message);
       throw error;
     }
@@ -166,17 +180,17 @@ class AIProviderService {
       try {
         const testMessages = [{ role: 'user', content: 'health check' }];
         const startTime = Date.now();
-        
+
         await this.callAI(provider, testMessages, { timeout: 5000 });
-        
-        health.providers[provider] = { 
+
+        health.providers[provider] = {
           status: 'healthy',
           latency: Date.now() - startTime
         };
       } catch (error) {
-        health.providers[provider] = { 
-          status: 'unhealthy', 
-          error: error.message 
+        health.providers[provider] = {
+          status: 'unhealthy',
+          error: error.message
         };
         health.status = 'degraded';
       }

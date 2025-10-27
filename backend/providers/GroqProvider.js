@@ -8,10 +8,9 @@ const BaseProvider = require('./BaseProvider');
  * Handles communication with Groq API
  */
 class GroqProvider extends BaseProvider {
-  constructor() {
-    const apiKey = process.env.GROQ_API_KEY;
+  constructor(apiKey) {
     if (!apiKey) {
-      throw new Error('Missing Groq API key. Set environment variable GROQ_API_KEY.');
+      throw new Error('Missing Groq API key.');
     }
     super(apiKey, 'https://api.groq.com/openai/v1');
   }
@@ -24,11 +23,11 @@ class GroqProvider extends BaseProvider {
    */
   async call(messages, options = {}) {
     const payload = {
-      model: options.model || 'llama3-8b-8192',
+      model: options.model || 'llama-3.1-8b-instant',
       messages,
       response_format: { type: 'json_object' },
-      temperature: options.temperature || 0.1,
-      max_tokens: options.max_tokens || 4000
+      temperature: options.temperature,
+      max_tokens: options.maxTokens
     };
 
     // Add optional parameters
@@ -36,9 +35,7 @@ class GroqProvider extends BaseProvider {
     if (options.frequency_penalty) payload.frequency_penalty = options.frequency_penalty;
     if (options.presence_penalty) payload.presence_penalty = options.presence_penalty;
 
-    return await this.makeRequest('/chat/completions', payload, {
-      timeout: options.timeout || 30000
-    });
+    return await this.makeRequest('/chat/completions', payload, options);
   }
 
   /**
@@ -47,7 +44,7 @@ class GroqProvider extends BaseProvider {
    */
   getAvailableModels() {
     return [
-      'llama3-8b-8192',
+      'llama-3.1-8b-instant',
       'llama3-70b-8192',
       'mixtral-8x7b-32768',
       'gemma-7b-it'
@@ -59,7 +56,7 @@ class GroqProvider extends BaseProvider {
    * @returns {string} Default model name
    */
   getDefaultModel() {
-    return 'llama3-8b-8192';
+    return 'llama-3.1-8b-instant';
   }
 
   /**

@@ -8,10 +8,9 @@ const BaseProvider = require('./BaseProvider');
  * Handles communication with OpenAI API
  */
 class OpenAIProvider extends BaseProvider {
-  constructor() {
-    const apiKey = process.env.OpenAI_key || process.env.OPENAI_API_KEY;
+  constructor(apiKey) {
     if (!apiKey) {
-      throw new Error('Missing OpenAI API key. Set environment variable OpenAI_key or OPENAI_API_KEY.');
+      throw new Error('Missing OpenAI API key.');
     }
     super(apiKey, 'https://api.openai.com/v1');
   }
@@ -27,8 +26,8 @@ class OpenAIProvider extends BaseProvider {
       model: options.model || 'gpt-4o-mini',
       messages,
       response_format: { type: 'json_object' },
-      temperature: options.temperature || 0.1,
-      max_tokens: options.max_tokens || 4000
+      temperature: options.temperature,
+      max_tokens: options.maxTokens
     };
 
     // Add optional parameters
@@ -36,9 +35,7 @@ class OpenAIProvider extends BaseProvider {
     if (options.frequency_penalty) payload.frequency_penalty = options.frequency_penalty;
     if (options.presence_penalty) payload.presence_penalty = options.presence_penalty;
 
-    return await this.makeRequest('/chat/completions', payload, {
-      timeout: options.timeout || 30000
-    });
+    return await this.makeRequest('/chat/completions', payload, options);
   }
 
   /**
