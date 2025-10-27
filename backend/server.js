@@ -1493,64 +1493,30 @@ app.post('/step2', async (req, res) => {
     const templates = await loadTemplatesFromDB();
     console.log(`[STEP2] Using ${Object.keys(templates).length} templates from Factory DB cache`);
 
-    // ✅ NUOVO: Analisi intelligente della richiesta
-    const analysis = analyzeUserRequest(user_desc, templates);
-    console.log(`[STEP2] Analysis: ${analysis.action} - ${analysis.reasoning}`);
+    // ✅ NUOVO: Analisi intelligente della richiesta usando AI reale
+    const analysis = await analyzeUserRequestWithAI(user_desc, templates);
+    console.log(`[STEP2] AI Analysis: ${analysis.action} - ${analysis.reason}`);
 
-    if (analysis.action === 'compose') {
-      // ✅ NUOVO: Composizione intelligente di template esistenti
-      const composedResponse = await composeTemplates(analysis.composedFrom, templates, user_desc);
-      console.log(`[STEP2] Composed template from: ${analysis.composedFrom.join(', ')}`);
-      res.json(composedResponse);
-      return;
-    } else if (analysis.action === 'use_existing') {
-      // ✅ NUOVO: Usa template esistente con validazione migliorata
-      const existingResponse = await useExistingTemplate(analysis.templateName, templates, user_desc);
-      console.log(`[STEP2] Used existing template: ${analysis.templateName}`);
-      res.json(existingResponse);
-      return;
-    } else {
-      // ✅ NUOVO: Crea nuovo template con AI
-      console.log(`[STEP2] Creating new template for: ${user_desc}`);
-
-      // Fallback finale: crea template generico con validazione migliorata
-      const result = {
-        type: 'text',
-        icon: 'FileText',
-        label: user_desc.charAt(0).toUpperCase() + user_desc.slice(1),
-        subData: []
-      };
-
-      console.log(`[STEP2] No template found, using generic fallback with enhanced validation`);
-
-      // Formato compatibile con il frontend con validazione migliorata
-      const response = {
-        ai: {
-          action: 'create_new',
-          auditing_state: 'AI_generated',
-          reason: `Created new generic template for: "${user_desc}"`,
-          type: result.type,
-          icon: result.icon,
-          label: result.label,
-          schema: {
-            label: result.label,
-            mainData: [{
-              label: result.label,
-              type: result.type,
-              icon: result.icon,
-              subData: result.subData,
-              validation: {
-                description: 'This field accepts text input with basic validation rules.',
-                examples: generateTestExamples('generic', {})
-              },
-              example: generateExampleValue('generic')
-            }]
-          }
+    // ✅ NUOVO: Processa la risposta AI direttamente
+    const aiResponse = {
+      ai: {
+        action: analysis.action,
+        template_source: analysis.template_source,
+        composed_from: analysis.composed_from,
+        auditing_state: analysis.auditing_state,
+        reason: analysis.reason,
+        label: analysis.label,
+        type: analysis.type,
+        icon: analysis.icon,
+        schema: {
+          label: analysis.label,
+          mainData: analysis.mains || []
         }
-      };
+      }
+    };
 
-      res.json(response);
-    }
+    console.log(`[STEP2] AI Response generated:`, aiResponse);
+    res.json(aiResponse);
 
   } catch (error) {
     console.error('[STEP2] Error:', error);
@@ -1695,8 +1661,119 @@ app.get('/projects/:id', async (req, res) => {
 
 // ✅ NUOVO: Template Intelligence Service Functions
 
-// Analizza la richiesta utente e determina l'azione migliore
-function analyzeUserRequest(userDesc, templates) {
+// Funzione per chiamare OpenAI
+async function callOpenAI(messages, model = 'gpt-4o-mini') {
+  const fetch = require('node-fetch');
+
+  const OPENAI_KEY = process.env.OpenAI_key || process.env.OPENAI_API_KEY;
+  if (!OPENAI_KEY) {
+    throw new Error('Missing OpenAI API key. Set environment variable OpenAI_key or OPENAI_API_KEY.');
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: messages,
+      response_format: { type: 'json_object' }
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content;
+}
+
+// Analizza la richiesta utente usando AI reale
+async function analyzeUserRequestWithAI(userDesc, templates) {
+  try {
+    console.log(`[AI_ANALYSIS] Starting AI analysis for: "${userDesc}"`);
+
+    // Crea prompt per l'analisi AI
+    const prompt = `You are a DDT Template Intelligence System. Your task is to convert natural language requests into structured, reusable templates.
+
+USER REQUEST: "${userDesc}"
+
+AVAILABLE TEMPLATES:
+${JSON.stringify(templates, null, 2)}
+
+🎯 OBJECTIVE:
+Return a complete JSON structure in a single response, including:
+- Action type: use_existing | compose | create_new
+- Template structure: label, type, icon, mains
+- Field-level validation rules with NATURAL LANGUAGE DESCRIPTIONS
+- Example values for testing with valid/invalid/edge cases
+- Auditing state
+- Up to 3 levels of nesting (no more)
+
+📊 DECISION ALGORITHM:
+1. If semantic match ≥ 0.95 → use_existing
+2. If semantic match ≥ 0.80 and request implies aggregation → compose
+3. If semantic match < 0.80 → create_new
+
+📏 RESPONSE FORMAT:
+{
+  "action": "use_existing | compose | create_new",
+  "template_source": "<template_name_if_using_existing>",
+  "composed_from": ["<template1>", "<template2>", ...],
+  "auditing_state": "AI_generated",
+  "reason": "Explanation of decision and template logic",
+  "label": "<Main label>",
+  "type": "<type_name>",
+  "icon": "<icon_name>",
+  "mains": [
+    {
+      "label": "<Field label>",
+      "type": "<Field type>",
+      "icon": "<icon_name>",
+      "subData": [...],
+      "validation": {
+        "description": "<NATURAL LANGUAGE DESCRIPTION of what this validation does>",
+        "examples": {
+          "valid": ["<example1>", "<example2>"],
+          "invalid": ["<example1>", "<example2>"],
+          "edgeCases": ["<example1>", "<example2>"]
+        }
+      },
+      "example": "<example value>"
+    }
+  ]
+}`;
+
+    // Chiama OpenAI
+    const messages = [
+      { role: "system", content: "You are an expert data structure analyzer. Always respond with valid JSON." },
+      { role: "user", content: prompt }
+    ];
+
+    const aiResponse = await callOpenAI(messages);
+    console.log(`[AI_ANALYSIS] OpenAI response:`, aiResponse);
+
+    // Parse risposta AI
+    const analysis = JSON.parse(aiResponse);
+    console.log(`[AI_ANALYSIS] Parsed analysis:`, analysis);
+
+    return analysis;
+
+  } catch (error) {
+    console.error(`[AI_ANALYSIS] Error:`, error);
+
+    // Fallback alla logica locale
+    console.log(`[AI_ANALYSIS] Falling back to local logic`);
+    return analyzeUserRequestLocal(userDesc, templates);
+  }
+}
+
+// Analisi locale di fallback
+function analyzeUserRequestLocal(userDesc, templates) {
   const userLower = userDesc.toLowerCase();
 
   // Mappatura intelligente per composizione
@@ -1736,8 +1813,13 @@ function analyzeUserRequest(userDesc, templates) {
       if (availableTemplates.length >= 2) {
         return {
           action: 'compose',
-          composedFrom: availableTemplates,
-          reasoning: `User requested "${pattern}" which can be composed from existing templates: ${availableTemplates.join(', ')}`
+          composed_from: availableTemplates,
+          auditing_state: 'AI_generated',
+          reason: `User requested "${pattern}" which can be composed from existing templates: ${availableTemplates.join(', ')}`,
+          label: userDesc.charAt(0).toUpperCase() + userDesc.slice(1),
+          type: 'composite',
+          icon: 'user',
+          mains: []
         };
       }
     }
@@ -1748,8 +1830,13 @@ function analyzeUserRequest(userDesc, templates) {
     if (userLower.includes(pattern) && templates[templateName]) {
       return {
         action: 'use_existing',
-        templateName: templateName,
-        reasoning: `High semantic match with existing "${templateName}" template`
+        template_source: templateName,
+        auditing_state: 'AI_generated',
+        reason: `High semantic match with existing "${templateName}" template`,
+        label: templates[templateName].label,
+        type: templates[templateName].type,
+        icon: templates[templateName].icon,
+        mains: []
       };
     }
   }
@@ -1757,7 +1844,12 @@ function analyzeUserRequest(userDesc, templates) {
   // Fallback: crea nuovo template
   return {
     action: 'create_new',
-    reasoning: `No existing template matches or composes this request: "${userDesc}"`
+    auditing_state: 'AI_generated',
+    reason: `No existing template matches or composes this request: "${userDesc}"`,
+    label: userDesc.charAt(0).toUpperCase() + userDesc.slice(1),
+    type: 'text',
+    icon: 'FileText',
+    mains: []
   };
 }
 
