@@ -133,6 +133,12 @@ async function resolveTemplateRefsWithLevels(subData, templates) {
 // Carica template all'avvio del server
 loadTemplatesFromDB().catch(console.error);
 
+// ✅ ENTERPRISE AI SERVICES INITIALIZATION
+const aiProviderService = new AIProviderService();
+const templateIntelligenceService = new TemplateIntelligenceService(aiProviderService);
+
+console.log('>>> ENTERPRISE AI SERVICES INITIALIZED <<<');
+
 // -----------------------------
 // Helpers: naming & catalog
 // -----------------------------
@@ -1665,115 +1671,14 @@ app.get('/projects/:id', async (req, res) => {
 
 // ✅ NUOVO: Template Intelligence Service Functions
 
-// Funzione per chiamare OpenAI
+// ✅ ENTERPRISE: Funzione per chiamare OpenAI (usa nuovo servizio)
 async function callOpenAI(messages, model = 'gpt-4o-mini') {
-  const fetch = globalThis.fetch || require('node-fetch');
-
-  const OPENAI_KEY = process.env.OpenAI_key || process.env.OPENAI_API_KEY;
-  if (!OPENAI_KEY) {
-    throw new Error('Missing OpenAI API key. Set environment variable OpenAI_key or OPENAI_API_KEY.');
-  }
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: messages,
-      response_format: { type: 'json_object' }
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0].message.content;
+  return await aiProviderService.callAI('openai', messages, { model });
 }
 
-// Analizza la richiesta utente usando AI reale
-async function analyzeUserRequestWithAI(userDesc, templates) {
-  try {
-    console.log(`[AI_ANALYSIS] Starting AI analysis for: "${userDesc}"`);
-
-    // Crea prompt per l'analisi AI
-    const prompt = `You are a DDT Template Intelligence System. Your task is to convert natural language requests into structured, reusable templates.
-
-USER REQUEST: "${userDesc}"
-
-AVAILABLE TEMPLATES:
-${JSON.stringify(templates, null, 2)}
-
-🎯 OBJECTIVE:
-Return a complete JSON structure in a single response, including:
-- Action type: use_existing | compose | create_new
-- Template structure: label, type, icon, mains
-- Field-level validation rules with NATURAL LANGUAGE DESCRIPTIONS
-- Example values for testing with valid/invalid/edge cases
-- Auditing state
-- Up to 3 levels of nesting (no more)
-
-📊 DECISION ALGORITHM:
-1. If semantic match ≥ 0.95 → use_existing
-2. If semantic match ≥ 0.80 and request implies aggregation → compose
-3. If semantic match < 0.80 → create_new
-
-📏 RESPONSE FORMAT:
-{
-  "action": "use_existing | compose | create_new",
-  "template_source": "<template_name_if_using_existing>",
-  "composed_from": ["<template1>", "<template2>", ...],
-  "auditing_state": "AI_generated",
-  "reason": "Explanation of decision and template logic",
-  "label": "<Main label>",
-  "type": "<type_name>",
-  "icon": "<icon_name>",
-  "mains": [
-    {
-      "label": "<Field label>",
-      "type": "<Field type>",
-      "icon": "<icon_name>",
-      "subData": [...],
-      "validation": {
-        "description": "<NATURAL LANGUAGE DESCRIPTION of what this validation does>",
-        "examples": {
-          "valid": ["<example1>", "<example2>"],
-          "invalid": ["<example1>", "<example2>"],
-          "edgeCases": ["<example1>", "<example2>"]
-        }
-      },
-      "example": "<example value>"
-    }
-  ]
-}`;
-
-    // Chiama OpenAI
-    const messages = [
-      { role: "system", content: "You are an expert data structure analyzer. Always respond with valid JSON." },
-      { role: "user", content: prompt }
-    ];
-
-    const aiResponse = await callOpenAI(messages);
-    console.log(`[AI_ANALYSIS] OpenAI response:`, aiResponse);
-
-    // Parse risposta AI
-    const analysis = JSON.parse(aiResponse);
-    console.log(`[AI_ANALYSIS] Parsed analysis:`, analysis);
-
-    return analysis;
-
-  } catch (error) {
-    console.error(`[AI_ANALYSIS] Error:`, error);
-
-    // Fallback alla logica locale
-    console.log(`[AI_ANALYSIS] Falling back to local logic`);
-    return analyzeUserRequestLocal(userDesc, templates);
-  }
+// ✅ ENTERPRISE: Analizza la richiesta utente usando AI reale (usa nuovo servizio)
+async function analyzeUserRequestWithAI(userDesc, templates, provider = 'openai') {
+  return await templateIntelligenceService.analyzeUserRequest(userDesc, templates, provider);
 }
 
 // Analisi locale di fallback
@@ -2068,8 +1973,52 @@ app.post('/api/generateConstraint', async (req, res) => {
   });
 });
 
-app.listen(3100, () => {
-  console.log('Backend API pronta su http://localhost:3100');
+// ✅ ENTERPRISE AI ENDPOINTS
+
+// Provider selection endpoint
+app.post('/step2-with-provider', async (req, res) => {
+  try {
+    const { user_desc, ai_provider = 'openai' } = req.body;
+
+    const templates = await loadTemplatesFromDB();
+    const analysis = await analyzeUserRequestWithAI(user_desc, templates, ai_provider);
+
+    res.json({
+      ai: {
+        ...analysis,
+        provider_used: ai_provider,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('[STEP2] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Provider information endpoint
+app.get('/api/ai-providers', (req, res) => {
+  res.json({
+    available: aiProviderService.getAvailableProviders(),
+    info: aiProviderService.getAllProvidersInfo(),
+    metrics: aiProviderService.getMetrics(),
+    default: 'openai'
+  });
+});
+
+// Health check endpoint
+app.get('/api/ai-health', async (req, res) => {
+  try {
+    const health = await aiProviderService.healthCheck();
+    res.json(health);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Service status endpoint
+app.get('/api/ai-status', (req, res) => {
+  res.json(aiProviderService.getStatus());
 });
 
 // --- Extractor endpoints (centralized contracts) ---
@@ -2091,4 +2040,8 @@ app.post('/api/extractors/run', async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
+});
+
+app.listen(3100, () => {
+  console.log('Backend API pronta su http://localhost:3100');
 });
