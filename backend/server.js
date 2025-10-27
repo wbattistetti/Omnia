@@ -1630,115 +1630,50 @@ app.get('/projects/:id', async (req, res) => {
   }
 });
 
-// ✅ NUOVO: Template Intelligence Service Functions
-
-// ✅ ENTERPRISE: Funzione per chiamare OpenAI (usa nuovo servizio con enterprise features)
-async function callOpenAI(messages, model = 'gpt-4o-mini') {
-  const provider = 'openai';
-
-  // Check rate limit
-  const rateLimitResult = rateLimiter.isAllowed(provider, 'global');
-  if (!rateLimitResult.allowed) {
-    throw new Error(`Rate limit exceeded for ${provider}: ${rateLimitResult.reason}`);
-  }
-
-  // Get or create circuit breaker
-  let breaker = circuitBreakerManager.getBreaker(provider);
-  if (!breaker) {
-    breaker = circuitBreakerManager.createBreaker(provider,
-      (msgs, opts) => aiProviderService.callAI(provider, msgs, opts)
-    );
-  }
-
-  // Execute with circuit breaker
-  return await breaker.fire(messages, { model });
-}
-
-// ✅ ENTERPRISE: Analizza la richiesta utente usando AI reale (usa nuovo servizio)
+// ✅ ENTERPRISE: Analizza la richiesta utente usando SOLO AI reale
 async function analyzeUserRequestWithAI(userDesc, templates, provider = 'openai') {
-  return await templateIntelligenceService.analyzeUserRequest(userDesc, templates, provider);
+  console.log(`[AI_ANALYSIS] Starting AI analysis for: "${userDesc}"`);
+  console.log(`[AI_ANALYSIS] Using ${provider} provider`);
+  console.log(`[AI_ANALYSIS] Available templates:`, Object.keys(templates).length);
+
+  try {
+    const result = await templateIntelligenceService.analyzeUserRequest(userDesc, templates, provider);
+    console.log(`[AI_ANALYSIS] ✅ AI analysis successful:`, result.action);
+    console.log(`[AI_ANALYSIS] 📋 AI Response structure:`, {
+      action: result.action,
+      label: result.label,
+      type: result.type,
+      icon: result.icon,
+      mainsCount: result.mains?.length || 0,
+      hasValidation: result.mains?.some(m => m.validation) || false,
+      hasExamples: result.mains?.some(m => m.example) || false
+    });
+
+    // Log detailed validation info
+    if (result.mains && result.mains.length > 0) {
+      console.log(`[AI_ANALYSIS] 🔍 Detailed mains analysis:`);
+      result.mains.forEach((main, index) => {
+        console.log(`[AI_ANALYSIS]   Main ${index + 1}:`, {
+          label: main.label,
+          type: main.type,
+          icon: main.icon,
+          hasValidation: !!main.validation,
+          hasExamples: !!main.example,
+          subDataCount: main.subData?.length || 0,
+          validationDescription: main.validation?.description || 'NO DESCRIPTION',
+          exampleValue: main.example || 'NO EXAMPLE'
+        });
+      });
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`[AI_ANALYSIS] ❌ AI analysis failed:`, error.message);
+    throw new Error(`AI analysis failed: ${error.message}`);
+  }
 }
 
-// Analisi locale di fallback
-function analyzeUserRequestLocal(userDesc, templates) {
-  const userLower = userDesc.toLowerCase();
-
-  // Mappatura intelligente per composizione
-  const compositionPatterns = {
-    'dati personali': ['name', 'date', 'phone', 'address', 'email'],
-    'chiedi dati personali': ['name', 'date', 'phone', 'address', 'email'],
-    'informazioni personali': ['name', 'date', 'phone', 'address', 'email'],
-    'profilo utente': ['name', 'date', 'phone', 'address', 'email'],
-    'dati di contatto': ['phone', 'email', 'address'],
-    'informazioni di contatto': ['phone', 'email', 'address'],
-    'dati anagrafici': ['name', 'date'],
-    'informazioni anagrafiche': ['name', 'date']
-  };
-
-  // Mappatura per template esistenti
-  const exactMatches = {
-    'data di nascita': 'date',
-    'data nascita': 'date',
-    'età': 'date',
-    'nome': 'name',
-    'nome completo': 'name',
-    'nominativo': 'name',
-    'email': 'email',
-    'telefono': 'phone',
-    'indirizzo': 'address',
-    'indirizzo complesso': 'complexAddress',
-    'codice fiscale': 'taxCode',
-    'iban': 'iban',
-    'partita iva': 'vatNumber'
-  };
-
-  // Controlla composizione
-  for (const [pattern, templateNames] of Object.entries(compositionPatterns)) {
-    if (userLower.includes(pattern)) {
-      // Verifica che tutti i template esistano
-      const availableTemplates = templateNames.filter(name => templates[name]);
-      if (availableTemplates.length >= 2) {
-        return {
-          action: 'compose',
-          composed_from: availableTemplates,
-          auditing_state: 'AI_generated',
-          reason: `User requested "${pattern}" which can be composed from existing templates: ${availableTemplates.join(', ')}`,
-          label: userDesc.charAt(0).toUpperCase() + userDesc.slice(1),
-          type: 'composite',
-          icon: 'user',
-          mains: []
-        };
-      }
-    }
-  }
-
-  // Controlla match esatti
-  for (const [pattern, templateName] of Object.entries(exactMatches)) {
-    if (userLower.includes(pattern) && templates[templateName]) {
-      return {
-        action: 'use_existing',
-        template_source: templateName,
-        auditing_state: 'AI_generated',
-        reason: `High semantic match with existing "${templateName}" template`,
-        label: templates[templateName].label,
-        type: templates[templateName].type,
-        icon: templates[templateName].icon,
-        mains: []
-      };
-    }
-  }
-
-  // Fallback: crea nuovo template
-  return {
-    action: 'create_new',
-    auditing_state: 'AI_generated',
-    reason: `No existing template matches or composes this request: "${userDesc}"`,
-    label: userDesc.charAt(0).toUpperCase() + userDesc.slice(1),
-    type: 'text',
-    icon: 'FileText',
-    mains: []
-  };
-}
+// ✅ ENTERPRISE: Solo AI generativa - nessun fallback locale
 
 // Compone template esistenti in una struttura unificata
 async function composeTemplates(templateNames, templates, userDesc) {
@@ -1953,6 +1888,30 @@ app.post('/api/generateConstraint', async (req, res) => {
 
 // ✅ ENTERPRISE AI ENDPOINTS
 
+// Single field analysis endpoint for auto-mapping
+app.post('/api/analyze-field', async (req, res) => {
+  try {
+    const { fieldLabel, provider = 'openai' } = req.body;
+
+    console.log('[FIELD_ANALYSIS] Analyzing field:', fieldLabel, 'with provider:', provider);
+
+    const templates = await loadTemplatesFromDB();
+    const analysis = await analyzeUserRequestWithAI(fieldLabel, templates, provider);
+
+    console.log('[FIELD_ANALYSIS] Result:', analysis.action);
+
+    res.json({
+      fieldLabel,
+      analysis,
+      provider_used: provider,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[FIELD_ANALYSIS] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Provider selection endpoint
 app.post('/step2-with-provider', async (req, res) => {
   try {
@@ -1961,11 +1920,16 @@ app.post('/step2-with-provider', async (req, res) => {
     console.log('[STEP2] Raw body:', req.body);
     console.log('[STEP2] Parsed userDesc:', userDesc);
     console.log('[STEP2] Parsed provider:', provider);
+    console.log('[STEP2] Using Template Intelligence Service');
 
+    // Load templates from database
     const templates = await loadTemplatesFromDB();
+    console.log('[STEP2] Using', Object.keys(templates).length, 'templates from Factory DB cache');
+
     const analysis = await analyzeUserRequestWithAI(userDesc, templates, provider);
 
-    console.log('[STEP2] AI Analysis completed, action:', analysis.action);
+    console.log('[STEP2] AI Analysis:', analysis.action, '- User requested', `"${userDesc}"`, '...');
+    console.log('[STEP2] AI Response generated:', JSON.stringify(analysis, null, 2));
 
     res.json({
       ai: {

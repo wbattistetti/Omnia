@@ -9,10 +9,47 @@ interface Props {
   dataNode?: { name?: string; subData?: string[] };
   selectedProvider?: 'openai' | 'groq';
   setSelectedProvider?: (provider: 'openai' | 'groq') => void;
+  onAutoDetect?: (userDesc: string) => void; // Nuovo prop per auto-rilevamento
 }
 
-const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCancel, dataNode, selectedProvider = 'openai', setSelectedProvider }) => {
+const WizardInputStep: React.FC<Props> = ({
+  userDesc,
+  setUserDesc,
+  onNext,
+  onCancel,
+  dataNode,
+  selectedProvider = 'openai',
+  setSelectedProvider,
+  onAutoDetect
+}) => {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const autoDetectTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-detect function
+  const handleAutoDetect = React.useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length >= 3 && onAutoDetect) {
+      // Clear existing timer
+      if (autoDetectTimerRef.current) {
+        clearTimeout(autoDetectTimerRef.current);
+      }
+
+      // Set new timer for auto-detection (debounce 1.5 seconds)
+      autoDetectTimerRef.current = setTimeout(() => {
+        console.log('[AUTO_DETECT] Triggering auto-detection for:', trimmed);
+        onAutoDetect(trimmed);
+      }, 1500);
+    }
+  }, [onAutoDetect]);
+
+  // Cleanup timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (autoDetectTimerRef.current) {
+        clearTimeout(autoDetectTimerRef.current);
+      }
+    };
+  }, []);
   React.useEffect(() => {
     try { console.log('[DDT][WizardInputStep][mount]'); } catch { }
     const handler = (e: any) => {
@@ -105,7 +142,12 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
       <textarea
         ref={textareaRef}
         value={userDesc}
-        onChange={e => setUserDesc(e.target.value)}
+        onChange={e => {
+          const newValue = e.target.value;
+          console.log('[WIZARD_INPUT] 🔤 Text changed:', newValue);
+          setUserDesc(newValue);
+          handleAutoDetect(newValue); // Trigger auto-detection
+        }}
         placeholder={dataNode?.name || ''}
         rows={2}
         style={{
@@ -123,7 +165,14 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
           whiteSpace: 'pre-wrap',
           wordWrap: 'break-word',
         }}
-        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && userDesc.trim()) { e.preventDefault(); try { console.log('[DDT][WizardInputStep][submit][Enter]'); } catch { }; onNext(); } }}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey && userDesc.trim()) {
+            e.preventDefault();
+            console.log('[WIZARD_INPUT] ⏎ Enter pressed with text:', userDesc.trim());
+            try { console.log('[DDT][WizardInputStep][submit][Enter]'); } catch { };
+            onNext();
+          }
+        }}
         autoFocus
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -146,7 +195,11 @@ const WizardInputStep: React.FC<Props> = ({ userDesc, setUserDesc, onNext, onCan
         </button>
         {/* 🎨 Pulsante Invia: sfondo verde, bordo verde, testo bianco */}
         <button
-          onClick={() => { try { console.log('[DDT][WizardInputStep][submit][Click]'); } catch { }; onNext(); }}
+          onClick={() => {
+            console.log('[WIZARD_INPUT] 🖱️ Button clicked with text:', userDesc.trim());
+            try { console.log('[DDT][WizardInputStep][submit][Click]'); } catch { };
+            onNext();
+          }}
           disabled={!userDesc.trim()}
           style={{
             background: '#22c55e',

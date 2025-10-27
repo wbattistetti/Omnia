@@ -27,12 +27,26 @@ class TemplateIntelligenceService {
         { role: "user", content: prompt + "\n\nPlease respond with valid JSON format." }
       ];
 
+      console.log(`[AI_ANALYSIS] 📝 Prompt length:`, prompt.length, 'characters');
+      console.log(`[AI_ANALYSIS] 📋 Available templates:`, Object.keys(templates).length);
+
       const response = await this.aiProvider.callAI(provider, messages, {
         model: this.getModelForProvider(provider)
       });
 
+      console.log(`[AI_ANALYSIS] 🤖 Raw AI response:`, response.choices[0].message.content.substring(0, 200) + '...');
+
       const analysis = JSON.parse(response.choices[0].message.content);
       console.log(`[AI_ANALYSIS] ✅ ${provider} analysis successful:`, analysis.action);
+      console.log(`[AI_ANALYSIS] 📊 Analysis details:`, {
+        action: analysis.action,
+        label: analysis.label,
+        type: analysis.type,
+        icon: analysis.icon,
+        mainsCount: analysis.mains?.length || 0,
+        hasValidation: analysis.mains?.some(m => m.validation) || false,
+        hasExamples: analysis.mains?.some(m => m.example) || false
+      });
 
       return analysis;
 

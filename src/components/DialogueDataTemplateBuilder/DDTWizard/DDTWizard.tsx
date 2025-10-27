@@ -34,6 +34,130 @@ interface DataNode {
   subData?: string[];
 }
 
+// Auto-Mapping Service (inline to avoid import issues)
+interface FieldAnalysis {
+  fieldLabel: string;
+  analysis: {
+    action: 'use_existing' | 'compose' | 'create_new';
+    template_source?: string;
+    composed_from?: string[];
+    mains?: Array<{
+      label: string;
+      type: string;
+      icon: string;
+      subData: Array<{
+        label: string;
+        type: string;
+        icon: string;
+        validation?: any;
+      }>;
+    }>;
+  };
+  provider_used: string;
+  timestamp: string;
+}
+
+interface TemplateInfo {
+  label: string;
+  type: string;
+  icon: string;
+  subData: Array<{
+    label: string;
+    type: string;
+    icon: string;
+  }>;
+}
+
+class AutoMappingService {
+  private templates: TemplateInfo[] = [];
+
+  async initializeTemplates(): Promise<void> {
+    try {
+      const response = await fetch('/api/factory/dialogue-templates');
+      if (response.ok) {
+        const data = await response.json();
+        this.templates = data.templates || [];
+        console.log('[AUTO_MAPPING] Loaded templates:', this.templates.length);
+      }
+    } catch (error) {
+      console.warn('[AUTO_MAPPING] Failed to load templates:', error);
+    }
+  }
+
+  async analyzeField(fieldLabel: string, provider: 'openai' | 'groq' = 'openai'): Promise<FieldAnalysis | null> {
+    try {
+      console.log('[AUTO_MAPPING] Analyzing field:', fieldLabel);
+
+      const response = await fetch('/api/analyze-field', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fieldLabel, provider })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Analysis failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[AUTO_MAPPING] Analysis result:', result.analysis.action);
+
+      return result;
+    } catch (error) {
+      console.warn('[AUTO_MAPPING] Analysis failed:', error);
+      return null;
+    }
+  }
+
+  async getSuggestedStructure(fieldLabel: string, provider: 'openai' | 'groq' = 'openai'): Promise<TemplateInfo | null> {
+    const analysis = await this.analyzeField(fieldLabel, provider);
+
+    if (!analysis) return null;
+
+    if (analysis.analysis.action === 'use_existing' && analysis.analysis.template_source) {
+      const template = this.templates.find(t =>
+        t.label.toLowerCase().includes(analysis.analysis.template_source!.toLowerCase()) ||
+        analysis.analysis.template_source!.toLowerCase().includes(t.label.toLowerCase())
+      );
+
+      if (template) {
+        console.log('[AUTO_MAPPING] Found matching template:', template.label);
+        return template;
+      }
+    }
+
+    if (analysis.analysis.action === 'create_new' && analysis.analysis.mains?.[0]) {
+      const main = analysis.analysis.mains[0];
+      return {
+        label: main.label,
+        type: main.type,
+        icon: main.icon,
+        subData: main.subData.map(sub => ({
+          label: sub.label,
+          type: sub.type,
+          icon: sub.icon
+        }))
+      };
+    }
+
+    return null;
+  }
+
+  shouldAutoMap(fieldLabel: string): boolean {
+    const lowerLabel = fieldLabel.toLowerCase();
+    const autoMapPatterns = [
+      'data', 'date', 'giorno', 'mese', 'anno',
+      'nome', 'cognome', 'nominativo',
+      'indirizzo', 'via', 'città', 'cap',
+      'telefono', 'phone', 'cellulare',
+      'email', 'mail',
+      'codice', 'code', 'id'
+    ];
+    return autoMapPatterns.some(pattern => lowerLabel.includes(pattern));
+  }
+}
+
+const autoMappingService = new AutoMappingService();
+
 const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean; onSeePrompts?: () => void }> = ({ onCancel, onComplete, initialDDT, startOnStructure, onSeePrompts }) => {
   const API_BASE = '';
   // Ensure accent is inherited in nested components
@@ -48,13 +172,116 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       }
     } catch { }
   }, []);
+  // Initialize auto-mapping service
+  useEffect(() => {
+    autoMappingService.initializeTemplates();
+  }, []);
+
   const [step, setStep] = useState<string>(startOnStructure ? 'structure' : 'input');
+
+  // Auto-mapping function for manually added fields
+  const autoMapFieldStructure = async (fieldLabel: string, fieldIndex: number) => {
+    try {
+      console.log('[AUTO_MAPPING] Auto-mapping field:', fieldLabel);
+
+      // Check if field should be auto-mapped
+      if (!autoMappingService.shouldAutoMap(fieldLabel)) {
+        console.log('[AUTO_MAPPING] Field does not need auto-mapping:', fieldLabel);
+        return;
+      }
+
+      // Get suggested structure
+      const suggestedStructure = await autoMappingService.getSuggestedStructure(fieldLabel, selectedProvider);
+
+      if (suggestedStructure && suggestedStructure.subData.length > 0) {
+        console.log('[AUTO_MAPPING] Applying structure:', suggestedStructure.subData.length, 'sub-fields');
+
+        // Update the field with suggested structure
+        setSchemaMains(prev =>
+          prev.map((m, index) =>
+            index === fieldIndex
+              ? {
+                ...m,
+                type: suggestedStructure.type,
+                icon: suggestedStructure.icon,
+                subData: suggestedStructure.subData.map(sub => ({
+                  label: sub.label,
+                  type: sub.type,
+                  icon: sub.icon,
+                  constraints: [] // TODO: Implement proper validation constraints later
+                }))
+              }
+              : m
+          )
+        );
+
+        console.log('[AUTO_MAPPING] ✅ Auto-mapping completed for:', fieldLabel);
+      } else {
+        console.log('[AUTO_MAPPING] No suitable structure found for:', fieldLabel);
+      }
+    } catch (error) {
+      console.warn('[AUTO_MAPPING] Auto-mapping failed for:', fieldLabel, error);
+    }
+  };
   const [userDesc, setUserDesc] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<'openai' | 'groq'>('openai');
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dataNode] = useState<DataNode | null>(() => ({ name: initialDDT?.label || '' }));
   const [closed, setClosed] = useState(false);
+
+  // Auto-detect function for real-time AI analysis
+  const handleAutoDetect = React.useCallback(async (text: string) => {
+    if (step === 'pipeline' || closed || !text.trim()) return;
+
+    console.log('[AUTO_DETECT] 🚀 Starting auto-detection for:', text);
+    console.log('[AUTO_DETECT] 📊 Current state:', { step, closed, textLength: text.trim().length });
+
+    try {
+      const urlPrimary = `/step2-with-provider`;
+      console.log('[AUTO_DETECT] 📡 Making API call to:', urlPrimary);
+
+      const response = await fetch(urlPrimary, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userDesc: text.trim(), provider: selectedProvider }),
+      });
+
+      console.log('[AUTO_DETECT] 📡 API response:', {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText
+      });
+
+      if (!response.ok) {
+        console.warn('[AUTO_DETECT] ❌ API call failed:', response.status);
+        return;
+      }
+
+      const result = await response.json();
+      console.log('[AUTO_DETECT] 📋 Parsed result:', result);
+
+      const ai = result.ai || result;
+      console.log('[AUTO_DETECT] 🤖 AI data:', {
+        action: ai.action,
+        label: ai.label,
+        type: ai.type,
+        icon: ai.icon,
+        mainsCount: ai.mains?.length || 0,
+        hasValidation: ai.mains?.some(m => m.validation) || false,
+        hasExamples: ai.mains?.some(m => m.example) || false
+      });
+
+      // If AI suggests a specific template, show preview
+      if (ai.action === 'use_existing' || ai.action === 'compose') {
+        console.log('[AUTO_DETECT] ✅ Template detected:', ai.template_source || ai.composed_from);
+        // You could show a preview tooltip here
+      }
+
+    } catch (error) {
+      console.warn('[AUTO_DETECT] ❌ Error:', error);
+    }
+  }, [step, closed, selectedProvider]);
   // removed unused refs
 
   // Schema editing state (from detect schema)
@@ -156,6 +383,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     setErrorMsg(null);
     try {
       const reqBody = userDesc.trim();
+      console.log('[DDT][DetectType] 🚀 Starting detection for:', reqBody);
+      console.log('[DDT][DetectType] 📊 Current state:', { step, closed, userDesc: reqBody });
+
       // Clean path via Vite proxy
       const urlPrimary = `/step2-with-provider`;
       const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -179,17 +409,31 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       console.log('[DDT][DetectType][parsed]', result);
       const ai = result.ai || result;
 
+      console.log('[DDT][DetectType] 🤖 AI Response analysis:', {
+        action: ai.action,
+        label: ai.label,
+        type: ai.type,
+        icon: ai.icon,
+        mainsCount: ai.mains?.length || 0,
+        hasValidation: ai.mains?.some(m => m.validation) || false,
+        hasExamples: ai.mains?.some(m => m.example) || false,
+        hasSchema: !!ai.schema,
+        schemaMainDataCount: ai.schema?.mainData?.length || 0
+      });
+
       // Handle new AI response structure
       let schema;
       if (ai.schema && Array.isArray(ai.schema.mainData)) {
         // Old structure: ai.schema.mainData
         schema = ai.schema;
+        console.log('[DDT][DetectType] 📋 Using schema.mainData structure');
       } else if (Array.isArray(ai.mains)) {
         // New structure: ai.mains directly
         schema = {
           label: ai.label || 'Data',
           mainData: ai.mains
         };
+        console.log('[DDT][DetectType] 📋 Using ai.mains structure');
       } else {
         throw new Error('Schema non valido');
       }
@@ -378,6 +622,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   };
 
   const handleChangeEvent = (e: { type: string; path: string; payload?: any }) => {
+    console.log('[DDT_WIZARD] 🔔 handleChangeEvent called:', {
+      type: e.type,
+      path: e.path,
+      payload: e.payload
+    });
+
     setChanges(prev => {
       const next = {
         mains: new Set(prev.mains),
@@ -457,6 +707,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           dataNode={stableDataNode || undefined}
           selectedProvider={selectedProvider}
           setSelectedProvider={setSelectedProvider}
+          onAutoDetect={handleAutoDetect}
         />
       </div>
 
@@ -486,6 +737,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   onSelect={setSelectedIdx}
                   autoEditIndex={autoEditIndex}
                   onChangeEvent={handleChangeEvent}
+                  onAutoMap={autoMapFieldStructure}
                 />
               </div>
               {step === 'structure' && (

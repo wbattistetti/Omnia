@@ -57,12 +57,61 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
     }
   };
 
-  const commitMain = () => {
+  const commitMain = async () => {
+    console.log('[MAIN_DATA_WIZARD] 🎯 commitMain called with:', {
+      labelDraft,
+      currentLabel: node.label,
+      isChanged: (node.label || '') !== labelDraft
+    });
+
+    // 🚀 NEW: Call AI for single field analysis
+    if (labelDraft.trim()) {
+      console.log('[MAIN_DATA_WIZARD] 🤖 Calling AI for field:', labelDraft);
+      try {
+        const response = await fetch('/step2-with-provider', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userDesc: labelDraft })
+        });
+        const data = await response.json();
+        console.log('[MAIN_DATA_WIZARD] 🤖 AI Response:', data);
+
+        if (data.ai?.mains?.[0]) {
+          const aiField = data.ai.mains[0];
+          console.log('[MAIN_DATA_WIZARD] 🎯 Using AI field structure:', aiField);
+
+          // Update node with AI structure
+          const updatedNode = {
+            ...node,
+            label: aiField.label || labelDraft,
+            type: aiField.type || 'text',
+            icon: aiField.icon || 'FileText',
+            subData: aiField.subData || [],
+            validation: aiField.validation || {},
+            example: aiField.example || ''
+          };
+
+          console.log('[MAIN_DATA_WIZARD] 📝 Updating node with AI structure:', updatedNode);
+          onChange(updatedNode);
+          onChangeEvent?.({ type: 'main.renamed', path: updatedNode.label, payload: { oldPath: node.label || '' } });
+          setIsEditingMain(false);
+          return;
+        }
+      } catch (error) {
+        console.error('[MAIN_DATA_WIZARD] ❌ AI call failed:', error);
+      }
+    }
+
+    // Fallback to original logic
     setIsEditingMain(false);
     if ((node.label || '') !== labelDraft) {
       const old = node.label || '';
+      console.log('[MAIN_DATA_WIZARD] 📝 Updating node label from', old, 'to', labelDraft);
       onChange({ ...node, label: labelDraft });
+      console.log('[MAIN_DATA_WIZARD] 🔔 Triggering changeEvent: main.renamed');
       onChangeEvent?.({ type: 'main.renamed', path: labelDraft, payload: { oldPath: old } });
+    } else {
+      console.log('[MAIN_DATA_WIZARD] ⏭️ No change detected, skipping update');
     }
   };
 
@@ -286,12 +335,28 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
               <input
                 autoFocus
                 value={labelDraft}
-                onChange={(e) => setLabelDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') commitMain(); if (e.key === 'Escape') cancelMain(); }}
+                onChange={(e) => {
+                  console.log('[MAIN_DATA_WIZARD] 🔤 Label changed:', e.target.value);
+                  setLabelDraft(e.target.value);
+                }}
+                onKeyDown={async (e) => {
+                  console.log('[MAIN_DATA_WIZARD] ⌨️ Key pressed:', e.key, 'with value:', labelDraft);
+                  if (e.key === 'Enter') {
+                    console.log('[MAIN_DATA_WIZARD] ⏎ Enter pressed, committing:', labelDraft);
+                    await commitMain();
+                  }
+                  if (e.key === 'Escape') {
+                    console.log('[MAIN_DATA_WIZARD] ⎋ Escape pressed, cancelling');
+                    cancelMain();
+                  }
+                }}
                 placeholder="data label ..."
                 style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', minWidth: 260, fontWeight: 700 }}
               />
-              <button title="Confirm" onClick={commitMain} style={iconBtn}><Check size={18} color="#22c55e" /></button>
+              <button title="Confirm" onClick={async () => {
+                console.log('[MAIN_DATA_WIZARD] ✅ Confirm clicked, committing:', labelDraft);
+                await commitMain();
+              }} style={iconBtn}><Check size={18} color="#22c55e" /></button>
               <button title="Cancel" onClick={cancelMain} style={iconBtn}><X size={18} color="#ef4444" /></button>
             </div>
           )}

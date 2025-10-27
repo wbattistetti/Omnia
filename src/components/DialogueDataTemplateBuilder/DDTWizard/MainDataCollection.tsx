@@ -30,9 +30,10 @@ interface MainDataCollectionProps {
   onAddMain: () => void;
   selectedIdx: number;
   onSelect: (idx: number) => void;
+  onAutoMap?: (fieldLabel: string, fieldIndex: number) => Promise<void>;
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, selectedIdx, onSelect, autoEditIndex, onChangeEvent }) => {
+const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap }) => {
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
     next[idx] = nextNode;
@@ -104,18 +105,18 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
             const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
             const isComplete = percentage >= 100;
             const barColor = isComplete ? '#ef4444' : '#fbbf24';
-            const barStyle = isComplete 
+            const barStyle = isComplete
               ? { background: barColor }
-              : { 
-                  background: `repeating-linear-gradient(
+              : {
+                background: `repeating-linear-gradient(
                     to right,
                     ${barColor} 0px,
                     ${barColor} 8px,
                     transparent 8px,
                     transparent 12px
                   )`
-                };
-            
+              };
+
             return (
               <div style={{ width: '100%', height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
                 <div style={{ width: `${percentage}%`, height: '100%', ...barStyle, transition: 'width 0.8s ease, background 0.3s ease' }} />
@@ -132,18 +133,18 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
             const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
             const isComplete = percentage >= 100;
             const barColor = isComplete ? '#ef4444' : '#fbbf24';
-            const barStyle = isComplete 
+            const barStyle = isComplete
               ? { background: barColor }
-              : { 
-                  background: `repeating-linear-gradient(
+              : {
+                background: `repeating-linear-gradient(
                     to right,
                     ${barColor} 0px,
                     ${barColor} 8px,
                     transparent 8px,
                     transparent 12px
                   )`
-                };
-            
+              };
+
             return (
               <div style={{ width: '100%', height: 6, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
                 <div style={{ width: `${percentage}%`, height: '100%', ...barStyle, transition: 'width 0.8s ease, background 0.3s ease' }} />
@@ -165,6 +166,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
               pathPrefix={m.label}
               onChangeEvent={onChangeEvent}
               onRequestOpen={() => onSelect(i)}
+              onAutoMap={onAutoMap}
             />
           </div>
         ))}
