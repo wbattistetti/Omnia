@@ -17,13 +17,13 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTas
     (async () => {
       if (!flows[flowId] || (!flows[flowId].nodes?.length && !flows[flowId].edges?.length)) {
         if (isDraft) {
-          try { console.log('[Flow][canvas][draft-init]', { projectId, flowId }); } catch {}
+          // RIMOSSO: console.log che causava loop infinito
           upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: [], edges: [] });
         } else {
-          try { console.log('[Flow][canvas][load]', { projectId, flowId }); } catch {}
+          // RIMOSSO: console.log che causava loop infinito
           const data = await loadFlow(projectId, flowId);
           upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: data.nodes, edges: data.edges });
-          try { console.log('[Flow][canvas][loaded]', { projectId, flowId, nodes: data.nodes.length, edges: data.edges.length }); } catch {}
+          // RIMOSSO: console.log che causava loop infinito
         }
       }
     })();
@@ -38,12 +38,12 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTas
       setNodes={(updater: any) => updateFlowGraph(flowId, (ns, es) => ({ nodes: typeof updater === 'function' ? updater(ns) : updater, edges: es }))}
       setEdges={(updater: any) => updateFlowGraph(flowId, (ns, es) => ({ nodes: ns, edges: typeof updater === 'function' ? updater(es) : updater }))}
       currentProject={{ id: projectId, name: 'Project' } as any}
-      setCurrentProject={() => {}}
+      setCurrentProject={() => { }}
       testPanelOpen={false}
-      setTestPanelOpen={() => {}}
+      setTestPanelOpen={() => { }}
       testNodeId={null}
-      setTestNodeId={() => {}}
-      onPlayNode={() => {}}
+      setTestNodeId={() => { }}
+      onPlayNode={() => { }}
       onCreateTaskFlow={onCreateTaskFlow}
       onOpenTaskFlow={onOpenTaskFlow}
     />

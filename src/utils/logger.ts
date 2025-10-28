@@ -12,7 +12,7 @@
  * enableDebug(); // Solo quando serve per debug
  */
 
-let isDebugEnabled = process.env.NODE_ENV === 'development';
+let isDebugEnabled = true; // ATTIVATO PER IDENTIFICARE TUTTI I LOOP
 
 export const enableDebug = () => {
     isDebugEnabled = true;

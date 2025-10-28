@@ -798,8 +798,7 @@ export async function getAllDialogueTemplates() {
   const data = await res.json();
   try {
     const snap = Array.isArray(data) ? data.map((d: any) => ({ label: d?.label, mains: (d?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) })) : [];
-    // eslint-disable-next-line no-console
-    console.log('[KindPersist][ProjectDataService][load templates]', snap);
+    // RIMOSSO: console.log che causava loop infinito
   } catch { }
   return data;
 }

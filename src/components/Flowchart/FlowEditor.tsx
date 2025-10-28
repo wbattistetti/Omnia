@@ -252,14 +252,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     nodeIdCounterRef
   );
 
-  // Log dettagliato su ogni cambiamento di nodes.length
-  useEffect(() => {
-    debug('FLOW_EDITOR', 'Nodes array changed', { count: nodes.length, nodeIds: nodes.map(n => n.id), tempNodes: nodes.filter(n => n.data?.isTemporary).map(n => n.id), timestamp: Date.now() });
-
-    if (reactFlowInstance) {
-      // Rimuovi completamente codice non utilizzato
-    }
-  }, [nodes.length, reactFlowInstance]);
+  // RIMOSSO: useEffect inutile che causava loop infinito
 
   // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
   // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation

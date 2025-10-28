@@ -43,13 +43,13 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   const createDDT = (ddt: any) => {
     // ensure has id for future lookups
     const withId = ddt.id ? ddt : { ...ddt, id: ddt._id || `${(ddt.label || 'DDT').replace(/\s+/g, '_')}_${crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}` };
-    try { console.log('[KindPersist][DDTManager][createDDT]', { label: withId?.label, mains: (withId?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
+    try { console.log('[KindPersist][DDTManager][createDDT]', { label: withId?.label, mains: (withId?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
     setDDTList(prev => [...prev, withId]);
     setSelectedDDT(withId);
   };
 
   const openDDT = (ddt: any) => {
-    try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
+    try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
     // Preserve steps if we already have an enriched copy of the same DDT in memory
     const sameId = (a: any, b: any) => !!a && !!b && ((a.id && b.id && a.id === b.id) || (a._id && b._id && a._id === b._id));
     const byLabel = (arr: any[]) => {
@@ -129,8 +129,8 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
       try {
         const ideCount = ide ? Object.keys(ide).length : 0;
         const ddtCount = ddtTr ? Object.keys(ddtTr).length : 0;
-        console.log('[DDTManager] Translations loaded:', { ideCount, ddtCount });
-      } catch {}
+        // RIMOSSO: console.log che causava loop infinito
+      } catch { }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Errore nel caricamento DDT';
       setLoadDDTError(errorMessage);
@@ -142,14 +142,14 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
 
   const replaceSelectedDDT = (next: any) => {
     if (!next) return;
-    try { console.log('[KindPersist][DDTManager][replaceSelectedDDT]', { label: next?.label, mains: (next?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch {}
+    try { console.log('[KindPersist][DDTManager][replaceSelectedDDT]', { label: next?.label, mains: (next?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
     setSelectedDDT(next);
     setDDTList(list => list.map(d => (d.id === next.id || d._id === next._id ? next : d)));
   };
 
   // DEBUG: Track every selectedDDT change
   // Track selectedDDT changes if needed for analytics
-  
+
   // Carica i DDT all'inizializzazione
   useEffect(() => {
     loadDDT();
@@ -177,4 +177,4 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
       {children}
     </DDTManagerContext.Provider>
   );
-}; 
+};

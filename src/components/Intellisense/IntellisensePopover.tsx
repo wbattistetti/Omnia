@@ -11,20 +11,7 @@ export const IntellisensePopover: React.FC = () => {
     const [rect, setRect] = useState<DOMRect | null>(null);
     const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
 
-    // Log quando lo stato cambia - solo quando si apre/chiude
-    useEffect(() => {
-        if (state.isOpen) {
-            console.log("🎯 [IntellisensePopover] OPENED:", {
-                targetNodeId: state.target?.nodeId,
-                targetEdgeId: state.target?.edgeId,
-                catalogLength: state.catalog.length,
-                firstItems: state.catalog.slice(0, 3).map(item => ({ id: item.id, label: item.label })),
-                timestamp: Date.now()
-            });
-        } else {
-            console.log("🎯 [IntellisensePopover] CLOSED");
-        }
-    }, [state.isOpen]);
+    // RIMOSSO: useEffect che causava loop infinito
 
     // Calcola anchor quando si apre o cambia target - NO POLLING!
     useLayoutEffect(() => {
