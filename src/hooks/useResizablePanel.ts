@@ -37,7 +37,7 @@ export const useResizablePanel = ({
     }
   }, [persistKey]);
 
-  const style = direction === 'horizontal' 
+  const style = direction === 'horizontal'
     ? { width: size }
     : { height: size };
 
@@ -46,4 +46,4 @@ export const useResizablePanel = ({
     handleResize,
     style
   };
-}; 
+};

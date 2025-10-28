@@ -66,15 +66,15 @@ export const useRowManager = (
   }, [generateRowId]);
 
   const updateRow = useCallback((rowId: string, newText: string, categoryType?: EntityType, meta?: Partial<NodeRowData>) => {
-    setRows(prevRows => 
-      prevRows.map(row => 
-        row.id === rowId 
-          ? { 
-              ...row, 
-              ...(meta || {}), 
-              text: newText, 
-              categoryType: (meta && (meta as any).categoryType) ? (meta as any).categoryType : categoryType 
-            } 
+    setRows(prevRows =>
+      prevRows.map(row =>
+        row.id === rowId
+          ? {
+            ...row,
+            ...(meta || {}),
+            text: newText,
+            categoryType: (meta && (meta as any).categoryType) ? (meta as any).categoryType : categoryType
+          }
           : row
       )
     );
@@ -90,7 +90,7 @@ export const useRowManager = (
     if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= rows.length || toIndex >= rows.length) {
       return;
     }
-    
+
     setRows(prevRows => {
       const updated = [...prevRows];
       const [row] = updated.splice(fromIndex, 1);

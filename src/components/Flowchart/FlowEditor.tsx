@@ -11,6 +11,7 @@ import ReactFlow, {
   applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { debug, error } from '../../utils/Logger';
 import { CustomNode } from './nodes/CustomNode/CustomNode';
 import { TaskNode } from './nodes/TaskNode/TaskNode';
 import { useEdgeManager } from '../../hooks/useEdgeManager';
@@ -120,22 +121,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [setEdges, setSelectedEdgeId]);
 
   const handleTempEdgeStabilization = useCallback((tempNodeId: string, tempEdgeId: string, label: string, fp: any) => {
-    console.log('[🔍 STABILIZE.1] Starting stabilization (first occurrence)', {
-      tempNodeId,
-      tempEdgeId,
-      flowPosition: fp,
-      timestamp: Date.now()
-    });
+    debug('FLOW_EDITOR', 'Starting stabilization', { tempNodeId, tempEdgeId, flowPosition: fp, timestamp: Date.now() });
 
     setNodes(nds => {
       const stabilizedNodes = nds.map(n => {
         if (n.id === tempNodeId) {
-          console.log('[🔍 STABILIZE.1] Stabilizing temporary node', {
-            tempNodeId,
-            pos: n.position,
-            fp,
-            timestamp: Date.now()
-          });
+          debug('FLOW_EDITOR', 'Stabilizing temporary node', { tempNodeId, pos: n.position, fp, timestamp: Date.now() });
           return { ...n, isTemporary: false };
         }
         return n;
@@ -263,12 +254,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Log dettagliato su ogni cambiamento di nodes.length
   useEffect(() => {
-    console.log("📊 [NODES_CHANGE] Nodes array changed", {
-      count: nodes.length,
-      nodeIds: nodes.map(n => n.id),
-      tempNodes: nodes.filter(n => n.data?.isTemporary).map(n => n.id),
-      timestamp: Date.now()
-    });
+    debug('FLOW_EDITOR', 'Nodes array changed', { count: nodes.length, nodeIds: nodes.map(n => n.id), tempNodes: nodes.filter(n => n.data?.isTemporary).map(n => n.id), timestamp: Date.now() });
 
     if (reactFlowInstance) {
       // Rimuovi completamente codice non utilizzato

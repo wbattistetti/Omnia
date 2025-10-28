@@ -24,10 +24,10 @@ interface TreeNodeExtraProps {
   stepType?: string;
 }
 
-const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({ 
-  text, 
+const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
+  text,
   type,
-  level = 0, 
+  level = 0,
   id,
   icon,
   color,
@@ -182,7 +182,7 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
         </div>
       );
     }
-    
+
     // Altrimenti mostra il rettangolo recovery normale
     // Colore dinamico escalation
     const colorKey = (escalationLabel || '').toLowerCase();
@@ -307,7 +307,7 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
                 text={child.primaryValue || child.text}
                 color={child.color}
                 draggable={true}
-                onEdit={() => {}} // enable editing mode for escalation children
+                onEdit={() => { }} // enable editing mode for escalation children
                 onDelete={onCancelNewNode ? () => onCancelNewNode(child.id) : undefined}
                 onAIGenerate={onAIGenerate}
                 stepType={stepType}
@@ -324,7 +324,7 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
   // console.log('RENDER TreeNode', id, 'type:', type, 'isOver:', isOver, 'dropTarget:', dropTarget);
   // console.log('RENDER TreeNode', id, type, 'isOver:', typeof isOver !== 'undefined' ? isOver : 'UNDEF', 'dropTarget:', dropTarget);
   return (
-    <div 
+    <div
       ref={nodeRef}
       id={domId}
       style={{
@@ -348,7 +348,7 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
         color={color}
         selected={selected}
         draggable={true}
-        onEdit={() => {}} // enable editing mode for now
+        onEdit={() => { }} // enable editing mode for now
         onDelete={onCancelNewNode ? () => onCancelNewNode(id) : undefined}
         onAIGenerate={onAIGenerate}
         stepType={stepType}
@@ -368,4 +368,4 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
   );
 };
 
-export default TreeNode; 
+export default TreeNode;

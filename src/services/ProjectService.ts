@@ -36,4 +36,4 @@ export const ProjectService = {
     const res = await fetch(`/api/projects/catalog`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Errore nell\'eliminazione di tutti i progetti');
   },
-}; 
+};

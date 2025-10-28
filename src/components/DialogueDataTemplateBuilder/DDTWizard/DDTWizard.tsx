@@ -12,11 +12,12 @@ import { PlanRunResult } from './planRunner';
 import { buildArtifactStore, mergeArtifactStores, moveArtifactsPath } from './artifactStore';
 import { assembleFinalDDT } from './assembleFinal';
 import { Hourglass, Bell } from 'lucide-react';
+import { debug, error } from '../../../utils/Logger';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // DEBUG (toggle)
 const __DEBUG_DDT_UI__ = false;
-const dlog = (...a: any[]) => { if (__DEBUG_DDT_UI__) console.log(...a); };
+const dlog = (...a: any[]) => { if (__DEBUG_DDT_UI__) debug('DDT_WIZARD', a.join(' ')); };
 
 // Piccolo componente per i puntini animati
 const AnimatedDots: React.FC<{ intervalMs?: number }> = ({ intervalMs = 450 }) => {
@@ -77,7 +78,7 @@ class AutoMappingService {
       if (response.ok) {
         const data = await response.json();
         this.templates = data.templates || [];
-        console.log('[AUTO_MAPPING] Loaded templates:', this.templates.length);
+        debug('DDT_WIZARD', 'Loaded templates', { count: this.templates.length });
       }
     } catch (error) {
       console.warn('[AUTO_MAPPING] Failed to load templates:', error);
@@ -234,12 +235,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const handleAutoDetect = React.useCallback(async (text: string) => {
     if (step === 'pipeline' || closed || !text.trim()) return;
 
-    console.log('[AUTO_DETECT] 🚀 Starting auto-detection for:', text);
-    console.log('[AUTO_DETECT] 📊 Current state:', { step, closed, textLength: text.trim().length });
+    debug('DDT_WIZARD', 'Starting auto-detection', { text, step, closed, textLength: text.trim().length });
 
     try {
       const urlPrimary = `/step2-with-provider`;
-      console.log('[AUTO_DETECT] 📡 Making API call to:', urlPrimary);
+      debug('DDT_WIZARD', 'Making API call', { url: urlPrimary });
 
       const response = await fetch(urlPrimary, {
         method: 'POST',
@@ -247,39 +247,27 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         body: JSON.stringify({ userDesc: text.trim(), provider: selectedProvider }),
       });
 
-      console.log('[AUTO_DETECT] 📡 API response:', {
-        status: response.status,
-        ok: response.ok,
-        statusText: response.statusText
-      });
+      debug('DDT_WIZARD', 'API response received', { status: response.status, ok: response.ok, statusText: response.statusText });
 
       if (!response.ok) {
-        console.warn('[AUTO_DETECT] ❌ API call failed:', response.status);
+        error('DDT_WIZARD', 'API call failed', { status: response.status });
         return;
       }
 
       const result = await response.json();
-      console.log('[AUTO_DETECT] 📋 Parsed result:', result);
+      debug('DDT_WIZARD', 'Parsed result', result);
 
       const ai = result.ai || result;
-      console.log('[AUTO_DETECT] 🤖 AI data:', {
-        action: ai.action,
-        label: ai.label,
-        type: ai.type,
-        icon: ai.icon,
-        mainsCount: ai.mains?.length || 0,
-        hasValidation: ai.mains?.some(m => m.validation) || false,
-        hasExamples: ai.mains?.some(m => m.example) || false
-      });
+      debug('DDT_WIZARD', 'AI data', { action: ai.action, label: ai.label, mainsCount: ai.mains?.length || 0 });
 
       // If AI suggests a specific template, show preview
       if (ai.action === 'use_existing' || ai.action === 'compose') {
-        console.log('[AUTO_DETECT] ✅ Template detected:', ai.template_source || ai.composed_from);
+        debug('DDT_WIZARD', 'Template detected', { template_source: ai.template_source, composed_from: ai.composed_from });
         // You could show a preview tooltip here
       }
 
     } catch (error) {
-      console.warn('[AUTO_DETECT] ❌ Error:', error);
+      error('DDT_WIZARD', 'Auto-detect error', error);
     }
   }, [step, closed, selectedProvider]);
   // removed unused refs
@@ -480,7 +468,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         const allAtomic = Array.isArray(finalMains) && finalMains.length > 1 && finalMains.every((m: any) => !Array.isArray((m as any)?.subData) || (m as any).subData.length === 0);
         if (allAtomic) {
           finalMains = [{ label: finalRoot, type: 'object', icon: 'Folder', subData: finalMains }];
-          console.log('[DDTWizard] Wrapped atomic mains into aggregator:', finalRoot, 'count', finalMains[0].subData.length);
+          debug('DDT_WIZARD', 'Wrapped atomic mains into aggregator', { finalRoot, count: finalMains[0].subData.length });
         }
         setSchemaRootLabel(finalRoot);
         setSchemaMains(finalMains);
@@ -526,7 +514,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       ...(initialDDT && (initialDDT as any).translations ? { translations: (initialDDT as any).translations } : {}),
     } as any;
     try {
-      console.log('[DDT][Wizard][assemble]', { root, mainsCount: mains.length, mainsLabels: mains.map(m => m.label), preservedId: baseId });
+      debug('DDT_WIZARD', 'Assembling DDT', { root, mainsCount: mains.length, mainsLabels: mains.map(m => m.label), preservedId: baseId });
     } catch { }
     return ddt;
   };
@@ -657,19 +645,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Handler per chiusura (annulla o completamento)
   const handleClose = (result?: any, messages?: any) => {
-    console.log('[DDT][Wizard][handleClose]', {
-      hasResult: !!result,
-      hasOnComplete: !!onComplete,
-      resultId: result?.id,
-      resultLabel: result?.label,
-      mainsCount: Array.isArray(result?.mainData) ? result.mainData.length : 'not-array'
-    });
+    debug('DDT_WIZARD', 'Handle close', { hasResult: !!result, hasOnComplete: !!onComplete, resultId: result?.id, resultLabel: result?.label, mainsCount: Array.isArray(result?.mainData) ? result.mainData.length : 'not-array' });
     setClosed(true);
     if (result && onComplete) {
-      console.log('[DDT][Wizard][handleClose] Calling onComplete callback');
+      debug('DDT_WIZARD', 'Calling onComplete callback');
       onComplete(result, messages);
     } else {
-      console.log('[DDT][Wizard][handleClose] Calling onCancel');
+      debug('DDT_WIZARD', 'Calling onCancel');
       onCancel();
     }
   };

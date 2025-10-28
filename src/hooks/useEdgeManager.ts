@@ -55,4 +55,4 @@ export function useEdgeManager(
   }, [setEdges]);
 
   return { addEdge, patchEdges, deleteEdge };
-} 
+}

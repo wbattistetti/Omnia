@@ -17,25 +17,25 @@ export function useNodesWithLog(setNodes: (updater: any) => void) {
         return;
       }
     }
-    
+
     isCreatingTempNode.current = true;
 
     if (typeof updater === 'function') {
       setNodes((currentNodes: Node<NodeData>[]) => {
         const newNodes = updater(currentNodes);
-        
+
         // Check if this is a stabilization update (removing isTemporary flag)
-        const isStabilizationUpdate = currentNodes.some(node => 
-          (node.data as any)?.isTemporary && 
+        const isStabilizationUpdate = currentNodes.some(node =>
+          (node.data as any)?.isTemporary &&
           newNodes.find(n => n.id === node.id && !(n.data as any)?.isTemporary)
         );
-        
+
         // If this is a stabilization update, release the lock immediately
         if (isStabilizationUpdate) {
           console.log("✅ [SET_NODES] Stabilization update detected, releasing lock");
           isCreatingTempNode.current = false;
         }
-        
+
         // Logging posizione temporanei
         currentNodes.forEach((oldNode, index) => {
           const newNode = newNodes[index];
@@ -53,14 +53,14 @@ export function useNodesWithLog(setNodes: (updater: any) => void) {
             }
           }
         });
-        
+
         // Release lock after microtask unless it's already been released for stabilization
         if (!isStabilizationUpdate) {
           queueMicrotask(() => {
             isCreatingTempNode.current = false;
           });
         }
-        
+
         return newNodes;
       });
     } else {

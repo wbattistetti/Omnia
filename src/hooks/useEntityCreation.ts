@@ -17,12 +17,12 @@ export interface UseEntityCreationReturn {
 export const useEntityCreation = (): UseEntityCreationReturn => {
   const projectDataContext = useProjectData();
   const projectDataUpdateContext = useProjectDataUpdate();
-  
+
   // Controlla se il context è disponibile
   if (!projectDataContext || !projectDataUpdateContext) {
     throw new Error('useEntityCreation must be used within ProjectDataProvider');
   }
-  
+
   const { data: projectData } = projectDataContext;
   const { refreshData } = projectDataUpdateContext;
 
@@ -31,7 +31,7 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
     name: string,
     scope?: 'global' | 'industry'
   ) => {
-    try { console.log('[CreateAct][hook][enter]', { entityType, name, scope }); } catch {}
+    try { console.log('[CreateAct][hook][enter]', { entityType, name, scope }); } catch { }
     const options: EntityCreationOptions = {
       name,
       projectData,
@@ -60,7 +60,7 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
 
     // Aggiorna il context per riflettere le modifiche nel sidebar
     if (result) {
-      try { console.log('[CreateAct][hook][result]', { id: (result as any)?.id, type: (result as any)?.type, mode: (result as any)?.mode }); } catch {}
+      try { console.log('[CreateAct][hook][result]', { id: (result as any)?.id, type: (result as any)?.type, mode: (result as any)?.mode }); } catch { }
       console.log('🔄 Refreshing project data after entity creation');
       refreshData();
     }

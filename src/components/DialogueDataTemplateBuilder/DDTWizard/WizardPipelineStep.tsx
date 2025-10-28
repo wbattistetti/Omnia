@@ -83,16 +83,16 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     alreadyStartedRef.current = false;
   }, [dataNode]);
 
-useEffect(() => {
-  if (hadErrorRef.current) return;
-  if (orchestrator.state.stepError || orchestrator.state.stepLoading) return;
-  if (alreadyStartedRef.current) return;
-  alreadyStartedRef.current = true;
-  Promise.resolve()
-    .then(() => orchestrator.runNextStep())
-    .finally(() => { alreadyStartedRef.current = false; });
-// not depending on dataNode to avoid retriggers on renders
-}, [orchestrator.state.currentStepIndex, orchestrator.state.stepError, orchestrator.state.stepLoading]);
+  useEffect(() => {
+    if (hadErrorRef.current) return;
+    if (orchestrator.state.stepError || orchestrator.state.stepLoading) return;
+    if (alreadyStartedRef.current) return;
+    alreadyStartedRef.current = true;
+    Promise.resolve()
+      .then(() => orchestrator.runNextStep())
+      .finally(() => { alreadyStartedRef.current = false; });
+    // not depending on dataNode to avoid retriggers on renders
+  }, [orchestrator.state.currentStepIndex, orchestrator.state.stepError, orchestrator.state.stepLoading]);
 
   useEffect(() => {
     if (orchestrator.debugModal) {
@@ -117,7 +117,7 @@ useEffect(() => {
   // When pipeline done, assemble
   useEffect(() => {
     if (hadErrorRef.current) return; // don't complete if any step failed
-    
+
     if (
       orchestrator.state.currentStepIndex >= orchestrator.state.steps.length &&
       !finalDDT
@@ -128,12 +128,12 @@ useEffect(() => {
         stepResults = [fakeDetectType, ...orchestrator.state.stepResults];
       }
       const stepMessages = buildSteps(stepResults);
-      
+
       // ✅ FIX: Use dataNode prop directly - it already has name, label, icon, subData from DDTWizard
       // The structureResult.payload only has subData, losing name/label/icon!
       const ddtId = dataNode.label || dataNode.name || 'ddt_unknown';
-      
-      console.log('[WizardPipelineStep][buildDDT] Starting assembly', { 
+
+      console.log('[WizardPipelineStep][buildDDT] Starting assembly', {
         ddtId,
         dataNodeKeys: Object.keys(dataNode || {}),
         label: dataNode?.label,
@@ -143,7 +143,7 @@ useEffect(() => {
         subDataCount: Array.isArray(dataNode?.subData) ? dataNode.subData.length : 0,
         stepResultsCount: stepResults.length
       });
-      
+
       try {
         // ✅ Pass dataNode directly - it has all the correct properties (name, label, icon, type, subData)!
         const final = buildDDT(ddtId, dataNode, stepResults);

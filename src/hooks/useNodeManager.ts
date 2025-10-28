@@ -31,13 +31,13 @@ export function useNodeManager(
       updates,
       timestamp: Date.now()
     });
-    
+
     setNodes((nds) => {
       const updatedNodes = nds.map((node) => {
         if (node.id === nodeId) {
           const oldPosition = node.position;
           const updatedNode = { ...node, data: { ...node.data, ...updates } };
-          
+
           // Log solo per cambiamenti significativi
           if (updates.isTemporary !== undefined || updates.hidden !== undefined) {
             console.log("🔄 [UPDATE_NODE] Node state changed", {
@@ -48,7 +48,7 @@ export function useNodeManager(
               updates
             });
           }
-          
+
           return updatedNode;
         }
         return node;
@@ -69,4 +69,4 @@ export function useNodeManager(
   }, [setNodes, setNodeIdCounter]);
 
   return { addNode, deleteNode, updateNode, addNodeAtPosition };
-} 
+}

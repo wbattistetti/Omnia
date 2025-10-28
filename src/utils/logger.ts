@@ -1,21 +1,47 @@
-type Level = "off" | "error" | "warn" | "info" | "debug";
-let CURRENT: Level = (import.meta.env?.VITE_LOG_LEVEL as Level) || "warn";
+/**
+ * 🚀 SISTEMA DI LOGGING STRUTTURATO
+ *
+ * Sostituisce tutti i console.log sparsi con un sistema centralizzato e controllabile.
+ * Risolve il problema dei log infiniti che causano loop di re-render.
+ *
+ * USAGE:
+ * import { debug, error, enableDebug } from '../utils/Logger';
+ *
+ * debug('COMPONENT_NAME', 'Message', { data });
+ * error('COMPONENT_NAME', 'Error occurred', error);
+ * enableDebug(); // Solo quando serve per debug
+ */
 
-export function setLogLevel(l: Level) {
-    CURRENT = l;
-}
+let isDebugEnabled = process.env.NODE_ENV === 'development';
 
-export function useLogger(ns: string) {
-    const tag = `[${ns}]`;
-    const should = (lvl: Level) => {
-        const order: Level[] = ["off", "error", "warn", "info", "debug"];
-        return order.indexOf(lvl) <= order.indexOf(CURRENT);
-    };
-    return {
-        error: (...a: any[]) => should("error") && console.error(tag, ...a),
-        warn: (...a: any[]) => should("warn") && console.warn(tag, ...a),
-        info: (...a: any[]) => should("info") && console.info(tag, ...a),
-        debug: (...a: any[]) => should("debug") && console.debug(tag, ...a),
-    };
-}
+export const enableDebug = () => {
+    isDebugEnabled = true;
+    console.log("🚀 Debugging enabled.");
+};
 
+export const disableDebug = () => {
+    isDebugEnabled = false;
+    console.log("🚫 Debugging disabled.");
+};
+
+export const debug = (component: string, message: string, ...args: any[]) => {
+    if (isDebugEnabled) {
+        console.log(`[DEBUG][${component}] ${message}`, ...args);
+    }
+};
+
+export const info = (component: string, message: string, ...args: any[]) => {
+    if (isDebugEnabled) {
+        console.info(`[INFO][${component}] ${message}`, ...args);
+    }
+};
+
+export const warn = (component: string, message: string, ...args: any[]) => {
+    if (isDebugEnabled) {
+        console.warn(`[WARN][${component}] ${message}`, ...args);
+    }
+};
+
+export const error = (component: string, message: string, ...args: any[]) => {
+    console.error(`[ERROR][${component}] ${message}`, ...args);
+};

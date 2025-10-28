@@ -21,7 +21,7 @@ function normalizeText(s: string): string {
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
     .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ') 
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -111,7 +111,7 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
       const words = tokenizeFields(item);
       const ok = tokens.every(tok => words.some(w => w.startsWith(tok)));
       try {
-        if (localStorage.getItem('debug.intellisense')==='1') {
+        if (localStorage.getItem('debug.intellisense') === '1') {
           console.log('[Intellisense][matchDbg]', {
             label: item.label,
             words,
@@ -119,7 +119,7 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
             ok
           });
         }
-      } catch {}
+      } catch { }
       return ok ? ({ item, score: 0 } as IntellisenseResult) : null;
     })
     .filter(Boolean) as IntellisenseResult[];
@@ -163,10 +163,10 @@ export function highlightMatches(text: string, matches?: Array<{ indices: [numbe
  */
 export function groupAndSortResults(results: IntellisenseResult[]): Map<string, IntellisenseResult[]> {
   const grouped = new Map<string, IntellisenseResult[]>();
-  
+
   // Define category priority order
   const categoryOrder = ['agentActs', 'userActs', 'backendActions', 'conditions', 'tasks', 'macrotasks'];
-  
+
   results.forEach(result => {
     const category = result.item.categoryType;
     if (!grouped.has(category)) {
@@ -174,12 +174,12 @@ export function groupAndSortResults(results: IntellisenseResult[]): Map<string, 
     }
     grouped.get(category)!.push(result);
   });
-  
+
   // Sort results within each category by score (lower is better for Fuse.js)
   grouped.forEach(categoryResults => {
     categoryResults.sort((a, b) => (a.score || 0) - (b.score || 0));
   });
-  
+
   // Return categories in priority order
   const sortedGrouped = new Map<string, IntellisenseResult[]>();
   categoryOrder.forEach(category => {
@@ -187,7 +187,7 @@ export function groupAndSortResults(results: IntellisenseResult[]): Map<string, 
       sortedGrouped.set(category, grouped.get(category)!);
     }
   });
-  
+
   return sortedGrouped;
 }
 
@@ -223,7 +223,7 @@ Do NOT include any explanations or extra text.`;
  */
 async function callGroqAPI(prompt: string): Promise<any> {
   const apiKey = import.meta.env.VITE_GROQ_KEY;
-  
+
   if (!apiKey) {
     console.error('[Intellisense][Groq] Missing VITE_GROQ_KEY');
     throw new Error('Groq API key not found. Make sure VITE_GROQ_KEY is set in your environment variables');
@@ -242,7 +242,7 @@ async function callGroqAPI(prompt: string): Promise<any> {
     response_format: { type: 'json_object' }
   } as any;
 
-  try { console.log('[Intellisense][Groq][request]', { url: GROQ_API_URL, model: GROQ_MODEL, promptPreview: String(prompt).slice(0, 400) + (prompt.length > 400 ? '…' : '') }); } catch {}
+  try { console.log('[Intellisense][Groq][request]', { url: GROQ_API_URL, model: GROQ_MODEL, promptPreview: String(prompt).slice(0, 400) + (prompt.length > 400 ? '…' : '') }); } catch { }
 
   const response = await fetch(GROQ_API_URL, {
     method: 'POST',
@@ -254,7 +254,7 @@ async function callGroqAPI(prompt: string): Promise<any> {
   });
 
   const text = await response.text();
-  try { console.log('[Intellisense][Groq][response]', { status: response.status, statusText: response.statusText, textPreview: text.slice(0, 400) + (text.length > 400 ? '…' : '') }); } catch {}
+  try { console.log('[Intellisense][Groq][response]', { status: response.status, statusText: response.statusText, textPreview: text.slice(0, 400) + (text.length > 400 ? '…' : '') }); } catch { }
 
   if (!response.ok) {
     throw new Error(`Groq API error: ${response.status} ${response.statusText}`);
@@ -276,7 +276,7 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
     // Lightweight prefilter to shrink payload drastically
     const q = normalizeText(query);
     const tokens = q.split(/\s+/).filter(Boolean);
-    const haystack = (it: IntellisenseItem) => normalizeText(`${it.name||it.label||''} ${it.shortLabel||''} ${it.description||''}`);
+    const haystack = (it: IntellisenseItem) => normalizeText(`${it.name || it.label || ''} ${it.shortLabel || ''} ${it.description || ''}`);
 
     const queryConcept = detectConceptFrom(q);
     let candidates = allItems.filter(it => tokens.every(t => haystack(it).includes(t)));
@@ -295,20 +295,20 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
     // hard cap and trim overly long fields
     const capped = candidates.slice(0, MAX_ITEMS_IN_PROMPT);
 
-    try { console.log('[Intellisense][Groq][candidates]', { total: allItems.length, filtered: capped.length, query }); } catch {}
+    try { console.log('[Intellisense][Groq][candidates]', { total: allItems.length, filtered: capped.length, query }); } catch { }
 
     // Build prompt for Groq
     const prompt = buildSemanticPrompt(capped, query);
-    
+
     // Call Groq API
     const response = await callGroqAPI(prompt);
-    
+
     // Extract content from response
     const content = response.choices?.[0]?.message?.content;
     if (!content) {
       throw new Error('No content in Groq response');
     }
-    
+
     // Parse JSON response (accept array or wrapped object)
     let semanticMatches: Array<{ id: string; score: number }> | null = null;
     try {
@@ -327,11 +327,11 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
     if (!semanticMatches) {
       throw new Error('Groq response is not an array');
     }
-    
+
     // Map IDs to IntellisenseItems
     let results: IntellisenseResult[] = [];
     const itemsMap = new Map(allItems.map(item => [item.id, item]));
-    
+
     for (const match of semanticMatches) {
       if (match.id && typeof match.score === 'number') {
         const item = itemsMap.get(match.id);
@@ -361,10 +361,10 @@ export async function performSemanticSearch(query: string, allItems: Intellisens
         return { ...r, score: combined } as IntellisenseResult;
       })
       .sort((a, b) => (b.score || 0) - (a.score || 0));
-    try { console.log('[Intellisense][Groq][mappedResults]', { count: results.length, top: results.slice(0, 5).map(r => ({ id: r.item.id, name: (r.item as any).name || (r.item as any).label, score: r.score })) }); } catch {}
+    try { console.log('[Intellisense][Groq][mappedResults]', { count: results.length, top: results.slice(0, 5).map(r => ({ id: r.item.id, name: (r.item as any).name || (r.item as any).label, score: r.score })) }); } catch { }
 
     return results;
-    
+
   } catch (error) {
     console.error('[Intellisense][Groq][error]', error);
     // Return empty results on error to not break the UI

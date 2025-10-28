@@ -31,7 +31,7 @@ export const useFocusManager = (): UseFocusManagerReturn => {
 
   const focusActions: FocusActions = {
     setFocus: setFocusWithLog,
-    
+
     clearFocus: useCallback(() => {
       setActive(null);
       focusBumpRef.current = (focusBumpRef.current + 1) % 1000;

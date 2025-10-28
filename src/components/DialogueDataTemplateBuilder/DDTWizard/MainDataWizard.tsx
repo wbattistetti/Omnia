@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import type { SchemaNode } from './MainDataCollection';
 import { Pencil, Trash2, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Link, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { debug, error } from '../../../utils/Logger';
 
 interface MainDataWizardProps {
   node: SchemaNode;
@@ -75,11 +76,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
   };
 
   const commitMain = async () => {
-    console.log('[MAIN_DATA_WIZARD] 🎯 commitMain called with:', {
-      labelDraft,
-      currentLabel: node.label,
-      isChanged: (node.label || '') !== labelDraft
-    });
+    debug('MAIN_DATA_WIZARD', 'commitMain called', { labelDraft, currentLabel: node.label, isChanged: (node.label || '') !== labelDraft });
 
     // 🚀 NEW: Set loading state
     setCommitLoading(true);
@@ -88,7 +85,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
       // 🚀 NEW: Call AI for single field analysis
       if (labelDraft.trim()) {
         const fieldId = labelDraft.trim();
-        console.log('[MAIN_DATA_WIZARD] 🤖 Calling AI for field:', fieldId);
+        debug('MAIN_DATA_WIZARD', 'Calling AI for field', { fieldId });
 
         try {
           // 🚀 SIMULAZIONE ERRORI: Diversi tipi di errori per test
@@ -119,7 +116,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
               throw new Error('Simulated retry error - try again');
             }
             // Al terzo tentativo, simula successo
-            console.log('[MAIN_DATA_WIZARD] 🎉 Simulating success after retries');
+            debug('MAIN_DATA_WIZARD', 'Simulating success after retries');
           }
 
           const response = await fetch('/step2-with-provider', {
@@ -133,11 +130,11 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
           }
 
           const data = await response.json();
-          console.log('[MAIN_DATA_WIZARD] 🤖 AI Response:', data);
+          debug('MAIN_DATA_WIZARD', 'AI Response', data);
 
           if (data.ai?.mains?.[0]) {
             const aiField = data.ai.mains[0];
-            console.log('[MAIN_DATA_WIZARD] 🎯 Using AI field structure:', aiField);
+            debug('MAIN_DATA_WIZARD', 'Using AI field structure', aiField);
 
             // Update node with AI structure
             const updatedNode = {
@@ -150,7 +147,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
               example: aiField.example || ''
             };
 
-            console.log('[MAIN_DATA_WIZARD] 📝 Updating node with AI structure:', updatedNode);
+            debug('MAIN_DATA_WIZARD', 'Updating node with AI structure', updatedNode);
             onChange(updatedNode);
             onChangeEvent?.({ type: 'main.renamed', path: updatedNode.label, payload: { oldPath: node.label || '' } });
 
@@ -178,7 +175,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
           }));
 
           // Non chiudere l'editing, mantieni il campo aperto per retry
-          console.log('[MAIN_DATA_WIZARD] ⚠️ Field error recorded, keeping editing mode open for retry');
+          debug('MAIN_DATA_WIZARD', 'Field error recorded, keeping editing mode open for retry');
           return;
         }
       }
@@ -187,12 +184,12 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
       setIsEditingMain(false);
       if ((node.label || '') !== labelDraft) {
         const old = node.label || '';
-        console.log('[MAIN_DATA_WIZARD] 📝 Updating node label from', old, 'to', labelDraft);
+        debug('MAIN_DATA_WIZARD', 'Updating node label', { from: old, to: labelDraft });
         onChange({ ...node, label: labelDraft });
-        console.log('[MAIN_DATA_WIZARD] 🔔 Triggering changeEvent: main.renamed');
+        debug('MAIN_DATA_WIZARD', 'Triggering changeEvent: main.renamed');
         onChangeEvent?.({ type: 'main.renamed', path: labelDraft, payload: { oldPath: old } });
       } else {
-        console.log('[MAIN_DATA_WIZARD] ⏭️ No change detected, skipping update');
+        debug('MAIN_DATA_WIZARD', 'No change detected, skipping update');
       }
     } finally {
       // 🚀 NEW: Clear loading state
@@ -207,7 +204,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
 
   // 🚀 NEW: Function to retry a failed field
   const retryField = async (fieldId: string) => {
-    console.log('[MAIN_DATA_WIZARD] 🔄 Retrying field:', fieldId);
+    debug('MAIN_DATA_WIZARD', 'Retrying field', { fieldId });
 
     // 🚀 NEW: Set loading state
     setRetryLoading(prev => ({ ...prev, [fieldId]: true }));
@@ -450,17 +447,17 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                     autoFocus
                     value={labelDraft}
                     onChange={(e) => {
-                      console.log('[MAIN_DATA_WIZARD] 🔤 Label changed:', e.target.value);
+                      debug('MAIN_DATA_WIZARD', 'Label changed', { value: e.target.value });
                       setLabelDraft(e.target.value);
                     }}
                     onKeyDown={async (e) => {
-                      console.log('[MAIN_DATA_WIZARD] ⌨️ Key pressed:', e.key, 'with value:', labelDraft);
+                      debug('MAIN_DATA_WIZARD', 'Key pressed', { key: e.key, value: labelDraft });
                       if (e.key === 'Enter') {
-                        console.log('[MAIN_DATA_WIZARD] ⏎ Enter pressed, committing:', labelDraft);
+                        debug('MAIN_DATA_WIZARD', 'Enter pressed, committing', { labelDraft });
                         await commitMain();
                       }
                       if (e.key === 'Escape') {
-                        console.log('[MAIN_DATA_WIZARD] ⎋ Escape pressed, cancelling');
+                        debug('MAIN_DATA_WIZARD', 'Escape pressed, cancelling');
                         cancelMain();
                       }
                     }}
@@ -532,17 +529,17 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                     autoFocus
                     value={labelDraft}
                     onChange={(e) => {
-                      console.log('[MAIN_DATA_WIZARD] 🔤 Label changed:', e.target.value);
+                      debug('MAIN_DATA_WIZARD', 'Label changed', { value: e.target.value });
                       setLabelDraft(e.target.value);
                     }}
                     onKeyDown={async (e) => {
-                      console.log('[MAIN_DATA_WIZARD] ⌨️ Key pressed:', e.key, 'with value:', labelDraft);
+                      debug('MAIN_DATA_WIZARD', 'Key pressed', { key: e.key, value: labelDraft });
                       if (e.key === 'Enter') {
-                        console.log('[MAIN_DATA_WIZARD] ⏎ Enter pressed, committing:', labelDraft);
+                        debug('MAIN_DATA_WIZARD', 'Enter pressed, committing', { labelDraft });
                         await commitMain();
                       }
                       if (e.key === 'Escape') {
-                        console.log('[MAIN_DATA_WIZARD] ⎋ Escape pressed, cancelling');
+                        debug('MAIN_DATA_WIZARD', 'Escape pressed, cancelling');
                         cancelMain();
                       }
                     }}
@@ -562,7 +559,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                   <button
                     title="Confirm"
                     onClick={async () => {
-                      console.log('[MAIN_DATA_WIZARD] ✅ Confirm clicked, committing:', labelDraft);
+                      debug('MAIN_DATA_WIZARD', 'Confirm clicked, committing', { labelDraft });
                       await commitMain();
                     }}
                     disabled={commitLoading}
