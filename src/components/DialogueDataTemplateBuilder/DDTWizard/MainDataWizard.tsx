@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import type { SchemaNode } from './MainDataCollection';
 import { Pencil, Trash2, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Link, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
-import { debug, error } from '../../../utils/Logger';
+import { debug } from '../../../utils/Logger';
 
 interface MainDataWizardProps {
   node: SchemaNode;
@@ -23,9 +23,39 @@ interface FieldErrorState {
   lastAttempt: Date;
 }
 
+// 🚀 NEW: Interface for field processing state
+interface FieldProcessingState {
+  fieldId: string;
+  status: 'idle' | 'processing' | 'completed' | 'error';
+  progress: number; // 0-100
+  message: string;
+  timestamp: Date;
+}
+
 const iconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' };
 
-const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<string, number> }> = ({ node, onChange, onRemove, progressByPath, selected, autoEdit, pathPrefix = '', onChangeEvent, onRequestOpen }) => {
+// 🚀 NEW: AnimatedDots component for processing indicators
+const AnimatedDots: React.FC = () => {
+  const [dots, setDots] = useState('');
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots(prev => {
+        if (prev === '...') return '';
+        return prev + '.';
+      });
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return <span className="text-blue-600 font-mono">{dots}</span>;
+};
+
+const MainDataWizard: React.FC<MainDataWizardProps & {
+  progressByPath?: Record<string, number>;
+  fieldProcessingStates?: Record<string, FieldProcessingState>;
+}> = ({ node, onChange, onRemove, progressByPath, fieldProcessingStates, selected, autoEdit, pathPrefix = '', onChangeEvent, onRequestOpen }) => {
   // Ensure open on demand (e.g., pencil click) in addition to selection
   const [forceOpen, setForceOpen] = useState(false);
   const [isEditingMain, setIsEditingMain] = useState(!!autoEdit);
@@ -48,6 +78,43 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
 
   // 🚀 NEW: State for field errors
   const [fieldErrors, setFieldErrors] = useState<Record<string, FieldErrorState>>({});
+
+  // 🚀 NEW: Helper functions for processing state
+  const getFieldProcessingState = (fieldId: string): FieldProcessingState | null => {
+    return fieldProcessingStates?.[fieldId] || null;
+  };
+
+  const getStatusIcon = (fieldId: string): React.ReactNode => {
+    const state = getFieldProcessingState(fieldId);
+    const progress = progressByPath?.[fieldId] || 0;
+
+    // 🚀 PRIORITÀ: Se abbiamo progressByPath, usiamo quello (più affidabile)
+    if (progress >= 100) return <Check className="w-4 h-4 text-green-600" />;
+    if (progress > 0) return <Loader2 className="w-4 h-4 animate-spin text-blue-600" />;
+
+    // Fallback su fieldProcessingStates solo se non c'è progressByPath
+    const status = state?.status || 'idle';
+    switch (status) {
+      case 'processing': return <Loader2 className="w-4 h-4 animate-spin text-blue-600" />;
+      case 'completed': return <Check className="w-4 h-4 text-green-600" />;
+      case 'error': return <AlertTriangle className="w-4 h-4 text-red-600" />;
+      default: return null;
+    }
+  };
+
+  const getStatusMessage = (fieldId: string): string => {
+    const state = getFieldProcessingState(fieldId);
+    const progress = progressByPath?.[fieldId] || 0;
+
+    // 🚀 PRIORITÀ: Se abbiamo progressByPath, usiamo quello (più affidabile)
+    if (progress >= 100) return "Done!";
+    if (progress > 0) return "Generando messaggi normal...";
+
+    // Fallback su fieldProcessingStates solo se non c'è progressByPath
+    if (state?.message) return state.message;
+
+    return "In attesa...";
+  };
 
   // 🚀 NEW: State for loading during retry
   const [retryLoading, setRetryLoading] = useState<Record<string, boolean>>({});
@@ -404,21 +471,32 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
                 <span>{renderIcon(node.icon, 16)}</span>
                 <span style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
+
+                {/* 🚀 NEW: Status display for main data */}
+                {(() => {
+                  const fieldId = node.label || '';
+                  const state = getFieldProcessingState(fieldId);
+                  const progress = progressByPath?.[fieldId] || 0;
+                  const message = getStatusMessage(fieldId);
+
+                  if (progress > 0 || state) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '12px' }}>
+                        {getStatusIcon(fieldId)}
+                        <span style={{ color: progress >= 100 ? '#22c55e' : '#3b82f6' }}>
+                          {Math.round(progress)}%
+                        </span>
+                        <span style={{ color: '#64748b' }}>
+                          {message}
+                        </span>
+                        {progress > 0 && progress < 100 && <AnimatedDots />}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
-              {/* 📍 Percentuale subito dopo il testo */}
-              {(() => {
-                const path = node.label;
-                const val = progressByPath ? progressByPath[path] : undefined;
-                if (typeof val === 'number') {
-                  const percentage = Math.round(val * 100);
-                  return (
-                    <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600, marginLeft: 4 }}>
-                      {percentage}%
-                    </span>
-                  );
-                }
-                return null;
-              })()}
+              {/* RIMOSSO: Sistema vecchio che causava duplicazione percentuali */}
               {/* Action buttons */}
               {hoverHeader && (
                 <>
@@ -603,8 +681,8 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
             const percentage = Math.round(val * 100);
             const isComplete = percentage >= 100;
 
-            // 🎨 Colors: light orange for in-progress, solid red/orange for complete
-            const barColor = isComplete ? '#ef4444' : '#fbbf24';
+            // 🎨 Colors: light orange for in-progress, solid GREEN for complete
+            const barColor = isComplete ? '#22c55e' : '#fbbf24';
 
             // 🎨 Style: dashed for in-progress, solid for complete
             const barStyle = isComplete
@@ -706,6 +784,30 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
                       <span>{renderIcon(s.icon, 14)}</span>
                       <span style={{ color: '#e2e8f0', whiteSpace: 'nowrap' }}>{s.label || 'Field'}</span>
+
+                      {/* 🚀 NEW: Status display for sub-data */}
+                      {(() => {
+                        const fieldId = `${node.label}/${s.label}`;
+                        const state = getFieldProcessingState(fieldId);
+                        const progress = progressByPath?.[fieldId] || 0;
+                        const message = getStatusMessage(fieldId);
+
+                        if (progress > 0 || state) {
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px' }}>
+                              {getStatusIcon(fieldId)}
+                              <span style={{ color: progress >= 100 ? '#22c55e' : '#3b82f6' }}>
+                                {Math.round(progress)}%
+                              </span>
+                              <span style={{ color: '#64748b' }}>
+                                {message}
+                              </span>
+                              {progress > 0 && progress < 100 && <AnimatedDots />}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                       {hoverSubIdx === i && (
                         <>
                           <button title="Add constraint" onClick={() => addSubConstraint(i)} style={{ ...iconBtn, color: '#fb923c' }}>
@@ -721,22 +823,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & { progressByPath?: Record<s
                       )}
                       <div style={{ flex: 1 }} />
                     </div>
-                    {/* sub progress bar with percentage text (under label, aligned left) */}
-                    {(() => {
-                      const path = `${node.label}/${s.label}`;
-                      const val = progressByPath ? progressByPath[path] : undefined;
-                      if (typeof val === 'number') {
-                        return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 0 22px', width: 'calc(100% - 22px)' }}>
-                            <div style={{ flex: 1, height: 3, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
-                              <div style={{ width: `${Math.round(val * 100)}%`, height: '100%', background: '#fb923c', transition: 'width 0.8s ease' }} />
-                            </div>
-                            <span style={{ fontSize: 10, color: '#93c5fd', minWidth: 28, textAlign: 'left' }}>{Math.round(val * 100)}%</span>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
+                    {/* RIMOSSO: Sistema vecchio che causava duplicazione barre progress */}
 
                     {(() => {
                       const useful = (Array.isArray(s.constraints) ? s.constraints : [])

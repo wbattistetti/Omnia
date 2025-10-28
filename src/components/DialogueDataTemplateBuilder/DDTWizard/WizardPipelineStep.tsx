@@ -5,13 +5,14 @@ import { buildDDT } from '../DDTAssembler/DDTBuilder';
 import { buildSteps } from '../DDTAssembler/buildStepMessagesFromResults';
 import { generateStepsSkipDetectType } from '../orchestrator/stepGenerator';
 import { calculateTotalSteps, getStepDescription } from '../utils/stepCalculator';
+import { taskCounter } from '../../../utils/TaskCounter';
 import DataTypeLabel from './DataTypeLabel';
 import StepLabel from './StepLabel';
 import HourglassSpinner from './HourglassSpinner';
 import ProgressBar from '../../Common/ProgressBar';
 import StructurePreviewModal from './StructurePreviewModal';
 
-const __DEBUG_DDT_UI__ = false;
+const __DEBUG_DDT_UI__ = true; // 🚀 ENABLED for debugging
 const dlog = (...a: any[]) => { if (__DEBUG_DDT_UI__) console.log(...a); };
 
 interface DataNode {
@@ -170,45 +171,59 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   const mainData = orchestrator.state.mainData;
   const currentStepLabel = orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || '';
 
-  // Quantized per-element progress (main + each sub), based on completed message steps
+  // 🚀 NEW: TaskCounter-based progress calculation
   useEffect(() => {
     if (!onProgress) return;
     if (hadErrorRef.current) return; // stop emitting progress after an error
 
     const MESSAGE_TYPES = new Set(['startPrompt', 'noMatchPrompts', 'noInputPrompts', 'confirmationPrompts', 'successPrompts']);
-
     const steps = orchestrator.state.steps || [];
-    const idx = orchestrator.state.currentStepIndex || 0; // steps [0..idx-1] already completed
+    const idx = orchestrator.state.currentStepIndex || 0;
     const mainLabel = (confirmedLabel || dataNode.name || '').trim();
     const subList: Array<string> = Array.isArray(dataNode.subData)
       ? dataNode.subData.map((s: any) => String(s?.label || s?.name || '')).filter(Boolean)
       : [];
 
-    const totalMsgSteps = Math.max(1, 5 * (1 + subList.length));
-    const counts: Record<string, number> = {};
-    let doneTotal = 0;
+    // 🚀 PREVENT INFINITE LOOP: Only process if we have new steps
+    if (idx === 0) return; // Don't process if no steps completed yet
 
+    // 🎯 Inizializza TaskCounter per questo main data
+    if (!taskCounter.getFieldTasks(mainLabel).startPrompt) {
+      taskCounter.initializeField(mainLabel, 'mainData');
+    }
+
+    // Inizializza sub data
+    subList.forEach(subLabel => {
+      const subFieldId = `${mainLabel}/${subLabel}`;
+      if (!taskCounter.getFieldTasks(subFieldId).startPrompt) {
+        taskCounter.initializeField(subFieldId, 'subData');
+      }
+    });
+
+    // 🎯 Processa i task completati
     for (let i = 0; i < idx; i++) {
       const st: any = steps[i];
       if (!st || !MESSAGE_TYPES.has(st.type)) continue;
+
       const sub = (st as any)?.subDataInfo;
       const subLabel = String(sub?.label || sub?.name || '') || undefined;
-      const key = subLabel ? `${mainLabel}/${subLabel}` : mainLabel;
-      counts[key] = (counts[key] || 0) + 1;
-      doneTotal++;
+      const fieldId = subLabel ? `${mainLabel}/${subLabel}` : mainLabel;
+
+      // 🎯 Task name è esattamente il tipo di step (startPrompt, noInputPrompts, etc.)
+      taskCounter.completeTask(fieldId, st.type);
     }
 
-    const payload: Record<string, number> = {};
-    payload.__root__ = Math.min(1, doneTotal / totalMsgSteps);
-    if (mainLabel) payload[mainLabel] = Math.min(1, (counts[mainLabel] || 0) / 5);
-    for (const s of subList) {
-      const k = `${mainLabel}/${s}`;
-      payload[k] = Math.min(1, (counts[k] || 0) / 5);
-    }
+    // 🎯 Calcola progress ricorsivo
+    const mainDataArray = [{
+      label: mainLabel,
+      subData: subList.map(s => ({ label: s }))
+    }];
 
-    onProgress(payload);
-    dlog('[DDT][UI][Pipeline][progress.quantized]', { idx, totalMsgSteps, payload, currentStepLabel });
-  }, [orchestrator.state.currentStepIndex, orchestrator.state.steps, onProgress, dataNode, confirmedLabel]);
+    const progressMap = taskCounter.calculateRecursiveProgress(mainDataArray);
+
+    onProgress(progressMap);
+    dlog('[DDT][UI][Pipeline][TaskCounter]', { idx, progressMap, currentStepLabel });
+  }, [orchestrator.state.currentStepIndex, orchestrator.state.steps, dataNode, confirmedLabel]);
 
   // Headless mode: run orchestration but don't render visual UI
   if (headless) { dlog('[DDT][UI][Pipeline] headless=true → UI hidden'); return null; }

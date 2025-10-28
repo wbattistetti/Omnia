@@ -8,12 +8,22 @@ import MainDataCollection, { SchemaNode } from './MainDataCollection';
 import V2TogglePanel from './V2TogglePanel';
 import { computeWorkPlan } from './workPlan';
 import { buildStepPlan, buildPartialPlanForChanges } from './stepPlan';
+import { taskCounter } from '../../../utils/TaskCounter';
 import { PlanRunResult } from './planRunner';
 import { buildArtifactStore, mergeArtifactStores, moveArtifactsPath } from './artifactStore';
 import { assembleFinalDDT } from './assembleFinal';
 import { Hourglass, Bell } from 'lucide-react';
 import { debug, error } from '../../../utils/Logger';
 // ResponseEditor will be opened by sidebar after onComplete
+
+// 🚀 NEW: Interface for field processing state
+interface FieldProcessingState {
+  fieldId: string;
+  status: 'idle' | 'processing' | 'completed' | 'error';
+  progress: number; // 0-100
+  message: string;
+  timestamp: Date;
+}
 
 // DEBUG (toggle)
 const __DEBUG_DDT_UI__ = false;
@@ -288,9 +298,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   });
   // removed local artifacts/editor state; we now rely on onComplete to open editor via sidebar
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progressByPath, setProgressByPath] = useState<Record<string, number>>({});
-  const [, setTotalByPath] = useState<Record<string, number>>({});
+  // 🚀 REPLACED: progressByPath con TaskCounter
+  const [taskProgress, setTaskProgress] = useState<Record<string, number>>({});
   const [rootProgress, setRootProgress] = useState<number>(0);
+
+  // 🚀 NEW: State for field processing states
+  const [fieldProcessingStates, setFieldProcessingStates] = useState<Record<string, FieldProcessingState>>({});
   const [playChime, setPlayChime] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem('ddtWizard.playChime');
@@ -334,12 +347,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     const currentMain = schemaMains[selectedIdx];
     if (!currentMain) return;
 
-    const currentMainProgress = progressByPath[currentMain.label] || 0;
+    const currentMainProgress = taskProgress[currentMain.label] || 0;
 
     // Se il main corrente ha raggiunto 100%, cerca il prossimo non completato
     if (currentMainProgress >= 0.99) { // 0.99 per tolleranza float
       const nextIdx = schemaMains.findIndex((m, i) =>
-        i > selectedIdx && (progressByPath[m.label] || 0) < 0.99
+        i > selectedIdx && (taskProgress[m.label] || 0) < 0.99
       );
 
       if (nextIdx !== -1) {
@@ -350,7 +363,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         setSelectedIdx(nextIdx);
       }
     }
-  }, [progressByPath, selectedIdx, schemaMains, step]);
+  }, [taskProgress, selectedIdx, schemaMains, step]);
 
   // DataNode stabile per pipeline (evita rilanci causati da oggetti inline)
   const pipelineDataNode = React.useMemo(() => {
@@ -714,7 +727,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   mains={schemaMains}
                   onChangeMains={setSchemaMains}
                   onAddMain={handleAddMain}
-                  progressByPath={{ ...progressByPath, __root__: rootProgress }}
+                  progressByPath={{ ...taskProgress, __root__: rootProgress }}
+                  fieldProcessingStates={fieldProcessingStates}
                   selectedIdx={selectedIdx}
                   onSelect={setSelectedIdx}
                   autoEditIndex={autoEditIndex}
@@ -727,16 +741,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
                   <button
                     onClick={() => {
+                      console.log(`[DDTWizard] Build Messages button clicked! Current step: ${step}`);
                       try { dlog('[DDT][UI] step → pipeline'); } catch { }
+                      console.log(`[DDTWizard] Setting step to pipeline, current step: ${step}`);
                       // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
                       setShowRight(true);
                       // reset progress state to avoid stale 100%
-                      setProgressByPath({});
+                      setTaskProgress({});
                       setRootProgress(0);
                       setPartialResults({}); // Reset parallel processing results
                       // Apri il primo main data
                       setSelectedIdx(0);
                       setStep('pipeline');
+                      console.log(`[DDTWizard] Step set to pipeline`);
                     }}
                     style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
                   >
@@ -777,7 +794,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                         // Update individual main progress
                         const mainProgress = typeof (m as any)?.[mainLabel] === 'number' ? (m as any)[mainLabel] : 0;
 
-                        setProgressByPath((prev) => {
+                        setTaskProgress((prev) => {
                           const updated = { ...(prev || {}), ...(m || {}) };
                           // Calculate overall root progress (average of all mains)
                           const allProgress = schemaMains.map(m => updated[m.label] || 0);
@@ -787,8 +804,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                         });
 
                         setRootProgress((prev) => {
-                          const allProgress = schemaMains.map(m => (progressByPath[m.label] || 0));
-                          return allProgress.reduce((sum, p) => sum + p, 0) / schemaMains.length;
+                          // 🎯 CORRETTO: Usa TaskCounter per calcolare task completati/totali
+                          const mainDataArray = schemaMains.map(m => ({
+                            label: m.label,
+                            subData: (m.subData || []).map(s => ({ label: s.label }))
+                          }));
+
+                          const progressMap = taskCounter.calculateRecursiveProgress(mainDataArray);
+                          console.log('[DDTWizard] TaskCounter progress calculation:', {
+                            mainDataArray,
+                            progressMap,
+                            rootProgress: progressMap.__root__
+                          });
+                          return progressMap.__root__ || 0;
                         });
                       }}
                       onComplete={(partialDDT) => {

@@ -4,7 +4,7 @@ import App from './components/App.tsx';
 import './index.css';
 
 // 🚫 DISATTIVA TUTTI I console.log PER EVITARE LOOP INFINITI
-const DISABLE_ALL_LOGS = true;
+const DISABLE_ALL_LOGS = false; // 🚀 TEMPORARY: Enable logs to debug TaskCounter
 if (DISABLE_ALL_LOGS) {
   console.log = () => { };
   console.debug = () => { };

@@ -31,9 +31,11 @@ interface MainDataCollectionProps {
   selectedIdx: number;
   onSelect: (idx: number) => void;
   onAutoMap?: (fieldLabel: string, fieldIndex: number) => Promise<void>;
+  progressByPath?: Record<string, number>;
+  fieldProcessingStates?: Record<string, any>;
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap }) => {
+const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap }) => {
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
     next[idx] = nextNode;
@@ -161,6 +163,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
               onChange={(n) => handleChangeAt(i, n)}
               onRemove={() => handleRemoveAt(i)}
               progressByPath={progressByPath}
+              fieldProcessingStates={fieldProcessingStates}
               selected={selectedIdx === i}
               autoEdit={autoEditIndex === i}
               pathPrefix={m.label}
