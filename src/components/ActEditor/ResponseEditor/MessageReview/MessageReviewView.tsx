@@ -13,6 +13,8 @@ export default function MessageReviewView({ node, translations }: Props) {
     const items = React.useMemo(() => collectAllMessages(node, translations), [node, translations]);
 
     const [accordionState, setAccordionState] = React.useState<AccordionState>({});
+    // Initialize with Italy (it) as default culture
+    const [activeParams, setActiveParams] = React.useState<Set<string>>(new Set(['it']));
 
     const groups = React.useMemo(() => groupMessagesByStep(items), [items]);
 
@@ -33,6 +35,42 @@ export default function MessageReviewView({ node, translations }: Props) {
 
     const handleCollapseAll = () => {
         setAccordionState({});
+    };
+
+    const handleStyleChange = (style: string) => {
+        // TODO: Implement style change for messages
+        console.log('Apply style:', style);
+    };
+
+    const handleParamChange = (param: string, enabled: boolean) => {
+        setActiveParams(prev => {
+            const newSet = new Set(prev);
+
+            // Culture options are mutually exclusive
+            const cultureOptions = ['br', 'fr', 'de', 'it', 'es', 'us'];
+            if (cultureOptions.includes(param)) {
+                // Remove all other culture options first
+                cultureOptions.forEach(culture => {
+                    if (culture !== param) {
+                        newSet.delete(culture);
+                    }
+                });
+            }
+
+            if (enabled) {
+                newSet.add(param);
+            } else {
+                newSet.delete(param);
+                // If disabling a culture and no culture is active, default to Italy
+                if (cultureOptions.includes(param) && cultureOptions.every(c => !newSet.has(c))) {
+                    newSet.add('it');
+                }
+            }
+
+            return newSet;
+        });
+
+        console.log('Param changed:', param, enabled);
     };
 
     // Calculate optimal number of columns based on available width and content
@@ -77,7 +115,13 @@ export default function MessageReviewView({ node, translations }: Props) {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            <MessageReviewToolbar onExpandAll={handleExpandAll} onCollapseAll={handleCollapseAll} />
+            <MessageReviewToolbar
+                onExpandAll={handleExpandAll}
+                onCollapseAll={handleCollapseAll}
+                onStyleChange={handleStyleChange}
+                onParamChange={handleParamChange}
+                activeParams={activeParams}
+            />
 
             <div
                 ref={containerRef}
