@@ -33,7 +33,7 @@ export function useRightPanelWidth(initial: number = 360) {
   });
   const update = (w: number) => {
     setWidth(w);
-    try { localStorage.setItem(localStorageKey, String(w)); } catch {}
+    try { localStorage.setItem(localStorageKey, String(w)); } catch { }
   };
   return { width, setWidth: update };
 }
@@ -50,7 +50,7 @@ function ValidatorView({ node }: { node: any }) {
         <span style={{ fontWeight: 700 }}>Validator</span>
         <select value={idx} onChange={(e) => setIdx(Number(e.target.value))} style={{ marginLeft: 'auto' }}>
           {constraints.map((c: any, i: number) => (
-            <option key={i} value={i}>{c?.title || c?.kind || `rule ${i+1}`}</option>
+            <option key={i} value={i}>{c?.title || c?.kind || `rule ${i + 1}`}</option>
           ))}
         </select>
       </div>
@@ -59,7 +59,7 @@ function ValidatorView({ node }: { node: any }) {
       )}
       {!!code && (
         <pre style={{ background: '#0b1220', color: '#e2e8f0', padding: 10, borderRadius: 8, overflow: 'auto' }}>
-{code}
+          {code}
         </pre>
       )}
     </div>
@@ -78,7 +78,7 @@ function TestsetView({ node }: { node: any }) {
         <span style={{ fontWeight: 700 }}>Test set</span>
         <select value={idx} onChange={(e) => setIdx(Number(e.target.value))} style={{ marginLeft: 'auto' }}>
           {constraints.map((c: any, i: number) => (
-            <option key={i} value={i}>{c?.title || c?.kind || `rule ${i+1}`}</option>
+            <option key={i} value={i}>{c?.title || c?.kind || `rule ${i + 1}`}</option>
           ))}
         </select>
       </div>
@@ -89,7 +89,7 @@ function TestsetView({ node }: { node: any }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {cases.map((tc: any, i: number) => (
             <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 8 }}>
-              <div style={{ fontWeight: 700 }}>{tc?.name || `case ${i+1}`}</div>
+              <div style={{ fontWeight: 700 }}>{tc?.name || `case ${i + 1}`}</div>
               <div style={{ fontSize: 12, color: '#334155' }}>input: {JSON.stringify(tc?.input)}</div>
               <div style={{ fontSize: 12, color: '#334155' }}>expect: {JSON.stringify(tc?.expect)}</div>
             </div>
@@ -100,121 +100,8 @@ function TestsetView({ node }: { node: any }) {
   );
 }
 
-type ReviewItem = {
-  id: string;
-  stepKey: string;
-  escIndex: number | null;
-  actionIndex: number | null;
-  textKey?: string;
-  text: string;
-  pathLabel: string; // Main / Sub label for context
-};
-
-const STEP_ORDER = ['start', 'confirmation', 'noInput', 'noMatch', 'notConfirmed', 'notAcquired', 'success'];
-const orderOf = (k: string) => {
-  const i = STEP_ORDER.indexOf(k);
-  return i === -1 ? 999 : i;
-};
-
-function extractActionTextKey(action: any): string | undefined {
-  const params = Array.isArray(action?.parameters) ? action.parameters : [];
-  const p = params.find((x: any) => x?.parameterId === 'text');
-  return typeof p?.value === 'string' ? p.value : undefined;
-}
-
-function collectNodeMessages(node: any, translations: Record<string, string>, pathLabel: string): ReviewItem[] {
-  const out: ReviewItem[] = [];
-  const steps = node?.steps || {};
-  Object.keys(steps).forEach((stepKey) => {
-    const escs = Array.isArray(steps[stepKey]?.escalations) ? steps[stepKey].escalations : [];
-    escs.forEach((esc: any, escIdx: number) => {
-      const actions = Array.isArray(esc?.actions) ? esc.actions : [];
-      actions.forEach((a: any, actIdx: number) => {
-        const key = extractActionTextKey(a);
-        if (typeof key === 'string') {
-          out.push({
-            id: `${pathLabel}|${stepKey}|${escIdx}|${actIdx}`,
-            stepKey,
-            escIndex: escIdx,
-            actionIndex: actIdx,
-            textKey: key,
-            text: translations[key] || key,
-            pathLabel,
-          });
-        }
-      });
-    });
-  });
-  // fallback legacy messages field
-  const msgs = node?.messages || {};
-  Object.keys(msgs).forEach((stepKey) => {
-    const m = msgs[stepKey];
-    const key = typeof m?.textKey === 'string' ? m.textKey : undefined;
-    if (key) {
-      out.push({ id: `${pathLabel}|${stepKey}|-1|-1`, stepKey, escIndex: null, actionIndex: null, textKey: key, text: translations[key] || key, pathLabel });
-    }
-  });
-  return out;
-}
-
-function collectAllMessages(ddt: any, translations: Record<string, string>): ReviewItem[] {
-  const list: ReviewItem[] = [];
-  const mains: any[] = Array.isArray(ddt?.mainData) ? ddt.mainData : [];
-  mains.forEach((m) => {
-    const mainLabel = m?.label || 'Main';
-    list.push(...collectNodeMessages(m, translations, mainLabel));
-    const subs: any[] = Array.isArray(m?.subData) ? m.subData : [];
-    subs.forEach((s) => {
-      const subLabel = s?.label || 'Sub';
-      list.push(...collectNodeMessages(s, translations, `${mainLabel} / ${subLabel}`));
-    });
-  });
-  return list.sort((a, b) => {
-    const d = orderOf(a.stepKey) - orderOf(b.stepKey);
-    if (d !== 0) return d;
-    const e = (a.escIndex ?? 0) - (b.escIndex ?? 0);
-    if (e !== 0) return e;
-    return (a.actionIndex ?? 0) - (b.actionIndex ?? 0);
-  });
-}
-
-function MessageReviewView({ ddt, translations }: { ddt: any; translations: Record<string, string> }) {
-  const { updateTranslation } = useDDTManager();
-  const items = React.useMemo(() => collectAllMessages(ddt, translations), [ddt, translations]);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [draft, setDraft] = React.useState('');
-  return (
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontWeight: 700, marginBottom: 4 }}>Message review</div>
-      {items.length === 0 && <div style={{ color: '#64748b', fontStyle: 'italic' }}>No messages found in current template.</div>}
-      {items.map((it) => (
-        <div key={it.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 8, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <div style={{ minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>{stepMeta[it.stepKey]?.icon || null}</span>
-            <span style={{ fontSize: 12 }}>{it.stepKey}{typeof it.escIndex === 'number' ? ` #${it.escIndex + 1}` : ''}</span>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{it.pathLabel}</div>
-            {editingId === it.id ? (
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  autoFocus
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { if (it.textKey) { try { updateTranslation(it.textKey, draft); } catch {} } setEditingId(null); } if (e.key === 'Escape') { setEditingId(null); setDraft(''); } }}
-                  style={{ width: '100%', background: '#0f172a', color: '#e5e7eb', border: '1px solid #334155', borderRadius: 8, padding: '6px 8px' }}
-                />
-                <button onClick={() => { if (it.textKey) { try { updateTranslation(it.textKey, draft); } catch {} } setEditingId(null); }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Save</button>
-              </div>
-            ) : (
-              <div title={it.textKey ? 'Click to edit' : undefined} onClick={() => { if (it.textKey) { setEditingId(it.id); setDraft(it.text); } }} style={{ cursor: it.textKey ? 'text' : 'default' }}>{it.text}</div>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+// MessageReviewView moved to MessageReview/MessageReviewView.tsx
+export { default as MessageReviewView } from './MessageReview/MessageReviewView';
 
 type Preset = { name: string; params: { style: 'formal' | 'informal' | 'neutral'; verbosity: 'concise' | 'medium' | 'verbose'; tone: 'friendly' | 'professional' | 'authoritative' | 'empathetic'; clarity: 'simple' | 'technical'; warmth: 'low' | 'medium' | 'high'; emoji: 'none' | 'light' | 'medium'; contractions: 'off' | 'on'; punctuation: 'minimal' | 'normal' | 'rich' } };
 const PRESETS: Preset[] = [

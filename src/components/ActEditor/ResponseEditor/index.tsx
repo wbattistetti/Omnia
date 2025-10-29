@@ -3,14 +3,15 @@ import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
 import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
-import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, BookOpen, Sparkles } from 'lucide-react';
+import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, BookOpen, Sparkles, List } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
+import MessageReviewView from './MessageReview/MessageReviewView';
 // import SynonymsEditor from './SynonymsEditor';
 import NLPExtractorProfileEditor from './NLPExtractorProfileEditor';
 import EditorHeader from '../../common/EditorHeader';
-import { findAgentAct, getAgentActVisualsByType } from '../../Flowchart/utils/actVisuals';
+import { getAgentActVisualsByType } from '../../Flowchart/utils/actVisuals';
 import ActionDragLayer from './ActionDragLayer';
 import {
   getMainDataList,
@@ -182,13 +183,14 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
   const [dragging, setDragging] = useState(false);
   const [showSynonyms, setShowSynonyms] = useState(false);
+  const [showMessageReview, setShowMessageReview] = useState(false);
   // Wizard/general layout flags
   const [showWizard, setShowWizard] = useState<boolean>(() => isDDTEmpty(localDDT));
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
   // Header: icon, title, and toolbar
   const actType = (act?.type || 'DataRequest') as any;
-  const { Icon, color: iconColor } = getAgentActVisualsByType(actType,  !!localDDT);
+  const { Icon, color: iconColor } = getAgentActVisualsByType(actType, !!localDDT);
   // Priority: _sourceAct.label (preserved act info) > act.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
   // NOTE: Do NOT use localDDT.label here - that's the DDT root label (e.g. "Age") which belongs in the TreeView, not the header
   const sourceAct = (localDDT as any)?._sourceAct;
@@ -204,12 +206,13 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     { icon: <Undo2 size={16} />, onClick: () => { }, title: "Undo" },
     { icon: <Redo2 size={16} />, onClick: () => { }, title: "Redo" },
     { icon: <Plus size={16} />, label: "Add constraint", onClick: () => { }, primary: true },
-    { icon: <Rocket size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('actions'); }, title: "Actions", active: rightMode === 'actions' },
-    { icon: <Code2 size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('validator'); }, title: "Validator", active: rightMode === 'validator' },
-    { icon: <FileText size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('testset'); }, title: "Test set", active: rightMode === 'testset' },
-    { icon: <MessageSquare size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('chat'); }, title: "Chat", active: rightMode === 'chat' },
-    { icon: <Sparkles size={16} />, onClick: () => { setShowSynonyms(false); saveRightMode('styles'); }, title: "Dialogue style presets", active: rightMode === 'styles' },
-    { icon: <BookOpen size={16} />, onClick: () => setShowSynonyms(v => !v), title: showSynonyms ? 'Close contract editor' : 'Open contract editor', active: showSynonyms },
+    { icon: <Rocket size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('actions'); }, title: "Actions", active: rightMode === 'actions' },
+    { icon: <Code2 size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('validator'); }, title: "Validator", active: rightMode === 'validator' },
+    { icon: <FileText size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('testset'); }, title: "Test set", active: rightMode === 'testset' },
+    { icon: <MessageSquare size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('chat'); }, title: "Chat", active: rightMode === 'chat' },
+    { icon: <Sparkles size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('styles'); }, title: "Dialogue style presets", active: rightMode === 'styles' },
+    { icon: <List size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(v => !v); }, title: "Message review", active: showMessageReview },
+    { icon: <BookOpen size={16} />, onClick: () => { setShowMessageReview(false); setShowSynonyms(v => !v); }, title: showSynonyms ? 'Close contract editor' : 'Open contract editor', active: showSynonyms },
   ] : [];
 
   useEffect(() => {
@@ -598,8 +601,8 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
               onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
             />
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              {/* Steps toolbar hidden during NLP editor */}
-              {!showSynonyms && (
+              {/* Steps toolbar hidden during NLP editor or MessageReview */}
+              {!showSynonyms && !showMessageReview && (
                 <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
                   <StepsStrip
                     stepKeys={uiStepKeys}
@@ -611,61 +614,69 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
               )}
               {/* Content */}
               <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: '16px 16px 0 16px' }}>
-                  <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                      {showSynonyms ? (
-                        <div style={{ padding: 12 }}>
-                          <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 }}>
-                            <h4 style={{ margin: 0 }}>Data Extractor: {selectedNode?.label || ''}</h4>
-                          </div>
-                          <NLPExtractorProfileEditor
-                            node={selectedNode}
-                            locale={'it-IT'}
-                            onChange={(profile) => {
-                              // Always log critical kind changes to diagnose persistence
-                              console.log('[KindChange][onChange]', {
-                                nodeLabel: (selectedNode as any)?.label,
-                                profileKind: profile?.kind,
-                                examples: (profile?.examples || []).length,
-                              });
-                              updateSelectedNode((node) => {
-                                const next: any = { ...(node || {}), nlpProfile: profile };
-                                if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }
-                                if (Array.isArray(profile.synonyms)) next.synonyms = profile.synonyms;
-                                return next;
-                              });
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <StepEditor
-                          node={selectedNode}
-                          stepKey={selectedStepKey}
-                          translations={localTranslations}
-                          onDeleteEscalation={(idx) => updateSelectedNode((node) => {
-                            const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                            const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                            st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
-                            next.steps[selectedStepKey] = st;
-                            return next;
-                          })}
-                          onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
-                            const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                            const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                            const esc = (st.escalations || [])[escIdx];
-                            if (!esc) return next;
-                            esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
-                            st.escalations[escIdx] = esc;
-                            next.steps[selectedStepKey] = st;
-                            return next;
-                          })}
-                        />
-                      )}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: showMessageReview ? '16px' : '16px 16px 0 16px' }}>
+                  {showMessageReview ? (
+                    <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                        <MessageReviewView node={selectedNode} translations={localTranslations} />
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                        {showSynonyms ? (
+                          <div style={{ padding: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 }}>
+                              <h4 style={{ margin: 0 }}>Data Extractor: {selectedNode?.label || ''}</h4>
+                            </div>
+                            <NLPExtractorProfileEditor
+                              node={selectedNode}
+                              locale={'it-IT'}
+                              onChange={(profile) => {
+                                // Always log critical kind changes to diagnose persistence
+                                console.log('[KindChange][onChange]', {
+                                  nodeLabel: (selectedNode as any)?.label,
+                                  profileKind: profile?.kind,
+                                  examples: (profile?.examples || []).length,
+                                });
+                                updateSelectedNode((node) => {
+                                  const next: any = { ...(node || {}), nlpProfile: profile };
+                                  if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }
+                                  if (Array.isArray(profile.synonyms)) next.synonyms = profile.synonyms;
+                                  return next;
+                                });
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <StepEditor
+                            node={selectedNode}
+                            stepKey={selectedStepKey}
+                            translations={localTranslations}
+                            onDeleteEscalation={(idx) => updateSelectedNode((node) => {
+                              const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                              const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                              st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
+                              next.steps[selectedStepKey] = st;
+                              return next;
+                            })}
+                            onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
+                              const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
+                              const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
+                              const esc = (st.escalations || [])[escIdx];
+                              if (!esc) return next;
+                              esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
+                              st.escalations[escIdx] = esc;
+                              next.steps[selectedStepKey] = st;
+                              return next;
+                            })}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {!showSynonyms && (
+                {!showSynonyms && !showMessageReview && (
                   <RightPanel
                     mode={rightMode}
                     width={rightWidth}
