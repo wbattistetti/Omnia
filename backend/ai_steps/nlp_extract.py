@@ -73,7 +73,7 @@ def llm_extract(body: dict = Body(...)):
     field = (body or {}).get("field") or "generic"
     text = (body or {}).get("text") or ""
     lang = (body or {}).get("lang") or "it"
-    
+
     print(f"[LLM_EXTRACT] Request received - field: {field}, text: {repr(text)}, lang: {lang}")
 
     instructions = {
@@ -99,7 +99,7 @@ def llm_extract(body: dict = Body(...)):
         "{\n  \"candidates\": [ { \"value\": <value>, \"confidence\": <number between 0 and 1> } ]\n}"
         f"\nInput: '{text}'\n"
     )
-    
+
     print(f"[LLM_EXTRACT] Prompt: {repr(prompt[:300])}...")
 
     # Small in-memory cache to avoid repeating identical extractions shortly
@@ -126,7 +126,7 @@ def llm_extract(body: dict = Body(...)):
         # Use OpenAI instead of Groq
         import requests
         from newBackend.core.core_settings import OPENAI_KEY, OPENAI_URL, OPENAI_MODEL
-        
+
         # Debug: Check if OpenAI key is configured
         if not OPENAI_KEY:
             print(f"[LLM_EXTRACT][ERROR] OPENAI_KEY not configured")
@@ -135,12 +135,12 @@ def llm_extract(body: dict = Body(...)):
                 media_type="application/json",
                 status_code=502,
             )
-        
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {OPENAI_KEY}"
         }
-        
+
         payload = {
             "model": OPENAI_MODEL,
             "messages": [
@@ -149,29 +149,50 @@ def llm_extract(body: dict = Body(...)):
             ],
             "temperature": 0.1
         }
-        
+
         print(f"[LLM_EXTRACT][DEBUG] Calling OpenAI: {OPENAI_URL}")
         print(f"[LLM_EXTRACT][DEBUG] Model: {OPENAI_MODEL}")
         print(f"[LLM_EXTRACT][DEBUG] Prompt: {repr(prompt[:200])}...")
-        
+
         response = requests.post(OPENAI_URL, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
-        
+
         ai_response = response.json()
         ai = ai_response.get("choices", [{}])[0].get("message", {}).get("content", "")
-        
+
         print(f"[LLM_EXTRACT][DEBUG] AI response: {repr(ai[:200])}...")
 
+        # Clean markdown code blocks before parsing
+        def _clean_json_like(s: str) -> str:
+            import re
+            t = (s or "").strip()
+            if t.startswith("```"):
+                t = re.sub(r"^```[a-zA-Z]*\n", "", t)
+                t = re.sub(r"\n```\s*$", "", t)
+            # extract first {...} block if present
+            m = re.search(r"\{[\s\S]*\}", t)
+            if m:
+                t = m.group(0)
+            # remove trailing commas
+            t = re.sub(r",\s*(\]|\})", r"\1", t)
+            return t
+
         try:
-            obj = json.loads(ai)
+            cleaned = _clean_json_like(ai)
+            obj = json.loads(cleaned)
             print(f"[LLM_EXTRACT] Parsed JSON successfully: {obj}")
         except Exception as e:
             print(f"[LLM_EXTRACT] JSON parse error: {e}")
+            # Fallback: try to extract JSON object substring
             start = ai.find('{')
             end = ai.rfind('}')
             if start != -1 and end != -1 and end > start:
-                obj = json.loads(ai[start:end+1])
-                print(f"[LLM_EXTRACT] Extracted JSON from response: {obj}")
+                try:
+                    obj = json.loads(ai[start:end+1])
+                    print(f"[LLM_EXTRACT] Extracted JSON from response: {obj}")
+                except Exception:
+                    obj = None
+                    print("[LLM_EXTRACT] No valid JSON found in response")
             else:
                 obj = None
                 print("[LLM_EXTRACT] No valid JSON found in response")

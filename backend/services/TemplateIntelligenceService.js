@@ -70,6 +70,15 @@ USER REQUEST: "${userDesc}"
 AVAILABLE TEMPLATES:
 ${JSON.stringify(templates, null, 2)}
 
+⚠️ CRITICAL INSTRUCTION - READ THIS FIRST:
+The examples below are ONLY illustrations showing the format and structure. They must NOT be used if they are not semantically relevant to the USER REQUEST above.
+
+- Examples are patterns to follow for STRUCTURE, not content to copy blindly
+- Always analyze the USER REQUEST semantically and match it to the appropriate structure complexity
+- If the user requests "chiedi eta" (ask for age), you MUST create a simple age field (1 level), NOT "Dati Personali" (personal data with 3 levels)
+- If the user requests a single field, you MUST return 1 level, NOT 3 levels
+- If the user requests multiple unrelated fields, you MUST return multiple 1-level fields, NOT a complex hierarchy
+
 🎯 OBJECTIVE:
 Return a complete JSON structure in a single response, including:
 - Action type: use_existing | compose | create_new
@@ -90,6 +99,7 @@ Create hierarchical structure ONLY when the request implies logical grouping:
 **1 LEVEL** (Single field requests):
 - "Chiedi il nome" → Nome (text)
 - "Chiedi l'email" → Email (email)
+- "Chiedi eta" → Età (number) - Single field, no subData
 
 **2 LEVELS** (Related fields that belong together):
 - "Chiedi nome e cognome" → Nominativo { Nome, Cognome }
@@ -97,6 +107,7 @@ Create hierarchical structure ONLY when the request implies logical grouping:
 
 **3 LEVELS** (Complex data with multiple categories):
 - "Chiedi dati personali" → Dati Personali { Nominativo { Nome, Cognome }, Data di Nascita { Giorno, Mese, Anno }, Indirizzo { Tipo Via, Nome Via, Numero Civico } }
+  ⚠️ ONLY use this 3-level structure if the user explicitly requests "dati personali" or similar complex aggregations of multiple unrelated data categories.
 
 ⚠️ CRITICAL: subData must ALWAYS be an array of objects, NEVER a string!
 
@@ -145,7 +156,32 @@ Create hierarchical structure ONLY when the request implies logical grouping:
   ]
 }
 
-📋 EXAMPLE FOR "chiedi dati personali":
+📋 EXAMPLE FOR "chiedi eta" (single field - SIMPLE):
+{
+  "action": "create_new",
+  "label": "Età",
+  "type": "number",
+  "icon": "Hash",
+  "mains": [
+    {
+      "label": "Età",
+      "type": "number",
+      "icon": "Hash",
+      "subData": [],
+      "validation": {
+        "description": "L'età deve essere un numero intero compreso tra 0 e 150",
+        "examples": {
+          "valid": ["18", "25", "65"],
+          "invalid": ["-5", "200", "abc"],
+          "edgeCases": ["0", "150"]
+        }
+      },
+      "example": "25"
+    }
+  ]
+}
+
+📋 EXAMPLE FOR "chiedi dati personali" (complex aggregation - ONLY if user requests this):
 {
   "action": "create_new",
   "label": "Dati Personali",
@@ -199,7 +235,9 @@ Create hierarchical structure ONLY when the request implies logical grouping:
       "example": "Mario Rossi"
     }
   ]
-}`;
+}
+
+⚠️ FINAL REMINDER: Match the structure complexity to the USER REQUEST above, not to the examples! If the request is simple (like "chiedi eta"), return a simple structure. If the request explicitly asks for complex data (like "chiedi dati personali"), then use the complex structure.`;
   }
 
   /**

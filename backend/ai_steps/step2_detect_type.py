@@ -100,7 +100,31 @@ def step2(user_desc: str = Body(...)):
         except Exception:
             pass
 
-        ai_obj = json.loads(ai)
+        # Clean markdown code blocks before parsing
+        def _clean_json_like(s: str) -> str:
+            import re
+            t = (s or "").strip()
+            if t.startswith("```"):
+                t = re.sub(r"^```[a-zA-Z]*\n", "", t)
+                t = re.sub(r"\n```\s*$", "", t)
+            # extract first {...} block if present (for objects)
+            m = re.search(r"\{[\s\S]*\}", t)
+            if m:
+                t = m.group(0)
+            # remove trailing commas
+            t = re.sub(r",\s*(\]|\})", r"\1", t)
+            return t
+
+        try:
+            cleaned = _clean_json_like(ai)
+            ai_obj = json.loads(cleaned)
+        except Exception as parse_error:
+            print(f"[step2][parse_error] {str(parse_error)}")
+            # Fallback: try direct parse
+            try:
+                ai_obj = json.loads(ai)
+            except Exception:
+                raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(parse_error)}")
 
         # Gestisci risposta intelligente
         if isinstance(ai_obj, dict):

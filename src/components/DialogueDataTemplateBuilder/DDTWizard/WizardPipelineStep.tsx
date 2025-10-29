@@ -30,6 +30,7 @@ interface Props {
   confirmedLabel?: string;
   onProgress?: (percentByPath: Record<string, number>) => void; // optional progress reporter
   headless?: boolean; // if true, orchestrate without rendering UI
+  selectedProvider?: 'openai' | 'groq'; // AI provider to use
 }
 
 function normalizeStructure(node: any) {
@@ -41,8 +42,8 @@ function normalizeStructure(node: any) {
   return out;
 }
 
-const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, onProgress, headless }) => {
-  const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType), headless);
+const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, onProgress, headless, selectedProvider = 'groq' }) => {
+  const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType, selectedProvider), headless);
   const [finalDDT, setFinalDDT] = useState<any>(null);
   const [totalSteps, setTotalSteps] = useState(0);
   const [currentStep, setCurrentStep] = useState(1);

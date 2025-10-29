@@ -22,12 +22,12 @@ export interface DataNode {
 }
 
 // Genera la sequenza di step per un dato (e subdata)
-export function generateSteps(data: DataNode): Step[] {
-  return generateStepsSkipDetectType(data, false);
+export function generateSteps(data: DataNode, provider: 'openai' | 'groq' = 'groq'): Step[] {
+  return generateStepsSkipDetectType(data, false, provider);
 }
 
 // Nuova funzione: permette di saltare detectType
-export function generateStepsSkipDetectType(data: DataNode, skipDetectType: boolean): Step[] {
+export function generateStepsSkipDetectType(data: DataNode, skipDetectType: boolean, provider: 'openai' | 'groq' = 'groq'): Step[] {
   // Definisci la sequenza degli step in modo esplicito
   const stepPlan: Array<{
     key: string;
@@ -125,10 +125,16 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
           body = JSON.stringify({
             meaning: subDataName || mainDataName,
             desc: `Generate a concise, direct message for ${subDataName || mainDataName}.`,
+            provider: provider.toLowerCase(),
             ...extraBody
           });
         } else {
-          body = JSON.stringify({ meaning: data.label || data.name || '', desc: '', ...extraBody });
+          body = JSON.stringify({
+            meaning: data.label || data.name || '',
+            desc: '',
+            provider: provider.toLowerCase(),
+            ...extraBody
+          });
         }
         try {
           const url = `${stepDef.endpoint}`;

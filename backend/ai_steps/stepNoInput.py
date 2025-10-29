@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Body, HTTPException
 import os
 import json
+import re
 from ai_prompts.no_input_prompt import get_no_input_prompt
 from call_openai import call_openai, OPENAI_KEY
 from call_groq import call_groq
@@ -12,52 +13,71 @@ def step_no_input(body: dict = Body(...)):
     meaning = body.get('meaning', '')
     desc = body.get('desc', '')
     start_examples = body.get('start_examples', None)
+    # Use provider from request body, default to 'groq'
+    provider = body.get('provider', 'groq')
+    if isinstance(provider, str):
+        provider = provider.lower()
+
     prompt = get_no_input_prompt(meaning, desc, start_examples)
     try:
-        print("[AI PROMPT][noInput]", prompt)
+        print(f"[AI PROMPT][noInput][provider={provider}]", prompt)
     except Exception:
         pass
 
-    openai_key = OPENAI_KEY or os.environ.get('OpenAI_key') or os.environ.get('OPENAI_KEY') or os.environ.get('openai_key')
-    groq_key = os.environ.get('Groq_key') or os.environ.get('GROQ_API_KEY')
-
     try:
-        ai = call_openai([
-            {"role": "system", "content": "Always reply in English."},
-            {"role": "user", "content": prompt}
-        ])
-        try:
-            print("[AI ANSWER][noInput]", ai)
-        except Exception:
-            pass
-        try:
-            ai_obj = json.loads(ai)
-            return {"ai": ai_obj}
-        except Exception:
-            pass
-        if groq_key:
+        def _clean_json_like(s: str) -> str:
+            t = (s or "").strip()
+            if t.startswith("```"):
+                t = re.sub(r"^```[a-zA-Z]*\n", "", t)
+                t = re.sub(r"\n```\s*$", "", t)
+            # extract first [...] block if present
+            m = re.search(r"\[[\s\S]*\]", t)
+            if m:
+                t = m.group(0)
+            # remove trailing commas
+            t = re.sub(r",\s*(\]|\})", r"\1", t)
+            return t
+
+        # Use provider from request instead of checking env vars
+        if provider == 'openai':
+            ai = call_openai([
+                {"role": "system", "content": "Always reply in English."},
+                {"role": "user", "content": prompt}
+            ])
+        else:  # default to groq
             ai = call_groq([
                 {"role": "system", "content": "Always reply in English."},
                 {"role": "user", "content": prompt}
             ])
+        try:
+            print(f"[AI ANSWER][noInput][provider={provider}]", ai)
+        except Exception:
+            pass
+
+        # Clean markdown code blocks before parsing
+        try:
+            cleaned = _clean_json_like(ai)
+            ai_obj = json.loads(cleaned)
+            return {"ai": ai_obj}
+        except Exception as parse_error:
             try:
-                ai_obj = json.loads(ai)
-                return {"ai": ai_obj}
+                print(f"[AI ERROR][noInput][parse_error][provider={provider}]", str(parse_error))
+                print(f"[AI ERROR][noInput][raw_response]", ai[:500])
             except Exception:
                 pass
-        raise HTTPException(status_code=500, detail="invalid_ai_json")
-    except Exception:
-        if groq_key:
+            # Try to salvage quoted strings
             try:
-                ai = call_groq([
-                    {"role": "system", "content": "Always reply in English."},
-                    {"role": "user", "content": prompt}
-                ])
-                try:
-                    ai_obj = json.loads(ai)
-                    return {"ai": ai_obj}
-                except Exception:
-                    pass
+                m = re.findall(r"\"([^\"]{4,120})\"", ai)
+                if m:
+                    return {"ai": m[:3]}
             except Exception:
                 pass
+            raise HTTPException(status_code=500, detail="invalid_ai_json")
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            print(f"[AI ERROR][noInput][provider={provider}]", str(e))
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail="ai_call_failed")

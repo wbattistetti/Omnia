@@ -16,9 +16,26 @@ def step3(schema: dict = Body(...)):
         {"role": "user", "content": prompt}
     ])
     print("[AI ANSWER][constraints]", ai)
+
+    # Clean markdown code blocks before parsing
+    def _clean_json_like(s: str) -> str:
+        import re
+        t = (s or "").strip()
+        if t.startswith("```"):
+            t = re.sub(r"^```[a-zA-Z]*\n", "", t)
+            t = re.sub(r"\n```\s*$", "", t)
+        # extract first {...} block if present
+        m = re.search(r"\{[\s\S]*\}", t)
+        if m:
+            t = m.group(0)
+        # remove trailing commas
+        t = re.sub(r",\s*(\]|\})", r"\1", t)
+        return t
+
     try:
-        # Try strict JSON parse first
-        ai_obj = json.loads(ai)
+        # Try strict JSON parse first with cleaned response
+        cleaned = _clean_json_like(ai)
+        ai_obj = json.loads(cleaned)
         # Normalize to schema with mainData
         if isinstance(ai_obj, dict):
             if 'mains' in ai_obj and 'label' in ai_obj:

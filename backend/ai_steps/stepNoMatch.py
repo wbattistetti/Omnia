@@ -13,14 +13,16 @@ def step_no_match(body: dict = Body(...)):
     meaning = body.get('meaning', '')
     desc = body.get('desc', '')
     start_examples = body.get('start_examples', None)
+    # Use provider from request body, default to 'groq'
+    provider = body.get('provider', 'groq')
+    if isinstance(provider, str):
+        provider = provider.lower()
+
     prompt = get_no_match_prompt(meaning, desc, start_examples)
     try:
-        print("[AI PROMPT][noMatch]", prompt)
+        print(f"[AI PROMPT][noMatch][provider={provider}]", prompt)
     except Exception:
         pass
-
-    openai_key = OPENAI_KEY or os.environ.get('OpenAI_key') or os.environ.get('OPENAI_KEY') or os.environ.get('openai_key')
-    groq_key = os.environ.get('Groq_key') or os.environ.get('GROQ_API_KEY')
 
     try:
         def _clean_json_like(s: str) -> str:
@@ -34,12 +36,13 @@ def step_no_match(body: dict = Body(...)):
             t = re.sub(r",\s*(\]|\})", r"\1", t)
             return t
 
-        if openai_key:
+        # Use provider from request instead of checking env vars
+        if provider == 'openai':
             ai = call_openai_json([
                 {"role": "system", "content": "Return only a JSON array of short English re-ask messages (no comments)."},
                 {"role": "user", "content": prompt}
             ])
-        else:
+        else:  # default to groq
             ai = call_groq([
                 {"role": "system", "content": "Return only a JSON array of short English re-ask messages (no comments)."},
                 {"role": "user", "content": prompt}

@@ -202,7 +202,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       }
 
       // Get suggested structure
-      const suggestedStructure = await autoMappingService.getSuggestedStructure(fieldLabel, selectedProvider);
+      const suggestedStructure = await autoMappingService.getSuggestedStructure(fieldLabel, selectedProvider.toLowerCase());
 
       if (suggestedStructure && suggestedStructure.subData.length > 0) {
         console.log('[AUTO_MAPPING] Applying structure:', suggestedStructure.subData.length, 'sub-fields');
@@ -235,7 +235,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     }
   };
   const [userDesc, setUserDesc] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'groq'>('openai');
+  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'groq'>('groq');
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dataNode] = useState<DataNode | null>(() => ({ name: initialDDT?.label || '' }));
@@ -254,7 +254,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const response = await fetch(urlPrimary, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userDesc: text.trim(), provider: selectedProvider }),
+        body: JSON.stringify({ userDesc: text.trim(), provider: selectedProvider.toLowerCase() }),
       });
 
       debug('DDT_WIZARD', 'API response received', { status: response.status, ok: response.ok, statusText: response.statusText });
@@ -323,6 +323,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [currentProcessingLabel, setCurrentProcessingLabel] = useState<string>('');
   // Parallel processing: accumulate partial DDT results for each main
   const [partialResults, setPartialResults] = useState<Record<number, any>>({});
+  // Ref to track when all mains are completed and we should close
+  const pendingCloseRef = React.useRef<{ ddt: any; translations: any } | null>(null);
   // Persisted artifacts across runs for incremental assemble
   const [artifactStore, setArtifactStore] = useState<any | null>(null);
   // Track pending renames to relocate artifacts keys between normalized paths
@@ -365,6 +367,22 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     }
   }, [taskProgress, selectedIdx, schemaMains, step]);
 
+  // Effect to handle closing when all mains are completed
+  React.useEffect(() => {
+    if (pendingCloseRef.current && schemaMains.length > 0) {
+      const completedCount = Object.keys(partialResults).length;
+      // Only close if all mains are completed
+      if (completedCount === schemaMains.length) {
+        const { ddt, translations } = pendingCloseRef.current;
+        pendingCloseRef.current = null; // Clear before calling to avoid re-triggering
+        // Use setTimeout to defer to next tick, avoiding setState during render
+        setTimeout(() => {
+          handleClose(ddt, translations);
+        }, 0);
+      }
+    }
+  }, [partialResults, schemaMains.length]);
+
   // DataNode stabile per pipeline (evita rilanci causati da oggetti inline)
   const pipelineDataNode = React.useMemo(() => {
     const main0 = schemaMains[selectedIdx] || schemaMains[0] || ({} as any);
@@ -390,14 +408,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       // Clean path via Vite proxy
       const urlPrimary = `/step2-with-provider`;
       const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody, provider: selectedProvider });
+      console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody, provider: selectedProvider, providerLower: selectedProvider.toLowerCase() });
       const ctrl = new AbortController();
       const timeoutMs = 60000; // 60 seconds - increased for enterprise AI
       const timeoutId = setTimeout(() => { try { ctrl.abort(); console.warn('[DDT][DetectType][timeout]', { url: urlPrimary, timeoutMs }); } catch { } }, timeoutMs);
       let res = await fetch(urlPrimary, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userDesc: reqBody, provider: selectedProvider }),
+        body: JSON.stringify({ userDesc: reqBody, provider: selectedProvider.toLowerCase() }),
         signal: ctrl.signal as any,
       });
       clearTimeout(timeoutId);
@@ -789,6 +807,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       onCancel={() => setStep('structure')}
                       skipDetectType
                       confirmedLabel={mainDataNode?.name || 'Data'}
+                      selectedProvider={selectedProvider}
                       onProgress={(m) => {
                         const mainLabel = mainItem.label;
                         // Update individual main progress
@@ -881,8 +900,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 (finalDDT as any)._sourceAct = (dataNode as any)._sourceAct;
                               }
 
-                              console.log('[DDT][Wizard][parallel] Calling handleClose with final DDT');
-                              handleClose(finalDDT, finalDDT.translations || {});
+                              console.log('[DDT][Wizard][parallel] Setting pending close with final DDT');
+                              // Store in ref instead of calling handleClose directly
+                              pendingCloseRef.current = {
+                                ddt: finalDDT,
+                                translations: finalDDT.translations || {}
+                              };
                             } catch (err) {
                               console.error('[DDT][Wizard][parallel] Failed to assemble final DDT:', err);
                             }

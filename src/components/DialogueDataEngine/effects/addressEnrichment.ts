@@ -57,7 +57,13 @@ export function runAddressEnrichment(candidate: string, setState: (updater: (cur
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   })
-    .then((r) => r.json())
+    .then((r) => {
+      if (!r.ok) {
+        console.warn('[AddressEnrichment] Endpoint not available:', r.status);
+        return null;
+      }
+      return r.json();
+    })
     .then((data) => {
       if (!data?.ok || !data.address) return;
       const addr = sanitizeAddress(data.address, text);
@@ -110,7 +116,10 @@ export function runAddressEnrichment(candidate: string, setState: (updater: (cur
         }
       });
     })
-    .catch(() => {});
+    .catch((err) => {
+      // Silently fail if endpoint is not available
+      console.debug('[AddressEnrichment] Endpoint not available or error:', err.message);
+    });
 }
 
 

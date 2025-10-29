@@ -12,25 +12,16 @@ router = APIRouter()
 def start_prompt(body: dict = Body(...)):
     meaning = body.get('meaning', '')
     desc = body.get('desc', '')
+    # Use provider from request body, default to 'groq'
+    provider = body.get('provider', 'groq')
+    if isinstance(provider, str):
+        provider = provider.lower()
+
     prompt = get_start_prompt(meaning, desc)
     try:
-        print("[AI PROMPT][startPrompt]", str(prompt).encode('ascii', 'ignore').decode('ascii'))
+        print(f"[AI PROMPT][startPrompt][provider={provider}]", str(prompt).encode('ascii', 'ignore').decode('ascii'))
     except Exception:
         pass
-
-    # Resolve OpenAI key from loaded module or env; also attempt backend.call_openai if needed
-    try:
-        openai_key_mod = OPENAI_KEY
-    except Exception:
-        openai_key_mod = None
-    if not openai_key_mod:
-        try:
-            from backend.call_openai import OPENAI_KEY as BK_OPENAI_KEY  # type: ignore
-            openai_key_mod = BK_OPENAI_KEY
-        except Exception:
-            openai_key_mod = None
-    openai_key = openai_key_mod or os.environ.get('OpenAI_key') or os.environ.get('OPENAI_KEY') or os.environ.get('openai_key')
-    groq_key = os.environ.get('Groq_key') or os.environ.get('GROQ_API_KEY')
 
     try:
         # small helper to salvage JSON arrays
@@ -47,17 +38,28 @@ def start_prompt(body: dict = Body(...)):
             t = re.sub(r",\s*(\]|\})", r"\1", t)
             return t
 
-        if openai_key:
-            ai = call_openai_json([
-                {"role": "system", "content": "Return only a JSON array with 1 English string (no IDs, no comments)."},
-                {"role": "user", "content": prompt}
-            ])
-        elif groq_key:
-            ai = call_groq([
-                {"role": "system", "content": "Return only a JSON array with 1 English string (no IDs, no comments)."},
-                {"role": "user", "content": prompt}
-            ])
-        else:
+        # Use provider from request instead of checking env vars
+        ai = None
+        try:
+            if provider == 'openai':
+                ai = call_openai_json([
+                    {"role": "system", "content": "Return only a JSON array with 1 English string (no IDs, no comments)."},
+                    {"role": "user", "content": prompt}
+                ])
+            else:  # default to groq
+                ai = call_groq([
+                    {"role": "system", "content": "Return only a JSON array with 1 English string (no IDs, no comments)."},
+                    {"role": "user", "content": prompt}
+                ])
+        except Exception as e:
+            try:
+                print(f"[startPrompt][call_error][provider={provider}]", str(e))
+            except Exception:
+                pass
+            ai = None
+
+        # Fallback to deterministic if call failed
+        if not ai:
             # No key available → deterministic fallback
             base = f"What is your {meaning.lower() or 'data'}?".strip()
             if 'phone' in (meaning or '').lower():
