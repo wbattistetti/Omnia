@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, Bell } from 'lucide-react';
 
 interface Props {
   userDesc: string;
@@ -18,12 +18,68 @@ const WizardInputStep: React.FC<Props> = ({
   onNext,
   onCancel,
   dataNode,
-  selectedProvider = 'openai',
+  selectedProvider = 'groq',
   setSelectedProvider,
   onAutoDetect
 }) => {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const autoDetectTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const selectRef = React.useRef<HTMLSelectElement | null>(null);
+  const [selectWidth, setSelectWidth] = React.useState<number>(120);
+
+  // Calcola la larghezza del select basata sul contenuto
+  React.useEffect(() => {
+    if (selectRef.current) {
+      // Usa un canvas per misurare la larghezza del testo
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.font = '500 13px system-ui, -apple-system, sans-serif';
+        const text = selectedProvider === 'groq' ? 'Groq' : 'OpenAI';
+        const metrics = context.measureText(text);
+        const textWidth = metrics.width;
+        // Aggiungi padding: 12px sinistra + 32px destra (per chevron) + un po' di spazio
+        const width = Math.max(textWidth + 44, 120);
+        setSelectWidth(width);
+      }
+    }
+  }, [selectedProvider]);
+
+  // Calcola la larghezza quando il select è aperto (per mostrare tutte le opzioni)
+  const handleSelectFocus = () => {
+    if (selectRef.current) {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.font = '500 13px system-ui, -apple-system, sans-serif';
+        // Calcola la larghezza massima di tutte le opzioni
+        const options = selectRef.current.options;
+        let maxWidth = 120;
+
+        for (let i = 0; i < options.length; i++) {
+          const text = options[i].textContent || '';
+          const metrics = context.measureText(text);
+          const textWidth = metrics.width + 44; // Padding
+          if (textWidth > maxWidth) maxWidth = textWidth;
+        }
+
+        setSelectWidth(maxWidth);
+      }
+    }
+  };
+
+  const handleSelectBlur = () => {
+    // Quando chiude, torna alla larghezza del valore selezionato
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (context) {
+      context.font = '500 13px system-ui, -apple-system, sans-serif';
+      const text = selectedProvider === 'groq' ? 'Groq' : 'OpenAI';
+      const metrics = context.measureText(text);
+      const width = Math.max(metrics.width + 44, 120);
+      setSelectWidth(width);
+    }
+  };
 
   // Auto-detect function
   const handleAutoDetect = React.useCallback((text: string) => {
@@ -89,53 +145,73 @@ const WizardInputStep: React.FC<Props> = ({
         boxSizing: 'border-box',
       }}
     >
-      {/* Header: keep only the instruction line */}
-      <div style={{ margin: '0 0 12px 0' }}>
-        <div style={{ fontSize: 15, fontWeight: 500, color: '#cbd5e1' }}>
+      {/* Header: instruction line + Provider Selector + Bell sulla stessa riga */}
+      <div style={{
+        margin: '0 0 12px 0',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '16px',
+        flexWrap: 'wrap' // Responsive: wrap su riga successiva se necessario
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 500, color: '#cbd5e1', flex: '1 1 auto' }}>
           Describe in detail the data or information the virtual agent must ask to the user:
         </div>
-      </div>
 
-      {/* Provider Selector */}
-      <div style={{ marginBottom: '16px' }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: '#9ca3af', marginBottom: '8px' }}>
-          AI Provider:
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => setSelectedProvider?.('openai')}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              border: '1px solid',
-              background: selectedProvider === 'openai' ? '#3b82f6' : '#374151',
-              color: selectedProvider === 'openai' ? '#ffffff' : '#9ca3af',
-              borderColor: selectedProvider === 'openai' ? '#3b82f6' : '#4b5563',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            OpenAI
-          </button>
-          <button
-            onClick={() => setSelectedProvider?.('groq')}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              border: '1px solid',
-              background: selectedProvider === 'groq' ? '#10b981' : '#374151',
-              color: selectedProvider === 'groq' ? '#ffffff' : '#9ca3af',
-              borderColor: selectedProvider === 'groq' ? '#10b981' : '#4b5563',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            Groq
-          </button>
+        {/* Provider Selector + Bell - Allineati a destra */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          flexShrink: 0
+        }}>
+          {/* Dropdown per AI Provider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: 13, fontWeight: 500, color: '#9ca3af', whiteSpace: 'nowrap' }}>
+              AI Provider:
+            </label>
+            <select
+              ref={selectRef}
+              value={selectedProvider}
+              onChange={(e) => setSelectedProvider?.(e.target.value as 'openai' | 'groq')}
+              onFocus={handleSelectFocus}
+              onBlur={handleSelectBlur}
+              style={{
+                padding: '6px 32px 6px 12px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                border: '1px solid #4b5563',
+                background: '#374151',
+                color: '#cbd5e1',
+                outline: 'none',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center',
+                backgroundSize: '12px',
+                width: `${selectWidth}px`,
+                transition: 'width 0.2s ease'
+              }}
+            >
+              <option value="openai">OpenAI</option>
+              <option value="groq">Groq</option>
+            </select>
+          </div>
+
+          {/* Bell icon + text */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            color: '#9ca3af',
+            fontSize: '13px',
+            whiteSpace: 'nowrap'
+          }}>
+            <Bell size={16} />
+            <span>Ring when completed</span>
+          </div>
         </div>
       </div>
 
