@@ -53,10 +53,21 @@ function ActionRowInner({
   };
   const handleEditKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
+      // Conferma come se si premesse la spunta
       if (onEdit && editValue !== text) onEdit(editValue);
       setEditing(false);
+      try { inputRef.current?.blur(); } catch { }
     }
     if (e.key === 'Escape') {
+      // If this row is newly added and still empty, ESC removes it
+      if (!text && (!editValue || editValue.trim().length === 0)) {
+        if (onDelete) {
+          e.preventDefault();
+          onDelete();
+          return;
+        }
+      }
       setEditing(false);
       setEditValue(text);
     }

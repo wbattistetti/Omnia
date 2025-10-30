@@ -15,6 +15,7 @@ type Props = {
   translations: Record<string, string>;
   onDeleteEscalation?: (idx: number) => void;
   onDeleteAction?: (escIdx: number, actionIdx: number) => void;
+  onModelChange?: (next: EscalationModel[]) => void;
 };
 
 type EscalationModel = { actions: Array<{ actionId: string; text?: string; textKey?: string; icon?: string; label?: string; color?: string }> };
@@ -40,7 +41,9 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
       actions: (esc.actions || []).map((a: any) => {
         const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
         const textKey = p?.value;
-        const text = typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined;
+        const text = (typeof a.text === 'string' && a.text.length > 0)
+          ? a.text
+          : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
         return { actionId: a.actionId, text, textKey };
       })
     }));
@@ -55,7 +58,9 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
         actions: (esc.actions || []).map((a: any) => {
           const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
           const textKey = p?.value;
-          const text = typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined;
+          const text = (typeof a.text === 'string' && a.text.length > 0)
+            ? a.text
+            : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
           return { actionId: a.actionId, text, textKey };
         })
       }));
@@ -92,7 +97,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   return [];
 }
 
-export default function StepEditor({ node, stepKey, translations, onDeleteEscalation }: Props) {
+export default function StepEditor({ node, stepKey, translations, onDeleteEscalation, onModelChange }: Props) {
   // No special-case: notConfirmed behaves like other steps (escalations UI)
   const meta = (stepMeta as any)[stepKey];
   const color = meta?.color || '#fb923c';
@@ -127,9 +132,15 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   const [localModel, setLocalModel] = React.useState(model);
   React.useEffect(() => { setLocalModel(model); }, [model]);
 
-  const { editAction, deleteAction, moveAction, dropFromViewer, appendAction } = useActionCommands(setLocalModel);
+  // Commit esplicito: chiamato solo da useActionCommands dopo ogni azione (drop, append, edit, delete, move)
+  const commitUp = React.useCallback((next: EscalationModel[]) => {
+    console.log('[StepEditor][commitUp] Notifying parent of change', { stepKey, escalationsCount: next.length });
+    try { onModelChange?.(next); } catch { }
+  }, [onModelChange, stepKey]);
+  const { editAction, deleteAction, moveAction, dropFromViewer, appendAction } = useActionCommands(setLocalModel as any, commitUp as any);
 
-  const getText = (a: any) => (typeof a.textKey === 'string' ? translations[a.textKey] : a.text || '');
+  // Priorità: a.text (UI-local) > translations[a.textKey] (persisted)
+  const getText = (a: any) => (a.text || (typeof a.textKey === 'string' ? translations[a.textKey] : '') || '');
 
   // const handleQuickAdd = () => {
   //   // Azione base: sayMessage vuota

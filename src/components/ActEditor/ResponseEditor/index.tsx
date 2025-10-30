@@ -283,7 +283,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   };
 
   // Editing helpers
-  const updateSelectedNode = (updater: (node: any) => any) => {
+  const updateSelectedNode = (updater: (node: any) => any, notifyProvider: boolean = true) => {
     setLocalDDT((prev: any) => {
       if (!prev) return prev;
       const next = JSON.parse(JSON.stringify(prev));
@@ -324,7 +324,9 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
           console.log('[KindPersist][ResponseEditor][updateSelectedNode->replaceSelectedDDT]', mainsKinds);
         } catch { }
       } catch { }
-      try { replaceSelectedDDT(next); } catch { }
+      if (notifyProvider) {
+        try { replaceSelectedDDT(next); } catch { }
+      }
       return next;
     });
   };
@@ -652,6 +654,96 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                             node={selectedNode}
                             stepKey={selectedStepKey}
                             translations={localTranslations}
+                            onModelChange={(nextEscalations) => updateSelectedNode((node) => {
+                              try {
+                                console.log('[Persist][onModelChange] incoming', {
+                                  nodeLabel: (node as any)?.label,
+                                  stepKey: selectedStepKey,
+                                  escalations: (nextEscalations || []).map((e: any, i: number) => ({ i, actions: (e?.actions || []).map((a: any) => ({ actionId: a?.actionId, text: a?.text, textKey: a?.textKey })) }))
+                                });
+                              } catch { }
+                              // Normalizza azioni: non serializzare record vuoti
+                              const normalized = (nextEscalations || []).map((esc: any) => ({
+                                actions: (esc.actions || [])
+                                  .map((a: any) => {
+                                    if (!a) return null;
+                                    const out: any = { actionId: a.actionId || 'sayMessage' };
+                                    if (typeof a.textKey === 'string') {
+                                      out.parameters = [{ parameterId: 'text', value: a.textKey }];
+                                    } else if (typeof a.text === 'string' && a.text.trim().length > 0) {
+                                      out.text = a.text;
+                                    }
+                                    if (!out.parameters && !out.text) return null; // ignora azioni ancora vuote
+                                    if (a.label) out.label = a.label;
+                                    if (a.icon) out.icon = a.icon;
+                                    if (a.color) out.color = a.color;
+                                    return out;
+                                  })
+                                  .filter(Boolean)
+                              }));
+
+                              try {
+                                console.log('[Persist][onModelChange] normalized', {
+                                  stepKey: selectedStepKey,
+                                  escalations: normalized.map((e: any, i: number) => ({ i, actions: (e?.actions || []).map((a: any) => ({ actionId: a?.actionId, text: a?.text, textKey: Array.isArray(a?.parameters) ? a.parameters.find((p: any) => p?.parameterId === 'text')?.value : undefined })) }))
+                                });
+                              } catch { }
+
+                              // Se non c'è nulla da committare, non toccare lo step
+                              if (normalized.length === 0) return node;
+
+                              const currentSteps = (node as any).steps;
+                              if (Array.isArray(currentSteps)) {
+                                const arr = [...currentSteps];
+                                let idx = arr.findIndex((g: any) => g?.type === selectedStepKey);
+                                if (idx < 0) {
+                                  arr.push({ type: selectedStepKey, escalations: normalized });
+                                  const nextNode = { ...(node || {}), steps: arr };
+                                  try {
+                                    console.log('[Persist][array] created group for step', selectedStepKey, {
+                                      totalGroups: arr.length,
+                                      escalationsCount: normalized.length
+                                    });
+                                  } catch { }
+                                  return nextNode;
+                                }
+                                const group = { ...(arr[idx] || {}) };
+                                const escs = Array.isArray(group.escalations) ? [...group.escalations] : [];
+                                // Aggiorna solo gli indici presenti in normalized
+                                normalized.forEach((esc: any, i: number) => {
+                                  if (!escs[i]) escs[i] = { actions: [] };
+                                  escs[i] = { actions: esc.actions };
+                                });
+                                group.escalations = escs;
+                                arr[idx] = { ...group, type: selectedStepKey };
+                                const nextNode = { ...(node || {}), steps: arr };
+                                try {
+                                  console.log('[Persist][array] updated', {
+                                    stepKey: selectedStepKey,
+                                    groups: arr.map((g: any) => ({ type: g?.type, escs: Array.isArray(g?.escalations) ? g.escalations.length : 0 }))
+                                  });
+                                } catch { }
+                                return nextNode;
+                              } else {
+                                const obj: any = { ...(currentSteps || {}) };
+                                const group = { ...(obj[selectedStepKey] || { type: selectedStepKey, escalations: [] }) };
+                                const escs = Array.isArray(group.escalations) ? [...group.escalations] : [];
+                                normalized.forEach((esc: any, i: number) => {
+                                  if (!escs[i]) escs[i] = { actions: [] };
+                                  escs[i] = { actions: esc.actions };
+                                });
+                                obj[selectedStepKey] = { ...group, escalations: escs, type: selectedStepKey };
+                                const nextNode = { ...(node || {}), steps: obj };
+                                try {
+                                  console.log('[Persist][object] updated', {
+                                    stepKey: selectedStepKey,
+                                    escCount: (obj[selectedStepKey]?.escalations || []).length,
+                                    actionsPerEsc: (obj[selectedStepKey]?.escalations || []).map((e: any, i: number) => ({ i, actions: (e?.actions || []).length }))
+                                  });
+                                } catch { }
+                                return nextNode;
+                              }
+                            }, /* notifyProvider */ false)}
                             onDeleteEscalation={(idx) => updateSelectedNode((node) => {
                               const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
                               const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };

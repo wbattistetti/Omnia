@@ -4,22 +4,29 @@ import { normalizeActionFromViewer } from './utils/normalize';
 
 export type Position = 'before' | 'after';
 
-export default function useActionCommands(setLocalModel: React.Dispatch<React.SetStateAction<Escalation[]>>) {
+export default function useActionCommands(
+  setLocalModel: React.Dispatch<React.SetStateAction<Escalation[]>>,
+  onCommit?: (next: Escalation[]) => void
+) {
   const editAction = React.useCallback((escalationIdx: number, actionIdx: number, newText: string) => {
     setLocalModel(prev => {
       const next = prev.map(esc => ({ ...esc, actions: [...esc.actions] }));
       next[escalationIdx].actions[actionIdx] = { ...next[escalationIdx].actions[actionIdx], text: newText } as Action;
+      try { console.log('[Commit][editAction]', { escalationIdx, actionIdx, newText }); } catch { }
+      try { onCommit?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel]);
+  }, [setLocalModel, onCommit]);
 
   const deleteAction = React.useCallback((escalationIdx: number, actionIdx: number) => {
     setLocalModel(prev => {
       const next = prev.map(esc => ({ ...esc, actions: [...esc.actions] }));
       next[escalationIdx].actions.splice(actionIdx, 1);
+      try { console.log('[Commit][deleteAction]', { escalationIdx, actionIdx }); } catch { }
+      try { onCommit?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel]);
+  }, [setLocalModel, onCommit]);
 
   const moveAction = React.useCallback((fromEscIdx: number, fromActIdx: number, toEscIdx: number, toActIdx: number, position: Position) => {
     setLocalModel(prev => {
@@ -30,9 +37,11 @@ export default function useActionCommands(setLocalModel: React.Dispatch<React.Se
       if (fromEscIdx === toEscIdx && fromActIdx < toActIdx) insertIdx--;
       if (position === 'after') insertIdx++;
       next[toEscIdx].actions.splice(insertIdx, 0, action);
+      try { console.log('[Commit][moveAction]', { fromEscIdx, fromActIdx, toEscIdx, toActIdx, position, insertIdx }); } catch { }
+      try { onCommit?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel]);
+  }, [setLocalModel, onCommit]);
 
   const dropFromViewer = React.useCallback((incoming: any, to: { escalationIdx: number; actionIdx: number }, position: Position) => {
     console.log('[useActionCommands][dropFromViewer]', { to, position });
@@ -43,9 +52,11 @@ export default function useActionCommands(setLocalModel: React.Dispatch<React.Se
       if (position === 'after') insertIdx++;
       next[to.escalationIdx].actions.splice(insertIdx, 0, newAction);
       console.log('[useActionCommands] Action added at', insertIdx);
+      try { console.log('[Commit][dropFromViewer]', { to, position, insertIdx, actionId: (newAction as any)?.actionId }); } catch { }
+      try { onCommit?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel]);
+  }, [setLocalModel, onCommit]);
 
   const appendAction = React.useCallback((escalationIdx: number, action: Action) => {
     setLocalModel(prev => {
@@ -55,9 +66,11 @@ export default function useActionCommands(setLocalModel: React.Dispatch<React.Se
         while (next.length <= escalationIdx) next.push({ actions: [] });
       }
       next[escalationIdx].actions.push(action);
+      try { console.log('[Commit][appendAction]', { escalationIdx, actionId: (action as any)?.actionId }); } catch { }
+      try { onCommit?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel]);
+  }, [setLocalModel, onCommit]);
 
   return { editAction, deleteAction, moveAction, dropFromViewer, appendAction };
 }
