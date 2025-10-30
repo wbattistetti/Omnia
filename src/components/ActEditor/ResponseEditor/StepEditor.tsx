@@ -22,7 +22,7 @@ type EscalationModel = { actions: Array<{ actionId: string; text?: string; textK
 function buildModel(node: any, stepKey: string, translations: Record<string, string>): EscalationModel[] {
   // Always log to diagnose message display issues
   const shape = Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none');
-  const keys = node?.steps && !Array.isArray(node.steps) ? Object.keys(node.steps) : (Array.isArray(node?.steps) ? (node.steps as any[]).map((g:any)=>g?.type) : []);
+  const keys = node?.steps && !Array.isArray(node.steps) ? Object.keys(node.steps) : (Array.isArray(node?.steps) ? (node.steps as any[]).map((g: any) => g?.type) : []);
   console.log('[RE][buildModel] START', {
     nodeLabel: node?.label,
     stepKey,
@@ -60,7 +60,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
         })
       }));
     } else {
-      console.log('[RE][buildModel] Case B: No group found for stepKey', { stepKey, availableTypes: node.steps.map((g:any) => g?.type) });
+      console.log('[RE][buildModel] Case B: No group found for stepKey', { stepKey, availableTypes: node.steps.map((g: any) => g?.type) });
     }
   }
 
@@ -87,7 +87,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
         }
       ];
     }
-  } catch {}
+  } catch { }
   console.log('[RE][buildModel] NO DATA - returning empty model', { stepKey });
   return [];
 }
@@ -101,9 +101,9 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   const model = React.useMemo(() => {
     const result = buildModel(node, stepKey, translations);
-    console.log('[StepEditor] Building model', { 
-      nodeLabel: node?.label, 
-      stepKey, 
+    console.log('[StepEditor] Building model', {
+      nodeLabel: node?.label,
+      stepKey,
       modelLength: result.length,
       hasSteps: !!node?.steps,
       stepsShape: Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none'),
@@ -120,7 +120,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       const sample = (model[0]?.actions?.[0]?.textKey) || (node?.messages?.[stepKey]?.textKey) || null;
       const has = typeof sample === 'string' ? Boolean(translations[sample]) : null;
       console.log('[StepEditor] stepKey', stepKey, 'sampleKey', sample, 'hasText', has);
-    } catch {}
+    } catch { }
   }, [node, stepKey, model, translations]);
 
   // Stato locale per le escalation e azioni (per demo, in reale va gestito a livello superiore)
@@ -136,6 +136,21 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   //   appendAction(0, { actionId: 'sayMessage', text: '' } as any);
   // };
 
+  // Auto-focus editing after drop/append
+  const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; actIdx: number } | null>(null);
+
+  const handleAppend = React.useCallback((escIdx: number, action: any) => {
+    const currentLen = (localModel?.[escIdx]?.actions?.length) || 0;
+    appendAction(escIdx, action);
+    setAutoEditTarget({ escIdx, actIdx: currentLen });
+  }, [appendAction, localModel]);
+
+  const handleDropFromViewer = React.useCallback((incoming: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => {
+    const targetIdx = position === 'after' ? to.actionIdx + 1 : to.actionIdx;
+    dropFromViewer(incoming, to, position);
+    setAutoEditTarget({ escIdx: to.escalationIdx, actIdx: targetIdx });
+  }, [dropFromViewer]);
+
   return (
     <div style={{ padding: 16 }}>
       {/* Title removed to avoid redundancy with step tabs */}
@@ -145,7 +160,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       )}
       {['start', 'success'].includes(stepKey) ? (
         // Per start/success: canvas droppabile per append; i row wrapper non accettano drop dal viewer
-        <CanvasDropWrapper onDropAction={(action) => appendAction(0, action)} color={color}>
+        <CanvasDropWrapper onDropAction={(action) => handleAppend(0, action)} color={color}>
           {localModel[0]?.actions?.map((a, j) => (
             <ActionRowDnDWrapper
               key={j}
@@ -153,7 +168,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
               actionIdx={j}
               action={a}
               onMoveAction={moveAction}
-              onDropNewAction={(action, to, pos) => dropFromViewer(action, to, pos)}
+              onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
               allowViewerDrop={true}
             >
               <ActionRow
@@ -166,6 +181,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
                 label={a.label || a.actionId}
                 onEdit={(newText) => editAction(0, j, newText)}
                 onDelete={() => deleteAction(0, j)}
+                autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === 0 && autoEditTarget.actIdx === j)}
               />
             </ActionRowDnDWrapper>
           ))}
@@ -183,7 +199,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
             </div>
             <div style={{ padding: 10 }}>
               {esc.actions.length === 0 ? (
-                <PanelEmptyDropZone color={color} onDropAction={(action) => appendAction(idx, action)} />
+                <PanelEmptyDropZone color={color} onDropAction={(action) => handleAppend(idx, action)} />
               ) : (
                 esc.actions.map((a, j) => (
                   <ActionRowDnDWrapper
@@ -192,7 +208,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
                     actionIdx={j}
                     action={a}
                     onMoveAction={moveAction}
-                    onDropNewAction={(action, to, pos) => dropFromViewer(action, to, pos)}
+                    onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
                     allowViewerDrop={true}
                   >
                     <ActionRow
@@ -205,6 +221,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
                       label={a.label || a.actionId}
                       onEdit={(newText) => editAction(idx, j, newText)}
                       onDelete={() => deleteAction(idx, j)}
+                      autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === idx && autoEditTarget.actIdx === j)}
                     />
                   </ActionRowDnDWrapper>
                 ))

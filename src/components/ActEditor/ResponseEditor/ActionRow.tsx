@@ -16,24 +16,35 @@ interface ActionRowProps {
   dndPreview?: 'before' | 'after';
   actionId?: string;
   isDragging?: boolean;
+  autoEdit?: boolean; // when true, open editor and focus input
 }
 
-function ActionRowInner({ 
-  icon, 
-  label, 
-  text, 
-  color = '#a21caf', 
-  onEdit, 
+function ActionRowInner({
+  icon,
+  label,
+  text,
+  color = '#a21caf',
+  onEdit,
   onDelete,
-  draggable, 
-  selected, 
+  draggable,
+  selected,
   dndPreview,
   actionId,
-  isDragging = false
+  isDragging = false,
+  autoEdit = false
 }: ActionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Open editor automatically when asked
+  React.useEffect(() => {
+    if (autoEdit) {
+      setEditValue(text || '');
+      setEditing(true);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [autoEdit, text]);
 
   const handleEdit = () => {
     setEditValue(text);
