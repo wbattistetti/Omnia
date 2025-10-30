@@ -3,7 +3,7 @@ import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
 import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import Sidebar from './Sidebar';
-import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, BookOpen, Sparkles, List } from 'lucide-react';
+import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, BookOpen, List } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
@@ -210,7 +210,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     { icon: <Code2 size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('validator'); }, title: "Validator", active: rightMode === 'validator' },
     { icon: <FileText size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('testset'); }, title: "Test set", active: rightMode === 'testset' },
     { icon: <MessageSquare size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('chat'); }, title: "Chat", active: rightMode === 'chat' },
-    { icon: <Sparkles size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('styles'); }, title: "Dialogue style presets", active: rightMode === 'styles' },
     { icon: <List size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(v => !v); }, title: "Message review", active: showMessageReview },
     { icon: <BookOpen size={16} />, onClick: () => { setShowMessageReview(false); setShowSynonyms(v => !v); }, title: showSynonyms ? 'Close contract editor' : 'Open contract editor', active: showSynonyms },
   ] : [];
