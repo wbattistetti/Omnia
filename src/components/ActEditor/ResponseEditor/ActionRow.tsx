@@ -34,19 +34,21 @@ function ActionRowInner({
   autoEdit = false
 }: ActionRowProps) {
   const [editing, setEditing] = useState(false);
+  const [wasConfirmed, setWasConfirmed] = useState(false);
   const [editValue, setEditValue] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Open editor automatically when asked
   React.useEffect(() => {
-    if (autoEdit) {
+    if (autoEdit && actionId === 'sayMessage') {
       setEditValue(text || '');
       setEditing(true);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [autoEdit, text]);
+  }, [autoEdit, text, actionId]);
 
   const handleEdit = () => {
+    if (actionId !== 'sayMessage') return;
     setEditValue(text);
     setEditing(true);
     setTimeout(() => inputRef.current?.focus(), 0);
@@ -58,10 +60,11 @@ function ActionRowInner({
       if (onEdit && editValue !== text) onEdit(editValue);
       setEditing(false);
       try { inputRef.current?.blur(); } catch { }
+      setWasConfirmed(true);
     }
     if (e.key === 'Escape') {
       // If this row is newly added and still empty, ESC removes it
-      if (!text && (!editValue || editValue.trim().length === 0)) {
+      if (!wasConfirmed && !text && (!editValue || editValue.trim().length === 0)) {
         if (onDelete) {
           e.preventDefault();
           onDelete();
@@ -75,6 +78,7 @@ function ActionRowInner({
   const handleEditConfirm = () => {
     if (onEdit && editValue !== text) onEdit(editValue);
     setEditing(false);
+    setWasConfirmed(true);
   };
   const handleEditCancel = () => {
     setEditing(false);
@@ -101,17 +105,36 @@ function ActionRowInner({
       >
         {icon && <span style={{ color, display: 'flex', alignItems: 'center', marginRight: 8 }}>{icon}</span>}
         {actionId && actionId !== 'sayMessage' && actionId !== 'askQuestion' && label && (
-          <span style={{ background: '#222', color: '#fff', borderRadius: 8, padding: '2px 8px', fontSize: 15, fontWeight: 500, marginRight: 8, display: 'inline-block' }}>{label}</span>
+          <span
+            style={{
+              background: '#222',
+              color: '#fff',
+              borderRadius: 8,
+              padding: '2px 8px',
+              fontSize: 15,
+              fontWeight: 500,
+              marginRight: 8,
+              display: 'inline-block',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: 220
+            }}
+          >
+            {label}
+          </span>
         )}
-        <ActionText
-          text={text}
-          editing={editing}
-          inputRef={inputRef}
-          editValue={editValue}
-          onChange={setEditValue}
-          onKeyDown={handleEditKeyDown}
-        />
-        {editing ? (
+        {actionId === 'sayMessage' && (
+          <ActionText
+            text={text}
+            editing={editing}
+            inputRef={inputRef}
+            editValue={editValue}
+            onChange={setEditValue}
+            onKeyDown={handleEditKeyDown}
+          />
+        )}
+        {editing && actionId === 'sayMessage' ? (
           <>
             <button
               onClick={handleEditConfirm}
@@ -134,7 +157,7 @@ function ActionRowInner({
           </>
         ) : (
           <ActionRowActions
-            onEdit={handleEdit}
+            onEdit={actionId === 'sayMessage' ? handleEdit : undefined}
             onDelete={onDelete}
             color={'#94a3b8'}
             style={{ marginLeft: 10 }}

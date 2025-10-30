@@ -3,7 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { stepMeta } from './ddtUtils';
 import ActionRowDnDWrapper from './ActionRowDnDWrapper';
 import ActionRow from './ActionRow';
-import getIconComponent from './icons';
+import { getActionIconNode, getActionLabel } from './actionMeta';
 import useActionCommands from './useActionCommands';
 import { ensureHexColor } from './utils/color';
 import CanvasDropWrapper from './CanvasDropWrapper';
@@ -183,14 +183,14 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
               allowViewerDrop={true}
             >
               <ActionRow
-                icon={getIconComponent(a.icon || a.actionId, ensureHexColor(a.color))}
+                icon={getActionIconNode(a.actionId, ensureHexColor(a.color))}
                 text={getText(a)}
                 color={color}
                 draggable
                 selected={false}
                 actionId={a.actionId}
-                label={a.label || a.actionId}
-                onEdit={(newText) => editAction(0, j, newText)}
+                label={getActionLabel(a.actionId)}
+                onEdit={a.actionId === 'sayMessage' ? (newText) => editAction(0, j, newText) : undefined}
                 onDelete={() => deleteAction(0, j)}
                 autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === 0 && autoEditTarget.actIdx === j)}
               />
@@ -223,14 +223,14 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
                     allowViewerDrop={true}
                   >
                     <ActionRow
-                      icon={getIconComponent(a.icon || a.actionId, ensureHexColor(a.color))}
+                      icon={getActionIconNode(a.actionId, ensureHexColor(a.color))}
                       text={getText(a)}
                       color={color}
                       draggable
                       selected={false}
                       actionId={a.actionId}
-                      label={a.label || a.actionId}
-                      onEdit={(newText) => editAction(idx, j, newText)}
+                      label={getActionLabel(a.actionId)}
+                      onEdit={a.actionId === 'sayMessage' ? (newText) => editAction(idx, j, newText) : undefined}
                       onDelete={() => deleteAction(idx, j)}
                       autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === idx && autoEditTarget.actIdx === j)}
                     />

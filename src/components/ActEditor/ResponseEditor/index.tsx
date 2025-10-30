@@ -662,24 +662,29 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                                   escalations: (nextEscalations || []).map((e: any, i: number) => ({ i, actions: (e?.actions || []).map((a: any) => ({ actionId: a?.actionId, text: a?.text, textKey: a?.textKey })) }))
                                 });
                               } catch { }
-                              // Normalizza azioni: non serializzare record vuoti
+                              // Normalizza azioni: conserva anche azioni non testuali senza testo
                               const normalized = (nextEscalations || []).map((esc: any) => ({
-                                actions: (esc.actions || [])
-                                  .map((a: any) => {
-                                    if (!a) return null;
-                                    const out: any = { actionId: a.actionId || 'sayMessage' };
+                                actions: (esc.actions || []).map((a: any) => {
+                                  if (!a) return null;
+                                  const id = a.actionId || 'sayMessage';
+                                  const out: any = { actionId: id };
+
+                                  // Copia parametri/props generiche
+                                  if (Array.isArray(a.parameters)) out.parameters = a.parameters;
+                                  if (a.icon) out.icon = a.icon;
+                                  if (a.color) out.color = a.color;
+                                  if (a.label) out.label = a.label;
+
+                                  // Per azioni testuali, aggiungi contenuto se presente (non scartare i vuoti)
+                                  if (id === 'sayMessage' || id === 'askQuestion') {
                                     if (typeof a.textKey === 'string') {
                                       out.parameters = [{ parameterId: 'text', value: a.textKey }];
                                     } else if (typeof a.text === 'string' && a.text.trim().length > 0) {
                                       out.text = a.text;
                                     }
-                                    if (!out.parameters && !out.text) return null; // ignora azioni ancora vuote
-                                    if (a.label) out.label = a.label;
-                                    if (a.icon) out.icon = a.icon;
-                                    if (a.color) out.color = a.color;
-                                    return out;
-                                  })
-                                  .filter(Boolean)
+                                  }
+                                  return out;
+                                }).filter((x: any) => x != null)
                               }));
 
                               try {

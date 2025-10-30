@@ -11,7 +11,11 @@ interface ActionTextProps {
 
 const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editValue, onChange, onKeyDown }) => {
   if (!editing) {
-    return <span style={{ color: '#fff', fontSize: 15, fontWeight: 500 }}>{text}</span>;
+    return text ? (
+      <span style={{ color: '#fff', fontSize: 15, fontWeight: 500 }}>{text}</span>
+    ) : (
+      <span style={{ color: '#ef4444', fontSize: 15, fontStyle: 'italic' }}>Text missing...</span>
+    );
   }
   return (
     <input

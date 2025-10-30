@@ -31,7 +31,7 @@ function AppInner() {
   React.useEffect(() => {
     fetch('/data/actionsCatalog.json')
       .then(res => res.json())
-      .then(data => setActionsCatalog(data))
+      .then(data => { setActionsCatalog(data); try { (window as any).__actionsCatalog = data; } catch { } })
       .catch(err => {
         setActionsCatalog([]);
         console.error('[App][ERROR] fetch actionsCatalog', err);
