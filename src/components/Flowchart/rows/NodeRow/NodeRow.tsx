@@ -948,7 +948,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             hasDDT={hasActDDT(row as any, actFound)}
             gearColor={labelTextColor}
             onOpenDDT={async () => {
-              console.log('🚀🚀🚀 OPEN DDT REQUEST 🚀🚀🚀', { rowId: row.id, text: row.text });
               try {
                 console.log('[DDT][open] request', { rowId: row.id, text: row.text });
               } catch { }

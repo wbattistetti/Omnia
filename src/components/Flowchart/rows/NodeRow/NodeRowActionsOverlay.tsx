@@ -139,10 +139,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         style={{ display: 'flex', alignItems: 'center', padding: 2, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
         className="hover:opacity-100 hover:scale-110"
         onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
-        onMouseDown={(e) => { try { console.log('[DDT][gear][mouseDown]', { x: e.clientX, y: e.clientY }); } catch { } }}
+        onMouseDown={(e) => { }}
         onClick={(e) => {
-          console.log('🔥🔥🔥 GEAR CLICKED 🔥🔥🔥', { x: e.clientX, y: e.clientY });
-          alert('🔥 GEAR CLICKED! Check console for logs 🔥');
           onOpenDDT();
         }}
       >

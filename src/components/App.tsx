@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { enableDebug } from '../utils/logger';
+import { instanceRepository } from '../services/InstanceRepository';
 import { DockPanel } from './TestEngine/DockPanel';
 import { ChatPanel } from './TestEngine/ChatPanel';
 import { ProjectDataProvider } from '../context/ProjectDataContext';
@@ -18,8 +19,6 @@ function AppInner() {
   const [appState, setAppState] = useState<AppState>('landing');
   const [currentProject, setCurrentProject] = useState<ProjectData | null>(null);
 
-  // Test log che dovrebbe apparire sempre
-  console.log('🔥🔥🔥 APP INNER MOUNTED - CONSOLE LOG WORKS 🔥🔥🔥');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [testPanelOpen, setTestPanelOpen] = useState(false);
   const [testNodeId, setTestNodeId] = useState<string | null>(null);
@@ -31,6 +30,17 @@ function AppInner() {
   const [inputValue, setInputValue] = useState('');
   const [showChat, setShowChat] = useState(true); // nuovo stato
   const { setActionsCatalog } = useSetActionsCatalog();
+
+  // Carica le istanze dal database all'avvio
+  React.useEffect(() => {
+    instanceRepository.loadInstancesFromDatabase().then(success => {
+      if (success) {
+        console.log('✅ [App] Instances loaded from database');
+      } else {
+        console.log('⚠️ [App] Failed to load instances from database (continuing anyway)');
+      }
+    });
+  }, []);
 
   React.useEffect(() => {
     fetch('/data/actionsCatalog.json')

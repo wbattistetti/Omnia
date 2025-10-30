@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ProblemIntent } from '../types/project';
 import { generateId } from '../utils/idGenerator';
 
+const API_BASE = ''; // Usa la stessa base URL degli altri servizi
+
 /**
  * Rappresenta un'istanza di un Agent Act con intents personalizzati
  */
@@ -41,6 +43,11 @@ class InstanceRepository {
 
         this.instances.set(finalInstanceId, instance);
 
+        // Salva automaticamente nel database
+        this.saveInstanceToDatabase(instance).catch(error => {
+            console.error('Failed to save instance to database:', error);
+        });
+
         console.log('✅ [InstanceRepository] Created new instance:', {
             instanceId: finalInstanceId,
             actId,
@@ -68,6 +75,11 @@ class InstanceRepository {
         };
 
         this.instances.set(instanceId, instance);
+
+        // Salva automaticamente nel database
+        this.saveInstanceToDatabase(instance).catch(error => {
+            console.error('Failed to save instance to database:', error);
+        });
 
         console.log('✅ [InstanceRepository] Created instance with specific ID:', {
             instanceId,
@@ -120,6 +132,11 @@ class InstanceRepository {
         if (instance) {
             instance.ddt = ddt;
             instance.updatedAt = new Date();
+
+            // Salva automaticamente nel database
+            this.updateInstanceInDatabase(instance).catch(error => {
+                console.error('Failed to update instance in database:', error);
+            });
 
             console.log('✅ [InstanceRepository] DDT SALVATO con successo', {
                 instanceId,
@@ -190,6 +207,90 @@ class InstanceRepository {
     clearAll(): void {
         this.instances.clear();
         console.log('✅ [InstanceRepository] Cleared all instances');
+    }
+
+    /**
+     * Salva un'istanza nel database
+     * @param instance L'istanza da salvare
+     * @returns True se salvata con successo, false altrimenti
+     */
+    async saveInstanceToDatabase(instance: ActInstance): Promise<boolean> {
+        try {
+            const response = await fetch(`${API_BASE}/api/instances`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(instance)
+            });
+
+            if (response.ok) {
+                console.log('✅ [InstanceRepository] Instance saved to database:', instance.instanceId);
+                return true;
+            } else {
+                console.error('❌ [InstanceRepository] Failed to save instance:', response.statusText);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ [InstanceRepository] Error saving instance:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Carica tutte le istanze dal database
+     * @returns True se caricate con successo, false altrimenti
+     */
+    async loadInstancesFromDatabase(): Promise<boolean> {
+        try {
+            const response = await fetch(`${API_BASE}/api/instances`);
+
+            if (response.ok) {
+                const instances: ActInstance[] = await response.json();
+
+                // Pulisce le istanze esistenti e carica quelle dal database
+                this.instances.clear();
+                instances.forEach(instance => {
+                    // Converte le date da stringa a Date
+                    instance.createdAt = new Date(instance.createdAt);
+                    instance.updatedAt = new Date(instance.updatedAt);
+                    this.instances.set(instance.instanceId, instance);
+                });
+
+                console.log('✅ [InstanceRepository] Loaded instances from database:', instances.length);
+                return true;
+            } else {
+                console.error('❌ [InstanceRepository] Failed to load instances:', response.statusText);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ [InstanceRepository] Error loading instances:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Aggiorna un'istanza nel database
+     * @param instance L'istanza da aggiornare
+     * @returns True se aggiornata con successo, false altrimenti
+     */
+    async updateInstanceInDatabase(instance: ActInstance): Promise<boolean> {
+        try {
+            const response = await fetch(`${API_BASE}/api/instances/${instance.instanceId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(instance)
+            });
+
+            if (response.ok) {
+                console.log('✅ [InstanceRepository] Instance updated in database:', instance.instanceId);
+                return true;
+            } else {
+                console.error('❌ [InstanceRepository] Failed to update instance:', response.statusText);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ [InstanceRepository] Error updating instance:', error);
+            return false;
+        }
     }
 }
 

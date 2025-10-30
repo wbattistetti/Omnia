@@ -30,25 +30,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const rootRef = useRef<HTMLDivElement>(null);
   const fontScale = useMemo(() => Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, fontSize)) / DEFAULT_FONT_SIZE, [fontSize]);
 
-  // Debug mount log (always console)
-  useEffect(() => {
-    try {
-      console.log('🚀 [ResponseEditor][MOUNT]', {
-        actId: act?.id,
-        instanceId: act?.instanceId || act?.id,
-        actType: act?.type,
-        actLabel: act?.label,
-        hasDDT: !!ddt,
-        mains: Array.isArray(ddt?.mainData) ? ddt.mainData.length : 0
-      });
-      // Also try logger centralizzato
-      info('RESPONSE_EDITOR', 'ResponseEditor mounted', {
-        actId: act?.id,
-        instanceId: act?.instanceId || act?.id,
-        hasDDT: !!ddt
-      });
-    } catch { }
-  }, []);
 
   // Helper: enforce phone kind by label when missing/mis-set
   const coercePhoneKind = (src: any) => {
@@ -193,31 +174,23 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
   // Persist explicitly on close only (avoid side-effects/flicker on unmount)
   const handleEditorClose = React.useCallback(() => {
-    console.log('🚪 [ResponseEditor] CHIUSURA EDITOR - Persisting DDT', {
-      actId: act?.id,
-      instanceId: act?.instanceId || act?.id,
-      actLabel: act?.label,
-      label: localDDT?.label,
-      mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0,
-    });
 
     try {
       // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
       if (act?.id || act?.instanceId) {
         const key = (act?.instanceId || act?.id) as string;
         const saved = instanceRepository.updateDDT(key, localDDT);
-        console.log('🚪 [ResponseEditor] Save to instance:', saved ? '✅ SUCCESS' : '❌ FAILED');
 
         // Fallback: salva anche nel provider globale se l'istanza non esiste
         if (!saved) {
-          console.log('🚪 [ResponseEditor] Instance save failed, using global provider fallback');
+          // Instance save failed, using global provider fallback
         }
       }
 
       // Salva anche nel provider globale per compatibilità
       replaceSelectedDDT(localDDT);
     } catch (e) {
-      console.error('🚪 [ResponseEditor] ❌ ERRORE durante persist:', e);
+      console.error('ResponseEditor persist error:', e);
     }
 
     try { onClose && onClose(); } catch { }
@@ -274,7 +247,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       setShowWizard(true);
       wizardOwnsDataRef.current = true;
       try {
-        console.log('🔧 [ResponseEditor] Wizard ON (DDT empty)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
         info('RESPONSE_EDITOR', 'Wizard ON (DDT empty)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
       } catch { }
     } else if (!empty && wizardOwnsDataRef.current) {
@@ -282,7 +254,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       setShowWizard(false);
       wizardOwnsDataRef.current = false;
       try {
-        console.log('🔧 [ResponseEditor] Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
         info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
       } catch { }
     }

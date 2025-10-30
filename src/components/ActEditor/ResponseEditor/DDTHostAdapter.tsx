@@ -8,44 +8,18 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   const { openDDT } = useDDTManager();
   const instanceKey = React.useMemo(() => act.instanceId || act.id, [act.instanceId, act.id]);
 
-  // Debug mount log
-  React.useEffect(() => {
-    console.log('🔧 [DDTHostAdapter][MOUNT]', {
-      actId: act.id,
-      instanceId: act.instanceId,
-      instanceKey,
-      actType: act.type,
-      actLabel: act.label
-    });
-    // Also try logger centralizzato
-    try {
-      const { info } = require('../../../utils/logger');
-      info('RESPONSE_EDITOR', 'DDTHostAdapter mounted', { actId: act.id, instanceId: act.instanceId });
-    } catch { }
-  }, []);
 
-  // 1. Cerca DDT nell'istanza, se non esiste cerca nel provider globale
+  // 1. Cerca DDT nell'istanza, crea l'istanza se non esiste
   const existingDDT = React.useMemo(() => {
     let instance = instanceRepository.getInstance(instanceKey);
-    let ddt = instance?.ddt;
 
-    console.log('🔍 [DDTHostAdapter] APERTURA GEAR - Looking for existing DDT', {
-      actId: act.id,
-      instanceId: instanceKey,
-      actLabel: act.label,
-      instanceFound: !!instance,
-      hasDDT: !!ddt,
-      ddtMainData: ddt?.mainData?.length || 0
-    });
-
-    // Se non c'è DDT nell'istanza, cerca nel provider globale
-    if (!ddt) {
-      console.log('🔍 [DDTHostAdapter] No DDT in instance, checking global provider...');
-      // Qui potresti aggiungere la logica per cercare nel provider globale
-      // Per ora restituiamo null per aprire il wizard
+    // Se l'istanza non esiste, creala
+    if (!instance) {
+      console.log('🔧 [DDTHostAdapter] Creating missing instance for:', instanceKey);
+      instance = instanceRepository.createInstanceWithId(instanceKey, act.id, []);
     }
 
-    return ddt || null;
+    return instance?.ddt || null;
   }, [instanceKey, act.id]);
 
   // 2. Se esiste, usalo; altrimenti crea un placeholder vuoto
@@ -62,18 +36,8 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
   // 3. Quando completi il wizard, salva nell'istanza
   const handleComplete = React.useCallback((finalDDT: any) => {
-    console.log('💾 [DDTHostAdapter] COMPLETAMENTO WIZARD - Saving DDT', {
-      actId: act.id,
-      instanceId: instanceKey,
-      actLabel: act.label,
-      ddtId: finalDDT?.id || finalDDT?._id,
-      ddtLabel: finalDDT?.label,
-      mainDataCount: finalDDT?.mainData?.length || 0
-    });
-
     // Salva il DDT nell'istanza
     const saved = instanceRepository.updateDDT(instanceKey, finalDDT);
-    console.log('💾 [DDTHostAdapter] Save result:', saved ? '✅ SUCCESS' : '❌ FAILED');
 
     // Close this overlay first
     if (onClose) onClose();
