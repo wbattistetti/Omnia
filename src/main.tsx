@@ -4,11 +4,11 @@ import App from './components/App.tsx';
 import './index.css';
 
 // 🚀 ENTERPRISE LOGGING SYSTEM
-import { logger } from './utils/Logger';
+import { logger } from './utils/logger';
 
 // 🚫 DISABILITA TUTTI I console.log NATIVI PER EVITARE LOOP INFINITI
 // Usa invece il Logger centralizzato che può essere controllato
-const DISABLE_NATIVE_LOGS = true; // Disabilita console.log nativi per default
+const DISABLE_NATIVE_LOGS = false; // Abilita console.log per debug
 if (DISABLE_NATIVE_LOGS) {
   const originalLog = console.log;
   const originalDebug = console.debug;

@@ -140,7 +140,11 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         className="hover:opacity-100 hover:scale-110"
         onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
         onMouseDown={(e) => { try { console.log('[DDT][gear][mouseDown]', { x: e.clientX, y: e.clientY }); } catch { } }}
-        onClick={(e) => { try { console.log('[DDT][gear][click]', { x: e.clientX, y: e.clientY }); } catch { } onOpenDDT(); }}
+        onClick={(e) => {
+          console.log('🔥🔥🔥 GEAR CLICKED 🔥🔥🔥', { x: e.clientX, y: e.clientY });
+          alert('🔥 GEAR CLICKED! Check console for logs 🔥');
+          onOpenDDT();
+        }}
       >
         <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
       </button>

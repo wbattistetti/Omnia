@@ -9,6 +9,7 @@ export interface ActInstance {
     instanceId: string;           // ID unico dell'istanza
     actId: string;                // Riferimento al template nel catalogo
     problemIntents: ProblemIntent[]; // Intents personalizzati di questa istanza
+    ddt?: any;                    // DDT associato a questa istanza (se esiste)
     createdAt: Date;
     updatedAt: Date;
 }
@@ -86,10 +87,53 @@ class InstanceRepository {
         const instance = this.instances.get(instanceId);
 
         if (!instance) {
-            console.log('❌ [InstanceRepository] Instance not found:', instanceId);
+            console.log('❌ [InstanceRepository] getInstance: ISTANZA NON TROVATA', {
+                instanceId,
+                availableInstances: Array.from(this.instances.keys())
+            });
+        } else {
+            console.log('✅ [InstanceRepository] getInstance: ISTANZA TROVATA', {
+                instanceId,
+                hasDDT: !!instance.ddt,
+                ddtMainData: instance.ddt?.mainData?.length || 0
+            });
         }
 
         return instance;
+    }
+
+    /**
+     * Aggiorna il DDT di un'istanza
+     * @param instanceId ID dell'istanza da aggiornare
+     * @param ddt DDT da associare all'istanza
+     * @returns True se aggiornato con successo, false altrimenti
+     */
+    updateDDT(instanceId: string, ddt: any): boolean {
+        console.log('📦 [InstanceRepository] updateDDT chiamato', {
+            instanceId,
+            ddtProvided: !!ddt,
+            ddtMainData: ddt?.mainData?.length || 0
+        });
+
+        const instance = this.getInstance(instanceId);
+
+        if (instance) {
+            instance.ddt = ddt;
+            instance.updatedAt = new Date();
+
+            console.log('✅ [InstanceRepository] DDT SALVATO con successo', {
+                instanceId,
+                ddtId: ddt?.id || ddt?._id,
+                ddtLabel: ddt?.label,
+                ddtMainData: ddt?.mainData?.length || 0
+            });
+
+            return true;
+        }
+
+        console.error('❌ [InstanceRepository] ISTANZA NON TROVATA per instanceId:', instanceId);
+        console.log('📦 [InstanceRepository] Istanze disponibili:', Array.from(this.instances.keys()));
+        return false;
     }
 
     /**

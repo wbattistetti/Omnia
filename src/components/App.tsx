@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { enableDebug } from '../utils/logger';
 import { DockPanel } from './TestEngine/DockPanel';
 import { ChatPanel } from './TestEngine/ChatPanel';
 import { ProjectDataProvider } from '../context/ProjectDataContext';
@@ -16,6 +17,9 @@ type AppState = 'landing' | 'creatingProject' | 'mainApp';
 function AppInner() {
   const [appState, setAppState] = useState<AppState>('landing');
   const [currentProject, setCurrentProject] = useState<ProjectData | null>(null);
+
+  // Test log che dovrebbe apparire sempre
+  console.log('🔥🔥🔥 APP INNER MOUNTED - CONSOLE LOG WORKS 🔥🔥🔥');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [testPanelOpen, setTestPanelOpen] = useState(false);
   const [testNodeId, setTestNodeId] = useState<string | null>(null);
@@ -37,6 +41,15 @@ function AppInner() {
         console.error('[App][ERROR] fetch actionsCatalog', err);
       });
   }, [setActionsCatalog]);
+
+  // Enable central logger globally for this session
+  React.useEffect(() => {
+    try {
+      enableDebug();
+      (window as any).Logger?.setLevel('debug');
+      (window as any).Logger?.enableComponent('ALL');
+    } catch { }
+  }, []);
 
   // Callback da passare ai nodi
   const handlePlayNode = (nodeId: string, nodeRows: any[]) => {

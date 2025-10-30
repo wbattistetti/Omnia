@@ -7,6 +7,7 @@ import { getAgentActVisualsByType } from '../../Flowchart/utils/actVisuals';
 export default function ActEditorHost({ act, onClose }: EditorProps) {
   const kind = resolveEditorKind(act);
   const Comp = registry[kind];
+  console.log('🎯🎯🎯 ACT EDITOR HOST MOUNTED 🎯🎯🎯', { kind, act });
   // quiet: remove mount spam; enable only via debug flag if needed
   try { if (localStorage.getItem('debug.actEditor') === '1') console.log('[ActEditorHost][mount]', { kind, act }); } catch { }
 

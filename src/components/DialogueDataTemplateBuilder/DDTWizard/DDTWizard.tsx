@@ -13,7 +13,7 @@ import { PlanRunResult } from './planRunner';
 import { buildArtifactStore, mergeArtifactStores, moveArtifactsPath } from './artifactStore';
 import { assembleFinalDDT } from './assembleFinal';
 import { Hourglass, Bell } from 'lucide-react';
-import { debug, error } from '../../../utils/Logger';
+import { debug, error } from '../../../utils/logger';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // 🚀 NEW: Interface for field processing state

@@ -11,7 +11,7 @@ import ReactFlow, {
   applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { debug, error } from '../../utils/Logger';
+import { debug, error } from '../../utils/logger';
 import { CustomNode } from './nodes/CustomNode/CustomNode';
 import { TaskNode } from './nodes/TaskNode/TaskNode';
 import { useEdgeManager } from '../../hooks/useEdgeManager';

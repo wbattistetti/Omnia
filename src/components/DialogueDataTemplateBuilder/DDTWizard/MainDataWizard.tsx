@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type { SchemaNode } from './MainDataCollection';
 import { Pencil, Trash2, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Link, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
-import { debug } from '../../../utils/Logger';
+import { debug } from '../../../utils/logger';
 
 interface MainDataWizardProps {
   node: SchemaNode;
