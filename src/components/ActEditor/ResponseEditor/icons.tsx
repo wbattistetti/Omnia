@@ -28,6 +28,9 @@ const tailwindToHex = (tw?: string): string | undefined => {
 const getIconComponent = (iconName: string, color?: string) => {
   const hexColor = tailwindToHex(color) || color;
   const iconMap: { [key: string]: React.ReactNode } = {
+    // Core actions aliases
+    sayMessage: <MessageCircle size={16} color={hexColor} />,
+    SayMessage: <MessageCircle size={16} color={hexColor} />,
     MessageCircle: <MessageCircle size={16} color={hexColor} />,
     HelpCircle: <HelpCircle size={16} color={hexColor} />,
     User: <User size={16} color={hexColor} />,
@@ -73,4 +76,4 @@ const getIconComponent = (iconName: string, color?: string) => {
   return iconMap[iconName] || <FileText size={16} color={hexColor} />;
 };
 
-export default getIconComponent; 
+export default getIconComponent;
