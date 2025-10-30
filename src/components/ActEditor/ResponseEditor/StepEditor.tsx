@@ -44,7 +44,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
         const text = (typeof a.text === 'string' && a.text.length > 0)
           ? a.text
           : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
-        return { actionId: a.actionId, text, textKey };
+        return { actionId: a.actionId, text, textKey, icon: a.icon, color: a.color, label: a.label };
       })
     }));
   }
@@ -61,7 +61,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
           const text = (typeof a.text === 'string' && a.text.length > 0)
             ? a.text
             : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
-          return { actionId: a.actionId, text, textKey };
+          return { actionId: a.actionId, text, textKey, icon: a.icon, color: a.color, label: a.label };
         })
       }));
     } else {
