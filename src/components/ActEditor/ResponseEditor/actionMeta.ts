@@ -11,21 +11,6 @@ export type ActionMeta = {
     color?: string;
 };
 
-// Build catalog from global injected by App (fallback to empty)
-// App sets window.__actionsCatalog after fetch('/data/actionsCatalog.json')
-const RAW: any[] = (() => {
-    try { return Array.isArray((window as any).__actionsCatalog) ? (window as any).__actionsCatalog : []; } catch { return []; }
-})();
-
-const baseById: Record<string, ActionMeta> = RAW.reduce((acc, a: any) => {
-    const id = String(a?.id || '');
-    if (!id) return acc;
-    const label = a?.label?.it || a?.label?.en || id;
-    const iconName = a?.icon || undefined;
-    acc[id] = { id, label, iconName, color: a?.color };
-    return acc;
-}, {} as Record<string, ActionMeta>);
-
 // Aliases used in various parts of the UI → canonical IDs in actionsCatalog
 const ALIASES: Record<string, string> = {
     // textual
@@ -56,17 +41,34 @@ const ALIASES: Record<string, string> = {
     waitAgent: 'waitForAgent',
 };
 
-const CATALOG: Record<string, ActionMeta> = new Proxy(baseById, {
-    get(target, p: string) {
-        const key = String(p);
-        const canonical = ALIASES[key] || key;
-        return (target as any)[canonical] || { id: key, label: key, iconName: 'FileText' };
+// Build catalog dinamicamente ogni volta (come ActionList usa useActionsCatalog)
+// Legge da window.__actionsCatalog quando chiamato, non all'inizializzazione
+function getCatalog(): Record<string, ActionMeta> {
+    try {
+        const RAW: any[] = Array.isArray((window as any).__actionsCatalog)
+            ? (window as any).__actionsCatalog
+            : [];
+
+        return RAW.reduce((acc, a: any) => {
+            const id = String(a?.id || '');
+            if (!id) return acc;
+            // Stessa logica di ActionList: action.label[lang] || action.label.en || action.id
+            const label = a?.label?.it || a?.label?.en || id;
+            const iconName = a?.icon || undefined;
+            acc[id] = { id, label, iconName, color: a?.color };
+            return acc;
+        }, {} as Record<string, ActionMeta>);
+    } catch {
+        return {};
     }
-}) as unknown as Record<string, ActionMeta>;
+}
 
 export function getActionMeta(actionId?: string): ActionMeta {
     if (!actionId) return { id: 'unknown', label: 'Azione', iconName: 'FileText' };
-    return CATALOG[actionId] || { id: actionId, label: actionId, iconName: actionId };
+
+    const catalog = getCatalog(); // Legge dinamicamente da window.__actionsCatalog (come ActionList legge dal context)
+    const canonical = ALIASES[actionId] || actionId;
+    return catalog[canonical] || { id: actionId, label: actionId, iconName: 'FileText' };
 }
 
 export function getActionLabel(actionId?: string): string {

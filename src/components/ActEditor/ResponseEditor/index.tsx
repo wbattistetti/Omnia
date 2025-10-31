@@ -702,9 +702,8 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
                                   // Copia parametri/props generiche
                                   if (Array.isArray(a.parameters)) out.parameters = a.parameters;
-                                  if (a.icon) out.icon = a.icon;
                                   if (a.color) out.color = a.color;
-                                  if (a.label) out.label = a.label;
+                                  // icon e label vengono sempre da getActionIconNode/getActionLabel centralizzate
 
                                   // Per azioni testuali, aggiungi contenuto se presente (non scartare i vuoti)
                                   if (id === 'sayMessage' || id === 'askQuestion') {
