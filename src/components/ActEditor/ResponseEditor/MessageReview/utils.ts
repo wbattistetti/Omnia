@@ -1,4 +1,4 @@
-import { ReviewItem, StepGroup } from './types';
+import { ReviewItem, StepGroup, RecoveryGroup } from './types';
 
 const STEP_ORDER = ['start', 'confirmation', 'noInput', 'noMatch', 'notConfirmed', 'notAcquired', 'success'];
 
@@ -49,22 +49,50 @@ export function groupMessagesByStep(items: ReviewItem[]): StepGroup[] {
         });
     });
 
-    // Sort groups by STEP_ORDER, then add any remaining steps
-    const ordered = STEP_ORDER
-        .map(stepKey => ({
-            stepKey,
-            items: Array.from(mappedGroups[stepKey]?.values() || [])
-        }))
-        .filter(group => group.items.length > 0);
+    // Group by stepKey first, then by escIndex (recovery) within each step
+    const stepGroups: StepGroup[] = [];
 
-    const remaining = Object.keys(mappedGroups)
-        .filter(key => !STEP_ORDER.includes(key))
-        .map(stepKey => ({
-            stepKey,
-            items: Array.from(mappedGroups[stepKey].values())
-        }));
+    const allSteps = [...STEP_ORDER, ...Object.keys(mappedGroups).filter(key => !STEP_ORDER.includes(key))];
 
-    return [...ordered, ...remaining];
+    allSteps.forEach(stepKey => {
+        const stepItems = Array.from(mappedGroups[stepKey]?.values() || []);
+        if (stepItems.length === 0) return;
+
+        // Group items by escIndex (recovery)
+        const recoveryGroups: Record<string, ReviewItem[]> = {};
+        stepItems.forEach(item => {
+            const escKey = item.escIndex !== null && item.escIndex !== undefined
+                ? `esc_${item.escIndex}`
+                : 'no_esc';
+            if (!recoveryGroups[escKey]) {
+                recoveryGroups[escKey] = [];
+            }
+            recoveryGroups[escKey].push(item);
+        });
+
+        // Convert to RecoveryGroup array, sorted by escIndex
+        const recoveries = Object.keys(recoveryGroups)
+            .map(escKey => {
+                const escIndex = escKey === 'no_esc' ? null : parseInt(escKey.replace('esc_', ''), 10);
+                return {
+                    escIndex,
+                    items: recoveryGroups[escKey].sort((a, b) => (a.actionIndex ?? 0) - (b.actionIndex ?? 0))
+                };
+            })
+            .sort((a, b) => {
+                // Sort: null last, then by index
+                if (a.escIndex === null) return 1;
+                if (b.escIndex === null) return -1;
+                return a.escIndex - b.escIndex;
+            });
+
+        stepGroups.push({
+            stepKey,
+            recoveries
+        });
+    });
+
+    return stepGroups.filter(group => group.recoveries.length > 0);
 }
 
 export function extractActionTextKey(action: any): string | undefined {

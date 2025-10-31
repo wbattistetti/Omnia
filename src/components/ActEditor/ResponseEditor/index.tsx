@@ -658,7 +658,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                   {showMessageReview ? (
                     <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
                       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                        <MessageReviewView node={selectedNode} translations={localTranslations} />
+                        <MessageReviewView node={selectedNode} translations={localTranslations} updateSelectedNode={updateSelectedNode} />
                       </div>
                     </div>
                   ) : (

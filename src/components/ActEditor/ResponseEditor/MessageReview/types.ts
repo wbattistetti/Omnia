@@ -10,9 +10,14 @@ export type ReviewItem = {
     color?: string; // Action color (not step color)
 };
 
+export type RecoveryGroup = {
+    escIndex: number | null;
+    items: ReviewItem[];
+};
+
 export type StepGroup = {
     stepKey: string;
-    items: ReviewItem[];
+    recoveries: RecoveryGroup[];
 };
 
 export type AccordionState = Record<string, boolean>;

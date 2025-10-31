@@ -8,9 +8,10 @@ type Props = {
     group: StepGroup;
     expanded: boolean;
     onToggle: () => void;
+    updateSelectedNode?: (updater: (node: any) => any) => void;
 };
 
-export default function MessageReviewAccordion({ group, expanded, onToggle }: Props) {
+export default function MessageReviewAccordion({ group, expanded, onToggle, updateSelectedNode }: Props) {
     const meta = stepMeta[group.stepKey];
 
     if (!meta) {
@@ -70,30 +71,60 @@ export default function MessageReviewAccordion({ group, expanded, onToggle }: Pr
                     {meta?.label || group.stepKey}
                 </span>
                 <span style={{ fontSize: 12, color: textColor, opacity: 0.7 }}>
-                    {group.items.length} {group.items.length === 1 ? 'message' : 'messages'}
+                    {(() => {
+                        const totalMessages = group.recoveries.reduce((sum, r) => sum + r.items.length, 0);
+                        return `${totalMessages} ${totalMessages === 1 ? 'message' : 'messages'}`;
+                    })()}
                 </span>
             </button>
 
-            {/* Accordion Content - All messages when expanded */}
+            {/* Accordion Content - Recovery boxes with messages when expanded */}
             {expanded && (
-                <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {group.items.length === 0 ? (
+                <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {group.recoveries.length === 0 ? (
                         <div style={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>
                             No messages for this step type.
                         </div>
                     ) : (
-                        group.items.map((item) => (
+                        group.recoveries.map((recovery) => (
                             <div
-                                key={item.id}
+                                key={recovery.escIndex !== null ? `recovery_${recovery.escIndex}` : 'no_recovery'}
                                 style={{
-                                    background: '#fff',
                                     border: `1px solid ${borderColor}`,
                                     borderRadius: 8,
-                                    padding: 12,
-                                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                    padding: '12px',
+                                    background: 'rgba(255, 255, 255, 0.5)',
                                 }}
                             >
-                                <MessageReviewMessage item={item} />
+                                {/* Recovery header (optional, can be hidden if not needed) */}
+                                {recovery.escIndex !== null && (
+                                    <div style={{
+                                        marginBottom: 8,
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: textColor,
+                                        opacity: 0.8
+                                    }}>
+                                        Recovery {recovery.escIndex + 1}
+                                    </div>
+                                )}
+
+                                {/* Messages inside recovery - no individual boxes */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {recovery.items.length === 0 ? (
+                                        <div style={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>
+                                            No messages in this recovery.
+                                        </div>
+                                    ) : (
+                                        recovery.items.map((item) => (
+                                            <MessageReviewMessage
+                                                key={item.id}
+                                                item={item}
+                                                updateSelectedNode={updateSelectedNode}
+                                            />
+                                        ))
+                                    )}
+                                </div>
                             </div>
                         ))
                     )}

@@ -7,9 +7,10 @@ import MessageReviewAccordion from './MessageReviewAccordion';
 type Props = {
     node: any;
     translations: Record<string, string>;
+    updateSelectedNode?: (updater: (node: any) => any) => void;
 };
 
-export default function MessageReviewView({ node, translations }: Props) {
+export default function MessageReviewView({ node, translations, updateSelectedNode }: Props) {
     const items = React.useMemo(() => collectAllMessages(node, translations), [node, translations]);
 
     const [accordionState, setAccordionState] = React.useState<AccordionState>({});
@@ -151,6 +152,7 @@ export default function MessageReviewView({ node, translations }: Props) {
                                 group={group}
                                 expanded={accordionState[group.stepKey] ?? false}
                                 onToggle={() => handleToggleAccordion(group.stepKey)}
+                                updateSelectedNode={updateSelectedNode}
                             />
                         ))}
                     </div>
