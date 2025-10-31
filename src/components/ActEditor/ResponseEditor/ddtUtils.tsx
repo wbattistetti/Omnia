@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Calendar, Mail, MapPin, FileText,
-  PlayCircle, HelpCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle
+  PlayCircle, HelpCircle, MicOff, CheckCircle2, CheckSquare, AlertCircle, Wine
 } from 'lucide-react';
 
 export function getDDTIcon(type: string): JSX.Element {
@@ -59,4 +59,5 @@ export const stepMeta: Record<string, {
   success: { icon: <CheckSquare size={17} />, label: 'Ho capito!', border: '#22c55e', bg: 'rgba(34,197,94,0.08)', color: '#22c55e', bgActive: 'rgba(34,197,94,0.18)' },
   notAcquired: { icon: <AlertCircle size={17} />, label: 'Dato non acquisito', border: '#f59e42', bg: 'rgba(245,158,66,0.08)', color: '#f59e42', bgActive: 'rgba(245,158,66,0.18)' },
   notConfirmed: { icon: <AlertCircle size={17} />, label: 'Non Confermato', border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
+  introduction: { icon: <Wine size={17} />, label: 'Introduzione', border: '#a855f7', bg: 'rgba(168,85,247,0.08)', color: '#a855f7', bgActive: 'rgba(168,85,247,0.18)' },
 };

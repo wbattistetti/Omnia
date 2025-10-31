@@ -17,7 +17,7 @@ export type Escalation = {
 };
 
 export type StepGroup = {
-  type: 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success';
+  type: 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success' | 'introduction';
   escalations: Escalation[];
 };
 

@@ -9,15 +9,15 @@ import type { Kind } from '../../DialogueDataEngine/model/ddt.v2.types';
 /**
  * Maps AI semantic types to frontend Kind values using the shared config.
  * Falls back to 'generic' for unknown types.
- * 
+ *
  * @param aiType - The type returned by the AI (e.g., 'phone', 'taxCode', 'fiscalCode')
  * @returns The corresponding frontend Kind or 'generic' as fallback
  */
 function mapAITypeToKind(aiType: string | undefined): Kind | undefined {
   if (!aiType) return undefined;
-  
+
   const normalized = aiType.toLowerCase().trim();
-  
+
   // Step 1: Check if it's a supported kind directly
   const supportedKinds = nlpTypesConfig.supportedKinds as string[];
   if (supportedKinds.includes(normalized)) {
@@ -27,7 +27,7 @@ function mapAITypeToKind(aiType: string | undefined): Kind | undefined {
     });
     return normalized as Kind;
   }
-  
+
   // Step 2: Check aliases mapping
   const aliases = nlpTypesConfig.aliases as Record<string, string>;
   if (aliases[normalized]) {
@@ -38,7 +38,7 @@ function mapAITypeToKind(aiType: string | undefined): Kind | undefined {
     });
     return aliases[normalized] as Kind;
   }
-  
+
   // Step 3: Fallback to 'generic' for unknown types
   console.log('[MainDataBuilder][mapType] Unknown type, using fallback', {
     aiType,
@@ -46,7 +46,7 @@ function mapAITypeToKind(aiType: string | undefined): Kind | undefined {
     mappedKind: 'generic',
     availableKinds: supportedKinds.join(', ')
   });
-  
+
   return 'generic';
 }
 
@@ -76,7 +76,7 @@ export function buildMainDataNodeWithSubData(
     variable: dataNode?.variable,
     type: dataNode?.type
   });
-  
+
   // Normalize and enrich constraints, add prompt translations
   const constraints = enrichAndTranslateConstraints(Array.isArray(dataNode.constraints) ? dataNode.constraints : [], ddtId, translations);
 
@@ -85,7 +85,13 @@ export function buildMainDataNodeWithSubData(
   let allStepTranslations: { key: string; value: string }[] = [];
   const steps: StepGroup[] = STANDARD_STEPS.map((stepType) => {
     const messagesArr = (stepMessagesWithSubData.mainData && stepMessagesWithSubData.mainData[stepType]) || [];
+    // Always create a step, even if messagesArr is empty (for sub-data without specific prompts)
+    // This ensures each node has its own step objects, not shared references
     const step = buildStepGroup(stepType, messagesArr, ddtId, translations);
+    // Ensure escalations array exists even if empty
+    if (!step.escalations || step.escalations.length === 0) {
+      step.escalations = [];
+    }
     return step;
   });
 
@@ -96,17 +102,17 @@ export function buildMainDataNodeWithSubData(
       // Always set label and id for subData
       sub.label = sub.label || sub.variable || sub.name || 'Subdata';
       sub.id = sub.id || uuidv4();
-      
+
       // Get specific stepMessages for this subData
       const subDataName = (sub.name || sub.variable || sub.label || '').toLowerCase(); // Normalize to lowercase
       const subDataStepMessages = stepMessagesWithSubData.subData[subDataName] || {};
-      
+
       // Create a SubDataStepMessages object for this subData
       const subDataStepMessagesObj: SubDataStepMessages = {
         mainData: subDataStepMessages, // Use subData-specific messages as mainData
         subData: {} // No nested subData for now
       };
-      
+
       const result = buildMainDataNodeWithSubData(ddtId, sub, subDataStepMessagesObj, translations);
       return result;
     });
@@ -128,12 +134,12 @@ export function buildMainDataNodeWithSubData(
   mainData.id = dataNode.id || uuidv4();
   if (dataNode.variable) mainData.variable = dataNode.variable;
   if (dataNode.icon) mainData.icon = dataNode.icon;  // ✅ Preserve icon from AI
-  
+
   // ✅ Map AI type → frontend Kind with fallback to 'generic'
   if (dataNode.type) {
     mainData.kind = mapAITypeToKind(dataNode.type);
   }
-  
+
   console.log('[MainDataBuilder][result]', {
     ddtId,
     assignedLabel: mainData.label,
@@ -145,7 +151,7 @@ export function buildMainDataNodeWithSubData(
     hadName: !!dataNode.name,
     hadType: !!dataNode.type
   });
-  
+
   // Final clean log for the full node (including subData)
   return mainData;
 }

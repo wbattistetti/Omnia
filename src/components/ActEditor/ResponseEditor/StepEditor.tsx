@@ -53,19 +53,60 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   if (Array.isArray(node?.steps)) {
     const group = (node.steps as any[]).find((g: any) => (g?.type === stepKey));
     if (group && Array.isArray(group.escalations)) {
-      console.log('[RE][buildModel] Using Case B (array steps)', { stepKey, escalationsCount: group.escalations.length });
+      console.error('🔍 [RE][buildModel] Using Case B (array steps)', {
+        stepKey,
+        escalationsCount: group.escalations.length,
+        nodeLabel: node?.label,
+        nodeId: node?.id,
+        // Verifica le actions del primo escalation
+        firstEscalationActions: group.escalations[0]?.actions || [],
+        firstActionTextKey: group.escalations[0]?.actions?.[0]?.parameters?.find((p: any) => p?.parameterId === 'text')?.value,
+        firstActionText: group.escalations[0]?.actions?.[0]?.text,
+        firstActionFull: group.escalations[0]?.actions?.[0]
+      });
       return (group.escalations as any[]).map((esc: any) => ({
         actions: (esc.actions || []).map((a: any) => {
           const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
           const textKey = p?.value;
+
+          // DEBUG: Log the raw action before processing
+          console.error('🔍 [RE][buildModel] RAW ACTION', {
+            nodeLabel: node?.label,
+            nodeId: node?.id,
+            stepKey,
+            actionId: a.actionId,
+            rawActionText: a.text,
+            rawActionTextType: typeof a.text,
+            rawActionTextLength: typeof a.text === 'string' ? a.text.length : 0,
+            rawActionKeys: Object.keys(a || {}),
+            rawActionFull: JSON.stringify(a).substring(0, 200)
+          });
+
+          // PRIORITY: Always use action.text if present (this is the edited text, saved directly on the action)
+          // Only fallback to translations[textKey] if action.text is not available
+          // This ensures that sub-data use their own edited text, not the main's textKey translations
           const text = (typeof a.text === 'string' && a.text.length > 0)
             ? a.text
             : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
+
+          console.error('🔍 [RE][buildModel] Action processed', {
+            nodeLabel: node?.label,
+            nodeId: node?.id,
+            stepKey,
+            actionId: a.actionId,
+            textKey,
+            text,
+            finalText: text,
+            hasDirectText: typeof a.text === 'string' && a.text.length > 0,
+            textFromTranslations: typeof textKey === 'string' ? translations[textKey] : 'no textKey',
+            // Verify if textKey points to wrong node
+            textKeyContainsWrongNode: typeof textKey === 'string' && node?.label && !textKey.includes(node.label)
+          });
           return { actionId: a.actionId, text, textKey, color: a.color };
         })
       }));
     } else {
-      console.log('[RE][buildModel] Case B: No group found for stepKey', { stepKey, availableTypes: node.steps.map((g: any) => g?.type) });
+      console.error('🔍 [RE][buildModel] Case B: No group found for stepKey', { stepKey, availableTypes: node.steps.map((g: any) => g?.type), nodeLabel: node?.label });
     }
   }
 
@@ -101,6 +142,9 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   // No special-case: notConfirmed behaves like other steps (escalations UI)
   const meta = (stepMeta as any)[stepKey];
   const color = meta?.color || '#fb923c';
+
+  // For introduction step, only allow playJingle and sayMessage actions
+  const allowedActions = stepKey === 'introduction' ? ['playJingle', 'sayMessage'] : undefined;
   // const icon = meta?.icon || null;
   // const title = meta?.label || stepKey;
 
@@ -146,9 +190,21 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   // Commit esplicito: chiamato solo da useActionCommands dopo ogni azione (drop, append, edit, delete, move)
   const commitUp = React.useCallback((next: EscalationModel[]) => {
-    console.log('[StepEditor][commitUp] Notifying parent of change', { stepKey, escalationsCount: next.length });
-    try { onModelChange?.(next); } catch { }
-  }, [onModelChange, stepKey]);
+    console.error('🔍 [StepEditor][commitUp] Notifying parent of change', {
+      stepKey,
+      escalationsCount: next.length,
+      nodeLabel: node?.label,
+      nodeId: node?.id,
+      firstActionText: next[0]?.actions?.[0]?.text,
+      firstActionTextKey: next[0]?.actions?.[0]?.textKey
+    });
+    try {
+      onModelChange?.(next);
+      console.error('🔍 [StepEditor][commitUp] onModelChange called successfully');
+    } catch (error) {
+      console.error('🔍 [StepEditor][commitUp] ERROR calling onModelChange', error);
+    }
+  }, [onModelChange, stepKey, node]);
   const { editAction, deleteAction, moveAction, dropFromViewer, appendAction } = useActionCommands(setLocalModel as any, commitUp as any);
 
   // Priorità: a.text (UI-local) > translations[a.textKey] (persisted)
@@ -180,12 +236,20 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   // Wrapper per editAction che resetta autoEditTarget quando l'edit è completato
   const handleEdit = React.useCallback((escalationIdx: number, actionIdx: number, newText: string) => {
+    console.error('🔍 [StepEditor][handleEdit] Called', {
+      stepKey,
+      nodeLabel: node?.label,
+      escalationIdx,
+      actionIdx,
+      newText,
+      oldText: localModel[escalationIdx]?.actions?.[actionIdx]?.text
+    });
     editAction(escalationIdx, actionIdx, newText);
     // Reset autoEditTarget se corrisponde all'azione editata
     if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === actionIdx) {
       setAutoEditTarget(null);
     }
-  }, [editAction, autoEditTarget]);
+  }, [editAction, autoEditTarget, stepKey, node, localModel]);
 
   // Wrapper per deleteAction che resetta autoEditTarget quando l'azione viene eliminata
   const handleDelete = React.useCallback((escalationIdx: number, actionIdx: number) => {
@@ -201,16 +265,32 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   }, [deleteAction, autoEditTarget]);
 
   const handleAppend = React.useCallback((escIdx: number, action: any) => {
+    // Validate: for introduction step, only allow playJingle and sayMessage
+    if (allowedActions && allowedActions.length > 0) {
+      const actionId = action?.actionId || action?.id || '';
+      if (!allowedActions.includes(actionId)) {
+        console.warn('[StepEditor] Action not allowed in introduction step:', actionId, 'Allowed:', allowedActions);
+        return; // Reject the action
+      }
+    }
     const currentLen = (localModel?.[escIdx]?.actions?.length) || 0;
     appendAction(escIdx, action);
     setAutoEditTarget({ escIdx, actIdx: currentLen });
-  }, [appendAction, localModel]);
+  }, [appendAction, localModel, allowedActions]);
 
   const handleDropFromViewer = React.useCallback((incoming: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => {
+    // Validate: for introduction step, only allow playJingle and sayMessage
+    if (allowedActions && allowedActions.length > 0) {
+      const actionId = incoming?.actionId || incoming?.id || '';
+      if (!allowedActions.includes(actionId)) {
+        console.warn('[StepEditor] Action not allowed in introduction step:', actionId, 'Allowed:', allowedActions);
+        return; // Reject the drop
+      }
+    }
     const targetIdx = position === 'after' ? to.actionIdx + 1 : to.actionIdx;
     dropFromViewer(incoming, to, position);
     setAutoEditTarget({ escIdx: to.escalationIdx, actIdx: targetIdx });
-  }, [dropFromViewer]);
+  }, [dropFromViewer, allowedActions]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -219,7 +299,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       {localModel.length === 0 && (
         <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No escalation/actions for this step.</div>
       )}
-      {['start', 'success'].includes(stepKey) ? (
+      {['start', 'success', 'introduction'].includes(stepKey) ? (
         // Per start/success: canvas droppabile per append; i row wrapper non accettano drop dal viewer
         <CanvasDropWrapper onDropAction={(action) => handleAppend(0, action)} color={color}>
           {localModel[0]?.actions?.map((a, j) => {

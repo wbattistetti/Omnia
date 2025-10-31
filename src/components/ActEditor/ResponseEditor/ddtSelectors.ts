@@ -37,12 +37,20 @@ const DEFAULT_STEP_ORDER = [
 ];
 
 export function getNodeSteps(node: any): string[] {
-  if (!node) return [];
+  if (!node) {
+    console.log('[ddtSelectors][getNodeSteps] Node is null/undefined');
+    return [];
+  }
 
   const present = new Set<string>();
 
   // Variante A: steps come array: [{ type: 'start', ... }, ...]
   if (Array.isArray(node.steps)) {
+    console.log('[ddtSelectors][getNodeSteps] Found steps as array', {
+      nodeLabel: node?.label,
+      stepsLength: node.steps.length,
+      stepsTypes: node.steps.map((s: any) => s?.type)
+    });
     for (const s of node.steps) {
       const t = s?.type;
       if (typeof t === 'string' && t.trim()) present.add(t);
@@ -51,6 +59,10 @@ export function getNodeSteps(node: any): string[] {
 
   // Variante B: steps come oggetto: { start: {...}, success: {...} }
   if (node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps)) {
+    console.log('[ddtSelectors][getNodeSteps] Found steps as object', {
+      nodeLabel: node?.label,
+      stepsKeys: Object.keys(node.steps)
+    });
     for (const key of Object.keys(node.steps)) {
       const val = node.steps[key];
       if (val != null) present.add(key);
@@ -59,18 +71,41 @@ export function getNodeSteps(node: any): string[] {
 
   // Variante C: messages annidati in node.messages
   if (node.messages && typeof node.messages === 'object') {
+    console.log('[ddtSelectors][getNodeSteps] Found messages object', {
+      nodeLabel: node?.label,
+      messagesKeys: Object.keys(node.messages)
+    });
     for (const key of Object.keys(node.messages)) {
       const val = node.messages[key];
       if (val != null) present.add(key);
     }
   }
 
-  if (present.size === 0) return [];
+  if (present.size === 0) {
+    console.log('[ddtSelectors][getNodeSteps] No steps found', {
+      nodeLabel: node?.label,
+      hasSteps: !!node.steps,
+      stepsType: typeof node.steps,
+      hasMessages: !!node.messages,
+      nodeKeys: Object.keys(node || {})
+    });
+    return [];
+  }
 
   // Ritorna nell'ordine noto, con append di eventuali step custom
   const orderedKnown = DEFAULT_STEP_ORDER.filter((k) => present.has(k));
   const custom = Array.from(present).filter((k) => !DEFAULT_STEP_ORDER.includes(k)).sort();
-  return [...orderedKnown, ...custom];
+  const result = [...orderedKnown, ...custom];
+  console.log('[ddtSelectors][getNodeSteps] Returning steps', {
+    nodeLabel: node?.label,
+    result: JSON.stringify(result),
+    resultLength: result.length,
+    present: JSON.stringify(Array.from(present)),
+    presentSize: present.size,
+    orderedKnown: JSON.stringify(orderedKnown),
+    custom: JSON.stringify(custom)
+  });
+  return result;
 }
 
 export function getMessagesFor(node: any, stepKey: string): any {

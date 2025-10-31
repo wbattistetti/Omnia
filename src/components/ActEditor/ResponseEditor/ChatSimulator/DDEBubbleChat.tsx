@@ -6,8 +6,8 @@ import { useDDTSimulator } from '../../../DialogueDataEngine/useSimulator';
 // Removed resolveMessage and DEFAULT_FALLBACKS - using translations directly like StepEditor
 import { extractTranslations, getEscalationActions, resolveActionText } from './DDTAdapter';
 import { useDDTManager } from '../../../../context/DDTManagerContext';
-import { Pencil, Check, X as XIcon, PlayCircle, CheckCircle2, CheckSquare, AlertCircle, MicOff, HelpCircle, CheckCircle, AlertTriangle } from 'lucide-react';
-import { extractField } from '../../../../nlp/pipeline';
+import { Pencil, Check, X as XIcon, PlayCircle, CheckCircle2, CheckSquare, AlertCircle, MicOff, HelpCircle, CheckCircle, AlertTriangle, Wine } from 'lucide-react';
+import { extractField, type ExtractionContext } from '../../../../nlp/pipeline';
 import type { SlotDecision } from '../../../../nlp/types';
 import { stepMeta } from '../ddtUtils';
 
@@ -44,6 +44,8 @@ function getStepIcon(stepType?: string, color?: string) {
       return <CheckSquare size={iconSize} className="flex-shrink-0" style={iconStyle} />;
     case 'notConfirmed':
       return <AlertCircle size={iconSize} className="flex-shrink-0" style={iconStyle} />;
+    case 'introduction':
+      return <Wine size={iconSize} className="flex-shrink-0" style={iconStyle} />;
     default:
       return null;
   }
@@ -152,6 +154,31 @@ function getMain(state: any): DDTNode | undefined {
 function getSub(state: any): DDTNode | undefined {
   const sid = state?.currentSubId;
   return sid ? state?.plan?.byId?.[sid] : undefined;
+}
+
+// Helper to find the original node from currentDDT by label/id to get nlpProfile
+function findOriginalNode(currentDDT: AssembledDDT, nodeLabel?: string, nodeId?: string): any {
+  if (!currentDDT) return undefined;
+  const mains = Array.isArray((currentDDT as any)?.mainData)
+    ? (currentDDT as any).mainData
+    : (currentDDT as any)?.mainData ? [(currentDDT as any).mainData] : [];
+
+  for (const main of mains) {
+    if (!main) continue;
+    // Check main node
+    if ((nodeLabel && main.label === nodeLabel) || (nodeId && main.id === nodeId)) {
+      return main;
+    }
+    // Check sub nodes
+    if (Array.isArray(main.subData)) {
+      for (const sub of main.subData) {
+        if ((nodeLabel && sub.label === nodeLabel) || (nodeId && sub.id === nodeId)) {
+          return sub;
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 function summarizeValue(state: any, main: DDTNode | undefined): string {
@@ -517,6 +544,40 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
     }
 
     if (!messages.length) {
+      // First, check if there's an introduction step in the root DDT
+      const introductionStep = (currentDDT as any)?.introduction;
+      if (introductionStep && Array.isArray(introductionStep.escalations) && introductionStep.escalations.length > 0) {
+        const introEscalation = introductionStep.escalations[0];
+        const introActions = introEscalation?.actions || [];
+        const introTexts: string[] = [];
+        const introKeys: string[] = [];
+
+        for (const action of introActions) {
+          const actionText = resolveActionText(action, { ...legacyDict, ...(translations || {}) });
+          if (actionText) {
+            introTexts.push(actionText);
+            const textKey = action?.parameters?.find((p: any) => p?.parameterId === 'text')?.value;
+            if (textKey) introKeys.push(textKey);
+          }
+        }
+
+        // Show all introduction messages
+        if (introTexts.length > 0) {
+          const introMessages = introTexts.map((text, idx) => ({
+            id: `intro-${idx}`,
+            type: 'bot' as const,
+            text,
+            stepType: 'introduction' as const,
+            textKey: introKeys[idx],
+            color: getStepColor('introduction')
+          }));
+          setMessages(introMessages);
+          lastKeyRef.current = introKeys[0] || 'introduction';
+          return;
+        }
+      }
+
+      // No introduction, show first main ask
       const { text, key } = resolveAsk(main, undefined, translations, legacyDict, legacyMain, legacySub);
       // eslint-disable-next-line no-console
       console.log('[DDE][ask][init]', { node: legacyMain?.label, text });
@@ -758,9 +819,51 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
 
       if (fieldName) {
         try {
-          console.error('[ChatSimulator][handleSend][extractField] Calling extractField...', { fieldName, text: trimmed });
+          // Build extraction context with node structure and regex from NLP profile
+          const targetNode = sub || main;
+
+          // Find original node in currentDDT to get nlpProfile (not preserved in state.plan)
+          const originalNode = findOriginalNode(currentDDT, targetNode?.label, targetNode?.id);
+          const nlpProfile = originalNode?.nlpProfile || (targetNode as any)?.nlpProfile;
+
+          console.log('[ChatSimulator][handleSend] Building context...', {
+            hasTargetNode: !!targetNode,
+            targetNodeLabel: targetNode?.label,
+            targetNodeKind: targetNode?.kind,
+            hasOriginalNode: !!originalNode,
+            hasNlpProfile: !!nlpProfile,
+            regex: nlpProfile?.regex,
+            subData: targetNode?.subData || originalNode?.subData,
+            subSlots: nlpProfile?.subSlots,
+            subs: targetNode?.subs
+          });
+
+          const context: ExtractionContext | undefined = targetNode ? {
+            node: {
+              subData: targetNode.subData || originalNode?.subData || targetNode.subs?.map((sid: string) => state?.plan?.byId?.[sid]) || [],
+              subSlots: nlpProfile?.subSlots,
+              kind: targetNode.kind,
+              label: targetNode.label
+            },
+            regex: nlpProfile?.regex
+          } : undefined;
+
+          console.error('[ChatSimulator][handleSend][extractField] Calling extractField...', {
+            fieldName,
+            text: trimmed,
+            hasContext: !!context,
+            contextNodeLabel: context?.node?.label,
+            contextNodeKind: context?.node?.kind,
+            contextRegex: context?.regex,
+            contextSubData: context?.node?.subData,
+            contextSubSlots: context?.node?.subSlots,
+            isComposite: !!(context?.node && ((Array.isArray(context.node.subData) && context.node.subData.length > 0) ||
+                                              (Array.isArray(context.node.subSlots) && context.node.subSlots.length > 0))),
+            hasRegex: !!context?.regex
+          });
+
           // Usa il Data Extractor per validare l'input
-          const extractionResult: SlotDecision<any> = await extractField(fieldName, trimmed);
+          const extractionResult: SlotDecision<any> = await extractField(fieldName, trimmed, undefined, context);
           console.error('[ChatSimulator][handleSend][extractField] Result:', {
             status: extractionResult.status,
             value: extractionResult.status === 'accepted' ? extractionResult.value : undefined,

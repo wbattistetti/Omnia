@@ -211,6 +211,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   ), [mainList]);
   const [selectedMainIndex, setSelectedMainIndex] = useState(0);
   const [selectedSubIndex, setSelectedSubIndex] = useState<number | undefined>(undefined);
+  const [selectedRoot, setSelectedRoot] = useState<boolean>(false); // Track if root/aggregate is selected
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [rightMode, setRightMode] = useState<RightPanelMode>('actions'); // Always start with actions panel visible
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
@@ -267,26 +268,126 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     }
   }, [localDDT]);
 
-  // Nodo selezionato: sempre main/sub in base agli indici
+  // Nodo selezionato: root se selectedRoot, altrimenti main/sub in base agli indici
   const selectedNode = useMemo(() => {
+    // If root is selected, return the root DDT structure with introduction step
+    if (selectedRoot) {
+      if (!localDDT) return null;
+      // Always include introduction step (even if empty) so StepEditor can work with it
+      const introStep = localDDT.introduction
+        ? { type: 'introduction', escalations: localDDT.introduction.escalations }
+        : { type: 'introduction', escalations: [] };
+      return { ...localDDT, steps: [introStep] };
+    }
     const main = mainList[selectedMainIndex];
     if (!main) {
       return null;
     }
-    if (selectedSubIndex == null) return main;
+    if (selectedSubIndex == null) {
+      // Main selected
+      console.log('[ResponseEditor][selectedNode] Main selected', {
+        selectedMainIndex,
+        mainLabel: main?.label,
+        hasSteps: !!main?.steps,
+        stepsType: Array.isArray(main?.steps) ? 'array' : typeof main?.steps,
+        stepsLength: Array.isArray(main?.steps) ? main.steps.length : Object.keys(main?.steps || {}).length,
+        steps: main?.steps
+      });
+      return main;
+    }
     const subList = getSubDataList(main);
     const sub = subList[selectedSubIndex] || main;
-    return sub;
-  }, [mainList, selectedMainIndex, selectedSubIndex]);
 
-  // Step keys per il nodo selezionato
-  const stepKeys = useMemo(() => selectedNode ? getNodeSteps(selectedNode) : [], [selectedNode]);
-  // Append V2 notConfirmed for main node if present
+    // DEBUG: Log per verificare la struttura del sub
+    const areStepsSameAsMain = main?.steps === sub?.steps;
+    const subStartStep = Array.isArray(sub?.steps) ? sub.steps.find((s: any) => s?.type === 'start') : null;
+    const mainStartStep = Array.isArray(main?.steps) ? main.steps.find((s: any) => s?.type === 'start') : null;
+    const areStartStepsSame = subStartStep === mainStartStep;
+
+    // DEBUG: Get the actual action object to inspect its structure
+    const subStartAction = subStartStep?.escalations?.[0]?.actions?.[0];
+    const subStartActionKeys = subStartAction ? Object.keys(subStartAction) : [];
+    const subStartActionFull = subStartAction ? JSON.stringify(subStartAction).substring(0, 300) : 'null';
+
+    console.error('🔍 [ResponseEditor][selectedNode] Sub selected - CHECKING STEP SHARING', {
+      selectedMainIndex,
+      selectedSubIndex,
+      mainLabel: main?.label,
+      mainStepsCount: Array.isArray(main?.steps) ? main.steps.length : 0,
+      subLabel: sub?.label,
+      subId: sub?.id,
+      hasSteps: !!sub?.steps,
+      stepsLength: Array.isArray(sub?.steps) ? sub.steps.length : 0,
+      '⚠️ ARE_STEPS_SHARED': areStepsSameAsMain,
+      '⚠️ ARE_START_STEPS_SHARED': areStartStepsSame,
+      subStartStepEscalations: subStartStep?.escalations?.[0]?.actions?.[0],
+      mainStartStepEscalations: mainStartStep?.escalations?.[0]?.actions?.[0],
+      subStartActionText: subStartStep?.escalations?.[0]?.actions?.[0]?.text,
+      mainStartActionText: mainStartStep?.escalations?.[0]?.actions?.[0]?.text,
+      subStartActionTextKey: subStartStep?.escalations?.[0]?.actions?.[0]?.parameters?.find((p: any) => p?.parameterId === 'text')?.value,
+      mainStartActionTextKey: mainStartStep?.escalations?.[0]?.actions?.[0]?.parameters?.find((p: any) => p?.parameterId === 'text')?.value,
+      // DEBUG: Additional inspection
+      subStartActionKeys,
+      subStartActionFull,
+      subStartActionTextType: typeof subStartAction?.text,
+      subStartActionTextLength: typeof subStartAction?.text === 'string' ? subStartAction.text.length : 0
+    });
+
+    return sub;
+  }, [mainList, selectedMainIndex, selectedSubIndex, selectedRoot, localDDT]);
+
+  // Step keys per il nodo selezionato: se root selezionato, sempre 'introduction' (anche se vuoto, per permettere creazione)
+  const stepKeys = useMemo(() => {
+    if (selectedRoot) {
+      // Root selected: always show 'introduction' (even if empty, to allow creation)
+      return ['introduction'];
+    }
+    const steps = selectedNode ? getNodeSteps(selectedNode) : [];
+
+    // DEBUG: Log per verificare gli step estratti
+    console.log('[ResponseEditor][stepKeys]', {
+      selectedRoot,
+      selectedSubIndex,
+      nodeLabel: selectedNode?.label,
+      nodeKind: selectedNode?.kind,
+      nodeId: selectedNode?.id,
+      hasNode: !!selectedNode,
+      extractedSteps: JSON.stringify(steps),
+      extractedStepsLength: steps.length,
+      nodeSteps: selectedNode?.steps,
+      nodeStepsLength: Array.isArray(selectedNode?.steps) ? selectedNode.steps.length : Object.keys(selectedNode?.steps || {}).length,
+      stepsType: Array.isArray(selectedNode?.steps) ? 'array' : typeof selectedNode?.steps,
+      hasMessages: !!selectedNode?.messages,
+      messagesKeys: selectedNode?.messages ? Object.keys(selectedNode.messages) : []
+    });
+
+    return steps;
+  }, [selectedNode, selectedRoot, selectedSubIndex]);
+  // Append V2 notConfirmed for main node if present (not for root)
   const uiStepKeys = useMemo(() => {
-    if (selectedSubIndex != null) return stepKeys;
-    if (!stepKeys.includes('notConfirmed')) return [...stepKeys, 'notConfirmed'];
-    return stepKeys;
-  }, [stepKeys, selectedSubIndex]);
+    let result: string[];
+    if (selectedRoot) {
+      result = stepKeys; // Root doesn't have notConfirmed
+    } else if (selectedSubIndex != null) {
+      result = stepKeys; // Sub nodes don't have notConfirmed
+    } else if (!stepKeys.includes('notConfirmed')) {
+      result = [...stepKeys, 'notConfirmed'];
+    } else {
+      result = stepKeys;
+    }
+
+    // DEBUG: Log per verificare cosa viene passato a StepsStrip
+    console.log('[ResponseEditor][uiStepKeys]', {
+      selectedRoot,
+      selectedSubIndex,
+      stepKeysLength: stepKeys.length,
+      stepKeys: JSON.stringify(stepKeys),
+      uiStepKeysLength: result.length,
+      uiStepKeys: JSON.stringify(result)
+    });
+
+    return result;
+  }, [stepKeys, selectedSubIndex, selectedRoot]);
   const [selectedStepKey, setSelectedStepKey] = useState<string>('');
 
   // Mantieni lo step selezionato quando cambia il dato. Se lo step non esiste per il nuovo dato, fallback al primo disponibile.
@@ -309,6 +410,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
   // Callback per Sidebar
   const handleSelectMain = (idx: number) => {
+    setSelectedRoot(false); // Deselect root when selecting a main
     setSelectedMainIndex(idx);
     setSelectedSubIndex(undefined);
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
@@ -317,7 +419,16 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   // Callback per Header
   // removed unused header handler
   const handleSelectSub = (idx: number | undefined) => {
+    setSelectedRoot(false); // Deselect root when selecting a sub
     setSelectedSubIndex(idx);
+    setTimeout(() => { sidebarRef.current?.focus(); }, 0);
+  };
+
+  // Callback for selecting root/aggregate
+  const handleSelectAggregator = () => {
+    setSelectedRoot(true);
+    setSelectedMainIndex(0);
+    setSelectedSubIndex(undefined);
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
   };
 
@@ -326,6 +437,48 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     setLocalDDT((prev: any) => {
       if (!prev) return prev;
       const next = JSON.parse(JSON.stringify(prev));
+
+      // If root is selected, update introduction
+      if (selectedRoot) {
+        // Build a node structure with introduction step for updater
+        const introStep = prev.introduction ? { type: 'introduction', escalations: prev.introduction.escalations } : { type: 'introduction', escalations: [] };
+        const nodeForUpdate = { ...prev, steps: [introStep] };
+        const updated = updater(nodeForUpdate) || nodeForUpdate;
+
+        // Extract introduction from updated steps
+        if (updated && updated.steps && Array.isArray(updated.steps)) {
+          const updatedIntroStep = updated.steps.find((s: any) => s.type === 'introduction');
+          if (updatedIntroStep && updatedIntroStep.escalations && updatedIntroStep.escalations.length > 0) {
+            // Check if there are any actions in escalations
+            const hasActions = updatedIntroStep.escalations.some((esc: any) =>
+              esc?.actions && Array.isArray(esc.actions) && esc.actions.length > 0
+            );
+            if (hasActions) {
+              next.introduction = {
+                type: 'introduction',
+                escalations: updatedIntroStep.escalations || []
+              };
+            } else {
+              delete next.introduction;
+            }
+          } else {
+            delete next.introduction;
+          }
+        } else {
+          // If steps structure is missing, check if introduction was directly modified
+          if (updated.introduction) {
+            next.introduction = updated.introduction;
+          } else if (!prev.introduction && updated.introduction === undefined) {
+            delete next.introduction;
+          }
+        }
+        if (notifyProvider) {
+          try { replaceSelectedDDT(next); } catch { }
+        }
+        return next;
+      }
+
+      // Normal update for main/sub nodes
       const mains = getMainDataList(next);
       const main = mains[selectedMainIndex];
       if (!main) return prev;
@@ -342,10 +495,40 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         if (!sub) return prev;
         const subIdx = (main.subData || []).findIndex((s: any) => s.label === sub.label);
         const before = JSON.stringify(main.subData[subIdx]);
+
+        console.error('🔍 [updateSelectedNode] Updating SUB node', {
+          mainLabel: main?.label,
+          subLabel: sub?.label,
+          subIdx,
+          subId: sub?.id,
+          beforeSteps: main.subData[subIdx]?.steps,
+          beforeStartStep: main.subData[subIdx]?.steps?.find((s: any) => s?.type === 'start'),
+          beforeStartActionText: main.subData[subIdx]?.steps?.find((s: any) => s?.type === 'start')?.escalations?.[0]?.actions?.[0]?.text
+        });
+
         const updated = updater(sub) || sub;
         const after = JSON.stringify(updated);
+
+        console.error('🔍 [updateSelectedNode] After update', {
+          mainLabel: main?.label,
+          subLabel: updated?.label,
+          subId: updated?.id,
+          afterSteps: updated?.steps,
+          afterStartStep: updated?.steps?.find((s: any) => s?.type === 'start'),
+          afterStartActionText: updated?.steps?.find((s: any) => s?.type === 'start')?.escalations?.[0]?.actions?.[0]?.text,
+          areStepsSame: main.subData[subIdx]?.steps === updated?.steps,
+          areStartStepsSame: main.subData[subIdx]?.steps?.find((s: any) => s?.type === 'start') === updated?.steps?.find((s: any) => s?.type === 'start')
+        });
+
         if (before === after) return prev; // no content change
         main.subData[subIdx] = updated;
+
+        console.error('🔍 [updateSelectedNode] SUB node saved in main.subData', {
+          mainLabel: main?.label,
+          savedSubLabel: main.subData[subIdx]?.label,
+          savedSubId: main.subData[subIdx]?.id,
+          savedStartActionText: main.subData[subIdx]?.steps?.find((s: any) => s?.type === 'start')?.escalations?.[0]?.actions?.[0]?.text
+        });
       }
       next.mainData = mains;
       try {
@@ -638,7 +821,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                   return next;
                 });
               }}
-              onSelectAggregator={() => { setSelectedMainIndex(0); setSelectedSubIndex(undefined); setTimeout(() => { sidebarRef.current?.focus(); }, 0); }}
+              onSelectAggregator={handleSelectAggregator}
             />
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               {/* Steps toolbar hidden during NLP editor or MessageReview */}

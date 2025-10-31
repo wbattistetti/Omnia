@@ -10,7 +10,26 @@ interface StepsStripProps {
 }
 
 export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, node }: StepsStripProps) {
-  if (!stepKeys.length) return null;
+  // DEBUG: Log per verificare cosa riceve StepsStrip
+  console.log('[StepsStrip] Rendering', {
+    stepKeysLength: stepKeys.length,
+    stepKeys: JSON.stringify(stepKeys),
+    selectedStepKey,
+    nodeLabel: node?.label,
+    willRender: stepKeys.length > 0,
+    renderedButtons: stepKeys.length // Count of buttons that should be rendered
+  });
+
+  if (!stepKeys.length) {
+    console.log('[StepsStrip] Returning null - no stepKeys', { stepKeys, stepKeysLength: stepKeys.length });
+    return null;
+  }
+
+  // DEBUG: Verifica che stepKeys sia un array
+  if (!Array.isArray(stepKeys)) {
+    console.error('[StepsStrip] ERROR - stepKeys is not an array!', { stepKeys, type: typeof stepKeys });
+    return null;
+  }
 
   const baseLabels: Record<string, string> = {
     start: 'Chiedo il dato',
@@ -18,7 +37,8 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
     noInput: 'Non sento',
     confirmation: 'Devo confermare',
     success: 'Ho capito!',
-    notConfirmed: 'Non Confermato'
+    notConfirmed: 'Non Confermato',
+    introduction: 'Introduzione'
   };
 
   const colorForStep = (key: string): string => {
@@ -55,7 +75,8 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
         overflowX: 'auto'
       }}
     >
-      {stepKeys.map((key) => {
+      {stepKeys.map((key, index) => {
+        console.log(`[StepsStrip] Rendering button ${index}`, { key, selectedStepKey, nodeLabel: node?.label });
         const color = colorForStep(key);
         const selected = selectedStepKey === key;
         const label = getFriendlyLabel(key);

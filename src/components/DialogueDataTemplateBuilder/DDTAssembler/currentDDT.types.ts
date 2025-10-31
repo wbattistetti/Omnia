@@ -6,7 +6,7 @@ import type { ActionParameter, Action, Escalation, StepGroup } from './types';
 export type { ActionParameter, Action, Escalation, StepGroup };
 
 // Explicit step type union for current UI/editor expectations
-export type StepType = 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success';
+export type StepType = 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success' | 'introduction';
 
 // Main data node produced by the assembler today
 export interface MainDataNode {
@@ -28,6 +28,7 @@ export interface AssembledDDT {
   label: string;
   mainData: MainDataNode;
   translations: Record<string, string>;
+  introduction?: StepGroup; // Optional introduction step at root level (aggregate)
 }
 
 

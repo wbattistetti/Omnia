@@ -6,12 +6,12 @@ import nlpTypesConfig from '../../../../config/nlp-types.json';
 export const SUPPORTED_KINDS = nlpTypesConfig.supportedKinds as readonly string[];
 
 // ✅ Type for Kind based on config (for type safety)
-export type Kind = 
-  | 'name' 
-  | 'email' 
-  | 'phone' 
-  | 'date' 
-  | 'address' 
+export type Kind =
+  | 'name'
+  | 'email'
+  | 'phone'
+  | 'date'
+  | 'address'
   | 'generic'
   | 'number'
   | 'month'
@@ -139,6 +139,7 @@ export interface DDTTemplateV2Metadata {
   owner?: string;
   createdAt?: string;
   updatedAt?: string;
+  introduction?: StepMessages; // Optional introduction step at root level
 }
 
 export interface DDTTemplateV2 {

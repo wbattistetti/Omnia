@@ -216,11 +216,35 @@ export function adaptCurrentToV2(current: AssembledDDT): DDTTemplateV2 {
     }
   }
 
+  // Convert introduction StepGroup to StepMessages format for V2
+  let introductionV2: any = undefined;
+  if (current.introduction) {
+    // Extract text keys from introduction actions
+    const actions = current.introduction.escalations?.[0]?.actions || [];
+    const textKeys = actions
+      .map((a: any) => a?.parameters?.find((p: any) => p?.parameterId === 'text')?.value)
+      .filter(Boolean);
+    if (textKeys.length > 0) {
+      // Create a simple StepMessages structure for introduction
+      // Use 'ask' structure but it's actually just messages to display
+      introductionV2 = {
+        ask: {
+          base: textKeys[0] || '',
+          reaskNoInput: [],
+          reaskNoMatch: []
+        },
+        // Store all action keys for reference
+        _introductionActions: textKeys
+      };
+    }
+  }
+
   return {
     schemaVersion: '2',
     metadata: {
       id: current.id,
       label: current.label,
+      ...(introductionV2 ? { introduction: introductionV2 } : {})
     },
     nodes,
   };

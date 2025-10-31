@@ -39,6 +39,18 @@ function ActionRowInner({
   const [editValue, setEditValue] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // DEBUG: Log per verificare se onEdit è definito
+  React.useEffect(() => {
+    console.error('🔍 [ActionRow] Rendered', {
+      actionId,
+      text: text?.substring(0, 30),
+      hasOnEdit: !!onEdit,
+      editing,
+      label,
+      onEditType: typeof onEdit
+    });
+  }, [actionId, text, onEdit, editing, label]);
+
   // Notify parent when editing state changes
   React.useEffect(() => {
     onEditingChange?.(editing);
@@ -77,8 +89,17 @@ function ActionRowInner({
 
       // Always call onEdit when saving, regardless of whether value changed
       // This ensures edits are saved even if text prop hasn't updated yet
+      console.error('🔍 [ActionRow][handleEditKeyDown] Enter pressed', {
+        newValue,
+        oldValue: text,
+        hasOnEdit: !!onEdit,
+        actionId
+      });
       if (onEdit) {
         onEdit(newValue);
+        console.error('🔍 [ActionRow][handleEditKeyDown] onEdit called with', newValue);
+      } else {
+        console.error('🔍 [ActionRow][handleEditKeyDown] ERROR: onEdit is not defined!');
       }
     }
     if (e.key === 'Escape') {
@@ -101,8 +122,17 @@ function ActionRowInner({
 
     // Always call onEdit when saving, regardless of whether value changed
     // This ensures edits are saved even if text prop hasn't updated yet
+    console.error('🔍 [ActionRow][handleEditConfirm] Called', {
+      newValue,
+      oldValue: text,
+      hasOnEdit: !!onEdit,
+      actionId
+    });
     if (onEdit) {
       onEdit(newValue);
+      console.error('🔍 [ActionRow][handleEditConfirm] onEdit called with', newValue);
+    } else {
+      console.error('🔍 [ActionRow][handleEditConfirm] ERROR: onEdit is not defined!');
     }
   };
 
