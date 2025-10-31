@@ -4,6 +4,7 @@ import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
 import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import { instanceRepository } from '../../../services/InstanceRepository';
+import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import Sidebar from './Sidebar';
 import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, BookOpen, List } from 'lucide-react';
 import StepsStrip from './StepsStrip';
@@ -22,6 +23,9 @@ import {
 } from './ddtSelectors';
 
 export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
+  // Ottieni projectId corrente per salvare le istanze nel progetto corretto
+  const pdUpdate = useProjectDataUpdate();
+  const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   // Font zoom (Ctrl+wheel) like sidebar
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 24;
@@ -179,7 +183,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
       if (act?.id || (act as any)?.instanceId) {
         const key = ((act as any)?.instanceId || act?.id) as string;
-        const saved = instanceRepository.updateDDT(key, localDDT);
+        const saved = instanceRepository.updateDDT(key, localDDT, currentProjectId || undefined);
 
         // Fallback: salva anche nel provider globale se l'istanza non esiste
         if (!saved) {

@@ -107,7 +107,15 @@ class InstanceRepository {
             console.log('✅ [InstanceRepository] getInstance: ISTANZA TROVATA', {
                 instanceId,
                 hasDDT: !!instance.ddt,
-                ddtMainData: instance.ddt?.mainData?.length || 0
+                ddtType: typeof instance.ddt,
+                ddtIsNull: instance.ddt === null,
+                ddtIsUndefined: instance.ddt === undefined,
+                ddtStringified: instance.ddt ? JSON.stringify(instance.ddt, null, 2).substring(0, 500) : 'null/undefined',
+                ddtKeys: instance.ddt && typeof instance.ddt === 'object' ? Object.keys(instance.ddt) : [],
+                ddtMainData: instance.ddt?.mainData,
+                ddtMainDataLength: instance.ddt?.mainData?.length || 0,
+                ddtId: instance.ddt?.id,
+                instanceFull: instance // Log completo per debugging
             });
         }
 
@@ -118,9 +126,10 @@ class InstanceRepository {
      * Aggiorna il DDT di un'istanza
      * @param instanceId ID dell'istanza da aggiornare
      * @param ddt DDT da associare all'istanza
+     * @param projectId ID del progetto (opzionale, se fornito salva nel progetto specifico)
      * @returns True se aggiornato con successo, false altrimenti
      */
-    updateDDT(instanceId: string, ddt: any): boolean {
+    updateDDT(instanceId: string, ddt: any, projectId?: string): boolean {
         console.log('📦 [InstanceRepository] updateDDT chiamato', {
             instanceId,
             ddtProvided: !!ddt,
@@ -134,7 +143,7 @@ class InstanceRepository {
             instance.updatedAt = new Date();
 
             // Salva automaticamente nel database
-            this.updateInstanceInDatabase(instance).catch(error => {
+            this.updateInstanceInDatabase(instance, projectId).catch(error => {
                 console.error('Failed to update instance in database:', error);
             });
 
@@ -142,7 +151,8 @@ class InstanceRepository {
                 instanceId,
                 ddtId: ddt?.id || ddt?._id,
                 ddtLabel: ddt?.label,
-                ddtMainData: ddt?.mainData?.length || 0
+                ddtMainData: ddt?.mainData?.length || 0,
+                projectId: projectId || 'global'
             });
 
             return true;
@@ -212,18 +222,51 @@ class InstanceRepository {
     /**
      * Salva un'istanza nel database
      * @param instance L'istanza da salvare
+     * @param projectId ID del progetto (opzionale, se fornito salva nel progetto specifico)
      * @returns True se salvata con successo, false altrimenti
      */
-    async saveInstanceToDatabase(instance: ActInstance): Promise<boolean> {
+    async saveInstanceToDatabase(instance: ActInstance, projectId?: string): Promise<boolean> {
         try {
-            const response = await fetch(`${API_BASE}/api/instances`, {
+            let url: string;
+            let payload: any;
+
+            if (projectId) {
+                // Salva nel progetto specifico
+                url = `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/instances`;
+                // Il backend si aspetta { baseActId, mode, message, overrides, ddtSnapshot, rowId }
+                payload = {
+                    baseActId: instance.actId,
+                    mode: 'DataRequest', // Default, dovrebbe essere determinato dal contesto
+                    message: null,
+                    overrides: null,
+                    ddtSnapshot: instance.ddt || null,
+                    rowId: instance.instanceId // ID originale della riga
+                };
+
+                console.log('💾 [InstanceRepository] Saving instance to DB:', {
+                    instanceId: instance.instanceId,
+                    projectId,
+                    hasDDT: !!instance.ddt,
+                    ddtType: typeof instance.ddt,
+                    ddtMainDataLength: instance.ddt?.mainData?.length || 0,
+                    ddtId: instance.ddt?.id,
+                    ddtKeys: instance.ddt && typeof instance.ddt === 'object' ? Object.keys(instance.ddt) : [],
+                    ddtSnapshotFull: instance.ddt // Log completo per vedere struttura
+                });
+            } else {
+                // Fallback: usa endpoint globale (se esiste)
+                url = `${API_BASE}/api/instances`;
+                payload = instance;
+            }
+
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(instance)
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {
-                console.log('✅ [InstanceRepository] Instance saved to database:', instance.instanceId);
+                console.log(`✅ [InstanceRepository] Instance saved to database: ${instance.instanceId}${projectId ? ` (project: ${projectId})` : ''}`);
                 return true;
             } else {
                 console.error('❌ [InstanceRepository] Failed to save instance:', response.statusText);
@@ -237,25 +280,96 @@ class InstanceRepository {
 
     /**
      * Carica tutte le istanze dal database
+     * @param projectId ID del progetto (opzionale, se fornito carica solo le istanze di quel progetto)
      * @returns True se caricate con successo, false altrimenti
      */
-    async loadInstancesFromDatabase(): Promise<boolean> {
+    async loadInstancesFromDatabase(projectId?: string): Promise<boolean> {
         try {
-            const response = await fetch(`${API_BASE}/api/instances`);
+            let url = `${API_BASE}/api/instances`;
+            if (projectId) {
+                // Carica solo le istanze del progetto specifico
+                url = `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/instances`;
+            } else {
+                // Endpoint globale non esiste o non è supportato
+                // Non è un errore, semplicemente non ci sono istanze globali
+                console.log('ℹ️ [InstanceRepository] Skipping global instances load (project-specific only)');
+                return true;
+            }
+
+            const response = await fetch(url);
 
             if (response.ok) {
-                const instances: ActInstance[] = await response.json();
+                let instances: ActInstance[];
+                if (projectId) {
+                    // Il backend restituisce { count, items } per progetti specifici
+                    const data = await response.json();
+                    instances = Array.isArray(data.items) ? data.items : [];
+                } else {
+                    // Il backend restituisce array diretto per /api/instances
+                    instances = await response.json();
+                }
 
-                // Pulisce le istanze esistenti e carica quelle dal database
-                this.instances.clear();
-                instances.forEach(instance => {
-                    // Converte le date da stringa a Date
-                    instance.createdAt = new Date(instance.createdAt);
-                    instance.updatedAt = new Date(instance.updatedAt);
-                    this.instances.set(instance.instanceId, instance);
+                if (projectId) {
+                    // Quando carichiamo un progetto specifico, puliamo solo le istanze e carichiamo quelle del progetto
+                    this.instances.clear();
+                } else {
+                    // Quando carichiamo globalmente, puliamo tutto
+                    this.instances.clear();
+                }
+
+                instances.forEach((instance: any) => {
+                    // Usa rowId (ID originale della riga) se disponibile, altrimenti _id
+                    // Questo permette di mappare correttamente le istanze alle righe del flowchart
+                    const instanceId = instance.rowId || instance.instanceId || instance._id || String(instance._id);
+
+                    // Debug: vediamo cosa arriva dal database
+                    console.log('📥 [InstanceRepository] Loading instance from DB:', {
+                        instanceId,
+                        rawInstance: instance,
+                        hasDDTSnapshot: !!instance.ddtSnapshot,
+                        ddtSnapshotType: typeof instance.ddtSnapshot,
+                        ddtSnapshotIsNull: instance.ddtSnapshot === null,
+                        ddtSnapshotKeys: instance.ddtSnapshot && typeof instance.ddtSnapshot === 'object' ? Object.keys(instance.ddtSnapshot) : [],
+                        ddtSnapshotMainDataLength: instance.ddtSnapshot?.mainData?.length || 0,
+                        ddtSnapshotId: instance.ddtSnapshot?.id,
+                        ddtSnapshotFull: instance.ddtSnapshot, // Log completo per vedere struttura
+                        hasDDT: !!instance.ddt,
+                        ddtType: typeof instance.ddt
+                    });
+
+                    const ddtValue = instance.ddtSnapshot || instance.ddt || null;
+
+                    console.log('📦 [InstanceRepository] Final ddt value:', {
+                        exists: !!ddtValue,
+                        type: typeof ddtValue,
+                        isNull: ddtValue === null,
+                        keys: ddtValue && typeof ddtValue === 'object' ? Object.keys(ddtValue) : [],
+                        mainDataLength: ddtValue?.mainData?.length || 0,
+                        id: ddtValue?.id
+                    });
+
+                    const actInstance: ActInstance = {
+                        instanceId,
+                        actId: instance.baseActId || instance.actId || '',
+                        problemIntents: instance.problemIntents || [],
+                        ddt: ddtValue,
+                        createdAt: instance.createdAt instanceof Date ? instance.createdAt : new Date(instance.createdAt),
+                        updatedAt: instance.updatedAt instanceof Date ? instance.updatedAt : new Date(instance.updatedAt)
+                    };
+                    this.instances.set(instanceId, actInstance);
+                    console.log(`💾 [InstanceRepository] Added instance to map:`, {
+                        instanceId,
+                        mapSize: this.instances.size,
+                        allKeys: Array.from(this.instances.keys())
+                    });
                 });
 
-                console.log('✅ [InstanceRepository] Loaded instances from database:', instances.length);
+                console.log(`✅ [InstanceRepository] Loaded ${instances.length} instances from database${projectId ? ` (project: ${projectId})` : ''}`);
+                console.log(`📊 [InstanceRepository] Final map state:`, {
+                    mapSize: this.instances.size,
+                    allKeys: Array.from(this.instances.keys()),
+                    allInstanceIds: Array.from(this.instances.values()).map(i => i.instanceId)
+                });
                 return true;
             } else {
                 console.error('❌ [InstanceRepository] Failed to load instances:', response.statusText);
@@ -268,27 +382,97 @@ class InstanceRepository {
     }
 
     /**
-     * Aggiorna un'istanza nel database
+     * Aggiorna un'istanza nel database (o la crea se non esiste)
      * @param instance L'istanza da aggiornare
-     * @returns True se aggiornata con successo, false altrimenti
+     * @param projectId ID del progetto (opzionale, se fornito aggiorna nel progetto specifico)
+     * @returns True se aggiornata/creata con successo, false altrimenti
      */
-    async updateInstanceInDatabase(instance: ActInstance): Promise<boolean> {
+    async updateInstanceInDatabase(instance: ActInstance, projectId?: string): Promise<boolean> {
         try {
-            const response = await fetch(`${API_BASE}/api/instances/${instance.instanceId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(instance)
-            });
+            if (projectId) {
+                // Usa endpoint progetto-specifico
+                const url = `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/instances/${instance.instanceId}`;
+                const payload = {
+                    message: null,
+                    overrides: null,
+                    ddtSnapshot: instance.ddt || null
+                };
 
-            if (response.ok) {
-                console.log('✅ [InstanceRepository] Instance updated in database:', instance.instanceId);
-                return true;
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    console.log(`✅ [InstanceRepository] Instance updated in database: ${instance.instanceId} (project: ${projectId})`);
+                    return true;
+                } else if (response.status === 404) {
+                    // Se l'istanza non esiste (404), creala con POST
+                    console.log(`⚠️ [InstanceRepository] Instance not found, creating new one: ${instance.instanceId} (project: ${projectId})`);
+                    return await this.saveInstanceToDatabase(instance, projectId);
+                } else {
+                    console.error('❌ [InstanceRepository] Failed to update instance:', response.statusText);
+                    return false;
+                }
             } else {
-                console.error('❌ [InstanceRepository] Failed to update instance:', response.statusText);
-                return false;
+                // Fallback: usa endpoint globale (se esiste)
+                const response = await fetch(`${API_BASE}/api/instances/${instance.instanceId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(instance)
+                });
+
+                if (response.ok) {
+                    console.log('✅ [InstanceRepository] Instance updated in database:', instance.instanceId);
+                    return true;
+                } else if (response.status === 404) {
+                    console.log('⚠️ [InstanceRepository] Instance not found, creating new one:', instance.instanceId);
+                    return await this.saveInstanceToDatabase(instance);
+                } else {
+                    console.error('❌ [InstanceRepository] Failed to update instance:', response.statusText);
+                    return false;
+                }
             }
         } catch (error) {
             console.error('❌ [InstanceRepository] Error updating instance:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Salva tutte le istanze in memoria nel database (bulk save)
+     * Utile quando si salva il progetto per sincronizzare tutto insieme
+     * @param projectId ID del progetto (opzionale, se fornito salva nel progetto specifico)
+     * @returns True se salvate con successo, false altrimenti
+     */
+    async saveAllInstancesToDatabase(projectId?: string): Promise<boolean> {
+        try {
+            const allInstances = Array.from(this.instances.values());
+            if (allInstances.length === 0) {
+                console.log('ℹ️ [InstanceRepository] No instances to save');
+                return true;
+            }
+
+            console.log(`📦 [InstanceRepository] Saving ${allInstances.length} instances to database${projectId ? ` (project: ${projectId})` : ''}...`);
+
+            // Salva tutte le istanze (crea quelle che non esistono, aggiorna quelle che esistono)
+            const results = await Promise.allSettled(
+                allInstances.map(instance => this.updateInstanceInDatabase(instance, projectId))
+            );
+
+            const successful = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+            const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === false)).length;
+
+            if (failed > 0) {
+                console.warn(`⚠️ [InstanceRepository] Failed to save ${failed} out of ${allInstances.length} instances`);
+            } else {
+                console.log(`✅ [InstanceRepository] Successfully saved ${successful} instances to database`);
+            }
+
+            return failed === 0;
+        } catch (error) {
+            console.error('❌ [InstanceRepository] Error saving all instances:', error);
             return false;
         }
     }

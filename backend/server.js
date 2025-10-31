@@ -718,7 +718,8 @@ app.post('/api/projects/:pid/instances', async (req, res) => {
       overrides: payload.overrides || null,
       baseVersion: base?.updatedAt || null,
       baseHash: null,
-      ddtSnapshot: null,
+      ddtSnapshot: payload.ddtSnapshot || null, // Supporto per ddtSnapshot nel POST
+      rowId: payload.rowId || null, // ID originale della riga (instance.instanceId)
       createdAt: now,
       updatedAt: now
     };
@@ -784,14 +785,26 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
 
+    // Cerca prima per _id, poi per rowId se non trovato (per supportare ID righe)
+    let existing = await projDb.collection('act_instances').findOne({ _id: iid });
+    if (!existing) {
+      // Prova a cercare per rowId (ID originale della riga)
+      existing = await projDb.collection('act_instances').findOne({ rowId: iid });
+    }
+
     const update = { updatedAt: new Date() };
     if (payload.message !== undefined) update['message'] = payload.message;
     if (payload.overrides !== undefined) update['overrides'] = payload.overrides;
+    if (payload.ddtSnapshot !== undefined) update['ddtSnapshot'] = payload.ddtSnapshot; // Supporto per ddtSnapshot
 
     // optional: fork = true → copy current project_acts.ddtSnapshot into instance.ddtSnapshot
     if (payload.fork === true) {
-      const curr = await projDb.collection('act_instances').findOne({ _id: iid });
-      const baseId = payload.baseActId || curr?.baseActId;
+      // Usa existing già trovato sopra, o cerca di nuovo se necessario
+      if (!existing) {
+        existing = await projDb.collection('act_instances').findOne({ _id: iid }) ||
+          await projDb.collection('act_instances').findOne({ rowId: iid });
+      }
+      const baseId = payload.baseActId || existing?.baseActId;
       if (baseId) {
         const base = await projDb.collection('project_acts').findOne({ _id: baseId });
         if (base && base.ddtSnapshot) {
@@ -801,8 +814,32 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
       }
     }
 
-    await projDb.collection('act_instances').updateOne({ _id: iid }, { $set: update });
-    const saved = await projDb.collection('act_instances').findOne({ _id: iid });
+    // Usa _id trovato o rowId per aggiornare
+    const filter = existing ? { _id: existing._id } : { rowId: iid };
+    const updateResult = await projDb.collection('act_instances').updateOne(filter, { $set: update });
+
+    // Se non esiste e abbiamo rowId, crea nuova istanza
+    if (updateResult.matchedCount === 0 && iid && !existing) {
+      // Crea nuova istanza con rowId
+      const newInstance = {
+        projectId,
+        baseActId: payload.baseActId || 'Unknown',
+        ddtRefId: payload.baseActId || 'Unknown',
+        mode: payload.mode || 'DataRequest',
+        message: payload.message || null,
+        overrides: payload.overrides || null,
+        ddtSnapshot: payload.ddtSnapshot || null,
+        rowId: iid,
+        baseVersion: null,
+        baseHash: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      await projDb.collection('act_instances').insertOne(newInstance);
+      existing = newInstance;
+    }
+
+    const saved = await projDb.collection('act_instances').findOne(existing ? { _id: existing._id } : { rowId: iid });
     res.json(saved);
   } catch (e) {
     logError('Instances.put', e, { projectId, instanceId: iid });

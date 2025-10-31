@@ -390,6 +390,14 @@ export const AppContent: React.FC<AppContentProps> = ({
       try { localStorage.setItem('current.projectId', id); } catch { }
       // Carica atti dal DB progetto
       await ProjectDataService.loadActsFromProject(id);
+      // Carica istanze dal DB progetto
+      try {
+        const { instanceRepository } = await import('../services/InstanceRepository');
+        await instanceRepository.loadInstancesFromDatabase(id);
+      } catch (e) {
+        console.warn('[OpenProject] Failed to load instances:', e);
+        // Non bloccare l'apertura del progetto se questo fallisce
+      }
       // Carica flow (nodi/edge)
       let loadedNodes: any[] = [];
       let loadedEdges: any[] = [];
@@ -576,6 +584,23 @@ export const AppContent: React.FC<AppContentProps> = ({
                     (dataSvc as any).__draftInstances.delete(key);
                     const tI1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                     try { console.log('[Save][timing] instances ms', Math.round(tI1 - tI0), 'count', items.length); } catch { }
+                  }
+                  // 2c) Persisti tutte le istanze con DDT da InstanceRepository
+                  if (pid) {
+                    try {
+                      const tI2_0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                      const { instanceRepository } = await import('../services/InstanceRepository');
+                      const saved = await instanceRepository.saveAllInstancesToDatabase(pid);
+                      const tI2_1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                      if (saved) {
+                        try { console.log('[Save][instances][repository]', { pid, ms: Math.round(tI2_1 - tI2_0) }); } catch { }
+                      } else {
+                        try { console.warn('[Save][instances][repository]', { pid, ms: Math.round(tI2_1 - tI2_0), warning: 'some_failed' }); } catch { }
+                      }
+                    } catch (e) {
+                      console.error('[Save][instances][repository] error', e);
+                      // Non bloccare il salvataggio del progetto se questo fallisce
+                    }
                   }
                   // 2b) persisti gli Agent Acts creati al volo nel DB progetto (solo su Save esplicito)
                   try {
@@ -768,8 +793,14 @@ function ActEditorOverlay() {
   React.useEffect(() => {
     const update = () => {
       const el = document.getElementById('flow-canvas-host');
-      if (el) setHostRect(el.getBoundingClientRect());
-      else setHostRect(null);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        setHostRect(rect);
+        console.log('✅ [ActEditorOverlay] hostRect updated:', { left: rect.left, width: rect.width, bottom: rect.bottom });
+      } else {
+        console.warn('⚠️ [ActEditorOverlay] flow-canvas-host element not found');
+        setHostRect(null);
+      }
     };
     update();
     window.addEventListener('resize', update);
@@ -781,7 +812,19 @@ function ActEditorOverlay() {
     }
     return () => { window.removeEventListener('resize', update); mo?.disconnect(); };
   }, []);
-  if (!ctx.act || !hostRect) return null;
+
+  console.log('🔍 [ActEditorOverlay] Render check:', {
+    hasAct: !!ctx.act,
+    actId: ctx.act?.id,
+    instanceId: ctx.act?.instanceId,
+    hasHostRect: !!hostRect,
+    hostRect: hostRect ? { left: hostRect.left, width: hostRect.width, bottom: hostRect.bottom } : null
+  });
+
+  if (!ctx.act || !hostRect) {
+    console.warn('⚠️ [ActEditorOverlay] Cannot render:', { hasAct: !!ctx.act, hasHostRect: !!hostRect });
+    return null;
+  }
   const node = (
     <div
       style={{ position: 'absolute', left: hostRect.left, width: hostRect.width, bottom: 0, zIndex: 50, pointerEvents: 'auto' }}
