@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { info, warn } from '../../../utils/logger';
+import { info } from '../../../utils/logger';
 import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
 import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
@@ -177,8 +177,8 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
     try {
       // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
-      if (act?.id || act?.instanceId) {
-        const key = (act?.instanceId || act?.id) as string;
+      if (act?.id || (act as any)?.instanceId) {
+        const key = ((act as any)?.instanceId || act?.id) as string;
         const saved = instanceRepository.updateDDT(key, localDDT);
 
         // Fallback: salva anche nel provider globale se l'istanza non esiste
@@ -187,14 +187,18 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         }
       }
 
-      // Salva anche nel provider globale per compatibilità
-      replaceSelectedDDT(localDDT);
+      // NON chiamare replaceSelectedDDT se abbiamo act prop (siamo in ActEditorOverlay)
+      // Questo previene l'apertura di ResizableResponseEditor in AppContent mentre si chiude ActEditorOverlay
+      if (!act) {
+        // Modalità diretta (senza act): aggiorna selectedDDT per compatibilità legacy
+        replaceSelectedDDT(localDDT);
+      }
     } catch (e) {
       console.error('ResponseEditor persist error:', e);
     }
 
     try { onClose && onClose(); } catch { }
-  }, [localDDT, replaceSelectedDDT, onClose, act?.id, act?.instanceId]);
+  }, [localDDT, replaceSelectedDDT, onClose, act?.id, (act as any)?.instanceId]);
 
   const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
   // Aggregated view: show a group header when there are multiple mains

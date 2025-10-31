@@ -11,6 +11,8 @@ import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
 import { usePanelZoom } from '../../hooks/usePanelZoom';
 import { classifyActInteractivity } from '../../nlp/actInteractivity';
+import { useActEditor } from '../ActEditor/EditorHost/ActEditorContext';
+import { ddtToAct } from '../../utils/ddtToAct';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -41,7 +43,8 @@ const Sidebar: React.FC = () => {
   } = useProjectDataUpdate();
 
   // Usa il nuovo hook per DDT
-  const { ddtList, openDDT, loadDDTError, selectedDDT } = useDDTManager();
+  const { ddtList, loadDDTError } = useDDTManager();
+  const actEditorCtx = useActEditor();
   const [search, setSearch] = useState('');
   const [industryFilter, setIndustryFilter] = useState<string>('all');
 
@@ -80,11 +83,11 @@ const Sidebar: React.FC = () => {
       })),
       translations: (newDDT?.translations && newDDT.translations.en) ? { en: newDDT.translations.en } : undefined,
       builtAt: new Date().toISOString(),
-      checksum: (() => { try { return String(btoa(unescape(encodeURIComponent(JSON.stringify(newDDT.mainData||[]))))).slice(0,32); } catch { return String(version); } })(),
+      checksum: (() => { try { return String(btoa(unescape(encodeURIComponent(JSON.stringify(newDDT.mainData || []))))).slice(0, 32); } catch { return String(version); } })(),
       origin: { tool: 'wizard' }
     } as any;
     item.ddt = snapshot;
-    try { console.log('[AgentAct][embed.ddt]', { act: item.name, version }); } catch {}
+    try { console.log('[AgentAct][embed.ddt]', { act: item.name, version }); } catch { }
     // Persist via regular updateItem flow (will call Factory PUT best-effort)
     try {
       await updateItem('agentActs', categoryId, itemId, { ddt: snapshot } as any);
@@ -106,7 +109,8 @@ const Sidebar: React.FC = () => {
         })),
         translations: snapshot.translations || { en: {} }
       } as any;
-      openDDT(transient);
+      // Usa ctx.act invece di openDDT per unificare l'apertura editor
+      actEditorCtx.open(ddtToAct(transient));
     } catch (e) { console.error('[Sidebar] auto-open embedded DDT failed', e); }
   };
 
@@ -128,7 +132,10 @@ const Sidebar: React.FC = () => {
       })),
       translations: ddtSnap.translations || { en: {} }
     } as any;
-    try { openDDT(transient); } catch (e) { console.error('[Sidebar] open embedded DDT failed', e); }
+    try {
+      // Usa ctx.act invece di openDDT per unificare l'apertura editor
+      actEditorCtx.open(ddtToAct(transient));
+    } catch (e) { console.error('[Sidebar] open embedded DDT failed', e); }
   };
 
   // const handleEditDDT = (_id: string) => {};
@@ -190,7 +197,7 @@ const Sidebar: React.FC = () => {
       try {
         const approxSize = new Blob([JSON.stringify(payload)]).size;
         console.log('[Sidebar] DDT save payload size ~', approxSize, 'bytes');
-      } catch {}
+      } catch { }
       const res = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -199,7 +206,7 @@ const Sidebar: React.FC = () => {
       if (!res.ok) {
         throw new Error('Server error: unable to save DDT');
       }
-      try { console.log('[KindPersist][Sidebar][saved payload mains]', payload.flatMap((d: any) => (d?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })))); } catch {}
+      try { console.log('[KindPersist][Sidebar][saved payload mains]', payload.flatMap((d: any) => (d?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })))); } catch { }
       // Nota: non ricarichiamo da backend per evitare flicker; la lista è già la sorgente del payload
       // ensure spinner is visible at least 600ms
       const elapsed = Date.now() - startedAt;
@@ -243,16 +250,16 @@ const Sidebar: React.FC = () => {
     };
 
     const handleSidebarRefresh = (_e: any) => {
-      try { console.log('[SidebarFlow] refresh received'); } catch {}
+      try { console.log('[SidebarFlow] refresh received'); } catch { }
       try {
         // Forza un leggero refresh locale leggendo dal ProjectDataService
         const ev = new CustomEvent('sidebar:forceRender', { bubbles: true });
         document.dispatchEvent(ev);
-      } catch {}
+      } catch { }
     };
 
     const handleForceRender = () => {
-      try { console.log('[SidebarFlow] forceRender tick'); } catch {}
+      try { console.log('[SidebarFlow] forceRender tick'); } catch { }
       setForceTick((t) => t + 1);
     };
 
@@ -422,7 +429,7 @@ const Sidebar: React.FC = () => {
               if (last) {
                 await updateItem('agentActs', categoryId, last.id, { type: 'BackendCall' } as any);
               }
-            } catch {}
+            } catch { }
           }}
           onDeleteItem={(categoryId, itemId) => deleteItem('agentActs', categoryId, itemId)}
           onUpdateItem={(categoryId, itemId, updates) => updateItem('agentActs', categoryId, itemId, updates)}

@@ -12,6 +12,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DDTProvider } from '../context/DDTContext';
 import { DDTManagerProvider } from '../context/DDTManagerContext';
 import { ThemeProvider } from '../theme/components/ThemeProvider';
+import { ActEditorProvider } from './ActEditor/EditorHost/ActEditorContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -137,7 +138,9 @@ export default function App() {
           <DndProvider backend={HTML5Backend}>
             <DDTProvider>
               <DDTManagerProvider>
-                <AppInner />
+                <ActEditorProvider>
+                  <AppInner />
+                </ActEditorProvider>
               </DDTManagerProvider>
             </DDTProvider>
           </DndProvider>

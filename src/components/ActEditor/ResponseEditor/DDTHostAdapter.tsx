@@ -1,11 +1,9 @@
 import React from 'react';
 import type { EditorProps } from '../EditorHost/types';
 import ResponseEditor from './index';
-import { useDDTManager } from '../../../context/DDTManagerContext';
 import { instanceRepository } from '../../../services/InstanceRepository';
 
 export default function DDTHostAdapter({ act, onClose }: EditorProps) {
-  const { openDDT } = useDDTManager();
   const instanceKey = React.useMemo(() => act.instanceId || act.id, [act.instanceId, act.id]);
 
 
@@ -42,13 +40,9 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     // Close this overlay first
     if (onClose) onClose();
 
-    // Then open in DDTManager (AppContent will mount ResizableResponseEditor)
-    if (finalDDT) {
-      setTimeout(() => {
-        openDDT(finalDDT);
-      }, 50);
-    }
-  }, [act.id, instanceKey, onClose, openDDT]);
+    // Non serve più aprire in DDTManager: l'editor è già stato aperto tramite ctx.act
+    // Se l'utente vuole riaprire, può cliccare di nuovo l'ingranaggio
+  }, [instanceKey, onClose]);
 
   return (
     <ResponseEditor
