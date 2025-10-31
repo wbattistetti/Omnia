@@ -39,7 +39,7 @@ import { getLogger } from './logger';
 function logMI(...args: any[]) {
   const logger = getLogger();
   if (!logger.miEnabled) return;
-  try { logger.debug('[MixedInit]', ...args); } catch {}
+  try { logger.debug('[MixedInit]', ...args); } catch { }
 }
 
 function currentMain(state: SimulatorState): DDTNode | undefined {
@@ -123,7 +123,7 @@ function advanceIndex(state: SimulatorState): SimulatorState {
         anyPresent,
         missingSub: labelOf(missingSub),
       });
-    } catch {}
+    } catch { }
     if (missingSub && anyPresent) {
       logMI('advanceIndex', { nextIdx, nextMain: nextMain?.label, nextMode: 'CollectingSub', currentSubId: missingSub, currentSubLabel: labelOf(missingSub) });
       return { ...newState, mode: 'CollectingSub', currentSubId: missingSub };
@@ -138,14 +138,14 @@ function advanceIndex(state: SimulatorState): SimulatorState {
 // --- Mixed-initiative sanitization helpers ---
 const MONTH_WORDS = new Set([
   // EN
-  'january','february','march','april','may','june','july','august','september','october','november','december',
-  'jan','feb','mar','apr','jun','jul','aug','sep','sept','oct','nov','dec',
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+  'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
   // IT
-  'gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre',
-  'gen','feb','mar','apr','mag','giu','lug','ago','sett','ott','nov','dic',
+  'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre',
+  'gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'sett', 'ott', 'nov', 'dic',
 ]);
 
-const NAME_STOPWORDS = new Set(['nato','nata','born','a','in','il','lo','la','le','del','della','dei','di','da','the','at','on','mi','chiamo','nome','e','è','my','name','is','sono']);
+const NAME_STOPWORDS = new Set(['nato', 'nata', 'born', 'a', 'in', 'il', 'lo', 'la', 'le', 'del', 'della', 'dei', 'di', 'da', 'the', 'at', 'on', 'mi', 'chiamo', 'nome', 'e', 'è', 'my', 'name', 'is', 'sono']);
 
 function isMonthWord(word: string): boolean {
   const w = word.normalize('NFKD').replace(/[^a-zA-Z]/g, '').toLowerCase();
@@ -272,7 +272,7 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
     .filter(Boolean)
     .map((n) => String(n.kind || '').toLowerCase());
   const uniqueKinds = Array.from(new Set(kindsOrder));
-  const constrained = ['email','phone','date','postal','zip','number','numeric'];
+  const constrained = ['email', 'phone', 'date', 'postal', 'zip', 'number', 'numeric'];
   const isConstrained = (k: string) => constrained.includes(String(k || '').toLowerCase());
 
   const constrainedKinds = uniqueKinds.filter((k) => isConstrained(k));
@@ -299,7 +299,7 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
     if (!hasPhoneAlready && (primaryKind === 'phone' || !!phoneHit)) {
       ordered = ['phone', ...ordered];
     }
-  } catch {}
+  } catch { }
   // Safety: always attempt a name extraction pass at the very end
   if (!ordered.includes('name')) ordered.push('name');
   logMI('order', { primaryKind, constrainedKinds, remaining, ordered });
@@ -432,8 +432,8 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
               if (v && (memory[id]?.value === undefined)) { memory = setMemory(memory, id, v, false); logMI('memWrite', { id, kind: 'name', value: v }); wrote = true; }
             }
             if (wrote) {
-            subtract(hit.span);
-            logMI('write', { kind, id, afterResidualLen: residual.length });
+              subtract(hit.span);
+              logMI('write', { kind, id, afterResidualLen: residual.length });
             } else {
               logMI('skipSubtract', { kind, reason: 'name already present' });
             }
@@ -495,7 +495,7 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
         })
         .map((sid) => String(state.plan.byId[sid]?.label || sid));
       logMI('postExtract', { main: mainLabel, residual, presentSubs });
-    } catch {}
+    } catch { }
     const dateDet = getKind('date')?.detect(residual);
     const corrected = extractImplicitCorrection(residual) || dateDet?.value || extractLastDate(residual) || residual;
     const applied = applyComposite(main.kind, corrected);
@@ -580,7 +580,7 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
     try {
       const missLabel = missing ? String(state.plan.byId[missing]?.label || missing) : undefined;
       logMI('decision', { main: String(main.label || main.id), saturated, missing: missLabel, nextMode: saturated && !missing ? 'ConfirmingMain' : missing ? 'CollectingSub' : 'CollectingMain' });
-    } catch {}
+    } catch { }
     if (saturated && !missing) {
       return { ...state, memory: mem, mode: 'ConfirmingMain' };
     }
@@ -596,7 +596,7 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
     let mem = setMemory(state.memory, sid, corrected, false);
     try {
       logMI('subWrite', { main: String(currentMain(state)?.label || ''), sub: String(state.plan.byId[sid]?.label || sid), value: corrected });
-    } catch {}
+    } catch { }
     // Recompose main value from current sub values so main reflects subs
     const composeFromSubs = (m: DDTNode, memory: Memory) => {
       if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
@@ -618,12 +618,12 @@ export function advance(state: SimulatorState, input: string): SimulatorState {
       try {
         const labels = requiredIds.map((s) => String(state.plan.byId[s]?.label || s));
         logMI('collectingSub.next', { main: main.label, required: labels, next: String(state.plan.byId[nextRequiredMissing]?.label || nextRequiredMissing) });
-      } catch {}
+      } catch { }
       return { ...state, memory: mem, currentSubId: nextRequiredMissing };
     }
     try {
       logMI('collectingSub.done', { main: String(main.label || main.id) });
-    } catch {}
+    } catch { }
     return { ...state, memory: mem, mode: 'ConfirmingMain', currentSubId: undefined };
   }
 

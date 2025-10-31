@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export type EditorType = 'regex' | 'extractor' | 'ner' | 'llm' | null;
+export type EditorType = 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | null;
 
 /**
  * Hook for managing active inline editor state

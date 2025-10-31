@@ -12,6 +12,7 @@ import nlpTypesConfig from '../../../../config/nlp-types.json';
 // 🎯 Custom Hooks
 import { useNotes } from './hooks/useNotes';
 import { useEditorState } from './hooks/useEditorState';
+import { useProfileState } from './hooks/useProfileState';
 
 // 🎨 Config Components
 import KindSelector from './Config/KindSelector';
@@ -41,23 +42,23 @@ const EXTRACTOR_COLORS = {
 
 // 📊 Etichette colonne con tooltip
 const COLUMN_LABELS = {
-  regex: { 
-    main: "Espressione", 
+  regex: {
+    main: "Espressione",
     tech: "Regex",
     tooltip: "Cerca pattern di testo con espressioni regolari"
   },
-  deterministic: { 
-    main: "Logica", 
+  deterministic: {
+    main: "Logica",
     tech: "Extractor",
     tooltip: "Parsing semantico con regole programmate specifiche per tipo"
   },
-  ner: { 
-    main: "AI Rapida", 
+  ner: {
+    main: "AI Rapida",
     tech: "NER",
     tooltip: "Riconoscimento entità con intelligenza artificiale veloce"
   },
-  llm: { 
-    main: "AI Completa", 
+  llm: {
+    main: "AI Completa",
     tech: "LLM",
     tooltip: "Comprensione linguistica profonda con modello AI avanzato"
   }
@@ -78,6 +79,7 @@ export interface NLPProfile {
   waitingEsc2?: string;
 }
 
+// Helper functions moved to useProfileState hook
 function toCommaList(list?: string[] | null): string {
   return Array.isArray(list) ? list.join(', ') : '';
 }
@@ -88,8 +90,6 @@ function fromCommaList(text: string): string[] {
     .map((s) => s.trim())
     .filter((s, i, arr) => s.length > 0 && arr.indexOf(s) === i);
 }
-
-// removed unused multiline helper
 
 function tryParseJSON<T = any>(text: string): { value?: T; error?: string } {
   const t = (text || '').trim();
@@ -127,54 +127,34 @@ export default function NLPExtractorProfileEditor({
   locale?: string;
   onChange?: (profile: NLPProfile) => void;
 }) {
-  function inferKindFromNode(n: any): string {
-    const typeStr = String(n?.type || '').toLowerCase();
-    const labelStr = String(n?.label || '').toLowerCase();
-    if (/date|dob|birth/.test(typeStr) || /date|dob|birth/.test(labelStr)) return 'date';
-    if (/email/.test(typeStr) || /email/.test(labelStr)) return 'email';
-    if (/phone|tel/.test(typeStr) || /phone|tel/.test(labelStr)) return 'phone';
-    if (/address/.test(typeStr) || /address/.test(labelStr)) return 'address';
-    if (/name/.test(typeStr) || /name/.test(labelStr)) return 'name';
-    if (/number|amount|qty|quantity/.test(typeStr) || /number|amount|qty|quantity/.test(labelStr)) return 'number';
-    return 'generic';
-  }
+  // Profile state management (extracted to hook)
+  const {
+    lockKind,
+    setLockKind,
+    kind,
+    setKind,
+    inferredKind,
+    synonymsText,
+    setSynonymsText,
+    regex,
+    setRegex,
+    formatText,
+    setFormatText,
+    examplesList,
+    setExamplesList,
+    minConf,
+    setMinConf,
+    postProcessText,
+    setPostProcessText,
+    waitingEsc1,
+    setWaitingEsc1,
+    waitingEsc2,
+    setWaitingEsc2,
+    jsonError,
+    profile,
+  } = useProfileState(node, locale, onChange);
 
-  const initial: NLPProfile = React.useMemo(() => {
-    const p = (node && (node as any).nlpProfile) || {};
-    try { console.log('[KindPersist][ProfileEditor][initial]', { nodeLabel: node?.label, nodeKind: node?.kind, manual: (node as any)?._kindManual, profileKind: p?.kind }); } catch {}
-    return {
-      slotId: (node?.id || node?._id || node?.label || 'slot') as string,
-      locale,
-      // Pre-seed kind strictly from node.kind or inferred value; never force 'generic' here
-      kind: ((node?.kind && node.kind !== 'generic') ? node.kind : (p.kind && p.kind !== 'generic') ? p.kind : inferKindFromNode(node)) as string,
-      synonyms: Array.isArray(p.synonyms)
-        ? p.synonyms
-        : Array.isArray((node as any)?.synonyms)
-          ? (node as any).synonyms
-          : [(node?.label || '').toString(), (node?.label || '').toString().toLowerCase()].filter(Boolean),
-      regex: p.regex,
-      formatHints: Array.isArray(p.formatHints) ? p.formatHints : undefined,
-      examples: Array.isArray(p.examples) ? p.examples : undefined,
-      minConfidence: typeof p.minConfidence === 'number' ? p.minConfidence : 0.6,
-      postProcess: p.postProcess,
-      subSlots: p.subSlots,
-      waitingEsc1: typeof p.waitingEsc1 === 'string' && p.waitingEsc1.trim() ? p.waitingEsc1 : 'Un istante…',
-      waitingEsc2: typeof p.waitingEsc2 === 'string' && p.waitingEsc2.trim() ? p.waitingEsc2 : 'Ancora un istante…',
-    };
-  }, [node, locale]);
-
-  const inferredKind = React.useMemo(() => inferKindFromNode(node), [node]);
-  // Default: Auto unchecked to avoid flipping kind -> 'auto' on mount
-  const [lockKind, setLockKind] = React.useState<boolean>(false);
-  const [kind, setKind] = React.useState<string>(initial.kind);
-  const [synonymsText, setSynonymsText] = React.useState<string>(toCommaList(initial.synonyms));
-  const [regex, setRegex] = React.useState<string>(initial.regex || '');
-  const [formatText, setFormatText] = React.useState<string>(toCommaList(initial.formatHints));
-  const [examplesList, setExamplesList] = React.useState<string[]>(Array.isArray(initial.examples) ? initial.examples : []);
-  const [minConf, setMinConf] = React.useState<number>(initial.minConfidence || 0.6);
-  const [postProcessText, setPostProcessText] = React.useState<string>(initial.postProcess ? JSON.stringify(initial.postProcess, null, 2) : '');
-  const [waitingEsc1, setWaitingEsc1] = React.useState<string>(initial.waitingEsc1 || '');
-  const [waitingEsc2, setWaitingEsc2] = React.useState<string>(initial.waitingEsc2 || '');
+  // Testing state
   const [newExample, setNewExample] = React.useState<string>('');
   const [selectedRow, setSelectedRow] = React.useState<number | null>(null);
   const [rowResults, setRowResults] = React.useState<Array<{
@@ -186,7 +166,7 @@ export default function NLPExtractorProfileEditor({
     detMs?: number;
     nerMs?: number;
     llmMs?: number;
-    running?: boolean; // overall
+    running?: boolean;
     detRunning?: boolean;
     nerRunning?: boolean;
     llmRunning?: boolean;
@@ -195,7 +175,6 @@ export default function NLPExtractorProfileEditor({
     confidence?: number;
     variables?: Record<string, any>;
   }>>([]);
-  // Inline editing state for Tester stacked values
   const [editingCell, setEditingCell] = React.useState<{
     row: number;
     col: 'det' | 'ner' | 'llm';
@@ -203,37 +182,35 @@ export default function NLPExtractorProfileEditor({
   } | null>(null);
   const [editingText, setEditingText] = React.useState<string>('');
   const [cellOverrides, setCellOverrides] = React.useState<Record<string, string>>({});
-  // Removed per-row bottom details panel state
   const [testing, setTesting] = React.useState<boolean>(false);
   const [baselineStats, setBaselineStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [lastStats, setLastStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [reportOpen, setReportOpen] = React.useState<boolean>(false);
-  const [jsonError, setJsonError] = React.useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = React.useState<'regex' | 'extractor' | 'post' | null>(null);
-  
+
   // 🎯 Use custom hooks
-  const { 
-    notes: cellNotes, 
-    getNote, 
-    hasNote, 
-    addNote, 
-    deleteNote, 
-    startEditing, 
-    stopEditing, 
-    isEditing, 
-    setHovered, 
-    isHovered 
+  const {
+    notes: cellNotes,
+    getNote,
+    hasNote,
+    addNote,
+    deleteNote,
+    startEditing,
+    stopEditing,
+    isEditing,
+    setHovered,
+    isHovered
   } = useNotes();
-  
-  const { 
-    activeEditor, 
-    openEditor, 
-    closeEditor, 
-    toggleEditor, 
-    isEditorOpen, 
-    isAnyEditorOpen 
+
+  const {
+    activeEditor,
+    openEditor,
+    closeEditor,
+    toggleEditor,
+    isEditorOpen,
+    isAnyEditorOpen
   } = useEditorState();
-  
+
   const [endpointBase] = React.useState<string>(() => {
     try {
       const saved = typeof window !== 'undefined' ? localStorage.getItem('nlpEndpointBase') : null;
@@ -247,100 +224,6 @@ export default function NLPExtractorProfileEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Recommended defaults per kind
-  const recommendedForKind = React.useCallback((k: string) => {
-    const s = (k || '').toLowerCase();
-    if (s === 'phone') {
-      return {
-        synonyms: 'phone, telefono, cellulare, mobile, numero di telefono',
-        formats: 'E.164, +39 333 1234567',
-        examples: ['+39 333 1234567', '3331234567', '0039 333 1234567'],
-        min: 0.9,
-      };
-    }
-    if (s === 'email') {
-      return {
-        synonyms: 'email, e-mail, indirizzo email',
-        formats: 'local@domain.tld',
-        examples: ['mario.rossi@example.com'],
-        min: 0.9,
-      };
-    }
-    if (s === 'date') {
-      return {
-        synonyms: 'date of birth, data di nascita, dob, birth date',
-        formats: 'dd/MM/yyyy, d/M/yyyy, d MMMM yyyy, d MMM yyyy',
-        examples: ['16/12/1961', '16 dicembre 1961'],
-        min: 0.85,
-      };
-    }
-    if (s === 'name') {
-      return {
-        synonyms: 'full name, nome completo, name',
-        formats: '',
-        examples: ['Mario Rossi'],
-        min: 0.8,
-      };
-    }
-    if (s === 'address') {
-      return {
-        synonyms: 'address, indirizzo, via, civico, cap, città',
-        formats: 'street, house number, city, postal code, country',
-        examples: ['via Chiabrera 25, 15011 Acqui Terme, Italia'],
-        min: 0.8,
-      };
-    }
-    if (s === 'number') {
-      return {
-        synonyms: 'number, quantity, amount, numero',
-        formats: 'integer, decimal',
-        examples: ['42', '3.14'],
-        min: 0.8,
-      };
-    }
-    return { synonyms: '', formats: '', examples: [], min: 0.6 };
-  }, []);
-
-  // When Kind changes (by user), re-seed editor fields with recommended defaults for that kind
-  const prevKindRef = React.useRef<string>(initial.kind);
-  React.useEffect(() => {
-    if (kind && kind !== prevKindRef.current) {
-      const r = recommendedForKind(kind);
-      try { console.log('[KindPersist][ProfileEditor][kind change]', { from: prevKindRef.current, to: kind, nodeLabel: node?.label }); } catch {}
-      setSynonymsText(r.synonyms);
-      setFormatText(r.formats);
-      setExamplesList(r.examples);
-      setMinConf(r.min);
-      // reset regex and post process when kind switches category
-      setRegex('');
-      setPostProcessText('');
-    }
-    prevKindRef.current = kind;
-  }, [kind, recommendedForKind]);
-
-  // Ensure latest profile is flushed on unmount (e.g., when closing the panel quickly)
-  const profileRef = React.useRef<NLPProfile | null>(null);
-  React.useEffect(() => { profileRef.current = {
-    slotId: initial.slotId,
-    locale: initial.locale,
-    kind,
-    synonyms: fromCommaList(synonymsText),
-    regex: regex || undefined,
-    formatHints: fromCommaList(formatText) || undefined,
-    examples: examplesList.length ? examplesList : undefined,
-    minConfidence: minConf,
-    postProcess: tryParseJSON(postProcessText).value,
-    subSlots: Array.isArray((node as any)?.subData)
-      ? (node as any).subData.map((s: any) => ({ slotId: s?.id || String(s?.label || s?.name || '').toLowerCase().replace(/\s+/g, '_'), label: s?.label || s?.name || '' }))
-      : undefined,
-    waitingEsc1: waitingEsc1 || undefined,
-    waitingEsc2: waitingEsc2 || undefined,
-  }; }, [initial.slotId, initial.locale, kind, synonymsText, regex, formatText, examplesList, minConf, postProcessText, node, waitingEsc1, waitingEsc2]);
-  React.useEffect(() => {
-    return () => {
-      try { if (profileRef.current) onChange?.(profileRef.current); } catch {}
-    };
-  }, [onChange]);
 
   // Auto-run parsing when a new phrase is appended
   const prevExamplesCountRef = React.useRef<number>(examplesList.length);
@@ -352,81 +235,6 @@ export default function NLPExtractorProfileEditor({
     }
     prevExamplesCountRef.current = examplesList.length;
   }, [examplesList.length]);
-
-  // Sync form when node changes (avoid depending on lockKind to prevent loops)
-  React.useEffect(() => {
-    // Default: Auto unchecked, use normalized node.kind directly
-    setLockKind(false);
-    setKind(initial.kind);
-    try { console.log('[KindPersist][ProfileEditor][sync from node]', { nodeLabel: node?.label, nodeKind: node?.kind, initialKind: initial.kind }); } catch {}
-    setSynonymsText(toCommaList(initial.synonyms));
-    setRegex(initial.regex || '');
-    setFormatText(toCommaList(initial.formatHints));
-    setExamplesList(Array.isArray(initial.examples) ? initial.examples : []);
-    setMinConf(initial.minConfidence || 0.6);
-    setPostProcessText(initial.postProcess ? JSON.stringify(initial.postProcess, null, 2) : '');
-    setNewExample('');
-    setSelectedRow(null);
-    setRowResults([]);
-    setWaitingEsc1(initial.waitingEsc1 || '');
-    setWaitingEsc2(initial.waitingEsc2 || '');
-  }, [initial.slotId]);
-
-  // Keep kind synced with inferred only when locked is enabled explicitly by user
-  React.useEffect(() => {
-    if (lockKind) {
-      setKind('auto');
-      try { console.log('[KindPersist][ProfileEditor][lockKind → auto]', { inferredKind, nodeLabel: node?.label }); } catch {}
-    }
-  }, [lockKind, inferredKind]);
-
-  const profile: NLPProfile = React.useMemo(() => {
-    const syns = fromCommaList(synonymsText);
-    const formats = fromCommaList(formatText);
-    const ex = examplesList;
-    const post = tryParseJSON(postProcessText);
-    setJsonError(post.error);
-    // Auto-derive subSlots from subData (hidden, read-only)
-    const autoSubSlots = Array.isArray((node as any)?.subData)
-      ? (node as any).subData.map((s: any) => ({
-          slotId: s?.id || String(s?.label || s?.name || '').toLowerCase().replace(/\s+/g, '_'),
-          label: s?.label || s?.name || ''
-        }))
-      : undefined;
-    const out = {
-      slotId: initial.slotId,
-      locale: initial.locale,
-      // Guard against writing back 'generic' over a known node.kind; keep 'auto' or the inferred kind
-      kind: (kind === 'generic' && (node?.kind && node.kind !== 'generic')) ? node.kind : kind,
-      synonyms: syns,
-      regex: regex || undefined,
-      formatHints: formats.length ? formats : undefined,
-      examples: ex.length ? ex : undefined,
-      minConfidence: minConf,
-      postProcess: post.error ? undefined : post.value,
-      subSlots: autoSubSlots,
-      waitingEsc1: waitingEsc1 || undefined,
-      waitingEsc2: waitingEsc2 || undefined,
-    };
-    try { console.log('[KindPersist][ProfileEditor][profile memo]', { nodeLabel: node?.label, outKind: out.kind }); } catch {}
-    return out;
-  }, [node, initial.slotId, initial.locale, kind, synonymsText, regex, formatText, examplesList, minConf, postProcessText, waitingEsc1, waitingEsc2]);
-
-  const lastSentJsonRef = React.useRef<string>('');
-  React.useEffect(() => {
-    const json = JSON.stringify(profile);
-    if (json !== lastSentJsonRef.current) {
-      lastSentJsonRef.current = json;
-      // Prevent emitting a downgrade to generic; keep previous node.kind in that case
-      const safeProfile = { ...profile } as NLPProfile;
-      if (safeProfile.kind === 'generic' && (node?.kind && node.kind !== 'generic')) {
-        safeProfile.kind = node.kind;
-      }
-      try { console.log('[KindPersist][ProfileEditor][emit onChange]', { nodeLabel: node?.label, kind: safeProfile.kind }); } catch {}
-      onChange?.(safeProfile);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.synonyms, profile.regex, profile.kind, profile.formatHints, profile.examples, profile.minConfidence, profile.postProcess, profile.subSlots]);
 
   function summarizeVars(vars?: Record<string, any>, fallbackValue?: string): string {
     if (!vars || typeof vars !== 'object') return fallbackValue ? `value=${fallbackValue}` : '—';
@@ -517,36 +325,36 @@ export default function NLPExtractorProfileEditor({
     console.log('[NLP_TESTER] mapKindToField called with:', k);
     const s = (k || '').toLowerCase();
     console.log('[NLP_TESTER] s value after lowercase:', s);
-    
+
     // ✅ SPECIAL MAPPING: number → age (per estrazione età) - PRIMA di tutto!
     if (s === 'number') {
       console.log('[NLP_TESTER] Entering number special mapping block');
       // Controlla se il contesto suggerisce "age"
       const synonyms = toCommaList(fromCommaList(synonymsText)).toLowerCase();
       const examplesText = (examplesList || []).join(' ').toLowerCase();
-      
+
       const hasAgeWords = /(età|age|anni|vecchio|giovane)/i.test(synonyms);
       const hasAgeExamples = /(18|21|30|40|50|60|70|80|90|100)/.test(examplesText);
-      
+
       console.log('[NLP_TESTER] Age detection debug:', {
         synonyms: synonymsText,
         examples: examplesList,
         hasAgeWords,
         hasAgeExamples
       });
-      
+
       if (hasAgeWords || hasAgeExamples) {
         console.log('[NLP_TESTER] auto-map number → age (age context detected)');
         return 'age';
       }
     }
-    
+
     // ✅ Use extractorMapping from config (DOPO il controllo speciale)
     const extractorMapping = nlpTypesConfig.extractorMapping as Record<string, string>;
     if (extractorMapping[s]) {
       return extractorMapping[s];
     }
-    
+
     // Auto/Generic → heuristic mapping to date when hints/examples suggest a date
     if (s === 'generic' || s === 'auto') {
       const months = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre','gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
@@ -584,7 +392,7 @@ export default function NLPExtractorProfileEditor({
 
     const field = mapKindToField(kind);
 
-    console.log('[NLP_TESTER] Field mapping:', { 
+    console.log('[NLP_TESTER] Field mapping:', {
       originalKind: kind,
       mappedField: field,
       profileKind: profile.kind,
@@ -599,26 +407,26 @@ export default function NLPExtractorProfileEditor({
       try {
         // Run extraction for this row
         const finalResult = await extractField<any>(field, phrase);
-        
+
         // Use individual results for each column
         const detSummary = finalResult.allResults?.deterministic ? summarizeResult(finalResult.allResults.deterministic, field) : "—";
         const nerSummary = finalResult.allResults?.ner ? summarizeResult(finalResult.allResults.ner, field) : "—";
         const llmSummary = finalResult.allResults?.llm ? summarizeResult(finalResult.allResults.llm, field) : "—";
-        
+
         // eslint-disable-next-line no-console
         console.log('[NLP_TESTER] Extraction results:', {
           deterministic: finalResult.allResults?.deterministic,
           ner: finalResult.allResults?.ner,
           llm: finalResult.allResults?.llm
         });
-        
+
         // eslint-disable-next-line no-console
         console.log('[NLP_TESTER] summarizeResult output:', {
           deterministic: detSummary,
-          ner: nerSummary, 
+          ner: nerSummary,
           llm: llmSummary
         });
-        
+
         update({
           deterministic: detSummary,
           ner: nerSummary,
@@ -929,18 +737,18 @@ export default function NLPExtractorProfileEditor({
   // Helper function to summarize extraction results
   const summarizeResult = (result: any, currentField: string): string => {
     try {
-      if (!result || result.status !== 'accepted' || result.value === undefined || result.value === null) 
+      if (!result || result.status !== 'accepted' || result.value === undefined || result.value === null)
         return "—";
-      
+
       // For age (number), show the value directly
       if (currentField === 'age') {
         return `value=${result.value}`;
       }
-      
+
       // For other fields, use existing logic
       if (currentField === 'dateOfBirth') {
         const v: any = result.value || {};
-        return summarizeVars({ day: v.day, month: v.month, year: v.year }, 
+        return summarizeVars({ day: v.day, month: v.month, year: v.year },
           v.day && v.month && v.year ? `${String(v.day).padStart(2,'0')}/${String(v.month).padStart(2,'0')}/${v.year}` : undefined);
       } else if (currentField === 'phone') {
         const v: any = result.value || {};
@@ -1004,10 +812,10 @@ export default function NLPExtractorProfileEditor({
             setLockKind={setLockKind}
             inferredKind={inferredKind}
           />
-          
+
           {/* Confidence Component */}
           <ConfidenceInput value={minConf} onChange={setMinConf} />
-          
+
           {/* Waiting Messages Component */}
           <WaitingMessagesConfig
             waitingNER={waitingEsc1}
@@ -1025,8 +833,8 @@ export default function NLPExtractorProfileEditor({
                 <input
                   ref={regexInputRef}
                   value={
-                    generatingRegex 
-                      ? "⏳ Creating regex..." 
+                    generatingRegex
+                      ? "⏳ Creating regex..."
                       : (regexAiMode ? regexAiPrompt : regex)
                   }
                   onChange={(e) => {
@@ -1048,22 +856,22 @@ export default function NLPExtractorProfileEditor({
                     }
                   }}
                   placeholder={
-                    regexAiMode && !generatingRegex 
-                      ? "Describe here what the regex should match (in English)" 
+                    regexAiMode && !generatingRegex
+                      ? "Describe here what the regex should match (in English)"
                       : "es. \\b\\d{5}\\b"
                   }
                   disabled={generatingRegex}
-                  style={{ 
-                    flex: 1, 
-                    padding: 10, 
+                  style={{
+                    flex: 1,
+                    padding: 10,
                     border: regexAiMode ? '2px solid #3b82f6' : '1px solid #ddd',
-                    borderRadius: 8, 
+                    borderRadius: 8,
                     fontFamily: regexAiMode ? 'inherit' : 'monospace',
                     backgroundColor: generatingRegex ? '#f9fafb' : (regexAiMode ? '#eff6ff' : '#fff'),
                     transition: 'all 0.2s ease'
                   }}
                 />
-                
+
                 {/* Show WAND ONLY in normal mode (NOT in AI mode) */}
                 {!regexAiMode && (
                   <button
@@ -1096,41 +904,41 @@ export default function NLPExtractorProfileEditor({
                     <Wand2 size={16} color='#666' />
                   </button>
                 )}
-                
+
                 {/* Show CREATE BUTTON when: AI mode AND at least 5 characters */}
                 {regexAiMode && regexAiPrompt.trim().length >= 5 && (
                   <button
                     type="button"
                     onClick={async () => {
                       if (!regexAiPrompt.trim()) return;
-                      
+
                       setGeneratingRegex(true);
                       try {
                         console.log('[AI Regex] Generating regex for:', regexAiPrompt);
-                        
-                        const response = await fetch('/api/nlp/generate-regex', { 
-                          method: 'POST', 
+
+                        const response = await fetch('/api/nlp/generate-regex', {
+                          method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ description: regexAiPrompt })
                         });
-                        
+
                         if (!response.ok) {
                           const error = await response.json();
                           throw new Error(error.detail || 'Failed to generate regex');
                         }
-                        
+
                         const data = await response.json();
                         console.log('[AI Regex] Response:', data);
-                        
+
                         if (data.success && data.regex) {
                           setRegex(data.regex);
                           console.log('[AI Regex] Regex generated successfully:', data.regex);
-                          
+
                           if (data.explanation) {
                             console.log('[AI Regex] Explanation:', data.explanation);
                             console.log('[AI Regex] Examples:', data.examples);
                           }
-                          
+
                           // Exit AI mode and return to normal
                           // Keep regexAiPrompt in memory for future iterations
                           setRegexAiMode(false);
@@ -1166,10 +974,10 @@ export default function NLPExtractorProfileEditor({
                   >
                     {generatingRegex ? (
                       <>
-                        <span style={{ 
-                          display: 'inline-block', 
-                          width: 14, 
-                          height: 14, 
+                        <span style={{
+                          display: 'inline-block',
+                          width: 14,
+                          height: 14,
                           border: '2px solid #fff',
                           borderTopColor: 'transparent',
                           borderRadius: '50%',
@@ -1381,22 +1189,40 @@ export default function NLPExtractorProfileEditor({
                           <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.deterministic ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.deterministic.tech})</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => toggleEditor('extractor')}
-                        title="Configure Extractor"
-                        style={{
-                          background: activeEditor === 'extractor' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
-                          border: 'none',
-                          borderRadius: 4,
-                          padding: '4px 6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        <Wand2 size={14} color={activeEditor === 'extractor' ? '#fff' : '#666'} />
-                      </button>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={() => toggleEditor('extractor')}
+                          title="Configure Extractor"
+                          style={{
+                            background: activeEditor === 'extractor' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
+                            border: 'none',
+                            borderRadius: 4,
+                            padding: '4px 6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <Wand2 size={14} color={activeEditor === 'extractor' ? '#fff' : '#666'} />
+                        </button>
+                        <button
+                          onClick={() => toggleEditor('post')}
+                          title="Configure Post Process"
+                          style={{
+                            background: activeEditor === 'post' ? '#10b981' : 'rgba(255,255,255,0.3)',
+                            border: 'none',
+                            borderRadius: 4,
+                            padding: '4px 6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <TypeIcon size={14} color={activeEditor === 'post' ? '#fff' : '#666'} />
+                        </button>
+                      </div>
                     </div>
                   </th>
                   <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.ner, opacity: enabledMethods.ner ? 1 : 0.4 }} title={COLUMN_LABELS.ner.tooltip}>
@@ -1499,7 +1325,7 @@ export default function NLPExtractorProfileEditor({
                           </span>
                         ) : ex}
                       </td>
-                      <td 
+                      <td
                         style={{ padding: 8, fontSize: 15, color: enabledMethods.regex ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.regex, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.regex ? 1 : 0.6 }}
                         onMouseEnter={() => setHovered(i, 'regex')}
                         onMouseLeave={() => setHovered(null, null)}
@@ -1531,7 +1357,7 @@ export default function NLPExtractorProfileEditor({
                           </>
                         )}
                       </td>
-                      <td 
+                      <td
                         style={{ padding: 8, fontSize: 15, color: enabledMethods.deterministic ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.deterministic, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.deterministic ? 1 : 0.6 }}
                         onMouseEnter={() => setHovered(i, 'deterministic')}
                         onMouseLeave={() => setHovered(null, null)}
@@ -1569,7 +1395,7 @@ export default function NLPExtractorProfileEditor({
                           </>
                         )}
                       </td>
-                      <td 
+                      <td
                         style={{ padding: 8, fontSize: 15, color: enabledMethods.ner ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.ner, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.ner ? 1 : 0.6 }}
                         onMouseEnter={() => setHovered(i, 'ner')}
                         onMouseLeave={() => setHovered(null, null)}
@@ -1607,7 +1433,7 @@ export default function NLPExtractorProfileEditor({
                           </>
                         )}
                       </td>
-                      <td 
+                      <td
                         style={{ padding: 8, fontSize: 15, color: enabledMethods.llm ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.llm, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.llm ? 1 : 0.6 }}
                         onMouseEnter={() => setHovered(i, 'llm')}
                         onMouseLeave={() => setHovered(null, null)}
@@ -1675,19 +1501,46 @@ export default function NLPExtractorProfileEditor({
               onClose={closeEditor}
             />
           )}
-          
+
           {activeEditor === 'extractor' && (
             <ExtractorInlineEditor
               onClose={closeEditor}
             />
           )}
-          
+
           {activeEditor === 'ner' && (
             <NERInlineEditor onClose={closeEditor} />
           )}
-          
+
           {activeEditor === 'llm' && (
             <LLMInlineEditor onClose={closeEditor} />
+          )}
+
+          {activeEditor === 'post' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Post Process Configuration</h3>
+                <button
+                  onClick={closeEditor}
+                  style={{
+                    padding: '6px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: 6,
+                    background: '#fff',
+                    cursor: 'pointer',
+                    fontSize: 14
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <PostProcessEditor value={postProcessText} onChange={setPostProcessText} />
+              {jsonError && (
+                <div style={{ color: '#b91c1c', fontSize: 12, padding: 8, background: '#fee2e2', borderRadius: 6 }}>
+                  JSON Error: {jsonError}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
