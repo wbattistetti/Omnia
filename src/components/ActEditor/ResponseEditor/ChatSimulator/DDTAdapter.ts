@@ -38,9 +38,13 @@ export function getEscalationActions(node: any, stepType: string, level: number)
 
 export function resolveActionText(action: any, dict: Record<string, string>): string | undefined {
   if (!action) return undefined;
+  // Priority: action.text (edited text in DDT instance) > dict[key] (old translation values)
+  // This ensures Chat Simulator uses the same source of truth as StepEditor
+  if (action.text && typeof action.text === 'string' && action.text.trim().length > 0) {
+    return action.text;
+  }
   const p = Array.isArray(action.parameters) ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text') : undefined;
   const key = p?.value;
   if (key && dict[key]) return dict[key];
-  if (action.text) return action.text;
   return undefined;
 }
