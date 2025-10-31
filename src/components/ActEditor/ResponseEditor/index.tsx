@@ -6,7 +6,6 @@ import { useDDTManager } from '../../../context/DDTManagerContext';
 import { instanceRepository } from '../../../services/InstanceRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import Sidebar from './Sidebar';
-import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, BookOpen, List } from 'lucide-react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
@@ -23,6 +22,9 @@ import {
 } from './ddtSelectors';
 import { useNodeSelection } from './hooks/useNodeSelection';
 import { useNodeUpdate } from './hooks/useNodeUpdate';
+import { useNodePersistence } from './hooks/useNodePersistence';
+import { useDDTInitialization } from './hooks/useDDTInitialization';
+import { useResponseEditorToolbar } from './ResponseEditorToolbar';
 
 export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -35,32 +37,36 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const [fontSize, setFontSize] = useState<number>(DEFAULT_FONT_SIZE);
   const rootRef = useRef<HTMLDivElement>(null);
   const fontScale = useMemo(() => Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, fontSize)) / DEFAULT_FONT_SIZE, [fontSize]);
+  const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
-
-  // Helper: enforce phone kind by label when missing/mis-set
-  const coercePhoneKind = (src: any) => {
-    if (!src) return src;
-    const clone = JSON.parse(JSON.stringify(src));
-    try {
-      const mains = Array.isArray(clone?.mainData) ? clone.mainData : [];
-      const before = mains.map((m: any) => ({ label: m?.label, kind: (m?.kind || '').toString(), manual: (m as any)?._kindManual }));
-      for (const m of mains) {
-        const label = String(m?.label || '').toLowerCase();
-        if (/phone|telephone|tel|cellulare|mobile/.test(label)) {
-          if ((m?.kind || '').toLowerCase() !== 'phone') {
-            m.kind = 'phone';
-            (m as any)._kindManual = 'phone';
-          }
-        }
-      }
-      const after = mains.map((m: any) => ({ label: m?.label, kind: (m?.kind || '').toString(), manual: (m as any)?._kindManual }));
-      try { console.log('[KindPersist][ResponseEditor][coercePhoneKind]', { before, after }); } catch { }
-    } catch { }
-    return clone;
-  };
-  // Local editable copies (initialize with coerced phone kind)
-  const [localDDT, setLocalDDT] = useState<any>(() => coercePhoneKind(ddt));
   const { ideTranslations, dataDialogueTranslations, replaceSelectedDDT } = useDDTManager();
+  const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
+
+  // Node selection management (must be before useDDTInitialization for callback)
+  const {
+    selectedMainIndex,
+    selectedSubIndex,
+    selectedRoot,
+    sidebarRef,
+    setSelectedMainIndex,
+    setSelectedSubIndex,
+    setSelectedRoot,
+    handleSelectMain,
+    handleSelectSub,
+    handleSelectAggregator,
+  } = useNodeSelection(0); // Initial main index
+
+  // DDT initialization (extracted to hook)
+  const { localDDT, setLocalDDT } = useDDTInitialization(
+    ddt,
+    wizardOwnsDataRef,
+    mergedBase,
+    () => {
+      // Reset selection when DDT changes
+      setSelectedMainIndex(0);
+      setSelectedSubIndex(undefined);
+    }
+  );
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
     try { if (localStorage.getItem('debug.responseEditor') === '1') console.log(...args); } catch { }
@@ -70,99 +76,15 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     try { localStorage.setItem('debug.responseEditor', '1'); } catch { }
     try { localStorage.setItem('debug.reopen', '1'); } catch { }
   }, []);
-  const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
   const [localTranslations, setLocalTranslations] = useState<any>({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
 
-  // --- Helpers: preserve/ensure steps on reopen (UI-only; no persistence) ---
-  function ensureStepsForNode(node: any): any {
-    if (!node) return node;
-    const steps = node.steps;
-    // If steps exist in either object or array form, leave unchanged
-    if (steps && (Array.isArray(steps) ? steps.length > 0 : Object.keys(steps || {}).length > 0)) return node;
-    const messages = node.messages || {};
-    const stepKeys = Object.keys(messages || {});
-    if (stepKeys.length === 0) return node;
-    // Build minimal steps object: one escalation with sayMessage(textKey)
-    const built: any = {};
-    for (const k of stepKeys) {
-      const textKey = messages[k]?.textKey;
-      built[k] = {
-        escalations: [
-          {
-            actions: [
-              {
-                actionId: 'sayMessage',
-                parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [],
-              }
-            ],
-          }
-        ],
-      };
-    }
-    return { ...node, steps: built };
-  }
-
-  function preserveStepsFromPrev(prev: any, next: any): any {
-    if (!prev || !next) return next;
-    const prevMains = Array.isArray(prev?.mainData) ? prev.mainData : [];
-    const nextMains = Array.isArray(next?.mainData) ? next.mainData : [];
-    const mapByLabel = (arr: any[]) => {
-      const m = new Map<string, any>();
-      arr.forEach((n: any) => { if (n?.label) m.set(String(n.label), n); });
-      return m;
-    };
-    const prevMap = mapByLabel(prevMains);
-    const enrichedMains = nextMains.map((n: any) => {
-      const prevNode = prevMap.get(String(n?.label));
-      let merged = n;
-      if (prevNode && !n?.steps && prevNode?.steps) merged = { ...n, steps: prevNode.steps };
-      const subs = Array.isArray(n?.subData) ? n.subData : [];
-      const prevSubs = Array.isArray(prevNode?.subData) ? prevNode.subData : [];
-      const prevSubsMap = mapByLabel(prevSubs);
-      const mergedSubs = subs.map((s: any) => {
-        const prevS = prevSubsMap.get(String(s?.label));
-        if (prevS && !s?.steps && prevS?.steps) return { ...ensureStepsForNode(s), steps: prevS.steps };
-        return ensureStepsForNode(s);
-      });
-      return { ...ensureStepsForNode(merged), subData: mergedSubs };
-    });
-    return { ...next, mainData: enrichedMains };
-  }
-
+  // Synchronize translations when DDT changes
   useEffect(() => {
-    // Don't sync from prop if wizard owns the data
-    if (wizardOwnsDataRef.current) {
-      return;
-    }
-
-    const prevId = (localDDT && (localDDT.id || localDDT._id)) as any;
-    const nextId = (ddt && (ddt.id || ddt._id)) as any;
-    const isSameDDT = prevId && nextId && prevId === nextId;
-    const coerced = coercePhoneKind(ddt);
-
-    // Sync ONLY if it's a different DDT (ID changed) or first load
-    const shouldSync = !prevId || !nextId || !isSameDDT;
-
-    if (shouldSync && localDDT !== coerced) {
-      try {
-        const mainsBefore = Array.isArray((localDDT || {}).mainData) ? (localDDT as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
-        const mainsAfter = Array.isArray((coerced || {}).mainData) ? (coerced as any).mainData.map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) : [];
-        console.log('[KindPersist][ResponseEditor][loadDDT->setLocalDDT]', { mainsBefore, mainsAfter });
-      } catch { }
-      // Preserve steps from previous in-memory DDT when reopening same template; ensure steps from messages if missing
-      const enriched = preserveStepsFromPrev(localDDT, coerced);
-      setLocalDDT(enriched);
-    }
     const nextTranslations = { ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) };
     setLocalTranslations((prev: any) => {
       const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
       return same ? prev : nextTranslations;
     });
-    // Reset selection when a different DDT is opened (new session)
-    if (!isSameDDT) {
-      setSelectedMainIndex(0);
-      setSelectedSubIndex(undefined);
-    }
     try {
       const counts = {
         ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
@@ -211,19 +133,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
   ), [mainList]);
-  // Node selection management (extracted to hook)
-  const {
-    selectedMainIndex,
-    selectedSubIndex,
-    selectedRoot,
-    sidebarRef,
-    setSelectedMainIndex,
-    setSelectedSubIndex,
-    setSelectedRoot,
-    handleSelectMain,
-    handleSelectSub,
-    handleSelectAggregator,
-  } = useNodeSelection(0);
   const [rightMode, setRightMode] = useState<RightPanelMode>('actions'); // Always start with actions panel visible
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
   const [dragging, setDragging] = useState(false);
@@ -231,7 +140,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const [showMessageReview, setShowMessageReview] = useState(false);
   // Wizard/general layout flags
   const [showWizard, setShowWizard] = useState<boolean>(() => isDDTEmpty(localDDT));
-  const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
   // Header: icon, title, and toolbar
   const actType = (act?.type || 'DataRequest') as any;
@@ -246,18 +154,16 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     try { localStorage.setItem('responseEditor.rightMode', m); } catch { }
   };
 
-  // Toolbar buttons (empty during wizard, full after)
-  const toolbarButtons = !showWizard ? [
-    { icon: <Undo2 size={16} />, onClick: () => { }, title: "Undo" },
-    { icon: <Redo2 size={16} />, onClick: () => { }, title: "Redo" },
-    { icon: <Plus size={16} />, label: "Add constraint", onClick: () => { }, primary: true },
-    { icon: <Rocket size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('actions'); }, title: "Actions", active: rightMode === 'actions' },
-    { icon: <Code2 size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('validator'); }, title: "Validator", active: rightMode === 'validator' },
-    { icon: <FileText size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('testset'); }, title: "Test set", active: rightMode === 'testset' },
-    { icon: <MessageSquare size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(false); saveRightMode('chat'); }, title: "Chat", active: rightMode === 'chat' },
-    { icon: <List size={16} />, onClick: () => { setShowSynonyms(false); setShowMessageReview(v => !v); }, title: "Message review", active: showMessageReview },
-    { icon: <BookOpen size={16} />, onClick: () => { setShowMessageReview(false); setShowSynonyms(v => !v); }, title: showSynonyms ? 'Close contract editor' : 'Open contract editor', active: showSynonyms },
-  ] : [];
+  // Toolbar buttons (extracted to hook)
+  const toolbarButtons = useResponseEditorToolbar({
+    showWizard,
+    rightMode,
+    showSynonyms,
+    showMessageReview,
+    onRightModeChange: saveRightMode,
+    onToggleSynonyms: () => setShowSynonyms(v => !v),
+    onToggleMessageReview: () => setShowMessageReview(v => !v),
+  });
 
   useEffect(() => {
     const empty = isDDTEmpty(localDDT);
@@ -419,8 +325,6 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     } catch { }
   }, [mainList, selectedMainIndex, selectedSubIndex, selectedStepKey, stepKeys]);
 
-  // Node selection handlers are now provided by useNodeSelection hook
-
   // Node update logic (extracted to hook)
   const { updateSelectedNode } = useNodeUpdate(
     localDDT,
@@ -429,6 +333,12 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     selectedMainIndex,
     selectedSubIndex,
     replaceSelectedDDT
+  );
+
+  // Node persistence/normalization logic (extracted to hook)
+  const { normalizeAndPersistModel } = useNodePersistence(
+    selectedStepKey,
+    updateSelectedNode
   );
 
   // kept for future translation edits in StepEditor
@@ -754,104 +664,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                             node={selectedNode}
                             stepKey={selectedStepKey}
                             translations={localTranslations}
-                            onModelChange={(nextEscalations) => updateSelectedNode((node) => {
-                              try {
-                                console.log('[Persist][onModelChange] incoming', {
-                                  nodeLabel: (node as any)?.label,
-                                  stepKey: selectedStepKey,
-                                  escalations: (nextEscalations || []).map((e: any, i: number) => ({ i, actions: (e?.actions || []).map((a: any) => ({ actionId: a?.actionId, text: a?.text, textKey: a?.textKey })) }))
-                                });
-                              } catch { }
-                              // Normalizza azioni: conserva anche azioni non testuali senza testo
-                              const normalized = (nextEscalations || []).map((esc: any) => ({
-                                actions: (esc.actions || []).map((a: any) => {
-                                  if (!a) return null;
-                                  const id = a.actionId || 'sayMessage';
-                                  const out: any = { actionId: id };
-
-                                  // Copia parametri/props generiche
-                                  if (Array.isArray(a.parameters)) out.parameters = a.parameters;
-                                  if (a.color) out.color = a.color;
-                                  // icon e label vengono sempre da getActionIconNode/getActionLabel centralizzate
-
-                                  // Per azioni testuali, aggiungi contenuto se presente (non scartare i vuoti)
-                                  if (id === 'sayMessage' || id === 'askQuestion') {
-                                    // Always preserve textKey if present (for translation reference)
-                                    if (typeof a.textKey === 'string') {
-                                      out.parameters = [{ parameterId: 'text', value: a.textKey }];
-                                    }
-                                    // If text is provided (especially when editing), save it directly in the node
-                                    // This ensures edited text persists even when switching steps
-                                    if (typeof a.text === 'string' && a.text.trim().length > 0) {
-                                      out.text = a.text;
-                                    }
-                                  }
-                                  return out;
-                                }).filter((x: any) => x != null)
-                              }));
-
-                              try {
-                                console.log('[Persist][onModelChange] normalized', {
-                                  stepKey: selectedStepKey,
-                                  escalations: normalized.map((e: any, i: number) => ({ i, actions: (e?.actions || []).map((a: any) => ({ actionId: a?.actionId, text: a?.text, textKey: Array.isArray(a?.parameters) ? a.parameters.find((p: any) => p?.parameterId === 'text')?.value : undefined })) }))
-                                });
-                              } catch { }
-
-                              // Se non c'è nulla da committare, non toccare lo step
-                              if (normalized.length === 0) return node;
-
-                              const currentSteps = (node as any).steps;
-                              if (Array.isArray(currentSteps)) {
-                                const arr = [...currentSteps];
-                                let idx = arr.findIndex((g: any) => g?.type === selectedStepKey);
-                                if (idx < 0) {
-                                  arr.push({ type: selectedStepKey, escalations: normalized });
-                                  const nextNode = { ...(node || {}), steps: arr };
-                                  try {
-                                    console.log('[Persist][array] created group for step', selectedStepKey, {
-                                      totalGroups: arr.length,
-                                      escalationsCount: normalized.length
-                                    });
-                                  } catch { }
-                                  return nextNode;
-                                }
-                                const group = { ...(arr[idx] || {}) };
-                                const escs = Array.isArray(group.escalations) ? [...group.escalations] : [];
-                                // Aggiorna solo gli indici presenti in normalized
-                                normalized.forEach((esc: any, i: number) => {
-                                  if (!escs[i]) escs[i] = { actions: [] };
-                                  escs[i] = { actions: esc.actions };
-                                });
-                                group.escalations = escs;
-                                arr[idx] = { ...group, type: selectedStepKey };
-                                const nextNode = { ...(node || {}), steps: arr };
-                                try {
-                                  console.log('[Persist][array] updated', {
-                                    stepKey: selectedStepKey,
-                                    groups: arr.map((g: any) => ({ type: g?.type, escs: Array.isArray(g?.escalations) ? g.escalations.length : 0 }))
-                                  });
-                                } catch { }
-                                return nextNode;
-                              } else {
-                                const obj: any = { ...(currentSteps || {}) };
-                                const group = { ...(obj[selectedStepKey] || { type: selectedStepKey, escalations: [] }) };
-                                const escs = Array.isArray(group.escalations) ? [...group.escalations] : [];
-                                normalized.forEach((esc: any, i: number) => {
-                                  if (!escs[i]) escs[i] = { actions: [] };
-                                  escs[i] = { actions: esc.actions };
-                                });
-                                obj[selectedStepKey] = { ...group, escalations: escs, type: selectedStepKey };
-                                const nextNode = { ...(node || {}), steps: obj };
-                                try {
-                                  console.log('[Persist][object] updated', {
-                                    stepKey: selectedStepKey,
-                                    escCount: (obj[selectedStepKey]?.escalations || []).length,
-                                    actionsPerEsc: (obj[selectedStepKey]?.escalations || []).map((e: any, i: number) => ({ i, actions: (e?.actions || []).length }))
-                                  });
-                                } catch { }
-                                return nextNode;
-                              }
-                            }, /* notifyProvider */ false)}
+                            onModelChange={normalizeAndPersistModel}
                             onDeleteEscalation={(idx) => updateSelectedNode((node) => {
                               const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
                               const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
