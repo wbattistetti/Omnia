@@ -174,9 +174,23 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   // Stato locale per le escalation e azioni (per demo, in reale va gestito a livello superiore)
   const [localModel, setLocalModel] = React.useState(model);
+
+  // FIX CRITICO: Usa una chiave unica per tracciare quando cambia nodo o stepKey
+  // Quando cambia questa chiave, localModel deve essere resettato completamente
+  const nodeStepKey = `${node?.id || ''}-${stepKey}`;
+
+  // Effect 1: Resetta localModel quando cambia nodo o stepKey (priorità assoluta)
   React.useEffect(() => {
-    // Only sync if model structure actually changed (new escalations/actions or removed ones),
-    // not just text updates. This prevents losing local edits when model is rebuilt from props.
+    // Quando cambia nodo o stepKey, resetta sempre localModel al nuovo model
+    // Questo risolve il bug dove localModel conteneva dati del nodo precedente
+    setLocalModel(model);
+  }, [nodeStepKey, model]); // Reset quando cambia node.id o stepKey
+
+  // Effect 2: Sincronizza solo struttura quando siamo sullo stesso nodo/stepKey
+  // Questo permette di preservare le modifiche locali al testo sullo stesso nodo
+  React.useEffect(() => {
+    // Solo sincronizza se la struttura (escalations/actions) è cambiata
+    // Non sincronizzare se cambia solo il testo (per preservare modifiche locali)
     const localStructure = JSON.stringify(localModel.map(e => ({
       actions: e.actions.map(a => ({ actionId: a.actionId, textKey: a.textKey }))
     })));
@@ -186,7 +200,9 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
     if (localStructure !== modelStructure) {
       setLocalModel(model);
     }
-  }, [model, localModel]);
+    // nodeStepKey nelle dipendenze evita esecuzione quando cambia nodo
+    // (quando cambia nodo, l'effect 1 resetta già localModel)
+  }, [model, localModel, nodeStepKey]);
 
   // Commit esplicito: chiamato solo da useActionCommands dopo ogni azione (drop, append, edit, delete, move)
   const commitUp = React.useCallback((next: EscalationModel[]) => {

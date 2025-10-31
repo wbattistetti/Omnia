@@ -21,6 +21,8 @@ import {
   getSubDataList,
   getNodeSteps
 } from './ddtSelectors';
+import { useNodeSelection } from './hooks/useNodeSelection';
+import { useNodeUpdate } from './hooks/useNodeUpdate';
 
 export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -209,10 +211,19 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
   ), [mainList]);
-  const [selectedMainIndex, setSelectedMainIndex] = useState(0);
-  const [selectedSubIndex, setSelectedSubIndex] = useState<number | undefined>(undefined);
-  const [selectedRoot, setSelectedRoot] = useState<boolean>(false); // Track if root/aggregate is selected
-  const sidebarRef = useRef<HTMLDivElement>(null);
+  // Node selection management (extracted to hook)
+  const {
+    selectedMainIndex,
+    selectedSubIndex,
+    selectedRoot,
+    sidebarRef,
+    setSelectedMainIndex,
+    setSelectedSubIndex,
+    setSelectedRoot,
+    handleSelectMain,
+    handleSelectSub,
+    handleSelectAggregator,
+  } = useNodeSelection(0);
   const [rightMode, setRightMode] = useState<RightPanelMode>('actions'); // Always start with actions panel visible
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
   const [dragging, setDragging] = useState(false);
@@ -408,150 +419,17 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     } catch { }
   }, [mainList, selectedMainIndex, selectedSubIndex, selectedStepKey, stepKeys]);
 
-  // Callback per Sidebar
-  const handleSelectMain = (idx: number) => {
-    setSelectedRoot(false); // Deselect root when selecting a main
-    setSelectedMainIndex(idx);
-    setSelectedSubIndex(undefined);
-    setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-  };
+  // Node selection handlers are now provided by useNodeSelection hook
 
-  // Callback per Header
-  // removed unused header handler
-  const handleSelectSub = (idx: number | undefined) => {
-    setSelectedRoot(false); // Deselect root when selecting a sub
-    setSelectedSubIndex(idx);
-    setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-  };
-
-  // Callback for selecting root/aggregate
-  const handleSelectAggregator = () => {
-    setSelectedRoot(true);
-    setSelectedMainIndex(0);
-    setSelectedSubIndex(undefined);
-    setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-  };
-
-  // Editing helpers
-  const updateSelectedNode = (updater: (node: any) => any, notifyProvider: boolean = true) => {
-    setLocalDDT((prev: any) => {
-      if (!prev) return prev;
-      const next = JSON.parse(JSON.stringify(prev));
-
-      // If root is selected, update introduction
-      if (selectedRoot) {
-        // Build a node structure with introduction step for updater
-        const introStep = prev.introduction ? { type: 'introduction', escalations: prev.introduction.escalations } : { type: 'introduction', escalations: [] };
-        const nodeForUpdate = { ...prev, steps: [introStep] };
-        const updated = updater(nodeForUpdate) || nodeForUpdate;
-
-        // Extract introduction from updated steps
-        if (updated && updated.steps && Array.isArray(updated.steps)) {
-          const updatedIntroStep = updated.steps.find((s: any) => s.type === 'introduction');
-          if (updatedIntroStep && updatedIntroStep.escalations && updatedIntroStep.escalations.length > 0) {
-            // Check if there are any actions in escalations
-            const hasActions = updatedIntroStep.escalations.some((esc: any) =>
-              esc?.actions && Array.isArray(esc.actions) && esc.actions.length > 0
-            );
-            if (hasActions) {
-              next.introduction = {
-                type: 'introduction',
-                escalations: updatedIntroStep.escalations || []
-              };
-            } else {
-              delete next.introduction;
-            }
-          } else {
-            delete next.introduction;
-          }
-        } else {
-          // If steps structure is missing, check if introduction was directly modified
-          if (updated.introduction) {
-            next.introduction = updated.introduction;
-          } else if (!prev.introduction && updated.introduction === undefined) {
-            delete next.introduction;
-          }
-        }
-        if (notifyProvider) {
-          try { replaceSelectedDDT(next); } catch { }
-        }
-        return next;
-      }
-
-      // Normal update for main/sub nodes
-      const mains = getMainDataList(next);
-      const main = mains[selectedMainIndex];
-      if (!main) return prev;
-      const beforeKind = selectedSubIndex == null ? main?.kind : getSubDataList(main)[selectedSubIndex]?.kind;
-      if (selectedSubIndex == null) {
-        const before = JSON.stringify(main);
-        const updated = updater(main) || main;
-        const after = JSON.stringify(updated);
-        if (before === after) return prev; // no content change
-        mains[selectedMainIndex] = updated;
-      } else {
-        const subList = getSubDataList(main);
-        const sub = subList[selectedSubIndex];
-        if (!sub) return prev;
-        const subIdx = (main.subData || []).findIndex((s: any) => s.label === sub.label);
-        const before = JSON.stringify(main.subData[subIdx]);
-
-        console.error('🔍 [updateSelectedNode] Updating SUB node', {
-          mainLabel: main?.label,
-          subLabel: sub?.label,
-          subIdx,
-          subId: sub?.id,
-          beforeSteps: main.subData[subIdx]?.steps,
-          beforeStartStep: main.subData[subIdx]?.steps?.find((s: any) => s?.type === 'start'),
-          beforeStartActionText: main.subData[subIdx]?.steps?.find((s: any) => s?.type === 'start')?.escalations?.[0]?.actions?.[0]?.text
-        });
-
-        const updated = updater(sub) || sub;
-        const after = JSON.stringify(updated);
-
-        console.error('🔍 [updateSelectedNode] After update', {
-          mainLabel: main?.label,
-          subLabel: updated?.label,
-          subId: updated?.id,
-          afterSteps: updated?.steps,
-          afterStartStep: updated?.steps?.find((s: any) => s?.type === 'start'),
-          afterStartActionText: updated?.steps?.find((s: any) => s?.type === 'start')?.escalations?.[0]?.actions?.[0]?.text,
-          areStepsSame: main.subData[subIdx]?.steps === updated?.steps,
-          areStartStepsSame: main.subData[subIdx]?.steps?.find((s: any) => s?.type === 'start') === updated?.steps?.find((s: any) => s?.type === 'start')
-        });
-
-        if (before === after) return prev; // no content change
-        main.subData[subIdx] = updated;
-
-        console.error('🔍 [updateSelectedNode] SUB node saved in main.subData', {
-          mainLabel: main?.label,
-          savedSubLabel: main.subData[subIdx]?.label,
-          savedSubId: main.subData[subIdx]?.id,
-          savedStartActionText: main.subData[subIdx]?.steps?.find((s: any) => s?.type === 'start')?.escalations?.[0]?.actions?.[0]?.text
-        });
-      }
-      next.mainData = mains;
-      try {
-        const afterMain = mains[selectedMainIndex];
-        const afterKind = selectedSubIndex == null ? afterMain?.kind : getSubDataList(afterMain)[selectedSubIndex]?.kind;
-        log('[ResponseEditor][updateSelectedNode]', {
-          mainLabel: afterMain?.label,
-          selectedMainIndex,
-          selectedSubIndex,
-          beforeKind,
-          afterKind,
-        });
-        try {
-          const mainsKinds = (getMainDataList(next) || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual }));
-          console.log('[KindPersist][ResponseEditor][updateSelectedNode->replaceSelectedDDT]', mainsKinds);
-        } catch { }
-      } catch { }
-      if (notifyProvider) {
-        try { replaceSelectedDDT(next); } catch { }
-      }
-      return next;
-    });
-  };
+  // Node update logic (extracted to hook)
+  const { updateSelectedNode } = useNodeUpdate(
+    localDDT,
+    setLocalDDT,
+    selectedRoot,
+    selectedMainIndex,
+    selectedSubIndex,
+    replaceSelectedDDT
+  );
 
   // kept for future translation edits in StepEditor
 
