@@ -186,18 +186,28 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
     setLocalModel(model);
   }, [nodeStepKey, model]); // Reset quando cambia node.id o stepKey
 
-  // Effect 2: Sincronizza solo struttura quando siamo sullo stesso nodo/stepKey
-  // Questo permette di preservare le modifiche locali al testo sullo stesso nodo
+  // Effect 2: Sincronizza quando cambia la struttura O il testo (quando viene da fonti esterne come Chat Simulator)
+  // Quando l'utente modifica localmente in StepEditor, preserviamo le modifiche locali
+  // Quando il cambiamento viene da fonti esterne (es. Chat Simulator), aggiorniamo localModel
   React.useEffect(() => {
-    // Solo sincronizza se la struttura (escalations/actions) è cambiata
-    // Non sincronizzare se cambia solo il testo (per preservare modifiche locali)
-    const localStructure = JSON.stringify(localModel.map(e => ({
-      actions: e.actions.map(a => ({ actionId: a.actionId, textKey: a.textKey }))
+    // Confronta sia struttura che testo per rilevare cambiamenti esterni
+    const localSnapshot = JSON.stringify(localModel.map(e => ({
+      actions: e.actions.map(a => ({
+        actionId: a.actionId,
+        textKey: a.textKey,
+        text: a.text // Include text to detect external changes (e.g., from Chat Simulator)
+      }))
     })));
-    const modelStructure = JSON.stringify(model.map(e => ({
-      actions: e.actions.map(a => ({ actionId: a.actionId, textKey: a.textKey }))
+    const modelSnapshot = JSON.stringify(model.map(e => ({
+      actions: e.actions.map(a => ({
+        actionId: a.actionId,
+        textKey: a.textKey,
+        text: a.text
+      }))
     })));
-    if (localStructure !== modelStructure) {
+    if (localSnapshot !== modelSnapshot) {
+      // Model changed (structure or text), update localModel
+      // This will sync changes from external sources (e.g., Chat Simulator editing)
       setLocalModel(model);
     }
     // nodeStepKey nelle dipendenze evita esecuzione quando cambia nodo

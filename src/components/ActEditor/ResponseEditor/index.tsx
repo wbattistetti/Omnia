@@ -702,6 +702,9 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                       setLocalDDT((prev: any) => {
                         const updated = updater(prev);
                         try { replaceSelectedDDT(updated); } catch { }
+                        // Force re-render by returning a new object reference
+                        // The deep copy in updateActionTextInDDT should already ensure this,
+                        // but this makes it explicit
                         return updated;
                       });
                     }}

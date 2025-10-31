@@ -28,6 +28,7 @@ export function updateActionTextInDDT(
   const stepKey = stepTypeMap[stepType] || stepType;
 
   // Helper to update action in a node
+  // IMPORTANT: This function mutates the node, so it should be called on a cloned copy
   const updateActionInNode = (node: any): boolean => {
     if (!node?.steps) return false;
 
@@ -45,6 +46,7 @@ export function updateActionTextInDDT(
               : undefined;
             const actionTextKey = p?.value;
             if (actionTextKey === textKey) {
+              // Mutate the node (should be a clone)
               esc.actions[i] = {
                 ...action,
                 text: newText.length > 0 ? newText : undefined
@@ -70,6 +72,7 @@ export function updateActionTextInDDT(
               : undefined;
             const actionTextKey = p?.value;
             if (actionTextKey === textKey) {
+              // Mutate the node (should be a clone)
               esc.actions[i] = {
                 ...action,
                 text: newText.length > 0 ? newText : undefined
@@ -85,10 +88,11 @@ export function updateActionTextInDDT(
   };
 
   // Try to update in mainData nodes
+  // Create a deep clone to ensure React detects the change
   const isArrayFormat = Array.isArray((ddt as any)?.mainData);
   const mains = isArrayFormat
-    ? [...((ddt as any).mainData || [])]
-    : (ddt as any)?.mainData ? [(ddt as any).mainData] : [];
+    ? (ddt as any).mainData.map((m: any) => JSON.parse(JSON.stringify(m)))
+    : (ddt as any)?.mainData ? [JSON.parse(JSON.stringify((ddt as any).mainData))] : [];
 
   let updated = false;
   for (let i = 0; i < mains.length; i++) {
@@ -121,7 +125,8 @@ export function updateActionTextInDDT(
 
   // Try introduction step at root level
   if ((ddt as any)?.introduction) {
-    const intro = (ddt as any).introduction;
+    // Create a deep clone of introduction
+    const intro = JSON.parse(JSON.stringify((ddt as any).introduction));
     if (intro?.escalations && Array.isArray(intro.escalations)) {
       const esc = intro.escalations[0];
       if (esc?.actions && Array.isArray(esc.actions)) {
