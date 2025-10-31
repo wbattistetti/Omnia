@@ -1,6 +1,8 @@
 import React from 'react';
 import { useDDTManager } from '../../../../context/DDTManagerContext';
 import { ReviewItem } from './types';
+import { getActionIconNode, getActionMeta } from '../actionMeta';
+import { ensureHexColor, tailwindToHex } from '../utils/color';
 
 type Props = {
     item: ReviewItem;
@@ -96,6 +98,18 @@ export default function MessageReviewMessage({ item, onSave }: Props) {
         );
     }
 
+    // Use centralized action icon system with action color (not step color)
+    const actionId = item.actionId || 'sayMessage';
+    // If no color in item, get it from catalog
+    let actionColor = item.color ? ensureHexColor(item.color) : undefined;
+    if (!actionColor) {
+        const meta = getActionMeta(actionId);
+        if (meta.color) {
+            actionColor = tailwindToHex(meta.color) || ensureHexColor(meta.color);
+        }
+    }
+    const iconNode = getActionIconNode(actionId, actionColor);
+
     return (
         <div
             title={item.textKey ? 'Click to edit' : undefined}
@@ -114,6 +128,9 @@ export default function MessageReviewMessage({ item, onSave }: Props) {
                 fontSize: 14,
                 lineHeight: '1.5',
                 transition: 'background 0.2s',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
             }}
             onMouseEnter={(e) => {
                 if (item.textKey) {
@@ -126,7 +143,19 @@ export default function MessageReviewMessage({ item, onSave }: Props) {
                 }
             }}
         >
-            {item.text || <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>No text</span>}
+            {iconNode && (
+                <span style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                    marginTop: 2
+                }}>
+                    {iconNode}
+                </span>
+            )}
+            <span style={{ flex: 1 }}>
+                {item.text || <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>No text</span>}
+            </span>
         </div>
     );
 }

@@ -96,16 +96,28 @@ export function collectNodeMessages(
                 const actions = Array.isArray(esc?.actions) ? esc.actions : [];
                 actions.forEach((a: any, actIdx: number) => {
                     const key = extractActionTextKey(a);
-                    if (typeof key === 'string' && !collectedTextKeys.has(key)) {
-                        collectedTextKeys.add(key);
+                    const actionId = a.actionId || 'sayMessage';
+
+                    // Include messages with or without textKey (to show newly added messages)
+                    const shouldInclude = !key || !collectedTextKeys.has(key);
+                    if (shouldInclude) {
+                        if (key) collectedTextKeys.add(key);
+
+                        // Priority: a.text (edited text) > translations[key] (persisted translation)
+                        const text = (typeof a.text === 'string' && a.text.length > 0)
+                            ? a.text
+                            : (typeof key === 'string' ? (translations[key] || key) : a.text || '');
+
                         out.push({
                             id: `${pathLabel}|${stepKey}|${escIdx}|${actIdx}`,
                             stepKey,
                             escIndex: escIdx,
                             actionIndex: actIdx,
                             textKey: key,
-                            text: translations[key] || key,
+                            text: text,
                             pathLabel,
+                            actionId: actionId,
+                            color: a.color,
                         });
                     }
                 });
@@ -118,16 +130,28 @@ export function collectNodeMessages(
                 const actions = Array.isArray(esc?.actions) ? esc.actions : [];
                 actions.forEach((a: any, actIdx: number) => {
                     const key = extractActionTextKey(a);
-                    if (typeof key === 'string' && !collectedTextKeys.has(key)) {
-                        collectedTextKeys.add(key);
+                    const actionId = a.actionId || 'sayMessage';
+
+                    // Include messages with or without textKey (to show newly added messages)
+                    const shouldInclude = !key || !collectedTextKeys.has(key);
+                    if (shouldInclude) {
+                        if (key) collectedTextKeys.add(key);
+
+                        // Priority: a.text (edited text) > translations[key] (persisted translation)
+                        const text = (typeof a.text === 'string' && a.text.length > 0)
+                            ? a.text
+                            : (typeof key === 'string' ? (translations[key] || key) : a.text || '');
+
                         out.push({
                             id: `${pathLabel}|${stepKey}|${escIdx}|${actIdx}`,
                             stepKey,
                             escIndex: escIdx,
                             actionIndex: actIdx,
                             textKey: key,
-                            text: translations[key] || key,
+                            text: text,
                             pathLabel,
+                            actionId: actionId,
+                            color: a.color,
                         });
                     }
                 });
@@ -149,6 +173,8 @@ export function collectNodeMessages(
                     textKey: key,
                     text: translations[key] || key,
                     pathLabel,
+                    actionId: 'sayMessage', // Default for legacy messages
+                    color: undefined,
                 });
             }
         }

@@ -6,6 +6,8 @@ export type ReviewItem = {
     textKey?: string;
     text: string;
     pathLabel: string;
+    actionId?: string; // For centralized icon/label system
+    color?: string; // Action color (not step color)
 };
 
 export type StepGroup = {
