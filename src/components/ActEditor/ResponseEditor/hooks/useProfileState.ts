@@ -155,10 +155,7 @@ export function useProfileState(
       try { console.log('[KindPersist][ProfileEditor][kind change]', { from: prevKindRef.current, to: kind, nodeLabel: node?.label }); } catch {}
       setSynonymsText(r.synonyms);
       setFormatText(r.formats);
-      // FIX: Preserve existing examples if any, only seed if empty
-      if (examplesList.length === 0) {
-        setExamplesList(r.examples);
-      }
+      setExamplesList(r.examples); // Load recommended examples for the new Kind
       setMinConf(r.min);
       // Only reset regex/postProcess on user-initiated kind change
       setRegex('');
@@ -166,7 +163,7 @@ export function useProfileState(
     }
     prevKindRef.current = kind;
     isUserKindChangeRef.current = false; // Reset flag after processing
-  }, [kind, recommendedForKind, node, examplesList.length]);
+  }, [kind, recommendedForKind, node]);
 
   // Sync form when node changes (use stable dependency to avoid loops)
   const prevSlotIdRef = useRef<string>('');
