@@ -1,7 +1,11 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import type { SchemaNode } from './MainDataCollection';
-import { Pencil, Trash2, Plus, Check, X, User, MapPin, Calendar, Type as TypeIcon, Mail, Phone, Hash, Globe, Home, Building, FileText, HelpCircle, Link, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { Pencil, Trash2, Plus, Check, X, Link, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { debug } from '../../../utils/logger';
+import AnimatedDots from './components/AnimatedDots';
+import IconRenderer from './components/IconRenderer';
+import ProgressBar from './components/ProgressBar';
+import { useFieldProcessing } from './hooks/useFieldProcessing';
 
 interface MainDataWizardProps {
   node: SchemaNode;
@@ -34,24 +38,6 @@ interface FieldProcessingState {
 
 const iconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' };
 
-// 🚀 NEW: AnimatedDots component for processing indicators
-const AnimatedDots: React.FC = () => {
-  const [dots, setDots] = useState('');
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDots(prev => {
-        if (prev === '...') return '';
-        return prev + '.';
-      });
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return <span className="text-blue-600 font-mono">{dots}</span>;
-};
-
 const MainDataWizard: React.FC<MainDataWizardProps & {
   progressByPath?: Record<string, number>;
   fieldProcessingStates?: Record<string, FieldProcessingState>;
@@ -79,42 +65,11 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
   // 🚀 NEW: State for field errors
   const [fieldErrors, setFieldErrors] = useState<Record<string, FieldErrorState>>({});
 
-  // 🚀 NEW: Helper functions for processing state
-  const getFieldProcessingState = (fieldId: string): FieldProcessingState | null => {
-    return fieldProcessingStates?.[fieldId] || null;
-  };
-
-  const getStatusIcon = (fieldId: string): React.ReactNode => {
-    const state = getFieldProcessingState(fieldId);
-    const progress = progressByPath?.[fieldId] || 0;
-
-    // 🚀 PRIORITÀ: Se abbiamo progressByPath, usiamo quello (più affidabile)
-    if (progress >= 100) return <Check className="w-4 h-4 text-green-600" />;
-    if (progress > 0) return <Loader2 className="w-4 h-4 animate-spin text-blue-600" />;
-
-    // Fallback su fieldProcessingStates solo se non c'è progressByPath
-    const status = state?.status || 'idle';
-    switch (status) {
-      case 'processing': return <Loader2 className="w-4 h-4 animate-spin text-blue-600" />;
-      case 'completed': return <Check className="w-4 h-4 text-green-600" />;
-      case 'error': return <AlertTriangle className="w-4 h-4 text-red-600" />;
-      default: return null;
-    }
-  };
-
-  const getStatusMessage = (fieldId: string): string => {
-    const state = getFieldProcessingState(fieldId);
-    const progress = progressByPath?.[fieldId] || 0;
-
-    // 🚀 PRIORITÀ: Se abbiamo progressByPath, usiamo quello (più affidabile)
-    if (progress >= 100) return "Done!";
-    if (progress > 0) return "Generando messaggi normal...";
-
-    // Fallback su fieldProcessingStates solo se non c'è progressByPath
-    if (state?.message) return state.message;
-
-    return "In attesa...";
-  };
+  // Processing state helpers (extracted to hook)
+  const { getFieldProcessingState, getStatusIcon, getStatusMessage } = useFieldProcessing({
+    fieldProcessingStates,
+    progressByPath
+  });
 
   // 🚀 NEW: State for loading during retry
   const [retryLoading, setRetryLoading] = useState<Record<string, boolean>>({});
@@ -122,25 +77,6 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
   // 🚀 NEW: State for loading during initial commit
   const [commitLoading, setCommitLoading] = useState(false);
 
-  const renderIcon = (name?: string, size: number = 16) => {
-    const color = '#fb923c';
-    switch ((name || '').trim()) {
-      case 'User': return <User size={size} color={color} />;
-      case 'MapPin': return <MapPin size={size} color={color} />;
-      case 'Calendar': return <Calendar size={size} color={color} />;
-      case 'Type': return <TypeIcon size={size} color={color} />;
-      case 'Mail': return <Mail size={size} color={color} />;
-      case 'Phone': return <Phone size={size} color={color} />;
-      case 'Hash': return <Hash size={size} color={color} />;
-      case 'Globe': return <Globe size={size} color={color} />;
-      case 'Home': return <Home size={size} color={color} />;
-      case 'Building': return <Building size={size} color={color} />;
-      case 'HelpCircle': return <HelpCircle size={size} color={color} />;
-      case 'FileText':
-      default:
-        return <FileText size={size} color={color} />;
-    }
-  };
 
   const commitMain = async () => {
     debug('MAIN_DATA_WIZARD', 'commitMain called', { labelDraft, currentLabel: node.label, isChanged: (node.label || '') !== labelDraft });
@@ -469,7 +405,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
           {!isEditingMain ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
-                <span>{renderIcon(node.icon, 16)}</span>
+                <span><IconRenderer name={node.icon} size={16} /></span>
                 <span style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
 
                 {/* 🚀 NEW: Status display for main data */}
@@ -678,35 +614,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
           const path = node.label;
           const val = progressByPath ? progressByPath[path] : undefined;
           if (typeof val === 'number') {
-            const percentage = Math.round(val * 100);
-            const isComplete = percentage >= 100;
-
-            // 🎨 Colors: light orange for in-progress, solid GREEN for complete
-            const barColor = isComplete ? '#22c55e' : '#fbbf24';
-
-            // 🎨 Style: dashed for in-progress, solid for complete
-            const barStyle = isComplete
-              ? { background: barColor }
-              : {
-                background: `repeating-linear-gradient(
-                    to right,
-                    ${barColor} 0px,
-                    ${barColor} 8px,
-                    transparent 8px,
-                    transparent 12px
-                  )`
-              };
-
-            return (
-              <div style={{ width: '100%', height: 4, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
-                <div style={{
-                  width: `${percentage}%`,
-                  height: '100%',
-                  ...barStyle,
-                  transition: 'width 0.8s ease, background 0.3s ease'
-                }} />
-              </div>
-            );
+            return <ProgressBar progress={val} />;
           }
           return null;
         })()}
@@ -782,7 +690,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                      <span>{renderIcon(s.icon, 14)}</span>
+                      <span><IconRenderer name={s.icon} size={14} /></span>
                       <span style={{ color: '#e2e8f0', whiteSpace: 'nowrap' }}>{s.label || 'Field'}</span>
 
                       {/* 🚀 NEW: Status display for sub-data */}
