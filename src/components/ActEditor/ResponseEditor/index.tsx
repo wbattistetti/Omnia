@@ -698,6 +698,13 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                     ddt={localDDT}
                     translations={localTranslations}
                     selectedNode={selectedNode}
+                    onUpdateDDT={(updater) => {
+                      setLocalDDT((prev: any) => {
+                        const updated = updater(prev);
+                        try { replaceSelectedDDT(updated); } catch { }
+                        return updated;
+                      });
+                    }}
                   />
                 )}
               </div>

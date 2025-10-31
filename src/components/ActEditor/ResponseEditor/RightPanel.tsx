@@ -16,6 +16,7 @@ type Props = {
   ddt: any;
   translations: Record<string, string>;
   selectedNode: any;
+  onUpdateDDT?: (updater: (ddt: any) => any) => void;
 };
 
 const localStorageKey = 'responseEditor.rightWidth';
@@ -137,7 +138,7 @@ function StylesView() {
   );
 }
 
-export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode }: Props) {
+export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode, onUpdateDDT }: Props) {
   const minWidth = 160;
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -166,7 +167,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
               <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-              <DDEBubbleChat currentDDT={ddt} translations={translations} />
+              <DDEBubbleChat currentDDT={ddt} translations={translations} onUpdateDDT={onUpdateDDT} />
             </div>
           </div>
         )}

@@ -1,0 +1,161 @@
+import type { AssembledDDT } from '../../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+
+/**
+ * Finds and updates action.text in the DDT structure for a given textKey and stepType.
+ * This ensures that when editing messages in Chat Simulator, we update the same source
+ * of truth (action.text) that StepEditor uses.
+ */
+export function updateActionTextInDDT(
+  ddt: AssembledDDT,
+  textKey: string,
+  stepType: string,
+  newText: string,
+  escalationNumber?: number
+): AssembledDDT {
+  if (!ddt || !textKey) return ddt;
+
+  // Map stepType to stepKey (Chat Simulator uses different names than DDT structure)
+  const stepTypeMap: Record<string, string> = {
+    'ask': 'start',
+    'start': 'start',
+    'noMatch': 'noMatch',
+    'noInput': 'noInput',
+    'confirmation': 'confirmation',
+    'confirm': 'confirmation',
+    'success': 'success',
+    'introduction': 'introduction'
+  };
+  const stepKey = stepTypeMap[stepType] || stepType;
+
+  // Helper to update action in a node
+  const updateActionInNode = (node: any): boolean => {
+    if (!node?.steps) return false;
+
+    // Case A: steps as object { start: { escalations: [...] } }
+    if (!Array.isArray(node.steps) && node.steps[stepKey]) {
+      const stepData = node.steps[stepKey];
+      if (stepData?.escalations && Array.isArray(stepData.escalations)) {
+        const escIndex = escalationNumber ? escalationNumber - 1 : 0; // escalationNumber is 1-indexed
+        const esc = stepData.escalations[escIndex];
+        if (esc?.actions && Array.isArray(esc.actions)) {
+          for (let i = 0; i < esc.actions.length; i++) {
+            const action = esc.actions[i];
+            const p = Array.isArray(action?.parameters)
+              ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
+              : undefined;
+            const actionTextKey = p?.value;
+            if (actionTextKey === textKey) {
+              esc.actions[i] = {
+                ...action,
+                text: newText.length > 0 ? newText : undefined
+              };
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
+    if (Array.isArray(node.steps)) {
+      const group = node.steps.find((g: any) => g?.type === stepKey);
+      if (group?.escalations && Array.isArray(group.escalations)) {
+        const escIndex = escalationNumber ? escalationNumber - 1 : 0;
+        const esc = group.escalations[escIndex];
+        if (esc?.actions && Array.isArray(esc.actions)) {
+          for (let i = 0; i < esc.actions.length; i++) {
+            const action = esc.actions[i];
+            const p = Array.isArray(action?.parameters)
+              ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
+              : undefined;
+            const actionTextKey = p?.value;
+            if (actionTextKey === textKey) {
+              esc.actions[i] = {
+                ...action,
+                text: newText.length > 0 ? newText : undefined
+              };
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    return false;
+  };
+
+  // Try to update in mainData nodes
+  const isArrayFormat = Array.isArray((ddt as any)?.mainData);
+  const mains = isArrayFormat
+    ? [...((ddt as any).mainData || [])]
+    : (ddt as any)?.mainData ? [(ddt as any).mainData] : [];
+
+  let updated = false;
+  for (let i = 0; i < mains.length; i++) {
+    const main = mains[i];
+    if (!main) continue;
+    // Try main node
+    if (updateActionInNode(main)) {
+      updated = true;
+      break;
+    }
+    // Try sub nodes
+    if (Array.isArray(main.subData)) {
+      for (let j = 0; j < main.subData.length; j++) {
+        const sub = main.subData[j];
+        if (updateActionInNode(sub)) {
+          updated = true;
+          break;
+        }
+      }
+      if (updated) break;
+    }
+  }
+
+  if (updated) {
+    return {
+      ...ddt,
+      mainData: isArrayFormat ? mains : (mains.length > 0 ? mains[0] : undefined)
+    };
+  }
+
+  // Try introduction step at root level
+  if ((ddt as any)?.introduction) {
+    const intro = (ddt as any).introduction;
+    if (intro?.escalations && Array.isArray(intro.escalations)) {
+      const esc = intro.escalations[0];
+      if (esc?.actions && Array.isArray(esc.actions)) {
+        for (let i = 0; i < esc.actions.length; i++) {
+          const action = esc.actions[i];
+          const p = Array.isArray(action?.parameters)
+            ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
+            : undefined;
+          const actionTextKey = p?.value;
+          if (actionTextKey === textKey) {
+            const updatedIntro = {
+              ...intro,
+              escalations: [
+                {
+                  ...esc,
+                  actions: [
+                    ...esc.actions.slice(0, i),
+                    {
+                      ...action,
+                      text: newText.length > 0 ? newText : undefined
+                    },
+                    ...esc.actions.slice(i + 1)
+                  ]
+                },
+                ...intro.escalations.slice(1)
+              ]
+            };
+            return { ...ddt, introduction: updatedIntro };
+          }
+        }
+      }
+    }
+  }
+
+  return ddt;
+}
+

@@ -23,12 +23,21 @@ import {
   resolveConfirm,
   resolveSuccess
 } from './messageResolvers';
+import { useMessageEditing } from './hooks/useMessageEditing';
 
 // getStepIcon and getStepColor moved to chatSimulatorUtils.tsx
 // Helper functions for message resolution moved to messageResolvers.ts
 // UserMessage and BotMessage components moved to separate files
 
-export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT: AssembledDDT, translations?: Record<string, string> }) {
+export default function DDEBubbleChat({
+  currentDDT,
+  translations,
+  onUpdateDDT
+}: {
+  currentDDT: AssembledDDT;
+  translations?: Record<string, string>;
+  onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
+}) {
   const template: DDTTemplateV2 = React.useMemo(() => adaptCurrentToV2(currentDDT), [currentDDT]);
   // Enable simulator debug logs only when explicitly toggled
   const debugEnabled = (() => { try { return localStorage.getItem('debug.chatSimulator') === '1'; } catch { return false; } })();
@@ -40,7 +49,7 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
     messageIdCounter.current += 1;
     return `${prefix}-${Date.now()}-${messageIdCounter.current}`;
   };
-  const { updateTranslation } = useDDTManager();
+  // updateTranslation moved to useMessageEditing hook
 
   const [messages, setMessages] = React.useState<Message[]>([]);
   const lastKeyRef = React.useRef<string>('');
@@ -49,23 +58,27 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
   // Track no-match escalation counts per (mainIdx|subId|mode)
   const [noMatchCounts, setNoMatchCounts] = React.useState<Record<string, number>>({});
   const legacyDict = React.useMemo(() => extractTranslations(currentDDT as any, translations), [currentDDT, translations]);
-  const [hoveredId, setHoveredId] = React.useState<string | null>(null);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [draftText, setDraftText] = React.useState<string>('');
-  const [inlineDraft, setInlineDraft] = React.useState<string>('');
-  const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
-  const inlineInputRef = React.useRef<HTMLInputElement | null>(null);
-  const ensureInlineFocus = React.useCallback((retries: number = 8) => {
-    const attempt = (i: number) => {
-      const el = inlineInputRef.current;
-      if (!el) return;
-      try { el.focus({ preventScroll: true } as any); } catch { }
-      if (document.activeElement !== el && i < retries) {
-        setTimeout(() => attempt(i + 1), 50);
-      }
-    };
-    requestAnimationFrame(() => attempt(0));
-  }, []);
+
+  // Message editing state and handlers (extracted to hook)
+  const {
+    hoveredId,
+    setHoveredId,
+    editingId,
+    draftText,
+    inlineDraft,
+    setInlineDraft,
+    scrollContainerRef,
+    inlineInputRef,
+    ensureInlineFocus,
+    handleEdit,
+    handleSave,
+    handleCancel
+  } = useMessageEditing({
+    messages,
+    setMessages,
+    currentDDT,
+    onUpdateDDT
+  });
   // Removed lastBotIndex - input field is now rendered after all messages
 
   const getPositionKey = React.useCallback((s: any): string => (
@@ -766,26 +779,6 @@ export default function DDEBubbleChat({ currentDDT, translations }: { currentDDT
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={scrollContainerRef}>
         {messages.map((m) => {
-          // Callback handlers
-          const handleEdit = (id: string, text: string) => {
-            setEditingId(id);
-            setDraftText(text);
-          };
-
-          const handleSave = (id: string, text: string) => {
-            const msg = messages.find(x => x.id === id);
-            if (msg?.textKey) {
-              try { updateTranslation(msg.textKey, text); } catch { }
-              setMessages((prev) => prev.map(x => x.id === id ? { ...x, text } : x));
-            }
-            setEditingId(null);
-          };
-
-          const handleCancel = () => {
-            setEditingId(null);
-            setDraftText('');
-          };
-
           // Render user message
           if (m.type === 'user') {
             return (
