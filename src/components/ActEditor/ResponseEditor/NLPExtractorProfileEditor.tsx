@@ -1,6 +1,5 @@
 import React from 'react';
 import { Wand2 } from 'lucide-react';
-import { databaseService } from '../../../nlp/services/databaseService';
 import RegexEditor from './RegexEditor';
 import NLPCompactEditor from './NLPCompactEditor';
 import PostProcessEditor from './PostProcessEditor';
@@ -32,6 +31,9 @@ import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
 // 📊 Tester Components
 import TesterGrid from './TesterGrid';
 import TesterControls from './TesterControls';
+
+// 🔧 Utilities
+import { saveNLPProfileToGlobal } from './utils/nlpProfileUtils';
 
 export interface NLPProfile {
   slotId: string;
@@ -199,70 +201,18 @@ export default function NLPExtractorProfileEditor({
     prevExamplesCountRef.current = examplesList.length;
   }, [examplesList.length, runRowTest, setSelectedRow]);
 
-  // renderStackedSummary and renderTimeBar moved to TesterGrid component
-
-  // Helper function to summarize extraction results (used in renderStackedSummary)
-  const summarizeResult = (result: any, currentField: string): string => {
-    try {
-      if (!result || result.status !== 'accepted' || result.value === undefined || result.value === null)
-        return "—";
-
-      // For age (number), show the value directly
-      if (currentField === 'age') {
-        return `value=${result.value}`;
-      }
-
-      // For other fields, use existing logic
-      if (currentField === 'dateOfBirth') {
-        const v: any = result.value || {};
-        return summarizeVars({ day: v.day, month: v.month, year: v.year },
-          v.day && v.month && v.year ? `${String(v.day).padStart(2,'0')}/${String(v.month).padStart(2,'0')}/${v.year}` : undefined);
-      } else if (currentField === 'phone') {
-        const v: any = result.value || {};
-        return v.e164 ? `value=${v.e164}` : '—';
-      } else if (currentField === 'email') {
-        return result.value ? `value=${String(result.value)}` : '—';
-      } else {
-        return result.value ? `value=${String(result.value)}` : '—';
-      }
-    } catch (error) {
-      console.error('[NLP_TESTER] summarizeResult error:', error, { result, currentField });
-      return "—";
-    }
-  };
-
   // Function to save current config to global database
   const saveToGlobal = async () => {
     try {
-      // Create config from current profile
-      const globalConfig: NLPConfigDB = {
-        supportedKinds: [profile.kind],
-        aliases: {},
-        extractorMapping: { [profile.kind]: profile.kind },
-        typeMetadata: {
-          [profile.kind]: {
-            description: profile.description || `Extractor for ${profile.kind}`,
-            examples: profile.examples || [],
-            regex: profile.regex ? [profile.regex] : undefined,
-            // TODO: Add more fields from profile
-          }
-        },
-        aiPrompts: {},  // Required field
-        version: "1.0.0",
-        lastUpdated: new Date().toISOString(),
-        permissions: { canEdit: true, canCreate: true, canDelete: false },
-        auditLog: true
-      };
-
-      const success = await databaseService.saveNLPConfig(globalConfig);
+      const success = await saveNLPProfileToGlobal(profile);
       if (success) {
         alert('Configuration saved to global database!');
       } else {
         alert('Failed to save configuration.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving to global:', error);
-      alert('Error saving configuration: ' + error.message);
+      alert('Error saving configuration: ' + (error?.message || 'Unknown error'));
     }
   };
 
