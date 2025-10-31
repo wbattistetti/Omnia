@@ -130,7 +130,19 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   // Stato locale per le escalation e azioni (per demo, in reale va gestito a livello superiore)
   const [localModel, setLocalModel] = React.useState(model);
-  React.useEffect(() => { setLocalModel(model); }, [model]);
+  React.useEffect(() => {
+    // Only sync if model structure actually changed (new escalations/actions or removed ones),
+    // not just text updates. This prevents losing local edits when model is rebuilt from props.
+    const localStructure = JSON.stringify(localModel.map(e => ({
+      actions: e.actions.map(a => ({ actionId: a.actionId, textKey: a.textKey }))
+    })));
+    const modelStructure = JSON.stringify(model.map(e => ({
+      actions: e.actions.map(a => ({ actionId: a.actionId, textKey: a.textKey }))
+    })));
+    if (localStructure !== modelStructure) {
+      setLocalModel(model);
+    }
+  }, [model, localModel]);
 
   // Commit esplicito: chiamato solo da useActionCommands dopo ogni azione (drop, append, edit, delete, move)
   const commitUp = React.useCallback((next: EscalationModel[]) => {
@@ -149,6 +161,22 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   // Auto-focus editing after drop/append
   const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; actIdx: number } | null>(null);
+
+  // Track which row is currently being edited (for disabling drag)
+  const [editingRows, setEditingRows] = React.useState<Set<string>>(new Set());
+
+  const handleEditingChange = React.useCallback((escalationIdx: number, actionIdx: number) => (isEditing: boolean) => {
+    const key = `${escalationIdx}-${actionIdx}`;
+    setEditingRows(prev => {
+      const next = new Set(prev);
+      if (isEditing) {
+        next.add(key);
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  }, []);
 
   // Wrapper per editAction che resetta autoEditTarget quando l'edit è completato
   const handleEdit = React.useCallback((escalationIdx: number, actionIdx: number, newText: string) => {
@@ -194,30 +222,36 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       {['start', 'success'].includes(stepKey) ? (
         // Per start/success: canvas droppabile per append; i row wrapper non accettano drop dal viewer
         <CanvasDropWrapper onDropAction={(action) => handleAppend(0, action)} color={color}>
-          {localModel[0]?.actions?.map((a, j) => (
-            <ActionRowDnDWrapper
-              key={j}
-              escalationIdx={0}
-              actionIdx={j}
-              action={a}
-              onMoveAction={moveAction}
-              onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
-              allowViewerDrop={true}
-            >
-              <ActionRow
-                icon={getActionIconNode(a.actionId, ensureHexColor(a.color))}
-                text={getText(a)}
-                color={color}
-                draggable
-                selected={false}
-                actionId={a.actionId}
-                label={getActionLabel(a.actionId)}
-                onEdit={a.actionId === 'sayMessage' ? (newText) => handleEdit(0, j, newText) : undefined}
-                onDelete={() => handleDelete(0, j)}
-                autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === 0 && autoEditTarget.actIdx === j)}
-              />
-            </ActionRowDnDWrapper>
-          ))}
+          {localModel[0]?.actions?.map((a, j) => {
+            const editingKey = `0-${j}`;
+            const isEditing = editingRows.has(editingKey);
+            return (
+              <ActionRowDnDWrapper
+                key={j}
+                escalationIdx={0}
+                actionIdx={j}
+                action={a}
+                onMoveAction={moveAction}
+                onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
+                allowViewerDrop={true}
+                isEditing={isEditing}
+              >
+                <ActionRow
+                  icon={getActionIconNode(a.actionId, ensureHexColor(a.color))}
+                  text={getText(a)}
+                  color={color}
+                  draggable
+                  selected={false}
+                  actionId={a.actionId}
+                  label={getActionLabel(a.actionId)}
+                  onEdit={a.actionId === 'sayMessage' ? (newText) => handleEdit(0, j, newText) : undefined}
+                  onDelete={() => handleDelete(0, j)}
+                  autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === 0 && autoEditTarget.actIdx === j)}
+                  onEditingChange={handleEditingChange(0, j)}
+                />
+              </ActionRowDnDWrapper>
+            );
+          })}
         </CanvasDropWrapper>
       ) : (
         localModel.map((esc, idx) => (
@@ -234,30 +268,36 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
               {esc.actions.length === 0 ? (
                 <PanelEmptyDropZone color={color} onDropAction={(action) => handleAppend(idx, action)} />
               ) : (
-                esc.actions.map((a, j) => (
-                  <ActionRowDnDWrapper
-                    key={j}
-                    escalationIdx={idx}
-                    actionIdx={j}
-                    action={a}
-                    onMoveAction={moveAction}
-                    onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
-                    allowViewerDrop={true}
-                  >
-                    <ActionRow
-                      icon={getActionIconNode(a.actionId, ensureHexColor(a.color))}
-                      text={getText(a)}
-                      color={color}
-                      draggable
-                      selected={false}
-                      actionId={a.actionId}
-                      label={getActionLabel(a.actionId)}
-                      onEdit={a.actionId === 'sayMessage' ? (newText) => handleEdit(idx, j, newText) : undefined}
-                      onDelete={() => handleDelete(idx, j)}
-                      autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === idx && autoEditTarget.actIdx === j)}
-                    />
-                  </ActionRowDnDWrapper>
-                ))
+                esc.actions.map((a, j) => {
+                  const editingKey = `${idx}-${j}`;
+                  const isEditing = editingRows.has(editingKey);
+                  return (
+                    <ActionRowDnDWrapper
+                      key={j}
+                      escalationIdx={idx}
+                      actionIdx={j}
+                      action={a}
+                      onMoveAction={moveAction}
+                      onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
+                      allowViewerDrop={true}
+                      isEditing={isEditing}
+                    >
+                      <ActionRow
+                        icon={getActionIconNode(a.actionId, ensureHexColor(a.color))}
+                        text={getText(a)}
+                        color={color}
+                        draggable
+                        selected={false}
+                        actionId={a.actionId}
+                        label={getActionLabel(a.actionId)}
+                        onEdit={a.actionId === 'sayMessage' ? (newText) => handleEdit(idx, j, newText) : undefined}
+                        onDelete={() => handleDelete(idx, j)}
+                        autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === idx && autoEditTarget.actIdx === j)}
+                        onEditingChange={handleEditingChange(idx, j)}
+                      />
+                    </ActionRowDnDWrapper>
+                  );
+                })
               )}
             </div>
           </div>

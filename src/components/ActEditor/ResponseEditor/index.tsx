@@ -715,9 +715,13 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
                                   // Per azioni testuali, aggiungi contenuto se presente (non scartare i vuoti)
                                   if (id === 'sayMessage' || id === 'askQuestion') {
+                                    // Always preserve textKey if present (for translation reference)
                                     if (typeof a.textKey === 'string') {
                                       out.parameters = [{ parameterId: 'text', value: a.textKey }];
-                                    } else if (typeof a.text === 'string' && a.text.trim().length > 0) {
+                                    }
+                                    // If text is provided (especially when editing), save it directly in the node
+                                    // This ensures edited text persists even when switching steps
+                                    if (typeof a.text === 'string' && a.text.trim().length > 0) {
                                       out.text = a.text;
                                     }
                                   }

@@ -11,6 +11,7 @@ export interface ActionRowDnDWrapperProps {
   onDropNewAction?: (action: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
   children: React.ReactNode;
   allowViewerDrop?: boolean;
+  isEditing?: boolean; // Disable drag when editing
 }
 
 export const DND_TYPE = 'ACTION_ROW';
@@ -25,6 +26,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
   onDropNewAction,
   children,
   allowViewerDrop = true,
+  isEditing = false,
 }) => {
   const ref = React.useRef<HTMLDivElement>(null);
   const [previewPosition, setPreviewPosition] = React.useState<'before' | 'after' | undefined>(undefined);
@@ -42,6 +44,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
     end: (item, monitor) => {
       console.log('[DnD][ActionRow][end]', { didDrop: monitor.didDrop() });
     },
+    canDrag: !isEditing, // Disable drag when editing
   });
 
   const accepts = React.useMemo(() => (allowViewerDrop ? [DND_TYPE, DND_TYPE_VIEWER] : [DND_TYPE]), [allowViewerDrop]);

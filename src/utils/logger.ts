@@ -5,7 +5,7 @@
  * Prevents infinite log loops and provides granular control over logging.
  *
  * USAGE:
- * import { debug, info, warn, error } from '../utils/Logger';
+ * import { debug, info, warn, error } from '../utils/logger';
  *
  * debug('DDT_WIZARD', 'Message', { data });
  * error('DDT_WIZARD', 'Error occurred', error);
@@ -29,6 +29,7 @@ type Component =
     | 'WIZARD_INPUT'
     | 'WIZARD_PIPELINE'
     | 'ORCHESTRATOR'
+    | 'RESPONSE_EDITOR'
     | 'ALL';
 
 interface LogEntry {

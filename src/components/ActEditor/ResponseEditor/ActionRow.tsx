@@ -17,6 +17,7 @@ interface ActionRowProps {
   actionId?: string;
   isDragging?: boolean;
   autoEdit?: boolean; // when true, open editor and focus input
+  onEditingChange?: (isEditing: boolean) => void; // Callback when editing state changes
 }
 
 function ActionRowInner({
@@ -31,11 +32,17 @@ function ActionRowInner({
   dndPreview,
   actionId,
   isDragging = false,
-  autoEdit = false
+  autoEdit = false,
+  onEditingChange
 }: ActionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Notify parent when editing state changes
+  React.useEffect(() => {
+    onEditingChange?.(editing);
+  }, [editing, onEditingChange]);
 
   // Sync editValue when text prop changes and we're not editing
   React.useEffect(() => {
@@ -68,7 +75,9 @@ function ActionRowInner({
       setEditing(false);
       try { inputRef.current?.blur(); } catch { }
 
-      if (onEdit && newValue !== text) {
+      // Always call onEdit when saving, regardless of whether value changed
+      // This ensures edits are saved even if text prop hasn't updated yet
+      if (onEdit) {
         onEdit(newValue);
       }
     }
@@ -90,7 +99,9 @@ function ActionRowInner({
     const newValue = editValue;
     setEditing(false);
 
-    if (onEdit && newValue !== text) {
+    // Always call onEdit when saving, regardless of whether value changed
+    // This ensures edits are saved even if text prop hasn't updated yet
+    if (onEdit) {
       onEdit(newValue);
     }
   };
@@ -111,7 +122,7 @@ function ActionRowInner({
           padding: '8px 0',
           marginBottom: 6,
           boxShadow: selected ? `0 2px 8px 0 ${color}22` : undefined,
-          cursor: isDragging ? 'grabbing' : (draggable ? 'grab' : 'default'),
+          cursor: editing ? 'text' : (isDragging ? 'grabbing' : (draggable ? 'grab' : 'default')),
           transition: 'background 0.15s, border 0.15s',
           position: 'relative',
           borderTop: dndPreview === 'before' ? '2px solid #2563eb' : undefined,
