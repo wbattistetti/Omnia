@@ -150,6 +150,28 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   // Auto-focus editing after drop/append
   const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; actIdx: number } | null>(null);
 
+  // Wrapper per editAction che resetta autoEditTarget quando l'edit è completato
+  const handleEdit = React.useCallback((escalationIdx: number, actionIdx: number, newText: string) => {
+    editAction(escalationIdx, actionIdx, newText);
+    // Reset autoEditTarget se corrisponde all'azione editata
+    if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === actionIdx) {
+      setAutoEditTarget(null);
+    }
+  }, [editAction, autoEditTarget]);
+
+  // Wrapper per deleteAction che resetta autoEditTarget quando l'azione viene eliminata
+  const handleDelete = React.useCallback((escalationIdx: number, actionIdx: number) => {
+    deleteAction(escalationIdx, actionIdx);
+    // Reset se l'azione eliminata era il target
+    if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === actionIdx) {
+      setAutoEditTarget(null);
+    }
+    // Aggiorna indici se l'azione eliminata era prima del target
+    else if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx > actionIdx) {
+      setAutoEditTarget({ ...autoEditTarget, actIdx: autoEditTarget.actIdx - 1 });
+    }
+  }, [deleteAction, autoEditTarget]);
+
   const handleAppend = React.useCallback((escIdx: number, action: any) => {
     const currentLen = (localModel?.[escIdx]?.actions?.length) || 0;
     appendAction(escIdx, action);
@@ -190,8 +212,8 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
                 selected={false}
                 actionId={a.actionId}
                 label={getActionLabel(a.actionId)}
-                onEdit={a.actionId === 'sayMessage' ? (newText) => editAction(0, j, newText) : undefined}
-                onDelete={() => deleteAction(0, j)}
+                onEdit={a.actionId === 'sayMessage' ? (newText) => handleEdit(0, j, newText) : undefined}
+                onDelete={() => handleDelete(0, j)}
                 autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === 0 && autoEditTarget.actIdx === j)}
               />
             </ActionRowDnDWrapper>
@@ -230,8 +252,8 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
                       selected={false}
                       actionId={a.actionId}
                       label={getActionLabel(a.actionId)}
-                      onEdit={a.actionId === 'sayMessage' ? (newText) => editAction(idx, j, newText) : undefined}
-                      onDelete={() => deleteAction(idx, j)}
+                      onEdit={a.actionId === 'sayMessage' ? (newText) => handleEdit(idx, j, newText) : undefined}
+                      onDelete={() => handleDelete(idx, j)}
                       autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === idx && autoEditTarget.actIdx === j)}
                     />
                   </ActionRowDnDWrapper>

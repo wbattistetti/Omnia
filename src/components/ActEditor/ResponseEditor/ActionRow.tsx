@@ -34,18 +34,24 @@ function ActionRowInner({
   autoEdit = false
 }: ActionRowProps) {
   const [editing, setEditing] = useState(false);
-  const [wasConfirmed, setWasConfirmed] = useState(false);
   const [editValue, setEditValue] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Sync editValue when text prop changes and we're not editing
+  React.useEffect(() => {
+    if (!editing) {
+      setEditValue(text);
+    }
+  }, [text, editing]);
+
   // Open editor automatically when asked
   React.useEffect(() => {
-    if (autoEdit && actionId === 'sayMessage') {
+    if (autoEdit && actionId === 'sayMessage' && !editing) {
       setEditValue(text || '');
       setEditing(true);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [autoEdit, text, actionId]);
+  }, [autoEdit, text, actionId, editing]);
 
   const handleEdit = () => {
     if (actionId !== 'sayMessage') return;
@@ -53,18 +59,22 @@ function ActionRowInner({
     setEditing(true);
     setTimeout(() => inputRef.current?.focus(), 0);
   };
+
   const handleEditKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      // Conferma come se si premesse la spunta
-      if (onEdit && editValue !== text) onEdit(editValue);
+      e.stopPropagation();
+      const newValue = editValue;
       setEditing(false);
       try { inputRef.current?.blur(); } catch { }
-      setWasConfirmed(true);
+
+      if (onEdit && newValue !== text) {
+        onEdit(newValue);
+      }
     }
     if (e.key === 'Escape') {
       // If this row is newly added and still empty, ESC removes it
-      if (!wasConfirmed && !text && (!editValue || editValue.trim().length === 0)) {
+      if (!text && (!editValue || editValue.trim().length === 0)) {
         if (onDelete) {
           e.preventDefault();
           onDelete();
@@ -75,11 +85,16 @@ function ActionRowInner({
       setEditValue(text);
     }
   };
+
   const handleEditConfirm = () => {
-    if (onEdit && editValue !== text) onEdit(editValue);
+    const newValue = editValue;
     setEditing(false);
-    setWasConfirmed(true);
+
+    if (onEdit && newValue !== text) {
+      onEdit(newValue);
+    }
   };
+
   const handleEditCancel = () => {
     setEditing(false);
     setEditValue(text);
