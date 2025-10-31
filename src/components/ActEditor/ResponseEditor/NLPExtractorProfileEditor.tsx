@@ -4,7 +4,7 @@ import { databaseService } from '../../../nlp/services/databaseService';
 import RegexEditor from './RegexEditor';
 import NLPCompactEditor from './NLPCompactEditor';
 import PostProcessEditor from './PostProcessEditor';
-import { Calendar, Mail, Phone, Hash, Globe, MapPin, User, FileText, CreditCard, CarFront as Car, Badge, Landmark, Type as TypeIcon, ChevronDown, Plus, ChevronsRight, Wrench, BarChart2 } from 'lucide-react';
+import { Calendar, Mail, Phone, Hash, Globe, MapPin, User, FileText, CreditCard, CarFront as Car, Badge, Landmark, Type as TypeIcon, ChevronDown } from 'lucide-react';
 
 // 🎯 Custom Hooks
 import { useNotes } from './hooks/useNotes';
@@ -29,8 +29,9 @@ import ExtractorInlineEditor from './InlineEditors/ExtractorInlineEditor';
 import NERInlineEditor from './InlineEditors/NERInlineEditor';
 import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
 
-// 📊 Tester Grid
+// 📊 Tester Components
 import TesterGrid from './TesterGrid';
+import TesterControls from './TesterControls';
 
 export interface NLPProfile {
   slotId: string;
@@ -47,27 +48,7 @@ export interface NLPProfile {
   waitingEsc2?: string;
 }
 
-// Helper functions moved to useProfileState hook
-function toCommaList(list?: string[] | null): string {
-  return Array.isArray(list) ? list.join(', ') : '';
-}
-
-function fromCommaList(text: string): string[] {
-  return (text || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s, i, arr) => s.length > 0 && arr.indexOf(s) === i);
-}
-
-function tryParseJSON<T = any>(text: string): { value?: T; error?: string } {
-  const t = (text || '').trim();
-  if (!t) return { value: undefined as any };
-  try {
-    return { value: JSON.parse(t) };
-  } catch (e: any) {
-    return { error: e?.message || 'JSON parse error' };
-  }
-}
+// Helper functions moved to hooks/components
 
 // 🎨 Aggiungi CSS per animazione spinner
 if (typeof document !== 'undefined' && !document.getElementById('nlp-spinner-animation')) {
@@ -126,7 +107,6 @@ export default function NLPExtractorProfileEditor({
   const [newExample, setNewExample] = React.useState<string>('');
   const [baselineStats, setBaselineStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [lastStats, setLastStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
-  const [reportOpen, setReportOpen] = React.useState<boolean>(false);
   const [activeTab, setActiveTab] = React.useState<'regex' | 'extractor' | 'post' | null>(null);
 
   // State for regex AI generation (used in hidden section)
@@ -501,129 +481,33 @@ export default function NLPExtractorProfileEditor({
       {!activeEditor && (
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Tester</div>
-          {/* Controls in one line: input fills, icons right */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-            <input
-              value={newExample}
-              onChange={(e) => setNewExample(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  const t = (newExample || '').trim();
-                  if (!t) return;
-                  const existIdx = examplesList.findIndex((p) => p === t);
-                  if (existIdx !== -1) {
-                    setSelectedRow(existIdx);
-                    // avvia il riconoscimento in background anche se già esiste
-                    setTimeout(() => { void runRowTest(existIdx); }, 0);
-                  } else {
-                    const next = Array.from(new Set([...examplesList, t]));
-                    setExamplesList(next);
-                    const newIdx = next.length - 1;
-                    setSelectedRow(newIdx);
-                    // avvia dopo che lo state è aggiornato
-                    setTimeout(() => { void runRowTest(newIdx); }, 0);
-                  }
-                  setNewExample('');
-                }
-              }}
-              placeholder="Aggiungi frase…"
-              style={{ flex: 1, padding: 10, border: '1px solid #4b5563', background: '#111827', color: '#e5e7eb', borderRadius: 8 }}
-            />
-            <button title="Aggiungi" onClick={() => {
-                const t = (newExample || '').trim();
-                if (!t) return;
-                const existIdx = examplesList.findIndex((p) => p === t);
-                if (existIdx !== -1) {
-                  setSelectedRow(existIdx);
-                  setTimeout(() => { void runRowTest(existIdx); }, 0);
-                } else {
-                  const next = Array.from(new Set([...examplesList, t]));
-                  setExamplesList(next);
-                  const newIdx = next.length - 1;
-                  setSelectedRow(newIdx);
-                  setTimeout(() => { void runRowTest(newIdx); }, 0);
-                }
-                setNewExample('');
-              }} style={{ border: '1px solid #10b981', background: '#065f46', color: '#ecfdf5', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
-              <Plus size={14} />
-            </button>
-            <button onClick={runAllRows} disabled={testing || examplesList.length === 0} title="Prova tutte" style={{ border: '1px solid #22c55e', background: testing ? '#eab308' : '#14532d', color: '#dcfce7', borderRadius: 8, padding: '8px 10px', cursor: testing ? 'default' : 'pointer' }}>
-              <ChevronsRight size={16} />
-            </button>
-            {/* Tuning */}
-            <button
-              title="Tuning"
-              onClick={async () => {
-                const errors: Array<any> = [];
-                (examplesList || []).forEach((phrase, rowIdx) => {
-                  const rr = rowResults[rowIdx] || {} as any;
-                  const cols: Array<{ id: 'det'|'ner'|'llm'; src?: string }> = [
-                    { id: 'det', src: rr?.deterministic },
-                    { id: 'ner', src: rr?.ner },
-                    { id: 'llm', src: rr?.llm },
-                  ];
-                  const keys = expectedKeysForKind(kind);
-                  keys.forEach((kKey) => {
-                    const gt = cellOverrides[`${rowIdx}:det:${kKey}`];
-                    cols.forEach(({ id, src }) => {
-                      const predMap: Record<string,string|undefined> = {};
-                      const t = (src || '').toString();
-                      if (t && t !== '—') {
-                        t.split(',').forEach(part => { const sp = part.split('='); const kk = sp[0]?.trim(); const vv = sp[1] != null ? String(sp[1]).trim() : undefined; if (kk) predMap[kk] = vv; });
-                      }
-                      const pred = predMap[kKey];
-                      if ((gt && !pred) || (gt && pred && pred !== gt)) {
-                        errors.push({ phrase, key: kKey, pred: pred ?? null, gt, type: pred ? 'false-accept' : 'unmatched', engine: id });
-                      }
-                    });
-                  });
-                });
-                try {
-                  const res = await fetch('/api/nlp/tune-contract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, locale: initial.locale, profile: { synonyms: fromCommaList(synonymsText), formatHints: fromCommaList(formatText), regex: regex || undefined, postProcess: tryParseJSON(postProcessText).value }, errors }) });
-                  if (res.ok) {
-                    const obj = await res.json();
-                    const s = obj?.suggested || {};
-                    if (Array.isArray(s.synonyms)) setSynonymsText(toCommaList(s.synonyms));
-                    if (Array.isArray(s.formatHints)) setFormatText(toCommaList(s.formatHints));
-                    if (typeof s.regex === 'string') setRegex(String(s.regex));
-                    if (typeof s.postProcess !== 'undefined') setPostProcessText(typeof s.postProcess === 'string' ? s.postProcess : JSON.stringify(s.postProcess, null, 2));
-                    await runAllRows();
-                  }
-                } catch {}
-              }}
-              style={{ border: '1px solid #f59e0b', background: '#7c2d12', color: '#ffedd5', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
-              <Wrench size={16} />
-            </button>
-            {/* Report dropdown moved to the far right */}
-            <div style={{ position: 'relative' }}>
-              <button title="Report" onClick={() => setReportOpen(o => !o)} style={{ border: '1px solid #60a5fa', background: '#0c4a6e', color: '#dbeafe', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
-                <BarChart2 size={16} />
-              </button>
-              {reportOpen && (
-                <div style={{ position: 'absolute', right: 0, marginTop: 6, background: '#111827', color: '#e5e7eb', border: '1px solid #374151', borderRadius: 8, padding: 10, minWidth: 260, zIndex: 30 }}>
-                  {(() => {
-                    const base = baselineStats || { matched: 0, falseAccept: 0, totalGt: 0 };
-                    const last = lastStats || base;
-                    const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
-                    const gainedMatched = pct(last.matched, last.totalGt) - pct(base.matched, base.totalGt);
-                    const removedFA = pct(base.falseAccept, base.totalGt) - pct(last.falseAccept, last.totalGt);
-                    const stillUnmatch = Math.max(0, (last.totalGt - last.matched - last.falseAccept));
-                    const stillFA = last.falseAccept;
-                    const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
-                    return (
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        <div><strong>Gained Matched:</strong> {sign(gainedMatched)}%</div>
-                        <div><strong>Removed False acceptance:</strong> {sign(removedFA)}%</div>
-                        <div><strong>Still UnMatching:</strong> {stillUnmatch}</div>
-                        <div><strong>Still False acceptance:</strong> {stillFA} ({sign(pct(last.falseAccept, last.totalGt) - pct(base.falseAccept, base.totalGt))}%)</div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Controls toolbar */}
+          <TesterControls
+            newExample={newExample}
+            setNewExample={setNewExample}
+            examplesList={examplesList}
+            setExamplesList={setExamplesList}
+            selectedRow={selectedRow}
+            setSelectedRow={setSelectedRow}
+            runRowTest={runRowTest}
+            runAllRows={runAllRows}
+            testing={testing}
+            kind={kind}
+            locale={locale}
+            synonymsText={synonymsText}
+            formatText={formatText}
+            regex={regex}
+            postProcessText={postProcessText}
+            rowResults={rowResults}
+            cellOverrides={cellOverrides}
+            expectedKeysForKind={expectedKeysForKind}
+            setSynonymsText={setSynonymsText}
+            setFormatText={setFormatText}
+            setRegex={setRegex}
+            setPostProcessText={setPostProcessText}
+            baselineStats={baselineStats}
+            lastStats={lastStats}
+          />
           {/* 🎨 Grid - already hidden by parent !activeEditor condition */}
           <TesterGrid
             examplesList={examplesList}
