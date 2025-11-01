@@ -42,6 +42,21 @@ export function getNodeSteps(node: any): string[] {
     return [];
   }
 
+  // 🐛 DEBUG: Log completo del nodo DOPO build messaggi
+  console.log('[ddtSelectors][getNodeSteps] FULL NODE', {
+    label: node?.label,
+    hasSteps: !!node.steps,
+    steps: node.steps,
+    stepsType: typeof node.steps,
+    stepsIsArray: Array.isArray(node.steps),
+    stepsKeys: node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps) ? Object.keys(node.steps) : [],
+    stepsLength: Array.isArray(node.steps) ? node.steps.length : (node.steps && typeof node.steps === 'object' ? Object.keys(node.steps).length : 0),
+    hasMessages: !!node.messages,
+    messages: node.messages,
+    messagesKeys: node.messages && typeof node.messages === 'object' ? Object.keys(node.messages) : [],
+    allKeys: Object.keys(node || {})
+  });
+
   const present = new Set<string>();
 
   // Variante A: steps come array: [{ type: 'start', ... }, ...]

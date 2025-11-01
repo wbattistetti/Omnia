@@ -57,7 +57,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   } = useNodeSelection(0); // Initial main index
 
   // DDT initialization (extracted to hook)
-  const { localDDT, setLocalDDT } = useDDTInitialization(
+  const { localDDT, setLocalDDT, coercePhoneKind } = useDDTInitialization(
     ddt,
     wizardOwnsDataRef,
     mergedBase,
@@ -167,9 +167,18 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
   useEffect(() => {
     const empty = isDDTEmpty(localDDT);
+        console.log('[WIZARD_FLOW] ResponseEditor: useEffect check DDT empty', {
+      empty,
+      wizardOwnsDataRef: wizardOwnsDataRef.current,
+      showWizard,
+      localDDTId: localDDT?.id,
+      localDDTLabel: localDDT?.label,
+      mainDataLength: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 'not-array'
+    });
 
     if (empty && !wizardOwnsDataRef.current) {
       // DDT is empty → open wizard and take ownership
+      console.log('[WIZARD_FLOW] ResponseEditor: DDT is empty - opening wizard');
       setShowWizard(true);
       wizardOwnsDataRef.current = true;
       try {
@@ -177,6 +186,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       } catch { }
     } else if (!empty && wizardOwnsDataRef.current) {
       // DDT is complete and wizard had ownership → close wizard and release ownership
+      console.log('[WIZARD_FLOW] ResponseEditor: DDT is filled - closing wizard (auto-close)');
       setShowWizard(false);
       wizardOwnsDataRef.current = false;
       try {
@@ -433,6 +443,18 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       />
 
       {/* Contenuto */}
+      {(() => {
+        console.log('[WIZARD_FLOW] ResponseEditor: RENDER', {
+          showWizard,
+          wizardOwnsDataRef: wizardOwnsDataRef.current,
+          localDDTId: localDDT?.id,
+          localDDTLabel: localDDT?.label,
+          mainDataLength: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 'not-array',
+          willShowWizard: showWizard,
+          willShowEditor: !showWizard
+        });
+        return null;
+      })()}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {showWizard ? (
           /* Full-screen wizard without RightPanel */
@@ -441,30 +463,63 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
               initialDDT={localDDT}
               onCancel={onClose || (() => { })}
               onComplete={(finalDDT) => {
+                console.log('[WIZARD_FLOW] ResponseEditor: Wizard onComplete called', {
+                  hasFinalDDT: !!finalDDT,
+                  finalDDTId: finalDDT?.id,
+                  finalDDTLabel: finalDDT?.label,
+                  mainDataLength: Array.isArray(finalDDT?.mainData) ? finalDDT.mainData.length : 'not-array',
+                  hasOnWizardComplete: !!onWizardComplete,
+                  currentShowWizard: showWizard
+                });
+
                 const coerced = coercePhoneKind(finalDDT);
+                console.log('[WIZARD_FLOW] ResponseEditor: DDT coerced', {
+                  coercedId: coerced?.id,
+                  coercedLabel: coerced?.label,
+                  coercedMainDataLength: Array.isArray(coerced?.mainData) ? coerced.mainData.length : 'not-array'
+                });
 
-                // If parent provided onWizardComplete, delegate to it (DDTHostAdapter case)
-                if (onWizardComplete) {
-                  onWizardComplete(coerced);
-                  return;
-                }
-
-                // Otherwise, handle locally (direct DDTManager case)
                 // Set flag to prevent auto-reopen
                 wizardOwnsDataRef.current = true;
+                console.log('[WIZARD_FLOW] ResponseEditor: wizardOwnsDataRef set to true');
 
+                // Update local DDT state first (ALWAYS do this)
                 setLocalDDT(coerced);
-                try { replaceSelectedDDT(coerced); } catch { }
+                console.log('[WIZARD_FLOW] ResponseEditor: setLocalDDT called');
+                try {
+                  replaceSelectedDDT(coerced);
+                  console.log('[WIZARD_FLOW] ResponseEditor: replaceSelectedDDT called successfully');
+                } catch (err) {
+                  console.error('[WIZARD_FLOW] ResponseEditor: replaceSelectedDDT FAILED', err);
+                }
 
                 // Release ownership after a brief delay
                 setTimeout(() => {
                   wizardOwnsDataRef.current = false;
+                  console.log('[WIZARD_FLOW] ResponseEditor: wizardOwnsDataRef reset to false');
                 }, 100);
 
-                // Close wizard and reset UI to show StepEditor (not MessageReview)
+                // Close wizard and reset UI to show StepEditor (ALWAYS do this)
+                console.log('[WIZARD_FLOW] ResponseEditor: Closing wizard and resetting UI', {
+                  currentShowWizard: showWizard,
+                  willSetShowWizard: false,
+                  willSetRightMode: 'actions',
+                  willSetSelectedStepKey: 'start'
+                });
                 setShowWizard(false);
                 setRightMode('actions'); // Force show ActionList
                 setSelectedStepKey('start'); // Start with first step
+                console.log('[WIZARD_FLOW] ResponseEditor: UI state updated - wizard closed, editor should be visible now');
+
+                // If parent provided onWizardComplete, notify it after updating UI
+                // (but don't close the overlay - let user see the editor)
+                if (onWizardComplete) {
+                  console.log('[WIZARD_FLOW] ResponseEditor: Calling onWizardComplete callback');
+                  onWizardComplete(coerced);
+                  console.log('[WIZARD_FLOW] ResponseEditor: onWizardComplete callback completed');
+                } else {
+                  console.log('[WIZARD_FLOW] ResponseEditor: No onWizardComplete callback provided');
+                }
               }}
               startOnStructure={false}
             />

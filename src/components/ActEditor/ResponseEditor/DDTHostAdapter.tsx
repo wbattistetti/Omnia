@@ -49,57 +49,87 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     return result;
   }, [instanceKey, act.id]); // Dipendenze: solo instanceKey e act.id
 
-  // 2. Se esiste, usalo; altrimenti crea un placeholder vuoto
-  const ddt = React.useMemo(() => {
-    console.log('🔧 [DDTHostAdapter] Building final DDT:', {
-      hasExistingDDT: !!existingDDT,
-      existingDDTId: existingDDT?.id,
-      existingDDTMainDataLength: existingDDT?.mainData?.length || 0
+  // 2. STATE per mantenere il DDT corrente (aggiornato dopo salvataggio)
+  // Questo risolve il problema: useMemo non ricalcola quando l'istanza viene aggiornata
+  const [currentDDT, setCurrentDDT] = React.useState<any>(() => {
+    // Inizializza dall'istanza se esiste, altrimenti placeholder
+    const instance = instanceRepository.getInstance(instanceKey);
+    const instanceDDT = instance?.ddt;
+
+    console.log('[WIZARD_FLOW] DDTHostAdapter: Initializing currentDDT', {
+      hasInstanceDDT: !!instanceDDT,
+      instanceDDTMainDataLength: instanceDDT?.mainData?.length || 0,
+      instanceKey
     });
 
-    const finalDDT = existingDDT || {
+    return instanceDDT || {
       id: `temp_ddt_${act.id}`,
       label: act.label || 'Data',
       _userLabel: act.label,
       _sourceAct: { id: act.id, label: act.label, type: act.type },
       mainData: []
     };
+  });
 
-    console.log('📤 [DDTHostAdapter] Final DDT:', {
-      id: finalDDT.id,
-      label: finalDDT.label,
-      mainDataLength: finalDDT.mainData?.length || 0,
-      isFromInstance: !!existingDDT,
-      isTemp: finalDDT.id.startsWith('temp_ddt_')
+  // Aggiorna currentDDT quando existingDDT cambia (al primo load se c'è un DDT salvato)
+  React.useEffect(() => {
+    // Solo se existingDDT ha dati e currentDDT è ancora il placeholder vuoto
+    if (existingDDT && existingDDT.mainData && existingDDT.mainData.length > 0) {
+      const currentIsPlaceholder = currentDDT.id?.startsWith('temp_ddt_') && (!currentDDT.mainData || currentDDT.mainData.length === 0);
+      if (currentIsPlaceholder) {
+        console.log('[WIZARD_FLOW] DDTHostAdapter: Updating currentDDT from existingDDT', {
+          currentDDTId: currentDDT.id,
+          existingDDTId: existingDDT.id,
+          existingDDTMainDataLength: existingDDT.mainData.length
+        });
+        setCurrentDDT(existingDDT);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingDDT]); // currentDDT intenzionalmente non incluso: controlliamo solo quando existingDDT cambia
+
+  // 3. Quando completi il wizard, salva nell'istanza E aggiorna lo state
+  const handleComplete = React.useCallback((finalDDT: any) => {
+    console.log('[WIZARD_FLOW] DDTHostAdapter: handleComplete called', {
+      hasFinalDDT: !!finalDDT,
+      finalDDTId: finalDDT?.id,
+      finalDDTLabel: finalDDT?.label,
+      instanceKey,
+      currentProjectId
     });
 
-    return finalDDT;
-  }, [existingDDT, act.id, act.label, act.type]);
-
-  // 3. Quando completi il wizard, salva nell'istanza
-  const handleComplete = React.useCallback((finalDDT: any) => {
     // Salva il DDT nell'istanza
     const saved = instanceRepository.updateDDT(instanceKey, finalDDT, currentProjectId || undefined);
+    console.log('[WIZARD_FLOW] DDTHostAdapter: DDT saved to instance', {
+      saved: !!saved,
+      instanceKey
+    });
 
-    // Close this overlay first
-    if (onClose) onClose();
+    // CRITICO: Aggiorna immediatamente currentDDT per aggiornare il prop ddt
+    // Questo evita che useDDTInitialization sincronizzi localDDT con il placeholder vuoto
+    console.log('[WIZARD_FLOW] DDTHostAdapter: Updating currentDDT state with saved DDT', {
+      finalDDTId: finalDDT?.id,
+      finalDDTMainDataLength: finalDDT?.mainData?.length || 0
+    });
+    setCurrentDDT(finalDDT);
 
-    // Non serve più aprire in DDTManager: l'editor è già stato aperto tramite ctx.act
-    // Se l'utente vuole riaprire, può cliccare di nuovo l'ingranaggio
-  }, [instanceKey, onClose]);
+    // NON chiudere l'overlay - lascia che l'utente veda l'editor con i messaggi generati
+    // L'utente può chiudere manualmente cliccando "Close" nell'header
+    console.log('[WIZARD_FLOW] DDTHostAdapter: Overlay will remain open for user to review editor');
+  }, [instanceKey, currentProjectId]);
 
   console.log('🎨 [DDTHostAdapter] Rendering ResponseEditor with:', {
-    hasDDT: !!ddt,
-    ddtIsEmpty: ddt && (!ddt.mainData || ddt.mainData.length === 0),
-    ddtMainDataLength: ddt?.mainData?.length || 0,
-    ddtId: ddt?.id,
+    hasDDT: !!currentDDT,
+    ddtIsEmpty: currentDDT && (!currentDDT.mainData || currentDDT.mainData.length === 0),
+    ddtMainDataLength: currentDDT?.mainData?.length || 0,
+    ddtId: currentDDT?.id,
     actId: act.id,
     instanceKey
   });
 
   return (
     <ResponseEditor
-      ddt={ddt}
+      ddt={currentDDT}
       onClose={onClose}
       onWizardComplete={handleComplete}
       act={act}
