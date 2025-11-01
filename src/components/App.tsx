@@ -13,6 +13,7 @@ import { DDTProvider } from '../context/DDTContext';
 import { DDTManagerProvider } from '../context/DDTManagerContext';
 import { ThemeProvider } from '../theme/components/ThemeProvider';
 import { ActEditorProvider } from './ActEditor/EditorHost/ActEditorContext';
+import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -137,13 +138,15 @@ export default function App() {
       <ProjectDataProvider>
         <ActionsCatalogProvider>
           <DndProvider backend={HTML5Backend}>
-            <DDTProvider>
-              <DDTManagerProvider>
-                <ActEditorProvider>
-                  <AppInner />
-                </ActEditorProvider>
-              </DDTManagerProvider>
-            </DDTProvider>
+            <SpeechRecognitionProvider>
+              <DDTProvider>
+                <DDTManagerProvider>
+                  <ActEditorProvider>
+                    <AppInner />
+                  </ActEditorProvider>
+                </DDTManagerProvider>
+              </DDTProvider>
+            </SpeechRecognitionProvider>
           </DndProvider>
         </ActionsCatalogProvider>
       </ProjectDataProvider>

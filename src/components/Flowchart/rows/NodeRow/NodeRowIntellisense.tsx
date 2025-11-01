@@ -35,14 +35,20 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
     handleIntellisenseSelect(item);
   };
 
+  // Move log to useEffect to avoid logging on every render
+  React.useEffect(() => {
+    if (showIntellisense && isEditing && nodeOverlayPosition) {
+      console.log("🎯 [NodeRowIntellisense] INDIVIDUAL ROW INTELLISENSE OPENED", {
+        query: intellisenseQuery,
+        timestamp: Date.now()
+      });
+    }
+  }, [showIntellisense, isEditing, nodeOverlayPosition, intellisenseQuery]);
+
   return (
     <>
       {showIntellisense && isEditing && nodeOverlayPosition && createPortal(
         <>
-          {console.log("🎯 [NodeRowIntellisense] INDIVIDUAL ROW INTELLISENSE OPENED", {
-            query: intellisenseQuery,
-            timestamp: Date.now()
-          })}
           <IntellisenseMenu
             isOpen={showIntellisense}
             query={intellisenseQuery}

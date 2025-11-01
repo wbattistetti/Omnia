@@ -796,9 +796,7 @@ function ActEditorOverlay() {
       if (el) {
         const rect = el.getBoundingClientRect();
         setHostRect(rect);
-        console.log('✅ [ActEditorOverlay] hostRect updated:', { left: rect.left, width: rect.width, bottom: rect.bottom });
       } else {
-        console.warn('⚠️ [ActEditorOverlay] flow-canvas-host element not found');
         setHostRect(null);
       }
     };
@@ -813,16 +811,7 @@ function ActEditorOverlay() {
     return () => { window.removeEventListener('resize', update); mo?.disconnect(); };
   }, []);
 
-  console.log('🔍 [ActEditorOverlay] Render check:', {
-    hasAct: !!ctx.act,
-    actId: ctx.act?.id,
-    instanceId: ctx.act?.instanceId,
-    hasHostRect: !!hostRect,
-    hostRect: hostRect ? { left: hostRect.left, width: hostRect.width, bottom: hostRect.bottom } : null
-  });
-
   if (!ctx.act || !hostRect) {
-    console.warn('⚠️ [ActEditorOverlay] Cannot render:', { hasAct: !!ctx.act, hasHostRect: !!hostRect });
     return null;
   }
   const node = (

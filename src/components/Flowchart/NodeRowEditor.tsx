@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect } from 'react';
+import { VoiceTextbox } from '../common/VoiceTextbox';
 
 interface NodeRowEditorProps {
   value: string;
@@ -17,6 +18,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
 }) => {
   const DEBUG_FOCUS = (() => { try { return localStorage.getItem('debug.focus') === '1'; } catch { return false; } })();
   const log = (...args: any[]) => { if (DEBUG_FOCUS) { try { console.log('[Focus][RowEditor]', ...args); } catch {} } };
+
   // Auto-resize the textarea on value change
   useEffect(() => {
     const el = inputRef.current;
@@ -34,25 +36,28 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   }, []);
 
   return (
-    <textarea
+    <VoiceTextbox
       ref={inputRef}
       value={value}
       onChange={onChange}
-      onKeyDown={onKeyDown}
+      onKeyDown={(e) => {
+        onKeyDown(e);
+      }}
       onFocus={(e) => { log('onFocus', { valueLength: String(value||'').length }); }}
       onBlur={(e) => {
         log('onBlur');
         const rt = e.relatedTarget as HTMLElement | null;
         const toNode = rt && (rt.classList?.contains('react-flow__node') || rt.classList?.contains('react-flow'));
         if (toNode || !rt) {
-          setTimeout(() => {
+          // Use requestAnimationFrame instead of setTimeout
+          requestAnimationFrame(() => {
             const ae = document.activeElement as HTMLElement | null;
             const tag = ae?.tagName?.toLowerCase();
             const shouldRefocus = !ae || (tag !== 'input' && tag !== 'textarea' && ae?.getAttribute('contenteditable') !== 'true');
             if (shouldRefocus) {
               try { inputRef.current?.focus(); inputRef.current?.select(); log('refocus after blur safety'); } catch { log('refocus error'); }
             }
-          }, 0);
+          });
         }
       }}
       onInput={() => {

@@ -5,17 +5,17 @@
 /* Glow animation for OMNIA letters */
 @keyframes smooth-brush-glow {
   0% {
-    text-shadow: 
+    text-shadow:
       none;
   }
   30% {
-    text-shadow: 
+    text-shadow:
       0 0 5px rgba(255, 255, 255, 0.8),
       0 0 10px rgba(255, 255, 255, 0.6),
       0 0 15px rgba(255, 255, 255, 0.4);
   }
   50% {
-    text-shadow: 
+    text-shadow:
       0 0 10px rgba(255, 255, 255, 1),
       0 0 20px rgba(255, 255, 255, 0.8),
       0 0 30px rgba(255, 255, 255, 0.6),
@@ -23,13 +23,13 @@
       0 0 50px rgba(255, 255, 255, 0.2);
   }
   70% {
-    text-shadow: 
+    text-shadow:
       0 0 5px rgba(255, 255, 255, 0.8),
       0 0 10px rgba(255, 255, 255, 0.6),
       0 0 15px rgba(255, 255, 255, 0.4);
   }
   100% {
-    text-shadow: 
+    text-shadow:
       none;
   }
 }
@@ -104,4 +104,27 @@
 .react-flow .react-flow__selection.dragging {
   background-color: rgba(125, 211, 252, 0.26) !important;
   border-color: rgba(14, 165, 233, 0.95) !important;       /* sky-500 ~ #0ea5e9 */
+}
+
+/* Speech Recognition Microphone Icon Animations */
+@keyframes speechMicPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+}
+
+@keyframes speechMicRipple {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
 }
