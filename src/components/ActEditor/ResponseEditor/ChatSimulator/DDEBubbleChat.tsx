@@ -137,8 +137,6 @@ export default function DDEBubbleChat({
 
       // No introduction, show first main ask
       const { text, key } = resolveAsk(main, undefined, translations, legacyDict, legacyMain, legacySub);
-      // eslint-disable-next-line no-console
-      console.log('[DDE][ask][init]', { node: legacyMain?.label, text });
       setMessages([{ id: 'init', type: 'bot', text, stepType: 'ask', textKey: key, color: getStepColor('ask') }]);
       lastKeyRef.current = key || 'ask.base';
       return;
@@ -173,8 +171,6 @@ export default function DDEBubbleChat({
         : (currentDDT as any)?.mainData;
       const candidate = (legacyMain?.subData || []).find((s: any) => (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase()));
       const { text, key: k } = resolveAsk(main, sub, translations, legacyDict, candidate || legacyMain, candidate);
-      // eslint-disable-next-line no-console
-      console.log('[DDE][ask][sub]', { sub: candidate?.label || sub?.label, text });
       setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'ask', textKey: k, color: getStepColor('ask') }]);
     } else if (state.mode === 'ConfirmingMain') {
       // If the main has REQUIRED subs missing, ask the first missing REQUIRED sub instead of confirming

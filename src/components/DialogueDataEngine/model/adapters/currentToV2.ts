@@ -175,18 +175,7 @@ function mapNode(current: MainDataNode, asType: 'main' | 'sub'): DDTNode {
     : looksLikeAddress ? 'address'
     : (typeStr as any) || 'generic';
 
-  try {
-    // eslint-disable-next-line no-console
-    console.log('[adaptCurrentToV2][mapNode]', {
-      asType,
-      label: current.label,
-      explicitKind,
-      detectedKind,
-      typeStr,
-      subLabels,
-      required: (current as any)?.required,
-    });
-  } catch {}
+  // Removed verbose logging
 
   return {
     id: current.id,

@@ -50,17 +50,15 @@ export function useMessageHandling({
 }: UseMessageHandlingProps) {
   const handleSend = useCallback(async (text: string) => {
     const trimmed = String(text || '');
-    console.error('[ChatSimulator][handleSend] START', { text: trimmed, mode: state.mode, currentIndex: state.currentIndex, currentSubId: state.currentSubId });
+    // Removed verbose logging
 
     // Empty input → use configured noInput escalation per current mode
     if (trimmed.trim().length === 0) {
-      console.error('[ChatSimulator][handleSend] Empty input detected');
       const main = getMain(state);
       const sub = getSub(state);
       const keyId = getPositionKey(state);
       const count = noInputCounts[keyId] || 0;
       const escalationLevel = count + 1; // 1-indexed per getEscalationActions
-      console.error('[ChatSimulator][handleSend][noInput]', { keyId, count, escalationLevel, mainLabel: main?.label, subLabel: sub?.label });
 
       // Determina quale node usare (legacy)
       let legacyNode: any = undefined;
@@ -69,7 +67,6 @@ export function useMessageHandling({
           ? (currentDDT as any)?.mainData[0]
           : (currentDDT as any)?.mainData;
         const { text: escalationText, key, level: foundLevel } = resolveEscalation(legacyNode, 'noInput', escalationLevel, legacyDict, translations);
-        console.error('[ChatSimulator][handleSend][noInput][ConfirmingMain]', { escalationText, key, found: !!escalationText, requested: escalationLevel, foundLevel });
         if (escalationText) {
           const finalEscalationLevel = foundLevel;
           setMessages((prev) => [...prev, {
@@ -88,7 +85,6 @@ export function useMessageHandling({
         const mainAsk = getMain(state);
         const subAsk = getSub(state);
         const { text: askText, key: askKey } = resolveAsk(mainAsk, subAsk, translations, legacyDict, legacyNode, undefined);
-        console.error('[ChatSimulator][handleSend][noInput][ConfirmingMain][fallback]', { askText, askKey, found: !!askText });
         if (askText) {
           setMessages((prev) => [...prev, {
             id: generateMessageId('ask'),
@@ -111,7 +107,6 @@ export function useMessageHandling({
         });
         legacyNode = candidate || legacyMain;
         const { text: escalationText, key, level: foundLevel } = resolveEscalation(legacyNode, 'noInput', escalationLevel, legacyDict, translations);
-        console.error('[ChatSimulator][handleSend][noInput][CollectingSub]', { escalationText, key, found: !!escalationText, requested: escalationLevel, foundLevel });
         if (escalationText) {
           const finalEscalationLevel = foundLevel;
           setMessages((prev) => [...prev, {
@@ -130,7 +125,6 @@ export function useMessageHandling({
         const mainAsk = getMain(state);
         const subAsk = getSub(state);
         const { text: askText, key: askKey } = resolveAsk(mainAsk, subAsk, translations, legacyDict, legacyNode, subAsk);
-        console.error('[ChatSimulator][handleSend][noInput][CollectingSub][fallback]', { askText, askKey, found: !!askText });
         if (askText) {
           setMessages((prev) => [...prev, {
             id: generateMessageId('ask'),
@@ -148,7 +142,6 @@ export function useMessageHandling({
           ? (currentDDT as any)?.mainData[0]
           : (currentDDT as any)?.mainData;
         const { text: escalationText, key, level: foundLevel } = resolveEscalation(legacyNode, 'noInput', escalationLevel, legacyDict, translations);
-        console.error('[ChatSimulator][handleSend][noInput][CollectingMain]', { escalationText, key, found: !!escalationText, requested: escalationLevel, foundLevel });
         if (escalationText) {
           const finalEscalationLevel = foundLevel;
           setMessages((prev) => [...prev, {
@@ -166,7 +159,6 @@ export function useMessageHandling({
         // Se non c'è escalation, torna al prompt normale (ask)
         const mainAsk = getMain(state);
         const { text: askText, key: askKey } = resolveAsk(mainAsk, undefined, translations, legacyDict, legacyNode, undefined);
-        console.error('[ChatSimulator][handleSend][noInput][CollectingMain][fallback]', { askText, askKey, found: !!askText });
         if (askText) {
           setMessages((prev) => [...prev, {
             id: generateMessageId('ask'),
@@ -180,7 +172,6 @@ export function useMessageHandling({
           return;
         }
       }
-      console.error('[ChatSimulator][handleSend][noInput] No escalation and no fallback found, returning');
       return;
     }
 
@@ -190,7 +181,6 @@ export function useMessageHandling({
       const main = getMain(state);
       const sub = getSub(state);
       const fieldName = sub?.label || main?.label || '';
-      console.error('[ChatSimulator][handleSend][validation]', { fieldName, mainLabel: main?.label, subLabel: sub?.label, kind: sub?.kind || main?.kind });
 
       if (fieldName) {
         try {
@@ -201,17 +191,6 @@ export function useMessageHandling({
           const originalNode = findOriginalNode(currentDDT, targetNode?.label, targetNode?.id);
           const nlpProfile = originalNode?.nlpProfile || (targetNode as any)?.nlpProfile;
 
-          console.log('[ChatSimulator][handleSend] Building context...', {
-            hasTargetNode: !!targetNode,
-            targetNodeLabel: targetNode?.label,
-            targetNodeKind: targetNode?.kind,
-            hasOriginalNode: !!originalNode,
-            hasNlpProfile: !!nlpProfile,
-            regex: nlpProfile?.regex,
-            subData: targetNode?.subData || originalNode?.subData,
-            subSlots: nlpProfile?.subSlots,
-            subs: targetNode?.subs
-          });
 
           const context: ExtractionContext | undefined = targetNode ? {
             node: {
@@ -223,30 +202,9 @@ export function useMessageHandling({
             regex: nlpProfile?.regex
           } : undefined;
 
-          console.error('[ChatSimulator][handleSend][extractField] Calling extractField...', {
-            fieldName,
-            text: trimmed,
-            hasContext: !!context,
-            contextNodeLabel: context?.node?.label,
-            contextNodeKind: context?.node?.kind,
-            contextRegex: context?.regex,
-            contextSubData: context?.node?.subData,
-            contextSubSlots: context?.node?.subSlots,
-            isComposite: !!(context?.node && ((Array.isArray(context.node.subData) && context.node.subData.length > 0) ||
-                                              (Array.isArray(context.node.subSlots) && context.node.subSlots.length > 0))),
-            hasRegex: !!context?.regex
-          });
 
           // Usa il Data Extractor per validare l'input
           const extractionResult: SlotDecision<any> = await extractField(fieldName, trimmed, undefined, context);
-          console.error('[ChatSimulator][handleSend][extractField] Result:', {
-            status: extractionResult.status,
-            value: extractionResult.status === 'accepted' ? extractionResult.value : undefined,
-            source: extractionResult.status === 'accepted' ? extractionResult.source : undefined,
-            confidence: extractionResult.status === 'accepted' ? extractionResult.confidence : undefined,
-            reasons: extractionResult.status === 'reject' ? extractionResult.reasons : undefined,
-            missing: extractionResult.status === 'ask-more' ? extractionResult.missing : undefined
-          });
 
           // Determina matchStatus basato sul risultato dell'estrazione
           let matchStatus: 'match' | 'noMatch' | 'partialMatch';
@@ -257,15 +215,12 @@ export function useMessageHandling({
           } else {
             matchStatus = 'noMatch'; // Estrazione fallita
           }
-          console.error('[ChatSimulator][handleSend][matchStatus] Determined:', { matchStatus, extractionStatus: extractionResult.status });
 
           // Se l'estrazione fallisce, mostra escalation noMatch
           if (extractionResult.status === 'reject') {
-            console.error('[ChatSimulator][handleSend][noMatch] Extraction rejected, showing escalation');
             const keyId = getPositionKey(state);
             const count = noMatchCounts[keyId] || 0;
             const escalationLevel = count + 1; // 1-indexed per getEscalationActions
-            console.error('[ChatSimulator][handleSend][noMatch]', { keyId, count, escalationLevel });
 
             // Determina quale node usare (legacy)
             let legacyNode: any = undefined;
@@ -278,28 +233,12 @@ export function useMessageHandling({
                 return (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase());
               });
               legacyNode = candidate || legacyMain;
-              console.error('🔍 [ChatSimulator][handleSend][noMatch][CollectingSub]', {
-                subId: sub?.id,
-                subLabel: sub?.label,
-                foundCandidate: !!candidate,
-                candidateLabel: candidate?.label,
-                usingMain: !candidate,
-                legacyNodeLabel: legacyNode?.label,
-                legacyNodeSteps: legacyNode?.steps ? Object.keys(legacyNode.steps) : [],
-                legacyNodeFull: legacyNode
-              });
             } else if (state.mode === 'CollectingMain') {
               // currentDDT.mainData è un array!
               legacyNode = Array.isArray((currentDDT as any)?.mainData)
                 ? (currentDDT as any)?.mainData[0]
                 : (currentDDT as any)?.mainData;
-              console.error('🔍 [ChatSimulator][handleSend][noMatch][CollectingMain]', {
-                legacyNodeLabel: legacyNode?.label,
-                legacyNodeSteps: legacyNode?.steps ? Object.keys(legacyNode.steps) : [],
-                legacyNodeFull: legacyNode
-              });
             }
-            console.error('🔍 [ChatSimulator][handleSend][noMatch] Legacy node:', { found: !!legacyNode, mode: state.mode });
 
             if (legacyNode) {
               // Cerca escalation: prima quella richiesta, poi l'ultima disponibile
@@ -333,10 +272,6 @@ export function useMessageHandling({
                 ]);
                 // IMPORTANTE: aggiorna il counter con il livello trovato
                 setNoMatchCounts((prev) => ({ ...prev, [keyId]: finalEscalationLevel }));
-                console.error('[ChatSimulator][handleSend][noMatch] Messages added with escalation', {
-                  requested: escalationLevel,
-                  found: finalEscalationLevel
-                });
                 return;
               }
 
@@ -344,7 +279,6 @@ export function useMessageHandling({
               const mainAsk = getMain(state);
               const subAsk = getSub(state);
               const { text: askText, key: askKey } = resolveAsk(mainAsk, subAsk, translations, legacyDict, legacyNode, subAsk);
-              console.error('[ChatSimulator][handleSend][noMatch][fallback]', { askText, askKey, found: !!askText });
               if (askText) {
                 setMessages((prev) => [...prev,
                 {
@@ -364,12 +298,10 @@ export function useMessageHandling({
                 ]);
                 // Reset counter quando si usa ask
                 setNoMatchCounts((prev) => ({ ...prev, [keyId]: 0 }));
-                console.error('[ChatSimulator][handleSend][noMatch] Messages added with fallback ask');
                 return;
               }
             }
             // Se non trova né escalation né prompt normale, mostra comunque il messaggio utente con noMatch
-            console.error('[ChatSimulator][handleSend][noMatch] No escalation or fallback, showing user message only');
             setMessages((prev) => [...prev, {
               id: generateMessageId('user'),
               type: 'user',
@@ -382,7 +314,6 @@ export function useMessageHandling({
           // Se l'estrazione è parziale (ask-more), mostra partialMatch ma invia comunque al motore
           // Il motore gestirà la richiesta di ulteriori informazioni
           if (extractionResult.status === 'ask-more') {
-            console.error('[ChatSimulator][handleSend][partialMatch] Partial extraction, sending to engine');
             setMessages((prev) => [...prev, {
               id: generateMessageId('user'),
               type: 'user',
@@ -394,7 +325,6 @@ export function useMessageHandling({
           }
 
           // Estrazione riuscita: imposta matchStatus = 'match' e invia al motore
-          console.error('[ChatSimulator][handleSend][match] Extraction successful, sending to engine');
           setMessages((prev) => [...prev, {
             id: generateMessageId('user'),
             type: 'user',
@@ -419,7 +349,7 @@ export function useMessageHandling({
             // Continua con la logica noMatch invece di return
           } else {
             // Altri errori: logga come errore
-            console.error('[ChatSimulator][handleSend][extractField] ERROR:', error);
+            // Error logged silently
           }
 
           // Per altri errori o se config missing, considera noMatch e continua
@@ -437,26 +367,11 @@ export function useMessageHandling({
               return (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase());
             });
             legacyNode = candidate || legacyMain;
-            console.error('🔍 [ChatSimulator][handleSend][noMatch][catch][CollectingSub]', {
-              subId: sub?.id,
-              subLabel: sub?.label,
-              foundCandidate: !!candidate,
-              candidateLabel: candidate?.label,
-              usingMain: !candidate,
-              legacyNodeLabel: legacyNode?.label,
-              legacyNodeSteps: legacyNode?.steps ? Object.keys(legacyNode.steps) : [],
-              legacyNodeFull: legacyNode
-            });
           } else if (state.mode === 'CollectingMain') {
             // currentDDT.mainData è un array!
             legacyNode = Array.isArray((currentDDT as any)?.mainData)
               ? (currentDDT as any)?.mainData[0]
               : (currentDDT as any)?.mainData;
-            console.error('🔍 [ChatSimulator][handleSend][noMatch][catch][CollectingMain]', {
-              legacyNodeLabel: legacyNode?.label,
-              legacyNodeSteps: legacyNode?.steps ? Object.keys(legacyNode.steps) : [],
-              legacyNodeFull: legacyNode
-            });
           }
 
           if (legacyNode) {
@@ -492,10 +407,6 @@ export function useMessageHandling({
               ]);
               // IMPORTANTE: aggiorna il counter con il livello trovato
               setNoMatchCounts((prev) => ({ ...prev, [keyId]: finalEscalationLevel }));
-              console.error('[ChatSimulator][handleSend][noMatch] Messages added with escalation', {
-                requested: escalationLevel,
-                found: finalEscalationLevel
-              });
               return;
             }
 
@@ -503,7 +414,6 @@ export function useMessageHandling({
             const mainAsk = getMain(state);
             const subAsk = getSub(state);
             const { text: askText, key: askKey } = resolveAsk(mainAsk, subAsk, translations, legacyDict, legacyNode, subAsk);
-            console.error('[ChatSimulator][handleSend][noMatch][fallback]', { askText, askKey, found: !!askText });
             if (askText) {
               setMessages((prev) => [...prev,
               {
@@ -524,13 +434,11 @@ export function useMessageHandling({
               ]);
               // Reset counter quando si usa ask
               setNoMatchCounts((prev) => ({ ...prev, [keyId]: 0 }));
-              console.error('[ChatSimulator][handleSend][noMatch] Messages added with fallback ask');
               return;
             }
           }
 
           // Se non trova né escalation né prompt normale, mostra comunque il messaggio utente con noMatch
-          console.error('[ChatSimulator][handleSend][noMatch] No escalation or fallback, showing user message only');
           setMessages((prev) => [...prev, {
             id: generateMessageId('user'),
             type: 'user',
@@ -540,16 +448,10 @@ export function useMessageHandling({
           }]);
           return;
         }
-      } else {
-        console.error('[ChatSimulator][handleSend][validation] No fieldName found, skipping validation');
-      }
-    } else {
-      console.error('[ChatSimulator][handleSend][validation] Skipping validation (mode is ConfirmingMain)');
     }
 
     // Fallback: se non abbiamo fieldName o siamo in confirmation, usa il comportamento precedente
     // Non-empty input: reset counter for this position and send to engine
-    console.error('[ChatSimulator][handleSend][fallback] Using fallback behavior');
     const keyId = getPositionKey(state);
     setNoInputCounts((prev) => ({ ...prev, [keyId]: 0 }));
     setNoMatchCounts((prev) => ({ ...prev, [keyId]: 0 }));
@@ -561,7 +463,6 @@ export function useMessageHandling({
       text: trimmed,
       matchStatus: 'match'
     }]);
-    console.error('[ChatSimulator][handleSend][fallback] Sending to engine');
     await send(text);
   }, [
     state,
