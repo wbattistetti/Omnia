@@ -73,8 +73,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         pointerEvents: 'auto'
       }}
       className="flex items-center"
-      onMouseEnter={() => { onHoverChange && onHoverChange(true); console.log('[Toolbar][enter][overlay]'); }}
-      onMouseLeave={() => { onHoverChange && onHoverChange(false); console.log('[Toolbar][leave][overlay]'); }}
+      onMouseEnter={() => { onHoverChange && onHoverChange(true); }}
+      onMouseLeave={() => { onHoverChange && onHoverChange(false); }}
     >
       {/* Current ActType icon → opens inline type picker below */}
       {ActIcon && (
@@ -89,7 +89,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           onMouseEnter={(e) => {
             const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
             onTypeChangeRequest && onTypeChangeRequest(anchor);
-            console.log('[Picker][trigger] icon hover → open');
+            // Removed verbose log
           }}
           title="Change act type"
           style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}

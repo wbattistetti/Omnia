@@ -663,7 +663,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     if (!rect) { return; }
     // Position menu close to icon with minimal padding to avoid right whitespace
     const finalPos = { left: rect.left, top: (rect as any).bottom } as { left: number; top: number };
-    console.log('[Picker][open]', { anchor: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }, currentType });
+    // Removed verbose log
     setPickerPosition(finalPos);
     setShowIntellisense(false);
     setAllowCreatePicker(true);
@@ -680,9 +680,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       const overRow = !!(rowEl && target && target instanceof Node && rowEl.contains(target as Node));
       const overlayEl = overlayRef.current as HTMLElement | null;
       const overOverlay = !!(overlayEl && target && target instanceof Node && overlayEl.contains(target as Node));
-      console.log('[Picker][docClick]', { overToolbar, overRow, overOverlay, targetTag: (ev.target as HTMLElement)?.tagName, class: (ev.target as HTMLElement)?.className });
+      // Removed verbose log
       if (overToolbar || overRow || overOverlay) return; // clicks inside picker, row, or toolbar overlay should NOT close
-      console.log('[Picker][close] docClick outside → close picker');
+      // Removed verbose log
       setShowCreatePicker(false);
       document.removeEventListener('mousedown', onDocClick, true);
       window.removeEventListener('mousemove', onMoveCloseIfFar, true);
@@ -712,12 +712,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Drag & Drop personalizzato
   const handleMouseDown = (e: React.MouseEvent) => {
-    console.log('🎯 [NodeRow] Mouse down - avvio drag personalizzato', {
-      rowId: row.id,
-      index,
-      clientX: e.clientX,
-      clientY: e.clientY
-    });
+    // Removed verbose log
 
     // Preveni il drag nativo
     e.preventDefault();
@@ -949,7 +944,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             gearColor={labelTextColor}
             onOpenDDT={async () => {
               try {
-                console.log('[DDT][open] request', { rowId: row.id, text: row.text });
+                // Removed verbose log
               } catch { }
               try {
                 // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType
@@ -957,7 +952,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 const type = resolveActType(row as any, actFound) as any;
                 // Host present → open deterministically
                 actEditorCtx.open({ id: String(baseId), type, label: row.text, instanceId: row.id });
-                console.log('[DDT][open] done', { baseId, type });
+                // Removed verbose log
                 return;
               } catch (e) { console.warn('[Row][openDDT] failed', e); }
             }}

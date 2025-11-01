@@ -203,11 +203,56 @@ export function useMessageHandling({
           regex: nlpProfile?.regex
         } : undefined;
 
+        // Debug: log context before calling extractField
+        console.log('[ChatSimulator][extractField][context-check]', {
+          fieldName,
+          text: trimmed,
+          hasTargetNode: !!targetNode,
+          hasOriginalNode: !!originalNode,
+          hasNlpProfile: !!nlpProfile,
+          regex: nlpProfile?.regex,
+          regexTrimmed: nlpProfile?.regex?.trim(),
+          hasRegex: hasRegex,
+          contextNode: context?.node,
+          contextRegex: context?.regex,
+          contextRegexLength: context?.regex?.length,
+          contextRegexType: typeof context?.regex,
+          nodeSubData: context?.node?.subData,
+          nodeSubDataLength: Array.isArray(context?.node?.subData) ? context.node.subData.length : 0,
+          nodeSubSlots: context?.node?.subSlots,
+          nodeSubSlotsLength: Array.isArray(context?.node?.subSlots) ? context.node.subSlots.length : 0,
+          isComposite: context?.node ?
+            ((Array.isArray(context.node.subData) && context.node.subData.length > 0) ||
+             (Array.isArray(context.node.subSlots) && context.node.subSlots.length > 0)) : false,
+          willCallExtractField: true,
+          contextFull: context // Show full context object
+        });
+
+        console.log('[ChatSimulator][extractField][about-to-call]', {
+          fieldName,
+          text: trimmed,
+          contextRegexValue: context?.regex,
+          contextRegexIsTruthy: !!(context?.regex),
+          contextNodeIsTruthy: !!(context?.node),
+          conditionMet: !!(context?.node && context.regex)
+        });
+
         try {
-
-
+          console.log('[ChatSimulator][extractField][calling-now]', {
+            fieldName,
+            text: trimmed,
+            contextProvided: !!context,
+            contextRegex: context?.regex,
+            contextNodeLabel: context?.node?.label
+          });
           // Usa il Data Extractor per validare l'input
+          console.log('[ChatSimulator][extractField][BEFORE-AWAIT]');
           const extractionResult: SlotDecision<any> = await extractField(fieldName, trimmed, undefined, context);
+          console.log('[ChatSimulator][extractField][AFTER-AWAIT]', {
+            status: extractionResult.status,
+            hasValue: !!extractionResult.value,
+            value: extractionResult.value
+          });
 
           // Determina matchStatus basato sul risultato dell'estrazione
           let matchStatus: 'match' | 'noMatch' | 'partialMatch';
@@ -337,6 +382,13 @@ export function useMessageHandling({
           await send(text);
           return;
         } catch (error) {
+          console.error('[ChatSimulator][extractField][ERROR-CATCH]', {
+            error,
+            errorMessage: error instanceof Error ? error.message : String(error),
+            errorStack: error instanceof Error ? error.stack : undefined,
+            fieldName,
+            text: trimmed
+          });
           // Recupera main e sub PRIMA di usarli (sono definiti nel blocco try)
           const sub = getSub(state);
 

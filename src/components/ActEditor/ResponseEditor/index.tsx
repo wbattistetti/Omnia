@@ -71,6 +71,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const log = (...args: any[]) => {
     try { if (localStorage.getItem('debug.responseEditor') === '1') console.log(...args); } catch { }
   };
+  // Removed verbose translation sources log
   // Ensure debug flag is set once to avoid asking again
   useEffect(() => {
     try { localStorage.setItem('debug.responseEditor', '1'); } catch { }
@@ -92,10 +93,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         ddt: ddt?.translations?.en ? Object.keys(ddt.translations.en).length : (ddt?.translations ? Object.keys(ddt.translations).length : 0),
         merged: localTranslations ? Object.keys(localTranslations).length : 0,
       };
-      log('[ResponseEditor] Translation sources counts:', counts);
-      log('[ResponseEditor][DDT load]', { prevId, nextId, isSameDDT, selectedMainIndex, selectedSubIndex });
-      const mains = getMainDataList(ddt) || [];
-      log('[ResponseEditor] DDT label:', ddt?.label, 'mains:', mains.map((m: any) => m?.label));
+      // Removed verbose logs - gated by localStorage
     } catch { }
     // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
   }, [ddt, mergedBase, localDDT?.id, localDDT?._id]);
@@ -203,14 +201,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     }
     if (selectedSubIndex == null) {
       // Main selected
-      console.log('[ResponseEditor][selectedNode] Main selected', {
-        selectedMainIndex,
-        mainLabel: main?.label,
-        hasSteps: !!main?.steps,
-        stepsType: Array.isArray(main?.steps) ? 'array' : typeof main?.steps,
-        stepsLength: Array.isArray(main?.steps) ? main.steps.length : Object.keys(main?.steps || {}).length,
-        steps: main?.steps
-      });
+      // Removed verbose log
       return main;
     }
     const subList = getSubDataList(main);
@@ -227,29 +218,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     const subStartActionKeys = subStartAction ? Object.keys(subStartAction) : [];
     const subStartActionFull = subStartAction ? JSON.stringify(subStartAction).substring(0, 300) : 'null';
 
-    console.error('🔍 [ResponseEditor][selectedNode] Sub selected - CHECKING STEP SHARING', {
-      selectedMainIndex,
-      selectedSubIndex,
-      mainLabel: main?.label,
-      mainStepsCount: Array.isArray(main?.steps) ? main.steps.length : 0,
-      subLabel: sub?.label,
-      subId: sub?.id,
-      hasSteps: !!sub?.steps,
-      stepsLength: Array.isArray(sub?.steps) ? sub.steps.length : 0,
-      '⚠️ ARE_STEPS_SHARED': areStepsSameAsMain,
-      '⚠️ ARE_START_STEPS_SHARED': areStartStepsSame,
-      subStartStepEscalations: subStartStep?.escalations?.[0]?.actions?.[0],
-      mainStartStepEscalations: mainStartStep?.escalations?.[0]?.actions?.[0],
-      subStartActionText: subStartStep?.escalations?.[0]?.actions?.[0]?.text,
-      mainStartActionText: mainStartStep?.escalations?.[0]?.actions?.[0]?.text,
-      subStartActionTextKey: subStartStep?.escalations?.[0]?.actions?.[0]?.parameters?.find((p: any) => p?.parameterId === 'text')?.value,
-      mainStartActionTextKey: mainStartStep?.escalations?.[0]?.actions?.[0]?.parameters?.find((p: any) => p?.parameterId === 'text')?.value,
-      // DEBUG: Additional inspection
-      subStartActionKeys,
-      subStartActionFull,
-      subStartActionTextType: typeof subStartAction?.text,
-      subStartActionTextLength: typeof subStartAction?.text === 'string' ? subStartAction.text.length : 0
-    });
+    // Removed verbose log
 
     return sub;
   }, [mainList, selectedMainIndex, selectedSubIndex, selectedRoot, localDDT]);
@@ -262,22 +231,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     }
     const steps = selectedNode ? getNodeSteps(selectedNode) : [];
 
-    // DEBUG: Log per verificare gli step estratti
-    console.log('[ResponseEditor][stepKeys]', {
-      selectedRoot,
-      selectedSubIndex,
-      nodeLabel: selectedNode?.label,
-      nodeKind: selectedNode?.kind,
-      nodeId: selectedNode?.id,
-      hasNode: !!selectedNode,
-      extractedSteps: JSON.stringify(steps),
-      extractedStepsLength: steps.length,
-      nodeSteps: selectedNode?.steps,
-      nodeStepsLength: Array.isArray(selectedNode?.steps) ? selectedNode.steps.length : Object.keys(selectedNode?.steps || {}).length,
-      stepsType: Array.isArray(selectedNode?.steps) ? 'array' : typeof selectedNode?.steps,
-      hasMessages: !!selectedNode?.messages,
-      messagesKeys: selectedNode?.messages ? Object.keys(selectedNode.messages) : []
-    });
+    // Removed verbose log
 
     return steps;
   }, [selectedNode, selectedRoot, selectedSubIndex]);
@@ -294,15 +248,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       result = stepKeys;
     }
 
-    // DEBUG: Log per verificare cosa viene passato a StepsStrip
-    console.log('[ResponseEditor][uiStepKeys]', {
-      selectedRoot,
-      selectedSubIndex,
-      stepKeysLength: stepKeys.length,
-      stepKeys: JSON.stringify(stepKeys),
-      uiStepKeysLength: result.length,
-      uiStepKeys: JSON.stringify(result)
-    });
+    // Removed verbose log
 
     return result;
   }, [stepKeys, selectedSubIndex, selectedRoot]);

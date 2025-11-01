@@ -15,6 +15,31 @@ export interface ExtractionContext {
 }
 
 /**
+ * Maps sub-data label to standard English field key
+ * Returns standard keys: day, month, year, firstname, lastname, etc.
+ */
+function mapLabelToStandardKey(label: string): string | null {
+  const normalized = String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  // Date components
+  if (normalized.includes('day') || normalized.includes('giorno')) return 'day';
+  if (normalized.includes('month') || normalized.includes('mese')) return 'month';
+  if (normalized.includes('year') || normalized.includes('anno')) return 'year';
+
+  // Name components
+  if (normalized.includes('first') || normalized.includes('nome') || normalized.includes('firstname')) return 'firstname';
+  if (normalized.includes('last') || normalized.includes('cognome') || normalized.includes('surname') || normalized.includes('lastname')) return 'lastname';
+
+  // Address components (if needed)
+  if (normalized.includes('street') || normalized.includes('via') || normalized.includes('indirizzo')) return 'street';
+  if (normalized.includes('city') || normalized.includes('citta') || normalized.includes('comune')) return 'city';
+  if (normalized.includes('zip') || normalized.includes('cap') || normalized.includes('postal')) return 'zip';
+  if (normalized.includes('country') || normalized.includes('nazione') || normalized.includes('paese')) return 'country';
+
+  return null;
+}
+
+/**
  * Structural parser: derives parsing logic from subSlots/subData labels, not hardcoded types
  * Tries to parse complete value using regex for composite types (with subData/subSlots)
  * Returns parsed value if successful, null otherwise
@@ -38,13 +63,75 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
       return null;
     }
 
-    console.log('[NLP][tryParseComplete][matched]', { text, regex, match: match[0] });
+    console.log('[NLP][tryParseComplete][matched]', { text, regex, match: match[0], groups: match.slice(1) });
 
+    // Get all sub-data/subSlots with their IDs and labels
+    const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+
+    // Count non-empty capture groups (skip full match at index 0)
+    const captureGroups = match.slice(1).filter(g => g !== undefined && g !== null && String(g).trim().length > 0);
+
+    // 🆕 FIRST PRIORITY: Use numeric capture groups if they match sub-data count
+    if (captureGroups.length > 0 && captureGroups.length <= allSubs.length) {
+      const result: Record<string, any> = {};
+      let hasValidMapping = false;
+
+      // Map each capture group (by position) to sub-data (by order)
+      for (let i = 0; i < Math.min(captureGroups.length, allSubs.length); i++) {
+        const groupValue = captureGroups[i]?.trim();
+        const subData = allSubs[i];
+
+        if (!groupValue || !subData) continue;
+
+        // Get sub-data ID and label
+        const subId = subData.id || subData._id || '';
+        const subLabel = String(subData.label || subData.name || '');
+
+        // Map label to standard key (day, month, year, firstname, lastname, etc.)
+        const standardKey = mapLabelToStandardKey(subLabel);
+
+        if (standardKey) {
+          // Use standard key (day, month, year, etc.)
+          if (standardKey === 'day' || standardKey === 'month' || standardKey === 'year') {
+            const numValue = parseInt(groupValue, 10);
+            if (!isNaN(numValue)) {
+              result[standardKey] = numValue;
+              hasValidMapping = true;
+            }
+          } else if (standardKey === 'firstname' || standardKey === 'lastname') {
+            result[standardKey] = groupValue;
+            hasValidMapping = true;
+          } else {
+            // Other standard keys (street, city, zip, country)
+            result[standardKey] = groupValue;
+            hasValidMapping = true;
+          }
+        } else {
+          // No standard mapping found - store with sub-data ID as key for fallback
+          // But prefer to use standard keys when possible
+          const fallbackKey = subLabel.toLowerCase().replace(/[^a-z0-9]+/g, '');
+          if (fallbackKey) {
+            result[fallbackKey] = groupValue;
+            hasValidMapping = true;
+          }
+        }
+      }
+
+      if (hasValidMapping && Object.keys(result).length > 0) {
+        console.log('[NLP][tryParseComplete][groups-mapped-to-subdata]', {
+          result,
+          captureGroups: captureGroups.map(g => String(g)),
+          subDataCount: allSubs.length,
+          groupsCount: captureGroups.length
+        });
+        return result as Partial<T>;
+      }
+    }
+
+    // Fallback to existing parsing logic (current behavior)
     const matchedValue = match[0] || match[1] || match[0]; // First captured group or full match
 
     // Get all subSlots/subData labels and normalize them (structural approach)
-    const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
-
     const labels = allSubs.map(s => String(s?.label || s?.name || '').toLowerCase());
     const normalized = labels.map(l => l.replace(/[^a-z0-9]+/g, ''));
 
@@ -177,13 +264,69 @@ export async function extractField<T>(
 ): Promise<SlotDecision<T>> {
   // Removed verbose logging
 
-  const extractorName = await mapFieldToExtractor(field);
+  // Use context.node.kind if available (avoids database lookup), otherwise fallback to mapFieldToExtractor
+  let extractorName: string;
+  if (context?.node?.kind) {
+    // Map common kind values to extractor names
+    const kindMap: Record<string, string> = {
+      'date': 'dateOfBirth',
+      'dateOfBirth': 'dateOfBirth',
+      'email': 'email',
+      'phone': 'phone',
+      'number': 'number',
+      'generic': 'generic'
+    };
+    extractorName = kindMap[context.node.kind] || context.node.kind;
+    console.log('[NLP][extractField][using-context-kind]', {
+      field,
+      nodeKind: context.node.kind,
+      extractorName
+    });
+  } else {
+    try {
+      extractorName = await mapFieldToExtractor(field);
+    } catch (error) {
+      // If database lookup fails, fallback to generic
+      console.warn('[NLP][extractField][mapFieldToExtractor-failed]', {
+        field,
+        error: error instanceof Error ? error.message : String(error),
+        fallingBackToGeneric: true
+      });
+      extractorName = 'generic';
+    }
+  }
+
   const ex = registry[extractorName];
 
-  if (!ex) return { status: 'reject', reasons: ['unknown-field'] } as any;
+  if (!ex) {
+    console.error('[NLP][extractField][extractor-not-found]', {
+      extractorName,
+      availableExtractors: Object.keys(registry)
+    });
+    return { status: 'reject', reasons: ['unknown-field'] } as any;
+  }
 
   // 🎯 FULL-FIRST APPROACH: Try complete parsing first if composite type with regex
+  console.log('[NLP][extractField][entry]', {
+    field,
+    text,
+    hasContext: !!context,
+    hasContextNode: !!context?.node,
+    hasContextRegex: !!context?.regex,
+    contextRegex: context?.regex,
+    contextNodeLabel: context?.node?.label,
+    contextNodeKind: context?.node?.kind,
+    contextNodeSubData: context?.node?.subData,
+    contextNodeSubSlots: context?.node?.subSlots,
+    willTryParseComplete: !!(context?.node && context.regex)
+  });
+
   if (context?.node && context.regex) {
+    console.log('[NLP][extractField][calling-tryParseComplete]', {
+      text,
+      regex: context.regex,
+      nodeLabel: context.node.label
+    });
     const parsedValue = tryParseComplete<T>(text, context.regex, context.node);
 
     if (parsedValue && Object.keys(parsedValue).length > 0) {

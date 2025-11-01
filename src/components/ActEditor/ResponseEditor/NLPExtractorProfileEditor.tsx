@@ -333,10 +333,28 @@ export default function NLPExtractorProfileEditor({
                       try {
                         console.log('[AI Regex] Generating regex for:', regexAiPrompt);
 
+                        // Extract sub-data from node if available
+                        const subData = (node?.subData || node?.subSlots || []) as any[];
+                        const subDataInfo = subData.map((sub: any, index: number) => ({
+                          id: sub.id || `sub-${index}`,
+                          label: sub.label || sub.name || '',
+                          index: index + 1 // Position in capture groups (1, 2, 3...)
+                        }));
+
+                        console.log('[AI Regex] Sub-data info:', {
+                          hasSubData: subDataInfo.length > 0,
+                          subDataInfo,
+                          kind
+                        });
+
                         const response = await fetch('/api/nlp/generate-regex', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ description: regexAiPrompt })
+                          body: JSON.stringify({
+                            description: regexAiPrompt,
+                            subData: subDataInfo.length > 0 ? subDataInfo : undefined,
+                            kind: kind || undefined
+                          })
                         });
 
                         if (!response.ok) {
@@ -499,6 +517,8 @@ export default function NLPExtractorProfileEditor({
               regex={regex}
               setRegex={setRegex}
               onClose={closeEditor}
+              node={node}
+              kind={kind}
             />
           )}
 

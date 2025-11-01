@@ -5,6 +5,8 @@ interface RegexInlineEditorProps {
   regex: string;
   setRegex: (value: string) => void;
   onClose: () => void;
+  node?: any; // Optional: node with subData for AI regex generation
+  kind?: string; // Optional: kind for AI regex generation
 }
 
 /**
@@ -15,6 +17,8 @@ export default function RegexInlineEditor({
   regex,
   setRegex,
   onClose,
+  node,
+  kind,
 }: RegexInlineEditorProps) {
   const [regexAiMode, setRegexAiMode] = React.useState(false);
   const [regexAiPrompt, setRegexAiPrompt] = React.useState('');
@@ -29,10 +33,22 @@ export default function RegexInlineEditor({
     try {
       console.log('[AI Regex] Generating regex for:', regexAiPrompt);
 
+      // Extract sub-data from node if available
+      const subData = (node?.subData || node?.subSlots || []) as any[];
+      const subDataInfo = subData.map((sub: any, index: number) => ({
+        id: sub.id || `sub-${index}`,
+        label: sub.label || sub.name || '',
+        index: index + 1 // Position in capture groups (1, 2, 3...)
+      }));
+
       const response = await fetch('/api/nlp/generate-regex', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: regexAiPrompt }),
+        body: JSON.stringify({
+          description: regexAiPrompt,
+          subData: subDataInfo.length > 0 ? subDataInfo : undefined,
+          kind: kind || undefined
+        }),
       });
 
       if (!response.ok) {

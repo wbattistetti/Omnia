@@ -26,11 +26,7 @@ export function useNodeManager(
    * Aggiorna un nodo per id
    */
   const updateNode = useCallback((nodeId: string, updates: Partial<NodeData>) => {
-    console.log("🔄 [UPDATE_NODE] updateNode called", {
-      nodeId,
-      updates,
-      timestamp: Date.now()
-    });
+    // Removed verbose log
 
     setNodes((nds) => {
       const updatedNodes = nds.map((node) => {

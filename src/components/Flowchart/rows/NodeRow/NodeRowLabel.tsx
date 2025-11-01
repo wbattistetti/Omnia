@@ -94,21 +94,16 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       onDoubleClick={onDoubleClick}
       onPointerDown={(e) => { e.stopPropagation(); }}
       onMouseDown={(e) => {
-        console.log('🎯 [NodeRowLabel] onMouseDown called', {
-          isEditing,
-          hasOnLabelDragStart: !!onLabelDragStart,
-          target: e.target,
-          button: e.button
-        });
+        // Removed verbose log
 
         e.preventDefault();
         e.stopPropagation();
         // consenti drag diretto sulla label quando non si è in editing
         if (!isEditing && typeof onLabelDragStart === 'function') {
-          console.log('🎯 [NodeRowLabel] Calling onLabelDragStart');
+          // Removed verbose log
           onLabelDragStart(e);
         } else {
-          console.log('🎯 [NodeRowLabel] Skipping drag because isEditing=true or onLabelDragStart not function');
+          // Removed verbose log
         }
       }}
       onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}

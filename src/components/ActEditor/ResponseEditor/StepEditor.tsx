@@ -24,19 +24,11 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   // Always log to diagnose message display issues
   const shape = Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none');
   const keys = node?.steps && !Array.isArray(node.steps) ? Object.keys(node.steps) : (Array.isArray(node?.steps) ? (node.steps as any[]).map((g: any) => g?.type) : []);
-  console.log('[RE][buildModel] START', {
-    nodeLabel: node?.label,
-    stepKey,
-    stepsShape: shape,
-    stepsKeys: keys,
-    hasMessages: !!node?.messages,
-    messagesKeys: Object.keys(node?.messages || {}),
-    messagesForStep: node?.messages?.[stepKey]
-  });
+  // Removed verbose log
   // Case A: steps as object { start: { escalations: [...] } }
   if (node?.steps && !Array.isArray(node.steps) && node.steps[stepKey] && Array.isArray(node.steps[stepKey].escalations)) {
     const escs = node.steps[stepKey].escalations as any[];
-    console.log('[RE][buildModel] Using Case A (object steps)', { stepKey, escalationsCount: escs.length });
+    // Removed verbose log
     return escs.map((esc) => ({
       actions: (esc.actions || []).map((a: any) => {
         const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
@@ -53,34 +45,13 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   if (Array.isArray(node?.steps)) {
     const group = (node.steps as any[]).find((g: any) => (g?.type === stepKey));
     if (group && Array.isArray(group.escalations)) {
-      console.error('🔍 [RE][buildModel] Using Case B (array steps)', {
-        stepKey,
-        escalationsCount: group.escalations.length,
-        nodeLabel: node?.label,
-        nodeId: node?.id,
-        // Verifica le actions del primo escalation
-        firstEscalationActions: group.escalations[0]?.actions || [],
-        firstActionTextKey: group.escalations[0]?.actions?.[0]?.parameters?.find((p: any) => p?.parameterId === 'text')?.value,
-        firstActionText: group.escalations[0]?.actions?.[0]?.text,
-        firstActionFull: group.escalations[0]?.actions?.[0]
-      });
+      // Removed verbose log
       return (group.escalations as any[]).map((esc: any) => ({
         actions: (esc.actions || []).map((a: any) => {
           const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
           const textKey = p?.value;
 
-          // DEBUG: Log the raw action before processing
-          console.error('🔍 [RE][buildModel] RAW ACTION', {
-            nodeLabel: node?.label,
-            nodeId: node?.id,
-            stepKey,
-            actionId: a.actionId,
-            rawActionText: a.text,
-            rawActionTextType: typeof a.text,
-            rawActionTextLength: typeof a.text === 'string' ? a.text.length : 0,
-            rawActionKeys: Object.keys(a || {}),
-            rawActionFull: JSON.stringify(a).substring(0, 200)
-          });
+          // Removed verbose log
 
           // PRIORITY: Always use action.text if present (this is the edited text, saved directly on the action)
           // Only fallback to translations[textKey] if action.text is not available
@@ -89,24 +60,12 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
             ? a.text
             : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
 
-          console.error('🔍 [RE][buildModel] Action processed', {
-            nodeLabel: node?.label,
-            nodeId: node?.id,
-            stepKey,
-            actionId: a.actionId,
-            textKey,
-            text,
-            finalText: text,
-            hasDirectText: typeof a.text === 'string' && a.text.length > 0,
-            textFromTranslations: typeof textKey === 'string' ? translations[textKey] : 'no textKey',
-            // Verify if textKey points to wrong node
-            textKeyContainsWrongNode: typeof textKey === 'string' && node?.label && !textKey.includes(node.label)
-          });
+          // Removed verbose log
           return { actionId: a.actionId, text, textKey, color: a.color };
         })
       }));
     } else {
-      console.error('🔍 [RE][buildModel] Case B: No group found for stepKey', { stepKey, availableTypes: node.steps.map((g: any) => g?.type), nodeLabel: node?.label });
+      // Removed verbose log
     }
   }
 
@@ -115,7 +74,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   if (msg && typeof msg.textKey === 'string') {
     const textKey = msg.textKey;
     const text = translations[textKey] || textKey;
-    console.log('[RE][buildModel] Using messages fallback', { stepKey, textKey, hasText: !!text });
+    // Removed verbose log
     return [
       { actions: [{ actionId: 'sayMessage', text, textKey }] }
     ];
@@ -126,7 +85,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
     const keys = Object.keys(translations || {});
     const matches = keys.filter(k => (stepKey ? k.includes(`.${stepKey}.`) : false) && (label ? k.includes(label) : true));
     if (matches.length > 0) {
-      console.log('[RE][buildModel] Using translation keys fallback', { stepKey, matchesCount: matches.length });
+      // Removed verbose log
       return [
         {
           actions: matches.map(k => ({ actionId: 'sayMessage', text: translations[k] || k, textKey: k }))
@@ -134,7 +93,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
       ];
     }
   } catch { }
-  console.log('[RE][buildModel] NO DATA - returning empty model', { stepKey });
+  // Removed verbose log
   return [];
 }
 
@@ -150,15 +109,6 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   const model = React.useMemo(() => {
     const result = buildModel(node, stepKey, translations);
-    console.log('[StepEditor] Building model', {
-      nodeLabel: node?.label,
-      stepKey,
-      modelLength: result.length,
-      hasSteps: !!node?.steps,
-      stepsShape: Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none'),
-      hasMessages: !!node?.messages,
-      messageForStep: node?.messages?.[stepKey]
-    });
     return result;
   }, [node, stepKey, translations]);
   // Debug logging gated; enable via localStorage.setItem('debug.stepEditor','1')

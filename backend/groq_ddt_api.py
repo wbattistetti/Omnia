@@ -1049,12 +1049,33 @@ async def _proxy_to_express(request: Request) -> Response:
                 json_payload = await request.json()
             except Exception:
                 json_payload = None
-            resp = requests.request(method, target_url, headers=headers, json=json_payload)
+            resp = requests.request(method, target_url, headers=headers, json=json_payload, timeout=5)
         else:
-            resp = requests.request(method, target_url, headers=headers, data=body_bytes)
+            resp = requests.request(method, target_url, headers=headers, data=body_bytes, timeout=5)
+    except requests.exceptions.ConnectionError as e:
+        error_msg = f"Cannot connect to Express server at {EXPRESS_BASE}. Is Express running?"
+        print(f"[PROXY ERROR] {error_msg}")
+        print(f"[PROXY ERROR] Details: {e}")
+        return JSONResponse(
+            content={"detail": error_msg, "error": "express_not_running"},
+            status_code=502
+        )
+    except requests.exceptions.Timeout as e:
+        error_msg = f"Express server timeout at {EXPRESS_BASE}"
+        print(f"[PROXY ERROR] {error_msg}")
+        return JSONResponse(
+            content={"detail": error_msg, "error": "express_timeout"},
+            status_code=504
+        )
     except Exception as e:
+        error_msg = f"Proxy error: {str(e)}"
         print(f"[PROXY ERROR] {method} {target_url} -> {e}")
-        return Response(content=str(e), status_code=502)
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            content={"detail": error_msg, "error": "proxy_error"},
+            status_code=502
+        )
 
     try:
         print(f"[PROXY←EXPRESS] {resp.status_code} {method} {target_url}")
@@ -1648,9 +1669,19 @@ def generate_regex(body: dict = Body(...)):
     }
     """
     print("\n[API] POST /api/nlp/generate-regex")
+    try:
+        print(f"[generate-regex] Request body keys: {list((body or {}).keys())}")
+    except Exception:
+        pass
 
     try:
         description = (body or {}).get("description", "").strip()
+        sub_data = (body or {}).get("subData")  # List of {id, label, index}
+        kind = (body or {}).get("kind")  # Field kind (date, email, etc.)
+
+        print(f"[generate-regex] Description: {description}")
+        print(f"[generate-regex] Sub_data type: {type(sub_data)}, value: {sub_data}")
+        print(f"[generate-regex] Kind type: {type(kind)}, value: {kind}")
 
         if not description:
             raise HTTPException(status_code=400, detail="Description is required")
@@ -1660,11 +1691,71 @@ def generate_regex(body: dict = Body(...)):
             raise HTTPException(status_code=500, detail="missing_ai_key")
 
         # Build AI prompt for regex generation
-        prompt = f"""
+        capture_groups_instructions = ""
+        if sub_data is not None and isinstance(sub_data, list) and len(sub_data) > 0:
+            # Enrich prompt with sub-data information for capture groups
+            groups_info = []
+            valid_sub_data = []
+            try:
+                for sub in sub_data:
+                    # Safety check: ensure sub is a dict
+                    if not isinstance(sub, dict):
+                        continue
+                    sub_id = str(sub.get("id", "") or "").strip()
+                    sub_label = str(sub.get("label", "") or "").strip()
+                    group_index = sub.get("index")
+                    if group_index is None:
+                        group_index = len(valid_sub_data) + 1
+                    else:
+                        group_index = int(group_index)
+                    valid_sub_data.append(sub)
+                    groups_info.append(f"  - Group {group_index}: maps to sub-data ID '{sub_id}' (label: '{sub_label}')")
+            except Exception as sub_data_error:
+                print(f"[generate-regex] Error processing sub_data: {sub_data_error}")
+                # Continue without sub-data instructions if there's an error
+                valid_sub_data = []
+                groups_info = []
+
+            # Only add instructions if we have valid sub-data
+            if len(valid_sub_data) > 0 and len(groups_info) > 0:
+                try:
+                    capture_groups_instructions = f"""
+
+IMPORTANT: This field contains sub-data components. You MUST create NUMERIC CAPTURE GROUPS (not named groups) that map to each sub-data component.
+
+Sub-data mapping:
+{chr(10).join(groups_info)}
+
+Capture Group Requirements:
+1. Use numeric capture groups only: (pattern1)(pattern2)(pattern3) - NOT named groups like (?<name>pattern)
+2. The number of capture groups must match the number of sub-data fields ({len(valid_sub_data)} groups)
+3. Each component must be in its OWN separate capture group - do NOT wrap the entire pattern in a single capture group
+4. Accept variations in separators and formats as described by the user
+5. Escape special characters properly for JavaScript (use \\\\ for backslashes)
+6. The regex must match realistic examples of the described format
+
+CRITICAL: Each sub-data component needs its own capture group.
+- WRONG: (\\d{1,2}[/-]\\d{1,2}[/-]\\d{4})  ← This captures the entire date as ONE group
+- CORRECT: (\\d{1,2})[/-](\\d{1,2})[/-](\\d{4})  ← This creates 3 separate groups for day, month, year
+"""
+                except Exception as prompt_error:
+                    print(f"[generate-regex] Error building capture_groups_instructions: {prompt_error}")
+                    capture_groups_instructions = ""
+
+        kind_hint = ""
+        if kind and isinstance(kind, str) and kind.strip():
+            if len(valid_sub_data) > 0:
+                kind_hint = f"\nField type (kind): structured data with sub-fields. The field may represent dates, phone numbers, addresses, names, or other structured formats.\n"
+            else:
+                kind_hint = f"\nField type (kind): {kind.strip()}. Consider formats typical for this type of field.\n"
+
+        # Build prompt safely
+        try:
+            prompt = f"""
 You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
-
+{kind_hint}
 User description: "{description}"
-
+{capture_groups_instructions}
 Requirements:
 1. Generate a regex pattern that matches the described pattern
 2. Escape special characters properly for JavaScript (use \\\\ for backslashes)
@@ -1693,8 +1784,37 @@ Common patterns for reference:
 
 Be precise and practical. Test mentally that your regex works correctly.
 """
+        except Exception as prompt_build_error:
+            print(f"[generate-regex] Error building prompt: {prompt_build_error}")
+            import traceback
+            traceback.print_exc()
+            # Fallback to simple prompt
+            prompt = f"""
+You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
+
+User description: "{description}"
+
+Requirements:
+1. Generate a regex pattern that matches the described pattern
+2. Escape special characters properly for JavaScript (use \\\\ for backslashes)
+3. Provide a clear explanation of what the regex matches
+4. Include 2-3 realistic examples that match the pattern
+5. Consider edge cases and common variations
+6. For Italian contexts, consider Italian formats (phone numbers, postal codes, etc.)
+
+Return ONLY a strict JSON object with this format (no markdown, no extra text):
+{{
+  "regex": "your-regex-pattern-here",
+  "explanation": "Clear explanation of what this regex matches",
+  "examples": ["example1", "example2", "example3"],
+  "flags": "gi"
+}}
+
+Be precise and practical. Test mentally that your regex works correctly.
+"""
 
         print(f"[generate-regex] Description: {description}")
+        print(f"[generate-regex] Prompt length: {len(prompt)}")
         print("[generate-regex] Calling AI...")
 
         # Provider routing

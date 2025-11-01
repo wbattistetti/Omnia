@@ -407,14 +407,7 @@ export const AppContent: React.FC<AppContentProps> = ({
           const flow = await flowRes.json();
           loadedNodes = Array.isArray(flow.nodes) ? flow.nodes : [];
           loadedEdges = Array.isArray(flow.edges) ? flow.edges : [];
-          try {
-            console.log('[Open][flow]', {
-              pid: id,
-              nodes: loadedNodes.length,
-              edges: loadedEdges.length,
-              sampleNodeIds: (loadedNodes || []).slice(0, 3).map((n: any) => n?.id)
-            });
-          } catch { }
+          // Removed verbose log
         }
       } catch { }
       const data = await ProjectDataService.loadProjectData();

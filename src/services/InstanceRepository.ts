@@ -98,26 +98,7 @@ class InstanceRepository {
     getInstance(instanceId: string): ActInstance | undefined {
         const instance = this.instances.get(instanceId);
 
-        if (!instance) {
-            console.log('❌ [InstanceRepository] getInstance: ISTANZA NON TROVATA', {
-                instanceId,
-                availableInstances: Array.from(this.instances.keys())
-            });
-        } else {
-            console.log('✅ [InstanceRepository] getInstance: ISTANZA TROVATA', {
-                instanceId,
-                hasDDT: !!instance.ddt,
-                ddtType: typeof instance.ddt,
-                ddtIsNull: instance.ddt === null,
-                ddtIsUndefined: instance.ddt === undefined,
-                ddtStringified: instance.ddt ? JSON.stringify(instance.ddt, null, 2).substring(0, 500) : 'null/undefined',
-                ddtKeys: instance.ddt && typeof instance.ddt === 'object' ? Object.keys(instance.ddt) : [],
-                ddtMainData: instance.ddt?.mainData,
-                ddtMainDataLength: instance.ddt?.mainData?.length || 0,
-                ddtId: instance.ddt?.id,
-                instanceFull: instance // Log completo per debugging
-            });
-        }
+        // Removed verbose logs
 
         return instance;
     }
@@ -130,12 +111,6 @@ class InstanceRepository {
      * @returns True se aggiornato con successo, false altrimenti
      */
     updateDDT(instanceId: string, ddt: any, projectId?: string): boolean {
-        console.log('📦 [InstanceRepository] updateDDT chiamato', {
-            instanceId,
-            ddtProvided: !!ddt,
-            ddtMainData: ddt?.mainData?.length || 0
-        });
-
         const instance = this.getInstance(instanceId);
 
         if (instance) {
@@ -147,19 +122,10 @@ class InstanceRepository {
                 console.error('Failed to update instance in database:', error);
             });
 
-            console.log('✅ [InstanceRepository] DDT SALVATO con successo', {
-                instanceId,
-                ddtId: ddt?.id || ddt?._id,
-                ddtLabel: ddt?.label,
-                ddtMainData: ddt?.mainData?.length || 0,
-                projectId: projectId || 'global'
-            });
-
             return true;
         }
 
         console.error('❌ [InstanceRepository] ISTANZA NON TROVATA per instanceId:', instanceId);
-        console.log('📦 [InstanceRepository] Istanze disponibili:', Array.from(this.instances.keys()));
         return false;
     }
 
@@ -176,10 +142,7 @@ class InstanceRepository {
             instance.problemIntents = intents;
             instance.updatedAt = new Date();
 
-            console.log('✅ [InstanceRepository] Updated intents for instance:', {
-                instanceId,
-                intentsCount: intents.length
-            });
+            // Removed verbose log
 
             return true;
         }
@@ -195,11 +158,7 @@ class InstanceRepository {
     deleteInstance(instanceId: string): boolean {
         const deleted = this.instances.delete(instanceId);
 
-        if (deleted) {
-            console.log('✅ [InstanceRepository] Deleted instance:', instanceId);
-        } else {
-            console.log('❌ [InstanceRepository] Instance not found for deletion:', instanceId);
-        }
+        // Removed verbose logs
 
         return deleted;
     }
@@ -216,7 +175,6 @@ class InstanceRepository {
      */
     clearAll(): void {
         this.instances.clear();
-        console.log('✅ [InstanceRepository] Cleared all instances');
     }
 
     /**
@@ -243,16 +201,7 @@ class InstanceRepository {
                     rowId: instance.instanceId // ID originale della riga
                 };
 
-                console.log('💾 [InstanceRepository] Saving instance to DB:', {
-                    instanceId: instance.instanceId,
-                    projectId,
-                    hasDDT: !!instance.ddt,
-                    ddtType: typeof instance.ddt,
-                    ddtMainDataLength: instance.ddt?.mainData?.length || 0,
-                    ddtId: instance.ddt?.id,
-                    ddtKeys: instance.ddt && typeof instance.ddt === 'object' ? Object.keys(instance.ddt) : [],
-                    ddtSnapshotFull: instance.ddt // Log completo per vedere struttura
-                });
+                // Removed verbose log
             } else {
                 // Fallback: usa endpoint globale (se esiste)
                 url = `${API_BASE}/api/instances`;
@@ -266,7 +215,6 @@ class InstanceRepository {
             });
 
             if (response.ok) {
-                console.log(`✅ [InstanceRepository] Instance saved to database: ${instance.instanceId}${projectId ? ` (project: ${projectId})` : ''}`);
                 return true;
             } else {
                 console.error('❌ [InstanceRepository] Failed to save instance:', response.statusText);
@@ -322,31 +270,7 @@ class InstanceRepository {
                     // Questo permette di mappare correttamente le istanze alle righe del flowchart
                     const instanceId = instance.rowId || instance.instanceId || instance._id || String(instance._id);
 
-                    // Debug: vediamo cosa arriva dal database
-                    console.log('📥 [InstanceRepository] Loading instance from DB:', {
-                        instanceId,
-                        rawInstance: instance,
-                        hasDDTSnapshot: !!instance.ddtSnapshot,
-                        ddtSnapshotType: typeof instance.ddtSnapshot,
-                        ddtSnapshotIsNull: instance.ddtSnapshot === null,
-                        ddtSnapshotKeys: instance.ddtSnapshot && typeof instance.ddtSnapshot === 'object' ? Object.keys(instance.ddtSnapshot) : [],
-                        ddtSnapshotMainDataLength: instance.ddtSnapshot?.mainData?.length || 0,
-                        ddtSnapshotId: instance.ddtSnapshot?.id,
-                        ddtSnapshotFull: instance.ddtSnapshot, // Log completo per vedere struttura
-                        hasDDT: !!instance.ddt,
-                        ddtType: typeof instance.ddt
-                    });
-
                     const ddtValue = instance.ddtSnapshot || instance.ddt || null;
-
-                    console.log('📦 [InstanceRepository] Final ddt value:', {
-                        exists: !!ddtValue,
-                        type: typeof ddtValue,
-                        isNull: ddtValue === null,
-                        keys: ddtValue && typeof ddtValue === 'object' ? Object.keys(ddtValue) : [],
-                        mainDataLength: ddtValue?.mainData?.length || 0,
-                        id: ddtValue?.id
-                    });
 
                     const actInstance: ActInstance = {
                         instanceId,
@@ -357,19 +281,9 @@ class InstanceRepository {
                         updatedAt: instance.updatedAt instanceof Date ? instance.updatedAt : new Date(instance.updatedAt)
                     };
                     this.instances.set(instanceId, actInstance);
-                    console.log(`💾 [InstanceRepository] Added instance to map:`, {
-                        instanceId,
-                        mapSize: this.instances.size,
-                        allKeys: Array.from(this.instances.keys())
-                    });
                 });
 
-                console.log(`✅ [InstanceRepository] Loaded ${instances.length} instances from database${projectId ? ` (project: ${projectId})` : ''}`);
-                console.log(`📊 [InstanceRepository] Final map state:`, {
-                    mapSize: this.instances.size,
-                    allKeys: Array.from(this.instances.keys()),
-                    allInstanceIds: Array.from(this.instances.values()).map(i => i.instanceId)
-                });
+                // Removed verbose logs
                 return true;
             } else {
                 console.error('❌ [InstanceRepository] Failed to load instances:', response.statusText);

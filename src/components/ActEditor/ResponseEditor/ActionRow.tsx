@@ -39,16 +39,9 @@ function ActionRowInner({
   const [editValue, setEditValue] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // DEBUG: Log per verificare se onEdit è definito
+  // Removed verbose log
   React.useEffect(() => {
-    console.error('🔍 [ActionRow] Rendered', {
-      actionId,
-      text: text?.substring(0, 30),
-      hasOnEdit: !!onEdit,
-      editing,
-      label,
-      onEditType: typeof onEdit
-    });
+    // Removed verbose log - useEffect for side effects only
   }, [actionId, text, onEdit, editing, label]);
 
   // Notify parent when editing state changes
