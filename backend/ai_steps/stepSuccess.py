@@ -57,6 +57,10 @@ def step_success(body: dict = Body(...)):
         # Clean markdown code blocks before parsing
         try:
             cleaned = _clean_json_like(ai)
+            # Fix common JSON malformations: single quotes at end of array strings
+            # Example: ["We've taken note of the year.'] -> ["We've taken note of the year."]
+            # Match: [ "text' ] or ["text'] -> fix the trailing single quote
+            cleaned = re.sub(r"(\[\s*\"[^\"]+?)'(\s*\])", r'\1"\2', cleaned)
             ai_obj = json.loads(cleaned)
             return {"ai": ai_obj}
         except Exception as parse_error:
@@ -65,9 +69,18 @@ def step_success(body: dict = Body(...)):
                 print(f"[AI ERROR][success][raw_response]", ai[:500])
             except Exception:
                 pass
-            # Try to salvage quoted strings
+            # Try to salvage quoted strings (both double and single quotes)
             try:
+                # First try double quotes
                 m = re.findall(r"\"([^\"]{4,120})\"", ai)
+                if m:
+                    return {"ai": m[:3]}
+                # Then try single quotes
+                m = re.findall(r"'([^']{4,120})'", ai)
+                if m:
+                    return {"ai": m[:3]}
+                # Last resort: try to extract any string-like content from array notation
+                m = re.findall(r"\[[\s\S]*?['\"]([^'\"]{4,120})['\"][\s\S]*?\]", ai)
                 if m:
                     return {"ai": m[:3]}
             except Exception:

@@ -31,6 +31,8 @@ interface Props {
   onProgress?: (percentByPath: Record<string, number>) => void; // optional progress reporter
   headless?: boolean; // if true, orchestrate without rendering UI
   selectedProvider?: 'openai' | 'groq'; // AI provider to use
+  setFieldProcessingStates?: (updater: (prev: any) => any) => void;
+  progressByPath?: Record<string, number>;
 }
 
 function normalizeStructure(node: any) {
@@ -42,7 +44,7 @@ function normalizeStructure(node: any) {
   return out;
 }
 
-const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, onProgress, headless, selectedProvider = 'groq' }) => {
+const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, onProgress, headless, selectedProvider = 'groq', setFieldProcessingStates, progressByPath }) => {
   const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType, selectedProvider), headless);
   const [finalDDT, setFinalDDT] = useState<any>(null);
   const [totalSteps, setTotalSteps] = useState(0);
@@ -72,6 +74,34 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
       hadErrorRef.current = true;
     }
   }, [orchestrator.state.stepError]);
+
+  // 🚀 NEW: Update fieldProcessingStates when error occurs
+  useEffect(() => {
+    if (orchestrator.state.stepError && orchestrator.state.lastError && setFieldProcessingStates) {
+      const error = orchestrator.state.lastError;
+      const stepInfo = (error as any).stepInfo;
+      if (stepInfo) {
+        const mainLabel = (confirmedLabel || dataNode.name || dataNode.label || '').trim();
+        const sub = stepInfo.subDataInfo;
+        const subLabel = sub ? (sub.label || sub.name || '') : undefined;
+        const fieldId = subLabel ? `${mainLabel}/${subLabel}` : mainLabel;
+
+        setFieldProcessingStates((prev: any) => ({
+          ...prev,
+          [fieldId]: {
+            fieldId,
+            status: 'error',
+            progress: progressByPath?.[fieldId] || 0,
+            message: `Errore generazione messaggi: ${error.message || 'Unknown error'}`,
+            timestamp: new Date(),
+            retryCount: prev[fieldId]?.retryCount || 0 // Initialize or preserve retryCount
+          }
+        }));
+
+        console.log('[WizardPipelineStep] Error captured for field:', fieldId, error.message);
+      }
+    }
+  }, [orchestrator.state.stepError, orchestrator.state.lastError, confirmedLabel, dataNode, setFieldProcessingStates, progressByPath]);
 
   useEffect(() => {
     return () => {
@@ -118,7 +148,8 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
   // When pipeline done, assemble
   useEffect(() => {
-    if (hadErrorRef.current) return; // don't complete if any step failed
+    // Allow completion even with errors - user can complete manually in editor
+    // if (hadErrorRef.current) return; // don't complete if any step failed
 
     if (
       orchestrator.state.currentStepIndex >= orchestrator.state.steps.length &&

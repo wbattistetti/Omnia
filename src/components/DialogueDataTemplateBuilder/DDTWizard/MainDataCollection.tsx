@@ -33,9 +33,11 @@ interface MainDataCollectionProps {
   onAutoMap?: (fieldLabel: string, fieldIndex: number) => Promise<void>;
   progressByPath?: Record<string, number>;
   fieldProcessingStates?: Record<string, any>;
+  onRetryField?: (fieldId: string) => void;
+  onCreateManually?: () => void;
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap }) => {
+const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap, onRetryField, onCreateManually }) => {
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
     next[idx] = nextNode;
@@ -170,6 +172,8 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
               onChangeEvent={onChangeEvent}
               onRequestOpen={() => onSelect(i)}
               onAutoMap={onAutoMap}
+              onRetryField={onRetryField}
+              onCreateManually={onCreateManually}
             />
           </div>
         ))}

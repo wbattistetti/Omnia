@@ -7,6 +7,7 @@ export interface FieldProcessingState {
   progress: number; // 0-100
   message: string;
   timestamp: Date;
+  retryCount?: number; // Track retry attempts
 }
 
 interface UseFieldProcessingProps {
@@ -43,6 +44,12 @@ export function useFieldProcessing({ fieldProcessingStates, progressByPath }: Us
 
     // Priority: If we have progressByPath, use that (more reliable)
     if (progress >= 100) return "Done!";
+
+    // Check for error status first
+    if (state?.status === 'error') {
+      return state.message || "Errore generazione messaggi...";
+    }
+
     if (progress > 0) return "Generando messaggi normal...";
 
     // Fallback to fieldProcessingStates only if no progressByPath

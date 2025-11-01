@@ -12,7 +12,7 @@ export function useOrchestrator(
   const [steps, setSteps] = useState<Step[]>(() => {
     return customGenerateSteps ? customGenerateSteps(data) : generateSteps(data);
   });
-  
+
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepError, setStepError] = useState(false);
   const [stepLoading, setStepLoading] = useState(false);
@@ -45,27 +45,27 @@ export function useOrchestrator(
         setStepLoading(false);
         return;
       }
-      
+
       const result = await step.run();
-      
+
       // Log results for subData steps
       if (step.type === 'subDataMessages' || step.type === 'subDataScripts') {
         console.log(`SubData step result for ${step.key}:`, result);
         console.log(`SubData payload content:`, JSON.stringify(result.payload, null, 2));
       }
-      
+
       setStepResults(prev => [...prev, result]);
-      
+
       // Se questo è il step suggestStructureAndConstraints, rigenera gli step con i subData
       if (step.key === 'suggestStructureAndConstraints' && result.payload?.mainData) {
         regenerateStepsWithSubData(result.payload.mainData);
       }
-      
+
       // Raccogli translations se presenti
       if (result.translations) {
         setTranslations(prev => ({ ...prev, ...result.translations }));
       }
-      
+
       // Se headless, avanza automaticamente senza modale debug
       if (headless) {
         setCurrentStepIndex(idx => idx + 1);
@@ -75,9 +75,17 @@ export function useOrchestrator(
         setStepLoading(false);
       }
     } catch (e: any) {
+      const stepInfo = step ? {
+        key: step.key,
+        type: step.type,
+        subDataInfo: (step as any).subDataInfo,
+      } : null;
       setStepError(true);
       setLastError(e);
       setStepLoading(false);
+      if (stepInfo) {
+        (e as any).stepInfo = stepInfo;
+      }
     }
   }, [currentStepIndex, steps, regenerateStepsWithSubData]);
 
@@ -112,4 +120,4 @@ export function useOrchestrator(
     debugModal,
     translations,
   };
-} 
+}

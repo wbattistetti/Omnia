@@ -23,6 +23,7 @@ interface FieldProcessingState {
   progress: number; // 0-100
   message: string;
   timestamp: Date;
+  retryCount?: number; // Track retry attempts
 }
 
 // DEBUG (toggle)
@@ -304,6 +305,155 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // 🚀 NEW: State for field processing states
   const [fieldProcessingStates, setFieldProcessingStates] = useState<Record<string, FieldProcessingState>>({});
+
+  // 🚀 NEW: Handle retry for a specific field
+  const handleRetryField = async (fieldId: string) => {
+    console.log('[DDTWizard] Retry requested for field:', fieldId);
+    const parts = fieldId.split('/');
+    const mainLabel = parts[0];
+    const subLabel = parts.length > 1 ? parts[1] : undefined;
+
+    // Find the main node
+    const mainNode = schemaMains.find(m => m.label === mainLabel);
+    if (!mainNode) {
+      console.error('[DDTWizard] Main node not found:', mainLabel);
+      return;
+    }
+
+    // Find the target node (main or sub)
+    const targetNode = subLabel
+      ? (mainNode.subData || []).find(s => s.label === subLabel)
+      : mainNode;
+
+    if (!targetNode) {
+      console.error('[DDTWizard] Target node not found:', fieldId);
+      return;
+    }
+
+    // Update state to processing, preserving retryCount
+    setFieldProcessingStates(prev => {
+      const currentRetryCount = prev[fieldId]?.retryCount ?? 0;
+      console.log('[DDTWizard] Starting retry for field:', fieldId, 'preserving retryCount:', currentRetryCount);
+      return {
+        ...prev,
+        [fieldId]: {
+          fieldId,
+          status: 'processing',
+          progress: 0,
+          message: 'Rigenerando messaggi...',
+          timestamp: new Date(),
+          retryCount: currentRetryCount // 🚀 FIX: Preserve retryCount when starting retry
+        }
+      };
+    });
+
+    try {
+      // Regenerate messages for this specific field
+      // TODO: Implementare logica per rigenerare solo i messaggi per questo campo specifico
+      // Chiamare gli endpoint API necessari solo per questo campo
+      const messageEndpoints = [
+        { type: 'startPrompt', endpoint: '/api/startPrompt' },
+        { type: 'noMatchPrompts', endpoint: '/api/stepNoMatch' },
+        { type: 'noInputPrompts', endpoint: '/api/stepNoInput' },
+        { type: 'confirmationPrompts', endpoint: '/api/stepConfirmation' },
+        { type: 'successPrompts', endpoint: '/api/stepSuccess' },
+      ];
+
+      const mainDataName = mainLabel;
+      const subDataName = subLabel || mainLabel;
+
+      for (let i = 0; i < messageEndpoints.length; i++) {
+        const { endpoint } = messageEndpoints[i];
+
+        // Update progress, preserving retryCount
+        const progress = Math.round((i + 1) / messageEndpoints.length * 100);
+        setFieldProcessingStates(prev => ({
+          ...prev,
+          [fieldId]: {
+            ...prev[fieldId],
+            progress,
+            message: `Generando ${messageEndpoints[i].type}...`,
+            retryCount: prev[fieldId]?.retryCount ?? 0 // 🚀 FIX: Preserve retryCount during progress updates
+          }
+        }));
+
+        const body = subLabel ? {
+          meaning: subDataName,
+          desc: `Generate a concise, direct message for ${subDataName}.`,
+          provider: selectedProvider.toLowerCase(),
+        } : {
+          meaning: mainDataName,
+          desc: '',
+          provider: selectedProvider.toLowerCase(),
+        };
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`${endpoint} failed: ${res.status} ${errorText}`);
+        }
+
+        // Small delay between requests
+        await new Promise(r => setTimeout(r, 300));
+      }
+
+      // Success - update to completed, clear retryCount on success
+      setFieldProcessingStates(prev => ({
+        ...prev,
+        [fieldId]: {
+          fieldId,
+          status: 'completed',
+          progress: 100,
+          message: 'Done!',
+          timestamp: new Date(),
+          retryCount: 0 // 🚀 Reset retryCount on success
+        }
+      }));
+
+      console.log('[DDTWizard] Retry completed successfully for field:', fieldId);
+    } catch (error: any) {
+      console.error('[DDTWizard] Retry failed for field:', fieldId, error);
+
+      // Update to error state with incremented retryCount
+      setFieldProcessingStates(prev => {
+        const currentRetryCount = prev[fieldId]?.retryCount ?? 0;
+        const newRetryCount = currentRetryCount + 1;
+        console.log('[DDTWizard] Retry failed, incrementing retryCount:', fieldId, 'from', currentRetryCount, 'to', newRetryCount);
+        return {
+          ...prev,
+          [fieldId]: {
+            fieldId,
+            status: 'error',
+            progress: prev[fieldId]?.progress || 0,
+            message: `Errore generazione messaggi: ${error.message || 'Unknown error'}`,
+            timestamp: new Date(),
+            retryCount: newRetryCount
+          }
+        };
+      });
+    }
+  };
+
+  // 🚀 NEW: Handle manual creation - assemble DDT with existing messages and open editor
+  const handleCreateManually = () => {
+    console.log('[DDTWizard] Manual creation requested - assembling DDT and opening editor');
+
+    // Assemble minimal DDT from current structure
+    const minimalDDT = assembleMinimalDDT();
+
+    // Call onComplete to open the editor with the minimal DDT
+    // The user can then manually add messages in the Response Editor
+    if (onComplete) {
+      handleClose(minimalDDT);
+    } else {
+      handleClose();
+    }
+  };
   const [playChime, setPlayChime] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem('ddtWizard.playChime');
@@ -786,6 +936,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   autoEditIndex={autoEditIndex}
                   onChangeEvent={handleChangeEvent}
                   onAutoMap={autoMapFieldStructure}
+                  onRetryField={handleRetryField}
+                  onCreateManually={handleCreateManually}
                 />
               </div>
               {step === 'structure' && (
@@ -842,6 +994,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       skipDetectType
                       confirmedLabel={mainDataNode?.name || 'Data'}
                       selectedProvider={selectedProvider}
+                      setFieldProcessingStates={setFieldProcessingStates}
+                      progressByPath={taskProgress}
                       onProgress={(m) => {
                         const mainLabel = mainItem.label;
                         // Update individual main progress
