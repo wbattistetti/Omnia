@@ -598,12 +598,16 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                               node={selectedNode}
                               locale={'it-IT'}
                               onChange={(profile) => {
-                                // Always log critical kind changes to diagnose persistence
-                                console.log('[KindChange][onChange]', {
-                                  nodeLabel: (selectedNode as any)?.label,
-                                  profileKind: profile?.kind,
-                                  examples: (profile?.examples || []).length,
-                                });
+                                // Only log if debug flag is set to avoid console spam
+                                try {
+                                  if (localStorage.getItem('debug.responseEditor') === '1') {
+                                    console.log('[KindChange][onChange]', {
+                                      nodeLabel: (selectedNode as any)?.label,
+                                      profileKind: profile?.kind,
+                                      examples: (profile?.examples || []).length,
+                                    });
+                                  }
+                                } catch {}
                                 updateSelectedNode((node) => {
                                   const next: any = { ...(node || {}), nlpProfile: profile };
                                   if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }

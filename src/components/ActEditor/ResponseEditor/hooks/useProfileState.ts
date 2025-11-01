@@ -47,7 +47,12 @@ export function useProfileState(
   // Compute initial profile from node
   const initial: NLPProfile = useMemo(() => {
     const p = (node && (node as any).nlpProfile) || {};
-    try { console.log('[KindPersist][ProfileEditor][initial]', { nodeLabel: node?.label, nodeKind: node?.kind, manual: (node as any)?._kindManual, profileKind: p?.kind }); } catch {}
+    // Removed verbose log - only log if debug flag is set
+    try {
+      if (localStorage.getItem('debug.responseEditor') === '1') {
+        console.log('[KindPersist][ProfileEditor][initial]', { nodeLabel: node?.label, nodeKind: node?.kind, manual: (node as any)?._kindManual, profileKind: p?.kind });
+      }
+    } catch {}
     return {
       slotId: (node?.id || node?._id || node?.label || 'slot') as string,
       locale,
@@ -241,21 +246,32 @@ export function useProfileState(
       waitingEsc1: waitingEsc1 || undefined,
       waitingEsc2: waitingEsc2 || undefined,
     };
-    try { console.log('[KindPersist][ProfileEditor][profile memo]', { nodeLabel: node?.label, outKind: out.kind }); } catch {}
+    // Removed verbose log - only log if debug flag is set
+    try {
+      if (localStorage.getItem('debug.responseEditor') === '1') {
+        console.log('[KindPersist][ProfileEditor][profile memo]', { nodeLabel: node?.label, outKind: out.kind });
+      }
+    } catch {}
     return out;
   }, [node, initial.slotId, initial.locale, kind, synonymsText, regex, formatText, examplesList, minConf, postProcessText, waitingEsc1, waitingEsc2]);
 
   // Ensure latest profile is flushed on unmount
   const profileRef = useRef<NLPProfile | null>(null);
+  const onChangeRef = useRef(onChange);
+  const nodeRef = useRef(node);
+
+  // Keep refs updated
   useEffect(() => {
     profileRef.current = profile;
-  }, [profile]);
+    onChangeRef.current = onChange;
+    nodeRef.current = node;
+  }, [profile, onChange, node]);
 
   useEffect(() => {
     return () => {
-      try { if (profileRef.current) onChange?.(profileRef.current); } catch {}
+      try { if (profileRef.current) onChangeRef.current?.(profileRef.current); } catch {}
     };
-  }, [onChange]);
+  }, []);
 
   // Emit onChange when profile changes (debounced)
   const lastSentJsonRef = useRef<string>('');
@@ -264,13 +280,20 @@ export function useProfileState(
     if (json !== lastSentJsonRef.current) {
       lastSentJsonRef.current = json;
       const safeProfile = { ...profile } as NLPProfile;
-      if (safeProfile.kind === 'generic' && (node?.kind && node.kind !== 'generic')) {
-        safeProfile.kind = node.kind;
+      if (safeProfile.kind === 'generic' && (nodeRef.current?.kind && nodeRef.current.kind !== 'generic')) {
+        safeProfile.kind = nodeRef.current.kind;
       }
-      try { console.log('[KindPersist][ProfileEditor][emit onChange]', { nodeLabel: node?.label, kind: safeProfile.kind }); } catch {}
-      onChange?.(safeProfile);
+      // Removed verbose log - only log if debug flag is set
+      try {
+        if (localStorage.getItem('debug.responseEditor') === '1') {
+          console.log('[KindPersist][ProfileEditor][emit onChange]', { nodeLabel: nodeRef.current?.label, kind: safeProfile.kind });
+        }
+      } catch {}
+      onChangeRef.current?.(safeProfile);
     }
-  }, [profile.synonyms, profile.regex, profile.kind, profile.formatHints, profile.examples, profile.minConfidence, profile.postProcess, profile.subSlots, profile, node, onChange]);
+    // REMOVED 'profile', 'node', 'onChange' from dependencies to prevent infinite loop
+    // We track all individual profile fields and use refs for node/onChange
+  }, [profile.synonyms, profile.regex, profile.kind, profile.formatHints, profile.examples, profile.minConfidence, profile.postProcess, profile.subSlots, profile.waitingEsc1, profile.waitingEsc2]);
 
   // Wrapper for setKind that marks user-initiated changes
   const setKindUser = useCallback((newKind: string) => {

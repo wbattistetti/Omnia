@@ -15,12 +15,35 @@ const TEMPLATE = `// Describe below, in detail, when the condition should be TRU
 // Now - vars["Agent asks for user's name.DateOfBirth"] > 18 years
 `;
 
-export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [], language = 'javascript' }: { code: any; onChange: (s: string) => void; fontSize?: number; varKeys?: string[]; language?: string }) {
+export interface CustomLanguage {
+  id: string;
+  tokenizer: any;
+  theme?: {
+    base?: string;
+    inherit?: boolean;
+    rules?: Array<{ token: string; foreground?: string; fontStyle?: string }>;
+    colors?: Record<string, string>;
+  };
+  themeName?: string; // Name of the theme to apply (defaults to id + 'Theme')
+}
+
+interface EditorPanelProps {
+  code: any;
+  onChange: (s: string) => void;
+  fontSize?: number;
+  varKeys?: string[];
+  language?: string;
+  customLanguage?: CustomLanguage;
+  useTemplate?: boolean; // Whether to inject template for empty code (default: true for conditions)
+}
+
+export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [], language = 'javascript', customLanguage, useTemplate = true }: EditorPanelProps) {
   const safeCode: string = typeof code === 'string' ? code : (code == null ? '' : (() => { try { return JSON.stringify(code, null, 2); } catch { return String(code); } })());
+  const editorLanguage = customLanguage ? customLanguage.id : language;
   return (
     <div className="w-full h-full border border-slate-700 rounded">
       <MonacoEditor
-        language={language}
+        language={editorLanguage}
         theme="vs-dark"
         value={safeCode}
         onChange={(v: string) => onChange(v || '')}
@@ -49,105 +72,147 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
               }
             } catch {}
 
-            // theme tweaks
-            monaco.editor.defineTheme('omnia-contrast', {
-              base: 'vs-dark', inherit: true,
-              rules: [
-                { token: 'keyword', foreground: '7DD3FC', fontStyle: 'bold' },
-                { token: 'type', foreground: 'A78BFA' },
-                { token: 'number', foreground: 'FCA5A5' },
-                { token: 'string', foreground: '86EFAC' },
-                { token: 'comment', foreground: '94A3B8', fontStyle: 'italic' },
-                { token: 'delimiter', foreground: 'E5E7EB' },
-                { token: 'identifier', foreground: 'EAB308' },
-              ],
-              colors: {
-                'editor.background': '#0B1220', 'editor.foreground': '#E5E7EB',
-                'editor.lineHighlightBackground': '#1F293733', 'editorCursor.foreground': '#38BDF8',
-                'editor.selectionBackground': '#2563EB55', 'editorLineNumber.foreground': '#64748B',
-                'editorLineNumber.activeForeground': '#E2E8F0', 'editorIndentGuide.background': '#334155',
-                'editorIndentGuide.activeBackground': '#475569', 'editorBracketMatch.border': '#38BDF8',
-              },
-            });
-            monaco.editor.setTheme('hc-black');
+            // Register custom language if provided
+            if (customLanguage) {
+              try {
+                const langId = customLanguage.id;
+                const existingLanguages = monaco.languages.getLanguages();
+                const isRegistered = existingLanguages.some((l: any) => l.id === langId);
+
+                if (!isRegistered) {
+                  monaco.languages.register({ id: langId });
+                }
+                // Always set the tokenizer, even if language is already registered
+                // Monaco expects the tokenizer to be wrapped in an object with 'tokenizer' property
+                monaco.languages.setMonarchTokensProvider(langId, { tokenizer: customLanguage.tokenizer });
+
+                // Define custom theme if provided
+                if (customLanguage.theme) {
+                  const themeName = customLanguage.themeName || `${langId}Theme`;
+                  monaco.editor.defineTheme(themeName, {
+                    base: customLanguage.theme.base || 'vs-dark',
+                    inherit: customLanguage.theme.inherit !== false,
+                    rules: customLanguage.theme.rules || [],
+                    colors: customLanguage.theme.colors || {},
+                  });
+                  // Apply theme if specified
+                  monaco.editor.setTheme(themeName);
+                }
+              } catch (err) {
+                console.warn('[EditorPanel] Failed to register custom language:', err);
+              }
+            } else {
+              // Default theme tweaks (only for non-custom languages)
+              monaco.editor.defineTheme('omnia-contrast', {
+                base: 'vs-dark', inherit: true,
+                rules: [
+                  { token: 'keyword', foreground: '7DD3FC', fontStyle: 'bold' },
+                  { token: 'type', foreground: 'A78BFA' },
+                  { token: 'number', foreground: 'FCA5A5' },
+                  { token: 'string', foreground: '86EFAC' },
+                  { token: 'comment', foreground: '94A3B8', fontStyle: 'italic' },
+                  { token: 'delimiter', foreground: 'E5E7EB' },
+                  { token: 'identifier', foreground: 'EAB308' },
+                ],
+                colors: {
+                  'editor.background': '#0B1220', 'editor.foreground': '#E5E7EB',
+                  'editor.lineHighlightBackground': '#1F293733', 'editorCursor.foreground': '#38BDF8',
+                  'editor.selectionBackground': '#2563EB55', 'editorLineNumber.foreground': '#64748B',
+                  'editorLineNumber.activeForeground': '#E2E8F0', 'editorIndentGuide.background': '#334155',
+                  'editorIndentGuide.activeBackground': '#475569', 'editorBracketMatch.border': '#38BDF8',
+                },
+              });
+              monaco.editor.setTheme('hc-black');
+            }
+
             monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
             editor.updateOptions({ renderLineHighlight: 'all', bracketPairColorization: { enabled: true } });
 
-            // Ensure simple template exists once (no duplication)
-            try {
-              const model = editor.getModel();
-              const txt: string = model.getValue() || '';
-              const looksOld = /\/\/\#region|#region|#endregion/.test(txt);
-              if (txt.trim().length === 0 || looksOld) {
-                editor.setValue(TEMPLATE);
-                onChange(TEMPLATE);
-              }
-            } catch {}
+            // Ensure simple template exists once (no duplication) - only if useTemplate is true
+            if (useTemplate) {
+              try {
+                const model = editor.getModel();
+                const txt: string = model.getValue() || '';
+                const looksOld = /\/\/\#region|#region|#endregion/.test(txt);
+                if (txt.trim().length === 0 || looksOld) {
+                  editor.setValue(TEMPLATE);
+                  onChange(TEMPLATE);
+                }
+              } catch {}
+            }
 
             // No custom folding provider needed when regions are removed
 
-            // Monaco provider (kept) — uses varKeys from props
-            const buildFallback = (range: any) => {
-              const jsKeywords = ['if','else','return','const','let','var','function','try','catch','switch','case','for','while','do','break','continue','true','false','null','undefined'];
-              return [
-                { label: 'vars["<key>"]', kind: monaco.languages.CompletionItemKind.Text, insertText: 'vars["<key>"]', detail: 'Insert OMNIA variable access', range },
-                ...jsKeywords.map((kw: string) => ({ label: kw, kind: monaco.languages.CompletionItemKind.Keyword, insertText: kw, range }))
-              ];
-            };
-            try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch {}
-            try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch {}
-            const registerFor = (lang: string) => monaco.languages.registerCompletionItemProvider(lang, {
-              triggerCharacters: ['"', '\'', '`', '.', '['],
-              provideCompletionItems: (model: any, position: any) => {
-                try {
-                  const keys: string[] = Array.from(new Set((varKeys || []).filter(Boolean)));
-                  const word = model.getWordUntilPosition(position);
-                  const range = { startLineNumber: position.lineNumber, startColumn: word.startColumn, endLineNumber: position.lineNumber, endColumn: word.endColumn };
-                  const capped = (keys || []).slice(0, 200);
-                  const suggestions = capped.map((k: string) => ({
-                    label: `vars["${k}"]`, kind: monaco.languages.CompletionItemKind.Variable,
-                    insertText: `vars["${k}"]`, detail: 'OMNIA Variable', range
-                  }));
-                  const out = suggestions.length ? suggestions : buildFallback(range);
-                  return { suggestions: out };
-                } catch {
+            // Monaco provider (kept) — uses varKeys from props - only for JavaScript/TypeScript
+            // Skip completion providers for custom languages (like regex)
+            if (!customLanguage && (language === 'javascript' || language === 'typescript')) {
+              const buildFallback = (range: any) => {
+                const jsKeywords = ['if','else','return','const','let','var','function','try','catch','switch','case','for','while','do','break','continue','true','false','null','undefined'];
+                return [
+                  { label: 'vars["<key>"]', kind: monaco.languages.CompletionItemKind.Text, insertText: 'vars["<key>"]', detail: 'Insert OMNIA variable access', range },
+                  ...jsKeywords.map((kw: string) => ({ label: kw, kind: monaco.languages.CompletionItemKind.Keyword, insertText: kw, range }))
+                ];
+              };
+              try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch {}
+              try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch {}
+              const registerFor = (lang: string) => monaco.languages.registerCompletionItemProvider(lang, {
+                triggerCharacters: ['"', '\'', '`', '.', '['],
+                provideCompletionItems: (model: any, position: any) => {
                   try {
+                    const keys: string[] = Array.from(new Set((varKeys || []).filter(Boolean)));
                     const word = model.getWordUntilPosition(position);
                     const range = { startLineNumber: position.lineNumber, startColumn: word.startColumn, endLineNumber: position.lineNumber, endColumn: word.endColumn };
-                    return { suggestions: buildFallback(range) };
+                    const capped = (keys || []).slice(0, 200);
+                    const suggestions = capped.map((k: string) => ({
+                      label: `vars["${k}"]`, kind: monaco.languages.CompletionItemKind.Variable,
+                      insertText: `vars["${k}"]`, detail: 'OMNIA Variable', range
+                    }));
+                    const out = suggestions.length ? suggestions : buildFallback(range);
+                    return { suggestions: out };
                   } catch {
-                    return { suggestions: [] };
+                    try {
+                      const word = model.getWordUntilPosition(position);
+                      const range = { startLineNumber: position.lineNumber, startColumn: word.startColumn, endLineNumber: position.lineNumber, endColumn: word.endColumn };
+                      return { suggestions: buildFallback(range) };
+                    } catch {
+                      return { suggestions: [] };
+                    }
                   }
                 }
-              }
-            });
-            (window as any).__omniaVarCompletionDispJS = registerFor('javascript');
-            (window as any).__omniaVarCompletionDispTS = registerFor('typescript');
-
-            // Custom fallback menu (always works, single instance)
-            let menu = document.getElementById('omnia-var-menu') as HTMLDivElement | null;
-            const createdMenu = !menu;
-            if (!menu) {
-              menu = document.createElement('div');
-              menu.id = 'omnia-var-menu';
-              menu.style.position = 'fixed';
-              menu.style.zIndex = '100000';
-              menu.style.background = '#0f172a';
-              menu.style.border = '1px solid #334155';
-              menu.style.borderRadius = '8px';
-              menu.style.padding = '6px';
-              menu.style.minWidth = '260px';
-              menu.style.maxHeight = '300px';
-              menu.style.overflowY = 'auto';
-              menu.style.boxShadow = '0 8px 28px rgba(2,6,23,0.5)';
-              menu.style.display = 'none';
-              // Use a smaller font than the editor by at least 3px (editor default ~13px)
-              menu.style.fontSize = '10px';
-              document.body.appendChild(menu);
+              });
+              (window as any).__omniaVarCompletionDispJS = registerFor('javascript');
+              (window as any).__omniaVarCompletionDispTS = registerFor('typescript');
             }
 
-            const closeMenu = () => { menu.style.display = 'none'; menu.innerHTML = ''; };
-            const openMenu = (x: number, y: number) => {
+            // Custom fallback menu (always works, single instance) - only for JavaScript/TypeScript
+            // Skip context menu for custom languages (like regex)
+            let menu: HTMLDivElement | null = null;
+            let createdMenu = false;
+            if (!customLanguage && (language === 'javascript' || language === 'typescript')) {
+              menu = document.getElementById('omnia-var-menu') as HTMLDivElement | null;
+              createdMenu = !menu;
+              if (!menu) {
+                menu = document.createElement('div');
+                menu.id = 'omnia-var-menu';
+                menu.style.position = 'fixed';
+                menu.style.zIndex = '100000';
+                menu.style.background = '#0f172a';
+                menu.style.border = '1px solid #334155';
+                menu.style.borderRadius = '8px';
+                menu.style.padding = '6px';
+                menu.style.minWidth = '260px';
+                menu.style.maxHeight = '300px';
+                menu.style.overflowY = 'auto';
+                menu.style.boxShadow = '0 8px 28px rgba(2,6,23,0.5)';
+                menu.style.display = 'none';
+                // Use a smaller font than the editor by at least 3px (editor default ~13px)
+                menu.style.fontSize = '10px';
+                document.body.appendChild(menu);
+              }
+
+              const closeMenu = () => { if (menu) { menu.style.display = 'none'; menu.innerHTML = ''; } };
+              const openMenu = (x: number, y: number) => {
+                if (!menu) return;
               try { menu.innerHTML = ''; } catch {}
               const keys = Array.from(new Set((varKeys || []).filter(Boolean)));
 
@@ -304,48 +369,56 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
                 } catch {}
                 menu.style.visibility = 'visible';
               });
-            };
-            const dom = editor.getDomNode();
-            let onCtx: any;
-            let onMouseUp: any;
-            let onDocKey: any;
-            let onDocClick: any;
-            if (dom) {
-              onCtx = (e: any) => { try { e.preventDefault(); e.stopPropagation(); } catch {}; try { editor.focus(); } catch {}; openMenu(e.clientX, e.clientY); return false; };
-              onMouseUp = (e: MouseEvent) => { if (e.button === 2) { try { e.preventDefault(); e.stopPropagation(); } catch {}; openMenu(e.clientX, e.clientY); } };
-              onDocKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeMenu(); };
-              // Close only when clicking outside the menu
-              onDocClick = (ev: MouseEvent) => {
-                try {
-                  const target = ev.target as Node;
-                  if (menu && !menu.contains(target)) {
-                    if (menu.style.display === 'block') closeMenu();
-                  }
-                } catch { closeMenu(); }
               };
-              // Prevent inside clicks from bubbling to document (so expanding tree won't close the menu)
-              try { menu.addEventListener('mousedown', (ev) => { ev.stopPropagation(); }); } catch {}
-              try { menu.addEventListener('click', (ev) => { ev.stopPropagation(); }); } catch {}
-              dom.addEventListener('contextmenu', onCtx, { capture: true } as any);
-              dom.addEventListener('mouseup', onMouseUp as any, { capture: true });
-              document.addEventListener('keydown', onDocKey as any);
-              document.addEventListener('click', onDocClick as any, { capture: true } as any);
+
+              const dom = editor.getDomNode();
+              let onCtx: any;
+              let onMouseUp: any;
+              let onDocKey: any;
+              let onDocClick: any;
+              if (dom && menu) {
+                onCtx = (e: any) => { try { e.preventDefault(); e.stopPropagation(); } catch {}; try { editor.focus(); } catch {}; openMenu(e.clientX, e.clientY); return false; };
+                onMouseUp = (e: MouseEvent) => { if (e.button === 2) { try { e.preventDefault(); e.stopPropagation(); } catch {}; openMenu(e.clientX, e.clientY); } };
+                onDocKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeMenu(); };
+                // Close only when clicking outside the menu
+                onDocClick = (ev: MouseEvent) => {
+                  try {
+                    const target = ev.target as Node;
+                    if (menu && !menu.contains(target)) {
+                      if (menu.style.display === 'block') closeMenu();
+                    }
+                  } catch { closeMenu(); }
+                };
+                // Prevent inside clicks from bubbling to document (so expanding tree won't close the menu)
+                try { menu.addEventListener('mousedown', (ev) => { ev.stopPropagation(); }); } catch {}
+                try { menu.addEventListener('click', (ev) => { ev.stopPropagation(); }); } catch {}
+                dom.addEventListener('contextmenu', onCtx, { capture: true } as any);
+                dom.addEventListener('mouseup', onMouseUp as any, { capture: true });
+                document.addEventListener('keydown', onDocKey as any);
+                document.addEventListener('click', onDocClick as any, { capture: true } as any);
+              }
             }
 
             // (template guard already installed above)
 
             // Cleanup on dispose to avoid leaks
             editor.onDidDispose(() => {
-              try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch {}
-              try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch {}
-              if (dom) {
-                try { dom.removeEventListener('contextmenu', onCtx as any, { capture: true } as any); } catch {}
-                try { dom.removeEventListener('mouseup', onMouseUp as any, { capture: true } as any); } catch {}
+              if (!customLanguage && (language === 'javascript' || language === 'typescript')) {
+                try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch {}
+                try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch {}
               }
-              try { document.removeEventListener('keydown', onDocKey as any); } catch {}
-              try { document.removeEventListener('click', onDocClick as any, { capture: true } as any); } catch {}
-              // keep single menu instance for other editors; don't remove if not created by this mount
-              try { if (createdMenu && menu && menu.parentElement) menu.parentElement.removeChild(menu); } catch {}
+              // Use editor's DOM node instead of the captured 'dom' variable
+              const editorDom = editor.getDomNode();
+              if (editorDom && menu) {
+                try { editorDom.removeEventListener('contextmenu', onCtx as any, { capture: true } as any); } catch {}
+                try { editorDom.removeEventListener('mouseup', onMouseUp as any, { capture: true } as any); } catch {}
+              }
+              if (menu) {
+                try { document.removeEventListener('keydown', onDocKey as any); } catch {}
+                try { document.removeEventListener('click', onDocClick as any, { capture: true } as any); } catch {}
+                // keep single menu instance for other editors; don't remove if not created by this mount
+                try { if (createdMenu && menu && menu.parentElement) menu.parentElement.removeChild(menu); } catch {}
+              }
             });
           } catch {}
         }}
