@@ -15,38 +15,13 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   // USO useMemo sincrono per evitare che il primo render mostri DDT vuoto
   // getInstance() è O(1) Map lookup, quindi veloce e sicuro durante il render
   const existingDDT = React.useMemo(() => {
-    console.log('🔍 [DDTHostAdapter] useMemo START - Looking for instance:', instanceKey);
     let instance = instanceRepository.getInstance(instanceKey);
 
     if (!instance) {
-      console.log('🔧 [DDTHostAdapter] Creating missing instance for:', instanceKey);
       instance = instanceRepository.createInstanceWithId(instanceKey, act.id, []);
-    } else {
-      console.log('✅ [DDTHostAdapter] Found instance:', {
-        instanceId: instance.instanceId,
-        hasDDT: !!instance.ddt,
-        ddtType: typeof instance.ddt,
-        ddtIsObject: instance.ddt && typeof instance.ddt === 'object',
-        ddtKeys: instance.ddt ? Object.keys(instance.ddt) : [],
-        ddtMainData: instance.ddt?.mainData,
-        ddtMainDataLength: instance.ddt?.mainData?.length || 0,
-        ddtId: instance.ddt?.id,
-        ddtLabel: instance.ddt?.label,
-        ddtFull: instance.ddt // Log completo per debugging
-      });
     }
 
-    const result = instance?.ddt || null;
-    console.log('📦 [DDTHostAdapter] useMemo RETURN:', {
-      resultExists: !!result,
-      resultType: typeof result,
-      resultIsObject: result && typeof result === 'object',
-      resultKeys: result ? Object.keys(result) : [],
-      resultMainDataLength: result?.mainData?.length || 0,
-      resultId: result?.id
-    });
-
-    return result;
+    return instance?.ddt || null;
   }, [instanceKey, act.id]); // Dipendenze: solo instanceKey e act.id
 
   // 2. STATE per mantenere il DDT corrente (aggiornato dopo salvataggio)
@@ -56,11 +31,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     const instance = instanceRepository.getInstance(instanceKey);
     const instanceDDT = instance?.ddt;
 
-    console.log('[WIZARD_FLOW] DDTHostAdapter: Initializing currentDDT', {
-      hasInstanceDDT: !!instanceDDT,
-      instanceDDTMainDataLength: instanceDDT?.mainData?.length || 0,
-      instanceKey
-    });
 
     return instanceDDT || {
       id: `temp_ddt_${act.id}`,
@@ -77,11 +47,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     if (existingDDT && existingDDT.mainData && existingDDT.mainData.length > 0) {
       const currentIsPlaceholder = currentDDT.id?.startsWith('temp_ddt_') && (!currentDDT.mainData || currentDDT.mainData.length === 0);
       if (currentIsPlaceholder) {
-        console.log('[WIZARD_FLOW] DDTHostAdapter: Updating currentDDT from existingDDT', {
-          currentDDTId: currentDDT.id,
-          existingDDTId: existingDDT.id,
-          existingDDTMainDataLength: existingDDT.mainData.length
-        });
         setCurrentDDT(existingDDT);
       }
     }
@@ -90,42 +55,14 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
   // 3. Quando completi il wizard, salva nell'istanza E aggiorna lo state
   const handleComplete = React.useCallback((finalDDT: any) => {
-    console.log('[WIZARD_FLOW] DDTHostAdapter: handleComplete called', {
-      hasFinalDDT: !!finalDDT,
-      finalDDTId: finalDDT?.id,
-      finalDDTLabel: finalDDT?.label,
-      instanceKey,
-      currentProjectId
-    });
-
     // Salva il DDT nell'istanza
-    const saved = instanceRepository.updateDDT(instanceKey, finalDDT, currentProjectId || undefined);
-    console.log('[WIZARD_FLOW] DDTHostAdapter: DDT saved to instance', {
-      saved: !!saved,
-      instanceKey
-    });
+    instanceRepository.updateDDT(instanceKey, finalDDT, currentProjectId || undefined);
 
     // CRITICO: Aggiorna immediatamente currentDDT per aggiornare il prop ddt
     // Questo evita che useDDTInitialization sincronizzi localDDT con il placeholder vuoto
-    console.log('[WIZARD_FLOW] DDTHostAdapter: Updating currentDDT state with saved DDT', {
-      finalDDTId: finalDDT?.id,
-      finalDDTMainDataLength: finalDDT?.mainData?.length || 0
-    });
     setCurrentDDT(finalDDT);
-
-    // NON chiudere l'overlay - lascia che l'utente veda l'editor con i messaggi generati
-    // L'utente può chiudere manualmente cliccando "Close" nell'header
-    console.log('[WIZARD_FLOW] DDTHostAdapter: Overlay will remain open for user to review editor');
   }, [instanceKey, currentProjectId]);
 
-  console.log('🎨 [DDTHostAdapter] Rendering ResponseEditor with:', {
-    hasDDT: !!currentDDT,
-    ddtIsEmpty: currentDDT && (!currentDDT.mainData || currentDDT.mainData.length === 0),
-    ddtMainDataLength: currentDDT?.mainData?.length || 0,
-    ddtId: currentDDT?.id,
-    actId: act.id,
-    instanceKey
-  });
 
   return (
     <ResponseEditor

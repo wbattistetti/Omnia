@@ -183,24 +183,27 @@ export function useMessageHandling({
       const fieldName = sub?.label || main?.label || '';
 
       if (fieldName) {
+        // Build extraction context with node structure and regex from NLP profile
+        const targetNode = sub || main;
+
+        // Find original node in currentDDT to get nlpProfile (not preserved in state.plan)
+        const originalNode = findOriginalNode(currentDDT, targetNode?.label, targetNode?.id);
+        const nlpProfile = originalNode?.nlpProfile || (targetNode as any)?.nlpProfile;
+
+        // Check if regex exists BEFORE try/catch to determine correct warning message
+        const hasRegex = !!(nlpProfile?.regex && nlpProfile.regex.trim());
+
+        const context: ExtractionContext | undefined = targetNode ? {
+          node: {
+            subData: targetNode.subData || originalNode?.subData || targetNode.subs?.map((sid: string) => state?.plan?.byId?.[sid]) || [],
+            subSlots: nlpProfile?.subSlots,
+            kind: targetNode.kind,
+            label: targetNode.label
+          },
+          regex: nlpProfile?.regex
+        } : undefined;
+
         try {
-          // Build extraction context with node structure and regex from NLP profile
-          const targetNode = sub || main;
-
-          // Find original node in currentDDT to get nlpProfile (not preserved in state.plan)
-          const originalNode = findOriginalNode(currentDDT, targetNode?.label, targetNode?.id);
-          const nlpProfile = originalNode?.nlpProfile || (targetNode as any)?.nlpProfile;
-
-
-          const context: ExtractionContext | undefined = targetNode ? {
-            node: {
-              subData: targetNode.subData || originalNode?.subData || targetNode.subs?.map((sid: string) => state?.plan?.byId?.[sid]) || [],
-              subSlots: nlpProfile?.subSlots,
-              kind: targetNode.kind,
-              label: targetNode.label
-            },
-            regex: nlpProfile?.regex
-          } : undefined;
 
 
           // Usa il Data Extractor per validare l'input
@@ -342,14 +345,16 @@ export function useMessageHandling({
           const isConfigMissing = errorMessage.includes('NLP configuration not found') ||
             errorMessage.includes('Failed to load NLP configuration');
 
+          // Determina il warning message corretto basato su regex ed escalation
+          let warningMessage: string | undefined = undefined;
           if (isConfigMissing) {
-            // Configurazione mancante: gestito gracefully, non loggare come errore
-            console.debug('[ChatSimulator][handleSend][extractField] NLP configuration missing - handled gracefully');
-            // NON aggiungere messaggio system separato - il warning sarà incorporato nel user message
-            // Continua con la logica noMatch invece di return
-          } else {
-            // Altri errori: logga come errore
-            // Error logged silently
+            if (hasRegex) {
+              // Regex esiste ma manca escalation/config completo
+              warningMessage = 'only regex, no escalation';
+            } else {
+              // Nessuna regex, configurazione completa mancante
+              warningMessage = 'grammar missing';
+            }
           }
 
           // Per altri errori o se config missing, considera noMatch e continua
@@ -393,7 +398,7 @@ export function useMessageHandling({
                 type: 'user',
                 text: trimmed,
                 matchStatus: 'noMatch',
-                warningMessage: isConfigMissing ? 'grammar missing' : undefined
+                warningMessage: warningMessage
               },
               {
                 id: generateMessageId('noMatch'),
@@ -421,7 +426,7 @@ export function useMessageHandling({
                 type: 'user',
                 text: trimmed,
                 matchStatus: 'noMatch',
-                warningMessage: isConfigMissing ? 'grammar missing' : undefined
+                warningMessage: warningMessage
               },
               {
                 id: generateMessageId('ask'),
@@ -444,10 +449,11 @@ export function useMessageHandling({
             type: 'user',
             text: trimmed,
             matchStatus: 'noMatch',
-            warningMessage: isConfigMissing ? 'grammar missing' : undefined
+            warningMessage: warningMessage
           }]);
           return;
         }
+      }
     }
 
     // Fallback: se non abbiamo fieldName o siamo in confirmation, usa il comportamento precedente

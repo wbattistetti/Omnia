@@ -7,16 +7,11 @@ import { getAgentActVisualsByType } from '../../Flowchart/utils/actVisuals';
 export default function ActEditorHost({ act, onClose }: EditorProps) {
   const kind = resolveEditorKind(act);
   const Comp = registry[kind];
-  console.log('🎯 [ActEditorHost] Rendering:', { kind, actId: act?.id, actType: act?.type, instanceId: act?.instanceId });
-  // quiet: remove mount spam; enable only via debug flag if needed
-  try { if (localStorage.getItem('debug.actEditor') === '1') console.log('[ActEditorHost][mount]', { kind, act }); } catch { }
 
   if (!Comp) {
     console.error('❌ [ActEditorHost] No component registered for kind:', kind);
     return <div>No editor registered for {kind}</div>;
   }
-
-  console.log('✅ [ActEditorHost] Component found, rendering');
 
   // DDTEditor è importato direttamente, quindi non ha bisogno di Suspense
   // Gli altri editori usano lazy loading, quindi hanno bisogno di Suspense

@@ -34,8 +34,11 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
   try {
     const match = text.match(new RegExp(regex));
     if (!match) {
+      console.log('[NLP][tryParseComplete][no-match]', { text, regex });
       return null;
     }
+
+    console.log('[NLP][tryParseComplete][matched]', { text, regex, match: match[0] });
 
     const matchedValue = match[0] || match[1] || match[0]; // First captured group or full match
 
@@ -55,7 +58,7 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
     const hasYear = normalized.some(l => l.includes('year') || l.includes('anno'));
 
     if (hasDay && hasMonth && hasYear) {
-      // Date parsing - try multiple formats
+      // Date parsing - try multiple formats (both complete and partial)
       const MONTHS: Record<string, number> = {
         gennaio: 1, gen: 1, febbraio: 2, feb: 2, marzo: 3, mar: 3, aprile: 4, apr: 4,
         maggio: 5, mag: 5, giugno: 6, giu: 6, luglio: 7, lug: 7, agosto: 8, ago: 8,
@@ -65,7 +68,7 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
         november: 11, december: 12, dec: 12
       };
 
-      // Format 1: dd/mm/yyyy or dd-mm-yyyy
+      // Format 1: dd/mm/yyyy or dd-mm-yyyy (complete)
       let dateMatch = matchedValue.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
       if (dateMatch) {
         const day = parseInt(dateMatch[1], 10);
@@ -73,7 +76,6 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
         let year = parseInt(dateMatch[3], 10);
         if (year < 100) year = year < 50 ? 2000 + year : 1900 + year;
         if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= 2100) {
-          // Use standard extractor keys (engine will map to subSlots via labels)
           result.day = day;
           result.month = month;
           result.year = year;
@@ -81,9 +83,21 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
         }
       }
 
-      // Format 2: yyyy-mm-dd (ISO format)
+      // Format 1 partial: dd/mm or dd-mm (missing year)
+      dateMatch = matchedValue.match(/(\d{1,2})[\/\-](\d{1,2})(?:\s|$)/);
+      if (dateMatch && !result.day && !result.month) {
+        const day = parseInt(dateMatch[1], 10);
+        const month = parseInt(dateMatch[2], 10);
+        if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+          result.day = day;
+          result.month = month;
+          // Year is missing - will be handled by ask-more
+        }
+      }
+
+      // Format 2: yyyy-mm-dd (ISO format - complete)
       dateMatch = matchedValue.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-      if (dateMatch) {
+      if (dateMatch && Object.keys(result).length === 0) {
         const year = parseInt(dateMatch[1], 10);
         const month = parseInt(dateMatch[2], 10);
         const day = parseInt(dateMatch[3], 10);
@@ -95,9 +109,9 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
         }
       }
 
-      // Format 3: dd month yyyy (e.g., "16 dicembre 1961")
+      // Format 3: dd month yyyy (complete)
       dateMatch = matchedValue.match(/(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{2,4})/i);
-      if (dateMatch) {
+      if (dateMatch && Object.keys(result).length === 0) {
         const day = parseInt(dateMatch[1], 10);
         const monthName = dateMatch[2].toLowerCase();
         const month = MONTHS[monthName];
@@ -109,6 +123,24 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
           result.year = year;
           return result as Partial<T>;
         }
+      }
+
+      // Format 3 partial: dd month (missing year)
+      dateMatch = matchedValue.match(/(\d{1,2})\s+([A-Za-zÀ-ÿ]+)(?:\s|$)/i);
+      if (dateMatch && Object.keys(result).length === 0) {
+        const day = parseInt(dateMatch[1], 10);
+        const monthName = dateMatch[2].toLowerCase();
+        const month = MONTHS[monthName];
+        if (month && day >= 1 && day <= 31) {
+          result.day = day;
+          result.month = month;
+          // Year is missing - will be handled by ask-more
+        }
+      }
+
+      // If we have any partial result, return it (will trigger ask-more)
+      if (Object.keys(result).length > 0) {
+        return result as Partial<T>;
       }
     }
 
@@ -152,24 +184,97 @@ export async function extractField<T>(
 
   // 🎯 FULL-FIRST APPROACH: Try complete parsing first if composite type with regex
   if (context?.node && context.regex) {
-    const completeValue = tryParseComplete<T>(text, context.regex, context.node);
+    const parsedValue = tryParseComplete<T>(text, context.regex, context.node);
 
-    if (completeValue && Object.keys(completeValue).length > 0) {
-      // Validate the complete value
-      const validation = ex.validate(completeValue as any);
+    if (parsedValue && Object.keys(parsedValue).length > 0) {
+      // Ensure values are numbers for date validation
+      const normalizedValue = { ...parsedValue };
+      if ('day' in normalizedValue && typeof normalizedValue.day !== 'number') {
+        normalizedValue.day = parseInt(String(normalizedValue.day), 10);
+      }
+      if ('month' in normalizedValue && typeof normalizedValue.month !== 'number') {
+        normalizedValue.month = parseInt(String(normalizedValue.month), 10);
+      }
+      if ('year' in normalizedValue && typeof normalizedValue.year !== 'number') {
+        normalizedValue.year = parseInt(String(normalizedValue.year), 10);
+      }
+
+      // Validate the parsed value
+      const validation = ex.validate(normalizedValue as any);
 
       if (validation.ok) {
+        // Complete value parsed and validated successfully
+        console.log('[NLP][extractField][regex-accepted]', {
+          text,
+          parsedValue,
+          normalizedValue,
+          field
+        });
         return {
           status: 'accepted',
-          value: completeValue as any,
+          value: normalizedValue as any,
           source: 'deterministic',
           confidence: 0.95,
           allResults: {
-            deterministic: { status: 'accepted', value: completeValue, source: 'deterministic', confidence: 0.95 },
+            deterministic: { status: 'accepted', value: normalizedValue, source: 'deterministic', confidence: 0.95 },
             ner: null,
             llm: null
           }
         } as any;
+      } else {
+        // Regex matched but validation failed - check if partial value can be used
+        // Get all expected fields from subData/subSlots
+        const allSubs = [...(context.node.subSlots || []), ...(context.node.subData || [])];
+        const expectedFields = allSubs.map(s => String(s?.label || s?.name || '').toLowerCase());
+
+        // Check which fields are present and which are missing
+        const parsedKeys = Object.keys(normalizedValue).map(k => k.toLowerCase());
+        const missingFields = expectedFields.filter(field => {
+          const normalizedField = field.replace(/[^a-z0-9]+/g, '');
+          return !parsedKeys.some(key => key.includes(normalizedField) || normalizedField.includes(key));
+        });
+
+        // Debug log for validation failure
+        console.log('[NLP][extractField][regex-validation-failed]', {
+          text,
+          parsedValue,
+          normalizedValue,
+          validationErrors: validation.errors,
+          missingFields,
+          expectedFields,
+          parsedKeys
+        });
+
+        if (missingFields.length > 0) {
+          // Partial match: some fields are missing, ask for them
+          return {
+            status: 'ask-more',
+            value: normalizedValue as any,
+            missing: missingFields,
+            hint: `Missing: ${missingFields.join(', ')}`,
+            confidence: 0.8,
+            source: 'deterministic',
+            allResults: {
+              deterministic: { status: 'ask-more', value: normalizedValue, source: 'deterministic', confidence: 0.8 },
+              ner: null,
+              llm: null
+            }
+          } as any;
+        } else {
+          // All fields present but validation failed - this is an invalid value
+          // Return reject instead of continuing with other extractors
+          // This ensures we don't fall through to escalation when regex matched correctly
+          return {
+            status: 'reject',
+            reasons: validation.errors || ['invalid-value'],
+            value: normalizedValue as any,
+            allResults: {
+              deterministic: { status: 'reject', value: normalizedValue, source: 'deterministic', confidence: 0.8 },
+              ner: null,
+              llm: null
+            }
+          } as any;
+        }
       }
     }
   }

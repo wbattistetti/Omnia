@@ -10,18 +10,7 @@ interface StepsStripProps {
 }
 
 export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, node }: StepsStripProps) {
-  // DEBUG: Log per verificare cosa riceve StepsStrip
-  console.log('[StepsStrip] Rendering', {
-    stepKeysLength: stepKeys.length,
-    stepKeys: JSON.stringify(stepKeys),
-    selectedStepKey,
-    nodeLabel: node?.label,
-    willRender: stepKeys.length > 0,
-    renderedButtons: stepKeys.length // Count of buttons that should be rendered
-  });
-
   if (!stepKeys.length) {
-    console.log('[StepsStrip] Returning null - no stepKeys', { stepKeys, stepKeysLength: stepKeys.length });
     return null;
   }
 
@@ -76,7 +65,6 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
       }}
     >
       {stepKeys.map((key, index) => {
-        console.log(`[StepsStrip] Rendering button ${index}`, { key, selectedStepKey, nodeLabel: node?.label });
         const color = colorForStep(key);
         const selected = selectedStepKey === key;
         const label = getFriendlyLabel(key);
