@@ -39,8 +39,10 @@ interface EditorPanelProps {
 
 export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [], language = 'javascript', customLanguage, useTemplate = true }: EditorPanelProps) {
   const safeCode: string = typeof code === 'string' ? code : (code == null ? '' : (() => { try { return JSON.stringify(code, null, 2); } catch { return String(code); } })());
-  const editorLanguage = customLanguage ? customLanguage.id : language;
+  // If customLanguage is provided, use its id. Otherwise use language prop (or 'javascript' as fallback)
+  const editorLanguage = customLanguage ? customLanguage.id : (language || 'javascript');
   const editorTheme = customLanguage?.themeName || `${customLanguage?.id || ''}Theme` || 'vs-dark';
+
   return (
     <div className="w-full h-full border border-slate-700 rounded">
       <MonacoEditor
@@ -73,7 +75,7 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
               }
             } catch {}
 
-            // Register custom language if provided
+            // Register custom language FIRST, before anything else
             if (customLanguage) {
               try {
                 const langId = customLanguage.id;
@@ -83,9 +85,20 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
                 if (!isRegistered) {
                   monaco.languages.register({ id: langId });
                 }
-                // Always set the tokenizer, even if language is already registered
-                // Monaco expects the tokenizer object directly
-                monaco.languages.setMonarchTokensProvider(langId, customLanguage.tokenizer);
+
+                // Monaco expects: { tokenizer: { root: [...] } }
+                // customLanguage.tokenizer already has { root: [...] }, so we wrap it in { tokenizer: ... }
+                const tokenizerConfig = {
+                  tokenizer: customLanguage.tokenizer
+                };
+
+                monaco.languages.setMonarchTokensProvider(langId, tokenizerConfig);
+                console.log('[EditorPanel] Registered tokenizer for language:', langId);
+                console.log('[EditorPanel] Tokenizer config structure:', {
+                  hasTokenizer: !!tokenizerConfig.tokenizer,
+                  hasRoot: !!tokenizerConfig.tokenizer?.root,
+                  rootLength: tokenizerConfig.tokenizer?.root?.length
+                });
 
                 // Define custom theme if provided
                 if (customLanguage.theme) {
@@ -98,11 +111,52 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
                   });
                   // Apply theme immediately
                   monaco.editor.setTheme(themeName);
-                  // Also update editor theme if needed
                   editor.updateOptions({ theme: themeName });
+                  console.log('[EditorPanel] Applied theme:', themeName);
+                }
+
+                // CRITICAL: Force re-tokenization immediately when editor mounts
+                // The model language must be set BEFORE content is loaded, but we set it here
+                // and force a refresh of the entire model to trigger tokenization
+                const model = editor.getModel();
+                if (model) {
+                  // Set language immediately
+                  monaco.editor.setModelLanguage(model, langId);
+
+                  // Get current content
+                  const currentValue = model.getValue();
+
+                  if (currentValue && currentValue.trim().length > 0) {
+                    // Force tokenization by triggering onChange through a dummy edit
+                    // Use requestAnimationFrame to ensure tokenizer is ready
+                    requestAnimationFrame(() => {
+                      requestAnimationFrame(() => {
+                        // Force re-tokenization by replacing content with itself
+                        // This triggers Monaco's internal tokenization mechanism
+                        model.pushEditOperations(
+                          [],
+                          [{
+                            range: model.getFullModelRange(),
+                            text: currentValue
+                          }],
+                          () => null
+                        );
+
+                        // Force editor to re-render all decorations/tokens
+                        editor.trigger('source', 'editor.action.formatDocument', {});
+
+                        // Also explicitly trigger a render pass
+                        setTimeout(() => {
+                          editor.render(true);
+                        }, 10);
+
+                        console.log('[EditorPanel] Forced re-tokenization for initial content');
+                      });
+                    });
+                  }
                 }
               } catch (err) {
-                console.warn('[EditorPanel] Failed to register custom language:', err);
+                console.error('[EditorPanel] Failed to register custom language:', err);
               }
             } else {
               // Default theme tweaks (only for non-custom languages)

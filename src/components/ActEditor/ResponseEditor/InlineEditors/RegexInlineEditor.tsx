@@ -24,6 +24,7 @@ export default function RegexInlineEditor({
   const [regexAiPrompt, setRegexAiPrompt] = React.useState('');
   const [regexBackup, setRegexBackup] = React.useState('');
   const [generatingRegex, setGeneratingRegex] = React.useState(false);
+  const [hasUserEdited, setHasUserEdited] = React.useState(false);
 
   // Track if regex was initially empty
   const wasInitiallyEmpty = React.useRef(!regex || regex.trim().length === 0);
@@ -36,26 +37,36 @@ export default function RegexInlineEditor({
 
   // Determine button label and visibility
   const hasContent = currentRegexValue && currentRegexValue.trim().length > 0;
-  const isGeneratingMessage = generatingRegex;
-  const showButton = hasContent && !isGeneratingMessage;
-  const buttonLabel = wasInitiallyEmpty.current ? 'Create Regex' : 'Refine Regex';
+
+  // Determine button label based on state
+  const getButtonLabel = () => {
+    if (generatingRegex) return 'Creating...';
+    // Show "Create Regex" if empty, "Refine Regex" if has content
+    return !hasContent ? 'Create Regex' : 'Refine Regex';
+  };
+
+  // Show button if:
+  // - NOT generating
+  // - AND user has edited (so button appears only after user modifies textbox)
+  const shouldShowButton = !generatingRegex && hasUserEdited;
 
   // Custom language configuration for regex
   const regexCustomLanguage: CustomLanguage = React.useMemo(() => ({
     id: 'regex',
     tokenizer: {
       root: [
-        [/\(\?[:=!]/, 'regex.group.special'],
-        [/\(/, 'regex.group'],
-        [/\)/, 'regex.group'],
-        [/\[\^?/, 'regex.charclass'],
-        [/\]/, 'regex.charclass'],
-        [/\\[dDsSwW]/, 'regex.escape'],
-        [/\\./, 'regex.escape'],
-        [/[\*\+\?\|]/, 'regex.quantifier'],
-        [/[\^\$]/, 'regex.anchor'],
-        [/\{\d+(,\d*)?\}/, 'regex.quantifier'],
-        [/[^\\\[\]\(\)\*\+\?\|\^\$\{\}]+/, 'regex.text']
+        // Most specific patterns first (order matters!)
+        [/\(\?[:=!]/, 'regex.group.special'],  // Special groups like (?:, (?=, (?!, (?:
+        [/\\[dDsSwWnrtfbv0-9]/, 'regex.escape'],  // Specific escape sequences
+        [/\\./, 'regex.escape'],  // Generic escape (any char after \)
+        [/\{\d+(,\d*)?\}/, 'regex.quantifier'],  // Quantifiers with braces {n} or {n,m}
+        [/[\*\+\?\|]/, 'regex.quantifier'],  // Single char quantifiers
+        [/[\^\$]/, 'regex.anchor'],  // Anchors
+        [/\[/, 'regex.charclass'],  // Char class start
+        [/\]/, 'regex.charclass'],  // Char class end
+        [/\(/, 'regex.group'],  // Group start
+        [/\)/, 'regex.group'],  // Group end
+        [/[^\\\[\]\(\)\*\+\?\|\^\$\{\}]+/, 'regex.text']  // Text (catch-all, must be last)
       ]
     },
     theme: {
@@ -96,13 +107,25 @@ export default function RegexInlineEditor({
     };
   }, [regexAiMode, regexBackup]);
 
-  const handleGenerateWithAI = async () => {
-    if (!regexAiPrompt.trim()) return;
+  // Unified button click handler - starts AI generation immediately
+  const handleButtonClick = async () => {
+    const prompt = currentRegexValue || '';
 
+    if (!prompt.trim() || prompt.trim().length < 5) {
+      console.log('[AI Regex] ❌ Prompt too short, cannot generate');
+      return;
+    }
+
+    console.log('[AI Regex] 🔵 ' + getButtonLabel() + ' clicked, starting generation immediately');
+    console.log('[AI Regex] 🔵 Using prompt:', prompt);
+
+    // Save backup
+    setRegexBackup(currentRegexValue);
+
+    // Start generation immediately (no AI mode)
     setGeneratingRegex(true);
-    try {
-      console.log('[AI Regex] Generating regex for:', regexAiPrompt);
 
+    try {
       // Extract sub-data from node if available
       const subData = (node?.subData || node?.subSlots || []) as any[];
       const subDataInfo = subData.map((sub: any, index: number) => ({
@@ -111,50 +134,75 @@ export default function RegexInlineEditor({
         index: index + 1 // Position in capture groups (1, 2, 3...)
       }));
 
+      const requestBody = {
+        description: prompt,
+        subData: subDataInfo.length > 0 ? subDataInfo : undefined,
+        kind: kind || undefined
+      };
+
+      console.log('[AI Regex] 🟢 Calling API /api/nlp/generate-regex');
+      console.log('[AI Regex] 🟢 Request body:', JSON.stringify(requestBody, null, 2));
+
       const response = await fetch('/api/nlp/generate-regex', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: regexAiPrompt,
-          subData: subDataInfo.length > 0 ? subDataInfo : undefined,
-          kind: kind || undefined
-        }),
+        body: JSON.stringify(requestBody),
       });
+
+      console.log('[AI Regex] 🟢 API Response status:', response.status);
+      console.log('[AI Regex] 🟢 API Response ok:', response.ok);
 
       if (!response.ok) {
         const error = await response.json();
+        console.log('[AI Regex] ❌ API Error response:', error);
         throw new Error(error.detail || 'Failed to generate regex');
       }
 
       const data = await response.json();
-      console.log('[AI Regex] Response:', data);
+      console.log('[AI Regex] ✅ API Response data:', data);
+      console.log('[AI Regex] ✅ data.success:', data.success);
+      console.log('[AI Regex] ✅ data.regex:', data.regex);
 
       if (data.success && data.regex) {
-        setRegex(data.regex);
-        setCurrentRegexValue(data.regex);
+        const newRegex = data.regex.trim();
+
+        console.log('[AI Regex] ✅ Regex generated successfully:', newRegex);
+        console.log('[AI Regex] ✅ Updating state variables...');
+
+        // Update state variables immediately
+        setRegex(newRegex);
+        console.log('[AI Regex] ✅ Called setRegex with:', newRegex);
+
+        setCurrentRegexValue(newRegex);
+        console.log('[AI Regex] ✅ Called setCurrentRegexValue with:', newRegex);
+
         // Update initial state: if regex was generated, it's no longer "initially empty"
         wasInitiallyEmpty.current = false;
-        console.log('[AI Regex] Regex generated successfully:', data.regex);
+        // Reset hasUserEdited since we now have a new generated regex
+        setHasUserEdited(false);
 
         if (data.explanation) {
-          console.log('[AI Regex] Explanation:', data.explanation);
-          console.log('[AI Regex] Examples:', data.examples);
+          console.log('[AI Regex] ✅ Explanation:', data.explanation);
+          console.log('[AI Regex] ✅ Examples:', data.examples);
         }
-
-        setRegexAiMode(false);
       } else {
+        console.log('[AI Regex] ❌ Invalid response: data.success =', data.success, ', data.regex =', data.regex);
         throw new Error('No regex returned from API');
       }
     } catch (error) {
-      console.error('[AI Regex] Error:', error);
+      console.error('[AI Regex] ❌ Error caught:', error);
+      console.error('[AI Regex] ❌ Error message:', error instanceof Error ? error.message : 'Unknown error');
       alert(
         `Error generating regex: ${error instanceof Error ? error.message : 'Unknown error'
         }`
       );
     } finally {
+      console.log('[AI Regex] 🟢 Finally block: setting generatingRegex to false');
       setGeneratingRegex(false);
+      console.log('[AI Regex] 🟢 generatingRegex should now be: false');
     }
   };
+
 
   return (
     <div
@@ -178,27 +226,26 @@ export default function RegexInlineEditor({
           🪄 Edit Regex
         </h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Dynamic Create/Refine Regex button */}
-          {showButton && (
+          {/* Unified Create/Refine Regex button */}
+          {shouldShowButton && (
             <button
               type="button"
-              onClick={() => {
-                setRegexBackup(currentRegexValue);
-                setRegexAiMode(true);
-              }}
-              disabled={generatingRegex}
-              title={buttonLabel}
+              onClick={handleButtonClick}
+              disabled={generatingRegex || !currentRegexValue || currentRegexValue.trim().length < 5}
+              title={getButtonLabel()}
               style={{
                 padding: '6px 16px',
                 border: '2px solid #3b82f6',
                 borderRadius: 8,
-                background: generatingRegex ? '#f3f4f6' : '#3b82f6',
+                background: (generatingRegex || !currentRegexValue || currentRegexValue.trim().length < 5) ? '#f3f4f6' : '#3b82f6',
                 color: '#fff',
-                cursor: generatingRegex ? 'default' : 'pointer',
+                cursor: (generatingRegex || !currentRegexValue || currentRegexValue.trim().length < 5) ? 'default' : 'pointer',
                 fontSize: 13,
                 fontWeight: 500,
                 transition: 'all 0.2s ease',
-                animation: 'fadeIn 0.2s ease-in',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
               }}
             >
               {generatingRegex ? (
@@ -218,10 +265,11 @@ export default function RegexInlineEditor({
                   <span>Creating...</span>
                 </>
               ) : (
-                buttonLabel
+                getButtonLabel()
               )}
             </button>
           )}
+
           <button
             onClick={onClose}
             style={{
@@ -254,16 +302,60 @@ export default function RegexInlineEditor({
                 border: regexAiMode ? '2px solid #3b82f6' : '1px solid #334155',
                 borderRadius: 8,
                 overflow: 'hidden',
+                position: 'relative',
               }}
             >
+              {/* Spinner overlay durante generazione */}
+              {(() => {
+                console.log('[AI Regex] 🎨 Rendering spinner check - generatingRegex:', generatingRegex);
+                return generatingRegex;
+              })() && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: 'rgba(0, 0, 0, 0.85)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 99999,
+                      gap: 16,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        border: '4px solid #3b82f6',
+                        borderTopColor: 'transparent',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite',
+                      }}
+                    />
+                    <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>
+                      Generating regex...
+                    </div>
+                  </div>
+                )}
               <EditorPanel
-                code={
-                  generatingRegex
-                    ? '⏳ Creating regex...'
-                    : regexAiMode
-                      ? regexAiPrompt
-                      : currentRegexValue
-                }
+                code={(() => {
+                  const codeValue = regexAiMode
+                    ? regexAiPrompt
+                    : currentRegexValue;
+                  console.log('[AI Regex] 🎨 EditorPanel code value:', {
+                    regexAiMode,
+                    regexAiPrompt,
+                    currentRegexValue,
+                    finalValue: codeValue,
+                    codeLength: codeValue?.length || 0
+                  });
+                  return codeValue;
+                })()}
                 onChange={(v: string) => {
                   if (regexAiMode && !generatingRegex) {
                     setRegexAiPrompt(v || '');
@@ -271,6 +363,10 @@ export default function RegexInlineEditor({
                     const newValue = v || '';
                     setCurrentRegexValue(newValue);
                     setRegex(newValue);
+                    // Mark as edited if different from original value
+                    if (newValue !== regex) {
+                      setHasUserEdited(true);
+                    }
                   }
                 }}
                 language={regexAiMode ? 'plaintext' : undefined}
@@ -280,54 +376,6 @@ export default function RegexInlineEditor({
               />
             </div>
           </div>
-
-          {/* Show CREATE BUTTON when: AI mode AND at least 5 characters */}
-          {regexAiMode && regexAiPrompt.trim().length >= 5 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={handleGenerateWithAI}
-                disabled={generatingRegex}
-                title="Generate regex from description"
-                style={{
-                  padding: '10px 16px',
-                  border: '2px solid #3b82f6',
-                  borderRadius: 8,
-                  background: generatingRegex ? '#f3f4f6' : '#3b82f6',
-                  color: '#fff',
-                  cursor: generatingRegex ? 'default' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  minWidth: 120,
-                  justifyContent: 'center',
-                  transition: 'all 0.2s ease',
-                  animation: 'fadeIn 0.2s ease-in',
-                }}
-              >
-                {generatingRegex ? (
-                  <>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: 14,
-                        height: 14,
-                        border: '2px solid #fff',
-                        borderTopColor: 'transparent',
-                        borderRadius: '50%',
-                        animation: 'spin 0.8s linear infinite',
-                      }}
-                    />
-                    <span>Creating...</span>
-                  </>
-                ) : (
-                  'Create Regex'
-                )}
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
