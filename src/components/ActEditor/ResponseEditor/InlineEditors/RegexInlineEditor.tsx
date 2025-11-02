@@ -176,9 +176,9 @@ export default function RegexInlineEditor({
 
   // 🆕 Resizable panel for test cases column
   const { size: testColumnWidth, handleResize, style: testColumnStyle } = useResizablePanel({
-    initialSize: 550,
-    min: 300,
-    max: 800,
+    initialSize: 280,
+    min: 150,
+    max: 400,
     direction: 'horizontal',
     persistKey: 'regex-editor-test-column-width'
   });
@@ -594,15 +594,31 @@ export default function RegexInlineEditor({
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        width: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden'
+      }}>
         <div
           style={{
             display: 'flex',
             gap: 0,
             alignItems: 'flex-start',
+            width: '100%',
+            maxWidth: '100%',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ flex: 1, position: 'relative' }}>
+          <div style={{
+            flex: 3,
+            position: 'relative',
+            minWidth: 0,
+            flexShrink: 1,
+            overflow: 'hidden'
+          }}>
             <div
               style={{
                 height: 500,
@@ -697,7 +713,8 @@ export default function RegexInlineEditor({
                 const onMouseMove = (ev: MouseEvent) => {
                   ev.preventDefault();
                   const delta = ev.clientX - startX;
-                  const newWidth = Math.max(300, Math.min(800, startWidth - delta));
+                  const maxAllowed = typeof window !== 'undefined' ? window.innerWidth * 0.25 : 400;
+                  const newWidth = Math.max(150, Math.min(maxAllowed, startWidth - delta));
                   handleResize(newWidth);
                 };
 
@@ -773,9 +790,10 @@ export default function RegexInlineEditor({
                 maxHeight: 500,
                 overflowY: 'auto',
                 background: '#1e1e1e',
-                flexShrink: 0,
-                minWidth: 300,
-                maxWidth: 800,
+                flexShrink: 1,
+                minWidth: 150,
+                maxWidth: typeof window !== 'undefined' ? `${Math.min(400, window.innerWidth * 0.25)}px` : '25%',
+                width: testColumnWidth > 0 ? `${Math.min(testColumnWidth, typeof window !== 'undefined' ? window.innerWidth * 0.25 : 400)}px` : 'auto',
               }}
             >
               {/* Recognized Values Section - includes input for adding test cases */}

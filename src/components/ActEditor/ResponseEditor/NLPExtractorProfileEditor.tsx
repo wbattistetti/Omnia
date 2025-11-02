@@ -511,7 +511,15 @@ export default function NLPExtractorProfileEditor({
       {/* 🎨 Inline Editors - shown in place of Tester when activeEditor is set */}
       {/* 📐 Full-height container for inline editors */}
       {activeEditor && (
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, minHeight: 600 }}>
+        <div style={{
+          border: '1px solid #e5e7eb',
+          borderRadius: 12,
+          padding: 12,
+          minHeight: 600,
+          width: '100%',
+          maxWidth: '100%',
+          overflow: 'hidden'
+        }}>
           {activeEditor === 'regex' && (
             <RegexInlineEditor
               regex={regex}

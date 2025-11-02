@@ -43,6 +43,169 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
   const editorLanguage = customLanguage ? customLanguage.id : (language || 'javascript');
   const editorTheme = customLanguage?.themeName || `${customLanguage?.id || ''}Theme` || 'vs-dark';
 
+  // Store refs to editor and monaco for useEffect
+  const editorRef = React.useRef<any>(null);
+  const monacoRef = React.useRef<any>(null);
+
+  // CRITICAL: Pre-register custom language BEFORE MonacoEditor renders
+  // This ensures the tokenizer is available when Monaco loads the initial content
+  React.useEffect(() => {
+    console.log('[EditorPanel] 🔍 PRE-REGISTRATION useEffect triggered', {
+      hasCustomLanguage: !!customLanguage,
+      langId: customLanguage?.id,
+      windowAvailable: typeof window !== 'undefined'
+    });
+
+    if (!customLanguage || typeof window === 'undefined') {
+      console.log('[EditorPanel] ⚠️ Skipping pre-registration:', {
+        noCustomLanguage: !customLanguage,
+        noWindow: typeof window === 'undefined'
+      });
+      return;
+    }
+
+    // Wait for Monaco to be available (react-monaco-editor loads it globally)
+    let retryCount = 0;
+    const maxRetries = 20; // 20 * 50ms = 1 second max wait
+
+    const checkMonaco = () => {
+      const monaco = (window as any).monaco;
+      console.log(`[EditorPanel] 🔍 Checking Monaco availability (attempt ${retryCount + 1}/${maxRetries})`, {
+        monacoExists: !!monaco,
+        hasLanguages: !!(monaco && monaco.languages),
+        hasEditor: !!(monaco && monaco.editor)
+      });
+
+      if (!monaco || !monaco.languages) {
+        retryCount++;
+        if (retryCount < maxRetries) {
+          setTimeout(checkMonaco, 50);
+        } else {
+          console.error('[EditorPanel] ❌ Monaco not available after max retries');
+        }
+        return;
+      }
+
+      try {
+        const langId = customLanguage.id;
+        console.log('[EditorPanel] 🔍 Starting pre-registration for:', langId);
+
+        const existingLanguages = monaco.languages.getLanguages();
+        const isRegistered = existingLanguages.some((l: any) => l.id === langId);
+        console.log('[EditorPanel] 🔍 Language registration check:', {
+          langId,
+          isRegistered,
+          totalLanguages: existingLanguages.length,
+          existingIds: existingLanguages.slice(0, 5).map((l: any) => l.id)
+        });
+
+        if (!isRegistered) {
+          monaco.languages.register({ id: langId });
+          console.log('[EditorPanel] ✅ Registered new language:', langId);
+        }
+
+        // Register tokenizer
+        const tokenizerConfig = {
+          tokenizer: customLanguage.tokenizer
+        };
+        console.log('[EditorPanel] 🔍 Registering tokenizer:', {
+          langId,
+          hasTokenizer: !!customLanguage.tokenizer,
+          hasRoot: !!customLanguage.tokenizer?.root,
+          rootRules: customLanguage.tokenizer?.root?.length || 0
+        });
+
+        monaco.languages.setMonarchTokensProvider(langId, tokenizerConfig);
+        console.log('[EditorPanel] ✅ Tokenizer registered for:', langId);
+
+        // Verify tokenizer was registered
+        const tokenizerProvider = (monaco.languages as any).getEncodedTokensProvider(langId);
+        console.log('[EditorPanel] 🔍 Tokenizer verification:', {
+          langId,
+          hasProvider: !!tokenizerProvider,
+          providerType: typeof tokenizerProvider
+        });
+
+        // Define theme
+        if (customLanguage.theme) {
+          const themeName = customLanguage.themeName || `${langId}Theme`;
+          console.log('[EditorPanel] 🔍 Defining theme:', {
+            themeName,
+            base: customLanguage.theme.base,
+            rulesCount: customLanguage.theme.rules?.length || 0,
+            colorsCount: Object.keys(customLanguage.theme.colors || {}).length
+          });
+
+          monaco.editor.defineTheme(themeName, {
+            base: customLanguage.theme.base || 'vs-dark',
+            inherit: customLanguage.theme.inherit !== false,
+            rules: customLanguage.theme.rules || [],
+            colors: customLanguage.theme.colors || {},
+          });
+
+          console.log('[EditorPanel] ✅ Theme defined:', themeName);
+        }
+
+        console.log('[EditorPanel] ✅✅✅ PRE-registration COMPLETE for:', langId);
+      } catch (err) {
+        console.error('[EditorPanel] ❌ Failed to pre-register language:', err);
+      }
+    };
+
+    // Start checking immediately
+    checkMonaco();
+  }, [customLanguage?.id]); // Only run when language ID changes
+
+  // Force tokenization whenever code/content changes (for custom languages)
+  React.useEffect(() => {
+    if (!customLanguage || !editorRef.current || !monacoRef.current) return;
+
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const langId = customLanguage.id;
+    const model = editor?.getModel();
+
+    if (!model) return;
+
+    // Force language update
+    monaco.editor.setModelLanguage(model, langId);
+
+    // Force tokenization by triggering a model change
+    const currentValue = model.getValue();
+    if (currentValue && currentValue.trim().length > 0) {
+      // Use multiple strategies to ensure tokenization
+      const forceTokenization = () => {
+        try {
+          // Strategy 1: Force model update
+          const fullRange = model.getFullModelRange();
+          model.pushEditOperations(
+            [],
+            [{
+              range: fullRange,
+              text: currentValue
+            }],
+            () => null
+          );
+
+          // Strategy 2: Force render
+          editor.render(true);
+
+          // Strategy 3: Trigger tokenization via deltaDecorations
+          editor.deltaDecorations([], []);
+
+          console.log('[EditorPanel] 🔄 Forced re-tokenization on content change');
+        } catch (e) {
+          console.warn('[EditorPanel] ⚠️ Error in useEffect tokenization:', e);
+        }
+      };
+
+      // Execute immediately
+      requestAnimationFrame(() => {
+        requestAnimationFrame(forceTokenization);
+      });
+    }
+  }, [safeCode, customLanguage?.id]); // Re-run when content or language changes
+
   return (
     <div className="w-full h-full border border-slate-700 rounded">
       <MonacoEditor
@@ -64,6 +227,10 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
           suggestOnTriggerCharacters: true,
         }}
         editorDidMount={(editor: any, monaco: any) => {
+          // Store refs for useEffect
+          editorRef.current = editor;
+          monacoRef.current = monaco;
+
           try {
             // z-index for Monaco widgets
             try {
@@ -76,14 +243,29 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
             } catch {}
 
             // Register custom language FIRST, before anything else
+            console.log('[EditorPanel] 🔍 editorDidMount called', {
+              hasCustomLanguage: !!customLanguage,
+              langId: customLanguage?.id,
+              editorLanguage,
+              safeCodeLength: safeCode?.length || 0
+            });
+
             if (customLanguage) {
               try {
                 const langId = customLanguage.id;
+                console.log('[EditorPanel] 🔍 Starting registration in editorDidMount:', langId);
+
                 const existingLanguages = monaco.languages.getLanguages();
                 const isRegistered = existingLanguages.some((l: any) => l.id === langId);
+                console.log('[EditorPanel] 🔍 Language check in editorDidMount:', {
+                  langId,
+                  isRegistered,
+                  wasPreRegistered: isRegistered
+                });
 
                 if (!isRegistered) {
                   monaco.languages.register({ id: langId });
+                  console.log('[EditorPanel] ✅ Registered language in editorDidMount:', langId);
                 }
 
                 // Monaco expects: { tokenizer: { root: [...] } }
@@ -93,12 +275,19 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
                 };
 
                 monaco.languages.setMonarchTokensProvider(langId, tokenizerConfig);
-                console.log('[EditorPanel] Registered tokenizer for language:', langId);
-                console.log('[EditorPanel] Tokenizer config structure:', {
-                  hasTokenizer: !!tokenizerConfig.tokenizer,
-                  hasRoot: !!tokenizerConfig.tokenizer?.root,
-                  rootLength: tokenizerConfig.tokenizer?.root?.length
-                });
+                console.log('[EditorPanel] ✅ Set tokenizer in editorDidMount:', langId);
+
+                // Verify tokenizer
+                try {
+                  const tokenizerProvider = (monaco.languages as any).getEncodedTokensProvider(langId);
+                  console.log('[EditorPanel] 🔍 Tokenizer verification in editorDidMount:', {
+                    langId,
+                    hasProvider: !!tokenizerProvider,
+                    canGetProvider: !!tokenizerProvider
+                  });
+                } catch (verifyErr) {
+                  console.warn('[EditorPanel] ⚠️ Cannot verify tokenizer:', verifyErr);
+                }
 
                 // Define custom theme if provided
                 if (customLanguage.theme) {
@@ -112,48 +301,134 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
                   // Apply theme immediately
                   monaco.editor.setTheme(themeName);
                   editor.updateOptions({ theme: themeName });
-                  console.log('[EditorPanel] Applied theme:', themeName);
+                  console.log('[EditorPanel] ✅ Applied theme in editorDidMount:', themeName);
                 }
 
-                // CRITICAL: Force re-tokenization immediately when editor mounts
-                // The model language must be set BEFORE content is loaded, but we set it here
-                // and force a refresh of the entire model to trigger tokenization
+                // CRITICAL: Get model and set language BEFORE tokenization
                 const model = editor.getModel();
+                console.log('[EditorPanel] 🔍 Model check:', {
+                  hasModel: !!model,
+                  modelUri: model?.uri?.toString(),
+                  currentLanguage: model?.getLanguageId(),
+                  expectedLanguage: langId
+                });
+
                 if (model) {
-                  // Set language immediately
+                  const previousLanguage = model.getLanguageId();
+                  console.log('[EditorPanel] 🔍 Setting model language:', {
+                    from: previousLanguage,
+                    to: langId,
+                    willChange: previousLanguage !== langId
+                  });
+
+                  // Set language IMMEDIATELY
                   monaco.editor.setModelLanguage(model, langId);
+
+                  const afterLanguage = model.getLanguageId();
+                  console.log('[EditorPanel] ✅ Set model language:', {
+                    before: previousLanguage,
+                    after: afterLanguage,
+                    success: afterLanguage === langId
+                  });
 
                   // Get current content
                   const currentValue = model.getValue();
+                  console.log('[EditorPanel] 📝 Current content:', {
+                    length: currentValue?.length || 0,
+                    preview: currentValue?.substring(0, 50) || '(empty)',
+                    isEmpty: !currentValue || currentValue.trim().length === 0
+                  });
 
-                  if (currentValue && currentValue.trim().length > 0) {
-                    // Force tokenization by triggering onChange through a dummy edit
-                    // Use requestAnimationFrame to ensure tokenizer is ready
-                    requestAnimationFrame(() => {
-                      requestAnimationFrame(() => {
-                        // Force re-tokenization by replacing content with itself
-                        // This triggers Monaco's internal tokenization mechanism
-                        model.pushEditOperations(
-                          [],
-                          [{
-                            range: model.getFullModelRange(),
-                            text: currentValue
-                          }],
-                          () => null
-                        );
+                  // AGGRESSIVE: Force tokenization multiple times with different strategies
+                  const forceTokenizationAggressively = (attempt: number) => {
+                    console.log(`[EditorPanel] 🔄 Force tokenization attempt ${attempt}`);
 
-                        // Force editor to re-render all decorations/tokens
-                        editor.trigger('source', 'editor.action.formatDocument', {});
+                    if (!model) {
+                      console.warn('[EditorPanel] ⚠️ No model for tokenization attempt', attempt);
+                      return;
+                    }
 
-                        // Also explicitly trigger a render pass
-                        setTimeout(() => {
-                          editor.render(true);
-                        }, 10);
+                    try {
+                      const currentLang = model.getLanguageId();
+                      console.log(`[EditorPanel] 🔍 Attempt ${attempt} - Current model language:`, currentLang);
 
-                        console.log('[EditorPanel] Forced re-tokenization for initial content');
+                      // Always force language update
+                      monaco.editor.setModelLanguage(model, langId);
+                      const afterSetLang = model.getLanguageId();
+                      console.log(`[EditorPanel] 🔍 Attempt ${attempt} - After setLanguage:`, {
+                        expected: langId,
+                        actual: afterSetLang,
+                        match: afterSetLang === langId
                       });
-                    });
-                  }
+
+                      if (currentValue && currentValue.trim().length > 0) {
+                        console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Has content, clearing and resetting`);
+
+                        // Strategy 1: Clear and reset content to force full tokenization
+                        const savedValue = currentValue;
+                        model.setValue('');
+                        console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Cleared model`);
+
+                        // Use setTimeout(0) to ensure Monaco processes the clear
+                        setTimeout(() => {
+                          if (model) {
+                            model.setValue(savedValue);
+                            monaco.editor.setModelLanguage(model, langId);
+                            console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Reset content and language`);
+
+                            // Strategy 2: Force edit operation
+                            setTimeout(() => {
+                              if (model) {
+                                const fullRange = model.getFullModelRange();
+                                model.pushEditOperations(
+                                  [],
+                                  [{
+                                    range: fullRange,
+                                    text: savedValue
+                                  }],
+                                  () => null
+                                );
+                                console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Applied edit operations`);
+
+                                // Strategy 3: Force multiple renders
+                                editor.render(true);
+                                editor.deltaDecorations([], []);
+                                editor.render(true);
+
+                                // Check if tokens are actually applied
+                                try {
+                                  const decorations = editor.getLineDecorations(1);
+                                  console.log(`[EditorPanel] 🔍 Attempt ${attempt} - Decorations on line 1:`, decorations?.length || 0);
+                                } catch (e) {
+                                  console.warn(`[EditorPanel] ⚠️ Cannot check decorations:`, e);
+                                }
+
+                                console.log(`[EditorPanel] ✅✅✅ Attempt ${attempt} - AGGRESSIVE tokenization completed`);
+                              }
+                            }, 5);
+                          }
+                        }, 5);
+                      } else {
+                        console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Empty content, just setting language`);
+                        // Even for empty content, ensure language is set
+                        monaco.editor.setModelLanguage(model, langId);
+                        editor.render(true);
+                        console.log(`[EditorPanel] ✅ Attempt ${attempt} - Language set and rendered`);
+                      }
+                    } catch (e) {
+                      console.error(`[EditorPanel] ❌ Error in aggressive tokenization attempt ${attempt}:`, e);
+                    }
+                  };
+
+                  // Execute IMMEDIATELY and MULTIPLE TIMES to ensure it works
+                  console.log('[EditorPanel] 🚀 Starting aggressive tokenization sequence');
+                  forceTokenizationAggressively(1);
+
+                  // Backup executions
+                  setTimeout(() => forceTokenizationAggressively(2), 10);
+                  setTimeout(() => forceTokenizationAggressively(3), 50);
+                  setTimeout(() => forceTokenizationAggressively(4), 100);
+                  setTimeout(() => forceTokenizationAggressively(5), 200);
                 }
               } catch (err) {
                 console.error('[EditorPanel] Failed to register custom language:', err);
