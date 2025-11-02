@@ -21,6 +21,7 @@ export type ListGridProps = {
   normalize?: (s: string) => string;
   onEditItem?: (id: string, newLabel: string, prevLabel: string) => void;
   onDeleteItem?: (id: string) => void;
+  highlightedId?: string | null; // ✅ ID dell'item da evidenziare con sfondo pastello
 };
 
 const defaultNormalize = (s: string) =>
@@ -45,6 +46,7 @@ export default function ListGrid({
   normalize = defaultNormalize,
   onEditItem,
   onDeleteItem,
+  highlightedId,
 }: ListGridProps) {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -90,8 +92,9 @@ export default function ListGrid({
   };
 
   return (
-  <div className="bg-white border rounded-2xl shadow-sm p-0 flex flex-col h-full min-h-0">
-      <div className="flex items-center gap-2 mb-2">
+  <div className="bg-white border rounded-2xl shadow-sm p-0 flex flex-col flex-1 min-h-0">
+      {/* ✅ INPUT FISSO IN ALTO - fuori dall'area scrollabile */}
+      <div className="flex items-center gap-2 p-3 flex-shrink-0 border-b">
         <div className="flex items-center gap-2 flex-1 rounded-lg border px-2 py-1.5">
           {LeftIcon ? <LeftIcon size={16} /> : null}
           <input
@@ -108,16 +111,23 @@ export default function ListGrid({
           <button className="px-2 py-1 text-sm rounded-lg border" onClick={handleAdd}>{addButtonLabel}</button>
         )}
       </div>
-      <div className="overflow-auto rounded-xl border min-h-0 flex-1">
-        <div className="divide-y">
+      {/* ✅ LISTA SCROLLABILE - solo questa parte scrolla */}
+      <div className="overflow-auto min-h-0 flex-1 px-3 pb-3">
+        <div className="divide-y border rounded-xl">
           {list.map(it => {
             const selected = it.id === selectedId;
-            const cls = rowClassName ? rowClassName(it, selected) : (selected ? 'bg-amber-50' : 'hover:bg-gray-50');
+            const highlighted = it.id === highlightedId;
+            // ✅ Sfondo pastello per l'item evidenziato (verde pastello)
+            const highlightCls = highlighted ? 'bg-green-100 animate-pulse' : '';
+            const cls = rowClassName
+              ? rowClassName(it, selected)
+              : (selected ? 'bg-amber-50' : 'hover:bg-gray-50');
             return (
               <div
                 key={it.id}
+                data-item-id={it.id}
                 ref={el => (rowRefs.current[it.id] = el)}
-                className={`px-3 py-2 cursor-pointer flex items-center gap-2 ${cls} group`}
+                className={`px-3 py-2 cursor-pointer flex items-center gap-2 ${cls} ${highlightCls} group transition-colors duration-300`}
                 onClick={() => onSelect(it.id)}
                 title={it.label}
               >

@@ -726,8 +726,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                 </div>
               )}
             </div>
-            {/* Act Editor Host overlay (always listens via context) */}
-            <ActEditorOverlay />
+            {/* Act Editor - parte del layout normale, riduce lo spazio del canvas sopra */}
+            <ActEditorPanel />
 
             {nonInteractiveEditor && (
               <ResizableNonInteractiveEditor
@@ -769,10 +769,11 @@ export const AppContent: React.FC<AppContentProps> = ({
   );
 };
 
-// Overlay that renders the ActEditorHost when an act is selected via context
-function ActEditorOverlay() {
+// Panel that renders the ActEditorHost when an act is selected via context
+// Rendered in normal document flow (not overlay) to push canvas up
+function ActEditorPanel() {
   const ctx = useActEditor();
-  const [hostRect, setHostRect] = React.useState<DOMRect | null>(null);
+
   // Bridge DOM event → context.open to allow callers to emit without importing the hook
   React.useEffect(() => {
     const handler = (e: any) => {
@@ -782,37 +783,21 @@ function ActEditorOverlay() {
     document.addEventListener('actEditor:open', handler as any);
     return () => document.removeEventListener('actEditor:open', handler as any);
   }, [ctx]);
-  // Track canvas host bounding box
-  React.useEffect(() => {
-    const update = () => {
-      const el = document.getElementById('flow-canvas-host');
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        setHostRect(rect);
-      } else {
-        setHostRect(null);
-      }
-    };
-    update();
-    window.addEventListener('resize', update);
-    const el = document.getElementById('flow-canvas-host');
-    let mo: MutationObserver | undefined;
-    if (el) {
-      mo = new MutationObserver(update);
-      mo.observe(el, { attributes: true, childList: true, subtree: true });
-    }
-    return () => { window.removeEventListener('resize', update); mo?.disconnect(); };
-  }, []);
 
-  if (!ctx.act || !hostRect) {
+  if (!ctx.act) {
     return null;
   }
-  const node = (
-    <div
-      style={{ position: 'absolute', left: hostRect.left, width: hostRect.width, bottom: 0, zIndex: 50, pointerEvents: 'auto' }}
-    >
+
+  // ✅ Render normale nel flusso del documento - questo riduce automaticamente lo spazio del canvas sopra
+  // Il canvas con flex: 1 si restringerà per fare spazio a questo elemento
+  return (
+    <div style={{
+      width: '100%',
+      backgroundColor: '#0b1220',
+      flexShrink: 0, // Non si restringe, mantiene la sua altezza
+      minHeight: 0
+    }}>
       <ResizableActEditorHost act={ctx.act} onClose={ctx.close} />
     </div>
   );
-  return createPortal(node, document.body);
 }
