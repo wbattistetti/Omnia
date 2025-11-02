@@ -93,14 +93,14 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
     const handleCancelClick = () => {
         console.log("🎯 [IntellisenseStandalone] Cancel clicked - cleanup temp nodes");
 
-        // ✅ Chiudi Intellisense
+        // ✅ Chiudi Intellisense (onClose ora gestisce anche il cleanup per gli edge)
         onClose();
 
-        // ✅ CLEANUP: Chiama la funzione globale per rimuovere nodi/edge temporanei
+        // ✅ CLEANUP: Chiama anche qui come fallback (onClose potrebbe non avere il contesto dell'edge)
         const cleanupTempNodesAndEdges = (window as any).__cleanupAllTempNodesAndEdges;
         if (cleanupTempNodesAndEdges) {
             cleanupTempNodesAndEdges();
-            console.log("🎯 [IntellisenseStandalone] Cleanup function called");
+            console.log("🎯 [IntellisenseStandalone] Cleanup function called (fallback)");
         }
     };
 

@@ -120,6 +120,16 @@ export const IntellisensePopover: React.FC = () => {
     // Handler per chiudere
     const handleClose = () => {
         actions.close();
+
+        // ✅ CLEANUP: Se è un edge, cancella nodo temporaneo e link
+        if (state.target?.edgeId) {
+            console.log("🎯 [IntellisensePopover] Closing intellisense for edge - cleanup temp nodes");
+            const cleanupTempNodesAndEdges = (window as any).__cleanupAllTempNodesAndEdges;
+            if (cleanupTempNodesAndEdges) {
+                cleanupTempNodesAndEdges();
+                console.log("🎯 [IntellisensePopover] Cleanup function called");
+            }
+        }
     };
 
     // Handler per selezione

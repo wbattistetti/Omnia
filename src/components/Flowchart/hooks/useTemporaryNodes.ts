@@ -12,28 +12,44 @@ export function useTemporaryNodes(
   setNodesWithLog: (updater: any) => void,
   isCreatingTempNode?: React.MutableRefObject<boolean>
 ) {
-  // Pulisce tutti i nodi e edge temporanei
+  // Pulisce SOLO il nodo temporaneo corrente e il suo edge associato
   const cleanupAllTempNodesAndEdges = useCallback(() => {
-    console.log("🧹 [CLEANUP] Starting cleanup of all temporary nodes and edges");
+    const tempNodeId = connectionMenuRef.current?.tempNodeId;
+    const tempEdgeId = connectionMenuRef.current?.tempEdgeId;
+
+    console.log("🧹 [CLEANUP] Starting cleanup of current temporary node and edge", {
+      tempNodeId,
+      tempEdgeId,
+      timestamp: Date.now()
+    });
+
+    if (!tempNodeId && !tempEdgeId) {
+      console.log("🧹 [CLEANUP] No temporary node/edge to clean up");
+      return;
+    }
+
+    // ✅ Rimuovi SOLO il nodo temporaneo corrente
     setNodes((nds) => {
-      const filtered = nds.filter(n => !(n.data as any)?.isTemporary);
+      const filtered = nds.filter(n => n.id !== tempNodeId);
+      const removed = nds.find(n => n.id === tempNodeId);
       console.log("🧹 [CLEANUP] Filtered nodes", {
         before: nds.length,
         after: filtered.length,
-        tempNodesRemoved: nds.length - filtered.length
+        tempNodeRemoved: removed ? true : false,
+        tempNodeId
       });
       return filtered;
     });
+
+    // ✅ Rimuovi SOLO l'edge temporaneo corrente
     setEdges((eds) => {
-      const currentNodes = reactFlowInstance?.getNodes() || [];
-      const filtered = eds.filter(e => {
-        const target = currentNodes.find(n => n.id === e.target);
-        return !(target && target.data && target.data.isTemporary === true);
-      });
+      const filtered = eds.filter(e => e.id !== tempEdgeId);
+      const removed = eds.find(e => e.id === tempEdgeId);
       console.log("🧹 [CLEANUP] Filtered edges", {
         before: eds.length,
         after: filtered.length,
-        tempEdgesRemoved: eds.length - filtered.length
+        tempEdgeRemoved: removed ? true : false,
+        tempEdgeId
       });
       return filtered;
     });
@@ -47,7 +63,7 @@ export function useTemporaryNodes(
     } catch (error) {
       console.error("❌ [CLEANUP] Error resetting temporary references:", error);
     }
-  }, [setNodes, setEdges, reactFlowInstance, connectionMenuRef]);
+  }, [setNodes, setEdges, connectionMenuRef]);
 
   // Crea un nodo temporaneo
   const createTemporaryNode = useCallback(async (event: any) => {
