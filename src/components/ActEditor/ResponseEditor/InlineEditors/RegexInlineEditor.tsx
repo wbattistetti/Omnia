@@ -778,12 +778,13 @@ export default function RegexInlineEditor({
                 maxWidth: 800,
               }}
             >
-              {/* Test Cases Section */}
+              {/* Recognized Values Section - includes input for adding test cases */}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#f1f5f9', marginBottom: 8 }}>
                   Test Values
                 </div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                {/* Input for adding new test cases */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                   <input
                     type="text"
                     value={newTestCase}
@@ -826,51 +827,9 @@ export default function RegexInlineEditor({
                     +
                   </button>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {testCases.map((testCase, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        padding: '6px 8px',
-                        background: '#0f172a',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        color: '#e2e8f0',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <span style={{ flex: 1 }}>{testCase}</span>
-                      <button
-                        onClick={() => setTestCases((prev) => prev.filter((_, i) => i !== idx))}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          padding: '2px 4px',
-                          fontSize: 12,
-                        }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  {testCases.length === 0 && (
-                    <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', padding: '8px 0' }}>
-                      Nessun test case. Aggiungi valori da testare.
-                    </div>
-                  )}
-                </div>
-              </div>
 
-              {/* Recognized Values Section */}
-              {testCases.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#f1f5f9', marginBottom: 8 }}>
-                    Valori riconosciuti
-                  </div>
+                {/* Recognized Values - two column layout (also shows test values with × button) */}
+                {testCases.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {testCases.map((testCase, idx) => {
                       // Test regex against this test case
@@ -911,45 +870,86 @@ export default function RegexInlineEditor({
                         }
                       }
 
+
                       return (
                         <div
                           key={idx}
                           style={{
-                            padding: '8px',
-                            background: matchResult.matched ? '#064e3b' : '#7f1d1d',
-                            borderRadius: 4,
-                            border: `1px solid ${matchResult.matched ? '#059669' : '#dc2626'}`,
+                            display: 'flex',
+                            flexDirection: 'row',
+                            gap: 8,
+                            alignItems: 'stretch',
+                            minHeight: 40,
                           }}
                         >
-                          <div style={{ fontSize: 11, color: '#e2e8f0', marginBottom: 4, fontWeight: 500 }}>
-                            {testCase}
+                          {/* Left column: Test value with remove button */}
+                          <div
+                            style={{
+                              flex: '0 0 45%',
+                              padding: '8px',
+                              background: '#0f172a',
+                              borderRadius: 4,
+                              fontSize: 11,
+                              color: '#e2e8f0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              border: '1px solid #334155',
+                            }}
+                          >
+                            <span style={{ flex: 1 }}>{testCase}</span>
+                            <button
+                              onClick={() => setTestCases((prev) => prev.filter((_, i) => i !== idx))}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '2px 4px',
+                                fontSize: 12,
+                                marginLeft: 8,
+                              }}
+                            >
+                              ×
+                            </button>
                           </div>
-                          {matchResult.matched ? (
-                            <div style={{ fontSize: 10, color: '#a7f3d0' }}>
-                              {matchResult.extracted && Object.keys(matchResult.extracted).length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                  {Object.entries(matchResult.extracted).map(([key, value]) => (
-                                    <div key={key} style={{ display: 'flex', gap: 4 }}>
-                                      <span style={{ fontWeight: 600 }}>{key}:</span>
-                                      <span>{value}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : matchResult.fullMatch ? (
-                                <div>Match: {matchResult.fullMatch}</div>
-                              ) : (
-                                <div>✓ Match</div>
-                              )}
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: 10, color: '#fca5a5' }}>✗ No match</div>
-                          )}
+
+                          {/* Right column: Matched value (green) or No match (red) */}
+                          <div
+                            style={{
+                              flex: '0 0 45%',
+                              padding: '8px',
+                              background: matchResult.matched ? '#064e3b' : '#7f1d1d',
+                              borderRadius: 4,
+                              border: `1px solid ${matchResult.matched ? '#059669' : '#dc2626'}`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'flex-start',
+                              minWidth: 150,
+                            }}
+                          >
+                            {matchResult.matched ? (
+                              <div style={{ fontSize: 11, color: '#a7f3d0', width: '100%' }}>
+                                {matchResult.fullMatch ? (
+                                  <span style={{ wordBreak: 'break-word' }}>{matchResult.fullMatch}</span>
+                                ) : (
+                                  <span>✓</span>
+                                )}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 11, color: '#fca5a5' }}>✗</div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', padding: '8px 0' }}>
+                    Nessun test case. Aggiungi valori da testare.
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
