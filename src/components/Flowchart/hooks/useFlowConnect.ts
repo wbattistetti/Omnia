@@ -21,7 +21,7 @@ export function useFlowConnect(
   // Gestisce la connessione tra due nodi esistenti
   const onConnect = useCallback((connection: Connection) => {
     const { source, target, sourceHandle, targetHandle } = connection;
-    
+
     if (!source || !target) {
       console.warn('[FlowConnect] Invalid connection: missing source or target');
       return;
@@ -46,16 +46,40 @@ export function useFlowConnect(
   // Gestisce l'inizio di una connessione
   const onConnectStart = useCallback((event: any, params: any) => {
     const { nodeId, handleId, handleType } = params;
-    
-    connectionMenuRef.current.sourceNodeId = nodeId;
-    connectionMenuRef.current.sourceHandleId = handleId;
-    connectionMenuRef.current.sourceHandleType = handleType;
-    
-    console.log('[FlowConnect] Connect started', {
+    const target = event.target as Element;
+
+    console.log('🔗🔗🔗 [ON_CONNECT_START] Dettagli completi:', {
       nodeId,
       handleId,
       handleType,
-      eventType: event.type
+      eventType: event.type,
+      eventButton: (event as any).button,
+      eventClientX: (event as any).clientX,
+      eventClientY: (event as any).clientY,
+      eventTarget: target?.className,
+      eventTargetTag: target?.tagName,
+      eventTargetId: target?.id,
+      hasHandleClass: target?.classList.contains('react-flow__handle'),
+      timestamp: Date.now(),
+      previousSourceNodeId: connectionMenuRef.current.sourceNodeId,
+      previousSourceHandleId: connectionMenuRef.current.sourceHandleId,
+      stackTrace: new Error().stack?.split('\n').slice(0, 5).join('\n')
+    });
+
+    connectionMenuRef.current.sourceNodeId = nodeId;
+    connectionMenuRef.current.sourceHandleId = handleId;
+    connectionMenuRef.current.sourceHandleType = handleType;
+
+    // ✅ Flag globale per bloccare drag HTML5 quando si traccia una connessione
+    (window as any).__isConnecting = true;
+    console.log('🚫 [ON_CONNECT_START] Flag __isConnecting = true - blocca drag HTML5');
+
+    console.log('[FlowConnect] Connect started - valori salvati:', {
+      nodeId,
+      handleId,
+      handleType,
+      savedToRef: true,
+      timestamp: Date.now()
     });
   }, [connectionMenuRef]);
 
@@ -78,11 +102,11 @@ export function useFlowConnect(
     const newNodeId = nodeIdCounter.toString();
     // Usa la posizione flow del rilascio se presente
     const fp = (connectionMenuRef.current as any).flowPosition;
-    const position = fp ? 
-      { x: fp.x - 140, y: fp.y - 20 } : 
-      reactFlowInstance.screenToFlowPosition({ 
-        x: connectionMenuRef.current.position.x - 140, 
-        y: connectionMenuRef.current.position.y - 20 
+    const position = fp ?
+      { x: fp.x - 140, y: fp.y - 20 } :
+      reactFlowInstance.screenToFlowPosition({
+        x: connectionMenuRef.current.position.x - 140,
+        y: connectionMenuRef.current.position.y - 20
       });
 
     const newNode: Node<NodeData> = {
@@ -118,7 +142,7 @@ export function useFlowConnect(
     setEdges((eds) => [...eds, newEdge]);
     closeMenu();
   }, [
-    reactFlowInstance, connectionMenuRef, setNodes, setEdges, 
+    reactFlowInstance, connectionMenuRef, setNodes, setEdges,
     closeMenu, onDeleteEdge, deleteNodeWithLog, updateNode,
     createAgentAct, createBackendCall, createTask, nodeIdCounter
   ]);

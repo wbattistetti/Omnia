@@ -292,11 +292,54 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         style={nodeStyles}
         tabIndex={-1}
         draggable={true}
-        onDragStart={() => {
+        onDragStart={(e) => {
+          const t = e.target as HTMLElement;
+          const isHandle = t?.classList.contains('react-flow__handle') ||
+                           t?.closest('.react-flow__handle');
+          const isConnecting = (window as any).__isConnecting;
+
+          console.log('🔥🔥🔥 [CUSTOM_NODE_DRAG_START] HTML5 DragStart:', {
+            nodeId: id,
+            targetTag: t?.tagName,
+            targetClass: t?.className,
+            isHandle: !!isHandle,
+            isConnecting: !!isConnecting,
+            timestamp: Date.now(),
+            eventType: e.type
+          });
+
+          // ✅ SOLUZIONE: Blocca drag HTML5 se si sta tracciando una connessione
+          if (isConnecting) {
+            console.error('❌❌❌ [CUSTOM_NODE_DRAG_START] BLOCCATO - connessione in corso!', {
+              nodeId: id,
+              timestamp: Date.now()
+            });
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+          }
+
+          // ✅ Se parte da un handle, blocca il drag HTML5
+          if (isHandle) {
+            console.error('❌❌❌ [CUSTOM_NODE_DRAG_START] PROBLEMA: HTML5 dragStart su handle!', {
+              nodeId: id,
+              timestamp: Date.now()
+            });
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+
           setIsDragging(true);
           document.body.style.cursor = 'move';
         }}
         onDragEnd={() => {
+          // ✅ Reset flag connessione quando finisce il drag
+          if ((window as any).__isConnecting) {
+            console.log('🔄 [CUSTOM_NODE_DRAG_END] Reset flag __isConnecting');
+            (window as any).__isConnecting = false;
+          }
           setIsDragging(false);
           setIsToolbarDrag(false);
           document.body.style.cursor = 'default';
@@ -305,9 +348,35 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         onMouseLeave={handleNodeMouseLeave}
         onMouseDownCapture={(e) => {
           const t = e.target as HTMLElement;
+
+          // ✅ LOG DETTAGLIATO
+          const isHandle = t?.classList.contains('react-flow__handle') ||
+                           t?.closest('.react-flow__handle');
           const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-          if (!isInput) return;
-          e.stopPropagation();
+
+          console.log('🔥🔥🔥 [CUSTOM_NODE_MOUSE_DOWN_CAPTURE] MouseDown:', {
+            nodeId: id,
+            targetTag: t?.tagName,
+            targetClass: t?.className,
+            targetId: t?.id,
+            isHandle: !!isHandle,
+            isInput: !!isInput,
+            hasHandleClass: t?.classList.contains('react-flow__handle'),
+            closestHandle: !!t?.closest('.react-flow__handle'),
+            eventButton: e.button,
+            eventClientX: e.clientX,
+            eventClientY: e.clientY,
+            timestamp: Date.now()
+          });
+
+          if (isHandle) {
+            console.log('🚫 [CUSTOM_NODE_MOUSE_DOWN_CAPTURE] Handle rilevato - dovrebbe bloccare drag');
+            // ✅ Non fermiamo la propagazione qui, React Flow deve gestire la connessione
+          }
+
+          if (isInput) {
+            e.stopPropagation();
+          }
         }}
         onMouseUpCapture={(e) => {
           if (!editingRowId) return;

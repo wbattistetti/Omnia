@@ -517,12 +517,34 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
 
   const onConnectEnd = useCallback((event: any) => {
-    console.log("🎬 [ON_CONNECT_END] Event triggered", {
-      target: event.target?.className,
+    const target = event.target as HTMLElement;
+    const isPane = target?.classList?.contains('react-flow__pane');
+
+    console.log("🎬🎬🎬 [ON_CONNECT_END] Dettagli completi:", {
+      targetClassName: target?.className,
+      targetTag: target?.tagName,
+      isPane,
       hasPendingEdge: !!pendingEdgeIdRef.current,
       hasSourceNode: !!connectionMenuRef.current.sourceNodeId,
+      sourceNodeId: connectionMenuRef.current.sourceNodeId,
+      sourceHandleId: connectionMenuRef.current.sourceHandleId,
+      dragStartedFromHandle: dragStartedFromHandleRef.current,
       timestamp: Date.now()
     });
+
+    // ✅ Reset flag connessione quando si rilascia
+    if ((window as any).__isConnecting) {
+      console.log('🔄 [ON_CONNECT_END] Reset flag __isConnecting');
+      (window as any).__isConnecting = false;
+    }
+
+    // ✅ NOTA: Con noDragClassName, onNodeDragStart non viene chiamato quando si parte da un handle,
+    // quindi questo controllo non dovrebbe essere necessario, ma lo lasciamo come sicurezza
+    if (dragStartedFromHandleRef.current) {
+      dragStartedFromHandleRef.current = false;
+      cleanupAllTempNodesAndEdges();
+      return;
+    }
 
     // Se subito prima è stata creata una edge reale (onConnect), NON creare il collegamento flottante
     if (pendingEdgeIdRef.current) {
@@ -582,19 +604,50 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ RIMOSSA: const handleConnectionMenuClose - non utilizzata
 
   const onNodeDragStart = useCallback((event: any, node: Node) => {
-    // Controlla se l'evento è iniziato da un elemento con classe 'nodrag'
     const target = event.target as Element;
     const isAnchor = target && (target.classList.contains('rigid-anchor') || target.closest('.rigid-anchor'));
 
-    console.log('🚀 [DRAG DEBUG] NODE DRAG START:', {
+    // ✅ LOG DETTAGLIATISSIMO per capire cosa succede
+    const isHandle = target && (
+      target.classList.contains('react-flow__handle') ||
+      target.closest('.react-flow__handle')
+    );
+
+    console.log('🔥🔥🔥 [ON_NODE_DRAG_START] DETTAGLI COMPLETISSIMI:', {
       nodeId: node.id,
+      nodePosition: node.position,
       targetTag: target?.tagName,
       targetClass: target?.className,
-      isAnchor,
-      __flowDragMode: (window as any).__flowDragMode,
+      targetId: target?.id,
+      isHandle: !!isHandle,
+      hasHandleClass: target?.classList.contains('react-flow__handle'),
+      closestHandle: !!target?.closest('.react-flow__handle'),
+      isAnchor: !!isAnchor,
       hasNodrag: target?.classList.contains('nodrag'),
-      closestNodrag: target?.closest('.nodrag')
+      closestNodrag: !!target?.closest('.nodrag'),
+      eventType: event.type,
+      eventButton: (event as any).button,
+      eventClientX: (event as any).clientX,
+      eventClientY: (event as any).clientY,
+      timestamp: Date.now(),
+      stackTrace: new Error().stack?.split('\n').slice(0, 10).join('\n')
     });
+
+    // ✅ Se viene chiamato con un handle, c'è un problema con noDragClassName
+    if (isHandle) {
+      console.error('❌❌❌ [ON_NODE_DRAG_START] PROBLEMA: Chiamato con handle! noDragClassName non funziona!', {
+        nodeId: node.id,
+        targetClass: target?.className,
+        timestamp: Date.now()
+      });
+      dragStartedFromHandleRef.current = true;
+      event.preventDefault();
+      event.stopPropagation();
+      return false;
+    }
+
+    // ✅ Reset del flag
+    dragStartedFromHandleRef.current = false;
 
     if (target && (target.classList.contains('nodrag') || target.closest('.nodrag'))) {
       console.log('🚀 [DRAG DEBUG] DRAG BLOCKED - nodrag element found');
@@ -602,7 +655,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       return false;
     }
 
-    console.log('🚀 [DRAG DEBUG] DRAG ALLOWED - proceeding with node drag');
+    console.log('✅ [ON_NODE_DRAG_START] DRAG ALLOWED - proceeding with node drag');
     // Prepara contesto per drag rigido SOLO se partito dall'ancora
     if ((window as any).__flowDragMode === 'rigid' || isAnchor) {
       console.log('🚀 [DRAG DEBUG] RIGID DRAG DETECTED - setting up rigid drag context');
@@ -642,6 +695,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Rigid drag: se il drag parte con __flowDragMode = 'rigid', muovi anche i discendenti
   const rigidDragCtxRef = useRef<null | { rootId: string; ids: Set<string>; startPositions: Map<string, { x: number; y: number }>; rootStart: { x: number; y: number }; rootLast: { x: number; y: number } }>(null);
 
+  // ✅ Ref per tracciare se il drag è partito da un handle
+  const dragStartedFromHandleRef = useRef<boolean>(false);
+
   // Helper functions for rigid drag logic
   const applyRigidDragMovement = useCallback((ctx: any, draggedNode: Node, setNodes: any) => {
     if (draggedNode.id !== ctx.rootId) return;
@@ -678,25 +734,42 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, []);
 
   const onNodeDrag = useCallback((event: any, draggedNode: Node) => {
-    if (!rigidDragCtxRef.current) {
-      console.log('🚀 [DRAG DEBUG] onNodeDrag - no rigid context, normal drag');
+    console.log('🔥🔥🔥 [ON_NODE_DRAG] NODO IN MOVIMENTO:', {
+      nodeId: draggedNode.id,
+      currentPosition: draggedNode.position,
+      dragStartedFromHandle: dragStartedFromHandleRef.current,
+      hasRigidContext: !!rigidDragCtxRef.current,
+      eventType: event.type,
+      timestamp: Date.now()
+    });
+
+    // ✅ Se il drag è partito da un handle, NON DOVREBBE ESSERE QUI
+    if (dragStartedFromHandleRef.current) {
+      console.error('❌❌❌ [ON_NODE_DRAG] PROBLEMA: Nodo in movimento ma drag partito da handle!', {
+        nodeId: draggedNode.id,
+        timestamp: Date.now()
+      });
       return;
     }
-    console.log('🚀 [DRAG DEBUG] onNodeDrag - applying rigid drag movement');
+
+    if (!rigidDragCtxRef.current) {
+      return;
+    }
     const ctx = rigidDragCtxRef.current;
     applyRigidDragMovement(ctx, draggedNode, setNodes);
   }, [setNodes, applyRigidDragMovement]);
 
-  const onNodeDragStop = useCallback(() => {
-    console.log('🚀 [DRAG DEBUG] onNodeDragStop - cleaning up');
+  const onNodeDragStop = useCallback((event: any, node: Node) => {
+    // ✅ NOTA: onNodeDragStop NON viene chiamato quando si parte da un handle
+    // grazie a noDragClassName="react-flow__handle"
     try { (window as any).__flowDragMode = undefined; } catch { }
+
     const ctx = rigidDragCtxRef.current;
     if (ctx) {
-      console.log('🚀 [DRAG DEBUG] onNodeDragStop - applying final rigid drag offset');
       applyFinalRigidDragOffset(ctx, nodesRef, setNodes);
     }
     rigidDragCtxRef.current = null;
-  }, [setNodes, applyFinalRigidDragOffset]);
+  }, [setNodes, applyFinalRigidDragOffset, nodesRef]);
 
   // Wheel handler: zoom only when CTRL is pressed
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -908,7 +981,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           onEdgeClick={handleEdgeClick}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
-          onNodeDragStart={onNodeDragStart}
+          noDragClassName="react-flow__handle"
+          onNodeDragStart={(e, node) => {
+            console.log('🔥 [REACT_FLOW_NODE_DRAG_START] Chiamato da React Flow', {
+              nodeId: node.id,
+              timestamp: Date.now()
+            });
+            onNodeDragStart(e, node);
+          }}
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onNodeDoubleClick={(e, node) => {
