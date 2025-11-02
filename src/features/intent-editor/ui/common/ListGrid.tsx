@@ -22,6 +22,9 @@ export type ListGridProps = {
   onEditItem?: (id: string, newLabel: string, prevLabel: string) => void;
   onDeleteItem?: (id: string) => void;
   highlightedId?: string | null; // ✅ ID dell'item da evidenziare con sfondo pastello
+  // ✅ Nuove props per checkbox enabled/disabled
+  itemEnabled?: (item: ListItem) => boolean;
+  onToggleEnabled?: (id: string) => void;
 };
 
 const defaultNormalize = (s: string) =>
@@ -47,6 +50,8 @@ export default function ListGrid({
   onEditItem,
   onDeleteItem,
   highlightedId,
+  itemEnabled, // ✅ Nuova prop
+  onToggleEnabled, // ✅ Nuova prop
 }: ListGridProps) {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -117,20 +122,41 @@ export default function ListGrid({
           {list.map(it => {
             const selected = it.id === selectedId;
             const highlighted = it.id === highlightedId;
+            const enabled = itemEnabled ? itemEnabled(it) : true; // ✅ Default enabled se non specificato
+
             // ✅ Sfondo pastello per l'item evidenziato (verde pastello)
             const highlightCls = highlighted ? 'bg-green-100 animate-pulse' : '';
             const cls = rowClassName
               ? rowClassName(it, selected)
               : (selected ? 'bg-amber-50' : 'hover:bg-gray-50');
+
+            // ✅ Stile grigio quando disabilitato
+            const disabledCls = !enabled ? 'opacity-50 grayscale text-gray-400' : '';
+
             return (
               <div
                 key={it.id}
                 data-item-id={it.id}
                 ref={el => (rowRefs.current[it.id] = el)}
-                className={`px-3 py-2 cursor-pointer flex items-center gap-2 ${cls} ${highlightCls} group transition-colors duration-300`}
+                className={`px-3 py-2 cursor-pointer flex items-center gap-2 ${cls} ${highlightCls} ${disabledCls} group transition-all duration-300`}
                 onClick={() => onSelect(it.id)}
                 title={it.label}
               >
+                {/* ✅ Checkbox per enable/disable */}
+                {onToggleEnabled && (
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={(e) => {
+                      e.stopPropagation(); // ✅ Previene il click sulla riga
+                      onToggleEnabled(it.id);
+                    }}
+                    onClick={(e) => e.stopPropagation()} // ✅ Doppia sicurezza
+                    className="cursor-pointer shrink-0"
+                    title={enabled ? 'Disattiva intento' : 'Attiva intento'}
+                  />
+                )}
+
                 {LeftIcon ? <LeftIcon size={14} /> : null}
                 <div className="text-sm flex-1 truncate flex items-center gap-2">
                   {editingId === it.id ? (

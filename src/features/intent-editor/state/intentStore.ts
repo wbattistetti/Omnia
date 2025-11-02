@@ -9,6 +9,7 @@ type IntentState = {
   addIntent: (name: string, langs: Lang[]) => string;
   renameIntent: (id: string, name: string) => void;
   removeIntent: (id: string) => void;
+  toggleIntentEnabled: (id: string) => void; // ✅ Nuovo metodo
   addStaging: (id: string, vs: Variant[]) => void;
   promoteToCurated: (id: string, variantIds: string[]) => void;
   addHardNeg: (id: string, v: Variant) => void;
@@ -27,6 +28,7 @@ export const useIntentStore = create<IntentState>((set, get) => ({
     const id = crypto.randomUUID();
     const it: Intent = {
       id, name, langs, threshold: 0.6, status: 'draft',
+      enabled: true, // ✅ Default enabled
       variants: { curated: [], staging: [], hardNeg: [] },
       signals: { keywords: [], synonymSets: [], patterns: [] },
     };
@@ -46,6 +48,11 @@ export const useIntentStore = create<IntentState>((set, get) => ({
     const nextSelected = s.selectedId === id ? (rest[0]?.id) : s.selectedId;
     return { intents: rest, selectedId: nextSelected };
   }),
+  toggleIntentEnabled: (id) => set(s => ({
+    intents: s.intents.map(it =>
+      it.id === id ? { ...it, enabled: it.enabled !== false ? false : true } : it
+    )
+  })),
   addStaging: (id, vs) => set(s => ({
     intents: s.intents.map(it => it.id === id ? { ...it, variants: { ...it.variants, staging: [...it.variants.staging, ...vs] } } : it)
   })),

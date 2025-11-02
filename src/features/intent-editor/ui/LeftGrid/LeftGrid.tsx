@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useIntentStore } from '../../state/intentStore';
 import ListGrid from '../common/ListGrid';
-import { GitBranch, Download, Trash2 } from 'lucide-react';
+import { GitBranch, Download, Trash2, CheckSquare2, Square } from 'lucide-react';
 
 export function LeftGrid(){
   const intents = useIntentStore(s=>s.intents);
@@ -10,6 +10,7 @@ export function LeftGrid(){
   const addOrFocusIntent = useIntentStore(s=>s.addOrFocusIntent);
   const rename = useIntentStore(s=>s.renameIntent);
   const remove = useIntentStore(s=>s.removeIntent);
+  const toggleEnabled = useIntentStore(s=>s.toggleIntentEnabled); // ✅ Nuovo hook
   const [showImportMenu, setShowImportMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -21,6 +22,7 @@ export function LeftGrid(){
       pos: i.variants.curated.length,
       neg: i.variants.hardNeg.length,
       key: (i.signals.keywords || []).length,
+      enabled: i.enabled !== false, // ✅ Passa lo stato enabled nel meta
     }
   }));
 
@@ -102,11 +104,46 @@ export function LeftGrid(){
     intents.forEach(intent => remove(intent.id));
   };
 
+  // ✅ Seleziona tutto (abilita tutti gli intenti)
+  const handleSelectAll = () => {
+    intents.forEach(intent => {
+      if (intent.enabled === false) {
+        toggleEnabled(intent.id);
+      }
+    });
+  };
+
+  // ✅ Deseleziona tutto (disabilita tutti gli intenti)
+  const handleDeselectAll = () => {
+    intents.forEach(intent => {
+      if (intent.enabled !== false) {
+        toggleEnabled(intent.id);
+      }
+    });
+  };
+
   return (
     <div className="border border-amber-300 rounded-2xl overflow-hidden shadow-sm flex flex-col h-full min-h-0">
       <div className="px-3 py-2 bg-amber-200 text-slate-900 text-sm font-semibold border-b flex items-center justify-between">
         <span>Intents</span>
         <div className="flex items-center gap-2">
+          {/* ✅ Pulsanti Seleziona/Deseleziona tutto - solo icone */}
+          <button
+            onClick={handleSelectAll}
+            disabled={intents.length === 0}
+            className="p-1.5 rounded border bg-white hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Seleziona tutto"
+          >
+            <CheckSquare2 size={16} />
+          </button>
+          <button
+            onClick={handleDeselectAll}
+            disabled={intents.length === 0}
+            className="p-1.5 rounded border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Deseleziona tutto"
+          >
+            <Square size={16} />
+          </button>
           <div className="relative">
             <button
               onClick={() => setShowImportMenu(!showImportMenu)}
@@ -141,15 +178,14 @@ export function LeftGrid(){
             </>
           )}
           </div>
-          {/* ✅ Pulsante Clear per rimuovere tutti gli intenti */}
+          {/* ✅ Pulsante Clear per rimuovere tutti gli intenti - solo icona */}
           <button
             onClick={handleClearAll}
             disabled={intents.length === 0}
-            className="px-2 py-1 text-xs rounded border bg-white hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            className="p-1.5 rounded border bg-white hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Clear All Intents"
           >
-            <Trash2 size={14} />
-            Clear
+            <Trash2 size={16} />
           </button>
         </div>
       </div>
@@ -193,6 +229,8 @@ export function LeftGrid(){
             <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-700">{item.meta?.pos ?? 0}</span>
           )}
           rightSlot={() => null}
+          itemEnabled={(item) => item.meta?.enabled !== false} // ✅ Passa funzione per controllare enabled
+          onToggleEnabled={toggleEnabled} // ✅ Passa handler per toggle
           onEditItem={(id, newLabel)=> rename(id, newLabel)}
           onDeleteItem={(id)=> remove(id)}
         />

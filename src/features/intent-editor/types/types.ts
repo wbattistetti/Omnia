@@ -9,6 +9,7 @@ export type Intent = {
   langs: Lang[];
   threshold: number; // 0..1
   status: 'draft'|'ready';
+  enabled?: boolean; // ✅ Default true, se false l'intento è disabilitato
   variants: {
     curated: Variant[];
     staging: Variant[];
