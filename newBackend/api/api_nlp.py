@@ -120,8 +120,20 @@ def ner_extract(body: dict = Body(...)):
     """
     NER extraction endpoint - extract entities from text using rule-based methods
     """
-    from newBackend.services.svc_nlp import ner_extract as ner_service
-    return ner_service(body)
+    try:
+        from newBackend.services.svc_nlp import ner_extract as ner_service
+        result = ner_service(body)
+        # Ensure result has the expected format
+        if not isinstance(result, dict):
+            return {"candidates": []}
+        if "candidates" not in result:
+            return {"candidates": result.get("results", []) if "results" in result else []}
+        return result
+    except Exception as e:
+        import traceback
+        print(f"[NER_EXTRACT] Error: {str(e)}")
+        traceback.print_exc()
+        return {"candidates": [], "error": str(e)}
 
 @router.post("/api/nlp/llm-extract")
 def llm_extract(body: dict = Body(...)):

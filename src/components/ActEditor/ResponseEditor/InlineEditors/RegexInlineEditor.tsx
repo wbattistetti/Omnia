@@ -284,6 +284,22 @@ export default function RegexInlineEditor({
   const handleButtonClick = async () => {
     let prompt = currentRegexValue || '';
 
+    // 🆕 Find test cases that don't match the current regex
+    const unmatchedTestCases: string[] = [];
+    if (currentRegexValue && currentRegexValue.trim() && testCases.length > 0) {
+      try {
+        const regexObj = new RegExp(currentRegexValue, 'g');
+        testCases.forEach((testCase) => {
+          const match = testCase.match(regexObj);
+          if (!match) {
+            unmatchedTestCases.push(testCase);
+          }
+        });
+      } catch (e) {
+        // Invalid regex - will be handled by validation errors
+      }
+    }
+
     // If regex is invalid, include validation errors in the prompt
     if (validationResult && !validationResult.valid && validationResult.errors.length > 0) {
       const errorsText = validationResult.errors.join('. ');
@@ -292,7 +308,25 @@ export default function RegexInlineEditor({
         const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
         return allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ');
       })()}`;
+
+      // 🆕 Add unmatched test cases to the prompt
+      if (unmatchedTestCases.length > 0) {
+        prompt += `\n\nIMPORTANT: The following test values should be matched by the regex but are currently NOT matching:\n${unmatchedTestCases.map(tc => `- "${tc}"`).join('\n')}\n\nPlease fix the regex so it matches all these values.`;
+      }
+
       console.log('[AI Regex] 🔵 Refine Regex clicked with validation errors, enhancing prompt');
+      if (unmatchedTestCases.length > 0) {
+        console.log('[AI Regex] 🔵 Including unmatched test cases in prompt:', unmatchedTestCases);
+      }
+    } else if (unmatchedTestCases.length > 0) {
+      // 🆕 If regex is valid but has unmatched test cases, enhance the prompt
+      const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
+      const subLabels = allSubs.length > 0
+        ? allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ')
+        : 'the sub-data components';
+
+      prompt = `Current regex: ${currentRegexValue}\n\nThe following test values should be matched by the regex but are currently NOT matching:\n${unmatchedTestCases.map(tc => `- "${tc}"`).join('\n')}\n\nPlease refine the regex so it matches all these values while maintaining the existing capture groups for: ${subLabels}`;
+      console.log('[AI Regex] 🔵 Refine Regex clicked with unmatched test cases:', unmatchedTestCases);
     }
 
     if (!prompt.trim() || prompt.trim().length < 5) {
@@ -302,6 +336,7 @@ export default function RegexInlineEditor({
 
     console.log('[AI Regex] 🔵 ' + getButtonLabel() + ' clicked, starting generation immediately');
     console.log('[AI Regex] 🔵 Using prompt:', prompt);
+    console.log('[AI Regex] 🔵 Unmatched test cases count:', unmatchedTestCases.length);
 
     // Save backup
     setRegexBackup(currentRegexValue);
@@ -366,17 +401,29 @@ export default function RegexInlineEditor({
         setHasUserEdited(false);
 
         // 🆕 Save test cases from AI response
+        console.log('[AI Regex] 🔍 Checking examples from AI response:', {
+          hasExamples: !!data.examples,
+          examplesType: typeof data.examples,
+          isArray: Array.isArray(data.examples),
+          examplesValue: data.examples,
+          examplesLength: Array.isArray(data.examples) ? data.examples.length : 'N/A'
+        });
+
         if (data.examples && Array.isArray(data.examples) && data.examples.length > 0) {
           const aiTestCases = data.examples.filter((ex: any) => typeof ex === 'string' && ex.trim().length > 0);
+          console.log('[AI Regex] 🔍 Filtered test cases:', aiTestCases);
           if (aiTestCases.length > 0) {
             setTestCases(aiTestCases);
             console.log('[AI Regex] ✅ Saved test cases from AI:', aiTestCases);
+          } else {
+            console.log('[AI Regex] ⚠️ No valid string examples found. Original:', data.examples);
           }
+        } else {
+          console.log('[AI Regex] ⚠️ Examples not found or invalid format:', data.examples);
         }
 
         if (data.explanation) {
           console.log('[AI Regex] ✅ Explanation:', data.explanation);
-          console.log('[AI Regex] ✅ Examples:', data.examples);
         }
       } else {
         console.log('[AI Regex] ❌ Invalid response: data.success =', data.success, ', data.regex =', data.regex);
@@ -551,7 +598,7 @@ export default function RegexInlineEditor({
         <div
           style={{
             display: 'flex',
-            gap: 8,
+            gap: 0,
             alignItems: 'flex-start',
           }}
         >
@@ -637,16 +684,18 @@ export default function RegexInlineEditor({
             </div>
           </div>
 
-          {/* 🆕 Resize Handle */}
+          {/* 🆕 Resize Handle - visible and interactive */}
           {currentRegexValue && currentRegexValue.trim().length > 0 && (
             <div
               onMouseDown={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 setIsResizing(true);
                 const startX = e.clientX;
                 const startWidth = testColumnWidth;
 
                 const onMouseMove = (ev: MouseEvent) => {
+                  ev.preventDefault();
                   const delta = ev.clientX - startX;
                   const newWidth = Math.max(300, Math.min(800, startWidth - delta));
                   handleResize(newWidth);
@@ -666,26 +715,48 @@ export default function RegexInlineEditor({
                 document.body.style.userSelect = 'none';
               }}
               style={{
-                width: 6,
+                width: 8,
+                minWidth: 8,
                 cursor: 'col-resize',
-                background: isResizing ? 'rgba(59, 130, 246, 0.5)' : 'transparent',
+                background: isResizing
+                  ? 'rgba(59, 130, 246, 0.6)'
+                  : 'rgba(148, 163, 184, 0.2)',
+                borderLeft: '1px solid rgba(148, 163, 184, 0.3)',
+                borderRight: '1px solid rgba(148, 163, 184, 0.3)',
                 flexShrink: 0,
                 position: 'relative',
                 zIndex: 10,
-                transition: 'background 0.2s',
+                transition: isResizing ? 'none' : 'background 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
               onMouseEnter={(e) => {
                 if (!isResizing) {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)';
+                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.4)';
+                  e.currentTarget.style.borderLeft = '1px solid rgba(59, 130, 246, 0.6)';
+                  e.currentTarget.style.borderRight = '1px solid rgba(59, 130, 246, 0.6)';
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isResizing) {
-                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.background = 'rgba(148, 163, 184, 0.2)';
+                  e.currentTarget.style.borderLeft = '1px solid rgba(148, 163, 184, 0.3)';
+                  e.currentTarget.style.borderRight = '1px solid rgba(148, 163, 184, 0.3)';
                 }
               }}
-              title="Trascina per ridimensionare"
-            />
+              title="Trascina per ridimensionare il pannello"
+            >
+              {/* Visual indicator dots */}
+              <div
+                style={{
+                  width: 2,
+                  height: 20,
+                  background: isResizing ? '#3b82f6' : 'rgba(148, 163, 184, 0.5)',
+                  borderRadius: 1,
+                }}
+              />
+            </div>
           )}
 
           {/* 🆕 Right: Test Cases Column */}
@@ -710,7 +781,7 @@ export default function RegexInlineEditor({
               {/* Test Cases Section */}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#f1f5f9', marginBottom: 8 }}>
-                  Valori da proporre
+                  Test Values
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                   <input
