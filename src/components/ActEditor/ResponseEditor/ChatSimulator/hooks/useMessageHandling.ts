@@ -361,25 +361,35 @@ export function useMessageHandling({
 
           // Se l'estrazione è parziale (ask-more), mostra partialMatch ma invia comunque al motore
           // Il motore gestirà la richiesta di ulteriori informazioni
+          // 🆕 Pass partial extracted values so engine can saturate what's available
           if (extractionResult.status === 'ask-more') {
+            const partialValue = extractionResult.value ? extractionResult.value : undefined;
+
             setMessages((prev) => [...prev, {
               id: generateMessageId('user'),
               type: 'user',
               text: trimmed,
               matchStatus: 'partialMatch'
             }]);
-            await send(text);
+
+            await send(text, partialValue);
             return;
           }
 
           // Estrazione riuscita: imposta matchStatus = 'match' e invia al motore
+          // 🆕 Pass extracted value to send() so engine can saturate sub-data directly
+          const extractedValue = extractionResult.status === 'accepted' && extractionResult.value
+            ? extractionResult.value
+            : undefined;
+
           setMessages((prev) => [...prev, {
             id: generateMessageId('user'),
             type: 'user',
             text: trimmed,
             matchStatus: 'match'
           }]);
-          await send(text);
+
+          await send(text, extractedValue);
           return;
         } catch (error) {
           console.error('[ChatSimulator][extractField][ERROR-CATCH]', {

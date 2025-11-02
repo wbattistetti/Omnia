@@ -460,101 +460,168 @@ function extractOrdered(state: SimulatorState, input: string, primaryKind: strin
 
   return { memory, residual };
 }
-export function advance(state: SimulatorState, input: string): SimulatorState {
+export function advance(state: SimulatorState, input: string, extractedVariables?: Record<string, any>): SimulatorState {
   const main = currentMain(state);
   if (!main) return { ...state, mode: 'Completed' };
 
   // Handle by mode
   if (state.mode === 'CollectingMain') {
-    // First, attempt mixed-initiative extraction: target current kind, then others, subtracting matches
-    // Fallback: if kind is mis-normalized, infer from label (phone/email/date/name)
-    const mainKind = String(main.kind || '').toLowerCase();
-    const labelStr = String((main as any)?.label || '').toLowerCase();
-    let primaryKind = mainKind;
-    if (!primaryKind || primaryKind === 'generic') {
-      if (/phone|telefono|cellulare/.test(labelStr)) primaryKind = 'phone';
-      else if (/email|e-?mail/.test(labelStr)) primaryKind = 'email';
-      else if (/date\s*of\s*birth|data\s*di\s*nascita|dob|birth/.test(labelStr)) primaryKind = 'date';
-      else if (/full\s*name|name|nome/.test(labelStr)) primaryKind = 'name';
-    }
-    // Guard against accidental address kind on phone label
-    if (primaryKind === 'address' && /phone|telefono|cellulare/.test(labelStr)) primaryKind = 'phone';
-    logMI('primaryKind', { mainKind, label: labelStr, chosen: primaryKind });
-    const extracted = extractOrdered(state, input, primaryKind);
-    if (extracted.memory !== state.memory) {
-      state = { ...state, memory: extracted.memory };
-    }
-    // Implicit correction: if input contains a correction, try to re-parse that
-    const residual = extracted.residual ?? input;
-    try {
-      const mainLabel = String(main.label || main.id);
-      const presentSubs = (Array.isArray(main.subs) ? main.subs : [])
-        .filter((sid) => {
-          const m = state.memory[sid];
-          return m && m.value !== undefined && m.value !== null && String(m.value).length > 0;
-        })
-        .map((sid) => String(state.plan.byId[sid]?.label || sid));
-      logMI('postExtract', { main: mainLabel, residual, presentSubs });
-    } catch { }
-    const dateDet = getKind('date')?.detect(residual);
-    const corrected = extractImplicitCorrection(residual) || dateDet?.value || extractLastDate(residual) || residual;
-    const applied = applyComposite(main.kind, corrected);
-    const variables = applied.variables;
     let mem = state.memory;
-    // For mains with subs, populate only subs here; compose main later from subs
-    if (Array.isArray(main.subs) && main.subs.length > 0) {
-      for (const sid of main.subs) {
-        const sub = state.plan.byId[sid];
-        const labelNorm = (sub?.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-        let v: any = undefined;
-        if (main.kind === 'name') {
-          if (labelNorm.includes('first')) v = (variables as any).firstname;
-          else if (labelNorm.includes('last')) v = (variables as any).lastname;
-        } else if (main.kind === 'date') {
-          if (labelNorm.includes('day')) v = (variables as any).day;
-          else if (labelNorm.includes('month')) v = (variables as any).month;
-          else if (labelNorm.includes('year')) v = (variables as any).year;
-        } else if (main.kind === 'address') {
-          if (labelNorm.includes('street')) v = (variables as any).street;
-          else if (labelNorm.includes('city')) v = (variables as any).city;
-          else if (labelNorm.includes('postal') || labelNorm.includes('zip')) v = (variables as any).postal_code;
-          else if (labelNorm.includes('country')) v = (variables as any).country;
+
+    // 🆕 PRIORITY: If extractedVariables are provided (from extractField), use them directly to saturate sub-data
+    if (extractedVariables && typeof extractedVariables === 'object' && Object.keys(extractedVariables).length > 0) {
+      logMI('extractedVariables', { extractedVariables, mainKind: main.kind });
+
+      if (Array.isArray(main.subs) && main.subs.length > 0) {
+        // Map extractedVariables to sub-data nodes using standard keys (day, month, year, etc.)
+        for (const sid of main.subs) {
+          const sub = state.plan.byId[sid];
+          if (!sub) continue;
+
+          const labelNorm = (sub?.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+          let v: any = undefined;
+
+          // Map using standard keys from extractedVariables
+          if (main.kind === 'name') {
+            if (labelNorm.includes('first')) v = extractedVariables.firstname;
+            else if (labelNorm.includes('last')) v = extractedVariables.lastname;
+          } else if (main.kind === 'date') {
+            if (labelNorm.includes('day') || labelNorm.includes('giorno')) v = extractedVariables.day;
+            else if (labelNorm.includes('month') || labelNorm.includes('mese')) v = extractedVariables.month;
+            else if (labelNorm.includes('year') || labelNorm.includes('anno')) v = extractedVariables.year;
+          } else if (main.kind === 'address') {
+            if (labelNorm.includes('street')) v = extractedVariables.street;
+            else if (labelNorm.includes('city')) v = extractedVariables.city;
+            else if (labelNorm.includes('postal') || labelNorm.includes('zip')) v = extractedVariables.postal_code;
+            else if (labelNorm.includes('country')) v = extractedVariables.country;
+          }
+
+          // Write to memory if value exists and sub-data is not already set
+          if (v !== undefined && v !== null && (mem[sid]?.value === undefined)) {
+            mem = setMemory(mem, sid, v, false);
+            logMI('memWriteFromExtracted', { sid, label: sub.label, value: v });
+          }
         }
-        if (v !== undefined && (mem[sid]?.value === undefined)) {
-          mem = setMemory(mem, sid, v, false);
+
+        // Compose main value from sub values
+        const composeFromSubs = (m: DDTNode, memory: Memory) => {
+          if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
+          const out: Record<string, any> = {};
+          for (const s of (m.subs || [])) {
+            const v = memory[s]?.value;
+            if (v !== undefined) out[s] = v;
+          }
+          return out;
+        };
+        mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
+
+        // Skip applyComposite since we already have structured values
+        // Update state and continue with saturation check below
+        state = { ...state, memory: mem };
+      } else {
+        // Atomic main: write extracted value directly
+        const value = extractedVariables.value ?? extractedVariables;
+        if (value !== undefined && value !== null) {
+          mem = setMemory(state.memory, main.id, value, false);
+          state = { ...state, memory: mem };
         }
       }
+
+      // Continue with saturation check below (skip applyComposite since we already have structured values)
+      mem = state.memory;
     } else {
-      // Atomic mains: write value directly, but never overwrite a value already set by MI extraction with empty residual
-      const nextVal = (variables as any).value ?? corrected;
-      const hasExisting = mem[main.id]?.value !== undefined;
-      const isEmpty = nextVal === undefined || String(nextVal).trim().length === 0;
-      if (!hasExisting && !isEmpty) {
-        mem = setMemory(state.memory, main.id, nextVal, false);
+      // Fallback to original extraction logic when extractedVariables not provided
+      // First, attempt mixed-initiative extraction: target current kind, then others, subtracting matches
+      // Fallback: if kind is mis-normalized, infer from label (phone/email/date/name)
+      const mainKind = String(main.kind || '').toLowerCase();
+      const labelStr = String((main as any)?.label || '').toLowerCase();
+      let primaryKind = mainKind;
+      if (!primaryKind || primaryKind === 'generic') {
+        if (/phone|telefono|cellulare/.test(labelStr)) primaryKind = 'phone';
+        else if (/email|e-?mail/.test(labelStr)) primaryKind = 'email';
+        else if (/date\s*of\s*birth|data\s*di\s*nascita|dob|birth/.test(labelStr)) primaryKind = 'date';
+        else if (/full\s*name|name|nome/.test(labelStr)) primaryKind = 'name';
       }
-    }
-    // Propagate composite parts into sub memory when available
-    if (Array.isArray(main.subs) && main.subs.length > 0) {
-      for (const sid of main.subs) {
-        const val = (applied.variables as any)[sid];
-        // Also support matching by simplified sub id (e.g., firstname/lastname)
-        const alt = Object.entries(applied.variables as any).find(([k]) => k === sid || k.replace(/[^a-z0-9]+/g, '') === sid.replace(/[^a-z0-9]+/g, ''));
-        const chosen = val !== undefined ? val : (alt ? alt[1] : undefined);
-        if (chosen !== undefined) {
-          mem = setMemory(mem, sid, chosen, false);
+      // Guard against accidental address kind on phone label
+      if (primaryKind === 'address' && /phone|telefono|cellulare/.test(labelStr)) primaryKind = 'phone';
+      logMI('primaryKind', { mainKind, label: labelStr, chosen: primaryKind });
+      const extracted = extractOrdered(state, input, primaryKind);
+      if (extracted.memory !== state.memory) {
+        state = { ...state, memory: extracted.memory };
+      }
+      // Implicit correction: if input contains a correction, try to re-parse that
+      const residual = extracted.residual ?? input;
+      try {
+        const mainLabel = String(main.label || main.id);
+        const presentSubs = (Array.isArray(main.subs) ? main.subs : [])
+          .filter((sid) => {
+            const m = state.memory[sid];
+            return m && m.value !== undefined && m.value !== null && String(m.value).length > 0;
+          })
+          .map((sid) => String(state.plan.byId[sid]?.label || sid));
+        logMI('postExtract', { main: mainLabel, residual, presentSubs });
+      } catch { }
+      const dateDet = getKind('date')?.detect(residual);
+      const corrected = extractImplicitCorrection(residual) || dateDet?.value || extractLastDate(residual) || residual;
+      const applied = applyComposite(main.kind, corrected);
+      const variables = applied.variables;
+      mem = state.memory;
+      // For mains with subs, populate only subs here; compose main later from subs
+      if (Array.isArray(main.subs) && main.subs.length > 0) {
+        for (const sid of main.subs) {
+          const sub = state.plan.byId[sid];
+          const labelNorm = (sub?.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+          let v: any = undefined;
+          if (main.kind === 'name') {
+            if (labelNorm.includes('first')) v = (variables as any).firstname;
+            else if (labelNorm.includes('last')) v = (variables as any).lastname;
+          } else if (main.kind === 'date') {
+            if (labelNorm.includes('day')) v = (variables as any).day;
+            else if (labelNorm.includes('month')) v = (variables as any).month;
+            else if (labelNorm.includes('year')) v = (variables as any).year;
+          } else if (main.kind === 'address') {
+            if (labelNorm.includes('street')) v = (variables as any).street;
+            else if (labelNorm.includes('city')) v = (variables as any).city;
+            else if (labelNorm.includes('postal') || labelNorm.includes('zip')) v = (variables as any).postal_code;
+            else if (labelNorm.includes('country')) v = (variables as any).country;
+          }
+          if (v !== undefined && (mem[sid]?.value === undefined)) {
+            mem = setMemory(mem, sid, v, false);
+          }
+        }
+      } else {
+        // Atomic mains: write value directly, but never overwrite a value already set by MI extraction with empty residual
+        const nextVal = (variables as any).value ?? corrected;
+        const hasExisting = mem[main.id]?.value !== undefined;
+        const isEmpty = nextVal === undefined || String(nextVal).trim().length === 0;
+        if (!hasExisting && !isEmpty) {
+          mem = setMemory(state.memory, main.id, nextVal, false);
         }
       }
-      // Compose and store the main value from current sub values so confirmation can show it
-      const composeFromSubs = (m: DDTNode, memory: Memory) => {
-        if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
-        const out: Record<string, any> = {};
-        for (const s of (m.subs || [])) {
-          const v = memory[s]?.value;
-          if (v !== undefined) out[s] = v;
+      // Propagate composite parts into sub memory when available
+      if (Array.isArray(main.subs) && main.subs.length > 0) {
+        for (const sid of main.subs) {
+          const val = (applied.variables as any)[sid];
+          // Also support matching by simplified sub id (e.g., firstname/lastname)
+          const alt = Object.entries(applied.variables as any).find(([k]) => k === sid || k.replace(/[^a-z0-9]+/g, '') === sid.replace(/[^a-z0-9]+/g, ''));
+          const chosen = val !== undefined ? val : (alt ? alt[1] : undefined);
+          if (chosen !== undefined) {
+            mem = setMemory(mem, sid, chosen, false);
+          }
         }
-        return out;
-      };
-      mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
+        // Compose and store the main value from current sub values so confirmation can show it
+        const composeFromSubs = (m: DDTNode, memory: Memory) => {
+          if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
+          const out: Record<string, any> = {};
+          for (const s of (m.subs || [])) {
+            const v = memory[s]?.value;
+            if (v !== undefined) out[s] = v;
+          }
+          return out;
+        };
+        mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
+      }
+      state = { ...state, memory: mem };
     }
     // Respect required=false on sub nodes
     const requiredSubsOf = (node: DDTNode) => (node.subs || []).filter((sid) => !!state.plan.byId[sid]).filter((sid) => state.plan.byId[sid].required !== false);

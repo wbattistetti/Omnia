@@ -61,11 +61,14 @@ export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookCon
     };
   }, []);
 
-  const send = useCallback(async (input: string) => {
+  const send = useCallback(async (input: string, extractedVariables?: Record<string, any>) => {
     cfgRef.current.onLog?.({ ts: Date.now(), kind: 'input', message: input });
     if (cfgRef.current.debug) {
       // eslint-disable-next-line no-console
       console.log('[DDE] input:', input);
+      if (extractedVariables) {
+        console.log('[DDE] extractedVariables:', extractedVariables);
+      }
     }
     const delay = Math.max(0, cfgRef.current.typingIndicatorMs || 0);
     await new Promise((res) => setTimeout(res, delay));
@@ -84,7 +87,7 @@ export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookCon
     } catch {}
 
     setState((prev) => {
-      const next = advance(prev, input);
+      const next = advance(prev, input, extractedVariables);
       // Detailed memory debug (flattened) for inspection
       if (cfgRef.current.debug) {
         try {
