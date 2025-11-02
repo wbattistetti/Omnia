@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import ListGrid from '../common/ListGrid';
 import { CheckCircle, XCircle, MessageSquare, Tag, Sparkles, Loader2 } from 'lucide-react';
 import { generateVariantsForIntent } from '../../services/variantsService';
+import { ImportDropdown } from '../common/ImportDropdown';
 
 type Phrase = { id: string; text: string };
 
@@ -59,6 +60,40 @@ export default function PhrasesPanel({
   const norm = (s: string) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
   const existsIn = (label: string, list: { id: string; label: string }[]) => list.find(i=>norm(i.label)===norm(label));
 
+  // ✅ Handler per import frasi - aggiunge al tab corrente
+  const handleImportPhrases = (values: string[]) => {
+    let added = 0;
+    let duplicates = 0;
+    for (const value of values) {
+      if (tab === 'pos') {
+        if (!existsIn(value, posItems) && !existsIn(value, negItems)) {
+          onAddPositive(value);
+          added++;
+        } else {
+          duplicates++;
+        }
+      } else if (tab === 'neg') {
+        if (!existsIn(value, negItems) && !existsIn(value, posItems)) {
+          onAddNegative(value);
+          added++;
+        } else {
+          duplicates++;
+        }
+      } else if (tab === 'key') {
+        if (!existsIn(value, keyItems)) {
+          onAddKeyword(value);
+          added++;
+        } else {
+          duplicates++;
+        }
+      }
+    }
+    // Messaggio personalizzato se ci sono duplicati
+    if (duplicates > 0) {
+      alert(`Importate ${added} frasi (${duplicates} duplicate ignorate)`);
+    }
+  };
+
   return (
     <div className="mt-2 flex flex-col min-h-0 h-full">
       {/* Tabs row tight under header */}
@@ -83,6 +118,17 @@ export default function PhrasesPanel({
             onChange={e=> setGenN(Math.max(1, Math.min(50, Number(e.target.value)||1)))}
             className={`w-14 px-2 py-1 text-xs rounded-md border ${tab ? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
             title="Numero di frasi da generare"
+          />
+          {/* ✅ ImportDropdown per importare frasi */}
+          <ImportDropdown
+            onImport={handleImportPhrases}
+            buttonLabel="Import Phrases"
+            successMessage={(count) => `Importate ${count} frasi`}
+            errorMessage={{
+              clipboard: 'Errore durante la lettura del clipboard',
+              file: 'Errore durante la lettura del file',
+              empty: 'Nessuna frase valida trovata'
+            }}
           />
           <button
             className={`${tab? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'} px-2 py-1 text-xs rounded-md border flex items-center gap-1`}
