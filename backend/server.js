@@ -1668,13 +1668,14 @@ app.get('/projects/:id', async (req, res) => {
 });
 
 // ✅ ENTERPRISE: Analizza la richiesta utente usando SOLO AI reale
-async function analyzeUserRequestWithAI(userDesc, templates, provider = 'groq') {
+async function analyzeUserRequestWithAI(userDesc, templates, provider = 'groq', model = null) {
   console.log(`[AI_ANALYSIS] Starting AI analysis for: "${userDesc}"`);
   console.log(`[AI_ANALYSIS] Using ${provider} provider`);
+  console.log(`[AI_ANALYSIS] Using model: ${model || 'default'}`);
   console.log(`[AI_ANALYSIS] Available templates:`, Object.keys(templates).length);
 
   try {
-    const result = await templateIntelligenceService.analyzeUserRequest(userDesc, templates, provider);
+    const result = await templateIntelligenceService.analyzeUserRequest(userDesc, templates, provider, model);
     console.log(`[AI_ANALYSIS] ✅ AI analysis successful:`, result.action);
     console.log(`[AI_ANALYSIS] 📋 AI Response structure:`, {
       action: result.action,
@@ -1928,12 +1929,12 @@ app.post('/api/generateConstraint', async (req, res) => {
 // Single field analysis endpoint for auto-mapping
 app.post('/api/analyze-field', async (req, res) => {
   try {
-    const { fieldLabel, provider = 'groq' } = req.body;
+    const { fieldLabel, provider = 'groq', model } = req.body;
 
-    console.log('[FIELD_ANALYSIS] Analyzing field:', fieldLabel, 'with provider:', provider);
+    console.log('[FIELD_ANALYSIS] Analyzing field:', fieldLabel, 'with provider:', provider, 'model:', model || 'default');
 
     const templates = await loadTemplatesFromDB();
-    const analysis = await analyzeUserRequestWithAI(fieldLabel, templates, provider);
+    const analysis = await analyzeUserRequestWithAI(fieldLabel, templates, provider, model);
 
     console.log('[FIELD_ANALYSIS] Result:', analysis.action);
 
@@ -1952,18 +1953,19 @@ app.post('/api/analyze-field', async (req, res) => {
 // Provider selection endpoint
 app.post('/step2-with-provider', async (req, res) => {
   try {
-    const { userDesc, provider = 'groq' } = req.body;
+    const { userDesc, provider = 'groq', model } = req.body;
 
     console.log('[STEP2] Raw body:', req.body);
     console.log('[STEP2] Parsed userDesc:', userDesc);
     console.log('[STEP2] Parsed provider:', provider);
+    console.log('[STEP2] Parsed model:', model);
     console.log('[STEP2] Using Template Intelligence Service');
 
     // Load templates from database
     const templates = await loadTemplatesFromDB();
     console.log('[STEP2] Using', Object.keys(templates).length, 'templates from Factory DB cache');
 
-    const analysis = await analyzeUserRequestWithAI(userDesc, templates, provider);
+    const analysis = await analyzeUserRequestWithAI(userDesc, templates, provider, model);
 
     console.log('[STEP2] AI Analysis:', analysis.action, '- User requested', `"${userDesc}"`, '...');
     console.log('[STEP2] AI Response generated:', JSON.stringify(analysis, null, 2));

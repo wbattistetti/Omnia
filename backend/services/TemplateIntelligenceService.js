@@ -17,9 +17,10 @@ class TemplateIntelligenceService {
    * @param {string} provider - AI provider to use
    * @returns {Promise<Object>} Analysis result
    */
-  async analyzeUserRequest(userDesc, templates, provider = 'groq') {
+  async analyzeUserRequest(userDesc, templates, provider = 'groq', model = null) {
     try {
       console.log(`[AI_ANALYSIS] 🚀 Starting AI analysis with ${provider} for: "${userDesc}"`);
+      console.log(`[AI_ANALYSIS] 📋 Using model: ${model || 'default (from getModelForProvider)'}`);
 
       const prompt = this.buildAnalysisPrompt(userDesc, templates);
       const messages = [
@@ -31,7 +32,7 @@ class TemplateIntelligenceService {
       console.log(`[AI_ANALYSIS] 📋 Available templates:`, Object.keys(templates).length);
 
       const response = await this.aiProvider.callAI(provider, messages, {
-        model: this.getModelForProvider(provider)
+        model: model || this.getModelForProvider(provider)
       });
 
       console.log(`[AI_ANALYSIS] 🤖 Raw AI response:`, response.choices[0].message.content.substring(0, 200) + '...');

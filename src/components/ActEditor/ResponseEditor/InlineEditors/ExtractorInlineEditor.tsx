@@ -120,6 +120,18 @@ export default function ExtractorInlineEditor({
 
     setGenerating(true);
 
+    // Get AI provider and model from localStorage
+    let provider = 'groq';
+    let model: string | undefined = undefined;
+    try {
+      const savedProvider = localStorage.getItem('omnia.aiProvider') || 'groq';
+      const savedModel = localStorage.getItem('omnia.aiModel');
+      provider = savedProvider;
+      model = savedModel || undefined;
+    } catch (e) {
+      console.warn('[ExtractorEditor] Could not read AI config from localStorage:', e);
+    }
+
     try {
       const endpoint = isCreateMode
         ? '/api/nlp/generate-extractor'
@@ -128,12 +140,16 @@ export default function ExtractorInlineEditor({
       const body = isCreateMode
         ? {
           description: prompt,
-          dataType: 'string'
+          dataType: 'string',
+          provider,
+          model
         }
         : {
           code: extractorCode,
           improvements: prompt,
-          dataType: 'string'
+          dataType: 'string',
+          provider,
+          model
         };
 
       const response = await fetch(endpoint, {
@@ -153,10 +169,7 @@ export default function ExtractorInlineEditor({
         setCurrentValue(data.code);
         setHasUserEdited(false);
 
-        // Save test cases from AI response if available
-        if (data.examples && Array.isArray(data.examples)) {
-          setTestCases(data.examples);
-        }
+        // ⚠️ Test cases are now generated at profile initialization, not here
       } else {
         alert(`AI ${isCreateMode ? 'generation' : 'refinement'} failed. Please try again.`);
       }

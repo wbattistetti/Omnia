@@ -178,11 +178,42 @@ export default function RegexInlineEditor({
   const [validationResult, setValidationResult] = React.useState<ValidationResult | null>(null);
   const [shouldShowValidation, setShouldShowValidation] = React.useState(false);
 
+  // 🔍 LOG: Verifica profile ricevuto come prop
+  React.useEffect(() => {
+    console.log('[RegexInlineEditor] 📥 Profile prop received:', {
+      nodeLabel: node?.label,
+      hasProfile: !!profile,
+      profileKeys: profile ? Object.keys(profile) : [],
+      testCasesInProfile: profile ? (Array.isArray(profile.testCases) ? profile.testCases.length : 'not array or missing') : 'no profile',
+      testCasesValue: profile?.testCases,
+      profileTestCasesType: profile ? typeof profile.testCases : 'no profile',
+    });
+  }, [profile, node?.label]);
+
   // 🆕 Use shared hook for test cases
   const { testCases, setTestCases } = useTestValues(
     profile || { slotId: '', locale: 'it-IT', kind: kind || 'generic', synonyms: [] },
     onProfileUpdate || (() => { })
   );
+
+  // Debug: Log test cases to verify they're being passed
+  React.useEffect(() => {
+    console.log('[RegexInlineEditor] 🔍 Test cases hook result:', {
+      testCasesCount: testCases?.length || 0,
+      testCasesValue: testCases,
+      hasProfile: !!profile,
+      profileTestCases: profile?.testCases,
+    });
+
+    if (testCases && testCases.length > 0) {
+      console.log('[RegexInlineEditor] ✅ Test cases loaded:', testCases.length, 'cases');
+      console.log('[RegexInlineEditor] ✅ Test cases values:', testCases);
+    } else if (profile?.testCases && profile.testCases.length > 0) {
+      console.log('[RegexInlineEditor] ⚠️ Profile has testCases but hook returned empty:', profile.testCases);
+    } else {
+      console.log('[RegexInlineEditor] ℹ️ No test cases available yet');
+    }
+  }, [testCases, profile?.testCases]);
 
   // Use unified editor mode hook
   const { currentValue: currentRegexValue, setCurrentValue: setCurrentRegexValue, isCreateMode, getButtonLabel } = useEditorMode({
@@ -348,10 +379,24 @@ export default function RegexInlineEditor({
         index: index + 1 // Position in capture groups (1, 2, 3...)
       }));
 
+      // Get AI provider and model from localStorage
+      let provider = 'groq';
+      let model: string | undefined = undefined;
+      try {
+        const savedProvider = localStorage.getItem('omnia.aiProvider') || 'groq';
+        const savedModel = localStorage.getItem('omnia.aiModel');
+        provider = savedProvider;
+        model = savedModel || undefined;
+      } catch (e) {
+        console.warn('[AI Regex] Could not read AI config from localStorage:', e);
+      }
+
       const requestBody = {
         description: prompt,
         subData: subDataInfo.length > 0 ? subDataInfo : undefined,
-        kind: kind || undefined
+        kind: kind || undefined,
+        provider,
+        model
       };
 
       console.log('[AI Regex] 🟢 Calling API /api/nlp/generate-regex');
@@ -393,27 +438,8 @@ export default function RegexInlineEditor({
         // Reset hasUserEdited since we now have a new generated regex
         setHasUserEdited(false);
 
-        // 🆕 Save test cases from AI response
-        console.log('[AI Regex] 🔍 Checking examples from AI response:', {
-          hasExamples: !!data.examples,
-          examplesType: typeof data.examples,
-          isArray: Array.isArray(data.examples),
-          examplesValue: data.examples,
-          examplesLength: Array.isArray(data.examples) ? data.examples.length : 'N/A'
-        });
-
-        if (data.examples && Array.isArray(data.examples) && data.examples.length > 0) {
-          const aiTestCases = data.examples.filter((ex: any) => typeof ex === 'string' && ex.trim().length > 0);
-          console.log('[AI Regex] 🔍 Filtered test cases:', aiTestCases);
-          if (aiTestCases.length > 0) {
-            setTestCases(aiTestCases);
-            console.log('[AI Regex] ✅ Saved test cases from AI:', aiTestCases);
-          } else {
-            console.log('[AI Regex] ⚠️ No valid string examples found. Original:', data.examples);
-          }
-        } else {
-          console.log('[AI Regex] ⚠️ Examples not found or invalid format:', data.examples);
-        }
+        // ⚠️ Test cases are now generated at profile initialization, not here
+        // Keep examples for potential future use, but don't overwrite existing testCases
 
         if (data.explanation) {
           console.log('[AI Regex] ✅ Explanation:', data.explanation);
@@ -644,7 +670,7 @@ export default function RegexInlineEditor({
             }}
             extractorType="regex"
             node={node}
-            enabled={!!currentRegexValue && currentRegexValue.trim().length > 0}
+            enabled={true}
           />
         </div>
       </div>

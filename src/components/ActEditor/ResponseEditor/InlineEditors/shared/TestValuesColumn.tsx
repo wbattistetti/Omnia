@@ -30,6 +30,20 @@ export default function TestValuesColumn({
   node,
   enabled = true,
 }: TestValuesColumnProps) {
+
+  // 🔍 LOG: Verifica test cases ricevuti come prop
+  React.useEffect(() => {
+    console.log('[TestValuesColumn] 📥 Test cases prop received:', {
+      extractorType,
+      nodeLabel: node?.label,
+      enabled,
+      testCasesCount: testCases?.length || 0,
+      testCasesIsArray: Array.isArray(testCases),
+      testCasesValue: testCases,
+      testCasesType: typeof testCases,
+    });
+  }, [testCases, extractorType, node?.label, enabled]);
+
   const [newTestCase, setNewTestCase] = React.useState('');
 
   // Resizable panel for test cases column

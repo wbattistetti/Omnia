@@ -608,10 +608,39 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                                     });
                                   }
                                 } catch {}
+
+                                // 🔍 LOG: Verifica test cases nel profile ricevuto
+                                console.log('[ResponseEditor][onChange] 📥 Profile received:', {
+                                  nodeLabel: (selectedNode as any)?.label,
+                                  testCasesCount: Array.isArray(profile.testCases) ? profile.testCases.length : 'not array or missing',
+                                  testCasesValue: profile.testCases,
+                                  profileKeys: Object.keys(profile),
+                                });
+
                                 updateSelectedNode((node) => {
                                   const next: any = { ...(node || {}), nlpProfile: profile };
                                   if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }
                                   if (Array.isArray(profile.synonyms)) next.synonyms = profile.synonyms;
+                                  // Ensure testCases are persisted to node.nlpProfile
+                                  if (Array.isArray(profile.testCases)) {
+                                    console.log('[ResponseEditor] 💾 Saving test cases to node:', profile.testCases.length, 'cases');
+                                    console.log('[ResponseEditor] 💾 Test cases values:', profile.testCases);
+                                  } else {
+                                    console.log('[ResponseEditor] ⚠️ No test cases to save or not an array:', {
+                                      hasTestCases: 'testCases' in profile,
+                                      testCasesType: typeof profile.testCases,
+                                      testCasesValue: profile.testCases,
+                                    });
+                                  }
+
+                                  // 🔍 LOG: Verifica dopo il salvataggio
+                                  console.log('[ResponseEditor][updateSelectedNode] ✅ Node updated:', {
+                                    nodeLabel: next?.label,
+                                    hasNlpProfile: !!(next.nlpProfile),
+                                    testCasesInUpdatedNode: Array.isArray(next.nlpProfile?.testCases) ? next.nlpProfile.testCases.length : 'not array or missing',
+                                    testCasesValue: next.nlpProfile?.testCases,
+                                  });
+
                                   return next;
                                 });
                               }}

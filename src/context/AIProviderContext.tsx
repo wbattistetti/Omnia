@@ -22,11 +22,13 @@ export const AI_PROVIDERS: Record<AIProvider, AIProviderConfig> = {
     id: 'groq',
     label: 'Groq (Llama)',
     models: [
-      { id: 'llama-3.1-405b-instruct', label: 'Llama 3.1 405B', description: 'Most powerful - 405B parameters' },
       { id: 'llama-3.1-70b-instruct', label: 'Llama 3.1 70B', description: 'High performance - 70B parameters' },
       { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant', description: 'Fast - 8B parameters' },
+      { id: 'llama3-70b-8192', label: 'Llama3 70B (8192)', description: 'Legacy 70B model with 8K context' },
+      { id: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B', description: 'Mixtral model with 32K context' },
+      { id: 'gemma-7b-it', label: 'Gemma 7B IT', description: 'Gemma 7B instruction-tuned' },
     ],
-    defaultModel: 'llama-3.1-405b-instruct',
+    defaultModel: 'llama-3.1-70b-instruct',
   },
   openai: {
     id: 'openai',

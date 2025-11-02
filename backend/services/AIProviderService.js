@@ -76,13 +76,19 @@ class AIProviderService {
 
       // Get provider configuration
       const providerConfig = await this.config.getProviderConfig(provider);
+      // Get default model
+      const defaultModel = await this.config.getDefaultModel(provider);
+      // Merge options: spread options first, then apply defaults only for missing values
       const mergedOptions = {
-        model: options.model || await this.config.getDefaultModel(provider),
         timeout: options.timeout || providerConfig.timeout,
         temperature: options.temperature || providerConfig.temperature,
         maxTokens: options.maxTokens || providerConfig.maxTokens,
-        ...options
+        ...options, // Spread options to preserve all explicitly passed values (including model if provided)
       };
+      // Apply default model only if not explicitly provided
+      if (!mergedOptions.model) {
+        mergedOptions.model = defaultModel;
+      }
 
       console.log(`[AI_PROVIDER] 🚀 Calling ${provider} with model: ${mergedOptions.model}`);
 

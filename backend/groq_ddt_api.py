@@ -1112,7 +1112,7 @@ def call_groq(messages):
     # Build candidate model list: configured MODEL, env fallbacks, and a small built-in list
     candidates_env = os.environ.get("GROQ_MODEL_FALLBACKS", "")
     candidates = [m.strip() for m in candidates_env.split(",") if m.strip()]
-    builtins = ["llama-3.1-70b-instruct", "llama-3.1-8b-instant", "llama-3.1-405b-instruct"]
+    builtins = ["llama-3.1-70b-instruct", "llama-3.1-8b-instant", "llama3-70b-8192", "mixtral-8x7b-32768"]
     models_to_try = []
     for m in [MODEL, *candidates, *builtins]:
         if m and m not in models_to_try:
@@ -1817,23 +1817,46 @@ Be precise and practical. Test mentally that your regex works correctly.
         print(f"[generate-regex] Prompt length: {len(prompt)}")
         print("[generate-regex] Calling AI...")
 
-        # Provider routing
-        provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
+        # Provider and model routing - read from request body, fallback to env
+        provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
+        model = (body or {}).get("model")  # Model from frontend
         print(f"[generate-regex] Provider: {provider}")
+        print(f"[generate-regex] Model: {model or 'default'}")
 
         if provider == "openai":
             try:
                 from backend.call_openai import call_openai_json as _call_json
             except Exception:
                 from call_openai import call_openai_json as _call_json
+            # For OpenAI, pass model if provided
+            if model:
+                ai_response = _call_json([
+                    {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
+                    {"role": "user", "content": prompt}
+                ], model=model)
+            else:
+                ai_response = _call_json([
+                    {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
+                    {"role": "user", "content": prompt}
+                ])
         else:
-            _call_json = call_groq_json
-
-        # Call AI
-        ai_response = _call_json([
-            {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
-            {"role": "user", "content": prompt}
-        ])
+            # For Groq, temporarily override MODEL if model provided
+            if model:
+                import backend.call_groq as call_groq_module
+                original_model = call_groq_module.MODEL
+                call_groq_module.MODEL = model
+                try:
+                    ai_response = call_groq_json([
+                        {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
+                        {"role": "user", "content": prompt}
+                    ])
+                finally:
+                    call_groq_module.MODEL = original_model
+            else:
+                ai_response = call_groq_json([
+                    {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
+                    {"role": "user", "content": prompt}
+                ])
 
         print("[generate-regex] AI Response:", ai_response)
 
@@ -1871,6 +1894,212 @@ Be precise and practical. Test mentally that your regex works correctly.
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating regex: {str(e)}")
+
+# --- API: Generate Test Cases for NLP Profile ---
+@app.post("/api/nlp/generate-test-cases")
+def generate_test_cases(body: dict = Body(...)):
+    """
+    Generate test cases for an NLP profile based on node structure.
+    Test cases should be general and work for all extractors (regex, extractor, NER, LLM).
+
+    Body example:
+    {
+      "label": "Data di Nascita",
+      "kind": "date",
+      "synonyms": ["data di nascita", "dob", "birth date"],
+      "subData": [
+        {"id": "day", "label": "Giorno"},
+        {"id": "month", "label": "Mese"},
+        {"id": "year", "label": "Anno"}
+      ]
+    }
+
+    Returns:
+    {
+      "success": True,
+      "testCases": ["16/12/1961", "16 dicembre 1961", "12/16/1961", ...]
+    }
+    """
+    print("\n[API] POST /api/nlp/generate-test-cases")
+
+    try:
+        label = (body or {}).get("label", "").strip()
+        kind = (body or {}).get("kind", "generic")
+        synonyms = (body or {}).get("synonyms", [])
+        sub_data = (body or {}).get("subData", [])  # List of {id, label}
+        locale = (body or {}).get("locale") or IDE_LANGUE or "it"  # Dynamic locale from request or env
+
+        print(f"[generate-test-cases] Label: {label}")
+        print(f"[generate-test-cases] Kind: {kind}")
+        print(f"[generate-test-cases] Synonyms: {synonyms}")
+        print(f"[generate-test-cases] Sub_data: {sub_data}")
+        print(f"[generate-test-cases] Locale: {locale}")
+
+        if not label:
+            raise HTTPException(status_code=400, detail="Label is required")
+
+        # Check AI key availability
+        if not (GROQ_KEY or OPENAI_KEY):
+            raise HTTPException(status_code=500, detail="missing_ai_key")
+
+        # Build prompt for test case generation
+        sub_data_description = ""
+        if sub_data and isinstance(sub_data, list) and len(sub_data) > 0:
+            sub_labels = [sub.get("label", sub.get("id", "")) for sub in sub_data if sub]
+            sub_data_description = f"""
+The field has sub-components:
+{chr(10).join([f"- {sub.get('label', sub.get('id', ''))} ({sub.get('id', '')})" for sub in sub_data if sub])}
+
+Generate test cases that cover:
+- Complete values (all sub-components present)
+- Partial values (some sub-components present)
+- Different formats and variations
+"""
+
+        synonyms_text = ", ".join(synonyms[:5]) if synonyms else label
+
+        # Map locale to language context description
+        locale_to_context = {
+            "it": "Italian",
+            "it-IT": "Italian",
+            "en": "US English",
+            "en-US": "US English",
+            "en-GB": "British English",
+            "pt": "Portuguese",
+            "pt-BR": "Brazilian Portuguese",
+        }
+        language_context = locale_to_context.get(locale.lower(), "Italian")  # Default to Italian
+
+        # Build prompt - simplified for fields without sub-components
+        if sub_data and len(sub_data) > 0:
+            # Full prompt with sub-components section
+            prompt = f"""You are a test data generation expert. Generate realistic test cases for an NLP extraction field.
+
+Field Information:
+- Label: "{label}"
+- Type: {kind}
+- Synonyms: {synonyms_text}
+{sub_data_description}
+
+Requirements:
+1. Generate 8-12 diverse test cases that represent valid inputs for this field
+2. Include various formats, edge cases, and realistic variations
+3. For fields with sub-components: include complete values (all sub-components present), partial values (some sub-components present), and different format combinations
+4. Language context: {language_context} - use culturally appropriate formats and phrasing (e.g., dates: {"dd/mm/yyyy" if "it" in locale.lower() else "MM/DD/YYYY"}, phone: {"+39" if "it" in locale.lower() else "+1"}, ID formats, etc.)
+5. Test cases should be realistic and representative of actual user input
+6. Do NOT include invalid or malformed values - focus on valid variations
+
+Return ONLY a strict JSON object with this format (no markdown, no extra text):
+{{
+  "testCases": ["example1", "example2", "example3", ...]
+}}
+
+Be precise and generate diverse, realistic test cases.
+"""
+        else:
+            # Simplified prompt for simple fields without sub-components
+            prompt = f"""You are a test data generation expert. Generate realistic test cases for an NLP extraction field.
+
+Field Information:
+- Label: "{label}"
+- Type: {kind}
+- Synonyms: {synonyms_text}
+
+Requirements:
+1. Generate 8-12 diverse test cases that represent valid inputs for this field
+2. Include various formats, edge cases, and realistic variations
+3. Language context: {language_context} - use culturally appropriate formats and phrasing (e.g., dates: {"dd/mm/yyyy" if "it" in locale.lower() else "MM/DD/YYYY"}, phone: {"+39" if "it" in locale.lower() else "+1"}, ID formats, etc.)
+4. Test cases should be realistic and representative of actual user input
+5. Do NOT include invalid or malformed values - focus on valid variations
+
+Return ONLY a strict JSON object with this format (no markdown, no extra text):
+{{
+  "testCases": ["example1", "example2", "example3", ...]
+}}
+
+Be precise and generate diverse, realistic test cases.
+"""
+
+        print(f"[generate-test-cases] Prompt length: {len(prompt)}")
+        print("[generate-test-cases] Calling AI...")
+
+        # Provider and model routing - read from request body, fallback to env
+        provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
+        model = (body or {}).get("model")  # Model from frontend
+        print(f"[generate-test-cases] Provider: {provider}")
+        print(f"[generate-test-cases] Model: {model or 'default'}")
+
+        if provider == "openai":
+            try:
+                from backend.call_openai import call_openai_json as _call_json
+            except Exception:
+                from call_openai import call_openai_json as _call_json
+            # For OpenAI, pass model if provided
+            if model:
+                ai_response = _call_json([
+                    {"role": "system", "content": "You are a test data generation expert. Always return valid JSON with a 'testCases' array."},
+                    {"role": "user", "content": prompt}
+                ], model=model)
+            else:
+                ai_response = _call_json([
+                    {"role": "system", "content": "You are a test data generation expert. Always return valid JSON with a 'testCases' array."},
+                    {"role": "user", "content": prompt}
+                ])
+        else:
+            # For Groq, use call_groq_json which accepts model parameter
+            if model:
+                # Temporarily override MODEL env var if model provided
+                import backend.call_groq as call_groq_module
+                original_model = call_groq_module.MODEL
+                call_groq_module.MODEL = model
+                try:
+                    ai_response = call_groq_json([
+                        {"role": "system", "content": "You are a test data generation expert. Always return valid JSON with a 'testCases' array."},
+                        {"role": "user", "content": prompt}
+                    ])
+                finally:
+                    call_groq_module.MODEL = original_model
+            else:
+                ai_response = call_groq_json([
+                    {"role": "system", "content": "You are a test data generation expert. Always return valid JSON with a 'testCases' array."},
+                    {"role": "user", "content": prompt}
+                ])
+
+        print("[generate-test-cases] AI Response:", ai_response)
+
+        # Parse response
+        if isinstance(ai_response, dict):
+            result = ai_response
+        else:
+            result = _safe_json_loads(ai_response)
+
+        if not result or not isinstance(result, dict):
+            raise HTTPException(status_code=500, detail="AI returned invalid response")
+
+        test_cases = result.get('testCases', [])
+        if not isinstance(test_cases, list):
+            raise HTTPException(status_code=500, detail="AI returned testCases in invalid format")
+
+        # Filter out invalid entries and ensure they're strings
+        test_cases = [str(tc).strip() for tc in test_cases if tc and str(tc).strip()]
+
+        if len(test_cases) < 3:
+            raise HTTPException(status_code=500, detail=f"AI returned too few test cases: {len(test_cases)}")
+
+        print(f"[generate-test-cases] Success! Generated {len(test_cases)} test cases")
+
+        return {
+            "success": True,
+            "testCases": test_cases
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[generate-test-cases] ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating test cases: {str(e)}")
 
 # --- API: Generate TypeScript Extractor from natural language description ---
 @app.post("/api/nlp/generate-extractor")
@@ -1993,21 +2222,46 @@ Make it production-ready and well-commented.
         print(f"[generate-extractor] Data type: {data_type}")
         print("[generate-extractor] Calling AI...")
 
-        provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
+        # Provider and model routing - read from request body, fallback to env
+        provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
+        model = (body or {}).get("model")  # Model from frontend
         print(f"[generate-extractor] Provider: {provider}")
+        print(f"[generate-extractor] Model: {model or 'default'}")
 
         if provider == "openai":
             try:
                 from backend.call_openai import call_openai as _call_ai
             except Exception:
                 from call_openai import call_openai as _call_ai
+            # For OpenAI, pass model if provided
+            if model:
+                ai_response = _call_ai([
+                    {"role": "system", "content": "You are a TypeScript expert. Generate clean, production-ready DataExtractor code."},
+                    {"role": "user", "content": prompt}
+                ], model=model)
+            else:
+                ai_response = _call_ai([
+                    {"role": "system", "content": "You are a TypeScript expert. Generate clean, production-ready DataExtractor code."},
+                    {"role": "user", "content": prompt}
+                ])
         else:
-            _call_ai = call_groq
-
-        ai_response = _call_ai([
-            {"role": "system", "content": "You are a TypeScript expert. Generate clean, production-ready DataExtractor code."},
-            {"role": "user", "content": prompt}
-        ])
+            # For Groq, temporarily override MODEL if model provided
+            if model:
+                import backend.call_groq as call_groq_module
+                original_model = call_groq_module.MODEL
+                call_groq_module.MODEL = model
+                try:
+                    ai_response = call_groq([
+                        {"role": "system", "content": "You are a TypeScript expert. Generate clean, production-ready DataExtractor code."},
+                        {"role": "user", "content": prompt}
+                    ])
+                finally:
+                    call_groq_module.MODEL = original_model
+            else:
+                ai_response = call_groq([
+                    {"role": "system", "content": "You are a TypeScript expert. Generate clean, production-ready DataExtractor code."},
+                    {"role": "user", "content": prompt}
+                ])
 
         print("[generate-extractor] AI Response received")
 
@@ -2144,21 +2398,46 @@ Return ONLY the improved TypeScript code, no markdown blocks, no explanations ou
         print(f"[refine-extractor] Test notes: {len(test_notes)} items")
         print("[refine-extractor] Calling AI...")
 
-        provider = (os.environ.get("AI_PROVIDER") or "groq").lower()
+        # Provider and model routing - read from request body, fallback to env
+        provider = ((body or {}).get("provider") or os.environ.get("AI_PROVIDER") or "groq").lower()
+        model = (body or {}).get("model")  # Model from frontend
         print(f"[refine-extractor] Provider: {provider}")
+        print(f"[refine-extractor] Model: {model or 'default'}")
 
         if provider == "openai":
             try:
                 from backend.call_openai import call_openai as _call_ai
             except Exception:
                 from call_openai import call_openai as _call_ai
+            # For OpenAI, pass model if provided
+            if model:
+                ai_response = _call_ai([
+                    {"role": "system", "content": "You are a TypeScript expert. Improve existing code incrementally, keeping what works."},
+                    {"role": "user", "content": prompt}
+                ], model=model)
+            else:
+                ai_response = _call_ai([
+                    {"role": "system", "content": "You are a TypeScript expert. Improve existing code incrementally, keeping what works."},
+                    {"role": "user", "content": prompt}
+                ])
         else:
-            _call_ai = call_groq
-
-        ai_response = _call_ai([
-            {"role": "system", "content": "You are a TypeScript expert. Improve existing code incrementally, keeping what works."},
-            {"role": "user", "content": prompt}
-        ])
+            # For Groq, temporarily override MODEL if model provided
+            if model:
+                import backend.call_groq as call_groq_module
+                original_model = call_groq_module.MODEL
+                call_groq_module.MODEL = model
+                try:
+                    ai_response = call_groq([
+                        {"role": "system", "content": "You are a TypeScript expert. Improve existing code incrementally, keeping what works."},
+                        {"role": "user", "content": prompt}
+                    ])
+                finally:
+                    call_groq_module.MODEL = original_model
+            else:
+                ai_response = call_groq([
+                    {"role": "system", "content": "You are a TypeScript expert. Improve existing code incrementally, keeping what works."},
+                    {"role": "user", "content": prompt}
+                ])
 
         print("[refine-extractor] AI Response received")
 

@@ -47,13 +47,23 @@ export function useProfileState(
   // Compute initial profile from node
   const initial: NLPProfile = useMemo(() => {
     const p = (node && (node as any).nlpProfile) || {};
+
+    // 🔍 LOG: Verifica test cases nel node.nlpProfile
+    console.log('[useProfileState][initial] 📊 Node nlpProfile check:', {
+      nodeLabel: node?.label,
+      hasNlpProfile: !!(node && (node as any).nlpProfile),
+      testCasesInNode: Array.isArray(p.testCases) ? p.testCases.length : 'not array or missing',
+      testCasesValue: p.testCases,
+    });
+
     // Removed verbose log - only log if debug flag is set
     try {
       if (localStorage.getItem('debug.responseEditor') === '1') {
         console.log('[KindPersist][ProfileEditor][initial]', { nodeLabel: node?.label, nodeKind: node?.kind, manual: (node as any)?._kindManual, profileKind: p?.kind });
       }
     } catch {}
-    return {
+
+    const result = {
       slotId: (node?.id || node?._id || node?.label || 'slot') as string,
       locale,
       kind: ((node?.kind && node.kind !== 'generic') ? node.kind : (p.kind && p.kind !== 'generic') ? p.kind : inferKindFromNode(node)) as string,
@@ -72,6 +82,15 @@ export function useProfileState(
       waitingEsc1: typeof p.waitingEsc1 === 'string' && p.waitingEsc1.trim() ? p.waitingEsc1 : 'Un istante…',
       waitingEsc2: typeof p.waitingEsc2 === 'string' && p.waitingEsc2.trim() ? p.waitingEsc2 : 'Ancora un istante…',
     };
+
+    // 🔍 LOG: Verifica result.testCases
+    console.log('[useProfileState][initial] ✅ Initial computed:', {
+      nodeLabel: node?.label,
+      testCasesInResult: Array.isArray(result.testCases) ? result.testCases.length : 'undefined/not array',
+      testCasesValue: result.testCases,
+    });
+
+    return result;
   }, [node, locale]);
 
   const inferredKind = useMemo(() => inferKindFromNode(node), [node]);
@@ -88,6 +107,19 @@ export function useProfileState(
   const [waitingEsc1, setWaitingEsc1] = useState<string>(initial.waitingEsc1 || '');
   const [waitingEsc2, setWaitingEsc2] = useState<string>(initial.waitingEsc2 || '');
   const [jsonError, setJsonError] = useState<string | undefined>(undefined);
+  const [isGeneratingTestCases, setIsGeneratingTestCases] = useState<boolean>(false);
+  const hasGeneratedTestCasesRef = useRef<boolean>(false);
+  const lastNodeLabelRef = useRef<string>('');
+
+  // Reset generation flag when node changes
+  useEffect(() => {
+    const currentLabel = node?.label || '';
+    if (currentLabel !== lastNodeLabelRef.current) {
+      hasGeneratedTestCasesRef.current = false;
+      lastNodeLabelRef.current = currentLabel;
+      console.log('[useProfileState] 🔄 Node changed, resetting test cases generation flag:', currentLabel);
+    }
+  }, [node?.label]);
 
   // Recommended defaults per kind
   const recommendedForKind = useCallback((k: string) => {
@@ -221,6 +253,118 @@ export function useProfileState(
     }
   }, [lockKind, inferredKind, node]);
 
+  // 🆕 Generate test cases when profile is initialized and testCases is empty
+  useEffect(() => {
+    // Only generate if:
+    // 1. Test cases are NOT already present (empty or undefined)
+    // 2. We haven't already attempted to generate for this node
+    // 3. Node has required info (label)
+    // 4. onChange callback is available
+    // 5. Not already generating
+    const nodeProfile = (node && (node as any).nlpProfile) || {};
+    const hasTestCases = Array.isArray(nodeProfile.testCases) && nodeProfile.testCases.length > 0;
+
+    console.log('[useProfileState] 🔍 Test case generation check:', {
+      nodeLabel: node?.label,
+      hasTestCasesInNode: hasTestCases,
+      hasTestCasesInInitial: !!(initial.testCases && initial.testCases.length > 0),
+      hasGenerated: hasGeneratedTestCasesRef.current,
+      isGenerating: isGeneratingTestCases,
+      hasOnChange: !!onChange
+    });
+
+    if (
+      hasTestCases || // Already has test cases in node - skip
+      (initial.testCases && initial.testCases.length > 0) || // Already has test cases in initial - skip
+      hasGeneratedTestCasesRef.current || // Already attempted - skip
+      isGeneratingTestCases || // Already generating - skip
+      !node?.label || // No label - skip
+      !onChange // No callback - skip
+    ) {
+      return;
+    }
+
+    // Mark as attempted to prevent loops
+    hasGeneratedTestCasesRef.current = true;
+    setIsGeneratingTestCases(true);
+
+    // Extract sub-data for test case generation
+    const subData = Array.isArray((node as any)?.subData)
+      ? (node as any).subData.map((sub: any) => ({
+          id: sub.id || sub._id || String(sub.label || sub.name || '').toLowerCase().replace(/\s+/g, '_'),
+          label: sub.label || sub.name || ''
+        }))
+      : [];
+
+    const requestBody = {
+      label: node.label,
+      kind: initial.kind || node.kind || 'generic',
+      synonyms: initial.synonyms || [],
+      subData: subData,
+      locale: locale || 'it-IT' // Add locale for dynamic language context
+    };
+
+    console.log('[useProfileState] 🎯 Generating test cases for node:', {
+      label: node.label,
+      kind: initial.kind,
+      hasSubData: subData.length > 0,
+      hasOnChange: !!onChange,
+      currentTestCases: initial.testCases?.length || 0,
+      requestBody
+    });
+
+    fetch('/api/nlp/generate-test-cases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.success && Array.isArray(data.testCases) && data.testCases.length > 0) {
+          console.log('[useProfileState] ✅ Generated test cases:', data.testCases.length, 'cases');
+          console.log('[useProfileState] 📝 Test cases:', data.testCases);
+
+          // Build complete profile object with test cases
+          const updatedProfile = {
+            ...profile, // Use current profile, not initial (which may be stale)
+            testCases: data.testCases
+          };
+
+          console.log('[useProfileState] 🔄 Calling onChange with updated profile:', {
+            testCasesCount: updatedProfile.testCases?.length || 0,
+            profileKind: updatedProfile.kind,
+            profileSlotId: updatedProfile.slotId
+          });
+
+          // Update profile with test cases via onChange
+          // This updates node.nlpProfile.testCases, which should trigger initial to update
+          onChange(updatedProfile);
+
+          console.log('[useProfileState] ✅ onChange called, waiting for node update...');
+        } else {
+          console.warn('[useProfileState] ⚠️ No test cases generated or invalid response:', data);
+        }
+      })
+      .catch(error => {
+        console.error('[useProfileState] ❌ Error generating test cases:', {
+          error: error.message,
+          stack: error.stack,
+          nodeLabel: node?.label
+        });
+        // Don't block the UI if test case generation fails
+        // Reset flag to allow retry on next mount
+        hasGeneratedTestCasesRef.current = false;
+      })
+      .finally(() => {
+        setIsGeneratingTestCases(false);
+      });
+  }, [initial.testCases, node, initial.kind, initial.synonyms, onChange]);
+
   // Build profile object
   const profile: NLPProfile = useMemo(() => {
     const syns = fromCommaList(synonymsText);
@@ -249,6 +393,16 @@ export function useProfileState(
       waitingEsc1: waitingEsc1 || undefined,
       waitingEsc2: waitingEsc2 || undefined,
     };
+
+    // 🔍 LOG: Verifica test cases nel profile finale
+    console.log('[useProfileState][profile] 📊 Profile computed:', {
+      nodeLabel: node?.label,
+      testCasesFromInitial: Array.isArray(initial.testCases) ? initial.testCases.length : 'undefined/not array',
+      testCasesInProfile: Array.isArray(out.testCases) ? out.testCases.length : 'undefined/not array',
+      testCasesValue: out.testCases,
+      initialTestCasesValue: initial.testCases,
+    });
+
     // Removed verbose log - only log if debug flag is set
     try {
       if (localStorage.getItem('debug.responseEditor') === '1') {
@@ -256,7 +410,7 @@ export function useProfileState(
       }
     } catch {}
     return out;
-  }, [node, initial.slotId, initial.locale, kind, synonymsText, regex, formatText, examplesList, minConf, postProcessText, waitingEsc1, waitingEsc2]);
+  }, [node, initial.slotId, initial.locale, initial.testCases, kind, synonymsText, regex, formatText, examplesList, minConf, postProcessText, waitingEsc1, waitingEsc2]);
 
   // Ensure latest profile is flushed on unmount
   const profileRef = useRef<NLPProfile | null>(null);
