@@ -53,7 +53,8 @@ export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookCon
             if (pendingBgRef.current) return;
             pendingBgRef.current = true;
             runAddressEnrichment(String(input || ''), (updater) => api.setState(updater));
-            setTimeout(() => { pendingBgRef.current = null; }, 0);
+            // 🆕 Use requestAnimationFrame for instant execution, no setTimeout delay
+            requestAnimationFrame(() => { pendingBgRef.current = null; });
           }
         }];
     return () => {

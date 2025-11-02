@@ -213,8 +213,8 @@ export default function DDEBubbleChat({
       const { text, key: k } = resolveSuccess(main, translations, legacyDict, legacyMain);
       setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'success', textKey: k, color: getStepColor('success') }]);
       // Auto-advance engine by sending an empty acknowledgment to move to next main
-      // after a short delay so the success bubble remains visible.
-      setTimeout(() => { void send(''); }, 10);
+      // 🆕 Instant in debug mode, no delay
+      void send('');
     }
   }, [state]);
 
@@ -232,21 +232,23 @@ export default function DDEBubbleChat({
         setInlineDraft('');
         sentTextRef.current = ''; // Reset ref
         // Ensure focus after clearing (new text box ready for next input)
-        setTimeout(() => ensureInlineFocus(), 0);
+        // 🆕 Use requestAnimationFrame for instant focus without delay
+        requestAnimationFrame(() => ensureInlineFocus());
       }
     }
   }, [messages, setInlineDraft, ensureInlineFocus]);
 
   // Keep the inline input minimally in view when it exists
   React.useEffect(() => {
-    const id = setTimeout(() => {
+    // 🆕 Use requestAnimationFrame for instant execution, no setTimeout delay
+    const rafId = requestAnimationFrame(() => {
       try {
         inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch { }
       // After scroll, try to focus the inline input
       try { ensureInlineFocus(); } catch { }
-    }, 0);
-    return () => clearTimeout(id);
+    });
+    return () => cancelAnimationFrame(rafId);
   }, [messages.length, ensureInlineFocus]);
 
   // Message handling logic (extracted to hook)

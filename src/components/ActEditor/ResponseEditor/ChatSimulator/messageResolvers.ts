@@ -90,13 +90,106 @@ export function findOriginalNode(currentDDT: AssembledDDT, nodeLabel?: string, n
   return undefined;
 }
 
-// Helper to summarize a value from state memory
+// Italian month names for formatting
+const ITALIAN_MONTHS: Record<number, string> = {
+  1: 'gennaio', 2: 'febbraio', 3: 'marzo', 4: 'aprile',
+  5: 'maggio', 6: 'giugno', 7: 'luglio', 8: 'agosto',
+  9: 'settembre', 10: 'ottobre', 11: 'novembre', 12: 'dicembre'
+};
+
+// Helper to summarize a value from state memory with smart formatting
 export function summarizeValue(state: any, main: DDTNode | undefined): string {
   if (!main) return '';
   const v = state?.memory?.[main.id]?.value;
   if (!v) return '';
+
+  // If it's a string, return as-is
   if (typeof v === 'string') return v;
-  try { return Object.values(v).filter(Boolean).join(' '); } catch { return ''; }
+
+  // If it's not an object, convert to string
+  if (typeof v !== 'object' || v === null) return String(v);
+
+  try {
+    // Check if it's a date object with standard keys (day, month, year)
+    if ('day' in v || 'month' in v || 'year' in v) {
+      const day = v.day;
+      const month = v.month;
+      const year = v.year;
+
+      const parts: string[] = [];
+      if (day !== undefined && day !== null) parts.push(String(day));
+      if (month !== undefined && month !== null) {
+        const monthNum = typeof month === 'number' ? month : parseInt(String(month), 10);
+        if (!Number.isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+          parts.push(ITALIAN_MONTHS[monthNum] || String(monthNum));
+        } else {
+          parts.push(String(month));
+        }
+      }
+      if (year !== undefined && year !== null) parts.push(String(year));
+
+      return parts.length > 0 ? parts.join(' ') : '';
+    }
+
+    // Check if it's a name object with standard keys (firstname, lastname)
+    if ('firstname' in v || 'lastname' in v) {
+      const parts: string[] = [];
+      if (v.firstname) parts.push(String(v.firstname));
+      if (v.lastname) parts.push(String(v.lastname));
+      return parts.join(' ');
+    }
+
+    // If object has sub-IDs as keys, try to map them to readable format
+    // This happens when value is composed from subs in engine.ts
+    if (main && Array.isArray(main.subs) && main.subs.length > 0) {
+      const parts: string[] = [];
+      const seenSubIds = new Set<string>();
+
+      // Check if any sub has day/month/year semantics
+      for (const subId of main.subs) {
+        if (seenSubIds.has(subId)) continue;
+        const sub = state?.plan?.byId?.[subId];
+        if (!sub) continue;
+
+        const subValue = v[subId];
+        if (subValue === undefined || subValue === null) continue;
+
+        const labelNorm = String(sub?.label || '').toLowerCase();
+
+        // Map based on sub label semantics
+        if (main.kind === 'date') {
+          if (labelNorm.includes('day') || labelNorm.includes('giorno')) {
+            parts.push(String(subValue));
+            seenSubIds.add(subId);
+          } else if (labelNorm.includes('month') || labelNorm.includes('mese')) {
+            const monthNum = typeof subValue === 'number' ? subValue : parseInt(String(subValue), 10);
+            if (!Number.isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+              parts.push(ITALIAN_MONTHS[monthNum] || String(subValue));
+            } else {
+              parts.push(String(subValue));
+            }
+            seenSubIds.add(subId);
+          } else if (labelNorm.includes('year') || labelNorm.includes('anno')) {
+            parts.push(String(subValue));
+            seenSubIds.add(subId);
+          }
+        } else {
+          // For non-date types, just add the value
+          parts.push(String(subValue));
+          seenSubIds.add(subId);
+        }
+      }
+
+      if (parts.length > 0) {
+        return parts.join(' ');
+      }
+    }
+
+    // Fallback: join all non-empty values
+    return Object.values(v).filter(Boolean).join(' ');
+  } catch (e) {
+    return '';
+  }
 }
 
 // Resolve ask message for a node
@@ -150,7 +243,13 @@ export function resolveConfirm(
     const actions = getEscalationActions(legacyNode, 'confirmation', 1);
     for (const a of actions) {
       const txt = resolveActionText(a, legacyDict || {});
-      if (txt) return { text: txt, key: a?.parameters?.[0]?.value };
+      if (txt) {
+        // 🆕 Replace {input} placeholder in legacy messages too
+        const summary = summarizeValue(state, node);
+        const trimmed = String(summary || '').trim();
+        const finalTxt = trimmed ? txt.replace(/{input}/g, trimmed) : txt;
+        return { text: finalTxt, key: a?.parameters?.[0]?.value };
+      }
     }
   }
   // Merge translations with legacyDict to ensure all configured prompts are available
@@ -158,17 +257,32 @@ export function resolveConfirm(
   const key = node?.steps?.confirm?.base;
   // Use translations directly like StepEditor does: translations[key] || key
   const resolvedText = typeof key === 'string' ? (mergedTranslations[key] || key) : '';
-  if (resolvedText && resolvedText !== key) {
-    const summary = summarizeValue(state, node);
-    const trimmed = String(summary || '').trim();
-    return { text: trimmed ? `${trimmed}. ${resolvedText}` : resolvedText, key };
-  }
-  // If no translation found, return empty or key itself
+
+  // 🆕 Extract value and replace {input} placeholder in the message
   const summary = summarizeValue(state, node);
   const trimmed = String(summary || '').trim();
-  const finalText = trimmed && key ? `${trimmed}. ${mergedTranslations[key] || key}` : (key ? mergedTranslations[key] || key : '');
-  // eslint-disable-next-line no-console
-  return { text: finalText, key };
+
+  if (resolvedText && resolvedText !== key) {
+    // If message contains {input}, replace it with the formatted value
+    if (resolvedText.includes('{input}')) {
+      const finalText = trimmed ? resolvedText.replace(/{input}/g, trimmed) : resolvedText.replace(/{input}/g, '');
+      return { text: finalText, key };
+    }
+    // Legacy behavior: prepend value if no {input} placeholder (backward compatibility)
+    return { text: trimmed ? `${trimmed}. ${resolvedText}` : resolvedText, key };
+  }
+
+  // If no translation found, return empty or key itself
+  if (key) {
+    const fallbackText = mergedTranslations[key] || key;
+    // Replace {input} if present
+    const finalText = trimmed && fallbackText.includes('{input}')
+      ? fallbackText.replace(/{input}/g, trimmed)
+      : (trimmed ? `${trimmed}. ${fallbackText}` : fallbackText);
+    return { text: finalText, key };
+  }
+
+  return { text: '', key: undefined };
 }
 
 // Resolve success message for a node
