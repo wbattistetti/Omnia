@@ -70,8 +70,12 @@ export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookCon
         console.log('[DDE] extractedVariables:', extractedVariables);
       }
     }
-    const delay = Math.max(0, cfgRef.current.typingIndicatorMs || 0);
-    await new Promise((res) => setTimeout(res, delay));
+    // 🆕 Skip delay in debug mode or when using regex (instant processing)
+    // Delay is only useful for simulating typing in production
+    const delay = cfgRef.current.debug ? 0 : Math.max(0, cfgRef.current.typingIndicatorMs || 0);
+    if (delay > 0) {
+      await new Promise((res) => setTimeout(res, delay));
+    }
 
     // EffectAPI for effects
     const api: EffectAPI = {

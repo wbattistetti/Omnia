@@ -53,6 +53,9 @@ export default function DDEBubbleChat({
   const [noMatchCounts, setNoMatchCounts] = React.useState<Record<string, number>>({});
   const legacyDict = React.useMemo(() => extractTranslations(currentDDT as any, translations), [currentDDT, translations]);
 
+  // 🆕 Track sent text to clear input when it appears as a message
+  const sentTextRef = React.useRef<string>('');
+
   // Message editing state and handlers (extracted to hook)
   const {
     hoveredId,
@@ -215,6 +218,25 @@ export default function DDEBubbleChat({
     }
   }, [state]);
 
+  // 🆕 Clear input when sent text appears as a user message (frozen label)
+  // This happens after handleSend adds the message to messages, before engine processes
+  React.useEffect(() => {
+    if (sentTextRef.current && messages.length > 0) {
+      // Find the last user message that matches the sent text
+      const matchingMessage = [...messages]
+        .reverse()
+        .find(m => m.type === 'user' && m.text === sentTextRef.current);
+
+      if (matchingMessage) {
+        // Message found in chat - text is now frozen/visible, clear input
+        setInlineDraft('');
+        sentTextRef.current = ''; // Reset ref
+        // Ensure focus after clearing (new text box ready for next input)
+        setTimeout(() => ensureInlineFocus(), 0);
+      }
+    }
+  }, [messages, setInlineDraft, ensureInlineFocus]);
+
   // Keep the inline input minimally in view when it exists
   React.useEffect(() => {
     const id = setTimeout(() => {
@@ -330,10 +352,13 @@ export default function DDEBubbleChat({
             onChange={(e) => setInlineDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                const v = inlineDraft;
-                setInlineDraft('');
+                const v = inlineDraft.trim();
+                if (!v) return;
+                // 🆕 Freeze text: save it so we can clear input when it appears as a message
+                // The text will become a frozen message label, then engine processes it
+                sentTextRef.current = v;
                 void handleSend(v);
-                setTimeout(() => ensureInlineFocus(), 0);
+                // Focus will be handled after input is cleared (see useEffect below)
               }
             }}
             autoFocus
