@@ -27,6 +27,7 @@ export async function saveNLPProfileToGlobal(profile: NLPProfile): Promise<boole
           description: profile.description || `Extractor for ${profile.kind}`,
           examples: profile.examples || [],
           regex: profile.regex ? [profile.regex] : undefined,
+          testCases: profile.testCases || [], // 🆕 Save test cases
           // TODO: Add more fields from profile
         }
       },

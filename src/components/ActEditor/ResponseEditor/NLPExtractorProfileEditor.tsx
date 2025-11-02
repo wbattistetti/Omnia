@@ -41,8 +41,9 @@ export interface NLPProfile {
   kind: string;
   synonyms: string[];
   regex?: string;
+  testCases?: string[]; // Test cases generali per tutti gli estrattori (regex, extractor, NER, LLM)
   formatHints?: string[];
-  examples?: string[];
+  examples?: string[]; // Esempi NLP per training/NER (diversi da testCases)
   minConfidence?: number;
   postProcess?: any;
   subSlots?: any;
@@ -527,21 +528,45 @@ export default function NLPExtractorProfileEditor({
               onClose={closeEditor}
               node={node}
               kind={kind}
+              profile={profile}
+              onProfileUpdate={(updatedProfile) => {
+                // Update profile via onChange callback
+                onChange?.(updatedProfile);
+              }}
             />
           )}
 
           {activeEditor === 'extractor' && (
             <ExtractorInlineEditor
               onClose={closeEditor}
+              node={node}
+              profile={profile}
+              onProfileUpdate={(updatedProfile) => {
+                onChange?.(updatedProfile);
+              }}
             />
           )}
 
           {activeEditor === 'ner' && (
-            <NERInlineEditor onClose={closeEditor} />
+            <NERInlineEditor
+              onClose={closeEditor}
+              node={node}
+              profile={profile}
+              onProfileUpdate={(updatedProfile) => {
+                onChange?.(updatedProfile);
+              }}
+            />
           )}
 
           {activeEditor === 'llm' && (
-            <LLMInlineEditor onClose={closeEditor} />
+            <LLMInlineEditor
+              onClose={closeEditor}
+              node={node}
+              profile={profile}
+              onProfileUpdate={(updatedProfile) => {
+                onChange?.(updatedProfile);
+              }}
+            />
           )}
 
           {activeEditor === 'post' && (

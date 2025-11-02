@@ -1,20 +1,27 @@
 import React from 'react';
 import EditorPanel from '../../../CodeEditor/EditorPanel';
-import { Wand2, Loader2, RefreshCw } from 'lucide-react';
+import EditorHeader from './shared/EditorHeader';
+import TestValuesColumn, { type TestResult } from './shared/TestValuesColumn';
+import { useEditorMode } from '../hooks/useEditorMode';
+import { useTestValues } from '../hooks/useTestValues';
+import { NLPProfile } from '../NLPExtractorProfileEditor';
 
 interface ExtractorInlineEditorProps {
   onClose: () => void;
+  node?: any;
+  profile?: NLPProfile;
+  onProfileUpdate?: (profile: NLPProfile) => void;
 }
 
 const TEMPLATE_CODE = `// Estrazione non configurata
-// Clicca la bacchetta magica (🪄) per generare il codice estrattore da una descrizione
+// Clicca "Create Extractor" per generare il codice estrattore da una descrizione
 
 export const customExtractor: DataExtractor<string> = {
   extract(text: string) {
     return {
       confidence: 0,
       reasons: ['estrattore-non-configurato'],
-      error: '❌ Estrazione non configurata. Clicca la bacchetta magica (🪄) per generare il codice estrattore.'
+      error: '❌ Estrazione non configurata. Genera il codice estrattore.'
     };
   },
 
@@ -23,125 +30,109 @@ export const customExtractor: DataExtractor<string> = {
   },
 
   format(value: string) {
-    return '⚠️ Configura estrazione cliccando 🪄';
+    return '⚠️ Configura estrazione';
   }
 };`;
 
 /**
  * Inline editor for configuring deterministic extractor with AI code generation
  * Uses Monaco Editor for TypeScript code editing
+ * Unified with other extractors: Create/Refine button, TestValuesColumn
  */
 export default function ExtractorInlineEditor({
   onClose,
+  node,
+  profile,
+  onProfileUpdate,
 }: ExtractorInlineEditorProps) {
   const [extractorCode, setExtractorCode] = React.useState<string>(TEMPLATE_CODE);
-  const [aiMode, setAiMode] = React.useState<boolean>(false);
-  const [aiPrompt, setAiPrompt] = React.useState<string>('');
-  const [codeBackup, setCodeBackup] = React.useState<string>('');
+  const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [generating, setGenerating] = React.useState<boolean>(false);
-  const [lastAiPrompt, setLastAiPrompt] = React.useState<string>('');
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
-  // Detect if code has been modified (CREATE vs REFINE mode)
-  const isCodeModified = React.useMemo(() => {
-    const normalized = extractorCode.trim();
-    const templateNormalized = TEMPLATE_CODE.trim();
+  // Use unified test values hook
+  const { testCases, setTestCases } = useTestValues(
+    profile || { slotId: '', locale: 'it-IT', kind: 'generic', synonyms: [] },
+    onProfileUpdate || (() => {})
+  );
 
-    // Code is modified if:
-    // 1. Not empty
-    // 2. Different from template
-    // 3. Has meaningful content (not just comments)
-    if (!normalized || normalized === templateNormalized) return false;
+  // Use unified editor mode hook
+  const { currentValue, setCurrentValue, isCreateMode } = useEditorMode({
+    initialValue: extractorCode,
+    templateValue: TEMPLATE_CODE,
+    hasUserEdited,
+    extractorType: 'extractor',
+  });
 
-    // Check if there's actual code beyond comments
-    const codeWithoutComments = normalized.replace(/\/\/.*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    const hasCode = codeWithoutComments.length > 50;
+  // Sync currentValue with extractorCode
+  React.useEffect(() => {
+    setExtractorCode(currentValue);
+  }, [currentValue]);
 
-    return hasCode;
+  // Track user edits
+  React.useEffect(() => {
+    if (extractorCode !== TEMPLATE_CODE && extractorCode.trim() !== TEMPLATE_CODE.trim()) {
+      // Check if there's actual code beyond comments
+      const codeWithoutComments = extractorCode.replace(/\/\/.*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      const hasCode = codeWithoutComments.length > 50;
+      if (hasCode && !hasUserEdited) {
+        setHasUserEdited(true);
+      }
+    }
+  }, [extractorCode, hasUserEdited]);
+
+  // Test function for TestValuesColumn
+  const testExtractor = React.useCallback((value: string): TestResult => {
+    try {
+      // Create a minimal context to evaluate the extractor
+      // This is a simplified test - in production, you'd want to properly compile/run the TypeScript
+      const matched = extractorCode.includes('extract') && extractorCode.includes(value || '');
+      return {
+        matched,
+        fullMatch: matched ? value : undefined,
+      };
+    } catch (error) {
+      return {
+        matched: false,
+        error: String(error),
+      };
+    }
   }, [extractorCode]);
 
-  // Auto-focus when entering AI mode
-  React.useEffect(() => {
-    if (aiMode && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [aiMode]);
+  // Unified button click handler
+  const handleButtonClick = async () => {
+    let prompt = extractorCode || '';
 
-  const handleWandClick = () => {
-    // 🔄 REFINE mode: Auto-start refinement using TODOs/comments in code
-    if (isCodeModified) {
-      handleRefineAutoStart();
-    } else {
-      // 🪄 CREATE mode: Enter AI description mode
-      setCodeBackup(extractorCode);
-      setAiMode(true);
-      // Restore last AI prompt if available
-      if (lastAiPrompt) {
-        setAiPrompt(lastAiPrompt);
-      }
-    }
-  };
-
-  // 🔄 Auto-start refinement without user input (uses TODOs/comments)
-  const handleRefineAutoStart = async () => {
-    setGenerating(true);
-
-    try {
-      const response = await fetch('/api/nlp/refine-extractor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: extractorCode,
-          improvements: 'Implement TODO comments and suggestions found in the code',
-          dataType: 'string'
-        })
+    // Find test cases that don't match
+    const unmatchedTestCases: string[] = [];
+    if (extractorCode && extractorCode.trim() && testCases.length > 0) {
+      testCases.forEach((testCase) => {
+        const result = testExtractor(testCase);
+        if (!result.matched) {
+          unmatchedTestCases.push(testCase);
+        }
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.ok && data.result?.refined_code) {
-        setExtractorCode(data.result.refined_code);
-      } else {
-        alert('AI refinement failed. Please try again.');
-      }
-    } catch (error) {
-      console.error('[ExtractorEditor] AI refine auto-start error:', error);
-      alert('Error refining extractor code. Check console for details.');
-    } finally {
-      setGenerating(false);
     }
-  };
 
-  const handleEscape = () => {
-    setAiMode(false);
-    setExtractorCode(codeBackup);
-    setAiPrompt('');
-  };
-
-  const handleGenerate = async () => {
-    if (aiPrompt.trim().length < 5) return;
+    // Build prompt with validation errors if needed
+    if (unmatchedTestCases.length > 0) {
+      prompt += `\n\n⚠️ These test cases should match but currently don't:\n${unmatchedTestCases.map(tc => `- ${tc}`).join('\n')}`;
+    }
 
     setGenerating(true);
-    setLastAiPrompt(aiPrompt); // Remember for next time
 
     try {
-      // Choose endpoint based on mode
-      const endpoint = isCodeModified
-        ? '/api/nlp/refine-extractor'   // REFINE: improve existing code
-        : '/api/nlp/generate-extractor'; // CREATE: generate from scratch
+      const endpoint = isCreateMode
+        ? '/api/nlp/generate-extractor'
+        : '/api/nlp/refine-extractor';
 
-      const body = isCodeModified
+      const body = isCreateMode
         ? {
-          code: extractorCode,        // Send existing code
-          improvements: aiPrompt,     // User's improvement requests
+          description: prompt,
           dataType: 'string'
         }
         : {
-          description: aiPrompt,      // Natural language description
+          code: extractorCode,
+          improvements: prompt,
           dataType: 'string'
         };
 
@@ -159,27 +150,32 @@ export default function ExtractorInlineEditor({
 
       if (data.success && data.code) {
         setExtractorCode(data.code);
-        setAiMode(false);
-        setAiPrompt('');
+        setCurrentValue(data.code);
+        setHasUserEdited(false);
+
+        // Save test cases from AI response if available
+        if (data.examples && Array.isArray(data.examples)) {
+          setTestCases(data.examples);
+        }
       } else {
-        alert(`AI ${isCodeModified ? 'refinement' : 'generation'} failed. Please try again.`);
+        alert(`AI ${isCreateMode ? 'generation' : 'refinement'} failed. Please try again.`);
       }
     } catch (error) {
-      console.error(`[ExtractorEditor] AI ${isCodeModified ? 'refine' : 'generate'} error:`, error);
-      alert(`Error ${isCodeModified ? 'refining' : 'generating'} extractor code. Check console for details.`);
+      console.error(`[ExtractorEditor] AI ${isCreateMode ? 'generate' : 'refine'} error:`, error);
+      alert(`Error ${isCreateMode ? 'generating' : 'refining'} extractor code. Check console for details.`);
     } finally {
       setGenerating(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      handleEscape();
-    } else if (e.key === 'Enter' && e.ctrlKey && aiPrompt.trim().length >= 5) {
-      e.preventDefault();
-      handleGenerate();
-    }
+  // Show button if user edited or there are unmatched test cases
+  const hasUnmatchedTests = testCases.some(tc => !testExtractor(tc).matched);
+  const shouldShowButton = !generating && (hasUserEdited || hasUnmatchedTests);
+
+  // Close handler - validate if needed
+  const handleClose = () => {
+    // Close anyway behavior - always allow closing
+    onClose();
   };
 
   return (
@@ -190,191 +186,98 @@ export default function ExtractorInlineEditor({
         padding: 16,
         background: '#f9fafb',
         animation: 'fadeIn 0.2s ease-in',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        width: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden',
       }}
     >
-      {/* Header */}
+      <EditorHeader
+        title="🪄 Configure Extractor"
+        extractorType="extractor"
+        isCreateMode={isCreateMode}
+        isGenerating={generating}
+        shouldShowButton={shouldShowButton}
+        onButtonClick={handleButtonClick}
+        onClose={handleClose}
+      />
+
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
+          flexDirection: 'row',
+          gap: 0,
+          width: '100%',
+          maxWidth: '100%',
+          overflow: 'hidden',
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-          🪄 Configure Extractor
-        </h3>
-        <button
-          onClick={onClose}
+        {/* Monaco Editor */}
+        <div
           style={{
-            background: '#e5e7eb',
-            border: 'none',
-            borderRadius: 4,
-            padding: '6px 12px',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 500,
+            flex: 3,
+            minWidth: 0,
+            flexShrink: 1,
+            overflow: 'hidden',
           }}
         >
-          ❌ Close
-        </button>
-      </div>
-
-      {/* Monaco Editor + Magic Wand */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', marginBottom: 8, fontWeight: 500, fontSize: 14 }}>
-          TypeScript Extractor Code
-        </label>
-
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          {/* Monaco or AI Prompt Textarea */}
-          <div style={{ flex: 1, position: 'relative' }}>
-            {generating ? (
-              <div
-                style={{
-                  height: 500,
-                  border: '1px solid #ddd',
-                  borderRadius: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: '#fff',
-                  flexDirection: 'column',
-                  gap: 12
-                }}
-              >
-                <Loader2 size={32} className="animate-spin" style={{ color: isCodeModified ? '#f59e0b' : '#3b82f6' }} />
-                <span style={{ fontSize: 14, color: '#666' }}>
-                  {isCodeModified ? '🔄 Refining extractor code...' : '🪄 Generating extractor code...'}
-                </span>
-              </div>
-            ) : aiMode ? (
-              <>
-                <textarea
-                  ref={textareaRef}
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={isCodeModified
-                    ? "Describe improvements (e.g., 'implement TODOs', 'add validation for...', 'support Italian numbers')..."
-                    : "Describe what you want to extract... (min 5 characters)"
-                  }
-                  style={{
-                    width: '100%',
-                    height: 120,
-                    padding: 12,
-                    border: '2px solid #3b82f6',
-                    borderRadius: 8,
-                    fontSize: 14,
-                    fontFamily: 'monospace',
-                    resize: 'vertical',
-                    outline: 'none',
-                    background: '#fff',
-                    boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)'
-                  }}
-                />
-                {aiPrompt.trim().length >= 5 && (
-                  <button
-                    onClick={handleGenerate}
-                    style={{
-                      marginTop: 8,
-                      padding: '8px 16px',
-                      background: isCodeModified ? '#f59e0b' : '#3b82f6',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 6,
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      animation: 'fadeIn 0.2s ease-in'
-                    }}
-                  >
-                    {isCodeModified ? (
-                      <>
-                        <RefreshCw size={16} />
-                        Refine Extractor (Ctrl+Enter)
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 size={16} />
-                        Create Extractor (Ctrl+Enter)
-                      </>
-                    )}
-                  </button>
-                )}
-              </>
-            ) : (
-              <div style={{ height: 500, border: '1px solid #334155', borderRadius: 8, overflow: 'hidden' }}>
-                <EditorPanel
-                  code={extractorCode}
-                  onChange={setExtractorCode}
-                  fontSize={13}
-                  varKeys={[]}
-                  language="typescript"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* AI Button - Changes icon/color based on CREATE vs REFINE mode */}
-          {!aiMode && !generating && (
-            <button
-              onClick={handleWandClick}
-              title={isCodeModified
-                ? "🔄 Refine: Improve existing code based on your comments/TODOs"
-                : "🪄 Create: Generate new extractor from description"
-              }
+          {generating ? (
+            <div
               style={{
-                height: 40,
-                minWidth: 40,
-                padding: 10,
-                background: isCodeModified
-                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' // Orange for REFINE
-                  : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // Purple for CREATE
-                border: 'none',
+                height: 500,
+                border: '1px solid #334155',
                 borderRadius: 8,
-                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                flexShrink: 0,
-                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                boxShadow: isCodeModified
-                  ? '0 2px 8px rgba(245, 158, 11, 0.3)'
-                  : '0 2px 8px rgba(102, 126, 234, 0.3)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.05)';
-                e.currentTarget.style.boxShadow = isCodeModified
-                  ? '0 4px 12px rgba(245, 158, 11, 0.5)'
-                  : '0 4px 12px rgba(102, 126, 234, 0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.boxShadow = isCodeModified
-                  ? '0 2px 8px rgba(245, 158, 11, 0.3)'
-                  : '0 2px 8px rgba(102, 126, 234, 0.3)';
+                background: '#1e1e1e',
+                flexDirection: 'column',
+                gap: 12
               }}
             >
-              {isCodeModified ? (
-                <RefreshCw size={16} color="#fff" />
-              ) : (
-                <Wand2 size={16} color="#fff" />
-              )}
-            </button>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  border: '3px solid #3b82f6',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }}
+              />
+              <span style={{ fontSize: 14, color: '#f1f5f9' }}>
+                {isCreateMode ? '🪄 Generating extractor code...' : '🔄 Refining extractor code...'}
+              </span>
+            </div>
+          ) : (
+            <div style={{ height: 500, border: '1px solid #334155', borderRadius: 8, overflow: 'hidden' }}>
+              <EditorPanel
+                code={extractorCode}
+                onChange={(newCode) => {
+                  setExtractorCode(newCode);
+                  setCurrentValue(newCode);
+                  if (!hasUserEdited) setHasUserEdited(true);
+                }}
+                fontSize={13}
+                varKeys={[]}
+                language="typescript"
+              />
+            </div>
           )}
         </div>
 
-        {aiMode && (
-          <div style={{ marginTop: 8, fontSize: 12, color: '#666', fontStyle: 'italic' }}>
-            💡 Press ESC to cancel • Ctrl+Enter to generate
-          </div>
-        )}
+        {/* Test Values Column */}
+        <TestValuesColumn
+          testCases={testCases}
+          onTestCasesChange={setTestCases}
+          testFunction={testExtractor}
+          extractorType="extractor"
+          node={node}
+          enabled={true}
+        />
       </div>
     </div>
   );
 }
-

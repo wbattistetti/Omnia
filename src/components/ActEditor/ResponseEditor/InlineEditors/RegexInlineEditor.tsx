@@ -1,6 +1,10 @@
 import React from 'react';
 import EditorPanel, { type CustomLanguage } from '../../../CodeEditor/EditorPanel';
-import { useResizablePanel } from '../../../../hooks/useResizablePanel';
+import TestValuesColumn, { type TestResult } from './shared/TestValuesColumn';
+import EditorHeader from './shared/EditorHeader';
+import { useTestValues } from '../hooks/useTestValues';
+import { useEditorMode } from '../hooks/useEditorMode';
+import { NLPProfile } from '../NLPExtractorProfileEditor';
 
 // Helper to map label to standard key (same logic as pipeline.ts)
 function mapLabelToStandardKey(label: string): string | null {
@@ -149,6 +153,8 @@ interface RegexInlineEditorProps {
   onClose: () => void;
   node?: any; // Optional: node with subData for AI regex generation
   kind?: string; // Optional: kind for AI regex generation
+  profile?: NLPProfile; // Profile for accessing testCases
+  onProfileUpdate?: (profile: NLPProfile) => void; // Callback to update profile
 }
 
 /**
@@ -161,6 +167,8 @@ export default function RegexInlineEditor({
   onClose,
   node,
   kind,
+  profile,
+  onProfileUpdate,
 }: RegexInlineEditorProps) {
   const [regexAiMode, setRegexAiMode] = React.useState(false);
   const [regexAiPrompt, setRegexAiPrompt] = React.useState('');
@@ -170,25 +178,19 @@ export default function RegexInlineEditor({
   const [validationResult, setValidationResult] = React.useState<ValidationResult | null>(null);
   const [shouldShowValidation, setShouldShowValidation] = React.useState(false);
 
-  // 🆕 Test cases state: values to test the regex against
-  const [testCases, setTestCases] = React.useState<string[]>([]);
-  const [newTestCase, setNewTestCase] = React.useState('');
+  // 🆕 Use shared hook for test cases
+  const { testCases, setTestCases } = useTestValues(
+    profile || { slotId: '', locale: 'it-IT', kind: kind || 'generic', synonyms: [] },
+    onProfileUpdate || (() => { })
+  );
 
-  // 🆕 Resizable panel for test cases column
-  const { size: testColumnWidth, handleResize, style: testColumnStyle } = useResizablePanel({
-    initialSize: 280,
-    min: 150,
-    max: 400,
-    direction: 'horizontal',
-    persistKey: 'regex-editor-test-column-width'
+  // Use unified editor mode hook
+  const { currentValue: currentRegexValue, setCurrentValue: setCurrentRegexValue, isCreateMode, getButtonLabel } = useEditorMode({
+    initialValue: regex,
+    templateValue: '',
+    hasUserEdited,
+    extractorType: 'regex',
   });
-
-  // Keep track of dragging state for resize handle
-  const [isResizing, setIsResizing] = React.useState(false);
-
-  // Track if regex was initially empty
-  const wasInitiallyEmpty = React.useRef(!regex || regex.trim().length === 0);
-  const [currentRegexValue, setCurrentRegexValue] = React.useState(regex);
 
   // 🆕 Validate regex ONLY when AI finishes generating (not on every textbox change)
   const prevGeneratingRegex = React.useRef(generatingRegex);
@@ -207,16 +209,6 @@ export default function RegexInlineEditor({
   React.useEffect(() => {
     setCurrentRegexValue(regex);
   }, [regex]);
-
-  // Determine button label and visibility
-  const hasContent = currentRegexValue && currentRegexValue.trim().length > 0;
-
-  // Determine button label based on state
-  const getButtonLabel = () => {
-    if (generatingRegex) return 'Creating...';
-    // Show "Create Regex" if empty, "Refine Regex" if has content
-    return !hasContent ? 'Create Regex' : 'Refine Regex';
-  };
 
   // Show button if:
   // - NOT generating
@@ -268,7 +260,10 @@ export default function RegexInlineEditor({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && regexAiMode) {
         setRegexAiMode(false);
-        setRegex(regexBackup);
+        if (regexBackup) {
+          setRegex(regexBackup);
+          setCurrentRegexValue(regexBackup);
+        }
         e.preventDefault();
         console.log('[AI Regex] Cancelled via ESC - restored:', regexBackup);
       }
@@ -395,8 +390,6 @@ export default function RegexInlineEditor({
         setCurrentRegexValue(newRegex);
         console.log('[AI Regex] ✅ Called setCurrentRegexValue with:', newRegex);
 
-        // Update initial state: if regex was generated, it's no longer "initially empty"
-        wasInitiallyEmpty.current = false;
         // Reset hasUserEdited since we now have a new generated regex
         setHasUserEdited(false);
 
@@ -454,145 +447,54 @@ export default function RegexInlineEditor({
         animation: 'fadeIn 0.2s ease-in',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-          🪄 Edit Regex
-        </h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {/* Validation badge - only shown when shouldShowValidation is true */}
-          {shouldShowValidation && validationResult && currentRegexValue && currentRegexValue.trim().length > 0 && (
-            <>
-              <div
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 500,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  background: validationResult.valid ? '#10b981' : '#ef4444',
-                  color: '#fff',
-                  border: '1px solid',
-                  borderColor: validationResult.valid ? '#059669' : '#dc2626',
-                  flexShrink: 0,
-                }}
-              >
-                {validationResult.valid ? (
-                  <>
-                    <span>✓</span>
-                    <span>Gruppi corretti</span>
-                  </>
-                ) : (
-                  <>
-                    <span>⚠</span>
-                    <span>
-                      {validationResult.groupsFound}/{validationResult.groupsExpected} gruppi
-                    </span>
-                  </>
-                )}
-              </div>
-              {/* 🆕 Error label - shown after badge, before Refine Regex button */}
-              {/* Uses flex: 1 to take available space, allows multi-line, no truncation unless truly necessary */}
-              {!validationResult.valid && validationResult.errors.length > 0 && (
-                <span
-                  style={{
-                    fontSize: 10,
-                    color: '#ef4444',
-                    fontStyle: 'italic',
-                    flex: 1,
-                    minWidth: 0, // Allow flex item to shrink below content size if needed
-                    whiteSpace: 'normal', // Allow multi-line wrapping
-                    wordBreak: 'break-word', // Break long words if necessary
-                    lineHeight: 1.4, // Better readability for multi-line
-                    maxWidth: '100%', // Don't exceed container width
-                  }}
-                >
-                  {validationResult.errors.join('. ')}
-                </span>
-              )}
-            </>
-          )}
-
-          {/* Unified Create/Refine Regex button */}
-          {shouldShowButton && (
-            <button
-              type="button"
-              onClick={handleButtonClick}
-              disabled={generatingRegex || !currentRegexValue || currentRegexValue.trim().length < 5}
-              title={getButtonLabel()}
+      <EditorHeader
+        title="🪄 Edit Regex"
+        extractorType="regex"
+        isCreateMode={isCreateMode}
+        isGenerating={generatingRegex}
+        shouldShowButton={!!shouldShowButton}
+        onButtonClick={handleButtonClick}
+        onClose={onClose}
+        validationBadge={
+          shouldShowValidation && validationResult && currentRegexValue && currentRegexValue.trim().length > 0 ? (
+            <div
               style={{
-                padding: '6px 16px',
-                border: '2px solid #3b82f6',
-                borderRadius: 8,
-                background: (generatingRegex || !currentRegexValue || currentRegexValue.trim().length < 5) ? '#f3f4f6' : '#3b82f6',
-                color: '#fff',
-                cursor: (generatingRegex || !currentRegexValue || currentRegexValue.trim().length < 5) ? 'default' : 'pointer',
-                fontSize: 13,
+                padding: '4px 12px',
+                borderRadius: 6,
+                fontSize: 12,
                 fontWeight: 500,
-                transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
+                gap: 6,
+                background: validationResult.valid ? '#10b981' : '#ef4444',
+                color: '#fff',
+                border: '1px solid',
+                borderColor: validationResult.valid ? '#059669' : '#dc2626',
+                flexShrink: 0,
               }}
             >
-              {generatingRegex ? (
+              {validationResult.valid ? (
                 <>
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      width: 12,
-                      height: 12,
-                      border: '2px solid #fff',
-                      borderTopColor: 'transparent',
-                      borderRadius: '50%',
-                      animation: 'spin 0.8s linear infinite',
-                      marginRight: 6,
-                    }}
-                  />
-                  <span>Creating...</span>
+                  <span>✓</span>
+                  <span>Gruppi corretti</span>
                 </>
               ) : (
-                getButtonLabel()
+                <>
+                  <span>⚠</span>
+                  <span>
+                    {validationResult.groupsFound}/{validationResult.groupsExpected} gruppi
+                  </span>
+                </>
               )}
-            </button>
-          )}
-
-          <button
-            onClick={() => {
-              // 🆕 If there are validation errors and not shown yet, validate and show before closing
-              if (currentRegexValue && currentRegexValue.trim().length > 0 && !shouldShowValidation) {
-                const validation = validateRegexGroups(currentRegexValue, node);
-                if (!validation.valid) {
-                  setValidationResult(validation);
-                  setShouldShowValidation(true);
-                  console.log('[AI Regex] ⚠️ Close clicked with errors, showing validation');
-                  // Still allow closing (Close anyway behavior)
-                }
-              }
-              onClose();
-            }}
-            style={{
-              background: '#e5e7eb',
-              border: 'none',
-              borderRadius: 4,
-              padding: '6px 12px',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            ❌ Close
-          </button>
-        </div>
-      </div>
+            </div>
+          ) : undefined
+        }
+        errorMessage={
+          shouldShowValidation && validationResult && !validationResult.valid && validationResult.errors.length > 0
+            ? validationResult.errors.join('. ')
+            : undefined
+        }
+      />
 
       <div style={{
         display: 'flex',
@@ -700,276 +602,50 @@ export default function RegexInlineEditor({
             </div>
           </div>
 
-          {/* 🆕 Resize Handle - visible and interactive */}
-          {currentRegexValue && currentRegexValue.trim().length > 0 && (
-            <div
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsResizing(true);
-                const startX = e.clientX;
-                const startWidth = testColumnWidth;
+          {/* 🆕 Right: Test Cases Column - Using shared component */}
+          <TestValuesColumn
+            testCases={testCases}
+            onTestCasesChange={setTestCases}
+            testFunction={(value: string): TestResult => {
+              if (!currentRegexValue || !currentRegexValue.trim()) {
+                return { matched: false, error: 'Regex vuoto' };
+              }
 
-                const onMouseMove = (ev: MouseEvent) => {
-                  ev.preventDefault();
-                  const delta = ev.clientX - startX;
-                  const maxAllowed = typeof window !== 'undefined' ? window.innerWidth * 0.25 : 400;
-                  const newWidth = Math.max(150, Math.min(maxAllowed, startWidth - delta));
-                  handleResize(newWidth);
-                };
+              try {
+                const regexObj = new RegExp(currentRegexValue, 'g');
+                const match = value.match(regexObj);
+                if (match) {
+                  const groups = match.slice(1).filter((g) => g !== undefined && g !== null);
+                  const extracted: Record<string, string> = {};
 
-                const onMouseUp = () => {
-                  document.removeEventListener('mousemove', onMouseMove);
-                  document.removeEventListener('mouseup', onMouseUp);
-                  document.body.style.cursor = '';
-                  document.body.style.userSelect = '';
-                  setIsResizing(false);
-                };
+                  // Map groups to sub-data if available
+                  if (node && (node.subData || node.subSlots) && groups.length > 0) {
+                    const allSubs = [...(node.subData || []), ...(node.subSlots || [])];
+                    groups.forEach((group, i) => {
+                      if (i < allSubs.length) {
+                        const sub = allSubs[i];
+                        const label = String(sub?.label || sub?.name || `group${i + 1}`).toLowerCase();
+                        extracted[label] = group;
+                      }
+                    });
+                  }
 
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-                document.body.style.cursor = 'col-resize';
-                document.body.style.userSelect = 'none';
-              }}
-              style={{
-                width: 8,
-                minWidth: 8,
-                cursor: 'col-resize',
-                background: isResizing
-                  ? 'rgba(59, 130, 246, 0.6)'
-                  : 'rgba(148, 163, 184, 0.2)',
-                borderLeft: '1px solid rgba(148, 163, 184, 0.3)',
-                borderRight: '1px solid rgba(148, 163, 184, 0.3)',
-                flexShrink: 0,
-                position: 'relative',
-                zIndex: 10,
-                transition: isResizing ? 'none' : 'background 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              onMouseEnter={(e) => {
-                if (!isResizing) {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.4)';
-                  e.currentTarget.style.borderLeft = '1px solid rgba(59, 130, 246, 0.6)';
-                  e.currentTarget.style.borderRight = '1px solid rgba(59, 130, 246, 0.6)';
+                  return {
+                    matched: true,
+                    fullMatch: match[0],
+                    groups,
+                    extracted: Object.keys(extracted).length > 0 ? extracted : undefined,
+                  };
                 }
-              }}
-              onMouseLeave={(e) => {
-                if (!isResizing) {
-                  e.currentTarget.style.background = 'rgba(148, 163, 184, 0.2)';
-                  e.currentTarget.style.borderLeft = '1px solid rgba(148, 163, 184, 0.3)';
-                  e.currentTarget.style.borderRight = '1px solid rgba(148, 163, 184, 0.3)';
-                }
-              }}
-              title="Trascina per ridimensionare il pannello"
-            >
-              {/* Visual indicator dots */}
-              <div
-                style={{
-                  width: 2,
-                  height: 20,
-                  background: isResizing ? '#3b82f6' : 'rgba(148, 163, 184, 0.5)',
-                  borderRadius: 1,
-                }}
-              />
-            </div>
-          )}
-
-          {/* 🆕 Right: Test Cases Column */}
-          {currentRegexValue && currentRegexValue.trim().length > 0 && (
-            <div
-              style={{
-                ...testColumnStyle,
-                border: '1px solid #334155',
-                borderRadius: 8,
-                padding: 12,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-                maxHeight: 500,
-                overflowY: 'auto',
-                background: '#1e1e1e',
-                flexShrink: 1,
-                minWidth: 150,
-                maxWidth: typeof window !== 'undefined' ? `${Math.min(400, window.innerWidth * 0.25)}px` : '25%',
-                width: testColumnWidth > 0 ? `${Math.min(testColumnWidth, typeof window !== 'undefined' ? window.innerWidth * 0.25 : 400)}px` : 'auto',
-              }}
-            >
-              {/* Recognized Values Section - includes input for adding test cases */}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#f1f5f9', marginBottom: 8 }}>
-                  Test Values
-                </div>
-                {/* Input for adding new test cases */}
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                  <input
-                    type="text"
-                    value={newTestCase}
-                    onChange={(e) => setNewTestCase(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newTestCase.trim()) {
-                        setTestCases((prev) => [...prev, newTestCase.trim()]);
-                        setNewTestCase('');
-                      }
-                    }}
-                    placeholder="Aggiungi frase..."
-                    style={{
-                      flex: 1,
-                      padding: '4px 8px',
-                      border: '1px solid #334155',
-                      borderRadius: 4,
-                      background: '#0f172a',
-                      color: '#f1f5f9',
-                      fontSize: 12,
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (newTestCase.trim()) {
-                        setTestCases((prev) => [...prev, newTestCase.trim()]);
-                        setNewTestCase('');
-                      }
-                    }}
-                    disabled={!newTestCase.trim()}
-                    style={{
-                      padding: '4px 8px',
-                      border: '1px solid #334155',
-                      borderRadius: 4,
-                      background: newTestCase.trim() ? '#3b82f6' : '#334155',
-                      color: '#fff',
-                      cursor: newTestCase.trim() ? 'pointer' : 'not-allowed',
-                      fontSize: 11,
-                    }}
-                  >
-                    +
-                  </button>
-                </div>
-
-                {/* Recognized Values - two column layout (also shows test values with × button) */}
-                {testCases.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {testCases.map((testCase, idx) => {
-                      // Test regex against this test case
-                      let matchResult: {
-                        matched: boolean;
-                        fullMatch?: string;
-                        groups?: string[];
-                        extracted?: Record<string, string>;
-                      } = { matched: false };
-
-                      if (currentRegexValue && currentRegexValue.trim()) {
-                        try {
-                          const regexObj = new RegExp(currentRegexValue, 'g');
-                          const match = testCase.match(regexObj);
-                          if (match) {
-                            matchResult = {
-                              matched: true,
-                              fullMatch: match[0],
-                              groups: match.slice(1).filter((g) => g !== undefined && g !== null),
-                            };
-
-                            // Map groups to sub-data if available
-                            if (node && (node.subData || node.subSlots) && matchResult.groups && matchResult.groups.length > 0) {
-                              const allSubs = [...(node.subData || []), ...(node.subSlots || [])];
-                              const extracted: Record<string, string> = {};
-                              matchResult.groups.forEach((group, i) => {
-                                if (i < allSubs.length) {
-                                  const sub = allSubs[i];
-                                  const label = String(sub?.label || sub?.name || `group${i + 1}`).toLowerCase();
-                                  extracted[label] = group;
-                                }
-                              });
-                              matchResult.extracted = extracted;
-                            }
-                          }
-                        } catch (e) {
-                          // Invalid regex
-                        }
-                      }
-
-
-                      return (
-                        <div
-                          key={idx}
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'row',
-                            gap: 8,
-                            alignItems: 'stretch',
-                            minHeight: 40,
-                          }}
-                        >
-                          {/* Left column: Test value with remove button */}
-                          <div
-                            style={{
-                              flex: '0 0 45%',
-                              padding: '8px',
-                              background: '#0f172a',
-                              borderRadius: 4,
-                              fontSize: 11,
-                              color: '#e2e8f0',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              border: '1px solid #334155',
-                            }}
-                          >
-                            <span style={{ flex: 1 }}>{testCase}</span>
-                            <button
-                              onClick={() => setTestCases((prev) => prev.filter((_, i) => i !== idx))}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#ef4444',
-                                cursor: 'pointer',
-                                padding: '2px 4px',
-                                fontSize: 12,
-                                marginLeft: 8,
-                              }}
-                            >
-                              ×
-                            </button>
-                          </div>
-
-                          {/* Right column: Matched value (green) or No match (red) */}
-                          <div
-                            style={{
-                              flex: '0 0 45%',
-                              padding: '8px',
-                              background: matchResult.matched ? '#064e3b' : '#7f1d1d',
-                              borderRadius: 4,
-                              border: `1px solid ${matchResult.matched ? '#059669' : '#dc2626'}`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'flex-start',
-                              minWidth: 150,
-                            }}
-                          >
-                            {matchResult.matched ? (
-                              <div style={{ fontSize: 11, color: '#a7f3d0', width: '100%' }}>
-                                {matchResult.fullMatch ? (
-                                  <span style={{ wordBreak: 'break-word' }}>{matchResult.fullMatch}</span>
-                                ) : (
-                                  <span>✓</span>
-                                )}
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: 11, color: '#fca5a5' }}>✗</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', padding: '8px 0' }}>
-                    Nessun test case. Aggiungi valori da testare.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+                return { matched: false };
+              } catch (e) {
+                return { matched: false, error: 'Regex non valido' };
+              }
+            }}
+            extractorType="regex"
+            node={node}
+            enabled={!!currentRegexValue && currentRegexValue.trim().length > 0}
+          />
         </div>
       </div>
     </div>

@@ -63,6 +63,7 @@ export function useProfileState(
           ? (node as any).synonyms
           : [(node?.label || '').toString(), (node?.label || '').toString().toLowerCase()].filter(Boolean),
       regex: p.regex,
+      testCases: Array.isArray(p.testCases) ? p.testCases : undefined,
       formatHints: Array.isArray(p.formatHints) ? p.formatHints : undefined,
       examples: Array.isArray(p.examples) ? p.examples : undefined,
       minConfidence: typeof p.minConfidence === 'number' ? p.minConfidence : 0.6,
@@ -202,6 +203,7 @@ export function useProfileState(
     } catch {}
     setSynonymsText(toCommaList(initial.synonyms));
     setRegex(initial.regex || ''); // IMPORTANT: Load regex from initial profile (don't reset!)
+    // testCases are managed separately via useTestValues hook, no local state needed
     setFormatText(toCommaList(initial.formatHints));
     setExamplesList(Array.isArray(initial.examples) ? initial.examples : []); // FIX: Always sync examples from node
     setMinConf(initial.minConfidence || 0.6);
@@ -238,6 +240,7 @@ export function useProfileState(
       kind: (kind === 'generic' && (node?.kind && node.kind !== 'generic')) ? node.kind : kind,
       synonyms: syns,
       regex: regex || undefined,
+      testCases: initial.testCases || undefined, // testCases come da initial profile (loaded from node)
       formatHints: formats.length ? formats : undefined,
       examples: ex.length ? ex : undefined,
       minConfidence: minConf,
@@ -293,7 +296,7 @@ export function useProfileState(
     }
     // REMOVED 'profile', 'node', 'onChange' from dependencies to prevent infinite loop
     // We track all individual profile fields and use refs for node/onChange
-  }, [profile.synonyms, profile.regex, profile.kind, profile.formatHints, profile.examples, profile.minConfidence, profile.postProcess, profile.subSlots, profile.waitingEsc1, profile.waitingEsc2]);
+  }, [profile.synonyms, profile.regex, profile.testCases, profile.kind, profile.formatHints, profile.examples, profile.minConfidence, profile.postProcess, profile.subSlots, profile.waitingEsc1, profile.waitingEsc2]);
 
   // Wrapper for setKind that marks user-initiated changes
   const setKindUser = useCallback((newKind: string) => {
