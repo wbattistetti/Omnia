@@ -9,6 +9,7 @@ import { X, Pencil, Check, Code2, FlaskConical, ListChecks, Loader2 } from 'luci
 import { SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarTheme';
 import { setupMonacoEnvironment } from '../../utils/monacoWorkerSetup';
 import VariablesPanel from './VariablesPanel';
+import { useAIProvider } from '../../context/AIProviderContext';
 // SmartTooltip is used only in the tester's toolbar (right panel)
 
 // Ensure Monaco workers configured once
@@ -101,12 +102,8 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   // Unified font size across all subpanels; Ctrl+Wheel handled at container level
   const [fontPx, setFontPx] = React.useState<number>(13);
   // chat removed
-  const [provider, setProvider] = React.useState<'openai'|'groq'>((() => {
-    try { return ((localStorage.getItem('omnia.aiProvider') || 'openai') as any); } catch { return 'openai' as const; }
-  })());
-  React.useEffect(() => {
-    try { (window as any).__AI_PROVIDER = provider; localStorage.setItem('omnia.aiProvider', provider); } catch {}
-  }, [provider]);
+  // Use global AI provider from context
+  const { provider } = useAIProvider();
 
   const normalizeCode = React.useCallback((txt: string) => {
     try { return String(txt || '').replace(/\r/g, '').trim(); } catch { return ''; }
@@ -1007,18 +1004,6 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                   )}
                 </div>
               )}
-              <div style={{ flex: 1 }} />
-              <div title="AI provider" style={{ display:'inline-flex', alignItems:'center', gap:6, color:'#cbd5e1' }}>
-                <span style={{ fontSize:12, color:'#94a3b8' }}>AI:</span>
-                <select
-                  value={provider}
-                  onChange={(e) => setProvider((e.target.value as any) || 'openai')}
-                  style={{ background:'transparent', color:'#e5e7eb', border:'1px solid #334155', borderRadius:6, padding:'4px 6px' }}
-                >
-                  <option value="openai">OpenAI</option>
-                  <option value="groq">Llama (Groq)</option>
-                </select>
-              </div>
             </div>
             <CodeEditor
               initialCode={script}

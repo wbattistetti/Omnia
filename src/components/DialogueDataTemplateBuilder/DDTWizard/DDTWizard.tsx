@@ -13,6 +13,7 @@ import { PlanRunResult } from './planRunner';
 import { buildArtifactStore, mergeArtifactStores, moveArtifactsPath } from './artifactStore';
 import { assembleFinalDDT } from './assembleFinal';
 import { Hourglass, Bell } from 'lucide-react';
+import { useAIProvider } from '../../../context/AIProviderContext';
 import { debug, error } from '../../../utils/logger';
 // ResponseEditor will be opened by sidebar after onComplete
 
@@ -204,6 +205,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
       // Get suggested structure
       const suggestedStructure = await autoMappingService.getSuggestedStructure(fieldLabel, selectedProvider.toLowerCase());
+      // Note: model is not used in this endpoint yet, can be added later if needed
 
       if (suggestedStructure && suggestedStructure.subData.length > 0) {
         console.log('[AUTO_MAPPING] Applying structure:', suggestedStructure.subData.length, 'sub-fields');
@@ -236,7 +238,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     }
   };
   const [userDesc, setUserDesc] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'groq'>('groq');
+  // Use global AI provider and model from context
+  const { provider: selectedProvider, model: selectedModel } = useAIProvider();
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dataNode] = useState<DataNode | null>(() => ({ name: initialDDT?.label || '' }));
@@ -255,7 +258,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const response = await fetch(urlPrimary, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userDesc: text.trim(), provider: selectedProvider.toLowerCase() }),
+        body: JSON.stringify({ userDesc: text.trim(), provider: selectedProvider.toLowerCase(), model: selectedModel }),
       });
 
       debug('DDT_WIZARD', 'API response received', { status: response.status, ok: response.ok, statusText: response.statusText });
@@ -585,7 +588,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       let res = await fetch(urlPrimary, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userDesc: reqBody, provider: selectedProvider.toLowerCase() }),
+        body: JSON.stringify({ userDesc: reqBody, provider: selectedProvider.toLowerCase(), model: selectedModel }),
         signal: ctrl.signal as any,
       });
       clearTimeout(timeoutId);
@@ -902,8 +905,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           onNext={handleDetectType}
           onCancel={handleClose}
           dataNode={stableDataNode || undefined}
-          selectedProvider={selectedProvider}
-          setSelectedProvider={setSelectedProvider}
           onAutoDetect={handleAutoDetect}
         />
       </div>
@@ -993,7 +994,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       onCancel={() => setStep('structure')}
                       skipDetectType
                       confirmedLabel={mainDataNode?.name || 'Data'}
-                      selectedProvider={selectedProvider}
                       setFieldProcessingStates={setFieldProcessingStates}
                       progressByPath={taskProgress}
                       onProgress={(m) => {

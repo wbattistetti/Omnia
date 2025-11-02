@@ -19,6 +19,17 @@ export type SuggestedVars = {
 
 const MODEL = 'llama-3.1-70b-instruct';
 
+// Helper to get provider/model from context (for use outside React components)
+function getAIProviderConfig(): { provider: string; model?: string } {
+  try {
+    const provider = (window as any).__AI_PROVIDER || 'groq';
+    const model = localStorage.getItem('omnia.aiModel') || undefined;
+    return { provider, model };
+  } catch {
+    return { provider: 'groq' };
+  }
+}
+
 export async function generateConditionWithAI(nl: string, variables: string[]): Promise<ConditionAIOutput> {
   // Prefer backend endpoint to avoid exposing keys in frontend
   try {
@@ -26,7 +37,7 @@ export async function generateConditionWithAI(nl: string, variables: string[]): 
     const res = await fetch('/api/conditions/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nl, variables, provider: (window as any).__AI_PROVIDER || undefined })
+      body: JSON.stringify({ nl, variables, ...getAIProviderConfig() })
     });
     const text = await res.text();
     try { console.log('[ConditionAI][res][backend]', { status: res.status, statusText: res.statusText, textPreview: text.slice(0, 300) }); } catch {}
@@ -120,10 +131,11 @@ export async function generateConditionWithAI(nl: string, variables: string[]): 
 
 export async function suggestConditionCases(nl: string, variables: string[], provider?: 'groq'|'openai'): Promise<SuggestedCases> {
   try {
+    const config = provider ? { provider } : getAIProviderConfig();
     const res = await fetch('/api/conditions/suggest-cases', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nl, variables, provider: provider ?? ((window as any).__AI_PROVIDER || undefined) })
+      body: JSON.stringify({ nl, variables, ...config })
     });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
@@ -137,10 +149,11 @@ export async function suggestConditionCases(nl: string, variables: string[], pro
 
 export async function suggestMinimalVars(nl: string, variables: string[], provider?: 'groq'|'openai'): Promise<SuggestedVars> {
   try {
+    const config = provider ? { provider } : getAIProviderConfig();
     const res = await fetch('/api/conditions/suggest-vars', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nl, variables, provider: provider ?? ((window as any).__AI_PROVIDER || undefined) })
+      body: JSON.stringify({ nl, variables, ...config })
     });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
@@ -156,10 +169,11 @@ export async function repairCondition(script: string, failures: Array<any>, vari
   Promise<{ script?: string; error?: string; raw?: string }>
 {
   try {
+    const config = provider ? { provider } : getAIProviderConfig();
     const res = await fetch('/api/conditions/repair', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ script, failures, variables: variables || [], provider: provider ?? ((window as any).__AI_PROVIDER || undefined) })
+      body: JSON.stringify({ script, failures, variables: variables || [], ...config })
     });
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};

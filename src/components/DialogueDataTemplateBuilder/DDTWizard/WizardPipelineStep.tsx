@@ -11,6 +11,7 @@ import StepLabel from './StepLabel';
 import HourglassSpinner from './HourglassSpinner';
 import ProgressBar from '../../Common/ProgressBar';
 import StructurePreviewModal from './StructurePreviewModal';
+import { useAIProvider } from '../../../context/AIProviderContext';
 
 const __DEBUG_DDT_UI__ = true; // 🚀 ENABLED for debugging
 const dlog = (...a: any[]) => { if (__DEBUG_DDT_UI__) console.log(...a); };
@@ -30,7 +31,6 @@ interface Props {
   confirmedLabel?: string;
   onProgress?: (percentByPath: Record<string, number>) => void; // optional progress reporter
   headless?: boolean; // if true, orchestrate without rendering UI
-  selectedProvider?: 'openai' | 'groq'; // AI provider to use
   setFieldProcessingStates?: (updater: (prev: any) => any) => void;
   progressByPath?: Record<string, number>;
 }
@@ -44,7 +44,8 @@ function normalizeStructure(node: any) {
   return out;
 }
 
-const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, onProgress, headless, selectedProvider = 'groq', setFieldProcessingStates, progressByPath }) => {
+const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, onProgress, headless, setFieldProcessingStates, progressByPath }) => {
+  const { provider: selectedProvider } = useAIProvider();
   const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType, selectedProvider), headless);
   const [finalDDT, setFinalDDT] = useState<any>(null);
   const [totalSteps, setTotalSteps] = useState(0);

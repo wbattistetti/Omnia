@@ -40,11 +40,12 @@ interface EditorPanelProps {
 export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [], language = 'javascript', customLanguage, useTemplate = true }: EditorPanelProps) {
   const safeCode: string = typeof code === 'string' ? code : (code == null ? '' : (() => { try { return JSON.stringify(code, null, 2); } catch { return String(code); } })());
   const editorLanguage = customLanguage ? customLanguage.id : language;
+  const editorTheme = customLanguage?.themeName || `${customLanguage?.id || ''}Theme` || 'vs-dark';
   return (
     <div className="w-full h-full border border-slate-700 rounded">
       <MonacoEditor
         language={editorLanguage}
-        theme="vs-dark"
+        theme={editorTheme}
         value={safeCode}
         onChange={(v: string) => onChange(v || '')}
         options={{
@@ -83,8 +84,8 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
                   monaco.languages.register({ id: langId });
                 }
                 // Always set the tokenizer, even if language is already registered
-                // Monaco expects the tokenizer to be wrapped in an object with 'tokenizer' property
-                monaco.languages.setMonarchTokensProvider(langId, { tokenizer: customLanguage.tokenizer });
+                // Monaco expects the tokenizer object directly
+                monaco.languages.setMonarchTokensProvider(langId, customLanguage.tokenizer);
 
                 // Define custom theme if provided
                 if (customLanguage.theme) {
@@ -95,8 +96,10 @@ export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [
                     rules: customLanguage.theme.rules || [],
                     colors: customLanguage.theme.colors || {},
                   });
-                  // Apply theme if specified
+                  // Apply theme immediately
                   monaco.editor.setTheme(themeName);
+                  // Also update editor theme if needed
+                  editor.updateOptions({ theme: themeName });
                 }
               } catch (err) {
                 console.warn('[EditorPanel] Failed to register custom language:', err);

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Wand2 } from 'lucide-react';
 import EditorPanel, { type CustomLanguage } from '../../../CodeEditor/EditorPanel';
 
 interface RegexInlineEditorProps {
@@ -25,6 +24,21 @@ export default function RegexInlineEditor({
   const [regexAiPrompt, setRegexAiPrompt] = React.useState('');
   const [regexBackup, setRegexBackup] = React.useState('');
   const [generatingRegex, setGeneratingRegex] = React.useState(false);
+
+  // Track if regex was initially empty
+  const wasInitiallyEmpty = React.useRef(!regex || regex.trim().length === 0);
+  const [currentRegexValue, setCurrentRegexValue] = React.useState(regex);
+
+  // Update current value when regex prop changes
+  React.useEffect(() => {
+    setCurrentRegexValue(regex);
+  }, [regex]);
+
+  // Determine button label and visibility
+  const hasContent = currentRegexValue && currentRegexValue.trim().length > 0;
+  const isGeneratingMessage = generatingRegex;
+  const showButton = hasContent && !isGeneratingMessage;
+  const buttonLabel = wasInitiallyEmpty.current ? 'Create Regex' : 'Refine Regex';
 
   // Custom language configuration for regex
   const regexCustomLanguage: CustomLanguage = React.useMemo(() => ({
@@ -117,6 +131,9 @@ export default function RegexInlineEditor({
 
       if (data.success && data.regex) {
         setRegex(data.regex);
+        setCurrentRegexValue(data.regex);
+        // Update initial state: if regex was generated, it's no longer "initially empty"
+        wasInitiallyEmpty.current = false;
         console.log('[AI Regex] Regex generated successfully:', data.regex);
 
         if (data.explanation) {
@@ -158,26 +175,71 @@ export default function RegexInlineEditor({
         }}
       >
         <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-          🪄 Configure Regex
+          🪄 Edit Regex
         </h3>
-        <button
-          onClick={onClose}
-          style={{
-            background: '#e5e7eb',
-            border: 'none',
-            borderRadius: 4,
-            padding: '6px 12px',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 500,
-          }}
-        >
-          ❌ Close
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Dynamic Create/Refine Regex button */}
+          {showButton && (
+            <button
+              type="button"
+              onClick={() => {
+                setRegexBackup(currentRegexValue);
+                setRegexAiMode(true);
+              }}
+              disabled={generatingRegex}
+              title={buttonLabel}
+              style={{
+                padding: '6px 16px',
+                border: '2px solid #3b82f6',
+                borderRadius: 8,
+                background: generatingRegex ? '#f3f4f6' : '#3b82f6',
+                color: '#fff',
+                cursor: generatingRegex ? 'default' : 'pointer',
+                fontSize: 13,
+                fontWeight: 500,
+                transition: 'all 0.2s ease',
+                animation: 'fadeIn 0.2s ease-in',
+              }}
+            >
+              {generatingRegex ? (
+                <>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 12,
+                      height: 12,
+                      border: '2px solid #fff',
+                      borderTopColor: 'transparent',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite',
+                      marginRight: 6,
+                    }}
+                  />
+                  <span>Creating...</span>
+                </>
+              ) : (
+                buttonLabel
+              )}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            style={{
+              background: '#e5e7eb',
+              border: 'none',
+              borderRadius: 4,
+              padding: '6px 12px',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            ❌ Close
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <label style={{ fontSize: 12, opacity: 0.8 }}>Regex Pattern</label>
         <div
           style={{
             display: 'flex',
@@ -200,13 +262,15 @@ export default function RegexInlineEditor({
                     ? '⏳ Creating regex...'
                     : regexAiMode
                       ? regexAiPrompt
-                      : regex
+                      : currentRegexValue
                 }
                 onChange={(v: string) => {
                   if (regexAiMode && !generatingRegex) {
                     setRegexAiPrompt(v || '');
                   } else if (!generatingRegex) {
-                    setRegex(v || '');
+                    const newValue = v || '';
+                    setCurrentRegexValue(newValue);
+                    setRegex(newValue);
                   }
                 }}
                 language={regexAiMode ? 'plaintext' : undefined}
@@ -217,37 +281,9 @@ export default function RegexInlineEditor({
             </div>
           </div>
 
-          {/* Magic Wand + Generate Button */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-            {/* Show WAND ONLY in normal mode */}
-            {!regexAiMode && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRegexBackup(regex);
-                  setRegexAiMode(true);
-                }}
-                disabled={generatingRegex}
-                title="Generate regex with AI"
-                style={{
-                  padding: 10,
-                  border: '1px solid #ddd',
-                  borderRadius: 8,
-                  background: '#fff',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minWidth: 40,
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Wand2 size={16} color="#666" />
-              </button>
-            )}
-
-            {/* Show CREATE BUTTON when: AI mode AND at least 5 characters */}
-            {regexAiMode && regexAiPrompt.trim().length >= 5 && (
+          {/* Show CREATE BUTTON when: AI mode AND at least 5 characters */}
+          {regexAiMode && regexAiPrompt.trim().length >= 5 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
               <button
                 type="button"
                 onClick={handleGenerateWithAI}
@@ -290,8 +326,8 @@ export default function RegexInlineEditor({
                   'Create Regex'
                 )}
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

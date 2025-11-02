@@ -62,10 +62,13 @@ export function useMainEditing({ node, autoEdit, onChange, onChangeEvent }: UseM
             debug('MAIN_DATA_WIZARD', 'Simulating success after retries');
           }
 
+          // Get provider/model from localStorage (set by AIProviderContext)
+          const provider = localStorage.getItem('omnia.aiProvider') || 'groq';
+          const model = localStorage.getItem('omnia.aiModel') || undefined;
           const response = await fetch('/step2-with-provider', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userDesc: fieldId, provider: 'groq' })
+            body: JSON.stringify({ userDesc: fieldId, provider, ...(model && { model }) })
           });
 
           if (!response.ok) {
