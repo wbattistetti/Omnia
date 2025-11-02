@@ -1,6 +1,147 @@
 import React from 'react';
 import EditorPanel, { type CustomLanguage } from '../../../CodeEditor/EditorPanel';
 
+// Helper to map label to standard key (same logic as pipeline.ts)
+function mapLabelToStandardKey(label: string): string | null {
+  const normalized = String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (normalized.includes('day') || normalized.includes('giorno')) return 'day';
+  if (normalized.includes('month') || normalized.includes('mese')) return 'month';
+  if (normalized.includes('year') || normalized.includes('anno')) return 'year';
+  if (normalized.includes('first') || normalized.includes('nome') || normalized.includes('firstname')) return 'firstname';
+  if (normalized.includes('last') || normalized.includes('cognome') || normalized.includes('surname') || normalized.includes('lastname')) return 'lastname';
+  if (normalized.includes('street') || normalized.includes('via') || normalized.includes('indirizzo')) return 'street';
+  if (normalized.includes('city') || normalized.includes('citta') || normalized.includes('comune')) return 'city';
+  if (normalized.includes('zip') || normalized.includes('cap') || normalized.includes('postal')) return 'zip';
+  if (normalized.includes('country') || normalized.includes('nazione') || normalized.includes('paese')) return 'country';
+  return null;
+}
+
+// Validate regex capture groups against expected sub-data
+interface ValidationResult {
+  valid: boolean;
+  groupsFound: number;
+  groupsExpected: number;
+  errors: string[];
+  warnings: string[];
+}
+
+function validateRegexGroups(regex: string | undefined, node: any): ValidationResult {
+  const result: ValidationResult = {
+    valid: true,
+    groupsFound: 0,
+    groupsExpected: 0,
+    errors: [],
+    warnings: []
+  };
+
+  if (!regex || !regex.trim()) {
+    result.valid = false;
+    result.errors.push('Regex is empty');
+    return result;
+  }
+
+  if (!node) {
+    // No sub-data to validate against
+    result.valid = true;
+    return result;
+  }
+
+  // Get all sub-data/subSlots
+  const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+  result.groupsExpected = allSubs.length;
+
+  if (allSubs.length === 0) {
+    // No sub-data, regex doesn't need capture groups
+    result.valid = true;
+    return result;
+  }
+
+  try {
+    // Count capture groups in regex (excluding non-capturing groups like (?: ...))
+    // Pattern: ( ... ) but not (?: ...) or (?= ...) or (?! ...)
+    const capturingGroupPattern = /\((?!\?[:=!])[^)]*\)/g;
+    const matches = regex.match(capturingGroupPattern);
+
+    if (!matches || matches.length === 0) {
+      result.valid = false;
+      result.errors.push(`No capture groups found. Expected ${allSubs.length} capture groups for: ${allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ')}`);
+      return result;
+    }
+
+    result.groupsFound = matches.length;
+
+    // Test regex with a sample input to see what groups actually match
+    // For dates, try a sample date string
+    let testString = '';
+    if (node.kind === 'date' || (node.label && /date|data/i.test(node.label))) {
+      testString = '16/12/1980'; // Sample date
+    } else {
+      // Generic test - just create a string with some characters
+      testString = 'test input';
+    }
+
+    const regexObj = new RegExp(regex);
+    const testMatch = testString.match(regexObj);
+
+    if (!testMatch) {
+      result.warnings.push('Regex does not match test input - cannot validate capture groups');
+      // Still validate structure
+    } else {
+      // Filter out undefined/null groups
+      const actualGroups = testMatch.slice(1).filter((g: string | undefined) => g !== undefined && g !== null && String(g).trim().length > 0);
+      result.groupsFound = actualGroups.length;
+    }
+
+    // Validate group count
+    if (result.groupsFound < result.groupsExpected) {
+      result.valid = false;
+      const expectedLabels = allSubs.slice(result.groupsFound).map((s: any) => {
+        const standardKey = mapLabelToStandardKey(s.label || s.name || '');
+        return standardKey || (s.label || s.name || 'sub-data');
+      }).join(', ');
+      result.errors.push(`Found ${result.groupsFound} capture groups but need ${result.groupsExpected}. Missing groups for: ${expectedLabels}`);
+    } else if (result.groupsFound > result.groupsExpected) {
+      result.warnings.push(`Found ${result.groupsFound} capture groups but only ${result.groupsExpected} sub-data expected. Extra groups may cause mapping issues.`);
+    }
+
+    // Validate group positions (if we have a test match)
+    if (testMatch && result.groupsFound > 0) {
+      const actualGroups = testMatch.slice(1).filter((g: string | undefined) => g !== undefined && g !== null);
+
+      for (let i = 0; i < Math.min(actualGroups.length, allSubs.length); i++) {
+        const groupValue = actualGroups[i]?.trim() || '';
+        const subData = allSubs[i];
+        const subLabel = String(subData.label || subData.name || '');
+        const standardKey = mapLabelToStandardKey(subLabel);
+
+        if (standardKey === 'day' || standardKey === 'month' || standardKey === 'year') {
+          // Should be numeric
+          const numValue = parseInt(groupValue, 10);
+          if (isNaN(numValue)) {
+            result.errors.push(`Group ${i + 1} (for '${subLabel}') contains '${groupValue}' which is not numeric. Expected number for ${standardKey}.`);
+            result.valid = false;
+          }
+        }
+
+        // Check for separators in wrong positions
+        if (groupValue.length === 1 && /[-/.\s]/.test(groupValue)) {
+          const expectedStandardKey = mapLabelToStandardKey(subLabel);
+          if (expectedStandardKey && (expectedStandardKey === 'day' || expectedStandardKey === 'month' || expectedStandardKey === 'year')) {
+            result.errors.push(`Group ${i + 1} contains separator '${groupValue}' instead of value for '${subLabel}' (${expectedStandardKey})`);
+            result.valid = false;
+          }
+        }
+      }
+    }
+
+  } catch (error) {
+    result.valid = false;
+    result.errors.push(`Error validating regex: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+
+  return result;
+}
+
 interface RegexInlineEditorProps {
   regex: string;
   setRegex: (value: string) => void;
@@ -25,10 +166,21 @@ export default function RegexInlineEditor({
   const [regexBackup, setRegexBackup] = React.useState('');
   const [generatingRegex, setGeneratingRegex] = React.useState(false);
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
+  const [validationResult, setValidationResult] = React.useState<ValidationResult | null>(null);
 
   // Track if regex was initially empty
   const wasInitiallyEmpty = React.useRef(!regex || regex.trim().length === 0);
   const [currentRegexValue, setCurrentRegexValue] = React.useState(regex);
+
+  // Validate regex whenever it changes
+  React.useEffect(() => {
+    if (currentRegexValue && currentRegexValue.trim().length > 0) {
+      const validation = validateRegexGroups(currentRegexValue, node);
+      setValidationResult(validation);
+    } else {
+      setValidationResult(null);
+    }
+  }, [currentRegexValue, node]);
 
   // Update current value when regex prop changes
   React.useEffect(() => {
@@ -109,7 +261,18 @@ export default function RegexInlineEditor({
 
   // Unified button click handler - starts AI generation immediately
   const handleButtonClick = async () => {
-    const prompt = currentRegexValue || '';
+    let prompt = currentRegexValue || '';
+
+    // If regex is invalid, include validation errors in the prompt
+    if (validationResult && !validationResult.valid && validationResult.errors.length > 0) {
+      const errorsText = validationResult.errors.join('. ');
+      const warningsText = validationResult.warnings.length > 0 ? ' Warnings: ' + validationResult.warnings.join('. ') : '';
+      prompt = `Current regex: ${currentRegexValue}\n\nErrors found: ${errorsText}${warningsText}\n\nPlease fix the regex to include the correct capture groups. Expected ${validationResult.groupsExpected} capture groups for: ${(() => {
+        const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
+        return allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ');
+      })()}`;
+      console.log('[AI Regex] 🔵 Refine Regex clicked with validation errors, enhancing prompt');
+    }
 
     if (!prompt.trim() || prompt.trim().length < 5) {
       console.log('[AI Regex] ❌ Prompt too short, cannot generate');
@@ -226,6 +389,44 @@ export default function RegexInlineEditor({
           🪄 Edit Regex
         </h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Validation badge */}
+          {validationResult && currentRegexValue && currentRegexValue.trim().length > 0 && (
+            <div
+              style={{
+                padding: '4px 12px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: validationResult.valid ? '#10b981' : '#ef4444',
+                color: '#fff',
+                border: '1px solid',
+                borderColor: validationResult.valid ? '#059669' : '#dc2626',
+              }}
+              title={
+                validationResult.valid
+                  ? 'All capture groups are correctly configured'
+                  : validationResult.errors.join('; ')
+              }
+            >
+              {validationResult.valid ? (
+                <>
+                  <span>✓</span>
+                  <span>Gruppi corretti</span>
+                </>
+              ) : (
+                <>
+                  <span>⚠</span>
+                  <span>
+                    {validationResult.groupsFound}/{validationResult.groupsExpected} gruppi
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Unified Create/Refine Regex button */}
           {shouldShowButton && (
             <button
