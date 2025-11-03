@@ -112,6 +112,9 @@ export default function NLPExtractorProfileEditor({
   const [lastStats, setLastStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [activeTab, setActiveTab] = React.useState<'regex' | 'extractor' | 'post' | null>(null);
 
+  // 🧪 TEMPORARY: Test toggle for mode (will be removed in Fase 6)
+  const [testMode, setTestMode] = React.useState<'extraction' | 'classification'>('extraction');
+
   // State for regex AI generation (used in hidden section)
   const regexInputRef = React.useRef<HTMLInputElement>(null);
   const [generatingRegex, setGeneratingRegex] = React.useState<boolean>(false);
@@ -241,7 +244,52 @@ export default function NLPExtractorProfileEditor({
             waitingLLM={waitingEsc2}
             setWaitingLLM={setWaitingEsc2}
           />
-                </div>
+        </div>
+
+        {/* 🧪 TEMPORARY: Test toggle for mode (will be removed in Fase 6) */}
+        <div style={{ marginTop: 12, padding: 8, background: '#fef3c7', borderRadius: 8, border: '1px solid #fbbf24' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>
+              🧪 Test Mode:
+            </label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                onClick={() => setTestMode('extraction')}
+                style={{
+                  padding: '4px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 6,
+                  background: testMode === 'extraction' ? '#3b82f6' : '#fff',
+                  color: testMode === 'extraction' ? '#fff' : '#374151',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: testMode === 'extraction' ? 600 : 400
+                }}
+              >
+                Extraction (4 colonne)
+              </button>
+              <button
+                onClick={() => setTestMode('classification')}
+                style={{
+                  padding: '4px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 6,
+                  background: testMode === 'classification' ? '#3b82f6' : '#fff',
+                  color: testMode === 'classification' ? '#fff' : '#374151',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: testMode === 'classification' ? 600 : 400
+                }}
+              >
+                Classification (3 colonne: Regex, Embeddings, LLM)
+              </button>
+            </div>
+            <span style={{ fontSize: 11, color: '#92400e', opacity: 0.8 }}>
+              ⚠️ Temporaneo per test - rimuoveremo in Fase 6
+            </span>
+          </div>
+        </div>
+
         {/* OLD tab editors - now replaced by inline editors */}
         <div style={{ marginTop: 10, display: 'none' }}>
           {activeTab === 'regex' && (
@@ -446,10 +494,10 @@ export default function NLPExtractorProfileEditor({
         </div>
       </div>
 
-      {/* 🎨 Tester section - hidden when inline editor is active */}
+      {/* Tester section - hidden when inline editor is active */}
       {!activeEditor && (
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Tester</div>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Tester</div>
           {/* Controls toolbar */}
           <TesterControls
             newExample={newExample}
@@ -505,8 +553,9 @@ export default function NLPExtractorProfileEditor({
             setHovered={setHovered}
             activeEditor={activeEditor}
             toggleEditor={toggleEditor}
+            mode={testMode}
           />
-      </div>
+        </div>
       )}
 
       {/* 🎨 Inline Editors - shown in place of Tester when activeEditor is set */}
@@ -567,6 +616,30 @@ export default function NLPExtractorProfileEditor({
                 onChange?.(updatedProfile);
               }}
             />
+          )}
+
+          {activeEditor === 'embeddings' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Intent Classifier (Embeddings)</h3>
+                <button
+                  onClick={closeEditor}
+                  style={{
+                    padding: '6px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: 6,
+                    background: '#fff',
+                    cursor: 'pointer',
+                    fontSize: 14
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>
+                <p>Intent Editor will be integrated here in Fase 4</p>
+              </div>
+            </div>
           )}
 
           {activeEditor === 'post' && (

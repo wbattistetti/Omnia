@@ -77,8 +77,8 @@ interface TesterGridProps {
   isHovered: (row: number, col: string) => boolean;
   setHovered: (row: number | null, col: string | null) => void;
   // Editor toggle
-  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | null;
-  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm') => void;
+  activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
+  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
   // Mode: extraction (default) or classification
   mode?: 'extraction' | 'classification';
 }
