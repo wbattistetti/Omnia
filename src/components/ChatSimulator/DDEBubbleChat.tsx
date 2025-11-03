@@ -121,6 +121,30 @@ export default function DDEBubbleChat({
     `${s.mode}|${s.currentIndex}|${s.currentSubId || 'main'}`
   ), []);
 
+  // Handle non-interactive messages from orchestrator (flow mode)
+  const [nonInteractiveMessages, setNonInteractiveMessages] = React.useState<Message[]>([]);
+  const lastDrainedIndexRef = React.useRef<number>(-1);
+
+  // Expose variables globally for ConditionEditor and other panels (flow mode)
+  React.useEffect(() => {
+    if (mode === 'flow') {
+      try {
+        (window as any).__omniaVars = { ...(orchestrator.variableStore || {}) };
+      } catch { }
+    }
+  }, [mode, orchestrator.variableStore]);
+
+  // Auto-focus input when DDT becomes active
+  React.useEffect(() => {
+    if (currentDDT && inlineInputRef.current) {
+      setTimeout(() => {
+        try {
+          inlineInputRef.current?.focus({ preventScroll: true } as any);
+        } catch { }
+      }, 100);
+    }
+  }, [currentDDT]);
+
   // Handle DDT completion (when DDT finishes, advance flow in flow mode)
   React.useEffect(() => {
     if (mode === 'flow' && state.mode === 'Completed' && orchestrator.isRunning) {
@@ -128,9 +152,45 @@ export default function DDEBubbleChat({
     }
   }, [mode, state.mode, orchestrator.isRunning, orchestrator.onDDTCompleted]);
 
-  // Handle non-interactive messages from orchestrator (flow mode)
-  const [nonInteractiveMessages, setNonInteractiveMessages] = React.useState<Message[]>([]);
-  const lastDrainedIndexRef = React.useRef<number>(-1);
+  // Auto-drain all'avvio quando isRunning diventa true e currentNodeId è impostato
+  const hasStartedRef = React.useRef<boolean>(false);
+  React.useEffect(() => {
+    if (mode === 'flow' && orchestrator.isRunning && orchestrator.currentNodeId && !hasStartedRef.current) {
+      hasStartedRef.current = true;
+      // Wait a tick for orchestrator.start() to complete its drain
+      setTimeout(() => {
+        try {
+          console.log('[DDEBubbleChat][start-drain] Calling drainInitialMessages');
+        } catch { }
+        const result = orchestrator.drainInitialMessages();
+        lastDrainedIndexRef.current = result.nextIndex;
+
+        try {
+          console.log('[DDEBubbleChat][start-drain] Drain result', { messagesCount: result.messages.length, messages: result.messages.map(m => ({ text: m.text.substring(0, 50), role: m.role })) });
+        } catch { }
+
+        if (result.messages.length > 0) {
+          const newMessages: Message[] = result.messages.map((msg, idx) => ({
+            id: `noninteractive-start-${Date.now()}-${idx}`,
+            type: msg.role === 'user' ? 'user' : 'bot',
+            text: msg.text,
+            stepType: 'ask' as const,
+            color: getStepColor('ask')
+          }));
+          try {
+            console.log('[DDEBubbleChat][start-drain] Setting messages', { count: newMessages.length });
+          } catch { }
+          setNonInteractiveMessages(newMessages);
+        }
+
+        if (result.nextDDT) {
+          orchestrator.setCurrentDDT(result.nextDDT);
+        }
+      }, 10);
+    } else if (!orchestrator.isRunning) {
+      hasStartedRef.current = false;
+    }
+  }, [mode, orchestrator.isRunning, orchestrator.currentNodeId, orchestrator.drainInitialMessages, orchestrator.setCurrentDDT]);
 
   // Track last node/act combination to detect changes
   const lastNodeActKeyRef = React.useRef<string>('');

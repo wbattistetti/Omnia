@@ -163,11 +163,14 @@ export function useNodeEffects({
         const handler = (e: any) => {
             const d = (e && e.detail) || {};
             if (!d || !d.instanceId) return;
-            const next = (latestRowsRef.current || []).map(r =>
-                (r as any)?.instanceId === d.instanceId
-                    ? { ...r, message: { ...(r as any)?.message, text: d.text } }
-                    : r
-            );
+            // IMPORTANT: row.id IS the instanceId, so we must match on row.id, not row.instanceId
+            const next = (latestRowsRef.current || []).map(r => {
+                const rowId = r?.id || (r as any)?.instanceId;
+                if (rowId === d.instanceId) {
+                    return { ...r, message: { ...(r as any)?.message, text: d.text } };
+                }
+                return r;
+            });
             setNodeRows(next);
             // Schedule parent update outside render/setState to avoid warnings
             try {

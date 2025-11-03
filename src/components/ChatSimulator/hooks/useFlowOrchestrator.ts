@@ -1,8 +1,9 @@
-import { useCallback, useState, useRef, useMemo } from 'react';
+import React, { useCallback, useState, useRef, useMemo } from 'react';
 import { Node, Edge } from 'reactflow';
 import { NodeData, EdgeData } from '../../Flowchart/types/flowTypes';
 import { useProjectData } from '../../../context/ProjectDataContext';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import { instanceRepository } from '../../../services/InstanceRepository';
 
 function findEntryNodes(nodes: Node<NodeData>[], edges: Edge<EdgeData>[]): Node<NodeData>[] {
   const targets = new Set((edges || []).map(e => e.target));
@@ -92,24 +93,78 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
   }, [resolveAct]);
 
   const actMessage = useCallback((row: any) => {
+    // For Message acts, read text from instance (row.id is the instanceId)
+    const instanceId = row?.id;
+    if (instanceId) {
+      const instance = instanceRepository.getInstance(instanceId);
+      try {
+        console.log('[FlowOrchestrator][actMessage] Checking instance', {
+          instanceId,
+          hasInstance: !!instance,
+          hasMessage: !!instance?.message,
+          messageText: instance?.message?.text,
+          messageTextLength: instance?.message?.text?.length || 0
+        });
+      } catch { }
+
+      if (instance?.message?.text) {
+        return instance.message.text;
+      }
+
+      // If instance exists but has no message.text, try to create it or check if it's being created
+      if (instance && !instance.message) {
+        try {
+          console.warn('[FlowOrchestrator][actMessage] Instance exists but has no message field', { instanceId });
+        } catch { }
+      }
+    } else {
+      try {
+        console.warn('[FlowOrchestrator][actMessage] No instanceId for row', { rowId: row?.id, rowText: row?.text });
+      } catch { }
+    }
+
+    // For other acts, try prompts
     const it: any = resolveAct(row);
-    return (it?.prompts && (it.prompts.informal || it.prompts.formal)) || '';
+    const promptText = (it?.prompts && (it.prompts.informal || it.prompts.formal)) || '';
+
+    try {
+      if (!promptText) {
+        console.warn('[FlowOrchestrator][actMessage] No text found from instance or prompts', {
+          instanceId,
+          rowText: row?.text,
+          hasPrompt: !!(it?.prompts),
+          promptText
+        });
+      }
+    } catch { }
+
+    return promptText;
   }, [resolveAct]);
 
   const start = useCallback(() => {
     const entries = findEntryNodes(nodes, edges);
     const ordered = entries.map(e => e.id);
-    if (ordered.length === 0 && nodes.length > 0) ordered.push(nodes[0].id);
 
+    // Validazione: se non ci sono entry nodes, non partire
+    if (ordered.length === 0) {
+      console.warn('[FlowOrchestrator] No entry nodes found. Cannot start flow.');
+      return;
+    }
+
+    const firstNodeId = ordered[0] || null;
+
+    // Set initial state
     setState(prev => ({
       ...prev,
       queue: ordered,
-      currentNodeId: ordered[0] || null,
+      currentNodeId: firstNodeId,
       currentActIndex: 0,
       isRunning: true,
       currentDDT: null,
       activeContext: null
     }));
+
+    // Drain will be handled by useEffect in DDEBubbleChat after state is set
   }, [nodes, edges]);
 
   const stop = useCallback(() => {
@@ -145,14 +200,44 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     // Emit non-interactive messages
     const nonInteractiveMessages: Array<{ role: 'agent' | 'system' | 'user'; text: string; interactive: false; fromDDT: false }> = [];
 
+    try {
+      console.log('[FlowOrchestrator][drain] Starting drain', {
+        startIndex,
+        total,
+        nodeId: state.currentNodeId,
+        nodeTitle: node?.data?.title,
+        rows: rows.map((r: any) => ({ id: r?.id, text: r?.text, type: r?.type, mode: r?.mode }))
+      });
+    } catch { }
+
     while (idx < total && !actIsInteractive(rows[idx])) {
-      const msg = actMessage(rows[idx]);
+      const row = rows[idx];
+      const isInteractive = actIsInteractive(row);
+      const msg = actMessage(row);
+
+      try {
+        console.log('[FlowOrchestrator][drain] Processing row', { idx, rowId: row?.id, rowText: row?.text, isInteractive, msgLength: msg?.length || 0, hasMsg: !!msg });
+      } catch { }
+
+      // Always increment idx and add message (even if empty) to process all non-interactive acts
       if (msg) {
         emitted = true;
         nonInteractiveMessages.push({ role: 'agent', text: msg, interactive: false, fromDDT: false });
+        try {
+          console.log('[FlowOrchestrator][drain] Added message', { idx, text: msg.substring(0, 50) });
+        } catch { }
+      } else {
+        // Log if message is empty but act is non-interactive (for debugging)
+        try {
+          console.warn('[FlowOrchestrator][drain] Empty message for non-interactive act:', { idx, rowId: row?.id, rowText: row?.text, rowType: row?.type, rowMode: row?.mode });
+        } catch { }
       }
       idx += 1;
     }
+
+    try {
+      console.log('[FlowOrchestrator][drain] Drain complete', { nextIndex: idx, messagesCount: nonInteractiveMessages.length, emitted });
+    } catch { }
 
     // If we hit an interactive act, prepare DDT
     let nextDDT: AssembledDDT | null = null;
@@ -250,6 +335,14 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     nextAct();
   }, [nextAct]);
 
+  // Expose drain result including messages for initial drain
+  const drainInitialMessages = useCallback(() => {
+    if (!state.isRunning || !state.currentNodeId) {
+      return { messages: [], nextIndex: 0, nextDDT: null, nextContext: null };
+    }
+    return drainSequentialNonInteractiveFrom(0);
+  }, [state.isRunning, state.currentNodeId, drainSequentialNonInteractiveFrom]);
+
   return {
     // State
     currentNodeId: state.currentNodeId,
@@ -265,6 +358,7 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     nextAct,
     getCurrentNode,
     drainSequentialNonInteractiveFrom,
+    drainInitialMessages,
     updateVariableStore,
     setCurrentDDT,
     onDDTCompleted
