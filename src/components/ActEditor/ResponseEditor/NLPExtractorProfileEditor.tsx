@@ -27,6 +27,7 @@ import RegexInlineEditor from './InlineEditors/RegexInlineEditor';
 import ExtractorInlineEditor from './InlineEditors/ExtractorInlineEditor';
 import NERInlineEditor from './InlineEditors/NERInlineEditor';
 import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
+import IntentEditorInlineEditor from './InlineEditors/IntentEditorInlineEditor';
 
 // 📊 Tester Components
 import TesterGrid from './TesterGrid';
@@ -619,27 +620,14 @@ export default function NLPExtractorProfileEditor({
           )}
 
           {activeEditor === 'embeddings' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Intent Classifier (Embeddings)</h3>
-                <button
-                  onClick={closeEditor}
-                  style={{
-                    padding: '6px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: 6,
-                    background: '#fff',
-                    cursor: 'pointer',
-                    fontSize: 14
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-              <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>
-                <p>Intent Editor will be integrated here in Fase 4</p>
-              </div>
-            </div>
+            <IntentEditorInlineEditor
+              onClose={closeEditor}
+              node={node}
+              profile={profile}
+              onProfileUpdate={(updatedProfile) => {
+                onChange?.(updatedProfile);
+              }}
+            />
           )}
 
           {activeEditor === 'post' && (

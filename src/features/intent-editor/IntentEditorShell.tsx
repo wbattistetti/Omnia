@@ -10,7 +10,11 @@ import { Brain, Loader2, Sparkles, AlertTriangle, Trash2, CheckCircle, XCircle, 
 import { ImportDropdown } from './ui/common/ImportDropdown';
 import { generateVariantsForIntent } from './services/variantsService';
 
-export default function IntentEditorShell(){
+interface IntentEditorShellProps {
+  inlineMode?: boolean;
+}
+
+export default function IntentEditorShell({ inlineMode = false }: IntentEditorShellProps){
   const selectedId = useIntentStore(s=>s.selectedId);
   const selected = useIntentStore(s=> s.intents.find(i=>i.id===s.selectedId));
   const posCount = selected?.variants.curated.length ?? 0;
@@ -532,11 +536,12 @@ export default function IntentEditorShell(){
           <div className="w-0.5 h-12 bg-slate-300 rounded-full group-hover:bg-blue-500 transition-colors" />
         </div>
 
-        {/* Test panel - larghezza controllata */}
-        <div
-          className="bg-white border rounded-2xl shadow-sm flex flex-col min-h-0 flex-shrink-0 overflow-hidden"
-          style={{ width: rightPanelWidth, minWidth: 280, maxWidth: 800 }}
-        >
+        {/* Test panel - nascosto quando inlineMode */}
+        {!inlineMode && (
+          <div
+            className="bg-white border rounded-2xl shadow-sm flex flex-col min-h-0 flex-shrink-0 overflow-hidden"
+            style={{ width: rightPanelWidth, minWidth: 280, maxWidth: 800 }}
+          >
           <div className="p-3 border-b border-amber-100 bg-amber-50 rounded-t-2xl flex items-center justify-between gap-2">
             {/* Left side: Title + phrases buttons */}
             <div className="flex items-center gap-2">
@@ -618,6 +623,7 @@ export default function IntentEditorShell(){
             <TestGrid intentId={selectedId} modelReady={modelReady} mode={testMode} />
           </div>
         </div>
+        )}
       </div>
     </div>
   );
