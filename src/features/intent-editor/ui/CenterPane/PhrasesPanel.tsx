@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ListGrid from '../common/ListGrid';
-import { CheckCircle, XCircle, MessageSquare, Tag, Sparkles, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, MessageSquare, Tag, Sparkles, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { generateVariantsForIntent } from '../../services/variantsService';
 import { ImportDropdown } from '../common/ImportDropdown';
 
@@ -15,6 +15,9 @@ export default function PhrasesPanel({
   onAddPositive,
   onAddNegative,
   onAddKeyword,
+  onClearPositive,
+  onClearNegative,
+  onClearKeywords,
   onTest
 }: {
   intentName: string;
@@ -25,12 +28,16 @@ export default function PhrasesPanel({
   onAddPositive: (t: string) => void;
   onAddNegative: (t: string) => void;
   onAddKeyword: (t: string) => void;
+  onClearPositive?: () => void;
+  onClearNegative?: () => void;
+  onClearKeywords?: () => void;
   onTest?: () => Promise<void> | void;
 }){
   const [tab, setTab] = useState<'pos'|'neg'|'key'>('pos');
   const [loading, setLoading] = useState(false);
   const [genN, setGenN] = useState<number>(10);
   const [lastGen, setLastGen] = useState<{ count: number; requested: number } | null>(null);
+  const [error, setError] = useState<string | null>(null); // ✅ Nuovo stato errore
 
   const posItems = useMemo(()=> positive.map(p=>({ id: p.id, label: p.text })), [positive]);
   const negItems = useMemo(()=> negative.map(p=>({ id: p.id, label: p.text })), [negative]);
@@ -94,6 +101,23 @@ export default function PhrasesPanel({
     }
   };
 
+  // ✅ Handler per Clear - svuota tutte le frasi del tab corrente (senza conferma)
+  const handleClear = () => {
+    if (tab === 'pos') {
+      if (positive.length === 0) return;
+      onClearPositive?.();
+    } else if (tab === 'neg') {
+      if (negative.length === 0) return;
+      onClearNegative?.();
+    } else if (tab === 'key') {
+      if (keywords.length === 0) return;
+      onClearKeywords?.();
+    }
+  };
+
+  // Conta le frasi per il tab corrente (per disabilitare il pulsante se vuoto)
+  const currentTabCount = tab === 'pos' ? positive.length : tab === 'neg' ? negative.length : keywords.length;
+
   return (
     <div className="mt-2 flex flex-col min-h-0 h-full">
       {/* Tabs row tight under header */}
@@ -131,12 +155,13 @@ export default function PhrasesPanel({
             }}
           />
           <button
-            className={`${tab? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'} px-2 py-1 text-xs rounded-md border flex items-center gap-1`}
-          title={loading ? 'Generating…' : 'Genera suggerimenti'}
+            className={`${tab? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'} px-2 py-1 text-xs rounded-md border flex items-center gap-1 ${error ? 'text-red-600 border-red-300' : ''}`}
+          title={error ? error : (loading ? 'Generating…' : 'Genera suggerimenti')}
           disabled={loading}
           onClick={async ()=>{
             try {
               setLoading(true);
+              setError(null); // ✅ Reset errore
               setLastGen(null);
               const requested = genN;
               // Send ALL phrases currently in the grids as explicit "do not repeat"
@@ -150,13 +175,23 @@ export default function PhrasesPanel({
                 if (tab==='key') { if (!existsIn(g, keyItems)) { onAddKeyword(g); added++; } }
               }
               setLastGen({ count: added, requested });
-            } finally { setLoading(false); }
+            } catch (err) {
+              const errorMsg = err instanceof Error ? err.message : 'Errore durante la generazione';
+              setError(errorMsg); // ✅ Salva errore
+              console.error('[PhrasesPanel] Generation error:', err);
+            } finally {
+              setLoading(false);
+            }
           }}
           >
             {loading ? (
               <span className="flex items-center gap-1">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Generate
+              </span>
+            ) : error ? (
+              <span className="flex items-center gap-1">
+                <AlertTriangle size={14} className="text-red-600" /> Generate
               </span>
             ) : (
               <span className="flex items-center gap-1">
@@ -178,6 +213,15 @@ export default function PhrasesPanel({
               {lastGen.count}/{lastGen.requested}
             </span>
           )}
+          {/* ✅ Pulsante Clear per svuotare tutte le frasi del tab corrente */}
+          <button
+            onClick={handleClear}
+            disabled={currentTabCount === 0}
+            className="p-1.5 rounded border bg-white hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Clear All Phrases"
+          >
+            <Trash2 size={16} />
+          </button>
           <button
             className={`px-2 py-1 text-xs rounded-md border flex items-center gap-1`}
             onClick={async ()=>{ if (onTest) await onTest(); }}

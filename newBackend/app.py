@@ -37,6 +37,15 @@ except ImportError as e:
     stepNotConfirmed_router = APIRouter()
     parse_address_router = APIRouter()
 
+# Import intent generation router from old backend
+try:
+    from backend.ai_endpoints.intent_generation import router as intent_gen_router
+    print("[INFO] Intent generation router loaded successfully")
+except ImportError as e:
+    print(f"Warning: Could not import intent generation router: {e}")
+    from fastapi import APIRouter
+    intent_gen_router = APIRouter()
+
 # Create empty routers for NER and LLM extract (will be implemented in api_nlp)
 from fastapi import APIRouter
 ner_router = APIRouter()
@@ -190,6 +199,9 @@ app.include_router(parse_address_router)
 # Include NER and LLM extract routers (empty for now - will be implemented in api_nlp)
 app.include_router(ner_router)
 app.include_router(llm_extract_router)
+
+# Include intent generation router
+app.include_router(intent_gen_router)
 
 # Include factory router with error handling
 try:

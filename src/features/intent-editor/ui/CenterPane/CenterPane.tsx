@@ -21,6 +21,9 @@ export function CenterPane({ intentId }: { intentId?: string }){
         onAddPositive={(t)=>{ useStore.getState().addCurated(it.id, t, 'it'); }}
         onAddNegative={(t)=>{ useStore.getState().addHardNeg(it.id, { id: (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2), text: t, lang: 'it' }); }}
         onAddKeyword={(t)=>{ useStore.getState().addKeyword(it.id, t, 1); }}
+        onClearPositive={()=>{ useStore.getState().clearCurated(it.id); }}
+        onClearNegative={()=>{ useStore.getState().clearHardNeg(it.id); }}
+        onClearKeywords={()=>{ useStore.getState().clearKeywords(it.id); }}
         onTest={async ()=>{ try { await actionRunAllTests(); } catch {} }}
       />
     </div>

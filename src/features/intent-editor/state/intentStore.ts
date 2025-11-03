@@ -19,6 +19,9 @@ type IntentState = {
   addOrFocusIntent: (name: string, langs?: Lang[]) => string;
   addCurated: (id: string, text: string, lang?: Lang) => void;
   addKeyword: (id: string, term: string, weight?: number) => void;
+  clearCurated: (id: string) => void;
+  clearHardNeg: (id: string) => void;
+  clearKeywords: (id: string) => void;
 };
 
 export const useIntentStore = create<IntentState>((set, get) => ({
@@ -96,6 +99,15 @@ export const useIntentStore = create<IntentState>((set, get) => ({
     if (idFound) { get().select(idFound); return idFound; }
     return get().addIntent(name, langs);
   },
+  clearCurated: (id) => set(s => ({
+    intents: s.intents.map(it => it.id === id ? { ...it, variants: { ...it.variants, curated: [] } } : it)
+  })),
+  clearHardNeg: (id) => set(s => ({
+    intents: s.intents.map(it => it.id === id ? { ...it, variants: { ...it.variants, hardNeg: [] } } : it)
+  })),
+  clearKeywords: (id) => set(s => ({
+    intents: s.intents.map(it => it.id === id ? { ...it, signals: { ...it.signals, keywords: [] } } : it)
+  })),
 }));
 
 
