@@ -20,6 +20,9 @@ import {
   getSubDataList,
   getNodeSteps
 } from './ddtSelectors';
+import { hasIntentMessages } from './utils/hasMessages';
+import IntentMessagesBuilder from './components/IntentMessagesBuilder';
+import { saveIntentMessagesToDDT } from './utils/saveIntentMessages';
 import { useNodeSelection } from './hooks/useNodeSelection';
 import { useNodeUpdate } from './hooks/useNodeUpdate';
 import { useNodePersistence } from './hooks/useNodePersistence';
@@ -139,6 +142,11 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
   // Header: icon, title, and toolbar
   const actType = (act?.type || 'DataRequest') as any;
+
+  // ✅ Verifica se ProblemClassification ha messaggi (mostra IntentMessagesBuilder se non ci sono)
+  const needsIntentMessages = useMemo(() => {
+    return actType === 'ProblemClassification' && !hasIntentMessages(localDDT);
+  }, [actType, localDDT]);
 
   // Wizard/general layout flags
   // ✅ ProblemClassification non ha bisogno di wizard (nessuna struttura dati)
@@ -436,6 +444,23 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                 }
               }}
               startOnStructure={false}
+            />
+          </div>
+        ) : needsIntentMessages ? (
+          /* Build Messages UI for ProblemClassification without messages */
+          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
+            <IntentMessagesBuilder
+              intentLabel={act?.label || localDDT?.label || 'chiedi il problema'}
+              onComplete={(messages) => {
+                const updatedDDT = saveIntentMessagesToDDT(localDDT, messages);
+                setLocalDDT(updatedDDT);
+                try {
+                  replaceSelectedDDT(updatedDDT);
+                } catch (err) {
+                  console.error('[ResponseEditor] Failed to save intent messages:', err);
+                }
+                // After saving, show normal editor (needsIntentMessages will become false)
+              }}
             />
           </div>
         ) : (
