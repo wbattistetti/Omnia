@@ -12,6 +12,7 @@ const EXTRACTOR_COLORS = {
   deterministic: '#e5e7eb', // Grigio
   ner: '#fef3c7',          // Giallo pallido
   llm: '#fed7aa',          // Arancione pallido
+  embeddings: '#e0e7ff',   // Viola chiaro
 };
 
 // 📊 Etichette colonne con tooltip
@@ -35,6 +36,11 @@ const COLUMN_LABELS = {
     main: "AI Completa",
     tech: "LLM",
     tooltip: "Comprensione linguistica profonda con modello AI avanzato"
+  },
+  embeddings: {
+    main: "Classificazione",
+    tech: "Embeddings",
+    tooltip: "Classificazione intenti basata su embeddings semantici"
   }
 };
 
@@ -73,6 +79,8 @@ interface TesterGridProps {
   // Editor toggle
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | null;
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm') => void;
+  // Mode: extraction (default) or classification
+  mode?: 'extraction' | 'classification';
 }
 
 // Helper to format summary into stacked key: value lines showing expected keys; missing keys grey, present black
@@ -297,6 +305,7 @@ export default function TesterGrid({
   setHovered,
   activeEditor,
   toggleEditor,
+  mode = 'extraction', // Default to extraction for backward compatibility
 }: TesterGridProps) {
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
