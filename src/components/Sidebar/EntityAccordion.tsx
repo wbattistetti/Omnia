@@ -58,7 +58,7 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
               }, { total: 0, built: 0 });
               return (
                 <span
-                  className="ml-1 px-1.5 py-0.5 text-[10px] font-semibold"
+                  className="ml-1 px-1.5 py-0.5 font-semibold"
                   style={{
                     background: 'transparent',
                     color: '#ffffff',
@@ -74,7 +74,7 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
           )}
           {isOpen && (
             <button
-              className="ml-2 px-1.5 py-0.5 text-[10px] rounded-md border transition-colors"
+              className="ml-2 px-1.5 py-0.5 rounded-md border transition-colors"
               onClick={e => {
                 e.stopPropagation();
                 setAdding(true);

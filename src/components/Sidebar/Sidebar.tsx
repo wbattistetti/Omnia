@@ -366,7 +366,7 @@ const Sidebar: React.FC = () => {
       </div>
       {/* Industry filter */}
       <div className="px-4 py-2 border-b" style={{ background: 'var(--sidebar-content-bg)', borderBottom: '1px solid var(--sidebar-border)' }}>
-        <label className="block text-sm text-slate-300 mb-1">Industry</label>
+        <label className="block text-slate-300 mb-1">Industry</label>
         <select
           value={industryFilter}
           onChange={(e) => setIndustryFilter(e.target.value)}
@@ -378,7 +378,7 @@ const Sidebar: React.FC = () => {
       </div>
       <div
         ref={zoomRef as any}
-        className="p-4 overflow-y-auto"
+        className="p-3 overflow-y-auto"
         style={{ flex: 1, ...zoomStyle }}
       >
         {/* Speech Acts (Agent Acts except Backend Call) */}

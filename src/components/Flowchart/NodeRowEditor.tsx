@@ -72,7 +72,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
       onClick={(e) => { log('onClick stop'); e.stopPropagation(); }}
       autoFocus
       rows={1}
-      className="w-full bg-slate-600 text-white text-[8px] px-1.5 py-1 rounded-md border border-slate-500 focus:outline-none focus:ring-0 nodrag node-row-input"
+      className="w-full bg-slate-600 text-white px-1.5 py-1 rounded-md border border-slate-500 focus:outline-none focus:ring-0 nodrag node-row-input"
       style={{
         width: '100%',
         maxWidth: '100%',

@@ -29,7 +29,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
   const nameColor = isAgentAct
     ? (mode === 'DataRequest' ? getAgentActIconColor(item as any) : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')
     : 'var(--sidebar-content-text)';
-  
+
   // Debug logging removed to prevent excessive console output
   // Expose the accent for nested wizard via CSS var
   const accentStyle: React.CSSProperties = isAgentAct ? { ['--ddt-accent' as any]: nameColor } : {};
@@ -44,7 +44,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
 
   return (
     <div
-      className="flex items-center gap-1 text-sm py-0.5 px-1 rounded min-h-[32px]"
+      className="flex items-center gap-1 py-0.5 px-1 rounded min-h-[32px]"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); }}
       style={accentStyle}
@@ -65,7 +65,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
         <>
           {/* Leading icon for Agent Acts */}
           {isAgentAct && (
-            <span className="inline-flex items-center justify-center mr-1" title={mode} style={{ color: leadingIconColor }}>
+            <span className="inline-flex items-center justify-center mr-1 flex-shrink-0" title={mode} style={{ color: leadingIconColor }}>
               {mode === 'DataRequest' ? (
                 <Ear className="w-4 h-4" style={{ color: leadingIconColor }} />
               ) : mode === 'DataConfirmation' ? (
@@ -76,7 +76,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
             </span>
           )}
           <span
-            className="truncate"
+            className="flex-1 min-w-0 break-words"
             style={{ color: nameColor, opacity: hasEmbedded ? 1 : 0.6 }}
             title={isAgentAct ? mode : undefined}
             role={isCondition ? 'button' : undefined}
@@ -107,7 +107,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
           >
             {item.name}
           </span>
-          <span className="flex items-center gap-1 ml-1" style={{ visibility: hovered ? 'visible' : 'hidden' }}>
+          <span className="flex items-center gap-1 ml-1 flex-shrink-0" style={{ visibility: hovered ? 'visible' : 'hidden' }}>
             {/* Pencil */}
             <button
               className="p-1 text-gray-400 hover:text-blue-400"

@@ -27,10 +27,10 @@ const SidebarEntityAccordion: React.FC<SidebarEntityAccordionProps> = ({
       <div
         className="flex items-center justify-between cursor-pointer px-4 py-2 hover:bg-slate-700 transition-colors"
         onClick={handleHeaderClick}
-        style={{ 
-          background: '#3b82f6', 
-          color: '#ffffff', 
-          borderTopLeftRadius: 8, 
+        style={{
+          background: '#3b82f6',
+          color: '#ffffff',
+          borderTopLeftRadius: 8,
           borderTopRightRadius: 8
         }}
       >
@@ -38,7 +38,7 @@ const SidebarEntityAccordion: React.FC<SidebarEntityAccordionProps> = ({
           <div className="w-5 h-5" style={{ color: '#ffffff' }}>
             {icon}
           </div>
-          <span className="font-semibold text-sm capitalize">
+          <span className="font-semibold capitalize">
             {title}
           </span>
         </div>

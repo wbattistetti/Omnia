@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Trash2, Edit3, Check, X, Anchor, Play, Eye, EyeOff } from 'lucide-react';
 import { IntellisenseMenu } from '../../../Intellisense/IntellisenseMenu';
 import { createPortal } from 'react-dom';
-import { FONT_SIZES } from '../../../../theme/fontSizes';
+import { useDynamicFontSizes } from '../../../../hooks/useDynamicFontSizes';
 
 /**
  * Props per NodeHeader
@@ -47,6 +47,8 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
   const wantedCaretRef = useRef<number | null>(null);
   // Extended hover area for editing (include icons outside border)
   const [extendedRect, setExtendedRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  // ✅ Font sizes dinamici dallo store globale
+  const fontSizes = useDynamicFontSizes();
 
   // Inizia editing titolo
   const handleTitleEdit = () => {
@@ -209,7 +211,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
               autoFocus
               className="node-title-input flex-1 min-w-0 bg-white text-slate-900 px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-amber-500 border border-amber-400 nodrag"
               data-node-id={nodeId || ''}
-              style={{ width: '100%', fontSize: FONT_SIZES.NODE_TITLE }}
+              style={{ width: '100%', fontSize: fontSizes.nodeTitle }}
               onFocus={() => {
                 if (titleInputRef.current) {
                   const rect = titleInputRef.current.getBoundingClientRect();
@@ -311,7 +313,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
         ) : (
           <h3
             className="text-white font-semibold cursor-text hover:text-amber-100 transition-colors truncate flex-1"
-            style={{ fontSize: FONT_SIZES.NODE_TITLE }}
+            style={{ fontSize: fontSizes.nodeTitle }}
             onMouseDown={(e) => {
               // Approximate caret index from click X over title width
               try {

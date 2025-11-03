@@ -110,7 +110,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
           />
         ) : (
           <>
-            <span className="text-sm font-semibold truncate" style={{ color: 'var(--sidebar-content-text)' }}>{category.name}</span>
+            <span className="font-semibold flex-1 min-w-0 break-words" style={{ color: 'var(--sidebar-content-text)' }}>{category.name}</span>
             {hovered && (
               <span className="flex items-center gap-1 ml-1">
                 <button
@@ -128,7 +128,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
                   <Trash2 className="w-4 h-4" />
                 </button>
                 <button
-                  className="p-1 text-blue-500 hover:text-blue-700 text-xs font-medium"
+                  className="p-1 text-blue-500 hover:text-blue-700 font-medium"
                   style={{ minWidth: 0 }}
                   onClick={() => setAdding(true)}
                 >

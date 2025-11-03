@@ -89,8 +89,8 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
     )}
     <span
       ref={labelRef}
-      className="block text-[8px] cursor-pointer transition-colors flex items-center relative nodrag"
-      style={{ background: included ? 'transparent' : '#f3f4f6', color: included ? labelTextColor : '#9ca3af', borderRadius: 4, paddingLeft: row.categoryType && Icon ? 4 : 0, paddingRight: 8, minHeight: '18px', lineHeight: 1.1, marginTop: 0, marginBottom: 0, whiteSpace: 'nowrap', userSelect: 'none', cursor: 'grab' }}
+      className="block cursor-pointer transition-colors flex items-center relative nodrag"
+      style={{ background: included ? 'transparent' : '#f3f4f6', color: included ? labelTextColor : '#9ca3af', borderRadius: 4, paddingLeft: row.categoryType && Icon ? 4 : 0, paddingRight: 8, minHeight: '1.5em', lineHeight: 1.1, marginTop: 0, marginBottom: 0, whiteSpace: 'nowrap', userSelect: 'none', cursor: 'grab' }}
       onDoubleClick={onDoubleClick}
       onPointerDown={(e) => { e.stopPropagation(); }}
       onMouseDown={(e) => {
