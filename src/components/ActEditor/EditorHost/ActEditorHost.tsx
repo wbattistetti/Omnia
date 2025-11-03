@@ -13,9 +13,9 @@ export default function ActEditorHost({ act, onClose }: EditorProps) {
     return <div>No editor registered for {kind}</div>;
   }
 
-  // DDTEditor e IntentEditor sono importati direttamente, quindi non hanno bisogno di Suspense
+  // DDTEditor, IntentEditor e TextMessageEditor sono importati direttamente, quindi non hanno bisogno di Suspense
   // Gli altri editori usano lazy loading, quindi hanno bisogno di Suspense
-  const isLazy = kind !== 'ddt' && kind !== 'intent';
+  const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message';
 
   if (!isLazy) {
     // Render diretto per DDTEditor e IntentEditor (più veloce, no lazy loading)

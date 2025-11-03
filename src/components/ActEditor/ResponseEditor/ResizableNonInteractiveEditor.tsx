@@ -10,9 +10,10 @@ interface ResizableNonInteractiveEditorProps {
   onChange: (next: NonInteractiveResponse) => void;
   onClose: () => void;
   accentColor?: string; // header background color, typically act forecolor
+  instanceId?: string; // ID dell'istanza per aggiornare instanceRepository
 }
 
-const ResizableNonInteractiveEditor: React.FC<ResizableNonInteractiveEditorProps> = ({ title, value, onChange, onClose, accentColor }) => {
+const ResizableNonInteractiveEditor: React.FC<ResizableNonInteractiveEditorProps> = ({ title, value, onChange, onClose, accentColor, instanceId }) => {
   const { size, handleResize, style } = useResizablePanel({
     initialSize: 260,
     min: 180,
@@ -42,7 +43,7 @@ const ResizableNonInteractiveEditor: React.FC<ResizableNonInteractiveEditorProps
           </button>
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
-          <NonInteractiveResponseEditor value={value} onChange={onChange} onClose={onClose} />
+          <NonInteractiveResponseEditor value={value} onChange={onChange} onClose={onClose} instanceId={instanceId} />
         </div>
       </div>
     </div>

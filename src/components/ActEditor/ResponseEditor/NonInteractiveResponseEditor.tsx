@@ -1,4 +1,5 @@
 import React from 'react';
+import { instanceRepository } from '../../../services/InstanceRepository';
 
 export interface NonInteractiveResponse {
   template: string;
@@ -11,6 +12,7 @@ export interface NonInteractiveResponseEditorProps {
   value: NonInteractiveResponse;
   onChange: (next: NonInteractiveResponse) => void;
   onClose?: () => void;
+  instanceId?: string; // ID dell'istanza per aggiornare instanceRepository
 }
 
 function extractTemplateVars(template: string): string[] {
@@ -36,10 +38,17 @@ const chipStyle: React.CSSProperties = {
   fontSize: 12,
 };
 
-export default function NonInteractiveResponseEditor({ value, onChange, onClose }: NonInteractiveResponseEditorProps) {
+export default function NonInteractiveResponseEditor({ value, onChange, onClose, instanceId }: NonInteractiveResponseEditorProps) {
   const [template, setTemplate] = React.useState<string>(value?.template || '');
   const vars = React.useMemo(() => extractTemplateVars(template), [template]);
   const [samples, setSamples] = React.useState<Record<string, string>>(() => ({ ...(value?.samples || {}) }));
+
+  // Update instanceRepository when template changes
+  React.useEffect(() => {
+    if (instanceId && template !== undefined) {
+      instanceRepository.updateMessage(instanceId, { text: template });
+    }
+  }, [template, instanceId]);
 
   // propagate upwards (debounced light)
   React.useEffect(() => {

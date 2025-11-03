@@ -32,9 +32,10 @@ import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableN
 import ResizableActEditorHost from './ActEditor/EditorHost/ResizableActEditorHost';
 import { useActEditor } from './ActEditor/EditorHost/ActEditorContext';
 import ConditionEditor from './conditions/ConditionEditor';
-import FlowRunner from './debugger/FlowRunner';
+import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
 import { useDDTContext } from '../context/DDTContext';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from './Sidebar/sidebarTheme';
+import { instanceRepository } from '../services/InstanceRepository';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -119,8 +120,23 @@ export const AppContent: React.FC<AppContentProps> = ({
   React.useEffect(() => {
     const handler = (e: any) => {
       const d = (e && e.detail) || {};
-      setNonInteractiveEditor({ title: d.title || 'Agent message', value: { template: d.template || '', samples: {}, vars: [] } as any, accentColor: d.accentColor });
-      setNiSource({ instanceId: d.instanceId });
+      const instanceId = d.instanceId;
+
+      // Read message text from instance (create if doesn't exist, like DDTHostAdapter)
+      let template = '';
+      if (instanceId) {
+        let instance = instanceRepository.getInstance(instanceId);
+        // Create instance if it doesn't exist (will be saved when closing)
+        if (!instance) {
+          // Try to get actId from row (passed in event detail) or use empty string
+          const actId = d.actId || d.baseActId || '';
+          instance = instanceRepository.createInstanceWithId(instanceId, actId, []);
+        }
+        template = instance?.message?.text || '';
+      }
+
+      setNonInteractiveEditor({ title: d.title || 'Agent message', value: { template, samples: {}, vars: [] } as any, accentColor: d.accentColor });
+      setNiSource({ instanceId });
     };
     document.addEventListener('nonInteractiveEditor:open', handler as any);
     return () => document.removeEventListener('nonInteractiveEditor:open', handler as any);
@@ -709,8 +725,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                 </div>
               )}
               {showGlobalDebugger && (
-                <div style={{ position: 'relative' }}>
-                  <FlowRunner nodes={nodes} edges={edges} />
+                <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                  <DDEBubbleChat
+                    mode="flow"
+                    nodes={nodes}
+                    edges={edges}
+                  />
                   <ConditionEditor
                     open={conditionEditorOpen}
                     onClose={() => setConditionEditorOpen(false)}
@@ -737,6 +757,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               <ResizableNonInteractiveEditor
                 title={nonInteractiveEditor.title}
                 value={nonInteractiveEditor.value}
+                instanceId={niSource?.instanceId}
                 onChange={(next) => {
                   // Only update local draft; persist on close
                   setNonInteractiveEditor({ title: nonInteractiveEditor.title, value: next, accentColor: (nonInteractiveEditor as any).accentColor });
@@ -750,8 +771,16 @@ export const AppContent: React.FC<AppContentProps> = ({
                     if (pid && niSource?.instanceId) {
                       // fire-and-forget: non bloccare la chiusura del pannello
                       const text = nonInteractiveEditor?.value?.template || '';
+                      // Update instance in memory (already done by NonInteractiveResponseEditor via updateMessage)
+                      // Just persist to database
                       void dataSvc.updateInstance(pid, niSource.instanceId, { message: { text } })
-                        .then(() => { try { console.log('[NI][close][PUT ok]', { instanceId: niSource?.instanceId }); } catch { } })
+                        .then(() => {
+                          try {
+                            console.log('[NI][close][PUT ok]', { instanceId: niSource?.instanceId, text });
+                            // Ensure instanceRepository is also updated (defensive)
+                            instanceRepository.updateMessage(niSource.instanceId, { text });
+                          } catch { }
+                        })
                         .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
                       // broadcast per aggiornare la riga che ha questa istanza
                       try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: niSource.instanceId, text } })); } catch { }

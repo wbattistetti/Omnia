@@ -18,21 +18,57 @@ import {
 } from './messageResolvers';
 import { useMessageEditing } from './hooks/useMessageEditing';
 import { useMessageHandling } from './hooks/useMessageHandling';
+import { useFlowOrchestrator } from './hooks/useFlowOrchestrator';
+import { Node, Edge } from 'reactflow';
+import { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
 
 // getStepIcon and getStepColor moved to chatSimulatorUtils.tsx
 // Helper functions for message resolution moved to messageResolvers.ts
 // UserMessage and BotMessage components moved to separate files
 
-export default function DDEBubbleChat({
-  currentDDT,
-  translations,
-  onUpdateDDT
-}: {
-  currentDDT: AssembledDDT;
+interface DDEBubbleChatProps {
+  currentDDT?: AssembledDDT | null; // Optional for flow mode
   translations?: Record<string, string>;
   onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
-}) {
-  const template: DDTTemplateV2 = React.useMemo(() => adaptCurrentToV2(currentDDT), [currentDDT]);
+  // Flow mode props
+  mode?: 'single-ddt' | 'flow';
+  nodes?: Node<NodeData>[]; // For flow mode
+  edges?: Edge<EdgeData>[]; // For flow mode
+}
+
+export default function DDEBubbleChat({
+  currentDDT: propCurrentDDT,
+  translations,
+  onUpdateDDT,
+  mode = 'single-ddt',
+  nodes,
+  edges
+}: DDEBubbleChatProps) {
+  // Flow orchestrator (only active in flow mode)
+  const orchestrator = useFlowOrchestrator(
+    mode === 'flow' && nodes && edges ? { nodes, edges } : { nodes: [], edges: [] }
+  );
+
+  // Determine current DDT: from orchestrator in flow mode, from prop in single-ddt mode
+  const currentDDT = React.useMemo(() => {
+    if (mode === 'flow') {
+      return orchestrator.currentDDT;
+    }
+    return propCurrentDDT || null;
+  }, [mode, orchestrator.currentDDT, propCurrentDDT]);
+
+  // Template for DDT simulator (only when DDT is active)
+  const template: DDTTemplateV2 = React.useMemo(() => {
+    if (!currentDDT) {
+      // Return empty template when no DDT
+      return { schemaVersion: '2', metadata: { id: 'DDT_Empty', label: 'Empty' }, nodes: [] } as DDTTemplateV2;
+    }
+    try {
+      return adaptCurrentToV2(currentDDT);
+    } catch {
+      return { schemaVersion: '2', metadata: { id: 'DDT_Error', label: 'Error' }, nodes: [] } as DDTTemplateV2;
+    }
+  }, [currentDDT]);
   // Enable simulator debug logs only when explicitly toggled
   const debugEnabled = (() => { try { return localStorage.getItem('debug.chatSimulator') === '1'; } catch { return false; } })();
   const { state, send, reset, setConfig } = useDDTSimulator(template, { typingIndicatorMs: 0, debug: debugEnabled });
@@ -51,7 +87,10 @@ export default function DDEBubbleChat({
   const [noInputCounts, setNoInputCounts] = React.useState<Record<string, number>>({});
   // Track no-match escalation counts per (mainIdx|subId|mode)
   const [noMatchCounts, setNoMatchCounts] = React.useState<Record<string, number>>({});
-  const legacyDict = React.useMemo(() => extractTranslations(currentDDT as any, translations), [currentDDT, translations]);
+  const legacyDict = React.useMemo(() => {
+    if (!currentDDT) return {};
+    return extractTranslations(currentDDT as any, translations);
+  }, [currentDDT, translations]);
 
   // 🆕 Track sent text to clear input when it appears as a message
   const sentTextRef = React.useRef<string>('');
@@ -82,7 +121,58 @@ export default function DDEBubbleChat({
     `${s.mode}|${s.currentIndex}|${s.currentSubId || 'main'}`
   ), []);
 
+  // Handle DDT completion (when DDT finishes, advance flow in flow mode)
   React.useEffect(() => {
+    if (mode === 'flow' && state.mode === 'Completed' && orchestrator.isRunning) {
+      orchestrator.onDDTCompleted();
+    }
+  }, [mode, state.mode, orchestrator.isRunning, orchestrator.onDDTCompleted]);
+
+  // Handle non-interactive messages from orchestrator (flow mode)
+  const [nonInteractiveMessages, setNonInteractiveMessages] = React.useState<Message[]>([]);
+  const lastDrainedIndexRef = React.useRef<number>(-1);
+
+  // Track last node/act combination to detect changes
+  const lastNodeActKeyRef = React.useRef<string>('');
+
+  React.useEffect(() => {
+    if (mode === 'flow' && orchestrator.isRunning && orchestrator.currentNodeId) {
+      const currentKey = `${orchestrator.currentNodeId}:${orchestrator.currentActIndex}`;
+
+      // Drain non-interactive messages when starting or advancing
+      if (lastNodeActKeyRef.current !== currentKey || lastDrainedIndexRef.current !== orchestrator.currentActIndex) {
+        const result = orchestrator.drainSequentialNonInteractiveFrom(orchestrator.currentActIndex);
+        lastDrainedIndexRef.current = result.nextIndex;
+        lastNodeActKeyRef.current = currentKey;
+
+        if (result.messages.length > 0) {
+          // Convert orchestrator messages to DDEBubbleChat Message format
+          const newMessages: Message[] = result.messages.map((msg, idx) => ({
+            id: `noninteractive-${Date.now()}-${idx}`,
+            type: msg.role === 'user' ? 'user' : 'bot',
+            text: msg.text,
+            stepType: 'ask' as const,
+            color: getStepColor('ask')
+          }));
+          setNonInteractiveMessages(prev => [...prev, ...newMessages]);
+        }
+
+        if (result.nextDDT) {
+          orchestrator.setCurrentDDT(result.nextDDT);
+        }
+      }
+    } else if (!orchestrator.isRunning) {
+      // Clear when stopped
+      setNonInteractiveMessages([]);
+      lastDrainedIndexRef.current = -1;
+      lastNodeActKeyRef.current = '';
+    }
+  }, [mode, orchestrator.isRunning, orchestrator.currentNodeId, orchestrator.currentActIndex, orchestrator.drainSequentialNonInteractiveFrom, orchestrator.setCurrentDDT]);
+
+  React.useEffect(() => {
+    // Skip if no DDT active
+    if (!currentDDT) return;
+
     // On mount or reset, show initial ask
     const key = getPositionKey(state);
     const main = getMain(state);
@@ -270,17 +360,44 @@ export default function DDEBubbleChat({
 
   // handleSend function moved to useMessageHandling hook (see hooks/useMessageHandling.ts)
 
+  // Combined messages: non-interactive (flow mode) + DDT messages
+  const allMessages = React.useMemo(() => {
+    if (mode === 'flow') {
+      return [...nonInteractiveMessages, ...messages];
+    }
+    return messages;
+  }, [mode, nonInteractiveMessages, messages]);
+
   return (
     <div className="h-full flex flex-col bg-white">
       <div className="border-b p-3 bg-gray-50 flex items-center gap-2">
+        {mode === 'flow' && (
+          <>
+            <button
+              onClick={orchestrator.isRunning ? orchestrator.stop : orchestrator.start}
+              className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
+            >
+              {orchestrator.isRunning ? 'Stop' : 'Start'}
+            </button>
+            {orchestrator.isRunning && orchestrator.currentNodeId && (
+              <span className="text-xs text-gray-600">
+                Node: {orchestrator.getCurrentNode()?.data?.title || orchestrator.currentNodeId}
+              </span>
+            )}
+          </>
+        )}
         <button
           onClick={() => {
             reset();
             setMessages([]);
+            setNonInteractiveMessages([]);
             lastKeyRef.current = '';
             messageIdCounter.current = 0;
             setNoMatchCounts({});
             setNoInputCounts({});
+            if (mode === 'flow') {
+              orchestrator.stop();
+            }
           }}
           className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
         >
@@ -294,7 +411,7 @@ export default function DDEBubbleChat({
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={scrollContainerRef}>
-        {messages.map((m) => {
+        {allMessages.map((m) => {
           // Render user message
           if (m.type === 'user') {
             return (
@@ -340,32 +457,35 @@ export default function DDEBubbleChat({
 
           return null;
         })}
-        {/* Input field DOPO tutti i messaggi */}
-        <div className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3">
-          <input
-            type="text"
-            className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-            ref={inlineInputRef}
-            onFocus={() => {
-              try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }
-            }}
-            placeholder="Type response..."
-            value={inlineDraft}
-            onChange={(e) => setInlineDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const v = inlineDraft.trim();
-                if (!v) return;
-                // 🆕 Freeze text: save it so we can clear input when it appears as a message
-                // The text will become a frozen message label, then engine processes it
-                sentTextRef.current = v;
-                void handleSend(v);
-                // Focus will be handled after input is cleared (see useEffect below)
-              }
-            }}
-            autoFocus
-          />
-        </div>
+        {/* Input field DOPO tutti i messaggi - only show when DDT is active */}
+        {currentDDT && (
+          <div className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3">
+            <input
+              type="text"
+              className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+              ref={inlineInputRef}
+              onFocus={() => {
+                try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }
+              }}
+              placeholder={mode === 'flow' && !currentDDT ? 'In attesa di atto interattivo...' : 'Type response...'}
+              value={inlineDraft}
+              onChange={(e) => setInlineDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = inlineDraft.trim();
+                  if (!v) return;
+                  // 🆕 Freeze text: save it so we can clear input when it appears as a message
+                  // The text will become a frozen message label, then engine processes it
+                  sentTextRef.current = v;
+                  void handleSend(v);
+                  // Focus will be handled after input is cleared (see useEffect below)
+                }
+              }}
+              autoFocus
+              disabled={!currentDDT}
+            />
+          </div>
+        )}
       </div>
       {/* input spostato nella nuvoletta inline sotto l'ultimo prompt */}
     </div>

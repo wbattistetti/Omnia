@@ -12,6 +12,7 @@ export interface ActInstance {
     actId: string;                // Riferimento al template nel catalogo
     problemIntents: ProblemIntent[]; // Intents personalizzati di questa istanza
     ddt?: any;                    // DDT associato a questa istanza (se esiste)
+    message?: { text: string };   // Messaggio testuale per atti non interattivi
     createdAt: Date;
     updatedAt: Date;
 }
@@ -151,6 +152,44 @@ class InstanceRepository {
     }
 
     /**
+     * Aggiorna il message di un'istanza
+     * @param instanceId ID dell'istanza da aggiornare
+     * @param message Messaggio da impostare
+     * @returns True se aggiornata con successo, false altrimenti
+     */
+    updateMessage(instanceId: string, message: { text: string }): boolean {
+        const instance = this.getInstance(instanceId);
+
+        if (instance) {
+            instance.message = message;
+            instance.updatedAt = new Date();
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Aggiorna un'istanza con valori parziali
+     * @param instanceId ID dell'istanza da aggiornare
+     * @param updates Campi da aggiornare
+     * @returns True se aggiornata con successo, false altrimenti
+     */
+    updateInstance(instanceId: string, updates: Partial<ActInstance>): boolean {
+        const instance = this.getInstance(instanceId);
+
+        if (instance) {
+            Object.assign(instance, updates);
+            instance.updatedAt = new Date();
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Elimina un'istanza
      * @param instanceId ID dell'istanza da eliminare
      * @returns True se eliminata con successo, false altrimenti
@@ -277,6 +316,7 @@ class InstanceRepository {
                         actId: instance.baseActId || instance.actId || '',
                         problemIntents: instance.problemIntents || [],
                         ddt: ddtValue,
+                        message: instance.message || undefined,
                         createdAt: instance.createdAt instanceof Date ? instance.createdAt : new Date(instance.createdAt),
                         updatedAt: instance.updatedAt instanceof Date ? instance.updatedAt : new Date(instance.updatedAt)
                     };
