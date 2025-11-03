@@ -14,6 +14,7 @@ export type ListGridProps = {
 
   LeftIcon?: React.ComponentType<{ size?: number; className?: string }>;
   labelAddon?: (item: ListItem) => React.ReactNode;
+  labelRenderer?: (item: ListItem) => React.ReactNode; // ✅ Renderer personalizzato per il label
   rightSlot?: (item: ListItem) => React.ReactNode;
   rowClassName?: (item: ListItem, selected: boolean) => string;
 
@@ -43,6 +44,7 @@ export default function ListGrid({
   onEnterAdd,
   LeftIcon,
   labelAddon,
+  labelRenderer,
   rightSlot,
   rowClassName,
   sort = 'alpha',
@@ -173,7 +175,9 @@ export default function ListGrid({
                     />
                   ) : (
                     <>
-                      <span className="truncate">{it.label}</span>
+                      <span className="truncate">
+                        {labelRenderer ? labelRenderer(it) : it.label}
+                      </span>
                       {labelAddon && (
                         <span className="shrink-0">{labelAddon(it)}</span>
                       )}

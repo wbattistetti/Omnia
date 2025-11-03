@@ -85,7 +85,7 @@ export function LeftGrid(){
           {/* ✅ ImportDropdown riutilizzabile */}
           <ImportDropdown
             onImport={handleImportIntents}
-            buttonLabel="Import Values"
+            buttonLabel="Import"
             successMessage={(count) => `Importati ${count} intenti`}
             errorMessage={{
               clipboard: 'Errore durante la lettura del clipboard',

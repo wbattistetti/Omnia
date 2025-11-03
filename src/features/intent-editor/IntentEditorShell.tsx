@@ -14,6 +14,34 @@ interface IntentEditorShellProps {
   inlineMode?: boolean;
 }
 
+// Componente per payoff temporaneo sotto Generate
+function GeneratePayoff({ lastGen }: { lastGen: { count: number; requested: number } }) {
+  const [visible, setVisible] = React.useState(true);
+
+  React.useEffect(() => {
+    // Scompare dopo 3 secondi
+    const timer = setTimeout(() => setVisible(false), 3000);
+    return () => clearTimeout(timer);
+  }, [lastGen.count, lastGen.requested]);
+
+  if (!visible) return null;
+
+  return (
+    <span
+      className={[
+        'absolute top-full left-0 mt-1 text-xs px-1 whitespace-nowrap',
+        lastGen.count === 0 ? 'text-rose-700' :
+        lastGen.count < lastGen.requested ? 'text-amber-700' :
+        'text-emerald-700'
+      ].join(' ')}
+    >
+      {lastGen.count < lastGen.requested
+        ? `generated ${lastGen.count} phrases`
+        : `${lastGen.count} phrases generated`}
+    </span>
+  );
+}
+
 export default function IntentEditorShell({ inlineMode = false }: IntentEditorShellProps){
   const selectedId = useIntentStore(s=>s.selectedId);
   const selected = useIntentStore(s=> s.intents.find(i=>i.id===s.selectedId));
@@ -54,11 +82,11 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
 
       const result = await trainIntent({ intentId: selectedId, phrases });
       setModelReady(result.modelReady);
-      alert(`Model ready! Processed ${result.stats.total} phrases (${result.stats.matching} matching, ${result.stats.notMatching} not-matching)`);
+      // Alert rimosso: training completato silenziosamente
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Training failed';
       console.error('[IntentEditorShell] Training error:', err);
-      alert(`Training failed: ${errorMsg}`);
+      // Alert rimosso: errori solo in console
     } finally {
       setTraining(false);
     }
@@ -417,111 +445,198 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-amber-800">Training set</h2>
 
-              {/* Tab buttons: Must Match, Can't Match, Keywords */}
-              <div className="flex items-center gap-1 ml-3">
-                <button
-                  className={`px-3 py-1.5 flex items-center gap-2 rounded border ${
-                    trainingTab === 'pos'
-                      ? 'bg-emerald-100 border-emerald-300 text-emerald-700'
-                      : 'bg-white hover:bg-gray-50'
-                  }`}
-                  onClick={() => setTrainingTab('pos')}
-                >
-                  <CheckCircle size={16} className="text-emerald-600" />
-                  <span>Must Match</span>
-                </button>
-                <button
-                  className={`px-3 py-1.5 flex items-center gap-2 rounded border ${
-                    trainingTab === 'neg'
-                      ? 'bg-rose-100 border-rose-300 text-rose-700'
-                      : 'bg-white hover:bg-gray-50'
-                  }`}
-                  onClick={() => setTrainingTab('neg')}
-                >
-                  <XCircle size={16} className="text-rose-600" />
-                  <span>Can't Match</span>
-                </button>
-                <button
-                  className={`px-3 py-1.5 flex items-center gap-2 rounded border ${
-                    trainingTab === 'key'
-                      ? 'bg-indigo-100 border-indigo-300 text-indigo-700'
-                      : 'bg-white hover:bg-gray-50'
-                  }`}
-                  onClick={() => setTrainingTab('key')}
-                >
-                  <Tag size={16} className="text-indigo-600" />
-                  <span>Keywords</span>
-                </button>
+              {/* Generate, numero, Import e payoff temporaneo */}
+              <div className="flex items-center gap-2 ml-3">
+                <div className="relative flex items-center">
+                  <button
+                    className={`px-2 py-1 rounded-md border flex items-center gap-1 ${genError ? 'text-red-600 border-red-300' : ''}`}
+                    title={genError ? genError : (generating ? 'Generating…' : 'Genera suggerimenti')}
+                    disabled={generating}
+                    onClick={handleGenerate}
+                  >
+                    {generating ? (
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Generate
+                      </span>
+                    ) : genError ? (
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle size={14} className="text-red-600" /> Generate
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <Sparkles size={14} /> Generate
+                      </span>
+                    )}
+                  </button>
+                  {/* Payoff temporaneo: appare sotto Generate e scompare dopo pochi secondi */}
+                  {!generating && lastGen && (
+                    <GeneratePayoff lastGen={lastGen} />
+                  )}
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={genN}
+                  onChange={e => setGenN(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+                  className="w-14 px-2 py-1 rounded-md border"
+                  title="Numero di frasi da generare"
+                />
+                <ImportDropdown
+                  onImport={handleImportPhrases}
+                  buttonLabel="Import"
+                  successMessage={(count) => `Importate ${count} frasi`}
+                  errorMessage={{
+                    clipboard: 'Errore durante la lettura del clipboard',
+                    file: 'Errore durante la lettura del file',
+                    empty: 'Nessuna frase valida trovata'
+                  }}
+                />
               </div>
             </div>
 
-            {/* Right side: Import, number input, Generate, Clear */}
-            <div className="flex items-center gap-2">
-              <ImportDropdown
-                onImport={handleImportPhrases}
-                buttonLabel="Import"
-                successMessage={(count) => `Importate ${count} frasi`}
-                errorMessage={{
-                  clipboard: 'Errore durante la lettura del clipboard',
-                  file: 'Errore durante la lettura del file',
-                  empty: 'Nessuna frase valida trovata'
-                }}
-              />
-              <input
-                type="number"
-                min={1}
-                max={50}
-                value={genN}
-                onChange={e => setGenN(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                className="w-14 px-2 py-1 rounded-md border"
-                title="Numero di frasi da generare"
-              />
+            {/* Right side: Train e Test (separati/staccati) */}
+            <div className="flex items-center gap-3">
               <button
-                className={`px-2 py-1 rounded-md border flex items-center gap-1 ${genError ? 'text-red-600 border-red-300' : ''}`}
-                title={genError ? genError : (generating ? 'Generating…' : 'Genera suggerimenti')}
-                disabled={generating}
-                onClick={handleGenerate}
+                onClick={handleTrain}
+                disabled={training || !hasTrainingData}
+                className={`px-3 py-1.5 rounded-md border flex items-center gap-1 ${
+                  training ? 'bg-blue-100' :
+                  modelReady ? 'bg-green-100 border-green-300' :
+                  !hasTrainingData ? 'opacity-50' :
+                  'bg-white hover:bg-blue-50'
+                } disabled:opacity-60 disabled:cursor-not-allowed`}
+                title={training ? 'Training in corso...' : modelReady ? 'Model ready - Click to retrain' : 'Train embeddings model'}
               >
-                {generating ? (
+                {training ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Brain size={14} className={modelReady ? 'text-green-600' : ''} />
+                )}
+                {modelReady ? 'Retrain' : 'Train'}
+              </button>
+
+              <button
+                className="px-3 py-1.5 rounded-lg border bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1"
+                onClick={async () => {
+                  try {
+                    setTesting(true);
+                    try { if (localStorage.getItem('debug.intent') === '1') console.log('[UI][RunTest][click]'); } catch {}
+                    // Testa le frasi del training set (positive + negative) del selected intent
+                    if (selected && selectedId) {
+                      const trainingItems = [
+                        ...(selected.variants.curated || []).map(p => ({ id: p.id, text: p.text })),
+                        ...(selected.variants.hardNeg || []).map(p => ({ id: p.id, text: p.text }))
+                      ];
+                      if (trainingItems.length > 0) {
+                        await actionRunVisibleTests(trainingItems);
+                      } else {
+                        // Fallback: testa frasi nel TestGrid se ci sono
+                        const visibleItems = (window as any).__testGridVisibleItems || [];
+                        if (visibleItems.length > 0) {
+                          await actionRunVisibleTests(visibleItems);
+                        } else {
+                          await actionRunAllTests();
+                        }
+                      }
+                    } else {
+                      // Fallback: testa tutte le frasi in testStore
+                      await actionRunAllTests();
+                    }
+                  } finally { setTesting(false); }
+                }}
+                title="Run test on training phrases"
+                disabled={testing || !modelReady}
+              >
+                {testing ? (
                   <span className="flex items-center gap-1">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Generate
-                  </span>
-                ) : genError ? (
-                  <span className="flex items-center gap-1">
-                    <AlertTriangle size={14} className="text-red-600" /> Generate
+                    <Loader2 size={14} className="animate-spin" />
+                    Testing…
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1">
-                    <Sparkles size={14} /> Generate
-                  </span>
+                  'Test'
                 )}
-              </button>
-              {!generating && lastGen && (
-                <span
-                  className={[
-                    'px-2 py-0.5 rounded border',
-                    lastGen.count === 0 ? 'bg-rose-100 text-rose-700 border-rose-200' :
-                    lastGen.count < lastGen.requested ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                    'bg-emerald-100 text-emerald-700 border-emerald-200'
-                  ].join(' ')}
-                  title={`Generated ${lastGen.count} of ${lastGen.requested}`}
-                >
-                  {lastGen.count}/{lastGen.requested}
-                </span>
-              )}
-              <button
-                onClick={handleClearTraining}
-                disabled={currentTabCount === 0}
-                className="p-1.5 rounded border bg-white hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Clear All Phrases"
-              >
-                <Trash2 size={16} />
               </button>
             </div>
           </div>
-          <div className="p-3 flex-1 min-h-0">
-            <CenterPane intentId={selectedId} tab={trainingTab} setTab={setTrainingTab} />
+
+          {/* Content area con strip verticale e griglia */}
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            {/* Vertical strip: Must Match, Can't Match, Keywords (testo verticale) */}
+            <div className="flex flex-col gap-2 p-2 border-r border-amber-100 bg-amber-50/50" style={{ width: 50 }}>
+              <button
+                className={`p-2 rounded border flex flex-col items-center justify-center gap-1 ${
+                  trainingTab === 'pos'
+                    ? 'bg-emerald-100 border-emerald-300'
+                    : 'bg-white hover:bg-gray-50'
+                }`}
+                onClick={() => setTrainingTab('pos')}
+                title="Must Match"
+                style={{ minHeight: 70 }}
+              >
+                <CheckCircle size={18} className={trainingTab === 'pos' ? 'text-emerald-600' : 'text-gray-600'} />
+                <span
+                  className={`text-xs font-semibold ${trainingTab === 'pos' ? 'text-emerald-700' : 'text-gray-600'}`}
+                  style={{
+                    writingMode: 'vertical-rl',
+                    textOrientation: 'mixed',
+                    letterSpacing: '0.1em'
+                  }}
+                >
+                  Must Match
+                </span>
+              </button>
+              <button
+                className={`p-2 rounded border flex flex-col items-center justify-center gap-1 ${
+                  trainingTab === 'neg'
+                    ? 'bg-rose-100 border-rose-300'
+                    : 'bg-white hover:bg-gray-50'
+                }`}
+                onClick={() => setTrainingTab('neg')}
+                title="Can't Match"
+                style={{ minHeight: 70 }}
+              >
+                <XCircle size={18} className={trainingTab === 'neg' ? 'text-rose-600' : 'text-gray-600'} />
+                <span
+                  className={`text-xs font-semibold ${trainingTab === 'neg' ? 'text-rose-700' : 'text-gray-600'}`}
+                  style={{
+                    writingMode: 'vertical-rl',
+                    textOrientation: 'mixed',
+                    letterSpacing: '0.1em'
+                  }}
+                >
+                  Can't Match
+                </span>
+              </button>
+              <button
+                className={`p-2 rounded border flex flex-col items-center justify-center gap-1 ${
+                  trainingTab === 'key'
+                    ? 'bg-indigo-100 border-indigo-300'
+                    : 'bg-white hover:bg-gray-50'
+                }`}
+                onClick={() => setTrainingTab('key')}
+                title="Keywords"
+                style={{ minHeight: 70 }}
+              >
+                <Tag size={18} className={trainingTab === 'key' ? 'text-indigo-600' : 'text-gray-600'} />
+                <span
+                  className={`text-xs font-semibold ${trainingTab === 'key' ? 'text-indigo-700' : 'text-gray-600'}`}
+                  style={{
+                    writingMode: 'vertical-rl',
+                    textOrientation: 'mixed',
+                    letterSpacing: '0.1em'
+                  }}
+                >
+                  Keywords
+                </span>
+              </button>
+            </div>
+
+            {/* Griglia frasi centrale */}
+            <div className="p-3 flex-1 min-h-0 overflow-auto">
+              <CenterPane intentId={selectedId} tab={trainingTab} setTab={setTrainingTab} />
+            </div>
           </div>
         </div>
 

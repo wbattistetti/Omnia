@@ -42,6 +42,52 @@ export default function PhrasesPanel({
   const tab = externalTab !== undefined ? externalTab : internalTab;
   const setTab = externalSetTab || setInternalTab;
 
+  // ✅ State per risultati test (correct/wrong) per colorazione frasi
+  const [testResults, setTestResults] = useState<Map<string, 'correct' | 'wrong'>>(new Map());
+
+  // ✅ Ascolta evento 'trainingTestResult' per aggiornare colorazione
+  useEffect(() => {
+    const handleTrainingResult = (e: any) => {
+      const { id, status } = e.detail || {};
+      if (id && (status === 'correct' || status === 'wrong')) {
+        setTestResults(prev => {
+          const next = new Map(prev);
+          next.set(id, status);
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('trainingTestResult' as any, handleTrainingResult);
+    return () => {
+      window.removeEventListener('trainingTestResult' as any, handleTrainingResult);
+    };
+  }, []);
+
+  // ✅ Funzione per className delle righe (solo selected, niente colorazione)
+  const getRowClassName = (item: { id: string; label: string }, selected: boolean): string => {
+    return selected ? 'bg-amber-50' : 'hover:bg-gray-50';
+  };
+
+  // ✅ Funzione per renderizzare il label con badge colorato quando c'è un risultato test
+  const renderLabelWithBadge = (item: { id: string; label: string }) => {
+    const result = testResults.get(item.id);
+    if (result === 'correct') {
+      return (
+        <span className="px-2 py-0.5 rounded-md border border-green-500 bg-green-50/70 text-green-700">
+          {item.label}
+        </span>
+      );
+    } else if (result === 'wrong') {
+      return (
+        <span className="px-2 py-0.5 rounded-md border border-red-500 bg-red-50/70 text-red-700">
+          {item.label}
+        </span>
+      );
+    }
+    return item.label;
+  };
+
   const posItems = useMemo(()=> positive.map(p=>({ id: p.id, label: p.text })), [positive]);
   const negItems = useMemo(()=> negative.map(p=>({ id: p.id, label: p.text })), [negative]);
   const keyItems = useMemo(()=> keywords.map(k=>({ id: k.id, label: k.term })), [keywords]);
@@ -100,6 +146,8 @@ export default function PhrasesPanel({
             }}
             LeftIcon={()=>(<MessageSquare size={14} className="text-emerald-600" />)}
             sort="alpha"
+            rowClassName={getRowClassName}
+            labelRenderer={renderLabelWithBadge}
           />
         )}
         {tab==='neg' && (
@@ -121,6 +169,8 @@ export default function PhrasesPanel({
             }}
             LeftIcon={()=>(<MessageSquare size={14} className="text-rose-600" />)}
             sort="alpha"
+            rowClassName={getRowClassName}
+            labelRenderer={renderLabelWithBadge}
           />
         )}
         {tab==='key' && (
