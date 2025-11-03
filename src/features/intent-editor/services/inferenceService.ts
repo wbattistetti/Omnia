@@ -101,11 +101,13 @@ export async function classify(text: string, intents: Intent[]): Promise<TestRes
   let embeddingResults: { intentId: string; score: number }[] = [];
   let embeddingScore = 0;
 
-  // Se score alto (>0.7) o basso (<0.25) → usa solo fast path
-  if (baselineScore >= 0.7 || baselineScore < 0.25) {
+  // Se score alto (>0.7) → usa solo fast path (già molto sicuro)
+  if (baselineScore >= 0.7) {
     method = 'fast-path';
   } else {
-    // Score medio (0.25-0.7) → verifica se ci sono modelli pronti e usa embeddings
+    // Score medio o basso → verifica se ci sono modelli pronti e usa embeddings
+    // Questo è importante per il multilingua: il fast-path può dare score bassi
+    // anche per frasi corrette, quindi proviamo sempre gli embeddings se disponibili
     const enabledIntents = intents.filter(it => it.enabled !== false);
     const intentIds = enabledIntents.map(it => it.id);
 
@@ -128,8 +130,15 @@ export async function classify(text: string, intents: Intent[]): Promise<TestRes
         const bestEmbedding = embeddingResults[0];
         embeddingScore = bestEmbedding.score;
 
-        // Fusion: 30% baseline + 70% embedding
-        finalScore = 0.3 * baselineScore + 0.7 * embeddingScore;
+        // Fusion: peso maggiore agli embeddings quando baseline è basso
+        // Se baseline è molto basso (<0.25), affidati principalmente agli embeddings
+        if (baselineScore < 0.25) {
+          // Score basso: usa principalmente embeddings (potrebbero essere migliori per multilingua)
+          finalScore = 0.1 * baselineScore + 0.9 * embeddingScore;
+        } else {
+          // Score medio (0.25-0.7): fusion bilanciata
+          finalScore = 0.3 * baselineScore + 0.7 * embeddingScore;
+        }
         method = 'hybrid';
 
         // Se embedding trova un match migliore, usa quello
@@ -144,6 +153,7 @@ export async function classify(text: string, intents: Intent[]): Promise<TestRes
           }
         }
       } else {
+        // Nessun risultato dagli embeddings → usa solo fast path
         method = 'fast-path';
       }
     }

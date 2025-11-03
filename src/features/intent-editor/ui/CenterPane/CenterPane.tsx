@@ -5,7 +5,7 @@ import { useIntentStore as useStore } from '../../state/intentStore';
 import { ThresholdControl } from './ThresholdControl';
 import { actionRunAllTests } from '../../actions/runAllTests';
 
-export function CenterPane({ intentId }: { intentId?: string }){
+export function CenterPane({ intentId, tab: externalTab, setTab: externalSetTab }: { intentId?: string; tab?: 'pos'|'neg'|'key'; setTab?: (tab: 'pos'|'neg'|'key') => void }){
   const it = useIntentStore(s=> s.intents.find(x=>x.id===intentId));
   if(!it) return <div className="border rounded-2xl p-4 bg-white">Select a problem</div>;
   return (
@@ -26,6 +26,8 @@ export function CenterPane({ intentId }: { intentId?: string }){
         onClearNegative={()=>{ useStore.getState().clearHardNeg(it.id); }}
         onClearKeywords={()=>{ useStore.getState().clearKeywords(it.id); }}
         onTest={async ()=>{ try { await actionRunAllTests(); } catch {} }}
+        tab={externalTab}
+        setTab={externalSetTab}
       />
     </div>
   );

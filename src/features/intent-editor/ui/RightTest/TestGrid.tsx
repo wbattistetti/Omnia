@@ -1,65 +1,36 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { MessageSquare, Check, X, Trash2, Brain, Loader2 } from 'lucide-react';
+import { MessageSquare, Check, X, Trash2 } from 'lucide-react';
 import { useTestStore } from '../../state/testStore';
 import { useIntentStore } from '../../state/intentStore';
-import { trainIntent, getModelStatus, TrainingPhrase } from '../../services/trainingService';
 
 type TestMode = 'training' | 'new';
 
-export default function TestGrid({ intentId, modelReady: initialModelReady }: { intentId?: string; modelReady?: boolean }){
+export default function TestGrid({
+  intentId,
+  modelReady: initialModelReady,
+  mode: externalMode,
+  setMode: externalSetMode
+}: {
+  intentId?: string;
+  modelReady?: boolean;
+  mode?: 'training' | 'new';
+  setMode?: (mode: 'training' | 'new') => void;
+}){
   const { items, add, remove, markCorrect, markWrong, setFixIntent, setNote } = useTestStore();
   const intents = useIntentStore(s => s.intents);
   const selectedIntent = intentId ? intents.find(i => i.id === intentId) : undefined;
 
-  const [mode, setMode] = useState<TestMode>('new'); // 'training' | 'new'
+  // Usa mode esterno se fornito, altrimenti usa stato interno
+  const [internalMode, setInternalMode] = useState<TestMode>('new');
+  const mode = externalMode !== undefined ? externalMode : internalMode;
+  const setMode = externalSetMode || setInternalMode;
   const [value, setValue] = useState('');
   const [hoverId, setHoverId] = useState<string|undefined>();
   const [expandedWrongId, setExpandedWrongId] = useState<string|undefined>();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [training, setTraining] = useState(false);
-  const [modelReady, setModelReady] = useState(initialModelReady || false);
+  const [modelReady] = useState(initialModelReady || false);
   // ✅ Risultati test per frasi di training (non sono in testStore)
   const [trainingResults, setTrainingResults] = useState<Map<string, { status: 'unknown' | 'correct' | 'wrong'; predictedIntentId?: string; score?: number }>>(new Map());
-
-  // ✅ Verifica stato modello
-  useEffect(() => {
-    if (!intentId) return;
-    getModelStatus(intentId).then(status => {
-      setModelReady(status.modelReady);
-    }).catch(() => {
-      setModelReady(false);
-    });
-  }, [intentId]);
-
-  // ✅ Handler per training
-  const handleTrain = async () => {
-    if (!intentId || !selectedIntent) return;
-    const positive = selectedIntent.variants.curated || [];
-    const negative = selectedIntent.variants.hardNeg || [];
-
-    if (positive.length === 0 && negative.length === 0) {
-      alert('Aggiungi almeno una frase matching o not-matching per fare training');
-      return;
-    }
-
-    try {
-      setTraining(true);
-      const phrases: TrainingPhrase[] = [
-        ...positive.map(p => ({ id: p.id, text: p.text, type: 'matching' as const })),
-        ...negative.map(p => ({ id: p.id, text: p.text, type: 'not-matching' as const }))
-      ];
-
-      const result = await trainIntent({ intentId, phrases });
-      setModelReady(result.modelReady);
-      alert(`Model ready! Processed ${result.stats.total} phrases (${result.stats.matching} matching, ${result.stats.notMatching} not-matching)`);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Training failed';
-      console.error('[TestGrid] Training error:', err);
-      alert(`Training failed: ${errorMsg}`);
-    } finally {
-      setTraining(false);
-    }
-  };
 
   // ✅ Lista frasi in base al mode
   const displayedList = useMemo(() => {
@@ -88,11 +59,6 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
       return items;
     }
   }, [mode, selectedIntent, items]);
-
-  const hasTrainingData = selectedIntent && (
-    (selectedIntent.variants.curated?.length || 0) > 0 ||
-    (selectedIntent.variants.hardNeg?.length || 0) > 0
-  );
 
   // ✅ Espone la lista visibile al parent per Run test
   useEffect(() => {
@@ -134,55 +100,6 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
 
   return (
     <div className="bg-white border rounded-2xl shadow-sm p-3 flex flex-col h-full">
-      {/* ✅ Toolbar con toggle e Train */}
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
-        {/* ✅ Toggle Training set / New phrases */}
-        <div className="flex items-center gap-1 border rounded-lg p-1">
-          <button
-            onClick={() => setMode('training')}
-            disabled={!selectedIntent || !hasTrainingData}
-            className={`px-2 py-1 rounded border ${
-              mode === 'training'
-                ? 'bg-blue-100 border-blue-300 text-blue-700'
-                : 'bg-white hover:bg-gray-50'
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-            title="Mostra frasi di training"
-          >
-            Training set
-          </button>
-          <button
-            onClick={() => setMode('new')}
-            className={`px-2 py-1 rounded border ${
-              mode === 'new'
-                ? 'bg-blue-100 border-blue-300 text-blue-700'
-                : 'bg-white hover:bg-gray-50'
-            }`}
-            title="Mostra frasi nuove"
-          >
-            New phrases
-          </button>
-        </div>
-
-        {/* ✅ Pulsante Train */}
-        <button
-          onClick={handleTrain}
-          disabled={training || !hasTrainingData}
-          className={`px-2 py-1 rounded-md border flex items-center gap-1 ${
-            training ? 'bg-blue-100' :
-            modelReady ? 'bg-green-100 border-green-300' :
-            !hasTrainingData ? 'opacity-50' :
-            'bg-white hover:bg-blue-50'
-          }`}
-          title={training ? 'Training in corso...' : modelReady ? 'Model ready - Click to retrain' : 'Train embeddings model'}
-        >
-          {training ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Brain size={14} className={modelReady ? 'text-green-600' : ''} />
-          )}
-          {modelReady ? 'Retrain' : 'Train'}
-        </button>
-      </div>
 
       {/* ✅ Input solo per new phrases */}
       {mode === 'new' && (
