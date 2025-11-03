@@ -12,7 +12,7 @@ export function TestConsole(){
       <h2 className="font-semibold mb-2">Quick test</h2>
       <textarea className="w-full rounded-xl border p-2 text-sm min-h-[96px]" value={text} onChange={e=>setText(e.target.value)} />
       <button className="mt-2 px-3 py-1.5 rounded-xl border" onClick={async()=>setRes(await actionRunTest(text))}>Run</button>
-      {res && <div className="mt-3"><TopKList items={res.top}/><ExplanationPanel ex={res.explain}/><LatencyMeter lat={res.latency}/></div>}
+      {res && <div className="mt-3"><TopKList items={res.top}/><ExplanationPanel result={res}/><LatencyMeter lat={res.latency}/></div>}
     </div>
   );
 }

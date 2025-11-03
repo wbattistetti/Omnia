@@ -14,6 +14,7 @@ export function CenterPane({ intentId }: { intentId?: string }){
       <div className="hidden"><h2 className="font-semibold">{it.name}</h2><ThresholdControl id={it.id} value={it.threshold}/></div>
       <PhrasesPanel
         intentName={it.name}
+        intentId={it.id}
         lang={(localStorage.getItem('project.lang') as any) || 'pt'}
         positive={it.variants.curated.map(v=>({ id: v.id, text: v.text }))}
         negative={it.variants.hardNeg.map(v=>({ id: v.id, text: v.text }))}

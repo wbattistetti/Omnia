@@ -8,6 +8,7 @@ type Phrase = { id: string; text: string };
 
 export default function PhrasesPanel({
   intentName,
+  intentId,
   lang = 'pt',
   positive,
   negative,
@@ -21,6 +22,7 @@ export default function PhrasesPanel({
   onTest
 }: {
   intentName: string;
+  intentId: string; // ✅ Necessario per training
   lang?: 'it'|'en'|'pt';
   positive: Phrase[];
   negative: Phrase[];
@@ -37,7 +39,7 @@ export default function PhrasesPanel({
   const [loading, setLoading] = useState(false);
   const [genN, setGenN] = useState<number>(10);
   const [lastGen, setLastGen] = useState<{ count: number; requested: number } | null>(null);
-  const [error, setError] = useState<string | null>(null); // ✅ Nuovo stato errore
+  const [error, setError] = useState<string | null>(null);
 
   const posItems = useMemo(()=> positive.map(p=>({ id: p.id, label: p.text })), [positive]);
   const negItems = useMemo(()=> negative.map(p=>({ id: p.id, label: p.text })), [negative]);
@@ -117,6 +119,7 @@ export default function PhrasesPanel({
 
   // Conta le frasi per il tab corrente (per disabilitare il pulsante se vuoto)
   const currentTabCount = tab === 'pos' ? positive.length : tab === 'neg' ? negative.length : keywords.length;
+
 
   return (
     <div className="mt-2 flex flex-col min-h-0 h-full">
@@ -221,14 +224,6 @@ export default function PhrasesPanel({
             title="Clear All Phrases"
           >
             <Trash2 size={16} />
-          </button>
-          <button
-            className={`px-2 py-1 text-xs rounded-md border flex items-center gap-1`}
-            onClick={async ()=>{ if (onTest) await onTest(); }}
-            title="Allena modello e testa il testo attuale"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3 15.4a1.65 1.65 0 0 0-1.51-1H1a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 3 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8.6 3a1.65 1.65 0 0 0 1-1.51V1a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15.4 3a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21 8.6c0 .37.13.72.35 1H21a2 2 0 1 1 0 4h.35c-.22.28-.35.63-.35 1z"></path></svg>
-            test
           </button>
         </div>
       </div>

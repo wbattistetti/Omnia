@@ -46,6 +46,15 @@ except ImportError as e:
     from fastapi import APIRouter
     intent_gen_router = APIRouter()
 
+# Import intent embeddings router from old backend
+try:
+    from backend.ai_endpoints.intent_embeddings import router as intent_embeddings_router
+    print("[INFO] Intent embeddings router loaded successfully")
+except ImportError as e:
+    print(f"Warning: Could not import intent embeddings router: {e}")
+    from fastapi import APIRouter
+    intent_embeddings_router = APIRouter()
+
 # Create empty routers for NER and LLM extract (will be implemented in api_nlp)
 from fastapi import APIRouter
 ner_router = APIRouter()
@@ -202,6 +211,9 @@ app.include_router(llm_extract_router)
 
 # Include intent generation router
 app.include_router(intent_gen_router)
+
+# Include intent embeddings router
+app.include_router(intent_embeddings_router)
 
 # Include factory router with error handling
 try:

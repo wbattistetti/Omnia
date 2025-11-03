@@ -40,6 +40,9 @@ export type TestResult = {
     nearestExample?: string;
   };
   latency: { a: number; b: number; total: number };
+  method?: 'fast-path' | 'embeddings' | 'hybrid'; // ✅ Metodo usato per classificazione
+  baselineScore?: number; // ✅ Score dal fast path (se hybrid)
+  embeddingScore?: number; // ✅ Score dagli embeddings (se hybrid/embeddings)
 };
 
 
