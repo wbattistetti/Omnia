@@ -73,10 +73,12 @@ if (typeof document !== 'undefined' && !document.getElementById('nlp-spinner-ani
 
 export default function NLPExtractorProfileEditor({
   node,
+  actType,
   locale = 'it-IT',
   onChange,
 }: {
   node: any;
+  actType?: string; // ✅ Type dell'act per determinare classification vs extraction mode
   locale?: string;
   onChange?: (profile: NLPProfile) => void;
 }) {
@@ -113,8 +115,16 @@ export default function NLPExtractorProfileEditor({
   const [lastStats, setLastStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [activeTab, setActiveTab] = React.useState<'regex' | 'extractor' | 'post' | null>(null);
 
-  // 🧪 TEMPORARY: Test toggle for mode (will be removed in Fase 6)
-  const [testMode, setTestMode] = React.useState<'extraction' | 'classification'>('extraction');
+  // ✅ Determina automaticamente il mode basandosi sul tipo di act
+  const testMode: 'extraction' | 'classification' = React.useMemo(() => {
+    // Priorità: actType prop > node.type > fallback
+    const type = actType || node?.type || node?.row?.type || (node?.rows?.[0] as any)?.type;
+    if (String(type).toLowerCase() === 'problemclassification') {
+      return 'classification';
+    }
+    // Default: extraction mode per DataRequest e altri tipi
+    return 'extraction';
+  }, [actType, node]);
 
   // State for regex AI generation (used in hidden section)
   const regexInputRef = React.useRef<HTMLInputElement>(null);
@@ -245,50 +255,6 @@ export default function NLPExtractorProfileEditor({
             waitingLLM={waitingEsc2}
             setWaitingLLM={setWaitingEsc2}
           />
-        </div>
-
-        {/* 🧪 TEMPORARY: Test toggle for mode (will be removed in Fase 6) */}
-        <div style={{ marginTop: 12, padding: 8, background: '#fef3c7', borderRadius: 8, border: '1px solid #fbbf24' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>
-              🧪 Test Mode:
-            </label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button
-                onClick={() => setTestMode('extraction')}
-                style={{
-                  padding: '4px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: 6,
-                  background: testMode === 'extraction' ? '#3b82f6' : '#fff',
-                  color: testMode === 'extraction' ? '#fff' : '#374151',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: testMode === 'extraction' ? 600 : 400
-                }}
-              >
-                Extraction (4 colonne)
-              </button>
-              <button
-                onClick={() => setTestMode('classification')}
-                style={{
-                  padding: '4px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: 6,
-                  background: testMode === 'classification' ? '#3b82f6' : '#fff',
-                  color: testMode === 'classification' ? '#fff' : '#374151',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: testMode === 'classification' ? 600 : 400
-                }}
-              >
-                Classification (3 colonne: Regex, Embeddings, LLM)
-              </button>
-            </div>
-            <span style={{ fontSize: 11, color: '#92400e', opacity: 0.8 }}>
-              ⚠️ Temporaneo per test - rimuoveremo in Fase 6
-            </span>
-          </div>
         </div>
 
         {/* OLD tab editors - now replaced by inline editors */}

@@ -136,11 +136,19 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const [dragging, setDragging] = useState(false);
   const [showSynonyms, setShowSynonyms] = useState(false);
   const [showMessageReview, setShowMessageReview] = useState(false);
-  // Wizard/general layout flags
-  const [showWizard, setShowWizard] = useState<boolean>(() => isDDTEmpty(localDDT));
 
   // Header: icon, title, and toolbar
   const actType = (act?.type || 'DataRequest') as any;
+
+  // Wizard/general layout flags
+  // ✅ ProblemClassification non ha bisogno di wizard (nessuna struttura dati)
+  const [showWizard, setShowWizard] = useState<boolean>(() => {
+    const currentActType = (act?.type || 'DataRequest') as any;
+    if (currentActType === 'ProblemClassification') {
+      return false;
+    }
+    return isDDTEmpty(localDDT);
+  });
   const { Icon, color: iconColor } = getAgentActVisualsByType(actType, !!localDDT);
   // Priority: _sourceAct.label (preserved act info) > act.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
   // NOTE: Do NOT use localDDT.label here - that's the DDT root label (e.g. "Age") which belongs in the TreeView, not the header
@@ -164,6 +172,13 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   });
 
   useEffect(() => {
+    // ✅ ProblemClassification non deve mostrare il wizard
+    if (actType === 'ProblemClassification') {
+      setShowWizard(false);
+      wizardOwnsDataRef.current = false;
+      return;
+    }
+
     const empty = isDDTEmpty(localDDT);
 
     if (empty && !wizardOwnsDataRef.current) {
@@ -182,7 +197,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
       } catch { }
     }
-  }, [localDDT]);
+  }, [localDDT, actType]); // ✅ Aggiungere actType alle dipendenze
 
   // Nodo selezionato: root se selectedRoot, altrimenti main/sub in base agli indici
   const selectedNode = useMemo(() => {
@@ -426,8 +441,9 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         ) : (
           /* Normal editor layout with 3 panels (no header, already shown above) */
           <>
-            {/* Always visible left navigation */}
-            <Sidebar
+            {/* Left navigation - hidden for ProblemClassification (no data structure) */}
+            {actType !== 'ProblemClassification' && (
+              <Sidebar
               ref={sidebarRef}
               mainList={mainList}
               selectedMainIndex={selectedMainIndex}
@@ -564,7 +580,8 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                 });
               }}
               onSelectAggregator={handleSelectAggregator}
-            />
+              />
+            )}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               {/* Steps toolbar hidden during NLP editor or MessageReview */}
               {!showSynonyms && !showMessageReview && (
@@ -596,6 +613,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                             </div>
                             <NLPExtractorProfileEditor
                               node={selectedNode}
+                              actType={actType}
                               locale={'it-IT'}
                               onChange={(profile) => {
                                 // Only log if debug flag is set to avoid console spam

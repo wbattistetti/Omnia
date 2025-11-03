@@ -5,11 +5,32 @@ import type { EditorProps } from './types';
 import { getAgentActVisualsByType } from '../../Flowchart/utils/actVisuals';
 
 export default function ActEditorHost({ act, onClose }: EditorProps) {
+  // ✅ Log per debug
+  console.log('[ActEditorHost] Opening editor', {
+    actId: act?.id,
+    actType: act?.type,
+    actLabel: act?.label,
+    instanceId: (act as any)?.instanceId,
+    timestamp: Date.now()
+  });
+
   const kind = resolveEditorKind(act);
+
+  // ✅ Log per debug
+  console.log('[ActEditorHost] Resolved editor kind', {
+    actType: act?.type,
+    resolvedKind: kind,
+    availableKinds: Object.keys(registry),
+    timestamp: Date.now()
+  });
+
   const Comp = registry[kind];
 
   if (!Comp) {
-    console.error('❌ [ActEditorHost] No component registered for kind:', kind);
+    console.error('❌ [ActEditorHost] No component registered for kind:', kind, {
+      actType: act?.type,
+      availableKinds: Object.keys(registry)
+    });
     return <div>No editor registered for {kind}</div>;
   }
 
