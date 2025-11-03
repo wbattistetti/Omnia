@@ -62,7 +62,7 @@ export function LeftGrid(){
 
   return (
     <div className="border border-amber-300 rounded-2xl overflow-hidden shadow-sm flex flex-col h-full min-h-0">
-      <div className="px-3 py-2 bg-amber-200 text-slate-900 text-sm font-semibold border-b flex items-center justify-between">
+      <div className="px-3 py-2 bg-amber-200 text-slate-900 font-semibold border-b flex items-center justify-between">
         <span>Intents</span>
         <div className="flex items-center gap-2">
           {/* ✅ Pulsanti Seleziona/Deseleziona tutto - solo icone */}

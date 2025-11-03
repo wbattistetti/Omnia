@@ -108,12 +108,12 @@ export default function ListGrid({
             onChange={e => setValue(e.target.value)}
             type="text"
             placeholder={placeholder}
-            className="flex-1 outline-none text-sm bg-transparent"
+            className="flex-1 outline-none bg-transparent"
             onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
           />
         </div>
         {onEnterAdd && (
-          <button className="px-2 py-1 text-sm rounded-lg border" onClick={handleAdd}>{addButtonLabel}</button>
+          <button className="px-2 py-1 rounded-lg border" onClick={handleAdd}>{addButtonLabel}</button>
         )}
       </div>
       {/* ✅ LISTA SCROLLABILE - solo questa parte scrolla */}
@@ -158,7 +158,7 @@ export default function ListGrid({
                 )}
 
                 {LeftIcon ? <LeftIcon size={14} /> : null}
-                <div className="text-sm flex-1 truncate flex items-center gap-2">
+                <div className="flex-1 truncate flex items-center gap-2">
                   {editingId === it.id ? (
                     <input
                       autoFocus

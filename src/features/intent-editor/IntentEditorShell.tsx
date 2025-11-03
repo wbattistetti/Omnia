@@ -39,7 +39,7 @@ export default function IntentEditorShell(){
       <div className="bg-white border rounded-2xl shadow-sm flex flex-col min-h-0">
         <div className="p-3 border-b border-amber-100 bg-amber-50 rounded-t-2xl flex items-center justify-between">
           <h2 className="font-semibold text-amber-800">Training phrases</h2>
-          <span className="px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-800">{posCount}</span>
+          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800">{posCount}</span>
         </div>
         <div className="p-3 flex-1 min-h-0">
           <CenterPane intentId={selectedId} />
@@ -50,7 +50,7 @@ export default function IntentEditorShell(){
         <div className="p-3 border-b border-amber-100 bg-amber-50 rounded-t-2xl flex items-center justify-between">
           <h2 className="font-semibold text-amber-800">Test</h2>
           <button
-            className="px-3 py-1 text-sm rounded-lg border bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="px-3 py-1 rounded-lg border bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
             onClick={async () => {
               try {
                 setTesting(true);

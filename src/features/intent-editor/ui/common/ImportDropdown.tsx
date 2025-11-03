@@ -91,7 +91,7 @@ export function ImportDropdown({
     <div className="relative">
       <button
         onClick={() => setShowMenu(!showMenu)}
-        className="px-2 py-1 text-xs rounded border bg-white hover:bg-amber-100 flex items-center gap-1"
+        className="px-2 py-1 rounded border bg-white hover:bg-amber-100 flex items-center gap-1"
         title={buttonLabel}
       >
         <Download size={14} />
@@ -108,13 +108,13 @@ export function ImportDropdown({
           <div className="absolute right-0 mt-1 bg-white border rounded-lg shadow-lg z-20 min-w-[180px]">
             <button
               onClick={handleImportFromClipboard}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50 rounded-t-lg"
+              className="w-full text-left px-3 py-2 hover:bg-amber-50 rounded-t-lg"
             >
               📋 Da Clipboard
             </button>
             <button
               onClick={handleImportFromFile}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50 rounded-b-lg border-t"
+              className="w-full text-left px-3 py-2 hover:bg-amber-50 rounded-b-lg border-t"
             >
               📁 Da File
             </button>

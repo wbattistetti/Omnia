@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
+import { useFontClasses } from '../hooks/useFontClasses';
 import { NewProjectModal } from './NewProjectModal';
 import Sidebar from './Sidebar/Sidebar';
 import { ProjectDataService } from '../services/ProjectDataService';
@@ -479,8 +480,11 @@ export const AppContent: React.FC<AppContentProps> = ({
     }
   }, [showAllProjectsModal, fetchAllProjects]);
 
+  // ✅ Applica font globali dallo store
+  const { combinedClass } = useFontClasses();
+
   return (
-    <div className="min-h-screen" style={{ position: 'relative' }}>
+    <div className={`min-h-screen ${combinedClass}`} style={{ position: 'relative' }}>
       {/* overlay ricarico rimosso per test */}
       {/* Toast feedback */}
       {toast && (

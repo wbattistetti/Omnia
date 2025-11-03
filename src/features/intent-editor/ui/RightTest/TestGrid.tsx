@@ -141,7 +141,7 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
           <button
             onClick={() => setMode('training')}
             disabled={!selectedIntent || !hasTrainingData}
-            className={`px-2 py-1 text-xs rounded border ${
+            className={`px-2 py-1 rounded border ${
               mode === 'training'
                 ? 'bg-blue-100 border-blue-300 text-blue-700'
                 : 'bg-white hover:bg-gray-50'
@@ -152,7 +152,7 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
           </button>
           <button
             onClick={() => setMode('new')}
-            className={`px-2 py-1 text-xs rounded border ${
+            className={`px-2 py-1 rounded border ${
               mode === 'new'
                 ? 'bg-blue-100 border-blue-300 text-blue-700'
                 : 'bg-white hover:bg-gray-50'
@@ -167,7 +167,7 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
         <button
           onClick={handleTrain}
           disabled={training || !hasTrainingData}
-          className={`px-2 py-1 text-xs rounded-md border flex items-center gap-1 ${
+          className={`px-2 py-1 rounded-md border flex items-center gap-1 ${
             training ? 'bg-blue-100' :
             modelReady ? 'bg-green-100 border-green-300' :
             !hasTrainingData ? 'opacity-50' :
@@ -195,11 +195,11 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
               onChange={e => setValue(e.target.value)}
               type="text"
               placeholder="Aggiungi frase di test…"
-              className="flex-1 outline-none text-sm bg-transparent"
+              className="flex-1 outline-none bg-transparent"
               onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
             />
           </div>
-          <button className="px-2 py-1 text-sm rounded-lg border" onClick={handleAdd}>+ Add</button>
+          <button className="px-2 py-1 rounded-lg border" onClick={handleAdd}>+ Add</button>
         </div>
       )}
 
@@ -207,7 +207,7 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
       <div className="overflow-auto rounded-xl border flex-1 min-h-0">
         <div className="divide-y">
           {displayedList.length === 0 ? (
-            <div className="px-3 py-4 text-center text-sm text-gray-500">
+            <div className="px-3 py-4 text-center text-gray-500">
               {mode === 'training' ? 'Nessuna frase di training disponibile' : 'Nessuna frase di test. Aggiungine una sopra.'}
             </div>
           ) : (
@@ -232,7 +232,7 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
                      onMouseLeave={() => setHoverId(undefined)}>
                   <div className="flex items-center gap-2">
                     <LeftIcon size={18} className={leftColor} />
-                    <div className={`text-sm flex-1 truncate ${textColor}`} title={it.text}>{it.text}</div>
+                    <div className={`flex-1 truncate ${textColor}`} title={it.text}>{it.text}</div>
                     {isTraining && mode === 'training' && (
                       <span className={`px-1.5 py-0.5 text-[10px] rounded ${
                         (it as any).type === 'matching' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
@@ -244,21 +244,21 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
                     {isHover && !isTraining && (
                       <div className="flex items-center gap-1">
                         <button
-                          className="px-2 py-0.5 text-xs rounded border text-green-700 border-green-300 hover:bg-green-50"
+                          className="px-2 py-0.5 rounded border text-green-700 border-green-300 hover:bg-green-50"
                           onClick={() => { markCorrect(it.id); setExpandedWrongId(undefined); }}
                           title="Segna come giusta"
                         >
                           ✓
                         </button>
                         <button
-                          className="px-2 py-0.5 text-xs rounded border text-red-700 border-red-300 hover:bg-red-50"
+                          className="px-2 py-0.5 rounded border text-red-700 border-red-300 hover:bg-red-50"
                           onClick={() => { markWrong(it.id); setExpandedWrongId(it.id); }}
                           title="Segna come sbagliata"
                         >
                           ✕
                         </button>
                         <button
-                          className="px-2 py-0.5 text-xs rounded border text-slate-600 hover:bg-slate-50"
+                          className="px-2 py-0.5 rounded border text-slate-600 hover:bg-slate-50"
                           onClick={() => handleRemove(it.id)}
                           title="Rimuovi"
                         >
@@ -270,7 +270,7 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
                   {isExpanded && (
                     <div className="mt-2 pl-6 grid grid-cols-2 gap-2">
                       <select
-                        className="w-full px-2 py-1 text-sm rounded border"
+                        className="w-full px-2 py-1 rounded border"
                         value={it.fixIntentId || ''}
                         onChange={e => setFixIntent(it.id, e.target.value || undefined)}
                       >
@@ -282,7 +282,7 @@ export default function TestGrid({ intentId, modelReady: initialModelReady }: { 
                       <input
                         type="text"
                         placeholder="Commento…"
-                        className="w-full px-2 py-1 text-sm rounded border"
+                        className="w-full px-2 py-1 rounded border"
                         value={it.note || ''}
                         onChange={e => setNote(it.id, e.target.value)}
                       />

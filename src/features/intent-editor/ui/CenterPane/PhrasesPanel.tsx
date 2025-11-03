@@ -125,13 +125,13 @@ export default function PhrasesPanel({
     <div className="mt-2 flex flex-col min-h-0 h-full">
       {/* Tabs row tight under header */}
       <div className="flex items-center gap-2 border-b group mb-2">
-        <button className={`px-3 py-1.5 text-sm flex items-center gap-2 ${tab==='pos'?'bg-emerald-100':''}`} onClick={()=>setTab('pos')}>
+        <button className={`px-3 py-1.5 flex items-center gap-2 ${tab==='pos'?'bg-emerald-100':''}`} onClick={()=>setTab('pos')}>
           <CheckCircle size={16} className="text-emerald-600" /> <span>Matching</span>
         </button>
-        <button className={`px-3 py-1.5 text-sm flex items-center gap-2 ${tab==='neg'?'bg-rose-100':''}`} onClick={()=>setTab('neg')}>
+        <button className={`px-3 py-1.5 flex items-center gap-2 ${tab==='neg'?'bg-rose-100':''}`} onClick={()=>setTab('neg')}>
           <XCircle size={16} className="text-rose-600" /> <span>Not matching</span>
         </button>
-        <button className={`px-3 py-1.5 text-sm flex items-center gap-2 ${tab==='key'?'bg-indigo-100':''}`} onClick={()=>setTab('key')}>
+        <button className={`px-3 py-1.5 flex items-center gap-2 ${tab==='key'?'bg-indigo-100':''}`} onClick={()=>setTab('key')}>
           <Tag size={16} className="text-indigo-600" /> <span>Keywords</span>
         </button>
         {/* controls a destra: numero da generare + generate, 20px dopo Keywords */}
@@ -143,7 +143,7 @@ export default function PhrasesPanel({
             max={50}
             value={genN}
             onChange={e=> setGenN(Math.max(1, Math.min(50, Number(e.target.value)||1)))}
-            className={`w-14 px-2 py-1 text-xs rounded-md border ${tab ? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
+            className={`w-14 px-2 py-1 rounded-md border ${tab ? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
             title="Numero di frasi da generare"
           />
           {/* ✅ ImportDropdown per importare frasi */}
@@ -158,7 +158,7 @@ export default function PhrasesPanel({
             }}
           />
           <button
-            className={`${tab? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'} px-2 py-1 text-xs rounded-md border flex items-center gap-1 ${error ? 'text-red-600 border-red-300' : ''}`}
+            className={`${tab? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'} px-2 py-1 rounded-md border flex items-center gap-1 ${error ? 'text-red-600 border-red-300' : ''}`}
           title={error ? error : (loading ? 'Generating…' : 'Genera suggerimenti')}
           disabled={loading}
           onClick={async ()=>{
@@ -205,7 +205,7 @@ export default function PhrasesPanel({
           {!loading && lastGen && (
             <span
               className={[
-                'px-2 py-0.5 text-xs rounded border',
+                'px-2 py-0.5 rounded border',
                 lastGen.count === 0 ? 'bg-rose-100 text-rose-700 border-rose-200' :
                 lastGen.count < lastGen.requested ? 'bg-amber-100 text-amber-800 border-amber-200' :
                 'bg-emerald-100 text-emerald-700 border-emerald-200'
