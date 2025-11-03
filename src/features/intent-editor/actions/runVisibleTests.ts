@@ -22,19 +22,22 @@ export async function actionRunVisibleTests(itemsToTest: TestItem[]){
       const res = await actionRunTest(it.text);
       const top = Array.isArray(res?.top) ? res.top[0] : undefined;
       const intentId = (top?.id || top?.intentId) as string | undefined;
-      const score = Number(top?.score ?? 0);
+      // ✅ Lo score viene da top.fused (non top.score) oppure da res.score se disponibile
+      const score = Number(top?.fused ?? res?.score ?? 0);
 
       // ✅ Aggiorna risultato se l'item esiste nel testStore (solo per new phrases)
       const existingItem = testStore.items.find(i => i.id === it.id);
       if (existingItem) {
         testStore.setResult(it.id, { predictedIntentId: intentId, score });
         const decision = (res as any)?.decision as string | undefined;
-        const matches = Boolean(decision === 'MATCH' && selectedId && intentId && selectedId === intentId);
+        // ✅ Match = c'è un match con qualsiasi intento (non solo quello selezionato)
+        const matches = Boolean(decision === 'MATCH' && intentId);
         testStore[matches ? 'markCorrect' : 'markWrong'](it.id);
       } else {
         // ✅ Item non in testStore = training phrase, salva risultato in window per TestGrid
         const decision = (res as any)?.decision as string | undefined;
-        const matches = Boolean(decision === 'MATCH' && selectedId && intentId && selectedId === intentId);
+        // ✅ Match = c'è un match con qualsiasi intento (non solo quello selezionato)
+        const matches = Boolean(decision === 'MATCH' && intentId);
         if (!(window as any).__trainingTestResults) {
           (window as any).__trainingTestResults = new Map();
         }
@@ -49,7 +52,7 @@ export async function actionRunVisibleTests(itemsToTest: TestItem[]){
         }));
       }
 
-      try { if (localStorage.getItem('debug.intent') === '1') console.log('[RunVisibleTests][item][result]', { id: it.id, text: it.text, top, matches: Boolean(decision === 'MATCH' && selectedId && intentId && selectedId === intentId) }); } catch {}
+      try { if (localStorage.getItem('debug.intent') === '1') console.log('[RunVisibleTests][item][result]', { id: it.id, text: it.text, top, matches: Boolean(decision === 'MATCH' && intentId) }); } catch {}
     }catch{
       // ignore errors per item
       try { if (localStorage.getItem('debug.intent') === '1') console.warn('[RunVisibleTests][item][error]', { id: it.id, text: it.text }); } catch {}

@@ -72,11 +72,10 @@ export default function PhrasesPanel({
 
 
   return (
-    <div className="mt-2 flex flex-col min-h-0 h-full">
-      {/* Scrollable list area inside panel */}
-      <div className="flex-1 min-h-0">
+    <div className="mt-2 flex flex-col min-h-0 h-full overflow-hidden">
+      {/* List area - ListGrid gestisce internamente input fisso e lista scrollabile */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {tab==='pos' && (
-          <div className="h-full min-h-0 overflow-auto rounded-xl">
           <ListGrid
             items={posItems}
             onSelect={()=>{}}
@@ -102,10 +101,8 @@ export default function PhrasesPanel({
             LeftIcon={()=>(<MessageSquare size={14} className="text-emerald-600" />)}
             sort="alpha"
           />
-          </div>
         )}
         {tab==='neg' && (
-          <div className="h-full min-h-0 overflow-auto rounded-xl">
           <ListGrid
             items={negItems}
             onSelect={()=>{}}
@@ -125,10 +122,8 @@ export default function PhrasesPanel({
             LeftIcon={()=>(<MessageSquare size={14} className="text-rose-600" />)}
             sort="alpha"
           />
-          </div>
         )}
         {tab==='key' && (
-          <div className="h-full min-h-0 overflow-auto rounded-xl">
           <ListGrid
             items={keyItems}
             onSelect={()=>{}}
@@ -147,7 +142,6 @@ export default function PhrasesPanel({
             LeftIcon={()=>(<MessageSquare size={14} className="text-indigo-600" />)}
             sort="alpha"
           />
-          </div>
         )}
       </div>
     </div>

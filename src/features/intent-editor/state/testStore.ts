@@ -20,6 +20,7 @@ type TestState = {
   setFixIntent: (id: string, intentId?: string) => void;
   setNote: (id: string, note: string) => void;
   setResult: (id: string, r: { predictedIntentId?: string; score?: number }) => void;
+  updateText: (id: string, text: string) => void;
 };
 
 const norm = (s: string) => (s || '')
@@ -42,6 +43,15 @@ export const useTestStore = create<TestState>((set, get) => ({
   setFixIntent: (id, intentId) => set(s => ({ items: s.items.map(i => i.id === id ? { ...i, fixIntentId: intentId } : i) })),
   setNote: (id, note) => set(s => ({ items: s.items.map(i => i.id === id ? { ...i, note } : i) })),
   setResult: (id, r) => set(s => ({ items: s.items.map(i => i.id === id ? { ...i, ...r } : i) })),
+  updateText: (id, text) => set(s => ({
+    items: s.items.map(i => i.id === id ? {
+      ...i,
+      text: text.trim(),
+      status: 'unknown', // ✅ Reset status quando si modifica il testo
+      predictedIntentId: undefined, // ✅ Reset predizione
+      score: undefined // ✅ Reset score
+    } : i)
+  })),
 }));
 
 
