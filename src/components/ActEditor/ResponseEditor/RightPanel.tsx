@@ -1,7 +1,7 @@
 import React from 'react';
 import ActionList from '../ActionViewer/ActionList';
-import ResponseSimulator from './ChatSimulator/ResponseSimulator';
-import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
+import ResponseSimulator from '../../ChatSimulator/ResponseSimulator';
+import DDEBubbleChat from '../../ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 
