@@ -307,6 +307,14 @@ export default function TesterGrid({
   toggleEditor,
   mode = 'extraction', // Default to extraction for backward compatibility
 }: TesterGridProps) {
+  // Determine which columns to show based on mode
+  const showDeterministic = mode !== 'classification';
+  const showNER = mode !== 'classification';
+  const showEmbeddings = mode === 'classification';
+
+  // Calculate colSpan for empty state (1 for Frase + Regex + conditionals + LLM + button)
+  const colSpanEmpty = 1 + 1 + (showDeterministic ? 1 : 0) + (showNER ? 1 : 0) + (showEmbeddings ? 1 : 0) + 1 + 1;
+
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
@@ -345,7 +353,8 @@ export default function TesterGrid({
                 </button>
               </div>
             </th>
-            <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.deterministic, opacity: enabledMethods.deterministic ? 1 : 0.4 }} title={COLUMN_LABELS.deterministic.tooltip}>
+            {showDeterministic && (
+              <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.deterministic, opacity: enabledMethods.deterministic ? 1 : 0.4 }} title={COLUMN_LABELS.deterministic.tooltip}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
@@ -395,7 +404,9 @@ export default function TesterGrid({
                 </div>
               </div>
             </th>
-            <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.ner, opacity: enabledMethods.ner ? 1 : 0.4 }} title={COLUMN_LABELS.ner.tooltip}>
+            )}
+            {showNER && (
+              <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.ner, opacity: enabledMethods.ner ? 1 : 0.4 }} title={COLUMN_LABELS.ner.tooltip}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
@@ -427,6 +438,42 @@ export default function TesterGrid({
                 </button>
               </div>
             </th>
+            )}
+            {showEmbeddings && (
+              <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.embeddings, opacity: enabledMethods.regex ? 1 : 0.4 }} title={COLUMN_LABELS.embeddings.tooltip}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={enabledMethods.regex}
+                      onChange={() => toggleMethod('regex')}
+                      style={{ cursor: 'pointer' }}
+                      disabled
+                    />
+                    <div>
+                      <span style={{ fontWeight: 600, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.embeddings.main}</span>
+                      <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.embeddings.tech})</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleEditor('embeddings' as any)}
+                    title="Configure Embeddings"
+                    style={{
+                      background: activeEditor === 'embeddings' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
+                      border: 'none',
+                      borderRadius: 4,
+                      padding: '4px 6px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <Wand2 size={14} color={activeEditor === 'embeddings' ? '#fff' : '#666'} />
+                  </button>
+                </div>
+              </th>
+            )}
             <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.llm, opacity: enabledMethods.llm ? 1 : 0.4 }} title={COLUMN_LABELS.llm.tooltip}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -508,11 +555,12 @@ export default function TesterGrid({
                     </>
                   )}
                 </td>
-                <td
-                  style={{ padding: 8, fontSize: 15, color: enabledMethods.deterministic ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.deterministic, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.deterministic ? 1 : 0.6 }}
-                  onMouseEnter={() => setHovered(i, 'deterministic')}
-                  onMouseLeave={() => setHovered(null, null)}
-                >
+                {showDeterministic && (
+                  <td
+                    style={{ padding: 8, fontSize: 15, color: enabledMethods.deterministic ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.deterministic, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.deterministic ? 1 : 0.6 }}
+                    onMouseEnter={() => setHovered(i, 'deterministic')}
+                    onMouseLeave={() => setHovered(null, null)}
+                  >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                     <div style={{ flex: 1 }}>
                       {enabledMethods.deterministic ? (
@@ -545,12 +593,14 @@ export default function TesterGrid({
                       )}
                     </>
                   )}
-                </td>
-                <td
-                  style={{ padding: 8, fontSize: 15, color: enabledMethods.ner ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.ner, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.ner ? 1 : 0.6 }}
-                  onMouseEnter={() => setHovered(i, 'ner')}
-                  onMouseLeave={() => setHovered(null, null)}
-                >
+                  </td>
+                )}
+                {showNER && (
+                  <td
+                    style={{ padding: 8, fontSize: 15, color: enabledMethods.ner ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.ner, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.ner ? 1 : 0.6 }}
+                    onMouseEnter={() => setHovered(i, 'ner')}
+                    onMouseLeave={() => setHovered(null, null)}
+                  >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                     <div style={{ flex: 1 }}>
                       {enabledMethods.ner ? (
@@ -583,7 +633,43 @@ export default function TesterGrid({
                       )}
                     </>
                   )}
-                </td>
+                  </td>
+                )}
+                {showEmbeddings && (
+                  <td
+                    style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.embeddings, position: 'relative', verticalAlign: 'top', opacity: 1 }}
+                    onMouseEnter={() => setHovered(i, 'embeddings')}
+                    onMouseLeave={() => setHovered(null, null)}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                      <div style={{ flex: 1 }}>
+                        {/* TODO: Show classification results here in Fase 9 */}
+                        {'—'}
+                      </div>
+                      {(isHovered(i, 'embeddings') || hasNote(i, 'embeddings')) && (
+                        <NoteButton
+                          hasNote={hasNote(i, 'embeddings')}
+                          onClick={() => isEditing(i, 'embeddings') ? stopEditing() : startEditing(i, 'embeddings')}
+                        />
+                      )}
+                    </div>
+                    {(getNote(i, 'embeddings') || isEditing(i, 'embeddings')) && (
+                      <>
+                        <NoteSeparator />
+                        {isEditing(i, 'embeddings') ? (
+                          <NoteEditor
+                            value={getNote(i, 'embeddings')}
+                            onSave={(text) => { addNote(i, 'embeddings', text); stopEditing(); }}
+                            onDelete={() => { deleteNote(i, 'embeddings'); stopEditing(); }}
+                            onCancel={stopEditing}
+                          />
+                        ) : (
+                          <NoteDisplay text={getNote(i, 'embeddings')} />
+                        )}
+                      </>
+                    )}
+                  </td>
+                )}
                 <td
                   style={{ padding: 8, fontSize: 15, color: enabledMethods.llm ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.llm, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.llm ? 1 : 0.6 }}
                   onMouseEnter={() => setHovered(i, 'llm')}
@@ -632,7 +718,7 @@ export default function TesterGrid({
           })}
           {examplesList.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ padding: 10, fontSize: 12, opacity: 0.7 }}>— nessuna frase —</td>
+              <td colSpan={colSpanEmpty} style={{ padding: 10, fontSize: 12, opacity: 0.7 }}>— nessuna frase —</td>
             </tr>
           )}
         </tbody>
