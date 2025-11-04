@@ -64,12 +64,12 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         background: 'transparent',
         borderRadius: 0,
         boxShadow: 'none',
-        padding: 0,
+        padding: '8px', // Extended padding for easier hover targeting
+        margin: '-8px', // Negative margin to keep visual position same
         alignItems: 'center',
         border: 'none',
-        height: labelRef.current ? `${labelRef.current.getBoundingClientRect().height}px` : `${size + 8}px`,
+        height: labelRef.current ? `${labelRef.current.getBoundingClientRect().height + 16}px` : `${size + 24}px`,
         minHeight: 0,
-        marginLeft: 0,
         pointerEvents: 'auto'
       }}
       className="flex items-center"

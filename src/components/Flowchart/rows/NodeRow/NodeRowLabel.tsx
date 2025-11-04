@@ -1,8 +1,92 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Check } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
 import { NodeRowData } from '../../types/project';
+
+// Invisible overlay for empty space between end of text and node right edge
+const EmptySpaceOverlay: React.FC<{
+  labelRef: React.RefObject<HTMLSpanElement>;
+  iconPos: { top: number; left: number };
+  onHoverEnter: () => void;
+  onHoverLeave: () => void;
+}> = ({ labelRef, iconPos, onHoverEnter, onHoverLeave }) => {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!labelRef.current || !overlayRef.current) {
+      if (overlayRef.current) {
+        overlayRef.current.style.display = 'none';
+      }
+      return;
+    }
+
+    const updateOverlay = () => {
+      if (!labelRef.current || !overlayRef.current) {
+        if (overlayRef.current) {
+          overlayRef.current.style.display = 'none';
+        }
+        return;
+      }
+
+      const labelRect = labelRef.current.getBoundingClientRect();
+      const nodeEl = labelRef.current.closest('.react-flow__node') as HTMLElement | null;
+      if (!nodeEl) {
+        overlayRef.current.style.display = 'none';
+        return;
+      }
+
+      const nodeRect = nodeEl.getBoundingClientRect();
+
+      // Calculate empty space: from end of label text to right edge of node
+      const labelEnd = labelRect.right;
+      const nodeRight = nodeRect.right;
+      const emptyWidth = nodeRight - labelEnd;
+
+      if (emptyWidth > 0) {
+        overlayRef.current.style.position = 'fixed';
+        overlayRef.current.style.left = `${labelEnd}px`;
+        overlayRef.current.style.top = `${labelRect.top}px`;
+        overlayRef.current.style.width = `${emptyWidth}px`;
+        overlayRef.current.style.height = `${labelRect.height}px`;
+        overlayRef.current.style.pointerEvents = 'auto';
+        overlayRef.current.style.zIndex = '998';
+        overlayRef.current.style.display = 'block';
+      } else {
+        overlayRef.current.style.display = 'none';
+      }
+    };
+
+    // Use requestAnimationFrame to ensure DOM is ready
+    requestAnimationFrame(updateOverlay);
+    window.addEventListener('resize', updateOverlay);
+    window.addEventListener('scroll', updateOverlay, true);
+
+    return () => {
+      window.removeEventListener('resize', updateOverlay);
+      window.removeEventListener('scroll', updateOverlay, true);
+    };
+  }, [labelRef, iconPos]);
+
+  return (
+    <div
+      ref={overlayRef}
+      style={{
+        position: 'fixed',
+        background: 'transparent',
+        pointerEvents: 'auto',
+        zIndex: 998,
+      }}
+      onMouseEnter={onHoverEnter}
+      onMouseLeave={onHoverLeave}
+      onMouseDown={(e) => {
+        // Prevent default but don't stop propagation - this allows hover to work
+        // but doesn't interfere with drag on label
+        e.preventDefault();
+      }}
+    />
+  );
+};
 
 interface NodeRowLabelProps {
   row: NodeRowData;
@@ -94,16 +178,11 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       onDoubleClick={onDoubleClick}
       onPointerDown={(e) => { e.stopPropagation(); }}
       onMouseDown={(e) => {
-        // Removed verbose log
-
         e.preventDefault();
         e.stopPropagation();
         // consenti drag diretto sulla label quando non si è in editing
         if (!isEditing && typeof onLabelDragStart === 'function') {
-          // Removed verbose log
           onLabelDragStart(e);
-        } else {
-          // Removed verbose log
         }
       }}
       onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -139,6 +218,16 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       )}
       {/* Gear icon intentionally omitted next to label; shown only in the external actions strip */}
       {row.text}
+      {/* Invisible overlay for empty space - only when toolbar is visible */}
+      {showIcons && createPortal(
+        <EmptySpaceOverlay
+          labelRef={labelRef}
+          iconPos={iconPos}
+          onHoverEnter={() => onLabelHoverChange && onLabelHoverChange(true)}
+          onHoverLeave={() => onLabelHoverChange && onLabelHoverChange(false)}
+        />,
+        document.body
+      )}
       {showIcons && iconPos && createPortal(
         <NodeRowActionsOverlay
           iconPos={iconPos}

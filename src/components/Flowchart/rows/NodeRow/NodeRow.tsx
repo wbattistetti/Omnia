@@ -201,6 +201,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   }, [showCreatePicker]);
 
   // Calcola la posizione delle icone: appena FUORI dal bordo destro del nodo, all'altezza della label
+  // NO gap - toolbar starts exactly at node right edge
   useEffect(() => {
     if (showIcons && labelRef.current) {
       const labelRect = labelRef.current.getBoundingClientRect();
@@ -208,7 +209,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       const nodeRect = nodeEl ? nodeEl.getBoundingClientRect() : labelRect;
       setIconPos({
         top: labelRect.top,
-        left: nodeRect.right + 6 // 6px fuori dal bordo destro del nodo
+        left: nodeRect.right // NO gap - toolbar starts exactly at node edge
       });
     } else {
       setIconPos(null);
@@ -901,9 +902,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         data-row-id={row.id}
         draggable={false}
         onDragStart={(e) => e.preventDefault()}
-        onMouseDown={(e) => e.preventDefault()}
-        onMouseEnter={() => toolbarSM.row.onEnter()}
-        onMouseLeave={(e) => toolbarSM.row.onLeave(e as any)}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
         {isEditing ? (
