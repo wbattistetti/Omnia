@@ -91,23 +91,59 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           // Update InstanceRepository when intents change
           try {
             const instanceId = (props.act as any)?.instanceId;
+            console.log('[IntentEditor][SAVE][DEBOUNCED]', {
+              actId: props.act.id,
+              instanceId: instanceId || 'NOT_FOUND',
+              intentsCount: next.intents.length,
+              intents: next.intents.map(it => ({
+                id: it.id,
+                name: it.name,
+                threshold: it.threshold,
+                matchingCount: it.phrases?.matching?.length || 0,
+                notMatchingCount: it.phrases?.notMatching?.length || 0,
+                keywordsCount: it.phrases?.keywords?.length || 0
+              }))
+            });
+
             if (instanceId) {
-              // console.log('✅ [IntentEditor] Extracted instanceId:', instanceId); // RIMOSSO
               const problemIntents = next.intents.map(it => ({
                 id: it.id,
                 name: it.name,
                 threshold: it.threshold,
                 phrases: it.phrases
               }));
-              // console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents); // RIMOSSO
-              instanceRepository.updateIntents(instanceId, problemIntents);
-              // console.log('✅ [IntentEditor] Updated InstanceRepository with new intents', { // RIMOSSO
-              //   instanceId,
-              //   intentsCount: problemIntents.length
-              // });
+
+              console.log('[IntentEditor][UPDATE_INSTANCE_REPO][START]', {
+                instanceId,
+                intentsCount: problemIntents.length,
+                firstIntent: problemIntents[0] ? {
+                  id: problemIntents[0].id,
+                  name: problemIntents[0].name,
+                  matchingCount: problemIntents[0].phrases?.matching?.length || 0,
+                  notMatchingCount: problemIntents[0].phrases?.notMatching?.length || 0
+                } : null
+              });
+
+              const updated = instanceRepository.updateIntents(instanceId, problemIntents);
+
+              console.log('[IntentEditor][UPDATE_INSTANCE_REPO][RESULT]', {
+                instanceId,
+                updated,
+                note: updated ? 'InstanceRepository updated in memory - will be saved to DB on project save' : 'FAILED - instance not found'
+              });
+            } else {
+              console.warn('[IntentEditor][UPDATE_INSTANCE_REPO][SKIP]', {
+                actId: props.act.id,
+                reason: 'instanceId not found in act',
+                actKeys: Object.keys(props.act)
+              });
             }
           } catch (err) {
-            console.warn('[IntentEditor] Could not update InstanceRepository:', err);
+            console.error('[IntentEditor][UPDATE_INSTANCE_REPO][ERROR]', {
+              actId: props.act.id,
+              error: String(err),
+              stack: err?.stack?.substring(0, 200)
+            });
           }
         } catch { }
       }, 700);

@@ -410,10 +410,27 @@ export const AppContent: React.FC<AppContentProps> = ({
       await ProjectDataService.loadActsFromProject(id);
       // Carica istanze dal DB progetto
       try {
+        console.log('[OpenProject][LOAD_INSTANCES][START]', { projectId: id });
         const { instanceRepository } = await import('../services/InstanceRepository');
-        await instanceRepository.loadInstancesFromDatabase(id);
+        const success = await instanceRepository.loadInstancesFromDatabase(id);
+        console.log('[OpenProject][LOAD_INSTANCES][RESULT]', {
+          projectId: id,
+          success,
+          instancesCount: instanceRepository.getAllInstances().length,
+          messageInstances: instanceRepository.getAllInstances().filter(inst => {
+            const instance = instanceRepository.getInstance(inst.instanceId);
+            return instance?.message?.text;
+          }).map(inst => ({
+            instanceId: inst.instanceId,
+            messageText: inst.message?.text?.substring(0, 50) || 'N/A'
+          }))
+        });
       } catch (e) {
-        console.warn('[OpenProject] Failed to load instances:', e);
+        console.error('[OpenProject][LOAD_INSTANCES][ERROR]', {
+          projectId: id,
+          error: String(e),
+          stack: e?.stack?.substring(0, 200)
+        });
         // Non bloccare l'apertura del progetto se questo fallisce
       }
       // Carica flow (nodi/edge)

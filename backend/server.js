@@ -782,6 +782,19 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
   const payload = req.body || {};
   const client = new MongoClient(uri);
   try {
+    console.log('[Backend][INSTANCE_UPDATE][START]', {
+      projectId,
+      instanceId: iid,
+      payload: {
+        hasMessage: !!payload.message,
+        messageText: payload.message?.text?.substring(0, 50) || 'N/A',
+        mode: payload.mode,
+        baseActId: payload.baseActId,
+        hasOverrides: !!payload.overrides,
+        hasDdtSnapshot: !!payload.ddtSnapshot
+      }
+    });
+
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
 
@@ -792,10 +805,42 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
       existing = await projDb.collection('act_instances').findOne({ rowId: iid });
     }
 
+    console.log('[Backend][INSTANCE_UPDATE][FIND]', {
+      instanceId: iid,
+      foundById: !!await projDb.collection('act_instances').findOne({ _id: iid }),
+      foundByRowId: !!await projDb.collection('act_instances').findOne({ rowId: iid }),
+      existing: existing ? {
+        _id: existing._id,
+        rowId: existing.rowId,
+        mode: existing.mode,
+        baseActId: existing.baseActId,
+        hasMessage: !!existing.message,
+        messageText: existing.message?.text?.substring(0, 50) || 'N/A'
+      } : null
+    });
+
     const update = { updatedAt: new Date() };
     if (payload.message !== undefined) update['message'] = payload.message;
     if (payload.overrides !== undefined) update['overrides'] = payload.overrides;
     if (payload.ddtSnapshot !== undefined) update['ddtSnapshot'] = payload.ddtSnapshot; // Supporto per ddtSnapshot
+    // ✅ FIX: Aggiorna anche mode e baseActId quando vengono passati nel payload
+    if (payload.mode !== undefined) update['mode'] = payload.mode;
+    if (payload.baseActId !== undefined) update['baseActId'] = payload.baseActId;
+    // ✅ FIX: Salva anche problemIntents (frasi generate nell'IntentEditor)
+    if (payload.problemIntents !== undefined) update['problemIntents'] = payload.problemIntents;
+
+    console.log('[Backend][INSTANCE_UPDATE][UPDATE_OBJECT]', {
+      instanceId: iid,
+      updateFields: Object.keys(update),
+      mode: update.mode,
+      baseActId: update.baseActId,
+      hasProblemIntents: !!update.problemIntents,
+      problemIntentsCount: update.problemIntents?.length || 0,
+      messageInUpdate: update.message ? {
+        text: update.message.text?.substring(0, 50) || 'N/A',
+        full: JSON.stringify(update.message)
+      } : null
+    });
 
     // optional: fork = true → copy current project_acts.ddtSnapshot into instance.ddtSnapshot
     if (payload.fork === true) {
@@ -816,7 +861,20 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
 
     // Usa _id trovato o rowId per aggiornare
     const filter = existing ? { _id: existing._id } : { rowId: iid };
+    console.log('[Backend][INSTANCE_UPDATE][FILTER]', {
+      instanceId: iid,
+      filter,
+      willCreate: !existing
+    });
+
     const updateResult = await projDb.collection('act_instances').updateOne(filter, { $set: update });
+
+    console.log('[Backend][INSTANCE_UPDATE][UPDATE_RESULT]', {
+      instanceId: iid,
+      matchedCount: updateResult.matchedCount,
+      modifiedCount: updateResult.modifiedCount,
+      willCreate: updateResult.matchedCount === 0 && iid && !existing
+    });
 
     // Se non esiste e abbiamo rowId, crea nuova istanza
     if (updateResult.matchedCount === 0 && iid && !existing) {
@@ -829,19 +887,52 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
         message: payload.message || null,
         overrides: payload.overrides || null,
         ddtSnapshot: payload.ddtSnapshot || null,
+        problemIntents: payload.problemIntents || null, // ✅ Salva anche problemIntents quando si crea una nuova istanza
         rowId: iid,
         baseVersion: null,
         baseHash: null,
         createdAt: new Date(),
         updatedAt: new Date()
       };
+
+      console.log('[Backend][INSTANCE_UPDATE][CREATE_NEW]', {
+        instanceId: iid,
+        newInstance: {
+          rowId: newInstance.rowId,
+          mode: newInstance.mode,
+          baseActId: newInstance.baseActId,
+          hasMessage: !!newInstance.message,
+          messageText: newInstance.message?.text?.substring(0, 50) || 'N/A'
+        }
+      });
+
       await projDb.collection('act_instances').insertOne(newInstance);
       existing = newInstance;
     }
 
     const saved = await projDb.collection('act_instances').findOne(existing ? { _id: existing._id } : { rowId: iid });
+
+    console.log('[Backend][INSTANCE_UPDATE][SAVED]', {
+      instanceId: iid,
+      saved: saved ? {
+        _id: saved._id,
+        rowId: saved.rowId,
+        mode: saved.mode,
+        baseActId: saved.baseActId,
+        hasMessage: !!saved.message,
+        messageText: saved.message?.text?.substring(0, 50) || 'N/A',
+        messageFull: saved.message ? JSON.stringify(saved.message) : 'null'
+      } : null
+    });
+
     res.json(saved);
   } catch (e) {
+    console.error('[Backend][INSTANCE_UPDATE][ERROR]', {
+      projectId,
+      instanceId: iid,
+      error: String(e),
+      stack: e?.stack?.substring(0, 300)
+    });
     logError('Instances.put', e, { projectId, instanceId: iid });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
@@ -854,13 +945,35 @@ app.get('/api/projects/:pid/instances', async (req, res) => {
   const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
   const client = new MongoClient(uri);
   try {
+    console.log('[Backend][INSTANCE_GET][START]', { projectId, requestedIds: ids.length > 0 ? ids : 'all' });
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const coll = projDb.collection('act_instances');
     const filter = ids.length ? { _id: { $in: ids } } : {};
     const items = await coll.find(filter).sort({ updatedAt: -1 }).toArray();
+
+    console.log('[Backend][INSTANCE_GET][FOUND]', {
+      projectId,
+      count: items.length,
+      instances: items.map(inst => ({
+        _id: inst._id,
+        rowId: inst.rowId,
+        instanceId: inst.instanceId,
+        mode: inst.mode,
+        baseActId: inst.baseActId,
+        hasMessage: !!inst.message,
+        messageText: inst.message?.text?.substring(0, 50) || 'N/A',
+        messageFull: inst.message ? JSON.stringify(inst.message) : 'null'
+      }))
+    });
+
     res.json({ count: items.length, items });
   } catch (e) {
+    console.error('[Backend][INSTANCE_GET][ERROR]', {
+      projectId,
+      error: String(e),
+      stack: e?.stack?.substring(0, 300)
+    });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();

@@ -284,11 +284,113 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     try {
       let pid: string | undefined = undefined;
       try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch { }
-      if (pid && (row as any)?.instanceId && ((row as any)?.mode === 'Message' || !(row as any)?.mode)) {
-        void ProjectDataService.updateInstance(pid, (row as any).instanceId, { message: { text: label } })
-          .catch((e) => { try { console.warn('[Row][save][instance:update] failed', e); } catch { } });
+      if (pid && ((row as any)?.mode === 'Message' || !(row as any)?.mode)) {
+        // Per Message, usa row.id come instanceId (row.id è l'instanceId per le righe Message)
+        const instanceId = (row as any)?.instanceId || row.id;
+        const baseActId = (row as any)?.actId || (row as any)?.baseActId || 'Message';
+
+        console.log('[Message][SAVE][START]', {
+          rowId: row.id,
+          rowInstanceId: (row as any)?.instanceId,
+          finalInstanceId: instanceId,
+          baseActId,
+          label,
+          labelLength: label.length,
+          projectId: pid,
+          rowMode: (row as any)?.mode
+        });
+
+        // Assicurati che l'istanza esista in memoria prima di salvare
+        // Se non esiste, creala (questo può succedere se la riga è stata creata senza intellisense)
+        const instance = instanceRepository.getInstance(instanceId);
+        console.log('[Message][SAVE][MEMORY_CHECK]', {
+          instanceId,
+          instanceExists: !!instance,
+          instanceMessage: instance?.message?.text || 'N/A'
+        });
+
+        if (!instance) {
+          // Crea l'istanza in memoria se non esiste
+          console.log('[Message][SAVE][CREATE_IN_MEMORY]', { instanceId, baseActId });
+          instanceRepository.createInstance(baseActId, [], instanceId);
+          // Aggiorna il messaggio nell'istanza appena creata
+          instanceRepository.updateMessage(instanceId, { text: label });
+          console.log('[Message][SAVE][CREATED_AND_UPDATED]', {
+            instanceId,
+            messageText: label.substring(0, 50)
+          });
+        } else {
+          // Aggiorna il messaggio nell'istanza esistente
+          console.log('[Message][SAVE][UPDATE_IN_MEMORY]', {
+            instanceId,
+            oldText: instance.message?.text?.substring(0, 50) || 'N/A',
+            newText: label.substring(0, 50)
+          });
+          instanceRepository.updateMessage(instanceId, { text: label });
+        }
+
+        // Verifica dopo l'aggiornamento
+        const instanceAfter = instanceRepository.getInstance(instanceId);
+        console.log('[Message][SAVE][MEMORY_AFTER_UPDATE]', {
+          instanceId,
+          instanceExists: !!instanceAfter,
+          messageText: instanceAfter?.message?.text?.substring(0, 50) || 'N/A'
+        });
+
+        // Passa mode e baseActId per permettere la creazione corretta se l'istanza non esiste nel DB
+        // Questo è cruciale: se l'istanza non esiste, il backend la crea con questi valori
+        const payload = {
+          message: { text: label },
+          mode: 'Message', // Esplicito: mode Message per evitare default 'DataRequest'
+          baseActId: baseActId // baseActId corretto invece di 'Unknown'
+        };
+
+        console.log('[Message][SAVE][DB_PAYLOAD]', {
+          instanceId,
+          projectId: pid,
+          payload: {
+            message: { text: label.substring(0, 50) + '...' },
+            mode: payload.mode,
+            baseActId: payload.baseActId
+          }
+        });
+
+        void ProjectDataService.updateInstance(pid, instanceId, payload)
+          .then((result) => {
+            console.log('[Message][SAVE][DB_SUCCESS]', {
+              instanceId,
+              projectId: pid,
+              result: result ? {
+                _id: result._id,
+                rowId: result.rowId,
+                mode: result.mode,
+                messageText: result.message?.text?.substring(0, 50) || 'N/A'
+              } : null
+            });
+          })
+          .catch((e) => {
+            console.error('[Message][SAVE][DB_FAILED]', {
+              instanceId,
+              projectId: pid,
+              error: String(e),
+              stack: e?.stack?.substring(0, 200)
+            });
+          });
+      } else {
+        console.log('[Message][SAVE][SKIPPED]', {
+          hasProjectId: !!pid,
+          rowMode: (row as any)?.mode,
+          rowInstanceId: (row as any)?.instanceId,
+          reason: !pid ? 'NO_PROJECT_ID' : 'NOT_MESSAGE_MODE'
+        });
       }
-    } catch { }
+    } catch (err) {
+      console.error('[Message][SAVE][ERROR]', {
+        error: String(err),
+        rowId: row.id,
+        label: label.substring(0, 50)
+      });
+    }
     if (typeof onEditingEnd === 'function') {
       onEditingEnd();
     }

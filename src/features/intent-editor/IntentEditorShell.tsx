@@ -162,32 +162,66 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
       ];
 
       const kind = trainingTab === 'pos' ? 'positive' : trainingTab === 'neg' ? 'negative' : 'keywords';
+      const projectLang = (localStorage.getItem('project.lang') as any) || 'pt';
+
+      console.log('[IntentEditor][GENERATE][START]', {
+        intentName: selected.name,
+        kind,
+        n: genN,
+        projectLang,
+        projectLangSource: localStorage.getItem('project.lang') || 'NOT_FOUND',
+        trainingTab,
+        existingCount: allExisting.length
+      });
+
       const generated = await generateVariantsForIntent({
         intentName: selected.name,
         kind: kind as any,
         exclude: allExisting,
         n: genN,
-        lang: (localStorage.getItem('project.lang') as any) || 'pt'
+        lang: projectLang
+      });
+
+      console.log('[IntentEditor][GENERATE][RESULT]', {
+        intentName: selected.name,
+        generatedCount: generated.length,
+        generated: generated.slice(0, 5).map(g => g.substring(0, 50))
       });
 
       const store = useIntentStore.getState();
       let added = 0;
+      const addedPhrases: string[] = [];
+
       for (const g of generated) {
         if (trainingTab === 'pos') {
-          store.addCurated(selectedId, g, 'it');
+          store.addCurated(selectedId, g, projectLang);
+          addedPhrases.push(g);
           added++;
         } else if (trainingTab === 'neg') {
           store.addHardNeg(selectedId, {
             id: (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2),
             text: g,
-            lang: 'it'
+            lang: projectLang
           });
+          addedPhrases.push(g);
           added++;
         } else if (trainingTab === 'key') {
           store.addKeyword(selectedId, g, 1);
+          addedPhrases.push(g);
           added++;
         }
       }
+
+      console.log('[IntentEditor][GENERATE][ADDED_TO_STORE]', {
+        intentId: selectedId,
+        intentName: selected.name,
+        added,
+        requested: genN,
+        lang: projectLang,
+        phrases: addedPhrases.slice(0, 5).map(p => p.substring(0, 50)),
+        note: 'Store updated - will trigger debounced save in HostAdapter after 700ms'
+      });
+
       setLastGen({ count: added, requested: genN });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Errore durante la generazione';
