@@ -47,6 +47,13 @@ export function useNodeDragDrop({
 
         // 2. Crea clone semplice per il drag visual
         const clone = originalElement.cloneNode(true) as HTMLElement;
+
+        // ✅ Recupera il font-size e altri stili di testo dall'elemento originale
+        const computedStyle = window.getComputedStyle(originalElement);
+        const fontSize = computedStyle.fontSize;
+        const fontFamily = computedStyle.fontFamily;
+        const lineHeight = computedStyle.lineHeight;
+
         clone.style.position = 'fixed';
         clone.style.pointerEvents = 'none';
         clone.style.zIndex = '9999';
@@ -62,6 +69,10 @@ export function useNodeDragDrop({
         clone.style.width = 'auto';
         clone.style.maxWidth = '300px';
         clone.style.minWidth = 'fit-content';
+        // ✅ Applica il font-size e altri stili di testo dall'originale
+        clone.style.fontSize = fontSize;
+        clone.style.fontFamily = fontFamily;
+        clone.style.lineHeight = lineHeight;
         document.body.appendChild(clone);
 
         // 3. Trova i dati della riga
@@ -93,25 +104,40 @@ export function useNodeDragDrop({
         const elementUnderMouse = document.elementFromPoint(e.clientX, e.clientY);
         const targetNode = elementUnderMouse?.closest('.react-flow__node');
 
+        // Prima rimuovi evidenziazione da tutti i nodi e ripristina classi Tailwind
+        document.querySelectorAll('.react-flow__node').forEach(node => {
+            const el = node as HTMLElement;
+            // Rimuovi stili inline
+            el.style.removeProperty('border');
+            el.style.removeProperty('border-width');
+            el.style.removeProperty('border-color');
+            el.style.removeProperty('border-style');
+            el.style.removeProperty('border-radius');
+            // Rimuovi classe di evidenziazione se presente
+            el.classList.remove('node-drop-highlight');
+        });
+
         if (targetNode) {
             const targetNodeId = targetNode.getAttribute('data-id');
-            const isDifferentNode = targetNodeId && targetNodeId !== nodeId;
 
-            if (isDifferentNode) {
-                // Evidenzia il nodo di destinazione
-                targetNode.style.border = '2px solid #10b981'; // Verde per indicare drop valido
-                targetNode.style.borderRadius = '8px';
+            if (targetNodeId) {
+                // ✅ Evidenzia il nodo di destinazione (anche se è lo stesso nodo)
+                const targetEl = targetNode as HTMLElement;
+
+                // ✅ Rimuovi temporaneamente le classi Tailwind del bordo per permettere allo stile inline di funzionare
+                targetEl.classList.remove('border', 'border-2', 'border-black');
+
+                // ✅ Aggiungi classe per identificare il nodo evidenziato
+                targetEl.classList.add('node-drop-highlight');
+
+                // ✅ Applica bordo verde sottile con !important
+                targetEl.style.setProperty('border', '1px solid #10b981', 'important');
+                targetEl.style.setProperty('border-radius', '8px', 'important');
                 setTargetNodeId(targetNodeId);
             } else {
-                // Rimuovi evidenziazione se è lo stesso nodo
-                targetNode.style.border = '';
                 setTargetNodeId(null);
             }
         } else {
-            // Rimuovi evidenziazione se non c'è nessun nodo
-            document.querySelectorAll('.react-flow__node').forEach(node => {
-                node.style.border = '';
-            });
             setTargetNodeId(null);
         }
     }, [isRowDragging, dragElement, nodeId]);
@@ -124,7 +150,16 @@ export function useNodeDragDrop({
 
         // Rimuovi evidenziazione da tutti i nodi
         document.querySelectorAll('.react-flow__node').forEach(node => {
-            node.style.border = '';
+            const el = node as HTMLElement;
+            // Rimuovi stili inline
+            el.style.removeProperty('border');
+            el.style.removeProperty('border-width');
+            el.style.removeProperty('border-color');
+            el.style.removeProperty('border-style');
+            el.style.removeProperty('border-radius');
+            // Rimuovi classe di evidenziazione
+            el.classList.remove('node-drop-highlight');
+            // ✅ Le classi Tailwind verranno riapplicate automaticamente da React al re-render
         });
 
         if (targetNodeId && targetNodeId !== nodeId) {

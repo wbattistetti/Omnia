@@ -128,3 +128,10 @@
     opacity: 0;
   }
 }
+
+/* Node drop highlight during row drag - Verde sottile */
+.node-drop-highlight {
+  border: 1px solid #10b981 !important; /* Verde emerald-500 */
+  border-radius: 8px !important;
+  border-width: 1px !important;
+}
