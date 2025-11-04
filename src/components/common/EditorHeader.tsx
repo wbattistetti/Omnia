@@ -14,6 +14,7 @@ type EditorHeaderProps = {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
+  titleActions?: React.ReactNode; // Actions to show right after title (before spacer)
   toolbarButtons?: ToolbarButton[];
   rightActions?: React.ReactNode;
   onClose?: () => void;
@@ -28,7 +29,7 @@ const THEMES: Record<string, { bg: string; fg: string; border: string; accent?: 
   purple: { bg: '#5b21b6', fg: '#ffffff', border: '#7c3aed' },
 };
 
-export function EditorHeader({ icon, title, subtitle, toolbarButtons = [], rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
+export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButtons = [], rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
   const theme = THEMES[color] || THEMES.orange;
   return (
     <div
@@ -45,18 +46,23 @@ export function EditorHeader({ icon, title, subtitle, toolbarButtons = [], right
         ...style,
       }}
     >
-      {/* Left: Icon + Title */}
+      {/* Left: Icon + Title + TitleActions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         {icon ? <div style={{ width: 18, height: 18, flexShrink: 0 }}>{icon}</div> : null}
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div style={{ fontWeight: 600, lineHeight: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
           {subtitle ? <div style={{ fontSize: 11, opacity: 0.8 }}>{subtitle}</div> : null}
         </div>
+        {titleActions && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+            {titleActions}
+          </div>
+        )}
       </div>
-      
+
       {/* Spacer to push everything to the right */}
       <div style={{ flex: 1 }} />
-      
+
       {/* Right: Toolbar + Custom actions + Close */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {/* Toolbar (auto-hidden if empty) */}

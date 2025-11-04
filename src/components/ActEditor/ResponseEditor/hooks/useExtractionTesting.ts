@@ -128,6 +128,7 @@ export function useExtractionTesting({
   const [rowResults, setRowResults] = useState<RowResult[]>([]);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [testing, setTesting] = useState<boolean>(false);
+  const cancelledRef = useRef<boolean>(false);
   const [cellOverrides, setCellOverrides] = useState<Record<string, string>>({});
   const [editingCell, setEditingCell] = useState<{
     row: number;
@@ -420,17 +421,30 @@ export function useExtractionTesting({
   }, [examplesList, kind, rowResults, cellOverrides]);
 
   // Run all rows
+  const cancelTesting = useCallback(() => {
+    cancelledRef.current = true;
+    setTesting(false);
+  }, []);
+
   const runAllRows = useCallback(async () => {
+    cancelledRef.current = false; // Reset flag all'inizio
     setTesting(true);
     for (let i = 0; i < examplesList.length; i += 1) {
+      // Controlla se l'esecuzione è stata cancellata
+      if (cancelledRef.current) {
+        setTesting(false);
+        return; // Interrompi l'esecuzione
+      }
       await runRowTest(i);
     }
-    // Compute stats after run
-    try {
-      const stats = computeStatsFromResults();
-      onStatsUpdate?.(stats);
-    } catch {}
-    setTesting(false);
+    // Compute stats after run (solo se non cancellato)
+    if (!cancelledRef.current) {
+      try {
+        const stats = computeStatsFromResults();
+        onStatsUpdate?.(stats);
+      } catch {}
+      setTesting(false);
+    }
   }, [examplesList.length, runRowTest, computeStatsFromResults, onStatsUpdate]);
 
   return {
@@ -451,6 +465,7 @@ export function useExtractionTesting({
     // Functions
     runRowTest,
     runAllRows,
+    cancelTesting,
     toggleMethod,
     computeStatsFromResults,
     // Helpers

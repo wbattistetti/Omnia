@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, ChevronsRight, Wrench, BarChart2 } from 'lucide-react';
+import { Plus, ChevronsRight, Wrench, BarChart2, X } from 'lucide-react';
 
 interface TesterControlsProps {
   newExample: string;
@@ -10,6 +10,7 @@ interface TesterControlsProps {
   setSelectedRow: React.Dispatch<React.SetStateAction<number | null>>;
   runRowTest: (idx: number) => Promise<void>;
   runAllRows: () => Promise<void>;
+  cancelTesting?: () => void;
   testing: boolean;
   // Tuning props
   kind: string;
@@ -61,6 +62,7 @@ export default function TesterControls({
   setSelectedRow,
   runRowTest,
   runAllRows,
+  cancelTesting,
   testing,
   kind,
   locale,
@@ -211,6 +213,24 @@ export default function TesterControls({
       >
         <ChevronsRight size={16} />
       </button>
+
+      {/* Cancel button - appare solo quando testing è true */}
+      {testing && cancelTesting && (
+        <button
+          onClick={cancelTesting}
+          title="Interrompi esecuzione"
+          style={{
+            border: '1px solid #ef4444',
+            background: '#991b1b',
+            color: '#fecaca',
+            borderRadius: 8,
+            padding: '8px 10px',
+            cursor: 'pointer'
+          }}
+        >
+          <X size={16} />
+        </button>
+      )}
 
       {/* Tuning button */}
       <button

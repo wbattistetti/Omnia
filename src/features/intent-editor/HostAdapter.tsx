@@ -1,12 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import EditorHeader from '../../components/common/EditorHeader';
 import { getAgentActVisualsByType } from '../../components/Flowchart/utils/actVisuals';
-import EmbeddingEditorShell from './EmbeddingEditorShell';
+import EmbeddingEditorShell, { EmbeddingEditorShellRef } from './EmbeddingEditorShell';
 import { useIntentStore } from './state/intentStore';
 import { useTestStore } from './state/testStore';
 import type { ProblemPayload, ProblemIntent, ProblemEditorState } from '../../types/project';
 import { ProjectDataService } from '../../services/ProjectDataService';
 import { instanceRepository } from '../../services/InstanceRepository';
+import { Brain, Loader2 } from 'lucide-react';
 
 function toEditorState(payload?: ProblemPayload) {
   const intents = (payload?.intents || []).map((pi: ProblemIntent) => ({
@@ -179,6 +180,10 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
   }, [props.act?.id]);
   const type = String(props.act?.type || 'ProblemClassification') as any;
   const { Icon, color } = getAgentActVisualsByType(type, true);
+
+  const editorRef = useRef<EmbeddingEditorShellRef>(null);
+  const [trainState, setTrainState] = useState({ training: false, modelReady: false, canTrain: false });
+
   return (
     <div className="h-full w-full flex flex-col min-h-0">
       <EditorHeader
@@ -186,10 +191,45 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
         title={String(props.act?.label || 'Problem')}
         color="orange"
         onClose={props.onClose}
+        titleActions={
+          <button
+            onClick={() => editorRef.current?.handleTrain()}
+            disabled={!trainState.canTrain || trainState.training}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: 8,
+              background: trainState.modelReady ? '#fef3c7' : 'transparent',
+              color: trainState.modelReady ? '#92400e' : '#ffffff',
+              cursor: trainState.canTrain && !trainState.training ? 'pointer' : 'not-allowed',
+              fontSize: 14,
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              opacity: trainState.canTrain && !trainState.training ? 1 : 0.6
+            }}
+            title={trainState.training ? 'Training in corso...' : trainState.modelReady ? 'Model ready - Click to retrain' : 'Train embeddings model'}
+          >
+            {trainState.training ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Training...
+              </>
+            ) : (
+              <>
+                <Brain size={14} />
+                Train Model
+              </>
+            )}
+          </button>
+        }
       />
       <div className="flex-1 min-h-0">
         <EmbeddingEditorShell
+          ref={editorRef}
           instanceId={(props.act as any)?.instanceId || props.act?.id}
+          onTrainStateChange={setTrainState}
         />
       </div>
     </div>

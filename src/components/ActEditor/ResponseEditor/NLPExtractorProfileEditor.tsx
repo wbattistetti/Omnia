@@ -187,6 +187,7 @@ export default function NLPExtractorProfileEditor({
     enabledMethods,
     runRowTest,
     runAllRows,
+    cancelTesting,
     toggleMethod,
     computeStatsFromResults,
     summarizeVars,
@@ -649,6 +650,7 @@ export default function NLPExtractorProfileEditor({
             setSelectedRow={setSelectedRow}
             runRowTest={runRowTest}
             runAllRows={runAllRows}
+            cancelTesting={cancelTesting}
             testing={testing}
             kind={kind}
             locale={locale}

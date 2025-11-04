@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
-import EmbeddingEditorShell from '../../../../features/intent-editor/EmbeddingEditorShell';
+import React, { useEffect, useRef, useState } from 'react';
+import EmbeddingEditorShell, { EmbeddingEditorShellRef } from '../../../../features/intent-editor/EmbeddingEditorShell';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
 import { useIntentStore } from '../../../../features/intent-editor/state/intentStore';
 import { instanceRepository } from '../../../../services/InstanceRepository';
 import type { ProblemIntent } from '../../../../types/project';
+import { Brain, Loader2 } from 'lucide-react';
 
 interface IntentEditorInlineEditorProps {
   onClose: () => void;
@@ -45,6 +46,9 @@ export default function IntentEditorInlineEditor({
   intentSelected,
   act,
 }: IntentEditorInlineEditorProps) {
+  const editorRef = useRef<EmbeddingEditorShellRef>(null);
+  const [trainState, setTrainState] = useState({ training: false, modelReady: false, canTrain: false });
+
   // Sync intents from instanceRepository to useIntentStore when editor opens
   useEffect(() => {
     if (!act) return;
@@ -109,7 +113,42 @@ export default function IntentEditorInlineEditor({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 600 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #e5e7eb' }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Intent Classifier (Embeddings)</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Intent Classifier (Embeddings)</h3>
+          {/* Train Model button - subito dopo la label */}
+          <button
+            onClick={() => editorRef.current?.handleTrain()}
+            disabled={!trainState.canTrain || trainState.training}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: 6,
+              background: trainState.modelReady ? '#fef3c7' : '#fff',
+              color: trainState.modelReady ? '#92400e' : '#374151',
+              cursor: trainState.canTrain && !trainState.training ? 'pointer' : 'not-allowed',
+              fontSize: 14,
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              opacity: trainState.canTrain && !trainState.training ? 1 : 0.6
+            }}
+            title={trainState.training ? 'Training in corso...' : trainState.modelReady ? 'Model ready - Click to retrain' : 'Train embeddings model'}
+          >
+            {trainState.training ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Training...
+              </>
+            ) : (
+              <>
+                <Brain size={14} />
+                Train Model
+              </>
+            )}
+          </button>
+        </div>
+        {/* Close button - a destra */}
         <button
           onClick={onClose}
           style={{
@@ -128,9 +167,11 @@ export default function IntentEditorInlineEditor({
       {/* EmbeddingEditorShell with inlineMode prop and intentSelected */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         <EmbeddingEditorShell
+          ref={editorRef}
           inlineMode={true}
           intentSelected={intentSelected}
           instanceId={act ? ((act as any)?.instanceId || act.id) : undefined}
+          onTrainStateChange={setTrainState}
         />
       </div>
     </div>
