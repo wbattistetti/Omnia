@@ -292,12 +292,10 @@ export function useNodeDragDrop({
                 return;
             }
 
-            // ✅ Calcola la posizione assoluta del testo nel clone al momento del rilascio
-            // Il clone è a mousePosition + (10, -10), il testo è a textOffsetInClone dentro il clone
-            const cloneOffsetX = 10;
-            const cloneOffsetY = -10;
-            const textAbsoluteX = mousePosition.x + cloneOffsetX + (textOffsetInClone?.x || 0);
-            const textAbsoluteY = mousePosition.y + cloneOffsetY + (textOffsetInClone?.y || 0);
+            // ✅ Posizione schermo del clone (position: fixed)
+            // Il clone è posizionato a mousePosition + (10, -10)
+            const cloneScreenX = mousePosition.x + 10;
+            const cloneScreenY = mousePosition.y - 10;
 
             // Dispatch evento per creare un nuovo nodo sul canvas
             const createNodeEvent = new CustomEvent('createNodeFromRow', {
@@ -305,9 +303,7 @@ export function useNodeDragDrop({
                     fromNodeId: nodeId,
                     rowId: draggedRowId,
                     rowData: rowDataToMove,
-                    mousePosition: { x: mousePosition.x, y: mousePosition.y },
-                    textAbsolutePosition: { x: textAbsoluteX, y: textAbsoluteY }, // ✅ Posizione assoluta del testo nel clone
-                    textOffsetInNode: textOffsetInClone?.nodeOffset || { x: 0, y: 0 } // ✅ Offset del testo nel nodo originale
+                    cloneScreenPosition: { x: cloneScreenX, y: cloneScreenY } // ✅ Posizione schermo del clone
                 }
             });
 

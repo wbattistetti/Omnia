@@ -406,19 +406,15 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setContentSize({ w, h });
   }, [nodes]);
 
-  const createNodeAt = useCallback((clientX: number, clientY: number, initialRow?: any, textOffsetInNode?: { x: number; y: number }) => {
+  const createNodeAt = useCallback((clientX: number, clientY: number, initialRow?: any) => {
     // Usa UUID invece del contatore per evitare conflitti
     const newNodeId = uuidv4();
 
     let x = 0, y = 0;
     if (reactFlowInstance) {
-      // ✅ clientX, clientY è la posizione assoluta del testo nel clone
-      // ✅ Sottrai l'offset del testo nel nodo per ottenere la posizione del bordo sinistro del nodo
-      const nodeLeftX = clientX - (textOffsetInNode?.x || 0);
-      const nodeTopY = clientY - (textOffsetInNode?.y || 0);
-
-      // ✅ Converti in coordinate flow
-      const pos = reactFlowInstance.screenToFlowPosition({ x: nodeLeftX, y: nodeTopY });
+      // ✅ clientX, clientY sono le coordinate schermo del clone (position: fixed)
+      // ✅ Converti direttamente in coordinate flow
+      const pos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
       x = pos.x;
       y = pos.y;
     }
@@ -446,14 +442,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ Listener per creare un nodo dal canvas quando si rilascia una riga
   useEffect(() => {
     const handleCreateNodeFromRow = (event: CustomEvent) => {
-      const { rowData, textAbsolutePosition, textOffsetInNode } = event.detail;
+      const { rowData, cloneScreenPosition } = event.detail;
 
-      if (!rowData || !textAbsolutePosition) {
+      if (!rowData || !cloneScreenPosition) {
         return;
       }
 
-      // ✅ Crea il nodo posizionando il testo della riga nella posizione assoluta del testo nel clone
-      createNodeAt(textAbsolutePosition.x, textAbsolutePosition.y, rowData, textOffsetInNode);
+      // ✅ Crea il nodo posizionandolo esattamente dove è il clone (coordinate schermo convertite in flow)
+      createNodeAt(cloneScreenPosition.x, cloneScreenPosition.y, rowData);
     };
 
     window.addEventListener('createNodeFromRow', handleCreateNodeFromRow as EventListener);
