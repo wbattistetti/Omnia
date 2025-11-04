@@ -1,12 +1,20 @@
 // Helper function to check if a DDT has messages for ProblemClassification
-// For ProblemClassification, we need to check if steps (start, noInput, noMatch, confirmation) have escalations with messages
+// For ProblemClassification, messages are stored in mainData[0].steps when kind === "intent"
 
 export function hasIntentMessages(ddt: any): boolean {
   if (!ddt) return false;
 
-  // For ProblemClassification, messages should be at root level (no mainData structure)
-  // Steps are usually at ddt.steps or ddt.root?.steps
-  const steps = ddt.steps || ddt.root?.steps || {};
+  // ✅ Leggi kind da mainData[0].kind
+  const mainList = Array.isArray(ddt.mainData) ? ddt.mainData : [];
+  const firstMain = mainList[0];
+
+  // Verifica che il primo mainData abbia kind === "intent"
+  if (!firstMain || firstMain.kind !== 'intent') {
+    return false;
+  }
+
+  // ✅ Leggi steps da mainData[0].steps
+  const steps = firstMain.steps || {};
 
   // Required steps for intent classification
   const requiredSteps = ['start', 'noInput', 'noMatch', 'confirmation'];

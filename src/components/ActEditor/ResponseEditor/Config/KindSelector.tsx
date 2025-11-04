@@ -28,6 +28,7 @@ interface KindSelectorProps {
   lockKind: boolean;
   setLockKind: (value: boolean) => void;
   inferredKind: string;
+  hideIfIntent?: boolean; // ✅ Nascondi se kind === "intent"
 }
 
 /**
@@ -39,9 +40,15 @@ export default function KindSelector({
   lockKind,
   setLockKind,
   inferredKind,
+  hideIfIntent = false,
 }: KindSelectorProps) {
   const [kindOpen, setKindOpen] = React.useState(false);
   const kindRef = React.useRef<HTMLDivElement | null>(null);
+
+  // ✅ Nascondi se kind === "intent" e hideIfIntent è true
+  if (hideIfIntent && kind === 'intent') {
+    return null;
+  }
 
   const KIND_OPTIONS = React.useMemo(() => {
     const iconColor = '#9ca3af';
@@ -218,34 +225,36 @@ export default function KindSelector({
                   boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                 }}
               >
-                {KIND_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => {
-                      setKind(opt.value);
-                      setKindOpen(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '6px 8px',
-                      background: opt.value === kind ? '#f3f4f6' : '#fff',
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span
-                      aria-hidden
-                      style={{ display: 'inline-flex', alignItems: 'center' }}
+                {KIND_OPTIONS
+                  .filter((opt) => opt.value !== 'intent') // ✅ Escludi "intent" dalle opzioni
+                  .map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setKind(opt.value);
+                        setKindOpen(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 8px',
+                        background: opt.value === kind ? '#f3f4f6' : '#fff',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
                     >
-                      <opt.Icon />
-                    </span>
-                    <span style={{ textAlign: 'left' }}>{opt.label}</span>
-                  </button>
-                ))}
+                      <span
+                        aria-hidden
+                        style={{ display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        <opt.Icon />
+                      </span>
+                      <span style={{ textAlign: 'left' }}>{opt.label}</span>
+                    </button>
+                  ))}
               </div>
             )}
           </div>

@@ -29,6 +29,7 @@ try:
     from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
     from backend.ai_steps.parse_address import router as parse_address_router
     from backend.ai_endpoints.intent_generation import router as intent_gen_router
+    from backend.ai_steps.intentMessages import router as intentMessages_router
 except Exception:
     from ai_steps.step3_suggest_constraints import router as step3_router
     from ai_steps.constraint_messages import router as constraint_messages_router
@@ -44,6 +45,7 @@ except Exception:
     from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
     from ai_steps.parse_address import router as parse_address_router
     from ai_endpoints.intent_generation import router as intent_gen_router
+    from ai_steps.intentMessages import router as intentMessages_router
 
 GROQ_KEY = os.environ.get("Groq_key")
 
@@ -211,6 +213,7 @@ app.include_router(nlp_extract_router)
 app.include_router(ner_router)
 app.include_router(parse_address_router)
 app.include_router(intent_gen_router)
+app.include_router(intentMessages_router)
 
 # DDT Wizard step routers (required by Build Messages)
 app.include_router(stepNoMatch_router)

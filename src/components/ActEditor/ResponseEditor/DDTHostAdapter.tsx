@@ -31,8 +31,51 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     const instance = instanceRepository.getInstance(instanceKey);
     const instanceDDT = instance?.ddt;
 
+    // ✅ Se ProblemClassification, verifica che il DDT abbia kind === "intent"
+    if (act.type === 'ProblemClassification') {
+      // Verifica se il DDT esistente ha kind === "intent"
+      const firstMain = instanceDDT?.mainData?.[0];
+      const hasCorrectKind = firstMain?.kind === 'intent';
 
-    return instanceDDT || {
+      // Se NON esiste DDT o ha kind sbagliato, inizializza/resetta con kind: "intent"
+      if (!instanceDDT || !hasCorrectKind) {
+        const newDDT = {
+          id: `temp_ddt_${act.id}`,
+          label: act.label || 'Data',
+          _userLabel: act.label,
+          _sourceAct: { id: act.id, label: act.label, type: act.type },
+          mainData: [{
+            label: act.label || 'Intent',
+            kind: 'intent', // ✅ FISSO per ProblemClassification
+            steps: {},
+            subData: []
+          }]
+        };
+
+        // ✅ Se l'istanza esiste ma ha DDT con kind sbagliato, correggilo
+        if (instance && instanceDDT && !hasCorrectKind) {
+          console.log('[DDTHostAdapter] Correcting DDT with wrong kind for ProblemClassification', {
+            instanceId: instanceKey,
+            oldKind: firstMain?.kind,
+            newKind: 'intent'
+          });
+          instanceRepository.updateDDT(instanceKey, newDDT, currentProjectId || undefined);
+        }
+
+        return newDDT;
+      }
+
+      // Se il DDT esiste e ha kind === "intent", usalo
+      return instanceDDT;
+    }
+
+    // ✅ Per altri tipi, se esiste instanceDDT usalo, altrimenti placeholder vuoto
+    if (instanceDDT) {
+      return instanceDDT;
+    }
+
+    // Default: placeholder vuoto per altri tipi
+    return {
       id: `temp_ddt_${act.id}`,
       label: act.label || 'Data',
       _userLabel: act.label,
@@ -43,9 +86,10 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
   // Aggiorna currentDDT quando existingDDT cambia (al primo load se c'è un DDT salvato)
   React.useEffect(() => {
-    // Solo se existingDDT ha dati e currentDDT è ancora il placeholder vuoto
-    if (existingDDT && existingDDT.mainData && existingDDT.mainData.length > 0) {
-      const currentIsPlaceholder = currentDDT.id?.startsWith('temp_ddt_') && (!currentDDT.mainData || currentDDT.mainData.length === 0);
+    // ✅ Se esiste existingDDT, usalo SEMPRE (è quello salvato dall'utente)
+    if (existingDDT) {
+      // Solo se currentDDT è ancora un placeholder (non è stato ancora caricato)
+      const currentIsPlaceholder = currentDDT.id?.startsWith('temp_ddt_');
       if (currentIsPlaceholder) {
         setCurrentDDT(existingDDT);
       }

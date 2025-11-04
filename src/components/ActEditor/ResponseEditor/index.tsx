@@ -143,16 +143,17 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   // Header: icon, title, and toolbar
   const actType = (act?.type || 'DataRequest') as any;
 
-  // ✅ Verifica se ProblemClassification ha messaggi (mostra IntentMessagesBuilder se non ci sono)
+  // ✅ Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
   const needsIntentMessages = useMemo(() => {
-    return actType === 'ProblemClassification' && !hasIntentMessages(localDDT);
-  }, [actType, localDDT]);
+    const firstMain = mainList[0];
+    return firstMain?.kind === 'intent' && !hasIntentMessages(localDDT);
+  }, [mainList, localDDT]);
 
   // Wizard/general layout flags
-  // ✅ ProblemClassification non ha bisogno di wizard (nessuna struttura dati)
+  // ✅ Se kind === "intent" non ha bisogno di wizard (nessuna struttura dati)
   const [showWizard, setShowWizard] = useState<boolean>(() => {
-    const currentActType = (act?.type || 'DataRequest') as any;
-    if (currentActType === 'ProblemClassification') {
+    const firstMain = mainList[0];
+    if (firstMain?.kind === 'intent') {
       return false;
     }
     return isDDTEmpty(localDDT);
@@ -180,8 +181,9 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   });
 
   useEffect(() => {
-    // ✅ ProblemClassification non deve mostrare il wizard
-    if (actType === 'ProblemClassification') {
+    // ✅ Se kind === "intent" non deve mostrare il wizard
+    const firstMain = mainList[0];
+    if (firstMain?.kind === 'intent') {
       setShowWizard(false);
       wizardOwnsDataRef.current = false;
       return;
@@ -201,11 +203,11 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       // Removed verbose log
       setShowWizard(false);
       wizardOwnsDataRef.current = false;
-      try {
-        info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
-      } catch { }
-    }
-  }, [localDDT, actType]); // ✅ Aggiungere actType alle dipendenze
+          try {
+            info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
+          } catch { }
+        }
+      }, [localDDT, mainList]); // ✅ Usa mainList invece di actType
 
   // Nodo selezionato: root se selectedRoot, altrimenti main/sub in base agli indici
   const selectedNode = useMemo(() => {
@@ -466,8 +468,8 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         ) : (
           /* Normal editor layout with 3 panels (no header, already shown above) */
           <>
-            {/* Left navigation - hidden for ProblemClassification (no data structure) */}
-            {actType !== 'ProblemClassification' && (
+            {/* ✅ Left navigation - hidden quando mainData[0]?.kind === "intent" */}
+            {mainList[0]?.kind !== 'intent' && (
               <Sidebar
               ref={sidebarRef}
               mainList={mainList}

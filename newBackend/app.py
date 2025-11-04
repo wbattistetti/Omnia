@@ -25,6 +25,8 @@ try:
     from backend.ai_steps.stepSuccess import router as stepSuccess_router
     from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
     from backend.ai_steps.parse_address import router as parse_address_router
+    from backend.ai_steps.intentMessages import router as intentMessages_router
+    print("[INFO] Intent messages router loaded successfully")
 except ImportError as e:
     print(f"Warning: Could not import DDT wizard routers: {e}")
     # Fallback to empty routers
@@ -36,6 +38,7 @@ except ImportError as e:
     stepSuccess_router = APIRouter()
     stepNotConfirmed_router = APIRouter()
     parse_address_router = APIRouter()
+    intentMessages_router = APIRouter()
 
 # Import intent generation router from old backend
 try:
@@ -204,6 +207,7 @@ app.include_router(stepConfirmation_router)
 app.include_router(stepSuccess_router)
 app.include_router(stepNotConfirmed_router)
 app.include_router(parse_address_router)
+app.include_router(intentMessages_router)
 
 # Include NER and LLM extract routers (empty for now - will be implemented in api_nlp)
 app.include_router(ner_router)

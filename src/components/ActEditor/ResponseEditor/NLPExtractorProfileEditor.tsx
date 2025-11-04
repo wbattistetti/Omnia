@@ -115,16 +115,23 @@ export default function NLPExtractorProfileEditor({
   const [lastStats, setLastStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [activeTab, setActiveTab] = React.useState<'regex' | 'extractor' | 'post' | null>(null);
 
-  // ✅ Determina automaticamente il mode basandosi sul tipo di act
+  // ✅ Leggi kind da node.kind (mainData.kind) invece di actType
+  const nodeKind = React.useMemo(() => {
+    return node?.kind || 'generic';
+  }, [node?.kind]);
+
+  // ✅ Determina automaticamente il mode basandosi sul kind del nodo
   const testMode: 'extraction' | 'classification' = React.useMemo(() => {
-    // Priorità: actType prop > node.type > fallback
-    const type = actType || node?.type || node?.row?.type || (node?.rows?.[0] as any)?.type;
-    if (String(type).toLowerCase() === 'problemclassification') {
+    // Se kind === "intent" → classification mode
+    if (nodeKind === 'intent') {
       return 'classification';
     }
-    // Default: extraction mode per DataRequest e altri tipi
+    // Default: extraction mode per tutti gli altri kind
     return 'extraction';
-  }, [actType, node]);
+  }, [nodeKind]);
+
+  // ✅ Nascondi Kind selector, Confidence, Waiting quando kind === "intent"
+  const isIntentKind = nodeKind === 'intent';
 
   // State for regex AI generation (used in hidden section)
   const regexInputRef = React.useRef<HTMLInputElement>(null);
@@ -235,27 +242,31 @@ export default function NLPExtractorProfileEditor({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Header compatto + tab editor */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) 80px 1fr', alignItems: 'end', gap: 12 }}>
-          {/* Kind Selector Component */}
-          <KindSelector
-            kind={kind}
-            setKind={setKind}
-            lockKind={lockKind}
-            setLockKind={setLockKind}
-            inferredKind={inferredKind}
-          />
+        {/* ✅ Nascondi Kind, Confidence, Waiting quando kind === "intent" */}
+        {!isIntentKind && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) 80px 1fr', alignItems: 'end', gap: 12 }}>
+            {/* Kind Selector Component */}
+            <KindSelector
+              kind={kind}
+              setKind={setKind}
+              lockKind={lockKind}
+              setLockKind={setLockKind}
+              inferredKind={inferredKind}
+              hideIfIntent={true}
+            />
 
-          {/* Confidence Component */}
-          <ConfidenceInput value={minConf} onChange={setMinConf} />
+            {/* Confidence Component */}
+            <ConfidenceInput value={minConf} onChange={setMinConf} />
 
-          {/* Waiting Messages Component */}
-          <WaitingMessagesConfig
-            waitingNER={waitingEsc1}
-            setWaitingNER={setWaitingEsc1}
-            waitingLLM={waitingEsc2}
-            setWaitingLLM={setWaitingEsc2}
-          />
-        </div>
+            {/* Waiting Messages Component */}
+            <WaitingMessagesConfig
+              waitingNER={waitingEsc1}
+              setWaitingNER={setWaitingEsc1}
+              waitingLLM={waitingEsc2}
+              setWaitingLLM={setWaitingEsc2}
+            />
+          </div>
+        )}
 
         {/* OLD tab editors - now replaced by inline editors */}
         <div style={{ marginTop: 10, display: 'none' }}>

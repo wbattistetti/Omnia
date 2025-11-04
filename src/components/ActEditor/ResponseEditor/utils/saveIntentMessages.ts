@@ -3,7 +3,7 @@ import type { IntentMessages } from '../components/IntentMessagesBuilder';
 
 /**
  * Converte IntentMessages in formato DDT steps e li salva nel DDT
- * Per ProblemClassification, i messaggi vanno nel root DDT (non in mainData)
+ * Per ProblemClassification, i messaggi vanno in mainData[0].steps quando kind === "intent"
  */
 export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any {
   if (!ddt || !messages) return ddt;
@@ -11,9 +11,27 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
   // Crea una copia del DDT
   const updated = JSON.parse(JSON.stringify(ddt));
 
-  // Inizializza steps se non esiste
-  if (!updated.steps) {
-    updated.steps = {};
+  // ✅ Assicurati che mainData[0] esista e abbia kind === "intent"
+  if (!Array.isArray(updated.mainData) || updated.mainData.length === 0) {
+    // Se non c'è mainData, crealo con kind: "intent"
+    updated.mainData = [{
+      label: updated.label || 'Intent',
+      kind: 'intent',
+      steps: {},
+      subData: []
+    }];
+  }
+
+  const firstMain = updated.mainData[0];
+
+  // ✅ Assicurati che kind === "intent"
+  if (firstMain.kind !== 'intent') {
+    firstMain.kind = 'intent';
+  }
+
+  // ✅ Inizializza steps in mainData[0] se non esiste
+  if (!firstMain.steps) {
+    firstMain.steps = {};
   }
 
   // Helper per creare una escalation con un messaggio
@@ -39,21 +57,21 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
     escalations: messageList.map(msg => createEscalation(msg)),
   });
 
-  // Crea steps per ogni tipo di messaggio
+  // ✅ Crea steps per ogni tipo di messaggio in mainData[0].steps
   if (messages.start && messages.start.length > 0) {
-    updated.steps.start = createStep('start', messages.start);
+    firstMain.steps.start = createStep('start', messages.start);
   }
 
   if (messages.noInput && messages.noInput.length > 0) {
-    updated.steps.noInput = createStep('noInput', messages.noInput);
+    firstMain.steps.noInput = createStep('noInput', messages.noInput);
   }
 
   if (messages.noMatch && messages.noMatch.length > 0) {
-    updated.steps.noMatch = createStep('noMatch', messages.noMatch);
+    firstMain.steps.noMatch = createStep('noMatch', messages.noMatch);
   }
 
   if (messages.confirmation && messages.confirmation.length > 0) {
-    updated.steps.confirmation = createStep('confirmation', messages.confirmation);
+    firstMain.steps.confirmation = createStep('confirmation', messages.confirmation);
   }
 
   return updated;
