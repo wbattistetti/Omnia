@@ -1,16 +1,17 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { LeftGrid } from './ui/LeftGrid';
+import ItemList from '../../components/common/ItemList';
+import { useIntentStore } from './state/intentStore';
+import { GitBranch } from 'lucide-react';
 import { CenterPane } from './ui/CenterPane';
 import { TestGrid } from './ui/RightTest';
 import { actionRunAllTests } from './actions/runAllTests';
 import { actionRunVisibleTests } from './actions/runVisibleTests';
-import { useIntentStore } from './state/intentStore';
 import { getModelStatus, trainIntent, TrainingPhrase } from './services/trainingService';
 import { Brain, Loader2, Sparkles, AlertTriangle, Trash2, CheckCircle, XCircle, Tag } from 'lucide-react';
 import { ImportDropdown } from './ui/common/ImportDropdown';
 import { generateVariantsForIntent } from './services/variantsService';
 
-interface IntentEditorShellProps {
+interface EmbeddingEditorShellProps {
   inlineMode?: boolean;
 }
 
@@ -42,9 +43,10 @@ function GeneratePayoff({ lastGen }: { lastGen: { count: number; requested: numb
   );
 }
 
-export default function IntentEditorShell({ inlineMode = false }: IntentEditorShellProps){
+export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEditorShellProps){
   const selectedId = useIntentStore(s=>s.selectedId);
   const selected = useIntentStore(s=> s.intents.find(i=>i.id===s.selectedId));
+  const intents = useIntentStore(s=>s.intents);
   const posCount = selected?.variants.curated.length ?? 0;
   const [testing, setTesting] = React.useState(false);
   const [modelReady, setModelReady] = useState(false);
@@ -85,7 +87,7 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
       // Alert rimosso: training completato silenziosamente
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Training failed';
-      console.error('[IntentEditorShell] Training error:', err);
+      console.error('[EmbeddingEditorShell] Training error:', err);
       // Alert rimosso: errori solo in console
     } finally {
       setTraining(false);
@@ -164,7 +166,7 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
       const kind = trainingTab === 'pos' ? 'positive' : trainingTab === 'neg' ? 'negative' : 'keywords';
       const projectLang = (localStorage.getItem('project.lang') as any) || 'pt';
 
-      console.log('[IntentEditor][GENERATE][START]', {
+      console.log('[EmbeddingEditor][GENERATE][START]', {
         intentName: selected.name,
         kind,
         n: genN,
@@ -182,7 +184,7 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
         lang: projectLang
       });
 
-      console.log('[IntentEditor][GENERATE][RESULT]', {
+      console.log('[EmbeddingEditor][GENERATE][RESULT]', {
         intentName: selected.name,
         generatedCount: generated.length,
         generated: generated.slice(0, 5).map(g => g.substring(0, 50))
@@ -212,7 +214,7 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
         }
       }
 
-      console.log('[IntentEditor][GENERATE][ADDED_TO_STORE]', {
+      console.log('[EmbeddingEditor][GENERATE][ADDED_TO_STORE]', {
         intentId: selectedId,
         intentName: selected.name,
         added,
@@ -226,7 +228,7 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Errore durante la generazione';
       setGenError(errorMsg);
-      console.error('[IntentEditorShell] Generation error:', err);
+      console.error('[EmbeddingEditorShell] Generation error:', err);
     } finally {
       setGenerating(false);
     }
@@ -276,8 +278,8 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
   }, [selectedId]);
 
   React.useEffect(() => {
-    try { if (localStorage.getItem('debug.intent') === '1') console.log('[IntentEditorShell][mount]', { selectedId }); } catch {}
-    return () => { try { if (localStorage.getItem('debug.intent') === '1') console.log('[IntentEditorShell][unmount]'); } catch {} };
+    try { if (localStorage.getItem('debug.intent') === '1') console.log('[EmbeddingEditorShell][mount]', { selectedId }); } catch {}
+    return () => { try { if (localStorage.getItem('debug.intent') === '1') console.log('[EmbeddingEditorShell][unmount]'); } catch {} };
   }, [selectedId]);
 
   // ✅ Handler per il drag dello slider tra Intents e Training phrases
@@ -442,12 +444,27 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
           gap: 0
         }}
       >
-        {/* Intents panel - larghezza controllata */}
+        {/* Intents panel - larghezza controllata - READ ONLY per EmbeddingEditor */}
         <div
           className="flex-shrink-0"
           style={{ width: leftPanelWidth, minWidth: 250, maxWidth: 600 }}
         >
-          <LeftGrid />
+          <ItemList
+            items={intents.map(i => ({
+              id: i.id,
+              label: i.name,
+              meta: {
+                pos: i.variants.curated.length,
+                neg: i.variants.hardNeg.length,
+                key: (i.signals.keywords || []).length,
+              }
+            }))}
+            selectedId={selectedId}
+            onSelect={(id) => useIntentStore.getState().select(id)}
+            LeftIcon={GitBranch}
+            getBadge={(item) => item.meta?.pos ?? 0}
+            sort="alpha"
+          />
         </div>
 
         {/* ✅ Resize Handle tra Intents e Training phrases */}
@@ -777,5 +794,4 @@ export default function IntentEditorShell({ inlineMode = false }: IntentEditorSh
     </div>
   );
 }
-
 

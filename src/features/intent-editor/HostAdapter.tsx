@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import EditorHeader from '../../components/common/EditorHeader';
 import { getAgentActVisualsByType } from '../../components/Flowchart/utils/actVisuals';
-import IntentEditorShell from './IntentEditorShell';
+import EmbeddingEditorShell from './EmbeddingEditorShell';
 import { useIntentStore } from './state/intentStore';
 import { useTestStore } from './state/testStore';
 import type { ProblemPayload, ProblemIntent, ProblemEditorState } from '../../types/project';
@@ -188,7 +188,7 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
         onClose={props.onClose}
       />
       <div className="flex-1 min-h-0">
-        <IntentEditorShell />
+        <EmbeddingEditorShell />
       </div>
     </div>
   );

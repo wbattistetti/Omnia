@@ -1,5 +1,5 @@
 import React from 'react';
-import IntentEditorShell from '../../../../features/intent-editor/IntentEditorShell';
+import EmbeddingEditorShell from '../../../../features/intent-editor/EmbeddingEditorShell';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
 
 interface IntentEditorInlineEditorProps {
@@ -10,8 +10,8 @@ interface IntentEditorInlineEditorProps {
 }
 
 /**
- * Inline editor wrapper for IntentEditorShell
- * Adapts IntentEditorShell for use within NLPExtractorProfileEditor
+ * Inline editor wrapper for EmbeddingEditorShell
+ * Adapts EmbeddingEditorShell for use within NLPExtractorProfileEditor
  * Shows intent classifier/embeddings configuration
  */
 export default function IntentEditorInlineEditor({
@@ -39,9 +39,9 @@ export default function IntentEditorInlineEditor({
         </button>
       </div>
 
-      {/* IntentEditorShell with inlineMode prop */}
+      {/* EmbeddingEditorShell with inlineMode prop */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <IntentEditorShell inlineMode={true} />
+        <EmbeddingEditorShell inlineMode={true} />
       </div>
     </div>
   );
