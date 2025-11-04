@@ -42,6 +42,89 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     variableStore: {}
   });
 
+  // Always read nodes/edges from window.__flowNodes to get latest state
+  // This ensures we always have the correct row order - simple and direct
+  const getCurrentNodes = React.useCallback(() => {
+    try {
+      return (window as any).__flowNodes || nodes || [];
+    } catch {
+      return nodes || [];
+    }
+  }, [nodes]);
+
+  const getCurrentEdges = React.useCallback(() => {
+    try {
+      return (window as any).__flowEdges || edges || [];
+    } catch {
+      return edges || [];
+    }
+  }, [edges]);
+
+  const previousRowsMapRef = React.useRef<Record<string, string[]>>({});
+
+  React.useEffect(() => {
+    // Get latest nodes from window bridge
+    const currentNodes = getCurrentNodes();
+
+    // Track row order changes for currently executing nodes
+    if (state.isRunning && state.currentNodeId) {
+      const currentNode = currentNodes.find(n => n.id === state.currentNodeId);
+      const currentRows = (currentNode?.data?.rows || []) as any[];
+      const currentRowIds = currentRows.map((r: any) => r?.id || '').join(',');
+
+      const previousRowIds = previousRowsMapRef.current[state.currentNodeId] || '';
+
+      if (previousRowIds && previousRowIds !== currentRowIds) {
+        try {
+          console.log('[FlowOrchestrator][rows-reorder-detected]', {
+            nodeId: state.currentNodeId,
+            previousOrder: previousRowsMapRef.current[state.currentNodeId]?.split(','),
+            newOrder: currentRowIds.split(','),
+            previousOrderText: (previousRowsMapRef.current[state.currentNodeId]?.split(',') || []).map((id: string) => {
+              const prevNode = previousNodesRef.find(n => n.id === state.currentNodeId);
+              const prevRow = (prevNode?.data?.rows || []).find((r: any) => r?.id === id);
+              return prevRow?.text?.substring(0, 30) || id;
+            }),
+            newOrderText: currentRows.map((r: any) => r?.text?.substring(0, 30) || r?.id),
+            currentActIndex: state.currentActIndex,
+            action: 'Resetting currentActIndex to 0 because rows were reordered'
+          });
+        } catch { }
+
+        // Reset currentActIndex when rows are reordered for the active node
+        setState(prev => ({
+          ...prev,
+          currentActIndex: 0
+        }));
+      }
+
+      previousRowsMapRef.current[state.currentNodeId] = currentRowIds;
+    } else if (!state.isRunning) {
+      // Clear previous rows map when flow stops
+      previousRowsMapRef.current = {};
+    }
+
+    // Log when nodes change (only if debug is enabled to avoid spam)
+    try {
+      const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+      if (debugEnabled) {
+        console.log('[FlowOrchestrator][nodes-updated]', {
+          timestamp: new Date().toISOString(),
+          nodesCount: currentNodes.length,
+          currentNodeId: state.currentNodeId,
+          currentActIndex: state.currentActIndex,
+          isRunning: state.isRunning,
+          nodes: currentNodes.map(n => ({
+            id: n.id,
+            title: n.data?.title,
+            rowsCount: (n.data?.rows || []).length,
+            rowsOrder: (n.data?.rows || []).map((r: any) => ({ id: r?.id, text: r?.text?.substring(0, 30) }))
+          }))
+        });
+      }
+    } catch { }
+  }, [getCurrentNodes, state.currentNodeId, state.currentActIndex, state.isRunning]);
+
   // Normalize various DDT shapes (embedded snapshot with 'mains' → assembled with mainData)
   const toAssembled = useCallback((raw: any): AssembledDDT | null => {
     if (!raw) return null;
@@ -142,7 +225,8 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
   }, [resolveAct]);
 
   const start = useCallback(() => {
-    const entries = findEntryNodes(nodes, edges);
+    // Always read from the latest nodes array
+    const entries = findEntryNodes(getCurrentNodes(), getCurrentEdges());
     const ordered = entries.map(e => e.id);
 
     // Validazione: se non ci sono entry nodes, non partire
@@ -165,7 +249,7 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     }));
 
     // Drain will be handled by useEffect in DDEBubbleChat after state is set
-  }, [nodes, edges]);
+  }, [getCurrentNodes, getCurrentEdges]);
 
   const stop = useCallback(() => {
     setState(prev => ({
@@ -191,7 +275,8 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
       return { emitted: false, nextIndex: startIndex, nextDDT: null, nextContext: null, messages: [] };
     }
 
-    const node = nodes.find(n => n.id === state.currentNodeId);
+    // Always read from the latest nodes array to get the current row order
+    const node = getCurrentNodes().find(n => n.id === state.currentNodeId);
     const rows = (node?.data?.rows || []) as any[];
     const total = rows.length;
     let idx = startIndex;
@@ -202,11 +287,20 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
 
     try {
       console.log('[FlowOrchestrator][drain] Starting drain', {
+        timestamp: new Date().toISOString(),
         startIndex,
         total,
         nodeId: state.currentNodeId,
         nodeTitle: node?.data?.title,
-        rows: rows.map((r: any) => ({ id: r?.id, text: r?.text, type: r?.type, mode: r?.mode }))
+        rowsOrder: rows.map((r: any, i: number) => ({
+          index: i,
+          id: r?.id,
+          text: r?.text?.substring(0, 50),
+          type: r?.type,
+          mode: r?.mode
+        })),
+        rowsIds: rows.map((r: any) => r?.id),
+        source: 'window.__flowNodes'
       });
     } catch { }
 
@@ -216,7 +310,15 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
       const msg = actMessage(row);
 
       try {
-        console.log('[FlowOrchestrator][drain] Processing row', { idx, rowId: row?.id, rowText: row?.text, isInteractive, msgLength: msg?.length || 0, hasMsg: !!msg });
+        console.log('[FlowOrchestrator][drain] Processing row', {
+          idx,
+          rowId: row?.id,
+          rowText: row?.text?.substring(0, 50),
+          isInteractive,
+          msgLength: msg?.length || 0,
+          hasMsg: !!msg,
+          actualRowAtThisIndex: rows[idx] ? { id: rows[idx]?.id, text: rows[idx]?.text?.substring(0, 30) } : 'NO ROW'
+        });
       } catch { }
 
       // Always increment idx and add message (even if empty) to process all non-interactive acts
@@ -224,19 +326,43 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
         emitted = true;
         nonInteractiveMessages.push({ role: 'agent', text: msg, interactive: false, fromDDT: false });
         try {
-          console.log('[FlowOrchestrator][drain] Added message', { idx, text: msg.substring(0, 50) });
+          console.log('[FlowOrchestrator][drain] Added message', {
+            idx,
+            text: msg.substring(0, 50),
+            rowId: row?.id,
+            messageOrder: nonInteractiveMessages.length
+          });
         } catch { }
       } else {
         // Log if message is empty but act is non-interactive (for debugging)
         try {
-          console.warn('[FlowOrchestrator][drain] Empty message for non-interactive act:', { idx, rowId: row?.id, rowText: row?.text, rowType: row?.type, rowMode: row?.mode });
+          console.warn('[FlowOrchestrator][drain] Empty message for non-interactive act:', {
+            idx,
+            rowId: row?.id,
+            rowText: row?.text?.substring(0, 30),
+            rowType: row?.type,
+            rowMode: row?.mode
+          });
         } catch { }
       }
       idx += 1;
     }
 
     try {
-      console.log('[FlowOrchestrator][drain] Drain complete', { nextIndex: idx, messagesCount: nonInteractiveMessages.length, emitted });
+      console.log('[FlowOrchestrator][drain] Drain complete', {
+        nextIndex: idx,
+        messagesCount: nonInteractiveMessages.length,
+        emitted,
+        messages: nonInteractiveMessages.map((m, i) => ({
+          order: i,
+          text: m.text.substring(0, 50)
+        })),
+        nextRowIfExists: idx < total ? {
+          id: rows[idx]?.id,
+          text: rows[idx]?.text?.substring(0, 50),
+          isInteractive: actIsInteractive(rows[idx])
+        } : null
+      });
     } catch { }
 
     // If we hit an interactive act, prepare DDT
@@ -251,9 +377,10 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
 
         // Capture active context
         try {
-          const node = nodes.find(n => n.id === state.currentNodeId);
+          const currentNode = getCurrentNodes();
+          const node = currentNode.find(n => n.id === state.currentNodeId);
           const title = (node?.data as any)?.title || '';
-          const blockIndex = Math.max(0, (nodes || []).findIndex(n => n.id === state.currentNodeId));
+          const blockIndex = Math.max(0, currentNode.findIndex(n => n.id === state.currentNodeId));
           const blockName = normalizeName(title) || `blocco${blockIndex + 1}`;
           const actName = normalizeName(it?.name || it?.label || rows[idx]?.text || 'act');
           nextContext = { blockName, actName };
@@ -262,14 +389,26 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     }
 
     return { emitted, nextIndex: idx, nextDDT, nextContext, messages: nonInteractiveMessages };
-  }, [state.currentNodeId, nodes, actIsInteractive, actMessage, resolveAct, toAssembled, normalizeName]);
+  }, [state.currentNodeId, getCurrentNodes, actIsInteractive, actMessage, resolveAct, toAssembled, normalizeName]);
 
   const nextAct = useCallback(() => {
     if (!state.currentNodeId) return;
 
-    const node = nodes.find(n => n.id === state.currentNodeId);
-    const total = (node?.data?.rows || []) as any[];
+    // Always read from the latest nodes array to get the current row order
+    const node = getCurrentNodes().find(n => n.id === state.currentNodeId);
+    const rows = (node?.data?.rows || []) as any[];
+    const total = rows.length;
     const nextIdx = state.currentActIndex + 1;
+
+    try {
+      console.log('[FlowOrchestrator][nextAct]', {
+        currentNodeId: state.currentNodeId,
+        currentActIndex: state.currentActIndex,
+        nextIdx,
+        total,
+        rowsOrder: rows.map((r: any, i: number) => ({ index: i, id: r?.id, text: r?.text?.substring(0, 30) }))
+      });
+    } catch { }
 
     if (nextIdx < total) {
       // Move to next act in same node
@@ -282,7 +421,7 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
       }));
     } else {
       // Move to next node
-      const nextIds = nextNodes(state.currentNodeId, edges);
+      const nextIds = nextNodes(state.currentNodeId, getCurrentEdges());
       const first = nextIds[0];
 
       if (first) {
@@ -314,11 +453,11 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
         }
       }
     }
-  }, [state.currentNodeId, state.currentActIndex, state.queue, nodes, edges, drainSequentialNonInteractiveFrom]);
+  }, [state.currentNodeId, state.currentActIndex, state.queue, getCurrentEdges, drainSequentialNonInteractiveFrom, getCurrentNodes]);
 
   const getCurrentNode = useCallback((): Node<NodeData> | undefined => {
-    return state.currentNodeId ? nodes.find(n => n.id === state.currentNodeId) : undefined;
-  }, [state.currentNodeId, nodes]);
+    return state.currentNodeId ? getCurrentNodes().find(n => n.id === state.currentNodeId) : undefined;
+  }, [state.currentNodeId, getCurrentNodes]);
 
   const updateVariableStore = useCallback((updater: (prev: Record<string, any>) => Record<string, any>) => {
     setState(prev => ({
@@ -329,6 +468,11 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
 
   const setCurrentDDT = useCallback((ddt: AssembledDDT | null) => {
     setState(prev => ({ ...prev, currentDDT: ddt }));
+  }, []);
+
+  // Update currentActIndex when we find an interactive act (to stop further draining)
+  const updateCurrentActIndex = useCallback((newIndex: number) => {
+    setState(prev => ({ ...prev, currentActIndex: newIndex }));
   }, []);
 
   const onDDTCompleted = useCallback(() => {
@@ -361,6 +505,7 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     drainInitialMessages,
     updateVariableStore,
     setCurrentDDT,
+    updateCurrentActIndex,
     onDDTCompleted
   };
 }

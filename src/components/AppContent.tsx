@@ -154,9 +154,8 @@ export const AppContent: React.FC<AppContentProps> = ({
     return () => { };
   }, []);
 
-  // Stato globale per nodi e edge
-  const [nodes, setNodes] = useState<Node<NodeData>[]>([]);
-  const [edges, setEdges] = useState<Edge<EdgeData>[]>([]);
+  // Note: nodes/edges are read directly from window.__flowNodes by DDEBubbleChat in flow mode
+  // No local state needed to avoid flickering and synchronization issues
   // Stato per feedback salvataggio
   // const [isSaving, setIsSaving] = useState(false);
   // const [saveSuccess, setSaveSuccess] = useState(false);
@@ -377,8 +376,10 @@ export const AppContent: React.FC<AppContentProps> = ({
       setCurrentProject(newProject);
       try { localStorage.setItem('project.lang', String(projectInfo.language || 'pt')); } catch { }
       try { pdUpdate.setCurrentProjectId(boot.projectId); console.log('[Bootstrap][projectId][DRAFT]', boot.projectId); } catch { }
-      setNodes([]);
-      setEdges([]);
+      try {
+        (window as any).__flowNodes = [];
+        (window as any).__flowEdges = [];
+      } catch { }
       await refreshData();
       setAppState('mainApp');
       return true;
@@ -443,8 +444,10 @@ export const AppContent: React.FC<AppContentProps> = ({
       };
       setCurrentProject(newProject);
       try { if (meta && meta.language) localStorage.setItem('project.lang', String(meta.language)); } catch { }
-      setNodes(loadedNodes as any);
-      setEdges(loadedEdges as any);
+      try {
+        (window as any).__flowNodes = loadedNodes as any;
+        (window as any).__flowEdges = loadedEdges as any;
+      } catch { }
       await refreshData();
       setAppState('mainApp');
     } catch (err) {
@@ -620,7 +623,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                     if (pid && projectData) {
                       try {
                         const flows = (window as any).__flows || {};
-                        const main = flows?.main || { nodes, edges };
+                        const main = flows?.main || { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] };
                         console.log('[Save][precheck]', { pid, mainNodes: main.nodes?.length || 0, mainEdges: main.edges?.length || 0 });
                       } catch { }
                       const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -642,7 +645,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                       const tf0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       try {
                         const flows = (window as any).__flows || {};
-                        const main = flows?.main || { nodes, edges };
+                        const main = flows?.main || { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] };
                         console.log('[Flow][save][begin]', { pid, flowId: 'main', nodes: main.nodes?.length || 0, edges: main.edges?.length || 0 });
                       } catch { }
                       const svc = await import('../services/FlowPersistService');
@@ -650,7 +653,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                       // Final PUT immediate (explicit Save)
                       const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
                         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes, edges })
+                        body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] })
                       });
                       const tf1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       if (!putRes.ok) {
@@ -691,10 +694,22 @@ export const AppContent: React.FC<AppContentProps> = ({
                     </FlowWorkspaceProvider>
                   ) : (
                     <FlowEditor
-                      nodes={nodes}
-                      setNodes={setNodes}
-                      edges={edges}
-                      setEdges={setEdges}
+                      nodes={(window as any).__flowNodes || []}
+                      setNodes={(updater: any) => {
+                        try {
+                          const current = (window as any).__flowNodes || [];
+                          const updated = typeof updater === 'function' ? updater(current) : updater;
+                          (window as any).__flowNodes = updated;
+                        } catch { }
+                      }}
+                      edges={(window as any).__flowEdges || []}
+                      setEdges={(updater: any) => {
+                        try {
+                          const current = (window as any).__flowEdges || [];
+                          const updated = typeof updater === 'function' ? updater(current) : updater;
+                          (window as any).__flowEdges = updated;
+                        } catch { }
+                      }}
                       currentProject={currentProject}
                       setCurrentProject={setCurrentProject}
                       onPlayNode={onPlayNode}
@@ -728,8 +743,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 <div style={{ position: 'relative', width: '100%', height: '100%' }}>
                   <DDEBubbleChat
                     mode="flow"
-                    nodes={nodes}
-                    edges={edges}
+                    // nodes and edges are read directly from window.__flowNodes in flow mode
                   />
                   <ConditionEditor
                     open={conditionEditorOpen}

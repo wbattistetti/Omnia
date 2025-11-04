@@ -41,12 +41,18 @@ export default function DDEBubbleChat({
   translations,
   onUpdateDDT,
   mode = 'single-ddt',
-  nodes,
-  edges
+  nodes: propNodes,
+  edges: propEdges
 }: DDEBubbleChatProps) {
-  // Flow orchestrator (only active in flow mode)
+  // Flow orchestrator reads directly from window.__flowNodes in flow mode
+  // This ensures it always has the latest nodes/rows order without polling or synchronization
   const orchestrator = useFlowOrchestrator(
-    mode === 'flow' && nodes && edges ? { nodes, edges } : { nodes: [], edges: [] }
+    mode === 'flow'
+      ? {
+          nodes: (() => { try { return (window as any).__flowNodes || propNodes || []; } catch { return propNodes || []; } })(),
+          edges: (() => { try { return (window as any).__flowEdges || propEdges || []; } catch { return propEdges || []; } })()
+        }
+      : { nodes: propNodes || [], edges: propEdges || [] }
   );
 
   // Determine current DDT: from orchestrator in flow mode, from prop in single-ddt mode
@@ -197,11 +203,21 @@ export default function DDEBubbleChat({
 
   React.useEffect(() => {
     if (mode === 'flow' && orchestrator.isRunning && orchestrator.currentNodeId) {
+      // Don't drain if we already have an active DDT (waiting for user input)
+      if (orchestrator.currentDDT) {
+        return;
+      }
+
       const currentKey = `${orchestrator.currentNodeId}:${orchestrator.currentActIndex}`;
 
-      // Drain non-interactive messages when starting or advancing
-      if (lastNodeActKeyRef.current !== currentKey || lastDrainedIndexRef.current !== orchestrator.currentActIndex) {
+      // Only drain if we haven't already drained from this exact position
+      // This prevents infinite loops - once we drain, we mark it and don't drain again
+      const alreadyDrained = lastNodeActKeyRef.current === currentKey && lastDrainedIndexRef.current >= orchestrator.currentActIndex;
+
+      if (!alreadyDrained) {
         const result = orchestrator.drainSequentialNonInteractiveFrom(orchestrator.currentActIndex);
+
+        // Always update refs to mark we've drained from this position
         lastDrainedIndexRef.current = result.nextIndex;
         lastNodeActKeyRef.current = currentKey;
 
@@ -218,7 +234,14 @@ export default function DDEBubbleChat({
         }
 
         if (result.nextDDT) {
+          // Found interactive act - set DDT and update currentActIndex
+          // Setting currentDDT will prevent further draining in future useEffect runs
           orchestrator.setCurrentDDT(result.nextDDT);
+          orchestrator.updateCurrentActIndex(result.nextIndex);
+        } else {
+          // No interactive act found - update index to the position we reached
+          // This marks the position so we don't drain again from the same place
+          orchestrator.updateCurrentActIndex(result.nextIndex);
         }
       }
     } else if (!orchestrator.isRunning) {
@@ -227,7 +250,7 @@ export default function DDEBubbleChat({
       lastDrainedIndexRef.current = -1;
       lastNodeActKeyRef.current = '';
     }
-  }, [mode, orchestrator.isRunning, orchestrator.currentNodeId, orchestrator.currentActIndex, orchestrator.drainSequentialNonInteractiveFrom, orchestrator.setCurrentDDT]);
+  }, [mode, orchestrator.isRunning, orchestrator.currentNodeId, orchestrator.currentDDT, orchestrator.drainSequentialNonInteractiveFrom, orchestrator.setCurrentDDT, orchestrator.updateCurrentActIndex]);
 
   React.useEffect(() => {
     // Skip if no DDT active
