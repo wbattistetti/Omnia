@@ -75,10 +75,13 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
             opacity: 0.85,
             transition: 'opacity 120ms linear, transform 120ms ease'
           }}
-          className="hover:opacity-100 hover:scale-110"
+          className="hover:opacity-100 hover:scale-110 nodrag"
           title="Drag to move node"
-          onPointerDownCapture={() => {
-            console.log('🚀 [DRAG DEBUG] MOVE ICON - Normal drag started');
+          onMouseDown={(e) => {
+            // ✅ Previeni comportamento di default e avvia drag personalizzato
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🚀 [DRAG DEBUG] MOVE ICON - Starting custom node drag');
             onDragStart?.();
           }}
         >

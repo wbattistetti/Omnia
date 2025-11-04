@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { NodeProps } from 'reactflow';
+import { NodeProps, useReactFlow } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
 import { NodeDragHeader } from '../shared/NodeDragHeader';
 import { NodeHandles } from '../../NodeHandles';
@@ -84,6 +84,29 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ CORREZIONE 6: Ref per il container del nodo (dichiarato prima dell'uso)
   const nodeContainerRef = useRef<HTMLDivElement>(null);
+
+  // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo
+  const { getNode, setNodes, getViewport } = useReactFlow();
+
+  // ✅ NODE DRAG: Ref per gestire il drag personalizzato del nodo (solo quando parte dall'icona Move)
+  const nodeDragStateRef = useRef<{
+    startX: number;
+    startY: number;
+    nodeStartX: number;
+    nodeStartY: number;
+    isActive: boolean;
+  } | null>(null);
+
+  // ✅ NODE DRAG: Cleanup listener quando il componente viene smontato
+  React.useEffect(() => {
+    return () => {
+      if (nodeDragStateRef.current?.isActive) {
+        // Cleanup se il componente viene smontato durante un drag
+        document.body.style.cursor = 'default';
+        nodeDragStateRef.current = null;
+      }
+    };
+  }, []);
 
   // ✅ DRAG & DROP: Manage row drag and drop functionality
   const dragDrop = useNodeDragDrop({
@@ -300,45 +323,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         style={nodeStyles}
         tabIndex={-1}
         draggable={false}
-        onDragStart={(e) => {
-          // ✅ Con nodesDraggable={false}, questo non dovrebbe essere chiamato per drag normale
-          // Solo se draggable={true} viene impostato manualmente (es. dal pulsante Move)
-          const t = e.target as HTMLElement;
-          const hasNodrag = t?.classList.contains('nodrag') || !!t?.closest('.nodrag');
-
-          // ✅ Se parte da nodrag, blocca (non dovrebbe succedere, ma per sicurezza)
-          if (hasNodrag) {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }
-
-          // ✅ Se è un drag dalla toolbar (isToolbarDrag), permetti
-          if (isToolbarDrag) {
-            setIsDragging(true);
-            document.body.style.cursor = 'move';
-          } else {
-            // ✅ Altrimenti blocca (non dovrebbe succedere)
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }
-        }}
-        onDragEnd={() => {
-          // ✅ Reset flag connessione quando finisce il drag
-          if ((window as any).__isConnecting) {
-            (window as any).__isConnecting = false;
-          }
-          // ✅ Reset draggable a false quando finisce il drag
-          if (nodeContainerRef.current) {
-            nodeContainerRef.current.setAttribute('draggable', 'false');
-          }
-          // ✅ Reset flag globale
-          (window as any).__isToolbarDrag = null;
-          setIsDragging(false);
-          setIsToolbarDrag(false);
-          document.body.style.cursor = 'default';
-        }}
         onMouseEnter={handleNodeMouseEnter}
         onMouseLeave={handleNodeMouseLeave}
         onMouseDownCapture={(e) => {
@@ -386,15 +370,96 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               onToggleUnchecked={handleToggleUnchecked}
               hasUncheckedRows={hasUncheckedRows}
               onDragStart={() => {
-                // ✅ Quando clicchi sul pulsante Move, attiva il drag del nodo
-                if (nodeContainerRef.current) {
-                  nodeContainerRef.current.setAttribute('draggable', 'true');
+                // ✅ Verifica che NON ci sia una riga in drag (PROTEZIONE CRITICA)
+                const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
+                if (isDraggingRow) {
+                  // Se c'è una riga in drag, NON permettere il drag del nodo
+                  console.log('🚫 [NODE DRAG] Blocked - row is being dragged');
+                  return;
                 }
-                // ✅ Imposta flag globale per permettere il drag del nodo
+
+                // ✅ Ottieni la posizione corrente del nodo
+                const currentNode = getNode(id);
+                if (!currentNode) {
+                  console.warn('⚠️ [NODE DRAG] Node not found:', id);
+                  return;
+                }
+
+                // ✅ Prepara stato per drag personalizzato
+                const nodeEl = nodeContainerRef.current;
+                if (!nodeEl) return;
+
+                const nodeRect = nodeEl.getBoundingClientRect();
+                const viewport = getViewport();
+
+                nodeDragStateRef.current = {
+                  startX: nodeRect.left,
+                  startY: nodeRect.top,
+                  nodeStartX: currentNode.position.x,
+                  nodeStartY: currentNode.position.y,
+                  isActive: true
+                };
+
+                // ✅ Imposta flag e stato
                 (window as any).__isToolbarDrag = id;
                 (window as any).__blockNodeDrag = null;
                 setIsDragging(true);
                 setIsToolbarDrag(true);
+                document.body.style.cursor = 'move';
+
+                // ✅ Handler per mouse move - aggiorna posizione del nodo
+                const handleMouseMove = (e: MouseEvent) => {
+                  // ✅ VERIFICA CRITICA: se inizia un drag di riga, annulla il drag del nodo
+                  const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
+                  if (isDraggingRow) {
+                    console.log('🚫 [NODE DRAG] Row drag detected during node drag - cancelling');
+                    handleMouseUp();
+                    return;
+                  }
+
+                  if (!nodeDragStateRef.current?.isActive) return;
+
+                  // Calcola offset del mouse
+                  const deltaX = e.clientX - nodeDragStateRef.current.startX;
+                  const deltaY = e.clientY - nodeDragStateRef.current.startY;
+
+                  // Converti in coordinate React Flow (considera zoom)
+                  const flowDeltaX = deltaX / viewport.zoom;
+                  const flowDeltaY = deltaY / viewport.zoom;
+
+                  // Aggiorna posizione del nodo
+                  const newPosition = {
+                    x: nodeDragStateRef.current.nodeStartX + flowDeltaX,
+                    y: nodeDragStateRef.current.nodeStartY + flowDeltaY
+                  };
+
+                  setNodes((nds) => nds.map((n) =>
+                    n.id === id ? { ...n, position: newPosition } : n
+                  ));
+                };
+
+                // ✅ Handler per mouse up - termina il drag
+                const handleMouseUp = () => {
+                  if (!nodeDragStateRef.current?.isActive) return;
+
+                  // Reset stato
+                  nodeDragStateRef.current.isActive = false;
+                  nodeDragStateRef.current = null;
+
+                  // Rimuovi listener
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+
+                  // Reset flag e stato
+                  (window as any).__isToolbarDrag = null;
+                  setIsDragging(false);
+                  setIsToolbarDrag(false);
+                  document.body.style.cursor = 'default';
+                };
+
+                // ✅ Aggiungi listener globali (capture per intercettare anche eventi sopra altri elementi)
+                document.addEventListener('mousemove', handleMouseMove, { capture: true });
+                document.addEventListener('mouseup', handleMouseUp, { capture: true });
               }}
             />
           </div>
@@ -441,17 +506,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             }
           }}
           onMouseDown={() => {
-            if (showDragHeader) {
-              // ✅ Quando clicchi sulla toolbar, attiva il drag del nodo
-              if (nodeContainerRef.current) {
-                nodeContainerRef.current.setAttribute('draggable', 'true');
-              }
-              // ✅ Imposta flag globale per permettere il drag del nodo
-              (window as any).__isToolbarDrag = id;
-              (window as any).__blockNodeDrag = null;
-              setIsDragging(true);
-              setIsToolbarDrag(true);
-            }
+            // ✅ Questo handler è per il drag header, non per l'icona Move
+            // L'icona Move gestisce il drag tramite onDragStart callback
+            // Non serve più impostare draggable="true" qui
           }}
           onClick={(e) => {
             if (showDragHeader) {
@@ -470,15 +527,96 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             onToggleUnchecked={handleToggleUnchecked}
             hasUncheckedRows={hasUncheckedRows}
             onDragStart={() => {
-              // ✅ Quando clicchi sul pulsante Move, attiva il drag del nodo
-              if (nodeContainerRef.current) {
-                nodeContainerRef.current.setAttribute('draggable', 'true');
+              // ✅ Verifica che NON ci sia una riga in drag (PROTEZIONE CRITICA)
+              const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
+              if (isDraggingRow) {
+                // Se c'è una riga in drag, NON permettere il drag del nodo
+                console.log('🚫 [NODE DRAG] Blocked - row is being dragged');
+                return;
               }
-              // ✅ Imposta flag globale per permettere il drag del nodo
+
+              // ✅ Ottieni la posizione corrente del nodo
+              const currentNode = getNode(id);
+              if (!currentNode) {
+                console.warn('⚠️ [NODE DRAG] Node not found:', id);
+                return;
+              }
+
+              // ✅ Prepara stato per drag personalizzato
+              const nodeEl = nodeContainerRef.current;
+              if (!nodeEl) return;
+
+              const nodeRect = nodeEl.getBoundingClientRect();
+              const viewport = getViewport();
+
+              nodeDragStateRef.current = {
+                startX: nodeRect.left,
+                startY: nodeRect.top,
+                nodeStartX: currentNode.position.x,
+                nodeStartY: currentNode.position.y,
+                isActive: true
+              };
+
+              // ✅ Imposta flag e stato
               (window as any).__isToolbarDrag = id;
               (window as any).__blockNodeDrag = null;
               setIsDragging(true);
               setIsToolbarDrag(true);
+              document.body.style.cursor = 'move';
+
+              // ✅ Handler per mouse move - aggiorna posizione del nodo
+              const handleMouseMove = (e: MouseEvent) => {
+                // ✅ VERIFICA CRITICA: se inizia un drag di riga, annulla il drag del nodo
+                const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
+                if (isDraggingRow) {
+                  console.log('🚫 [NODE DRAG] Row drag detected during node drag - cancelling');
+                  handleMouseUp();
+                  return;
+                }
+
+                if (!nodeDragStateRef.current?.isActive) return;
+
+                // Calcola offset del mouse
+                const deltaX = e.clientX - nodeDragStateRef.current.startX;
+                const deltaY = e.clientY - nodeDragStateRef.current.startY;
+
+                // Converti in coordinate React Flow (considera zoom)
+                const flowDeltaX = deltaX / viewport.zoom;
+                const flowDeltaY = deltaY / viewport.zoom;
+
+                // Aggiorna posizione del nodo
+                const newPosition = {
+                  x: nodeDragStateRef.current.nodeStartX + flowDeltaX,
+                  y: nodeDragStateRef.current.nodeStartY + flowDeltaY
+                };
+
+                setNodes((nds) => nds.map((n) =>
+                  n.id === id ? { ...n, position: newPosition } : n
+                ));
+              };
+
+              // ✅ Handler per mouse up - termina il drag
+              const handleMouseUp = () => {
+                if (!nodeDragStateRef.current?.isActive) return;
+
+                // Reset stato
+                nodeDragStateRef.current.isActive = false;
+                nodeDragStateRef.current = null;
+
+                // Rimuovi listener
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+
+                // Reset flag e stato
+                (window as any).__isToolbarDrag = null;
+                setIsDragging(false);
+                setIsToolbarDrag(false);
+                document.body.style.cursor = 'default';
+              };
+
+              // ✅ Aggiungi listener globali (capture per intercettare anche eventi sopra altri elementi)
+              document.addEventListener('mousemove', handleMouseMove, { capture: true });
+              document.addEventListener('mouseup', handleMouseUp, { capture: true });
             }}
           />
         </div>
