@@ -37,6 +37,7 @@ export default function WaitingMessagesConfig({
             alignItems: 'center',
             gap: 4,
             marginBottom: 4,
+            height: '16px', // ✅ Altezza fissa per allineamento
           }}
         >
           <MessageCircle size={14} />
@@ -49,7 +50,7 @@ export default function WaitingMessagesConfig({
           style={{
             width: '100%',
             padding: '6px 8px',
-            border: '1px solid #ddd',
+            border: '2px solid #9ca3af',
             borderRadius: 6,
           }}
         />
@@ -63,6 +64,7 @@ export default function WaitingMessagesConfig({
             alignItems: 'center',
             gap: 4,
             marginBottom: 4,
+            height: '16px', // ✅ Altezza fissa per allineamento
           }}
         >
           <MessageCircle size={14} />
@@ -75,7 +77,7 @@ export default function WaitingMessagesConfig({
           style={{
             width: '100%',
             padding: '6px 8px',
-            border: '1px solid #ddd',
+            border: '2px solid #9ca3af',
             borderRadius: 6,
           }}
         />

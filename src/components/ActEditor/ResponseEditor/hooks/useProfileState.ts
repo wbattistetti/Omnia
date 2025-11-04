@@ -80,7 +80,7 @@ export function useProfileState(
       postProcess: p.postProcess,
       subSlots: p.subSlots,
       waitingEsc1: typeof p.waitingEsc1 === 'string' && p.waitingEsc1.trim() ? p.waitingEsc1 : 'Un istante…',
-      waitingEsc2: typeof p.waitingEsc2 === 'string' && p.waitingEsc2.trim() ? p.waitingEsc2 : 'Ancora un istante…',
+      waitingEsc2: typeof p.waitingEsc2 === 'string' && p.waitingEsc2.trim() ? p.waitingEsc2 : (node?.kind === 'intent' ? 'Un momento per favore, sto analizzando la sua richiesta' : 'Ancora un istante…'),
     };
 
     // 🔍 LOG: Verifica result.testCases

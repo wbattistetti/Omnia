@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wand2 } from 'lucide-react';
+import { Wand2, MessageCircle } from 'lucide-react';
 import RegexEditor from './RegexEditor';
 import NLPCompactEditor from './NLPCompactEditor';
 import PostProcessEditor from './PostProcessEditor';
@@ -241,10 +241,41 @@ export default function NLPExtractorProfileEditor({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Header compatto + tab editor */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-        {/* ✅ Nascondi Kind, Confidence, Waiting quando kind === "intent" */}
-        {!isIntentKind && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) 80px 1fr', alignItems: 'end', gap: 12 }}>
+      <div style={{ border: '2px solid #9ca3af', borderRadius: 12, padding: 12 }}>
+        {/* ✅ Quando kind === "intent", mostra solo Waiting LLM con messaggio diverso */}
+        {isIntentKind ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+            <div>
+              <label
+                style={{
+                  fontSize: 12,
+                  opacity: 0.8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  marginBottom: 4,
+                  height: '16px', // ✅ Altezza fissa per consistenza
+                }}
+              >
+                <MessageCircle size={14} />
+                Waiting LLM
+              </label>
+              <input
+                value={waitingEsc2 || 'Un momento per favore, sto analizzando la sua richiesta'}
+                onChange={(e) => setWaitingEsc2(e.target.value)}
+                title="Testo mostrato all'utente mentre si attende l'analisi LLM"
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  border: '2px solid #9ca3af',
+                  borderRadius: 6,
+                  background: '#f0fdf4',
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) 80px 1fr', gap: 12, alignItems: 'start' }}>
             {/* Kind Selector Component */}
             <KindSelector
               kind={kind}
@@ -474,7 +505,7 @@ export default function NLPExtractorProfileEditor({
 
       {/* Tester section - hidden when inline editor is active */}
       {!activeEditor && (
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+        <div style={{ border: '2px solid #9ca3af', borderRadius: 12, padding: 12 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Tester</div>
           {/* Controls toolbar */}
           <TesterControls

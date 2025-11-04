@@ -11,7 +11,7 @@ interface ConfidenceInputProps {
 export default function ConfidenceInput({ value, onChange }: ConfidenceInputProps) {
   return (
     <div>
-      <label style={{ fontSize: 12, opacity: 0.8 }}>Confidence</label>
+      <label style={{ fontSize: 12, opacity: 0.8, marginBottom: 4, display: 'block', height: '16px', lineHeight: '16px' }}>Confidence</label>
       <input
         type="number"
         min={0}
@@ -22,7 +22,7 @@ export default function ConfidenceInput({ value, onChange }: ConfidenceInputProp
         style={{
           width: 80,
           padding: 6,
-          border: '1px solid #ddd',
+          border: '2px solid #9ca3af',
           borderRadius: 8,
         }}
       />

@@ -100,10 +100,11 @@ export default function KindSelector({
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: 'flex-start',
+          marginBottom: 4,
         }}
       >
-        <label style={{ fontSize: 12, opacity: 0.8 }}>Kind</label>
+        <label style={{ fontSize: 12, opacity: 0.8, display: 'block', height: '16px', lineHeight: '16px' }}>Kind</label>
         <label
           style={{
             display: 'inline-flex',
@@ -153,7 +154,7 @@ export default function KindSelector({
                 gap: 8,
                 padding: 6,
                 border:
-                  kind === 'generic' ? '2px solid #ef4444' : '1px solid #ddd',
+                  kind === 'generic' ? '2px solid #ef4444' : '2px solid #9ca3af',
                 borderRadius: 8,
                 background: kind === 'generic' ? '#fef2f2' : '#fff',
                 cursor: 'pointer',
