@@ -38,14 +38,31 @@ export function getEscalationActions(node: any, stepType: string, level: number)
 
 export function resolveActionText(action: any, dict: Record<string, string>): string | undefined {
   if (!action) return undefined;
-  // Priority: action.text (edited text in DDT instance) > dict[key] (old translation values)
+  // Priority: action.text (edited text in DDT instance) > dict[key] (old translation values) > direct value
   // This ensures Chat Simulator uses the same source of truth as StepEditor
   if (action.text && typeof action.text === 'string' && action.text.trim().length > 0) {
     return action.text;
   }
   const p = Array.isArray(action.parameters) ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text') : undefined;
+  if (!p) return undefined;
+
   const key = p?.value;
-  if (key && dict[key]) return dict[key];
+  if (!key) return undefined;
+
+  // Try as translation key first
+  if (dict[key]) return dict[key];
+
+  // If not found in dict, try as direct text value
+  // A key is usually a short identifier like "start.1" or "ask.base"
+  // Direct text is usually longer, contains spaces, or looks like a sentence
+  if (typeof key === 'string') {
+    const trimmed = key.trim();
+    // If it looks like a sentence (has spaces or is longer than typical keys), use it directly
+    if (trimmed.length > 0 && (trimmed.includes(' ') || trimmed.length > 30 || !trimmed.match(/^[a-zA-Z0-9_.-]+$/))) {
+      return trimmed;
+    }
+  }
+
   return undefined;
 }
 

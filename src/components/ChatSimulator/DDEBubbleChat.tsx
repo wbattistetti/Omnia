@@ -79,6 +79,31 @@ export default function DDEBubbleChat({
   const debugEnabled = (() => { try { return localStorage.getItem('debug.chatSimulator') === '1'; } catch { return false; } })();
   const { state, send, reset, setConfig } = useDDTSimulator(template, { typingIndicatorMs: 0, debug: debugEnabled });
 
+  // Re-initialize simulator when template changes
+  // This ensures the simulator is ready when currentDDT changes
+  React.useEffect(() => {
+    if (!template || template.metadata.id === 'DDT_Empty' || template.metadata.id === 'DDT_Error') {
+      return;
+    }
+
+    // Re-initialize simulator with new template
+    // reset() calls setState(initEngine(template)) which updates state asynchronously
+    // The useEffect that emits messages will re-run when state changes
+    reset();
+    // Reset the initial message emitted flag for new DDT
+    initialMessageEmittedRef.current = '';
+
+    try {
+      if (debugEnabled) {
+        console.log('[DDEBubbleChat][SIMULATOR_RESET]', {
+          templateId: template.metadata.id,
+          templateLabel: template.metadata.label,
+          nodesCount: template.nodes?.length || 0
+        });
+      }
+    } catch { }
+  }, [template, reset, debugEnabled]);
+
   // Message ID generator with counter to ensure uniqueness
   const messageIdCounter = React.useRef(0);
   const generateMessageId = (prefix: string = 'msg') => {
@@ -89,6 +114,8 @@ export default function DDEBubbleChat({
 
   const [messages, setMessages] = React.useState<Message[]>([]);
   const lastKeyRef = React.useRef<string>('');
+  // Track if initial message has been emitted for current DDT (synchronous check)
+  const initialMessageEmittedRef = React.useRef<string>('');
   // Track no-input escalation counts per (mainIdx|subId|mode)
   const [noInputCounts, setNoInputCounts] = React.useState<Record<string, number>>({});
   // Track no-match escalation counts per (mainIdx|subId|mode)
@@ -222,20 +249,40 @@ export default function DDEBubbleChat({
         lastNodeActKeyRef.current = currentKey;
 
         if (result.messages.length > 0) {
-          // Convert orchestrator messages to DDEBubbleChat Message format
-          const newMessages: Message[] = result.messages.map((msg, idx) => ({
-            id: `noninteractive-${Date.now()}-${idx}`,
-            type: msg.role === 'user' ? 'user' : 'bot',
-            text: msg.text,
-            stepType: 'ask' as const,
-            color: getStepColor('ask')
-          }));
-          setNonInteractiveMessages(prev => [...prev, ...newMessages]);
+          // Messages are already in PlayedMessage format (from playMessage/playDDT)
+          // They include stepType, color, textKey, etc. - just use them directly
+          setNonInteractiveMessages(prev => [...prev, ...result.messages]);
         }
 
         if (result.nextDDT) {
           // Found interactive act - set DDT and update currentActIndex
           // Setting currentDDT will prevent further draining in future useEffect runs
+          try {
+            const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+            if (debugEnabled) {
+              console.log('[DDEBubbleChat][DDT_FOUND_IN_DRAIN]', {
+                nextIndex: result.nextIndex,
+                ddtId: result.nextDDT?.id,
+                ddtLabel: result.nextDDT?.label,
+                mainDataKind: Array.isArray(result.nextDDT?.mainData)
+                  ? result.nextDDT.mainData[0]?.kind
+                  : (result.nextDDT?.mainData as any)?.kind,
+                hasStartStep: Array.isArray(result.nextDDT?.mainData)
+                  ? !!result.nextDDT.mainData[0]?.steps?.start
+                  : !!(result.nextDDT?.mainData as any)?.steps?.start,
+                startStepDetails: Array.isArray(result.nextDDT?.mainData)
+                  ? (result.nextDDT.mainData[0]?.steps?.start ? {
+                      type: result.nextDDT.mainData[0].steps.start.type,
+                      escalationsCount: result.nextDDT.mainData[0].steps.start.escalations?.length || 0
+                    } : null)
+                  : ((result.nextDDT?.mainData as any)?.steps?.start ? {
+                      type: (result.nextDDT.mainData as any).steps.start.type,
+                      escalationsCount: (result.nextDDT.mainData as any).steps.start.escalations?.length || 0
+                    } : null)
+              });
+            }
+          } catch { }
+
           orchestrator.setCurrentDDT(result.nextDDT);
           orchestrator.updateCurrentActIndex(result.nextIndex);
         } else {
@@ -254,7 +301,37 @@ export default function DDEBubbleChat({
 
   React.useEffect(() => {
     // Skip if no DDT active
-    if (!currentDDT) return;
+    if (!currentDDT) {
+      try {
+        const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+        if (debugEnabled) {
+          console.log('[DDEBubbleChat][NO_DDT]', {
+            orchestratorCurrentDDT: orchestrator.currentDDT,
+            propCurrentDDT: propCurrentDDT,
+            mode
+          });
+        }
+      } catch { }
+      return;
+    }
+
+    try {
+      const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+      if (debugEnabled) {
+        console.log('[DDEBubbleChat][DDT_ACTIVE]', {
+          ddtId: currentDDT?.id,
+          ddtLabel: currentDDT?.label,
+          stateMode: state.mode,
+          messagesCount: messages.length,
+          mainDataKind: Array.isArray(currentDDT?.mainData)
+            ? currentDDT.mainData[0]?.kind
+            : (currentDDT?.mainData as any)?.kind,
+          firstMainSteps: Array.isArray(currentDDT?.mainData)
+            ? (currentDDT.mainData[0]?.steps ? Object.keys(currentDDT.mainData[0].steps) : [])
+            : ((currentDDT?.mainData as any)?.steps ? Object.keys((currentDDT.mainData as any).steps) : [])
+        });
+      }
+    } catch { }
 
     // On mount or reset, show initial ask
     const key = getPositionKey(state);
@@ -264,7 +341,24 @@ export default function DDEBubbleChat({
       ? (currentDDT as any)?.mainData[0]
       : (currentDDT as any)?.mainData;
     const legacySub = undefined;
-    if (!main) return;
+
+    // If simulator is not ready yet (main is undefined), wait for it
+    // reset() updates state asynchronously, so this useEffect will re-run when state changes
+    // Single clean path: always wait for simulator to be ready before emitting
+    if (!main) {
+      try {
+        const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+        if (debugEnabled) {
+          console.log('[DDEBubbleChat][WAITING_FOR_SIMULATOR]', {
+            hasCurrentDDT: !!currentDDT,
+            ddtId: currentDDT?.id,
+            stateMode: state.mode,
+            note: 'Waiting for simulator state to update after reset() - useEffect will re-run automatically'
+          });
+        }
+      } catch { }
+      return; // Wait for state to update after reset() - useEffect will re-run automatically
+    }
     // If we are collecting a main but it is already saturated (all subs present), auto-advance to confirmation
     if (state.mode === 'CollectingMain' && main && Array.isArray((main as any).subs) && (main as any).subs.length > 0) {
       const allPresent = (main as any).subs.every((sid: string) => {
@@ -277,7 +371,12 @@ export default function DDEBubbleChat({
       }
     }
 
-    if (!messages.length) {
+    // Check if we've already emitted the initial message for this DDT
+    // Use a ref to track emission synchronously (messages.length is async)
+    const ddtKey = currentDDT?.id || '';
+    const hasEmittedInitial = initialMessageEmittedRef.current === ddtKey && ddtKey !== '';
+
+    if (!hasEmittedInitial) {
       // First, check if there's an introduction step in the root DDT
       const introductionStep = (currentDDT as any)?.introduction;
       if (introductionStep && Array.isArray(introductionStep.escalations) && introductionStep.escalations.length > 0) {
@@ -312,9 +411,91 @@ export default function DDEBubbleChat({
       }
 
       // No introduction, show first main ask
-      const { text, key } = resolveAsk(main, undefined, translations, legacyDict, legacyMain, legacySub);
-      setMessages([{ id: 'init', type: 'bot', text, stepType: 'ask', textKey: key, color: getStepColor('ask') }]);
-      lastKeyRef.current = key || 'ask.base';
+      // resolveAsk handles both intent (start) and data extraction (ask) uniformly
+      // At this point, main is guaranteed to be available (we returned early if not)
+      try {
+        const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+
+        if (debugEnabled) {
+            console.log('[DDEBubbleChat][INIT_MESSAGE]', {
+            hasMain: !!main,
+            hasLegacyMain: !!legacyMain,
+            mainKind: main?.kind,
+            legacyMainKind: legacyMain?.kind,
+            legacyMainSteps: legacyMain?.steps ? Object.keys(legacyMain.steps) : [],
+            currentDDT: currentDDT ? {
+              id: currentDDT.id,
+              label: currentDDT.label,
+              mainDataCount: Array.isArray(currentDDT.mainData) ? currentDDT.mainData.length : (currentDDT.mainData ? 1 : 0),
+              firstMainKind: Array.isArray(currentDDT.mainData) ? currentDDT.mainData[0]?.kind : (currentDDT.mainData as any)?.kind
+            } : null,
+            ddtKey,
+            hasEmittedInitial,
+            initialMessageEmittedRef: initialMessageEmittedRef.current
+          });
+        }
+
+        const { text, key: resolvedKey, stepType } = resolveAsk(main, undefined, translations, legacyDict, legacyMain, legacySub);
+
+        if (debugEnabled) {
+          console.log('[DDEBubbleChat][RESOLVE_ASK_RESULT]', {
+            hasText: !!text,
+            textLength: text?.length || 0,
+            textPreview: text?.substring(0, 100),
+            key: resolvedKey,
+            stepType,
+            willSetMessage: !!text
+          });
+        }
+
+        // Use stepType from resolveAsk if provided, otherwise default to 'ask'
+        const finalStepType = stepType || 'ask';
+
+        if (text) {
+          setMessages([{
+            id: 'init',
+            type: 'bot',
+            text,
+            stepType: finalStepType,
+            textKey: resolvedKey,
+            color: getStepColor(finalStepType)
+          }]);
+          lastKeyRef.current = resolvedKey || (finalStepType === 'start' ? 'start' : 'ask.base');
+          initialMessageEmittedRef.current = ddtKey; // Mark as emitted for this DDT
+
+          if (debugEnabled) {
+            console.log('[DDEBubbleChat][MESSAGE_SET]', {
+              stepType: finalStepType,
+              textLength: text.length,
+              lastKeyRef: lastKeyRef.current,
+              ddtKey
+            });
+          }
+        } else {
+          if (debugEnabled) {
+            console.warn('[DDEBubbleChat][NO_MESSAGE]', {
+              reason: 'resolveAsk returned empty text',
+              mainKind: main?.kind,
+              legacyMainKind: legacyMain?.kind
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[DDEBubbleChat][INIT_MESSAGE_ERROR]', err);
+      }
+      return;
+    } else {
+      try {
+        const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+        if (debugEnabled) {
+          console.log('[DDEBubbleChat][INIT_MESSAGE_SKIP]', {
+            reason: 'Already emitted initial message for this DDT',
+            ddtKey,
+            initialMessageEmittedRef: initialMessageEmittedRef.current,
+            messagesLength: messages.length
+          });
+        }
+      } catch { }
       return;
     }
     if (lastKeyRef.current === key) return;
@@ -389,7 +570,7 @@ export default function DDEBubbleChat({
       // 🆕 Instant in debug mode, no delay
       void send('');
     }
-  }, [state]);
+  }, [state, currentDDT, translations, legacyDict, mode, messages, send]);
 
   // 🆕 Clear input when sent text appears as a user message (frozen label)
   // This happens after handleSend adds the message to messages, before engine processes
@@ -476,6 +657,7 @@ export default function DDEBubbleChat({
             setNonInteractiveMessages([]);
             lastKeyRef.current = '';
             messageIdCounter.current = 0;
+            initialMessageEmittedRef.current = '';
             setNoMatchCounts({});
             setNoInputCounts({});
             if (mode === 'flow') {
@@ -493,6 +675,19 @@ export default function DDEBubbleChat({
           Typing 150ms
         </button>
       </div>
+      {/* Error message from orchestrator (e.g., DDT validation failed) */}
+      {mode === 'flow' && orchestrator.error && (
+        <div className="mx-4 mt-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+          <AlertTriangle size={16} className="flex-shrink-0 text-red-600 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800">Errore DDT</p>
+            <p className="text-xs text-red-700 mt-1">{orchestrator.error}</p>
+            <p className="text-xs text-red-600 mt-2">
+              Il debugger si è fermato. Controlla che il DDT sia configurato correttamente per questo atto.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={scrollContainerRef}>
         {allMessages.map((m) => {
           // Render user message

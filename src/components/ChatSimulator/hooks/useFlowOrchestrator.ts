@@ -4,6 +4,8 @@ import { NodeData, EdgeData } from '../../Flowchart/types/flowTypes';
 import { useProjectData } from '../../../context/ProjectDataContext';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import { instanceRepository } from '../../../services/InstanceRepository';
+import { getDDTForRow, validateDDT, isRowInteractive } from './rowHelpers';
+import { playMessage, type PlayedMessage } from './flowRowPlayer';
 
 function findEntryNodes(nodes: Node<NodeData>[], edges: Edge<EdgeData>[]): Node<NodeData>[] {
   const targets = new Set((edges || []).map(e => e.target));
@@ -27,6 +29,7 @@ interface FlowOrchestratorState {
   currentDDT: AssembledDDT | null;
   activeContext: { blockName: string; actName: string } | null;
   variableStore: Record<string, any>;
+  error: string | null;
 }
 
 export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) {
@@ -39,7 +42,8 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     isRunning: false,
     currentDDT: null,
     activeContext: null,
-    variableStore: {}
+    variableStore: {},
+    error: null
   });
 
   // Always read nodes/edges from window.__flowNodes to get latest state
@@ -104,25 +108,12 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
       previousRowsMapRef.current = {};
     }
 
-    // Log when nodes change (only if debug is enabled to avoid spam)
-    try {
-      const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
-      if (debugEnabled) {
-        console.log('[FlowOrchestrator][nodes-updated]', {
-          timestamp: new Date().toISOString(),
-          nodesCount: currentNodes.length,
-          currentNodeId: state.currentNodeId,
-          currentActIndex: state.currentActIndex,
-          isRunning: state.isRunning,
-          nodes: currentNodes.map(n => ({
-            id: n.id,
-            title: n.data?.title,
-            rowsCount: (n.data?.rows || []).length,
-            rowsOrder: (n.data?.rows || []).map((r: any) => ({ id: r?.id, text: r?.text?.substring(0, 30) }))
-          }))
-        });
-      }
-    } catch { }
+    // REMOVED: Log troppo verboso che causa spam nella console
+    // I log importanti per il debug sono già presenti in:
+    // - [FlowOrchestrator][DDT_SET] quando trova un DDT interattivo
+    // - [FlowOrchestrator][drain] per il processo di drain
+    // - [DDEBubbleChat][DDT_ACTIVE] quando il DDT diventa attivo
+    // - [resolveAsk] per la risoluzione dei messaggi
   }, [getCurrentNodes, state.currentNodeId, state.currentActIndex, state.isRunning]);
 
   // Normalize various DDT shapes (embedded snapshot with 'mains' → assembled with mainData)
@@ -170,10 +161,9 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
   }, [data]);
 
   const actIsInteractive = useCallback((row: any) => {
-    const it = resolveAct(row);
-    const mode = it?.mode || (row as any)?.mode;
-    return Boolean(it?.ddt || (mode && ['DataRequest', 'DataConfirmation'].includes(mode)));
-  }, [resolveAct]);
+    // Use the new helper function with strong guards
+    return isRowInteractive(row, resolveAct, toAssembled);
+  }, [resolveAct, toAssembled]);
 
   const actMessage = useCallback((row: any) => {
     // For Message acts, read text from instance (row.id is the instanceId)
@@ -260,8 +250,16 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
       currentActIndex: 0,
       currentDDT: null,
       activeContext: null,
-      variableStore: {}
+      variableStore: {},
+      error: null
     }));
+  }, []);
+
+  // Message ID generator for playMessage
+  const messageIdCounter = useRef(0);
+  const generateMessageId = useCallback((prefix: string = 'msg') => {
+    messageIdCounter.current += 1;
+    return `${prefix}-${Date.now()}-${messageIdCounter.current}`;
   }, []);
 
   const drainSequentialNonInteractiveFrom = useCallback((startIndex: number): {
@@ -269,7 +267,7 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     nextIndex: number;
     nextDDT: AssembledDDT | null;
     nextContext: { blockName: string; actName: string } | null;
-    messages: Array<{ role: 'agent' | 'system' | 'user'; text: string; interactive: false; fromDDT: false }>;
+    messages: PlayedMessage[];
   } => {
     if (!state.currentNodeId) {
       return { emitted: false, nextIndex: startIndex, nextDDT: null, nextContext: null, messages: [] };
@@ -282,8 +280,8 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     let idx = startIndex;
     let emitted = false;
 
-    // Emit non-interactive messages
-    const nonInteractiveMessages: Array<{ role: 'agent' | 'system' | 'user'; text: string; interactive: false; fromDDT: false }> = [];
+    // Emit non-interactive messages using playMessage
+    const playedMessages: PlayedMessage[] = [];
 
     try {
       console.log('[FlowOrchestrator][drain] Starting drain', {
@@ -304,92 +302,138 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
       });
     } catch { }
 
+    // Process non-interactive rows using playMessage
     while (idx < total && !actIsInteractive(rows[idx])) {
       const row = rows[idx];
-      const isInteractive = actIsInteractive(row);
-      const msg = actMessage(row);
+      const messages = playMessage(row, generateMessageId);
 
-      try {
-        console.log('[FlowOrchestrator][drain] Processing row', {
-          idx,
-          rowId: row?.id,
-          rowText: row?.text?.substring(0, 50),
-          isInteractive,
-          msgLength: msg?.length || 0,
-          hasMsg: !!msg,
-          actualRowAtThisIndex: rows[idx] ? { id: rows[idx]?.id, text: rows[idx]?.text?.substring(0, 30) } : 'NO ROW'
-        });
-      } catch { }
-
-      // Always increment idx and add message (even if empty) to process all non-interactive acts
-      if (msg) {
+      if (messages.length > 0) {
         emitted = true;
-        nonInteractiveMessages.push({ role: 'agent', text: msg, interactive: false, fromDDT: false });
+        playedMessages.push(...messages);
         try {
-          console.log('[FlowOrchestrator][drain] Added message', {
-            idx,
-            text: msg.substring(0, 50),
-            rowId: row?.id,
-            messageOrder: nonInteractiveMessages.length
-          });
-        } catch { }
-      } else {
-        // Log if message is empty but act is non-interactive (for debugging)
-        try {
-          console.warn('[FlowOrchestrator][drain] Empty message for non-interactive act:', {
-            idx,
-            rowId: row?.id,
-            rowText: row?.text?.substring(0, 30),
-            rowType: row?.type,
-            rowMode: row?.mode
-          });
+          const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+          if (debugEnabled) {
+            console.log('[FlowOrchestrator][drain][playMessage]', {
+              idx,
+              rowId: row?.id,
+              rowText: row?.text?.substring(0, 50),
+              messagesCount: messages.length,
+              firstMessageText: messages[0]?.text?.substring(0, 50)
+            });
+          }
         } catch { }
       }
       idx += 1;
     }
 
-    try {
-      console.log('[FlowOrchestrator][drain] Drain complete', {
-        nextIndex: idx,
-        messagesCount: nonInteractiveMessages.length,
-        emitted,
-        messages: nonInteractiveMessages.map((m, i) => ({
-          order: i,
-          text: m.text.substring(0, 50)
-        })),
-        nextRowIfExists: idx < total ? {
-          id: rows[idx]?.id,
-          text: rows[idx]?.text?.substring(0, 50),
-          isInteractive: actIsInteractive(rows[idx])
-        } : null
-      });
-    } catch { }
-
-    // If we hit an interactive act, prepare DDT
+    // If we hit an interactive act, get DDT and validate it (but don't emit message)
+    // The message will be emitted by the simulator when it's ready
     let nextDDT: AssembledDDT | null = null;
     let nextContext: { blockName: string; actName: string } | null = null;
 
     if (idx < total && actIsInteractive(rows[idx])) {
-      const it: any = resolveAct(rows[idx]);
-      if (it?.ddt) {
-        const assembled = toAssembled(it.ddt);
-        nextDDT = assembled;
+      const row = rows[idx];
 
-        // Capture active context
+      // Get DDT from instance - NO FALLBACK
+      const ddt = getDDTForRow(row, resolveAct, toAssembled);
+
+      // Validate DDT with basic structure check only
+      // Type-specific message validation is done later when emitting messages
+      // Here we only check: DDT exists, has mainData, has label
+      const validation = validateDDT(ddt, undefined, true); // basicOnly = true
+
+      if (!validation.valid) {
+        // 🛑 FERMA IL DEBUGGER E SEGNALA ERRORE
+        const rowText = row?.text || row?.id || 'unknown';
+        const errorMessage = `DDT mancante o non valido per "${rowText}": ${validation.reason}`;
+
         try {
-          const currentNode = getCurrentNodes();
-          const node = currentNode.find(n => n.id === state.currentNodeId);
-          const title = (node?.data as any)?.title || '';
-          const blockIndex = Math.max(0, currentNode.findIndex(n => n.id === state.currentNodeId));
-          const blockName = normalizeName(title) || `blocco${blockIndex + 1}`;
-          const actName = normalizeName(it?.name || it?.label || rows[idx]?.text || 'act');
-          nextContext = { blockName, actName };
+          console.error('[FlowOrchestrator][DDT_VALIDATION_FAILED]', {
+            rowId: row?.id,
+            rowText,
+            rowType: row?.type,
+            reason: validation.reason,
+            action: 'Stopping debugger - DDT missing or invalid'
+          });
         } catch { }
+
+        // Imposta errore nello state per mostrare nel UI
+        setState(prev => ({
+          ...prev,
+          isRunning: false,
+          error: errorMessage
+        }));
+
+        return { emitted, nextIndex: idx, nextDDT: null, nextContext: null, messages: playedMessages };
       }
+
+      // DDT valido → imposta nextDDT
+      // Il messaggio iniziale verrà emesso dal simulatore quando è pronto
+      nextDDT = ddt;
+
+      try {
+        const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+        if (debugEnabled) {
+          const firstMain = Array.isArray(ddt?.mainData) ? ddt.mainData[0] : (ddt?.mainData as any);
+          const steps = firstMain?.steps || {};
+          const stepsKeys = typeof steps === 'object' ? Object.keys(steps) : [];
+
+          console.log('[FlowOrchestrator][DDT_FOUND]', {
+            rowId: row?.id,
+            rowText: row?.text,
+            rowType: row?.type,
+            ddtId: ddt?.id,
+            ddtLabel: ddt?.label,
+            mainDataCount: Array.isArray(ddt?.mainData) ? ddt.mainData.length : (ddt?.mainData ? 1 : 0),
+            firstMain: {
+              kind: firstMain?.kind,
+              label: firstMain?.label,
+              stepsKeys,
+              hasStartStep: !!steps?.start,
+              hasAskStep: !!steps?.ask
+            },
+            note: 'DDT will be initialized by simulator, message will be emitted when simulator is ready'
+          });
+        }
+      } catch { }
+
+      // Capture active context
+      try {
+        const currentNode = getCurrentNodes();
+        const node = currentNode.find(n => n.id === state.currentNodeId);
+        const title = (node?.data as any)?.title || '';
+        const blockIndex = Math.max(0, currentNode.findIndex(n => n.id === state.currentNodeId));
+        const blockName = normalizeName(title) || `blocco${blockIndex + 1}`;
+        const it: any = resolveAct(row);
+        const actName = normalizeName(it?.name || it?.label || row?.text || 'act');
+        nextContext = { blockName, actName };
+      } catch { }
     }
 
-    return { emitted, nextIndex: idx, nextDDT, nextContext, messages: nonInteractiveMessages };
-  }, [state.currentNodeId, getCurrentNodes, actIsInteractive, actMessage, resolveAct, toAssembled, normalizeName]);
+    try {
+      const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+      if (debugEnabled) {
+        console.log('[FlowOrchestrator][drain] Drain complete', {
+          nextIndex: idx,
+          messagesCount: playedMessages.length,
+          emitted,
+          messages: playedMessages.map((m, i) => ({
+            order: i,
+            text: m.text.substring(0, 50),
+            stepType: m.stepType
+          })),
+          nextRowIfExists: idx < total ? {
+            id: rows[idx]?.id,
+            text: rows[idx]?.text?.substring(0, 50),
+            isInteractive: actIsInteractive(rows[idx])
+          } : null,
+          hasNextDDT: !!nextDDT
+        });
+      }
+    } catch { }
+
+    return { emitted, nextIndex: idx, nextDDT, nextContext, messages: playedMessages };
+  }, [state.currentNodeId, getCurrentNodes, actIsInteractive, resolveAct, toAssembled, normalizeName, generateMessageId]);
 
   const nextAct = useCallback(() => {
     if (!state.currentNodeId) return;
@@ -495,6 +539,7 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
     currentDDT: state.currentDDT,
     activeContext: state.activeContext,
     variableStore: state.variableStore,
+    error: state.error,
 
     // Actions
     start,

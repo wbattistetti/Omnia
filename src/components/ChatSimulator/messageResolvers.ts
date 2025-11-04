@@ -200,34 +200,132 @@ export function resolveAsk(
   legacyDict?: Record<string, string>,
   legacyNode?: any,
   legacySub?: any
-): { text: string; key?: string } {
-  // Try legacy deref first (exact same as legacy simulator)
-  if (legacyNode) {
-    const actions = getEscalationActions(legacySub || legacyNode, 'start', 1);
-    for (const a of actions) {
-      const txt = resolveActionText(a, legacyDict || {});
-      if (txt) {
-        // eslint-disable-next-line no-console
-        return { text: txt, key: a?.parameters?.[0]?.value };
+): { text: string; key?: string; stepType?: 'start' | 'ask' } {
+  try {
+    const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
+
+    // Merge translations with legacyDict upfront for consistent usage
+    const mergedTranslations = { ...(legacyDict || {}), ...(translations || {}) };
+
+    if (debugEnabled) {
+      console.log('[resolveAsk][START]', {
+        hasNode: !!node,
+        hasSub: !!sub,
+        hasLegacyNode: !!legacyNode,
+        hasLegacySub: !!legacySub,
+        nodeKind: node?.kind,
+        legacyNodeKind: legacyNode?.kind,
+        nodeSteps: node?.steps ? Object.keys(node.steps) : [],
+        legacyNodeSteps: legacyNode?.steps ? Object.keys(legacyNode.steps) : []
+      });
+    }
+
+    // Try legacy deref first - this works for both intent (start) and data extraction
+    // For intent, this will find steps.start; for data, it may find steps.start or fall through to ask
+    if (legacyNode || legacySub) {
+      const targetNode = legacySub || legacyNode;
+      const actions = getEscalationActions(targetNode, 'start', 1);
+
+      if (debugEnabled) {
+        console.log('[resolveAsk][LEGACY_START]', {
+          targetNodeKind: targetNode?.kind,
+          targetNodeSteps: targetNode?.steps ? Object.keys(targetNode.steps) : [],
+          actionsCount: actions.length,
+          actions: actions.map((a: any) => ({
+            actionId: a?.actionId,
+            hasText: !!a?.text,
+            textLength: a?.text?.length || 0,
+            parameters: a?.parameters?.map((p: any) => ({ id: p?.parameterId || p?.key, value: p?.value?.substring(0, 50) }))
+          }))
+        });
+      }
+
+      for (const a of actions) {
+        // Use mergedTranslations instead of just legacyDict
+        const txt = resolveActionText(a, mergedTranslations);
+
+        if (debugEnabled) {
+          const textParam = a?.parameters?.find((p: any) => (p?.parameterId || p?.key) === 'text');
+          console.log('[resolveAsk][ACTION_RESOLVE]', {
+            actionId: a?.actionId,
+            hasActionText: !!a?.text,
+            actionText: a?.text?.substring(0, 50),
+            textParam: textParam ? {
+              parameterId: textParam.parameterId || textParam.key,
+              value: textParam.value?.substring(0, 50),
+              valueType: typeof textParam.value,
+              isKey: !!mergedTranslations[textParam.value]
+            } : null,
+            resolvedText: txt?.substring(0, 100),
+            hasResolvedText: !!txt,
+            mergedTranslationsKeys: Object.keys(mergedTranslations).slice(0, 10),
+            actionFull: JSON.stringify(a, null, 2).substring(0, 500)
+          });
+        }
+
+        if (txt) {
+          const textKey = a?.parameters?.find((p: any) => p?.parameterId === 'text' || p?.key === 'text')?.value;
+          const result = { text: txt, key: textKey || a?.parameters?.[0]?.value, stepType: 'start' as const };
+
+          if (debugEnabled) {
+            console.log('[resolveAsk][SUCCESS_START]', {
+              textLength: txt.length,
+              textPreview: txt.substring(0, 100),
+              key: result.key,
+              stepType: result.stepType
+            });
+          }
+
+          return result;
+        }
       }
     }
+    // Fallback to V2 format (steps.ask.base) for data extraction
+    if (sub) {
+      const key = sub?.steps?.ask?.base;
+      // Use translations directly like StepEditor does: translations[key] || key
+      const text = typeof key === 'string' ? (mergedTranslations[key] || key) : '';
+
+      if (debugEnabled) {
+        console.log('[resolveAsk][V2_SUB]', {
+          key,
+          textLength: text.length,
+          textPreview: text.substring(0, 100),
+          hasTranslation: !!mergedTranslations[key]
+        });
+      }
+
+      return { text, key, stepType: 'ask' };
+    }
+    if (node) {
+      const key = node?.steps?.ask?.base;
+      // Use translations directly like StepEditor does: translations[key] || key
+      const text = typeof key === 'string' ? (mergedTranslations[key] || key) : '';
+
+      if (debugEnabled) {
+        console.log('[resolveAsk][V2_NODE]', {
+          key,
+          textLength: text.length,
+          textPreview: text.substring(0, 100),
+          hasTranslation: !!mergedTranslations[key]
+        });
+      }
+
+      return { text, key, stepType: 'ask' };
+    }
+
+    // No fallback hardcoded - return empty if no key found
+    if (debugEnabled) {
+      console.warn('[resolveAsk][EMPTY]', {
+        reason: 'No legacy node, no sub, no node - returning empty'
+      });
+    }
+
+    return { text: '', key: undefined, stepType: 'ask' };
+  } catch (err) {
+    console.error('[resolveAsk][ERROR]', err);
+    return { text: '', key: undefined, stepType: 'ask' };
   }
-  // Merge translations with legacyDict to ensure all configured prompts are available
-  const mergedTranslations = { ...(legacyDict || {}), ...(translations || {}) };
-  if (sub) {
-    const key = sub?.steps?.ask?.base;
-    // Use translations directly like StepEditor does: translations[key] || key
-    const text = typeof key === 'string' ? (mergedTranslations[key] || key) : '';
-    return { text, key };
-  }
-  if (node) {
-    const key = node?.steps?.ask?.base;
-    // Use translations directly like StepEditor does: translations[key] || key
-    const text = typeof key === 'string' ? (mergedTranslations[key] || key) : '';
-    return { text, key };
-  }
-  // No fallback hardcoded - return empty if no key found
-  return { text: '', key: undefined };
 }
 
 // Resolve confirmation message for a node
