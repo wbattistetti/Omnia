@@ -135,3 +135,9 @@
   border-radius: 8px !important;
   border-width: 1px !important;
 }
+
+/* Hot-tracking hover per righe nodo - Verde semitrasparente */
+.node-row-hover-target:hover {
+  background-color: rgba(16, 185, 129, 0.2) !important;
+  border-radius: 8px;
+}

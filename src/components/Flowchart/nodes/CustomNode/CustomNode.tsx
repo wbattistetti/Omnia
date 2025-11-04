@@ -257,14 +257,22 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             data.onUpdate({ rows: updatedRows });
           }
 
-          // ELEGANTE: Usa il componente per l'evidenziazione
-          // Aspetta un po' per assicurarsi che il componente sia stato renderizzato
-          setTimeout(() => {
+          // ✅ Highlight unificato: evidenzia la riga SUBITO dopo il drop
+          // Usa requestAnimationFrame per essere il più veloce possibile
+          requestAnimationFrame(() => {
             const rowComponent = getRowComponent(rowData.id);
             if (rowComponent) {
               rowComponent.highlight();
+            } else {
+              // Fallback: se il componente non è ancora renderizzato, riprova dopo un frame
+              requestAnimationFrame(() => {
+                const rowComponentRetry = getRowComponent(rowData.id);
+                if (rowComponentRetry) {
+                  rowComponentRetry.highlight();
+                }
+              });
             }
-          }, 50);
+          });
         } else {
           // Row already exists, skipping
         }

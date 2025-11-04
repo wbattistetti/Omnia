@@ -357,11 +357,14 @@ export function useNodeDragDrop({
                     data.onUpdate({ rows: updatedRows });
                 }
 
-                // ELEGANTE: Usa il componente per l'evidenziazione
-                const rowComponent = getRowComponent(draggedRow.id);
-                if (rowComponent) {
-                    rowComponent.highlight();
-                }
+                // ✅ Highlight unificato: evidenzia la riga SUBITO dopo il drop
+                // Usa requestAnimationFrame per assicurarsi che il DOM sia aggiornato
+                requestAnimationFrame(() => {
+                    const rowComponent = getRowComponent(draggedRow.id);
+                    if (rowComponent) {
+                        rowComponent.highlight();
+                    }
+                });
             }
 
             // ✅ Rimuovi evidenziazione del nodo target dopo timeout (same-node)

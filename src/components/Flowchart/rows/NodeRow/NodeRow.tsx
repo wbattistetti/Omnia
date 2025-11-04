@@ -97,7 +97,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   const highlight = useCallback(() => {
     setVisualState('highlight');
-    // Auto-reset to normal after 1 second
+    // ✅ Auto-reset to normal after 1 second
     setTimeout(() => setVisualState('normal'), 1000);
   }, []);
 
@@ -773,11 +773,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         return { opacity: 0.3, transition: 'opacity 0.2s ease' };
       case 'highlight':
         return {
-          backgroundColor: 'rgba(16, 185, 129, 0.6)',
+          backgroundColor: 'rgba(16, 185, 129, 0.6)', // ✅ Verde emerald-500 con trasparenza
           borderRadius: '8px',
-          transition: 'background-color 0.3s ease-out',
-          border: '2px solid rgba(16, 185, 129, 0.8)',
-          boxShadow: '0 0 10px rgba(16, 185, 129, 0.5)'
+          // ✅ Nessun bordo, nessuna transizione per evitare il "bianco prima del verde"
+          // ✅ Deve partire subito verde senza effetti di transizione
         };
       default:
         return {};
@@ -893,13 +892,19 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     <>
       <div
         ref={nodeContainerRef}
-        className={`node-row-outer nodrag flex items-center group transition-colors ${conditionalClasses}`}
-        style={{ ...conditionalStyles, ...checkboxStyles, ...finalStyles }}
+        className={`node-row-outer nodrag flex items-center group ${conditionalClasses} ${!isBeingDragged && visualState !== 'highlight' ? 'node-row-hover-target' : ''}`}
+        style={{
+          ...conditionalStyles,
+          ...checkboxStyles,
+          ...finalStyles,
+        }}
         data-index={index}
         data-being-dragged={isBeingDragged ? 'true' : 'false'}
         data-row-id={row.id}
         draggable={false}
         onDragStart={(e) => e.preventDefault()}
+        {...(onMouseEnter ? { onMouseEnter } : {})}
+        {...(onMouseLeave ? { onMouseLeave } : {})}
         {...(onMouseMove ? { onMouseMove } : {})}
       >
         {isEditing ? (
