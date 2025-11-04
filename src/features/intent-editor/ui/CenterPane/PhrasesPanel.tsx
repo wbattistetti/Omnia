@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ListGrid from '../common/ListGrid';
 import { MessageSquare } from 'lucide-react';
+import { useIntentStore } from '../../state/intentStore';
 
 type Phrase = { id: string; text: string };
 
@@ -135,8 +136,10 @@ export default function PhrasesPanel({
               if (!existsIn(newLabel, posItems)) onAddPositive(newLabel);
             }}
             onDeleteItem={(id)=>{
-              // temporary: no dedicated delete in store; ignore here.
-              // Deletion should be handled by parent store (future work).
+              const phrase = posItems.find(p => p.id === id);
+              if (phrase) {
+                useIntentStore.getState().removeCurated(intentId, id);
+              }
             }}
             onEnterAdd={(text)=>{
               // dedup locale e cross-tab
@@ -184,7 +187,12 @@ export default function PhrasesPanel({
               if (!prev) return;
               if (!existsIn(newLabel, keyItems)) onAddKeyword(newLabel);
             }}
-            onDeleteItem={(id)=>{}}
+            onDeleteItem={(id)=>{
+              const keyword = keyItems.find(k => k.id === id);
+              if (keyword) {
+                useIntentStore.getState().removeKeyword(intentId, keyword.term);
+              }
+            }}
             onEnterAdd={(text)=>{
               if (existsIn(text, keyItems)) return;
               onAddKeyword(text);

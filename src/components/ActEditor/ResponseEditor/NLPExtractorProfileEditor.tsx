@@ -1,5 +1,7 @@
 import React from 'react';
 import { Wand2, MessageCircle } from 'lucide-react';
+import { instanceRepository } from '../../../services/InstanceRepository';
+import type { ProblemIntent } from '../../../types/project';
 import RegexEditor from './RegexEditor';
 import NLPCompactEditor from './NLPCompactEditor';
 import PostProcessEditor from './PostProcessEditor';
@@ -77,12 +79,14 @@ export default function NLPExtractorProfileEditor({
   locale = 'it-IT',
   onChange,
   intentSelected,
+  act,
 }: {
   node: any;
   actType?: string; // ✅ Type dell'act per determinare classification vs extraction mode
   locale?: string;
   onChange?: (profile: NLPProfile) => void;
   intentSelected?: string; // Intent ID selected from IntentListEditor (when kind === 'intent')
+  act?: { id: string; type: string; label?: string; instanceId?: string }; // Act info for syncing intents
 }) {
   // Profile state management (extracted to hook)
   const {
@@ -116,6 +120,9 @@ export default function NLPExtractorProfileEditor({
   const [baselineStats, setBaselineStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [lastStats, setLastStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [activeTab, setActiveTab] = React.useState<'regex' | 'extractor' | 'post' | null>(null);
+
+  // ✅ State per modalità di visualizzazione frasi nel Tester (solo per kind === 'intent')
+  const [testPhraseMode, setTestPhraseMode] = React.useState<'all-training' | 'selected-training' | 'test-phrases'>('all-training');
 
   // ✅ Leggi kind da node.kind (mainData.kind) invece di actType
   const nodeKind = React.useMemo(() => {
@@ -224,6 +231,74 @@ export default function NLPExtractorProfileEditor({
     }
     prevExamplesCountRef.current = examplesList.length;
   }, [examplesList.length, runRowTest, setSelectedRow]);
+
+  // ✅ Aggiorna examplesList in base alla modalità selezionata (solo per kind === 'intent')
+  const updateExamplesList = React.useCallback(() => {
+    // Solo per kind === 'intent'
+    if (nodeKind !== 'intent' || !act?.instanceId) {
+      return;
+    }
+
+    const instance = instanceRepository.getInstance(act.instanceId);
+    if (!instance?.problemIntents) return;
+
+    let phrases: string[] = [];
+
+    if (testPhraseMode === 'all-training') {
+      // Tutte le frasi di training di tutti gli intenti
+      phrases = instance.problemIntents.flatMap((pi: ProblemIntent) =>
+        (pi.phrases?.matching || []).map((p: any) => p.text)
+      );
+    } else if (testPhraseMode === 'selected-training') {
+      // Solo frasi dell'intento selezionato
+      if (intentSelected) {
+        const intent = instance.problemIntents.find(
+          (pi: ProblemIntent) => pi.id === intentSelected || pi.name === intentSelected
+        );
+        phrases = (intent?.phrases?.matching || []).map((p: any) => p.text);
+      }
+    } else if (testPhraseMode === 'test-phrases') {
+      // Frasi di test (da ProblemPayload.editor.tests)
+      try {
+        const pid = localStorage.getItem('current.projectId') || '';
+        const key = `problem.${pid}.${act.id}`;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const payload = JSON.parse(raw);
+          phrases = (payload?.editor?.tests || []).map((t: any) => t.text);
+        }
+      } catch (err) {
+        console.warn('[NLPExtractorProfileEditor] Could not load test phrases:', err);
+      }
+    }
+
+    // Rimuovi duplicati e ordina alfabeticamente
+    const uniquePhrases = Array.from(new Set(phrases)).sort();
+    setExamplesList(uniquePhrases);
+  }, [testPhraseMode, intentSelected, act?.instanceId, act?.id, nodeKind, setExamplesList]);
+
+  React.useEffect(() => {
+    updateExamplesList();
+  }, [updateExamplesList]);
+
+  // ✅ Ascolta gli aggiornamenti di instanceRepository per aggiornare le frasi quando vengono generate
+  React.useEffect(() => {
+    if (nodeKind !== 'intent' || !act?.instanceId) {
+      return;
+    }
+
+    const handleInstanceUpdate = (event: any) => {
+      const { instanceId } = event.detail || {};
+      if (instanceId === act.instanceId) {
+        updateExamplesList();
+      }
+    };
+
+    window.addEventListener('instanceRepository:updated', handleInstanceUpdate);
+    return () => {
+      window.removeEventListener('instanceRepository:updated', handleInstanceUpdate);
+    };
+  }, [act?.instanceId, nodeKind, updateExamplesList]);
 
   // Function to save current config to global database
   const saveToGlobal = async () => {
@@ -508,7 +583,62 @@ export default function NLPExtractorProfileEditor({
       {/* Tester section - hidden when inline editor is active */}
       {!activeEditor && (
         <div style={{ border: '2px solid #9ca3af', borderRadius: 12, padding: 12 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Tester</div>
+          {/* Header con Tester e toolbar per kind === 'intent' */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontWeight: 700 }}>Tester</div>
+            {/* Toolbar con 3 pulsanti mutualmente esclusivi (solo per kind === 'intent') */}
+            {isIntentKind && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setTestPhraseMode('all-training')}
+                  style={{
+                    padding: '4px 8px',
+                    border: '1px solid #9ca3af',
+                    borderRadius: 4,
+                    background: testPhraseMode === 'all-training' ? '#dbeafe' : '#fff',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: testPhraseMode === 'all-training' ? 600 : 400
+                  }}
+                  title="Mostra tutte le frasi di training di tutti gli intenti"
+                >
+                  All training phrases
+                </button>
+                <button
+                  onClick={() => setTestPhraseMode('selected-training')}
+                  disabled={!intentSelected}
+                  style={{
+                    padding: '4px 8px',
+                    border: '1px solid #9ca3af',
+                    borderRadius: 4,
+                    background: testPhraseMode === 'selected-training' ? '#dbeafe' : '#fff',
+                    cursor: intentSelected ? 'pointer' : 'not-allowed',
+                    opacity: intentSelected ? 1 : 0.5,
+                    fontSize: 12,
+                    fontWeight: testPhraseMode === 'selected-training' ? 600 : 400
+                  }}
+                  title={intentSelected ? "Mostra solo le frasi di training dell'intento selezionato" : "Seleziona un intento per vedere le sue frasi"}
+                >
+                  Training phrases for selected Intent
+                </button>
+                <button
+                  onClick={() => setTestPhraseMode('test-phrases')}
+                  style={{
+                    padding: '4px 8px',
+                    border: '1px solid #9ca3af',
+                    borderRadius: 4,
+                    background: testPhraseMode === 'test-phrases' ? '#dbeafe' : '#fff',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: testPhraseMode === 'test-phrases' ? 600 : 400
+                  }}
+                  title="Mostra le frasi di test (non usate per il training)"
+                >
+                  Test Phrases
+                </button>
+              </div>
+            )}
+          </div>
           {/* Controls toolbar */}
           <TesterControls
             newExample={newExample}
@@ -638,6 +768,7 @@ export default function NLPExtractorProfileEditor({
                 onChange?.(updatedProfile);
               }}
               intentSelected={intentSelected}
+              act={act}
             />
           )}
 

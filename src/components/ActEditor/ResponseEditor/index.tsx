@@ -643,9 +643,9 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                     </div>
                   ) : (
                     <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
-                      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
                         {showSynonyms ? (
-                          <div style={{ padding: 12 }}>
+                          <div style={{ padding: 12, flex: 1, display: 'flex', flexDirection: 'column' }}>
                             <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 }}>
                               <h4 style={{ margin: 0 }}>Data Extractor: {selectedNode?.label || ''}</h4>
                             </div>
@@ -654,6 +654,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                               actType={actType}
                               locale={'it-IT'}
                               intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining : undefined}
+                              act={act}
                               onChange={(profile) => {
                                 // Only log if debug flag is set to avoid console spam
                                 try {

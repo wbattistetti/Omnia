@@ -188,7 +188,9 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
         onClose={props.onClose}
       />
       <div className="flex-1 min-h-0">
-        <EmbeddingEditorShell />
+        <EmbeddingEditorShell
+          instanceId={(props.act as any)?.instanceId || props.act?.id}
+        />
       </div>
     </div>
   );

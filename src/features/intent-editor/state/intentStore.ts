@@ -22,6 +22,9 @@ type IntentState = {
   clearCurated: (id: string) => void;
   clearHardNeg: (id: string) => void;
   clearKeywords: (id: string) => void;
+  removeCurated: (id: string, phraseId: string) => void;
+  removeHardNeg: (id: string, phraseId: string) => void;
+  removeKeyword: (id: string, term: string) => void;
 };
 
 export const useIntentStore = create<IntentState>((set, get) => ({
@@ -107,6 +110,24 @@ export const useIntentStore = create<IntentState>((set, get) => ({
   })),
   clearKeywords: (id) => set(s => ({
     intents: s.intents.map(it => it.id === id ? { ...it, signals: { ...it.signals, keywords: [] } } : it)
+  })),
+  removeCurated: (id, phraseId) => set(s => ({
+    intents: s.intents.map(it => it.id === id ? {
+      ...it,
+      variants: { ...it.variants, curated: it.variants.curated.filter(v => v.id !== phraseId) }
+    } : it)
+  })),
+  removeHardNeg: (id, phraseId) => set(s => ({
+    intents: s.intents.map(it => it.id === id ? {
+      ...it,
+      variants: { ...it.variants, hardNeg: it.variants.hardNeg.filter(v => v.id !== phraseId) }
+    } : it)
+  })),
+  removeKeyword: (id, term) => set(s => ({
+    intents: s.intents.map(it => it.id === id ? {
+      ...it,
+      signals: { ...it.signals, keywords: (it.signals.keywords || []).filter((k: any) => (k.t || k) !== term) }
+    } : it)
   })),
 }));
 

@@ -43,6 +43,9 @@ export interface ItemListEditorProps<T extends ListItem = ListItem> {
 
   // Clear confirmation
   clearConfirmMessage?: (count: number) => string;
+
+  // Custom header actions (optional)
+  headerActions?: React.ReactNode;
 }
 
 /**
@@ -77,6 +80,7 @@ export default function ItemListEditor<T extends ListItem = ListItem>({
     empty: 'Nessun valore valido trovato'
   },
   clearConfirmMessage = (count) => `Sei sicuro di voler rimuovere tutti gli ${count} items?`,
+  headerActions,
 }: ItemListEditorProps<T>) {
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
@@ -130,8 +134,11 @@ export default function ItemListEditor<T extends ListItem = ListItem>({
             </>
           )}
 
-          {/* Import dropdown (solo se onImport o onAdd è fornito) */}
-          {(onImport || onAdd) && (
+          {/* Custom header actions (es. Phrases dropdown) */}
+          {headerActions}
+
+          {/* Import dropdown (solo se onImport o onAdd è fornito E non c'è headerActions) */}
+          {(onImport || onAdd) && !headerActions && (
             <ImportDropdown
               onImport={handleImportItems}
               buttonLabel="Import"

@@ -165,6 +165,11 @@ class InstanceRepository {
                 note: 'Updated in memory - will be saved to DB when saveAllInstancesToDatabase() is called'
             });
 
+            // Emit custom event to notify listeners (e.g., IntentListEditor) that intents were updated
+            window.dispatchEvent(new CustomEvent('instanceRepository:updated', {
+                detail: { instanceId, type: 'intents' }
+            }));
+
             return true;
         }
 
