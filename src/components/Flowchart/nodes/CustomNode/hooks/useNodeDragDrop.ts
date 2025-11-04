@@ -102,7 +102,19 @@ export function useNodeDragDrop({
 
         // Trova il nodo sotto il mouse per cross-node drag
         const elementUnderMouse = document.elementFromPoint(e.clientX, e.clientY);
-        const targetNode = elementUnderMouse?.closest('.react-flow__node');
+        let targetNode = elementUnderMouse?.closest('.react-flow__node');
+
+        // ✅ Se non trovi un nodo ma stai trascinando una riga del nodo corrente,
+        // usa il nodo corrente stesso (per evidenziare anche quando si trascina all'interno)
+        if (!targetNode && rowsContainerRef.current) {
+            // Verifica se il mouse è sopra il contenitore delle righe del nodo corrente
+            const containerRect = rowsContainerRef.current.getBoundingClientRect();
+            if (e.clientX >= containerRect.left && e.clientX <= containerRect.right &&
+                e.clientY >= containerRect.top && e.clientY <= containerRect.bottom) {
+                // Il mouse è sopra il nodo corrente, trova il nodo
+                targetNode = rowsContainerRef.current.closest('.react-flow__node');
+            }
+        }
 
         // Prima rimuovi evidenziazione da tutti i nodi e ripristina classi Tailwind
         document.querySelectorAll('.react-flow__node').forEach(node => {
@@ -140,7 +152,7 @@ export function useNodeDragDrop({
         } else {
             setTargetNodeId(null);
         }
-    }, [isRowDragging, dragElement, nodeId]);
+    }, [isRowDragging, dragElement, nodeId, rowsContainerRef]);
 
     // Gestione rilascio del mouse - VERSIONE SEMPLIFICATA
     const handleMouseUp = useCallback(() => {
@@ -148,10 +160,21 @@ export function useNodeDragDrop({
 
         // Drag ended
 
-        // Rimuovi evidenziazione da tutti i nodi
+        // ✅ UNIFICATO: Mantieni evidenziazione del nodo target (sia cross-node che same-node) per feedback visivo
+        // Rimuovi evidenziazione da tutti i nodi tranne quello di destinazione
+        const targetNodeToKeep = targetNodeId; // Nodo da mantenere evidenziato
+
         document.querySelectorAll('.react-flow__node').forEach(node => {
             const el = node as HTMLElement;
-            // Rimuovi stili inline
+            const nodeIdAttr = el.getAttribute('data-id');
+
+            // ✅ Mantieni evidenziazione solo per il nodo target (sia cross-node che same-node)
+            if (targetNodeToKeep && nodeIdAttr === targetNodeToKeep) {
+                // Non rimuovere ancora - sarà rimosso dopo il timeout
+                return;
+            }
+
+            // Rimuovi stili inline da tutti gli altri nodi
             el.style.removeProperty('border');
             el.style.removeProperty('border-width');
             el.style.removeProperty('border-color');
@@ -161,6 +184,21 @@ export function useNodeDragDrop({
             el.classList.remove('node-drop-highlight');
             // ✅ Le classi Tailwind verranno riapplicate automaticamente da React al re-render
         });
+
+        // ✅ Funzione unificata per rimuovere evidenziazione del nodo dopo timeout
+        const removeNodeHighlight = (nodeIdToRemove: string) => {
+            setTimeout(() => {
+                const targetNode = document.querySelector(`[data-id="${nodeIdToRemove}"]`) as HTMLElement;
+                if (targetNode) {
+                    targetNode.style.removeProperty('border');
+                    targetNode.style.removeProperty('border-width');
+                    targetNode.style.removeProperty('border-color');
+                    targetNode.style.removeProperty('border-style');
+                    targetNode.style.removeProperty('border-radius');
+                    targetNode.classList.remove('node-drop-highlight');
+                }
+            }, 300); // 300ms di feedback visivo
+        };
 
         if (targetNodeId && targetNodeId !== nodeId) {
             // CROSS-NODE DROP: Sposta la riga a un altro nodo
@@ -192,6 +230,11 @@ export function useNodeDragDrop({
 
             if (data.onUpdate) {
                 data.onUpdate({ rows: updatedRows });
+            }
+
+            // ✅ Rimuovi evidenziazione del nodo target dopo timeout (cross-node)
+            if (targetNodeId) {
+                removeNodeHighlight(targetNodeId);
             }
 
         } else {
@@ -230,6 +273,11 @@ export function useNodeDragDrop({
                 if (rowComponent) {
                     rowComponent.highlight();
                 }
+            }
+
+            // ✅ Rimuovi evidenziazione del nodo target dopo timeout (same-node)
+            if (targetNodeId === nodeId) {
+                removeNodeHighlight(nodeId);
             }
         }
 
