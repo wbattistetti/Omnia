@@ -713,8 +713,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Drag & Drop personalizzato
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Removed verbose log
-
     // Preveni il drag nativo
     e.preventDefault();
     e.stopPropagation();

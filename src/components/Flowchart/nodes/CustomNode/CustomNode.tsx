@@ -291,55 +291,42 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
         style={nodeStyles}
         tabIndex={-1}
-        draggable={true}
+        draggable={false}
         onDragStart={(e) => {
+          // ✅ Con nodesDraggable={false}, questo non dovrebbe essere chiamato per drag normale
+          // Solo se draggable={true} viene impostato manualmente (es. dal pulsante Move)
           const t = e.target as HTMLElement;
-          const isHandle = t?.classList.contains('react-flow__handle') ||
-                           t?.closest('.react-flow__handle');
-          const isConnecting = (window as any).__isConnecting;
+          const hasNodrag = t?.classList.contains('nodrag') || !!t?.closest('.nodrag');
 
-          console.log('🔥🔥🔥 [CUSTOM_NODE_DRAG_START] HTML5 DragStart:', {
-            nodeId: id,
-            targetTag: t?.tagName,
-            targetClass: t?.className,
-            isHandle: !!isHandle,
-            isConnecting: !!isConnecting,
-            timestamp: Date.now(),
-            eventType: e.type
-          });
-
-          // ✅ SOLUZIONE: Blocca drag HTML5 se si sta tracciando una connessione
-          if (isConnecting) {
-            console.error('❌❌❌ [CUSTOM_NODE_DRAG_START] BLOCCATO - connessione in corso!', {
-              nodeId: id,
-              timestamp: Date.now()
-            });
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            return false;
-          }
-
-          // ✅ Se parte da un handle, blocca il drag HTML5
-          if (isHandle) {
-            console.error('❌❌❌ [CUSTOM_NODE_DRAG_START] PROBLEMA: HTML5 dragStart su handle!', {
-              nodeId: id,
-              timestamp: Date.now()
-            });
+          // ✅ Se parte da nodrag, blocca (non dovrebbe succedere, ma per sicurezza)
+          if (hasNodrag) {
             e.preventDefault();
             e.stopPropagation();
             return false;
           }
 
-          setIsDragging(true);
-          document.body.style.cursor = 'move';
+          // ✅ Se è un drag dalla toolbar (isToolbarDrag), permetti
+          if (isToolbarDrag) {
+            setIsDragging(true);
+            document.body.style.cursor = 'move';
+          } else {
+            // ✅ Altrimenti blocca (non dovrebbe succedere)
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
         }}
         onDragEnd={() => {
           // ✅ Reset flag connessione quando finisce il drag
           if ((window as any).__isConnecting) {
-            console.log('🔄 [CUSTOM_NODE_DRAG_END] Reset flag __isConnecting');
             (window as any).__isConnecting = false;
           }
+          // ✅ Reset draggable a false quando finisce il drag
+          if (nodeContainerRef.current) {
+            nodeContainerRef.current.setAttribute('draggable', 'false');
+          }
+          // ✅ Reset flag globale
+          (window as any).__isToolbarDrag = null;
           setIsDragging(false);
           setIsToolbarDrag(false);
           document.body.style.cursor = 'default';
@@ -348,35 +335,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         onMouseLeave={handleNodeMouseLeave}
         onMouseDownCapture={(e) => {
           const t = e.target as HTMLElement;
-
-          // ✅ LOG DETTAGLIATO
-          const isHandle = t?.classList.contains('react-flow__handle') ||
-                           t?.closest('.react-flow__handle');
           const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
 
-          console.log('🔥🔥🔥 [CUSTOM_NODE_MOUSE_DOWN_CAPTURE] MouseDown:', {
-            nodeId: id,
-            targetTag: t?.tagName,
-            targetClass: t?.className,
-            targetId: t?.id,
-            isHandle: !!isHandle,
-            isInput: !!isInput,
-            hasHandleClass: t?.classList.contains('react-flow__handle'),
-            closestHandle: !!t?.closest('.react-flow__handle'),
-            eventButton: e.button,
-            eventClientX: e.clientX,
-            eventClientY: e.clientY,
-            timestamp: Date.now()
-          });
-
-          if (isHandle) {
-            console.log('🚫 [CUSTOM_NODE_MOUSE_DOWN_CAPTURE] Handle rilevato - dovrebbe bloccare drag');
-            // ✅ Non fermiamo la propagazione qui, React Flow deve gestire la connessione
-          }
-
+          // ✅ Solo blocca input, lascia passare tutto il resto (incluso nodrag) alla label
           if (isInput) {
             e.stopPropagation();
           }
+          // ✅ NON bloccare nodrag - l'evento deve arrivare alla label che gestirà stopPropagation
         }}
         onMouseUpCapture={(e) => {
           if (!editingRowId) return;
@@ -413,10 +378,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               onToggleUnchecked={handleToggleUnchecked}
               hasUncheckedRows={hasUncheckedRows}
               onDragStart={() => {
-                console.log('🎯 [CustomNode] onDragStart from Move button', {
-                  isDragging: isDragging,
-                  isToolbarDrag: isToolbarDrag
-                });
+                // ✅ Quando clicchi sul pulsante Move, attiva il drag del nodo
+                if (nodeContainerRef.current) {
+                  nodeContainerRef.current.setAttribute('draggable', 'true');
+                }
+                // ✅ Imposta flag globale per permettere il drag del nodo
+                (window as any).__isToolbarDrag = id;
+                (window as any).__blockNodeDrag = null;
                 setIsDragging(true);
                 setIsToolbarDrag(true);
               }}
@@ -466,6 +434,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           }}
           onMouseDown={() => {
             if (showDragHeader) {
+              // ✅ Quando clicchi sulla toolbar, attiva il drag del nodo
+              if (nodeContainerRef.current) {
+                nodeContainerRef.current.setAttribute('draggable', 'true');
+              }
+              // ✅ Imposta flag globale per permettere il drag del nodo
+              (window as any).__isToolbarDrag = id;
+              (window as any).__blockNodeDrag = null;
               setIsDragging(true);
               setIsToolbarDrag(true);
             }
@@ -487,10 +462,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             onToggleUnchecked={handleToggleUnchecked}
             hasUncheckedRows={hasUncheckedRows}
             onDragStart={() => {
-              console.log('🎯 [CustomNode] onDragStart from Move button (second)', {
-                isDragging: isDragging,
-                isToolbarDrag: isToolbarDrag
-              });
+              // ✅ Quando clicchi sul pulsante Move, attiva il drag del nodo
+              if (nodeContainerRef.current) {
+                nodeContainerRef.current.setAttribute('draggable', 'true');
+              }
+              // ✅ Imposta flag globale per permettere il drag del nodo
+              (window as any).__isToolbarDrag = id;
+              (window as any).__blockNodeDrag = null;
               setIsDragging(true);
               setIsToolbarDrag(true);
             }}

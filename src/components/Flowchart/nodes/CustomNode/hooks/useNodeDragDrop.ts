@@ -33,12 +33,16 @@ export function useNodeDragDrop({
     const [draggedRowData, setDraggedRowData] = useState<NodeRowData | null>(null);
     const [targetNodeId, setTargetNodeId] = useState<string | null>(null);
 
-    // Gestione drag start personalizzato - VERSIONE SEMPLIFICATA
+    // Gestione drag start personalizzato
     const handleRowDragStart = useCallback((id: string, index: number, clientX: number, clientY: number, originalElement: HTMLElement) => {
         // 1. Trova il componente NodeRow e fai il fade
         const rowComponent = getRowComponent(id);
         if (rowComponent) {
-            rowComponent.fade();
+            try {
+                rowComponent.fade();
+            } catch (error) {
+                console.error('[DRAG] Error calling fade():', error);
+            }
         }
 
         // 2. Crea clone semplice per il drag visual
@@ -75,7 +79,6 @@ export function useNodeDragDrop({
         // 5. Cursor
         document.body.style.cursor = 'grabbing';
         document.body.style.userSelect = 'none';
-
     }, [getRowComponent, nodeRows]);
 
     // Gestione movimento del mouse

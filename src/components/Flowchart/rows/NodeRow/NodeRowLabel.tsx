@@ -79,11 +79,6 @@ const EmptySpaceOverlay: React.FC<{
       }}
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}
-      onMouseDown={(e) => {
-        // Prevent default but don't stop propagation - this allows hover to work
-        // but doesn't interfere with drag on label
-        e.preventDefault();
-      }}
     />
   );
 };
@@ -176,12 +171,12 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       className="block cursor-pointer transition-colors flex items-center relative nodrag"
       style={{ background: included ? 'transparent' : '#f3f4f6', color: included ? labelTextColor : '#9ca3af', borderRadius: 4, paddingLeft: row.categoryType && Icon ? 4 : 0, paddingRight: 8, minHeight: '1.5em', lineHeight: 1.1, marginTop: 0, marginBottom: 0, whiteSpace: 'nowrap', userSelect: 'none', cursor: 'grab' }}
       onDoubleClick={onDoubleClick}
-      onPointerDown={(e) => { e.stopPropagation(); }}
       onMouseDown={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
         // consenti drag diretto sulla label quando non si è in editing
         if (!isEditing && typeof onLabelDragStart === 'function') {
+          // ✅ IMPORTANTE: stopPropagation PRIMA di chiamare onLabelDragStart
+          // per impedire che React Flow intercetti l'evento
+          e.stopPropagation();
           onLabelDragStart(e);
         }
       }}

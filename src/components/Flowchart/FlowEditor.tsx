@@ -604,58 +604,46 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ RIMOSSA: const handleConnectionMenuClose - non utilizzata
 
   const onNodeDragStart = useCallback((event: any, node: Node) => {
+    // ✅ Con nodesDraggable={false}, questo non dovrebbe essere chiamato per drag normale
+    // Solo quando attiviamo manualmente il drag dalla toolbar
     const target = event.target as Element;
     const isAnchor = target && (target.classList.contains('rigid-anchor') || target.closest('.rigid-anchor'));
-
-    // ✅ LOG DETTAGLIATISSIMO per capire cosa succede
     const isHandle = target && (
       target.classList.contains('react-flow__handle') ||
       target.closest('.react-flow__handle')
     );
+    const hasNodrag = target && (target.classList.contains('nodrag') || target.closest('.nodrag'));
+    const isToolbarDrag = (window as any).__isToolbarDrag === node.id;
 
-    console.log('🔥🔥🔥 [ON_NODE_DRAG_START] DETTAGLI COMPLETISSIMI:', {
-      nodeId: node.id,
-      nodePosition: node.position,
-      targetTag: target?.tagName,
-      targetClass: target?.className,
-      targetId: target?.id,
-      isHandle: !!isHandle,
-      hasHandleClass: target?.classList.contains('react-flow__handle'),
-      closestHandle: !!target?.closest('.react-flow__handle'),
-      isAnchor: !!isAnchor,
-      hasNodrag: target?.classList.contains('nodrag'),
-      closestNodrag: !!target?.closest('.nodrag'),
-      eventType: event.type,
-      eventButton: (event as any).button,
-      eventClientX: (event as any).clientX,
-      eventClientY: (event as any).clientY,
-      timestamp: Date.now(),
-      stackTrace: new Error().stack?.split('\n').slice(0, 10).join('\n')
-    });
-
-    // ✅ Se viene chiamato con un handle, c'è un problema con noDragClassName
+    // ✅ Se viene chiamato con un handle, blocca
     if (isHandle) {
-      console.error('❌❌❌ [ON_NODE_DRAG_START] PROBLEMA: Chiamato con handle! noDragClassName non funziona!', {
-        nodeId: node.id,
-        targetClass: target?.className,
-        timestamp: Date.now()
-      });
       dragStartedFromHandleRef.current = true;
       event.preventDefault();
       event.stopPropagation();
       return false;
     }
 
-    // ✅ Reset del flag
     dragStartedFromHandleRef.current = false;
 
-    if (target && (target.classList.contains('nodrag') || target.closest('.nodrag'))) {
-      console.log('🚀 [DRAG DEBUG] DRAG BLOCKED - nodrag element found');
+    // ✅ BLOCCA se ha nodrag E non è un drag dalla toolbar
+    if (hasNodrag && !isToolbarDrag) {
+      (window as any).__blockNodeDrag = node.id;
       event.preventDefault();
+      event.stopPropagation();
       return false;
     }
 
-    console.log('✅ [ON_NODE_DRAG_START] DRAG ALLOWED - proceeding with node drag');
+    // ✅ Permetti solo se è un drag dalla toolbar
+    if (isToolbarDrag) {
+      (window as any).__blockNodeDrag = null;
+    } else {
+      // ✅ Se non è toolbar drag, blocca (non dovrebbe succedere con nodesDraggable={false})
+      event.preventDefault();
+      event.stopPropagation();
+      return false;
+    }
+
+    (window as any).__blockNodeDrag = null;
     // Prepara contesto per drag rigido SOLO se partito dall'ancora
     if ((window as any).__flowDragMode === 'rigid' || isAnchor) {
       console.log('🚀 [DRAG DEBUG] RIGID DRAG DETECTED - setting up rigid drag context');
@@ -734,14 +722,34 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, []);
 
   const onNodeDrag = useCallback((event: any, draggedNode: Node) => {
+    const isBlocked = (window as any).__blockNodeDrag === draggedNode.id;
     console.log('🔥🔥🔥 [ON_NODE_DRAG] NODO IN MOVIMENTO:', {
       nodeId: draggedNode.id,
       currentPosition: draggedNode.position,
       dragStartedFromHandle: dragStartedFromHandleRef.current,
       hasRigidContext: !!rigidDragCtxRef.current,
       eventType: event.type,
+      blockedByNodrag: isBlocked,
+      blockFlag: (window as any).__blockNodeDrag,
       timestamp: Date.now()
     });
+
+    // ✅ Blocca il drag se è partito da un elemento nodrag
+    if (isBlocked) {
+      console.log('🚫🚫🚫 [ON_NODE_DRAG] DRAG BLOCCATO - nodrag element detected, resetting position');
+      // Annulla il movimento ripristinando la posizione originale
+      const originalNode = nodes.find(n => n.id === draggedNode.id);
+      if (originalNode) {
+        console.log('🚫 [ON_NODE_DRAG] Resetting node position from', draggedNode.position, 'to', originalNode.position);
+        setNodes((nds) => nds.map((n) =>
+          n.id === draggedNode.id ? { ...n, position: originalNode.position } : n
+        ));
+        console.log('🚫 [ON_NODE_DRAG] Position reset - returning early');
+      } else {
+        console.warn('⚠️ [ON_NODE_DRAG] Original node not found, cannot reset position');
+      }
+      return;
+    }
 
     // ✅ Se il drag è partito da un handle, NON DOVREBBE ESSERE QUI
     if (dragStartedFromHandleRef.current) {
@@ -981,14 +989,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           onEdgeClick={handleEdgeClick}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
-          noDragClassName="react-flow__handle"
-          onNodeDragStart={(e, node) => {
-            console.log('🔥 [REACT_FLOW_NODE_DRAG_START] Chiamato da React Flow', {
-              nodeId: node.id,
-              timestamp: Date.now()
-            });
-            onNodeDragStart(e, node);
-          }}
+          noDragClassName="react-flow__handle nodrag"
+          nodesDraggable={false}
+          onNodeDragStart={onNodeDragStart}
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onNodeDoubleClick={(e, node) => {
