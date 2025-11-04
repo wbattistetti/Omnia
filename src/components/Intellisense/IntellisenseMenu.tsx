@@ -11,6 +11,7 @@ import { useProjectData } from '../../context/ProjectDataContext';
 import { prepareIntellisenseData } from '../../services/ProjectDataService';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { useIntellisense } from "../../context/IntellisenseContext"; // ✅ AGGIUNGI IMPORT
+import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
 
 const defaultLayoutConfig: IntellisenseLayoutConfig = {
   maxVisibleItems: 12,
@@ -72,6 +73,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   ), []);
   // Debug logging removed to prevent excessive console output
   const { data } = useProjectData();
+  const fontSizes = useDynamicFontSizes(); // ✅ Spostato all'inizio per rispettare le regole degli hooks
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const [fuzzyResults, setFuzzyResults] = useState<Map<string, IntellisenseResult[]>>(new Map());
@@ -538,7 +540,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
               padding: '8px 12px',
               border: '2px solid #3b82f6', // bordo blu
               borderRadius: '6px',
-              fontSize: '14px',
+              fontSize: fontSizes.nodeRow,
               marginBottom: '8px',
               outline: 'none',
               boxSizing: 'border-box'

@@ -3,6 +3,7 @@ import { Link2Off as LinkOff, X } from 'lucide-react';
 import { useIntellisense } from "../../context/IntellisenseContext";
 import { IntellisenseMenu } from './IntellisenseMenu';
 import { IntellisenseItem } from '../../types/intellisense';
+import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
 
 interface IntellisenseStandaloneProps {
     position: { x: number; y: number };
@@ -23,6 +24,7 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
 }) => {
     const { state, actions } = useIntellisense();
     const inputRef = useRef<HTMLInputElement>(null);
+    const fontSizes = useDynamicFontSizes();
 
     // Forza il focus sulla textbox
     useEffect(() => {
@@ -143,7 +145,7 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                         padding: '4px 6px',
                         border: '2px solid #3b82f6',
                         borderRadius: '4px',
-                        fontSize: '8px',
+                        fontSize: fontSizes.nodeRow,
                         lineHeight: 1.2,
                         outline: 'none',
                         boxSizing: 'border-box',
@@ -157,7 +159,7 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                     onClick={handleElseClick}
                     style={{
                         padding: '3px 8px',
-                        fontSize: '8px',
+                        fontSize: fontSizes.nodeRow,
                         fontWeight: 600,
                         borderRadius: '4px',
                         border: '1px solid #9333ea',

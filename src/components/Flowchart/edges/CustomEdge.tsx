@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
 import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDataContext';
 import { ProjectDataService } from '../../../services/ProjectDataService';
-import { FONT_SIZE_PRESETS } from '../../../theme/fontSizes';
+import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -53,6 +53,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   const reactFlowInstance = useReactFlow();
   const [zoom, setZoom] = useState(1);
+  const fontSizes = useDynamicFontSizes();
 
   // Handler per apertura intellisense
   const handleOpenIntellisense = (x: number, y: number) => {
@@ -481,7 +482,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             border: 'none',
             borderRadius: 4,
             padding: '2px 8px',
-            fontSize: FONT_SIZE_PRESETS.edgeCaption(zoom),
+            fontSize: fontSizes.edgeCaption,
             pointerEvents: 'auto',
             zIndex: 10,
             boxShadow: '0 2px 8px rgba(139,92,246,0.10)',

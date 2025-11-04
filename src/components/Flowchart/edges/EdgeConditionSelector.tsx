@@ -4,6 +4,7 @@ import { IntellisenseMenu } from '../../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../../Intellisense/IntellisenseTypes';
 import { useProjectData } from '../../../context/ProjectDataContext';
 import { findAgentAct } from '../utils/actVisuals';
+import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 
 /**
  * Props per EdgeConditionSelector
@@ -48,6 +49,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const { data: projectData } = useProjectData();
   const [extraItems, setExtraItems] = useState<IntellisenseItem[] | undefined>(undefined);
+  const fontSizes = useDynamicFontSizes();
 
   // Auto-focus input e apri subito l'intellisense quando il componente viene montato
   useEffect(() => {
@@ -260,13 +262,15 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
             onChange={handleInputChange}
             onKeyDown={handleInputKeyDown}
             placeholder="Digita per cercare condizioni..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            style={{ fontSize: fontSizes.nodeRow }}
           />
         </div>
         {/* Pulsante Else accanto alla textbox */}
         <button
           onClick={() => { onSelectElse && onSelectElse(); }}
-          className="px-3 py-2 text-sm font-semibold rounded-md border border-purple-600 bg-purple-600 text-white hover:bg-purple-500"
+          className="px-3 py-2 font-semibold rounded-md border border-purple-600 bg-purple-600 text-white hover:bg-purple-500"
+          style={{ fontSize: fontSizes.nodeRow }}
           title="Else: usa questo collegamento solo se tutte le altre condizioni del nodo sorgente sono false"
         >
           Else
