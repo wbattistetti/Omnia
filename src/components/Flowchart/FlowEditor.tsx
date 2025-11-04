@@ -406,25 +406,24 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setContentSize({ w, h });
   }, [nodes]);
 
-  const createNodeAt = useCallback((clientX: number, clientY: number) => {
+  const createNodeAt = useCallback((clientX: number, clientY: number, initialRow?: any, textOffsetInNode?: { x: number; y: number }) => {
     // Usa UUID invece del contatore per evitare conflitti
     const newNodeId = uuidv4();
 
     let x = 0, y = 0;
     if (reactFlowInstance) {
-      const pos = reactFlowInstance.screenToFlowPosition({ x: clientX, y: clientY });
-      x = pos.x - NODE_WIDTH / 2;
-      y = pos.y - NODE_HEIGHT / 2;
+      // ✅ clientX, clientY è la posizione assoluta del testo nel clone
+      // ✅ Sottrai l'offset del testo nel nodo per ottenere la posizione del bordo sinistro del nodo
+      const nodeLeftX = clientX - (textOffsetInNode?.x || 0);
+      const nodeTopY = clientY - (textOffsetInNode?.y || 0);
+
+      // ✅ Converti in coordinate flow
+      const pos = reactFlowInstance.screenToFlowPosition({ x: nodeLeftX, y: nodeTopY });
+      x = pos.x;
+      y = pos.y;
     }
 
-    const focusRowId = `${newNodeId}-${Math.random().toString(36).substr(2, 9)}`;
-    console.log("🎯 [CREATE_NODE_AT] Creating node with UUID", {
-      newNodeId,
-      focusRowId,
-      position: { x, y },
-      clientPos: { clientX, clientY },
-      timestamp: Date.now()
-    });
+    const focusRowId = initialRow ? initialRow.id : `${newNodeId}-${Math.random().toString(36).substr(2, 9)}`;
 
     const node: Node<NodeData> = {
       id: newNodeId,
@@ -432,38 +431,36 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       position: { x, y },
       data: {
         title: '',
-        rows: [],
+        rows: initialRow ? [initialRow] : [],
         onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
-        hidden: true,
+        hidden: false, // ✅ Visibile subito - la posizione è già corretta
         focusRowId: focusRowId,
         isTemporary: true,
       },
     };
-    // debug removed
+    // ✅ Aggiungi il nodo - fine, niente retry, niente attese DOM
     addNodeAtPosition(node, x, y);
-    requestAnimationFrame(() => {
-      try {
-        const el = document.querySelector(`.react-flow__node[data-id='${newNodeId}']`) as HTMLElement | null;
-        if (!el) { try { console.warn('[DC][mount] node element not found'); } catch { } return; }
-        if (!reactFlowInstance || !(reactFlowInstance as any).getViewport) { try { console.warn('[DC][mount] no reactFlowInstance viewport'); } catch { } return; }
-        const { zoom } = (reactFlowInstance as any).getViewport();
-        const rect = el.getBoundingClientRect();
-        const centerNowX = rect.left + rect.width / 2;
-        const centerNowY = rect.top + rect.height / 2;
-        const dxScreen = clientX - centerNowX;
-        const dyScreen = clientY - centerNowY;
-        const dxFlow = dxScreen / (zoom || 1);
-        const dyFlow = dyScreen / (zoom || 1);
-        // debug logs removed
-        setNodes((nds) => nds.map(n => n.id === newNodeId ? { ...n, position: { x: (n.position as any).x + dxFlow, y: (n.position as any).y + dyFlow } } : n));
-        requestAnimationFrame(() => {
-          setNodes((nds) => nds.map(n => n.id === newNodeId ? { ...n, data: { ...(n.data as any), hidden: false } } : n));
-          // debug logs removed
-        });
-      } catch { }
-    });
-  }, [addNodeAtPosition, nodeIdCounter, reactFlowInstance, setNodes, deleteNodeWithLog, updateNode]);
+  }, [addNodeAtPosition, reactFlowInstance, deleteNodeWithLog, updateNode]);
+
+  // ✅ Listener per creare un nodo dal canvas quando si rilascia una riga
+  useEffect(() => {
+    const handleCreateNodeFromRow = (event: CustomEvent) => {
+      const { rowData, textAbsolutePosition, textOffsetInNode } = event.detail;
+
+      if (!rowData || !textAbsolutePosition) {
+        return;
+      }
+
+      // ✅ Crea il nodo posizionando il testo della riga nella posizione assoluta del testo nel clone
+      createNodeAt(textAbsolutePosition.x, textAbsolutePosition.y, rowData, textOffsetInNode);
+    };
+
+    window.addEventListener('createNodeFromRow', handleCreateNodeFromRow as EventListener);
+    return () => {
+      window.removeEventListener('createNodeFromRow', handleCreateNodeFromRow as EventListener);
+    };
+  }, [createNodeAt]);
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
     setSelectedEdgeId(null);

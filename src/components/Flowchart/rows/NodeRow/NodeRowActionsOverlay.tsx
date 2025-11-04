@@ -113,8 +113,16 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       </span>
       {/* Matita (edit) */}
       <button
-        onClick={onEdit}
-        className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onEdit();
+        }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110 nodrag"
         title="Edit row"
         style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
         onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
@@ -124,8 +132,16 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       {/* Wrench (Condition) - subito dopo la matita se è una condition */}
       {isCondition && (
         <button
-          onClick={onWrenchClick}
-          className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onWrenchClick && onWrenchClick();
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110 nodrag"
           title="Edit condition"
           style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
           onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
@@ -137,11 +153,16 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       <button
         title={hasDDT ? 'Open DDT' : 'No DDT linked'}
         style={{ display: 'flex', alignItems: 'center', padding: 2, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
-        className="hover:opacity-100 hover:scale-110"
+        className="hover:opacity-100 hover:scale-110 nodrag"
         onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
-        onMouseDown={(e) => { }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         onClick={(e) => {
-          onOpenDDT();
+          e.preventDefault();
+          e.stopPropagation();
+          onOpenDDT && onOpenDDT();
         }}
       >
         <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
@@ -149,8 +170,16 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       {/* Cestino (delete) */}
       {canDelete && (
         <button
-          onClick={onDelete}
-          className="text-red-400 hover:text-red-500 transition-colors hover:opacity-100 hover:scale-110"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDelete();
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="text-red-400 hover:text-red-500 transition-colors hover:opacity-100 hover:scale-110 nodrag"
           title="Delete row"
           style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.95, transition: 'opacity 120ms linear, transform 120ms ease' }}
           onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}

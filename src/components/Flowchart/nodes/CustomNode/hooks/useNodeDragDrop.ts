@@ -32,6 +32,7 @@ export function useNodeDragDrop({
     const [dragElement, setDragElement] = useState<HTMLElement | null>(null);
     const [draggedRowData, setDraggedRowData] = useState<NodeRowData | null>(null);
     const [targetNodeId, setTargetNodeId] = useState<string | null>(null);
+    const [textOffsetInClone, setTextOffsetInClone] = useState<{ x: number; y: number; nodeOffset?: { x: number; y: number } } | null>(null);
 
     // Gestione drag start personalizzato
     const handleRowDragStart = useCallback((id: string, index: number, clientX: number, clientY: number, originalElement: HTMLElement) => {
@@ -45,6 +46,21 @@ export function useNodeDragDrop({
             }
         }
 
+        // ✅ Calcola l'offset del testo nel nodo originale usando getBoundingClientRect
+        const nodeEl = originalElement.closest('.react-flow__node') as HTMLElement | null;
+        const labelSpan = originalElement.querySelector('span.nodrag') as HTMLElement | null;
+
+        let textOffsetInNode = { x: 0, y: 0 };
+        if (nodeEl && labelSpan) {
+            const nodeRect = nodeEl.getBoundingClientRect();
+            const labelRect = labelSpan.getBoundingClientRect();
+            // Offset dell'inizio del testo rispetto al bordo superiore-sinistro del nodo
+            textOffsetInNode = {
+                x: labelRect.left - nodeRect.left, // Distanza orizzontale dall'inizio del testo al bordo sinistro del nodo
+                y: labelRect.top - nodeRect.top    // Distanza verticale dall'inizio del testo al bordo superiore del nodo
+            };
+        }
+
         // 2. Crea clone semplice per il drag visual
         const clone = originalElement.cloneNode(true) as HTMLElement;
 
@@ -53,6 +69,23 @@ export function useNodeDragDrop({
         const fontSize = computedStyle.fontSize;
         const fontFamily = computedStyle.fontFamily;
         const lineHeight = computedStyle.lineHeight;
+
+        // ✅ Calcola l'offset del testo all'interno del clone
+        // Il clone ha padding: 8px 12px, quindi il contenuto inizia a 12px da sinistra
+        const clonePaddingLeft = 12; // padding left del clone
+        const clonePaddingTop = 8; // padding top del clone
+        const checkboxWidth = 14;
+        const checkboxMargin = 6;
+        const iconWidth = 12;
+        const iconMargin = 4;
+        const labelPaddingLeft = 4; // se icona presente
+
+        // Trova se c'è un'icona nel clone originale
+        const hasIcon = originalElement.querySelector('button[type="button"]') !== null;
+
+        // Calcola offset del testo rispetto al bordo sinistro del clone
+        const textOffsetInCloneX = clonePaddingLeft + checkboxWidth + checkboxMargin + (hasIcon ? iconWidth + iconMargin + labelPaddingLeft : 0);
+        const textOffsetInCloneY = clonePaddingTop;
 
         clone.style.position = 'fixed';
         clone.style.pointerEvents = 'none';
@@ -74,6 +107,13 @@ export function useNodeDragDrop({
         clone.style.fontFamily = fontFamily;
         clone.style.lineHeight = lineHeight;
         document.body.appendChild(clone);
+
+        // ✅ Salva gli offset per usarlo al rilascio
+        setTextOffsetInClone({
+            x: textOffsetInCloneX,
+            y: textOffsetInCloneY,
+            nodeOffset: textOffsetInNode // ✅ Offset del testo nel nodo originale
+        });
 
         // 3. Trova i dati della riga
         const rowData = nodeRows.find(row => row.id === id);
@@ -235,6 +275,59 @@ export function useNodeDragDrop({
             // ✅ Rimuovi evidenziazione del nodo target dopo timeout (cross-node)
             if (targetNodeId) {
                 removeNodeHighlight(targetNodeId);
+            }
+
+            // ✅ Se il nodo sorgente rimane vuoto dopo lo spostamento, eliminalo
+            if (updatedRows.length === 0 && data.onDelete) {
+                setTimeout(() => {
+                    data.onDelete();
+                }, 50); // Piccolo delay per permettere la creazione/aggiornamento del nodo destinatario
+            }
+
+        } else if (!targetNodeId) {
+            // ✅ CANVAS DROP: Crea un nuovo nodo sul canvas con la riga trascinata
+            const rowDataToMove = draggedRowData || nodeRows.find(row => row.id === draggedRowId);
+
+            if (!rowDataToMove) {
+                return;
+            }
+
+            // ✅ Calcola la posizione assoluta del testo nel clone al momento del rilascio
+            // Il clone è a mousePosition + (10, -10), il testo è a textOffsetInClone dentro il clone
+            const cloneOffsetX = 10;
+            const cloneOffsetY = -10;
+            const textAbsoluteX = mousePosition.x + cloneOffsetX + (textOffsetInClone?.x || 0);
+            const textAbsoluteY = mousePosition.y + cloneOffsetY + (textOffsetInClone?.y || 0);
+
+            // Dispatch evento per creare un nuovo nodo sul canvas
+            const createNodeEvent = new CustomEvent('createNodeFromRow', {
+                detail: {
+                    fromNodeId: nodeId,
+                    rowId: draggedRowId,
+                    rowData: rowDataToMove,
+                    mousePosition: { x: mousePosition.x, y: mousePosition.y },
+                    textAbsolutePosition: { x: textAbsoluteX, y: textAbsoluteY }, // ✅ Posizione assoluta del testo nel clone
+                    textOffsetInNode: textOffsetInClone?.nodeOffset || { x: 0, y: 0 } // ✅ Offset del testo nel nodo originale
+                }
+            });
+
+            setTimeout(() => {
+                window.dispatchEvent(createNodeEvent);
+            }, 10);
+
+            // Rimuovi la riga dal nodo corrente
+            const updatedRows = nodeRows.filter(row => row.id !== draggedRowId);
+            setNodeRows(updatedRows);
+
+            if (data.onUpdate) {
+                data.onUpdate({ rows: updatedRows });
+            }
+
+            // ✅ Se il nodo sorgente rimane vuoto dopo lo spostamento, eliminalo
+            if (updatedRows.length === 0 && data.onDelete) {
+                setTimeout(() => {
+                    data.onDelete();
+                }, 50); // Piccolo delay per permettere la creazione del nuovo nodo
             }
 
         } else {
