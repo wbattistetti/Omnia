@@ -1,7 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import ItemList from '../../components/common/ItemList';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useIntentStore } from './state/intentStore';
-import { GitBranch } from 'lucide-react';
 import { CenterPane } from './ui/CenterPane';
 import { TestGrid } from './ui/RightTest';
 import { actionRunAllTests } from './actions/runAllTests';
@@ -10,9 +8,11 @@ import { getModelStatus, trainIntent, TrainingPhrase } from './services/training
 import { Brain, Loader2, Sparkles, AlertTriangle, Trash2, CheckCircle, XCircle, Tag } from 'lucide-react';
 import { ImportDropdown } from './ui/common/ImportDropdown';
 import { generateVariantsForIntent } from './services/variantsService';
+import { instanceRepository } from '../../services/InstanceRepository';
 
 interface EmbeddingEditorShellProps {
   inlineMode?: boolean;
+  intentSelected?: string; // Intent ID selected from IntentListEditor (when used in ResponseEditor)
 }
 
 // Componente per payoff temporaneo sotto Generate
@@ -43,11 +43,27 @@ function GeneratePayoff({ lastGen }: { lastGen: { count: number; requested: numb
   );
 }
 
-export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEditorShellProps){
-  const selectedId = useIntentStore(s=>s.selectedId);
-  const selected = useIntentStore(s=> s.intents.find(i=>i.id===s.selectedId));
-  const intents = useIntentStore(s=>s.intents);
-  const posCount = selected?.variants.curated.length ?? 0;
+export default function EmbeddingEditorShell({ inlineMode = false, intentSelected }: EmbeddingEditorShellProps){
+  // If intentSelected is provided (from ResponseEditor), use it; otherwise use useIntentStore
+  const storeSelectedId = useIntentStore(s=>s.selectedId);
+  const selectedId = intentSelected || storeSelectedId;
+
+  // Get intents from store - ensure we always get an array
+  const storeIntents = useIntentStore(s=>s.intents);
+  // Memoize the intents array to ensure stable reference
+  const intents = useMemo(() => {
+    return (storeIntents && Array.isArray(storeIntents)) ? storeIntents : [];
+  }, [storeIntents]);
+
+  const selected = useMemo(() => {
+    return intents.find(i=>i.id===selectedId);
+  }, [intents, selectedId]);
+
+  const posCount = selected?.variants?.curated?.length ?? 0;
+
+  // Note: When intentSelected is provided (from ResponseEditor), intents are managed by IntentListEditor
+  // which syncs with instanceRepository. The EmbeddingEditorShell reads from useIntentStore which
+  // should be synced by HostAdapter when the editor is opened.
   const [testing, setTesting] = React.useState(false);
   const [modelReady, setModelReady] = useState(false);
   const [testMode, setTestMode] = useState<'training' | 'new'>('new');
@@ -254,15 +270,12 @@ export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEd
     ? (selected?.variants.hardNeg.length || 0)
     : ((selected as any)?.signals?.keywords?.length || 0);
 
-  // ✅ Stato per la larghezza dei pannelli
-  const [leftPanelWidth, setLeftPanelWidth] = useState(320);
+  // ✅ Stato per la larghezza del pannello destro (test)
   const [rightPanelWidth, setRightPanelWidth] = useState(360);
 
   // ✅ Ref e stato per mantenere larghezze fisse durante il drag
   const containerRef = useRef<HTMLDivElement>(null);
-  const centerRightContainerRef = useRef<HTMLDivElement>(null);
-  const [fixedCenterRightWidth, setFixedCenterRightWidth] = useState<number | null>(null);
-  const [fixedLeftSectionWidth, setFixedLeftSectionWidth] = useState<number | null>(null);
+  const [fixedRightWidth, setFixedRightWidth] = useState<number | null>(null);
 
   // ✅ Verifica stato modello quando cambia selectedId
   useEffect(() => {
@@ -278,72 +291,9 @@ export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEd
   }, [selectedId]);
 
   React.useEffect(() => {
-    try { if (localStorage.getItem('debug.intent') === '1') console.log('[EmbeddingEditorShell][mount]', { selectedId }); } catch {}
+    try { if (localStorage.getItem('debug.intent') === '1') console.log('[EmbeddingEditorShell][mount]', { selectedId, intentSelected }); } catch {}
     return () => { try { if (localStorage.getItem('debug.intent') === '1') console.log('[EmbeddingEditorShell][unmount]'); } catch {} };
-  }, [selectedId]);
-
-  // ✅ Handler per il drag dello slider tra Intents e Training phrases
-  const [isDraggingLeft, setIsDraggingLeft] = useState(false);
-  const dragStartLeftRef = React.useRef<{ x: number; width: number } | null>(null);
-  const lastLeftWidthRef = React.useRef<number>(leftPanelWidth);
-
-  const handleMouseDownLeft = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDraggingLeft(true);
-
-    // ✅ Salva la larghezza corrente del container "Center + Right" per mantenerla fissa
-    if (centerRightContainerRef.current) {
-      setFixedCenterRightWidth(centerRightContainerRef.current.offsetWidth);
-    }
-
-    dragStartLeftRef.current = {
-      x: e.clientX,
-      width: leftPanelWidth
-    };
-    lastLeftWidthRef.current = leftPanelWidth;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  };
-
-  React.useEffect(() => {
-    lastLeftWidthRef.current = leftPanelWidth;
-  }, [leftPanelWidth]);
-
-  React.useEffect(() => {
-    if (!isDraggingLeft) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!dragStartLeftRef.current) return;
-      const delta = e.clientX - dragStartLeftRef.current.x;
-      // Il delta positivo aumenta la larghezza del pannello sinistro
-      const newWidth = Math.max(250, Math.min(600, dragStartLeftRef.current.width + delta));
-      setLeftPanelWidth(newWidth);
-      lastLeftWidthRef.current = newWidth;
-    };
-
-    const handleMouseUp = () => {
-      setIsDraggingLeft(false);
-      dragStartLeftRef.current = null;
-      // ✅ Rimuovi la larghezza fissa quando finisce il drag
-      setFixedCenterRightWidth(null);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      const finalWidth = lastLeftWidthRef.current;
-      if (finalWidth >= 250 && finalWidth <= 600) {
-        localStorage.setItem('intent-editor-left-panel-width', finalWidth.toString());
-      }
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isDraggingLeft]);
+  }, [selectedId, intentSelected]);
 
   // ✅ Handler per il drag dello slider tra Training phrases e Test
   const [isDraggingRight, setIsDraggingRight] = useState(false);
@@ -353,17 +303,6 @@ export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEd
   const handleMouseDownRight = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsDraggingRight(true);
-
-    // ✅ Salva la larghezza corrente della sezione sinistra (Intents + slider) per mantenerla fissa
-    if (containerRef.current) {
-      const leftSectionWidth = leftPanelWidth + 8; // Intents + slider
-      setFixedLeftSectionWidth(leftSectionWidth);
-    }
-
-    // ✅ IMPORTANTE: Fissa anche la larghezza del container "Center + Right" per evitare che si espanda
-    if (centerRightContainerRef.current) {
-      setFixedCenterRightWidth(centerRightContainerRef.current.offsetWidth);
-    }
 
     dragStartRightRef.current = {
       x: e.clientX,
@@ -393,9 +332,8 @@ export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEd
     const handleMouseUp = () => {
       setIsDraggingRight(false);
       dragStartRightRef.current = null;
-      // ✅ Rimuovi entrambe le larghezze fisse quando finisce il drag
-      setFixedLeftSectionWidth(null);
-      setFixedCenterRightWidth(null);
+      // ✅ Rimuovi la larghezza fissa quando finisce il drag
+      setFixedRightWidth(null);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       const finalWidth = lastRightWidthRef.current;
@@ -415,15 +353,8 @@ export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEd
     };
   }, [isDraggingRight]);
 
-  // ✅ Carica larghezze salvate al mount
+  // ✅ Carica larghezza destra salvata al mount
   React.useEffect(() => {
-    const savedLeft = localStorage.getItem('intent-editor-left-panel-width');
-    if (savedLeft) {
-      const savedWidth = parseInt(savedLeft);
-      if (savedWidth >= 250 && savedWidth <= 600) {
-        setLeftPanelWidth(savedWidth);
-      }
-    }
     const savedRight = localStorage.getItem('intent-editor-right-panel-width');
     if (savedRight) {
       const savedWidth = parseInt(savedRight);
@@ -433,65 +364,22 @@ export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEd
     }
   }, []);
 
+  // Show message if no intent selected (always render same structure to avoid hooks order issues)
   return (
     <div ref={containerRef} className="flex gap-0 p-4 h-full flex-1 min-w-0 overflow-hidden" style={{ maxWidth: '100%' }}>
-      {/* Sezione sinistra: Intents + slider - larghezza fissa quando si trascina slider destro */}
-      <div
-        className="flex-shrink-0"
-        style={{
-          width: fixedLeftSectionWidth !== null ? fixedLeftSectionWidth : undefined,
-          display: 'flex',
-          gap: 0
-        }}
-      >
-        {/* Intents panel - larghezza controllata - READ ONLY per EmbeddingEditor */}
-        <div
-          className="flex-shrink-0"
-          style={{ width: leftPanelWidth, minWidth: 250, maxWidth: 600 }}
-        >
-          <ItemList
-            items={intents.map(i => ({
-              id: i.id,
-              label: i.name,
-              meta: {
-                pos: i.variants.curated.length,
-                neg: i.variants.hardNeg.length,
-                key: (i.signals.keywords || []).length,
-              }
-            }))}
-            selectedId={selectedId}
-            onSelect={(id) => useIntentStore.getState().select(id)}
-            LeftIcon={GitBranch}
-            getBadge={(item) => item.meta?.pos ?? 0}
-            sort="alpha"
-          />
+      {!selectedId || !selected ? (
+        <div className="flex items-center justify-center h-full w-full">
+          <div className="text-center text-gray-500">
+            <p className="text-lg mb-2">Seleziona un intento</p>
+            <p className="text-sm">Seleziona un intento dalla lista a sinistra per iniziare il training</p>
+          </div>
         </div>
-
-        {/* ✅ Resize Handle tra Intents e Training phrases */}
-        <div
-          onMouseDown={handleMouseDownLeft}
-          className="flex-shrink-0 flex items-center justify-center cursor-col-resize hover:bg-blue-100/30 transition-colors group"
-          style={{ width: 8 }}
-          role="separator"
-          aria-label="Drag to resize panels"
-        >
-          <div className="w-0.5 h-12 bg-slate-300 rounded-full group-hover:bg-blue-500 transition-colors" />
-        </div>
-      </div>
-
-      {/* Container per Center + Right con larghezza FISSA quando si trascina slider sinistro o destro */}
-      <div
-        ref={centerRightContainerRef}
-        className="flex gap-0 min-w-0 overflow-hidden"
-        style={{
-          width: fixedCenterRightWidth !== null ? `${fixedCenterRightWidth}px` : undefined,
-          maxWidth: fixedCenterRightWidth !== null ? `${fixedCenterRightWidth}px` : undefined,
-          flex: fixedCenterRightWidth === null ? 1 : undefined,
-          flexShrink: fixedCenterRightWidth !== null ? 0 : undefined
-        }}
-      >
-        {/* Training phrases panel - occupa lo spazio rimanente */}
-        <div className="flex-1 bg-white border rounded-2xl shadow-sm flex flex-col min-h-0 min-w-0 overflow-hidden">
+      ) : (
+        <>
+          {/* Container per Training phrases + Test */}
+          <div className="flex gap-0 min-w-0 overflow-hidden flex-1">
+            {/* Training phrases panel - occupa lo spazio rimanente */}
+            <div className="flex-1 bg-white border rounded-2xl shadow-sm flex flex-col min-h-0 min-w-0 overflow-hidden">
           <div className="p-3 border-b border-amber-100 bg-amber-50 rounded-t-2xl flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-amber-800">Training set</h2>
@@ -790,7 +678,9 @@ export default function EmbeddingEditorShell({ inlineMode = false }: EmbeddingEd
           </div>
         </div>
         )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

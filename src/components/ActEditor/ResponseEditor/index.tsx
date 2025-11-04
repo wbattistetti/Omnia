@@ -28,6 +28,7 @@ import { useNodeUpdate } from './hooks/useNodeUpdate';
 import { useNodePersistence } from './hooks/useNodePersistence';
 import { useDDTInitialization } from './hooks/useDDTInitialization';
 import { useResponseEditorToolbar } from './ResponseEditorToolbar';
+import IntentListEditorWrapper from './components/IntentListEditorWrapper';
 
 export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -139,6 +140,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   const [dragging, setDragging] = useState(false);
   const [showSynonyms, setShowSynonyms] = useState(false);
   const [showMessageReview, setShowMessageReview] = useState(false);
+  const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
 
   // Header: icon, title, and toolbar
   const actType = (act?.type || 'DataRequest') as any;
@@ -468,7 +470,16 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
         ) : (
           /* Normal editor layout with 3 panels (no header, already shown above) */
           <>
-            {/* ✅ Left navigation - hidden quando mainData[0]?.kind === "intent" */}
+            {/* ✅ Left navigation - IntentListEditor quando kind === "intent", Sidebar altrimenti */}
+            {mainList[0]?.kind === 'intent' && act && (
+              <IntentListEditorWrapper
+                act={act}
+                onIntentSelect={(intentId) => {
+                  // Store selected intent ID in state to pass to EmbeddingEditor
+                  setSelectedIntentIdForTraining(intentId);
+                }}
+              />
+            )}
             {mainList[0]?.kind !== 'intent' && (
               <Sidebar
               ref={sidebarRef}
@@ -642,6 +653,7 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
                               node={selectedNode}
                               actType={actType}
                               locale={'it-IT'}
+                              intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining : undefined}
                               onChange={(profile) => {
                                 // Only log if debug flag is set to avoid console spam
                                 try {

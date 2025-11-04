@@ -76,11 +76,13 @@ export default function NLPExtractorProfileEditor({
   actType,
   locale = 'it-IT',
   onChange,
+  intentSelected,
 }: {
   node: any;
   actType?: string; // ✅ Type dell'act per determinare classification vs extraction mode
   locale?: string;
   onChange?: (profile: NLPProfile) => void;
+  intentSelected?: string; // Intent ID selected from IntentListEditor (when kind === 'intent')
 }) {
   // Profile state management (extracted to hook)
   const {
@@ -635,6 +637,7 @@ export default function NLPExtractorProfileEditor({
               onProfileUpdate={(updatedProfile) => {
                 onChange?.(updatedProfile);
               }}
+              intentSelected={intentSelected}
             />
           )}
 

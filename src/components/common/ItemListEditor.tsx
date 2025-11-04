@@ -103,7 +103,7 @@ export default function ItemListEditor<T extends ListItem = ListItem>({
   };
 
   return (
-    <div className={`border ${borderColor} rounded-2xl overflow-hidden shadow-sm flex flex-col h-full min-h-0`}>
+    <div className={`border ${borderColor} overflow-hidden shadow-sm flex flex-col h-full min-h-0`}>
       {/* Header con controlli di editing */}
       <div className={`px-3 py-2 ${headerColor} text-slate-900 font-semibold border-b flex items-center justify-between`}>
         <span>{title}</span>

@@ -19,6 +19,7 @@ export default function IntentEditorInlineEditor({
   node,
   profile,
   onProfileUpdate,
+  intentSelected,
 }: IntentEditorInlineEditorProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 600 }}>
@@ -39,9 +40,9 @@ export default function IntentEditorInlineEditor({
         </button>
       </div>
 
-      {/* EmbeddingEditorShell with inlineMode prop */}
+      {/* EmbeddingEditorShell with inlineMode prop and intentSelected */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <EmbeddingEditorShell inlineMode={true} />
+        <EmbeddingEditorShell inlineMode={true} intentSelected={intentSelected} />
       </div>
     </div>
   );
