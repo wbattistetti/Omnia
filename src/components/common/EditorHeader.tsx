@@ -1,4 +1,5 @@
 import React from 'react';
+import { X } from 'lucide-react';
 
 type ToolbarButton = {
   icon: React.ReactNode;
@@ -101,6 +102,9 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
           <button
             onClick={onClose}
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
               height: 28,
               padding: '0 10px',
               borderRadius: 6,
@@ -110,6 +114,7 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
               cursor: 'pointer',
             }}
           >
+            <X size={16} color="#ef4444" />
             Close
           </button>
         )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Undo2, Redo2, Plus, MessageSquare, Code2, FileText, Rocket, BookOpen, List } from 'lucide-react';
+import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
 
 interface ResponseEditorToolbarProps {
@@ -39,48 +39,39 @@ export function useResponseEditorToolbar({
   return [
     { icon: <Undo2 size={16} />, onClick: () => { }, title: "Undo" },
     { icon: <Redo2 size={16} />, onClick: () => { }, title: "Redo" },
-    { icon: <Plus size={16} />, label: "Add constraint", onClick: () => { }, primary: true },
     {
       icon: <Rocket size={16} />,
+      label: "Behaviour",
       onClick: () => handleRightModeChange('actions'),
-      title: "Actions",
+      title: "Define the agent's response flow: prompts, confirmations, error handling, and escalation logic.",
       active: rightMode === 'actions'
     },
     {
-      icon: <Code2 size={16} />,
-      onClick: () => handleRightModeChange('validator'),
-      title: "Validator",
-      active: rightMode === 'validator'
-    },
-    {
-      icon: <FileText size={16} />,
-      onClick: () => handleRightModeChange('testset'),
-      title: "Test set",
-      active: rightMode === 'testset'
-    },
-    {
-      icon: <MessageSquare size={16} />,
-      onClick: () => handleRightModeChange('chat'),
-      title: "Chat",
-      active: rightMode === 'chat'
-    },
-    {
       icon: <List size={16} />,
+      label: "Personality",
       onClick: () => {
         if (showSynonyms) onToggleSynonyms();
         onToggleMessageReview();
       },
-      title: "Message review",
+      title: "Customize the agent's tone, empathy level, and linguistic style to match your target audience.",
       active: showMessageReview
     },
     {
       icon: <BookOpen size={16} />,
+      label: "Recognition",
       onClick: () => {
         if (showMessageReview) onToggleMessageReview();
         onToggleSynonyms();
       },
-      title: showSynonyms ? 'Close contract editor' : 'Open contract editor',
+      title: "Configure rules and models to identify and extract relevant data from user input.",
       active: showSynonyms
+    },
+    {
+      icon: <MessageSquare size={16} />,
+      label: "Test",
+      onClick: () => handleRightModeChange('chat'),
+      title: "Simulate and validate the dialogue flow to ensure correct behavior and data recognition.",
+      active: rightMode === 'chat'
     },
   ];
 }
