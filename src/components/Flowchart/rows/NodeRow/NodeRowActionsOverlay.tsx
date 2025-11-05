@@ -86,7 +86,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
     >
       {/* Current ActType icon → opens inline type picker below */}
       {ActIcon && (
-        <SmartTooltip text="Change act type" tutorId="act_type_help" placement="top">
+        <SmartTooltip text="Change act type" tutorId="act_type_help" placement="bottom">
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -108,7 +108,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         </SmartTooltip>
       )}
       {/* Matita (edit) */}
-      <SmartTooltip text="Edit row" tutorId="edit_row_help" placement="top">
+      <SmartTooltip text="Edit row" tutorId="edit_row_help" placement="bottom">
         <button
           onClick={(e) => {
             e.preventDefault();
@@ -128,7 +128,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       </SmartTooltip>
       {/* Wrench (Condition) - subito dopo la matita se è una condition */}
       {isCondition && (
-        <SmartTooltip text="Edit condition" tutorId="edit_condition_help" placement="top">
+        <SmartTooltip text="Edit condition" tutorId="edit_condition_help" placement="bottom">
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -151,7 +151,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       <SmartTooltip
         text="Manually define this task's behavior using the rule editor."
         tutorId="gear_tooltip_help"
-        placement="top"
+        placement="bottom"
       >
         <button
           style={{ display: 'flex', alignItems: 'center', padding: 2, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
@@ -174,7 +174,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       <SmartTooltip
         text="Handle by AI at runtime instead of rule-based logic"
         tutorId="ai_prompt_help"
-        placement="top"
+        placement="bottom"
       >
         <button
           onClick={(e) => {
@@ -195,7 +195,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       </SmartTooltip>
       {/* Cestino (delete) */}
       {canDelete && (
-        <SmartTooltip text="Delete row" tutorId="delete_row_help" placement="top">
+        <SmartTooltip text="Delete row" tutorId="delete_row_help" placement="bottom">
           <button
             onClick={(e) => {
               e.preventDefault();

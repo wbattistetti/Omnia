@@ -21,6 +21,7 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
   const [contentStyle, setContentStyle] = useState<React.CSSProperties>({});
+  const [isPositionCalculated, setIsPositionCalculated] = useState(false);
   const { fontSize } = useFontStore();
 
   // Font size mapping basato sul font centralizzato
@@ -45,7 +46,8 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
 
   // Algoritmo intelligente per posizionamento e dimensionamento
   useEffect(() => {
-    if (!showTooltip || !wrapperRef.current || !tooltipRef.current) {
+    if (!showTooltip || !wrapperRef.current) {
+      setIsPositionCalculated(false);
       return;
     }
 
@@ -62,8 +64,28 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
       const minWordsPerLine = 10;
       const minWidthForWords = calculateMinWidthForWords(minWordsPerLine, tooltipFontSize);
 
+      // ✅ Determina il placement effettivo PRIMA del render del tooltip
+      // Usa SEMPRE una stima fissa dell'altezza per evitare flickering dovuto a ri-calcoli
+      let effectivePlacement = placement;
+
+      // Se placement è 'bottom' o non specificato, verifica se c'è spazio sotto
+      if (placement === 'bottom' || placement === undefined || placement === null) {
+        // ✅ Stima FISSA dell'altezza del tooltip (non cambia mai per evitare flickering)
+        const estimatedTooltipHeight = 60; // Stima conservativa sempre uguale
+        const spaceBelow = viewportHeight - wrapperRect.bottom - padding;
+        const spaceAbove = wrapperRect.top - padding;
+
+        // Se non c'è spazio sotto ma c'è spazio sopra, usa 'top'
+        // Aggiungi un margine di sicurezza (20px) per evitare che il tooltip tocchi i bordi
+        if (spaceBelow < estimatedTooltipHeight + 20 && spaceAbove >= estimatedTooltipHeight + 20) {
+          effectivePlacement = 'top';
+        } else {
+          effectivePlacement = 'bottom';
+        }
+      }
+
       // Per placement bottom/top: allinea a sinistra con l'elemento
-      if (placement === 'bottom' || placement === 'top') {
+      if (effectivePlacement === 'bottom' || effectivePlacement === 'top') {
         // Spazio disponibile a destra dall'elemento
         const spaceRight = viewportWidth - wrapperRect.left - padding;
         const spaceLeft = wrapperRect.left - padding;
@@ -102,12 +124,12 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
         const tooltipPosStyle: React.CSSProperties = {
           position: 'absolute',
           zIndex: 10000,
-          ...(placement === 'bottom' && {
+          ...(effectivePlacement === 'bottom' && {
             top: '100%',
             left: leftPosition,
             marginTop: 12,
           }),
-          ...(placement === 'top' && {
+          ...(effectivePlacement === 'top' && {
             bottom: '100%',
             left: leftPosition,
             marginBottom: 12,
@@ -130,6 +152,7 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
 
         setTooltipStyle(tooltipPosStyle);
         setContentStyle(contentPosStyle);
+        setIsPositionCalculated(true); // ✅ Marca come calcolato
       } else {
         // Per placement right/left: usa logica originale
         const tooltipPosStyle: React.CSSProperties = {
@@ -154,16 +177,18 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
 
         setTooltipStyle(tooltipPosStyle);
         setContentStyle(contentPosStyle);
+        setIsPositionCalculated(true); // ✅ Marca come calcolato
       }
     };
 
-    // Aggiorna dopo un breve delay per permettere il rendering
-    const timeoutId = setTimeout(updateTooltipPosition, 10);
+    // ✅ Calcola immediatamente (senza delay) per evitare flickering
+    // Il tooltip verrà renderizzato invisibile finché isPositionCalculated non è true
+    updateTooltipPosition();
+
     window.addEventListener('resize', updateTooltipPosition);
     window.addEventListener('scroll', updateTooltipPosition, true);
 
     return () => {
-      clearTimeout(timeoutId);
       window.removeEventListener('resize', updateTooltipPosition);
       window.removeEventListener('scroll', updateTooltipPosition, true);
     };
@@ -187,7 +212,12 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
       {showTooltip && (
         <div
           ref={tooltipRef}
-          style={tooltipStyle}
+          style={{
+            ...tooltipStyle,
+            opacity: isPositionCalculated ? 1 : 0, // ✅ Invisibile finché posizionamento non calcolato
+            transition: isPositionCalculated ? 'opacity 0.05s ease-in' : 'none', // Smooth fade-in
+            pointerEvents: isPositionCalculated ? 'auto' : 'none' // Disabilita interazioni finché non visibile
+          }}
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
