@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Move, Edit3, Trash2, Anchor, Eye, EyeOff } from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
 
@@ -14,6 +14,7 @@ interface NodeDragHeaderProps {
   showUnchecked?: boolean; // Se true, mostra righe unchecked
   onToggleUnchecked?: () => void; // Callback per toggle visibilità righe unchecked
   hasUncheckedRows?: boolean; // Se true, ci sono righe unchecked nel nodo
+  nodeRef?: React.RefObject<HTMLElement>; // Ref del nodo per calcolare il font size
 }
 
 /**
@@ -21,7 +22,7 @@ interface NodeDragHeaderProps {
  * Serve come area drag per spostare il nodo intero.
  * NON ha classe 'nodrag' quindi è draggable.
  */
-export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onDelete, compact, showDragHandle = true, fullWidth = false, isToolbarDrag = false, onDragStart, showUnchecked = true, onToggleUnchecked, hasUncheckedRows = false }) => {
+export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onDelete, compact, showDragHandle = true, fullWidth = false, isToolbarDrag = false, onDragStart, showUnchecked = true, onToggleUnchecked, hasUncheckedRows = false, nodeRef }) => {
   // Quando compact=true, è usato come toolbar sopra il nodo (no border radius, più piccolo)
   const isToolbar = compact === true;
   // showDragHandle controlla se mostrare l'area drag (grip + testo)
@@ -34,6 +35,57 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
       prevIsToolbarDrag.current = isToolbarDrag;
     }
   }, [isToolbarDrag]);
+
+  // Calcola dimensione icone dinamicamente basata sul font size del nodo (stessa logica delle icone di riga)
+  const [iconSize, setIconSize] = useState(16);
+  useEffect(() => {
+    const updateSize = () => {
+      // Cerca un elemento con testo nel nodo per ottenere il font size
+      let targetElement: HTMLElement | null = null;
+      if (nodeRef?.current) {
+        // Cerca la prima riga di testo nel nodo (span con classe nodrag o dentro .node-row)
+        const rowLabel = nodeRef.current.querySelector('span.nodrag, .node-row span, span[style*="cursor: grab"]') as HTMLElement;
+        if (rowLabel) {
+          targetElement = rowLabel;
+        } else {
+          // Fallback: cerca qualsiasi span con testo nel nodo
+          const anySpan = nodeRef.current.querySelector('span') as HTMLElement;
+          if (anySpan) {
+            targetElement = anySpan;
+          } else {
+            // Ultimo fallback: usa il nodo stesso
+            targetElement = nodeRef.current;
+          }
+        }
+      }
+
+      if (targetElement) {
+        const computedStyle = window.getComputedStyle(targetElement);
+        const fontSize = parseFloat(computedStyle.fontSize) || 12;
+        // Icone devono essere 119% del font size (stessa logica delle icone di riga)
+        const newSize = Math.max(16, Math.min(32, Math.round(fontSize * 1.19)));
+        setIconSize(newSize);
+      } else {
+        setIconSize(16);
+      }
+    };
+
+    updateSize();
+
+    const observer = new MutationObserver(updateSize);
+    if (nodeRef?.current) {
+      observer.observe(nodeRef.current, {
+        attributes: true,
+        attributeFilter: ['style', 'class'],
+        subtree: true
+      });
+      window.addEventListener('resize', updateSize);
+      return () => {
+        observer.disconnect();
+        window.removeEventListener('resize', updateSize);
+      };
+    }
+  }, [nodeRef]);
 
 
 
@@ -85,7 +137,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               onDragStart?.();
             }}
           >
-            <Move className="w-3 h-3 text-amber-300 drop-shadow" />
+            <Move style={{ width: iconSize, height: iconSize }} className="text-amber-300 drop-shadow" />
           </div>
         </SmartTooltip>
 
@@ -111,7 +163,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               onDragStart?.();
             }}
           >
-            <Anchor className="w-3 h-3 text-slate-200 hover:text-amber-300 drop-shadow" />
+            <Anchor style={{ width: iconSize, height: iconSize }} className="text-slate-200 hover:text-amber-300 drop-shadow" />
           </div>
         </SmartTooltip>
       </div>
@@ -141,9 +193,9 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               }}
             >
               {showUnchecked ? (
-                <Eye className="w-3 h-3 text-slate-200 hover:text-blue-400 drop-shadow hover:drop-shadow-lg transition-colors" />
+                <Eye style={{ width: iconSize, height: iconSize }} className="text-slate-200 hover:text-blue-400 drop-shadow hover:drop-shadow-lg transition-colors" />
               ) : (
-                <EyeOff className="w-3 h-3 text-slate-200 hover:text-blue-400 drop-shadow hover:drop-shadow-lg transition-colors" />
+                <EyeOff style={{ width: iconSize, height: iconSize }} className="text-slate-200 hover:text-blue-400 drop-shadow hover:drop-shadow-lg transition-colors" />
               )}
             </button>
           </SmartTooltip>
@@ -161,7 +213,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               onEditTitle();
             }}
           >
-            <Edit3 className="w-3 h-3 text-slate-200 hover:text-amber-300 drop-shadow hover:drop-shadow-lg transition-colors" />
+            <Edit3 style={{ width: iconSize, height: iconSize }} className="text-slate-200 hover:text-amber-300 drop-shadow hover:drop-shadow-lg transition-colors" />
           </button>
         </SmartTooltip>
 
@@ -175,7 +227,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               onDelete();
             }}
           >
-            <Trash2 className="w-3 h-3 text-slate-200 hover:text-red-400 drop-shadow hover:drop-shadow-lg transition-colors" />
+            <Trash2 style={{ width: iconSize, height: iconSize }} className="text-slate-200 hover:text-red-400 drop-shadow hover:drop-shadow-lg transition-colors" />
           </button>
         </SmartTooltip>
       </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import SmartTooltip from '../SmartTooltip';
 
 type ToolbarButton = {
   icon: React.ReactNode;
@@ -70,30 +71,56 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
         {toolbarButtons.length > 0 && (
           <>
             {toolbarButtons.map((btn, i) => (
-              <button
-                key={i}
-                onClick={btn.onClick}
-                title={btn.title}
-                disabled={btn.disabled}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
-                  color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
-                  border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
-                  borderRadius: 8,
-                  padding: btn.label ? '8px 14px' : '6px 10px',
-                  cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                  opacity: btn.disabled ? 0.5 : 1,
-                  fontWeight: btn.primary ? 600 : 400,
-                  fontSize: 14,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {btn.icon}
-                {btn.label && <span>{btn.label}</span>}
-              </button>
+              btn.title ? (
+                <SmartTooltip key={i} text={btn.title} tutorId={`toolbar_btn_${i}_help`} placement="bottom">
+                  <button
+                    onClick={btn.onClick}
+                    disabled={btn.disabled}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
+                      color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
+                      border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
+                      borderRadius: 8,
+                      padding: btn.label ? '8px 14px' : '6px 10px',
+                      cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                      opacity: btn.disabled ? 0.5 : 1,
+                      fontWeight: btn.primary ? 600 : 400,
+                      fontSize: 14,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {btn.icon}
+                    {btn.label && <span>{btn.label}</span>}
+                  </button>
+                </SmartTooltip>
+              ) : (
+                <button
+                  key={i}
+                  onClick={btn.onClick}
+                  disabled={btn.disabled}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
+                    color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
+                    border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
+                    borderRadius: 8,
+                    padding: btn.label ? '8px 14px' : '6px 10px',
+                    cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                    opacity: btn.disabled ? 0.5 : 1,
+                    fontWeight: btn.primary ? 600 : 400,
+                    fontSize: 14,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {btn.icon}
+                  {btn.label && <span>{btn.label}</span>}
+                </button>
+              )
             ))}
           </>
         )}

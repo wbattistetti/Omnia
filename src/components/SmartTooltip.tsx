@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { HelpCircle, GraduationCap } from 'lucide-react';
 import { useFontStore } from '../state/fontStore';
 import { emitTutorOpen } from '../ui/events';
@@ -18,6 +18,9 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
+  const [contentStyle, setContentStyle] = useState<React.CSSProperties>({});
   const { fontSize } = useFontStore();
 
   // Font size mapping basato sul font centralizzato
@@ -31,15 +34,140 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
 
   const tooltipFontSize = sizeMap[fontSize];
 
-  // Tooltip positioning
-  const tooltipStyle: React.CSSProperties = {
-    position: 'absolute',
-    zIndex: 10000,
-    ...(placement === 'right' && { top: '50%', left: '100%', transform: 'translateY(-50%)', marginLeft: 12 }),
-    ...(placement === 'left' && { top: '50%', right: '100%', transform: 'translateY(-50%)', marginRight: 12 }),
-    ...(placement === 'top' && { bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 12 }),
-    ...(placement === 'bottom' && { top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 12 }),
+  // Calcola larghezza minima per 10-12 parole (stima approssimativa)
+  const calculateMinWidthForWords = (words: number, fontSize: string): number => {
+    // Stima: ogni parola media è ~6 caratteri, ogni carattere ~0.6 * fontSize
+    const fontSizeNum = parseFloat(fontSize) || 14;
+    const avgCharWidth = fontSizeNum * 0.6;
+    const avgWordWidth = 6 * avgCharWidth;
+    return Math.round(words * avgWordWidth + 40); // +40 per padding e icone
   };
+
+  // Algoritmo intelligente per posizionamento e dimensionamento
+  useEffect(() => {
+    if (!showTooltip || !wrapperRef.current || !tooltipRef.current) {
+      return;
+    }
+
+    const updateTooltipPosition = () => {
+      const wrapperRect = wrapperRef.current?.getBoundingClientRect();
+      if (!wrapperRect) return;
+
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const padding = 12; // Margine minimo dal bordo viewport
+
+      // Calcola larghezza minima per 10-12 parole
+      const words = text.split(/\s+/).length;
+      const minWordsPerLine = 10;
+      const minWidthForWords = calculateMinWidthForWords(minWordsPerLine, tooltipFontSize);
+
+      // Per placement bottom/top: allinea a sinistra con l'elemento
+      if (placement === 'bottom' || placement === 'top') {
+        // Spazio disponibile a destra dall'elemento
+        const spaceRight = viewportWidth - wrapperRect.left - padding;
+        const spaceLeft = wrapperRect.left - padding;
+
+        // Larghezza ideale: quanto più largo possibile senza uscire
+        let idealWidth = Math.min(spaceRight, 600); // Max 600px
+
+        // Se il testo è corto e c'è spazio, usa tutto lo spazio disponibile
+        const estimatedTextWidth = calculateMinWidthForWords(words, tooltipFontSize);
+        if (estimatedTextWidth < spaceRight) {
+          idealWidth = Math.min(estimatedTextWidth + 40, spaceRight); // +40 per padding
+        }
+
+        // Determina se serve wrapping
+        const needsWrap = idealWidth < estimatedTextWidth || words > 20;
+        const finalWidth = needsWrap ? Math.max(minWidthForWords, idealWidth) : idealWidth;
+
+        // Verifica se esce dal viewport a destra quando allineato a sinistra
+        let leftPosition = 0; // Di default allineato a sinistra con l'elemento
+        if (wrapperRect.left + finalWidth > viewportWidth - padding) {
+          // Esce a destra: calcola quanto spostare a sinistra
+          const wouldExceed = (wrapperRect.left + finalWidth) - (viewportWidth - padding);
+          leftPosition = -wouldExceed;
+
+          // Verifica che non esca a sinistra
+          if (wrapperRect.left + leftPosition < padding) {
+            // Sposta il bordo sinistro al padding minimo
+            leftPosition = padding - wrapperRect.left;
+            // Riduci la larghezza se necessario
+            const maxPossibleWidth = viewportWidth - padding - (wrapperRect.left + leftPosition);
+            idealWidth = Math.min(finalWidth, maxPossibleWidth);
+          }
+        }
+
+        // Posizionamento: allineato a sinistra, eventualmente spostato
+        const tooltipPosStyle: React.CSSProperties = {
+          position: 'absolute',
+          zIndex: 10000,
+          ...(placement === 'bottom' && {
+            top: '100%',
+            left: leftPosition,
+            marginTop: 12,
+          }),
+          ...(placement === 'top' && {
+            bottom: '100%',
+            left: leftPosition,
+            marginBottom: 12,
+          }),
+        };
+
+        const contentPosStyle: React.CSSProperties = {
+          backgroundColor: '#fefce8',
+          color: '#854d0e',
+          border: '1px solid #fde68a',
+          fontSize: tooltipFontSize,
+          lineHeight: 1.4,
+          padding: '6px 8px',
+          width: needsWrap ? 'auto' : 'max-content',
+          maxWidth: idealWidth,
+          minWidth: needsWrap ? minWidthForWords : 'auto',
+          pointerEvents: 'auto',
+          boxSizing: 'border-box',
+        };
+
+        setTooltipStyle(tooltipPosStyle);
+        setContentStyle(contentPosStyle);
+      } else {
+        // Per placement right/left: usa logica originale
+        const tooltipPosStyle: React.CSSProperties = {
+          position: 'absolute',
+          zIndex: 10000,
+          ...(placement === 'right' && { top: '50%', left: '100%', transform: 'translateY(-50%)', marginLeft: 12 }),
+          ...(placement === 'left' && { top: '50%', right: '100%', transform: 'translateY(-50%)', marginRight: 12 }),
+        };
+
+        const contentPosStyle: React.CSSProperties = {
+          backgroundColor: '#fefce8',
+          color: '#854d0e',
+          border: '1px solid #fde68a',
+          fontSize: tooltipFontSize,
+          lineHeight: 1.4,
+          padding: '6px 8px',
+          width: 'max-content',
+          maxWidth: 500,
+          pointerEvents: 'auto',
+          boxSizing: 'border-box',
+        };
+
+        setTooltipStyle(tooltipPosStyle);
+        setContentStyle(contentPosStyle);
+      }
+    };
+
+    // Aggiorna dopo un breve delay per permettere il rendering
+    const timeoutId = setTimeout(updateTooltipPosition, 10);
+    window.addEventListener('resize', updateTooltipPosition);
+    window.addEventListener('scroll', updateTooltipPosition, true);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', updateTooltipPosition);
+      window.removeEventListener('scroll', updateTooltipPosition, true);
+    };
+  }, [showTooltip, placement, text, tooltipFontSize]);
 
   const handleTutorClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -58,24 +186,14 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
       {children}
       {showTooltip && (
         <div
+          ref={tooltipRef}
           style={tooltipStyle}
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
           <div
             className="rounded-lg shadow-lg flex items-center"
-            style={{
-              backgroundColor: '#fefce8', // Giallo pallidissimo
-              color: '#854d0e', // Testo marrone scuro per leggibilità
-              border: '1px solid #fde68a', // Bordo giallo chiaro
-              fontSize: tooltipFontSize,
-              lineHeight: 1.4,
-              padding: '6px 8px',
-              width: 'max-content',
-              maxWidth: 500,
-              pointerEvents: 'auto',
-              boxSizing: 'border-box',
-            }}
+            style={contentStyle}
             role="tooltip"
           >
             <GraduationCap
@@ -88,9 +206,11 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
             />
             <span
               style={{
-                whiteSpace: 'nowrap',
+                whiteSpace: contentStyle.width === 'auto' ? 'normal' : 'nowrap',
                 wordBreak: 'break-word',
                 overflowWrap: 'break-word',
+                flex: contentStyle.width === 'auto' ? '1 1 auto' : '0 0 auto',
+                minWidth: 0,
               }}
             >
               {text}

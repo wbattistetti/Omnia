@@ -5,6 +5,7 @@ import NoteButton from './CellNote/NoteButton';
 import NoteEditor from './CellNote/NoteEditor';
 import NoteDisplay from './CellNote/NoteDisplay';
 import NoteSeparator from './CellNote/NoteSeparator';
+import SmartTooltip from '../../SmartTooltip';
 
 // 🎨 Colori centralizzati per extractors
 const EXTRACTOR_COLORS = {
@@ -369,38 +370,40 @@ export default function TesterGrid({
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
-                  <button
-                    onClick={() => toggleEditor('extractor')}
-                    title="Configure Extractor"
-                    style={{
-                      background: activeEditor === 'extractor' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
-                      border: 'none',
-                      borderRadius: 4,
-                      padding: '4px 6px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <Wand2 size={14} color={activeEditor === 'extractor' ? '#fff' : '#666'} />
-                  </button>
-                  <button
-                    onClick={() => toggleEditor('post')}
-                    title="Configure Post Process"
-                    style={{
-                      background: activeEditor === 'post' ? '#10b981' : 'rgba(255,255,255,0.3)',
-                      border: 'none',
-                      borderRadius: 4,
-                      padding: '4px 6px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <TypeIcon size={14} color={activeEditor === 'post' ? '#fff' : '#666'} />
-                  </button>
+                  <SmartTooltip text="Configure Extractor" tutorId="configure_extractor_help" placement="bottom">
+                    <button
+                      onClick={() => toggleEditor('extractor')}
+                      style={{
+                        background: activeEditor === 'extractor' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
+                        border: 'none',
+                        borderRadius: 4,
+                        padding: '4px 6px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <Wand2 size={14} color={activeEditor === 'extractor' ? '#fff' : '#666'} />
+                    </button>
+                  </SmartTooltip>
+                  <SmartTooltip text="Configure Post Process" tutorId="configure_post_help" placement="bottom">
+                    <button
+                      onClick={() => toggleEditor('post')}
+                      style={{
+                        background: activeEditor === 'post' ? '#10b981' : 'rgba(255,255,255,0.3)',
+                        border: 'none',
+                        borderRadius: 4,
+                        padding: '4px 6px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <TypeIcon size={14} color={activeEditor === 'post' ? '#fff' : '#666'} />
+                    </button>
+                  </SmartTooltip>
                 </div>
               </div>
             </th>

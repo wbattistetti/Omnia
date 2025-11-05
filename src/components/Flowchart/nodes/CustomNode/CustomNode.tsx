@@ -351,6 +351,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               left: 0,
               right: 0,
               bottom: '100%',
+              marginBottom: 8, // Spazio tra toolbar e bordo del nodo
               ...toolbarStyles,
               zIndex: 1000, // Sopra il buffer area
               pointerEvents: 'auto',
@@ -369,6 +370,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               showUnchecked={showUnchecked}
               onToggleUnchecked={handleToggleUnchecked}
               hasUncheckedRows={hasUncheckedRows}
+              nodeRef={nodeContainerRef}
               onDragStart={() => {
                 // ✅ Verifica che NON ci sia una riga in drag (PROTEZIONE CRITICA)
                 const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
