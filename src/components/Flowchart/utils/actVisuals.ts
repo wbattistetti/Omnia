@@ -55,19 +55,7 @@ export function hasActDDT(row: any, act: any): boolean {
   const actType = resolveActType(row, act);
   const instanceId = row?.id || row?.instanceId;
 
-  console.log('[hasActDDT][START]', {
-    rowId: row?.id,
-    rowText: row?.text,
-    actType,
-    instanceId,
-    hasInstanceId: !!instanceId
-  });
-
   if (!instanceId) {
-    console.log('[hasActDDT][NO_INSTANCE_ID]', {
-      rowId: row?.id,
-      result: false
-    });
     return false;
   }
 
@@ -75,50 +63,19 @@ export function hasActDDT(row: any, act: any): boolean {
     const instance = instanceRepository.getInstance(instanceId);
 
     if (!instance) {
-      console.log('[hasActDDT][NO_INSTANCE]', {
-        rowId: row?.id,
-        instanceId,
-        result: false
-      });
       return false;
     }
 
     // Per Message: controlla se c'è un messaggio
     if (actType === 'Message') {
       const hasMessage = Boolean(instance?.message?.text && instance.message.text.trim().length > 0);
-
-      console.log('[hasActDDT][MESSAGE][RESULT]', {
-        rowId: row?.id,
-        instanceId,
-        hasMessage,
-        messageText: instance?.message?.text || 'N/A',
-        messageTextLength: instance?.message?.text?.trim().length || 0
-      });
-
       return hasMessage;
     }
 
     // Per altri tipi: controlla se c'è un DDT nell'istanza
     const hasDDT = Boolean(instance?.ddt);
-
-    console.log('[hasActDDT][NON_MESSAGE][RESULT]', {
-      rowId: row?.id,
-      actType,
-      instanceId,
-      hasDDT,
-      instanceDDTId: instance?.ddt?.id || 'N/A',
-      hasMainData: !!instance?.ddt?.mainData,
-      mainDataLength: instance?.ddt?.mainData?.length || 0
-    });
-
     return hasDDT;
   } catch (err) {
-    console.error('[hasActDDT][ERROR]', {
-      rowId: row?.id,
-      instanceId,
-      actType,
-      error: err
-    });
     return false;
   }
 }
@@ -186,14 +143,6 @@ export function getAgentActVisualsByType(type: ActType, hasDDT: boolean) {
       labelColor = green; // Label sempre verde
       iconColor = hasDDT ? green : gray; // Icona: verde se ha DDT, grigio se no
   }
-
-  console.log('[getAgentActVisualsByType][RESULT]', {
-    type,
-    hasDDT,
-    labelColor,
-    iconColor,
-    iconName: Icon?.name || 'Unknown'
-  });
 
   return {
     Icon,

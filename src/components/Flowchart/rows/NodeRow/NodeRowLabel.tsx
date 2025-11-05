@@ -121,28 +121,9 @@ const PrimaryIconButton: React.FC<{
     }
   }, [iconSize, labelRef]);
 
-  // Log quando il colore viene applicato
+  // Icon color applied (no logging to reduce console clutter)
   useEffect(() => {
-    console.log('[PrimaryIconButton][ICON_COLOR_APPLIED]', {
-      iconColor,
-      computedSize,
-      willApplyColor: iconColor
-    });
-
-    // Verifica il colore effettivo applicato al DOM dopo il rendering
-    requestAnimationFrame(() => {
-      if (labelRef.current) {
-        const iconElement = labelRef.current.querySelector('svg');
-        if (iconElement) {
-          const computedColor = window.getComputedStyle(iconElement).color;
-          console.log('[PrimaryIconButton][DOM_COLOR_CHECK]', {
-            iconColor,
-            computedColor,
-            match: computedColor === iconColor || computedColor === `rgb(${parseInt(iconColor.slice(1, 3), 16)}, ${parseInt(iconColor.slice(3, 5), 16)}, ${parseInt(iconColor.slice(5, 7), 16)})`
-          });
-        }
-      }
-    });
+    // Color is applied via inline style on the Icon component
   }, [iconColor, computedSize, labelRef]);
 
   return (
@@ -155,7 +136,6 @@ const PrimaryIconButton: React.FC<{
           e.stopPropagation();
           try {
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            console.log('[TypePicker][labelIcon][click]', { rect, labelRect: labelRef.current?.getBoundingClientRect() });
             onTypeChangeRequest && onTypeChangeRequest(rect);
           } catch (err) { try { console.warn('[TypePicker][labelIcon][err]', err); } catch { } }
         }}
@@ -345,15 +325,6 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
     >
       {Icon && (() => {
         const finalIconColor = iconColor || labelTextColor;
-        console.log('[NodeRowLabel][ICON_RENDER]', {
-          rowId: row.id,
-          rowText: row.text,
-          hasIcon: !!Icon,
-          iconColor,
-          labelTextColor,
-          finalIconColor,
-          included
-        });
         return (
           <PrimaryIconButton
             Icon={Icon}

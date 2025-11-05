@@ -439,6 +439,16 @@ export default function RegexInlineEditor({
         setCurrentRegexValue(newRegex);
         console.log('[AI Regex] ✅ Called setCurrentRegexValue with:', newRegex);
 
+        // ✅ Save regex to profile immediately (no timing issues)
+        if (onProfileUpdate && profile) {
+          const updatedProfile = {
+            ...profile,
+            regex: newRegex || undefined
+          };
+          console.log('[AI Regex] ✅ Saving regex to profile immediately');
+          onProfileUpdate(updatedProfile);
+        }
+
         // Reset hasUserEdited since we now have a new generated regex
         setHasUserEdited(false);
 
@@ -621,6 +631,14 @@ export default function RegexInlineEditor({
                     // Mark as edited if different from original value
                     if (newValue !== regex) {
                       setHasUserEdited(true);
+                    }
+                    // ✅ Save regex to profile immediately (no timing issues)
+                    if (onProfileUpdate && profile) {
+                      const updatedProfile = {
+                        ...profile,
+                        regex: newValue || undefined
+                      };
+                      onProfileUpdate(updatedProfile);
                     }
                   }
                 }}

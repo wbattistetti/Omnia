@@ -56,6 +56,12 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
     return null;
   }
 
+  // ✅ If input text is empty, don't even attempt regex match
+  if (!text || text.trim().length === 0) {
+    console.log('[NLP][tryParseComplete][empty-input]', { text, regex });
+    return null;
+  }
+
   try {
     const match = text.match(new RegExp(regex));
     if (!match) {
@@ -67,21 +73,50 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
 
     // Get all sub-data/subSlots with their IDs and labels
     const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+    console.log('[NLP][tryParseComplete][subs-info]', {
+      subsCount: allSubs.length,
+      subs: allSubs.map(s => ({ label: s.label || s.name, id: s.id || s._id }))
+    });
 
-    // Count non-empty capture groups (skip full match at index 0)
-    const captureGroups = match.slice(1).filter(g => g !== undefined && g !== null && String(g).trim().length > 0);
+    // ✅ Get ALL capture groups (including undefined for optional groups)
+    // Skip full match at index 0, but preserve undefined values to track which groups are missing
+    const allCaptureGroups = match.slice(1);
+    const nonEmptyGroups = allCaptureGroups.filter(g => g !== undefined && g !== null && String(g).trim().length > 0);
+    console.log('[NLP][tryParseComplete][capture-groups]', {
+      rawGroups: allCaptureGroups,
+      nonEmptyGroups,
+      nonEmptyCount: nonEmptyGroups.length,
+      totalGroups: allCaptureGroups.length,
+      expectedCount: allSubs.length,
+      hasPartialMatch: nonEmptyGroups.length > 0 && nonEmptyGroups.length < allSubs.length
+    });
 
-    // 🆕 FIRST PRIORITY: Use numeric capture groups if they match sub-data count
-    if (captureGroups.length > 0 && captureGroups.length <= allSubs.length) {
+    // ✅ FIRST PRIORITY: Use numeric capture groups (even if partial match)
+    // Allow partial matches: if we have at least one valid group, extract what we can
+    if (nonEmptyGroups.length > 0 && allCaptureGroups.length <= allSubs.length) {
       const result: Record<string, any> = {};
       let hasValidMapping = false;
 
       // Map each capture group (by position) to sub-data (by order)
-      for (let i = 0; i < Math.min(captureGroups.length, allSubs.length); i++) {
-        const groupValue = captureGroups[i]?.trim();
+      // Iterate over ALL expected sub-data, but only map groups that exist
+      for (let i = 0; i < allSubs.length; i++) {
         const subData = allSubs[i];
+        if (!subData) continue;
 
-        if (!groupValue || !subData) continue;
+        // Get the capture group at position i (may be undefined if optional group didn't match)
+        const groupValue = allCaptureGroups[i];
+
+        // If this group is undefined/null/empty, skip it (this sub-data is missing)
+        if (groupValue === undefined || groupValue === null || String(groupValue).trim().length === 0) {
+          console.log('[NLP][tryParseComplete][missing-group]', {
+            index: i,
+            subLabel: subData.label || subData.name,
+            reason: 'Optional group did not match or is empty'
+          });
+          continue;
+        }
+
+        const trimmedValue = String(groupValue).trim();
 
         // Get sub-data ID and label
         const subId = subData.id || subData._id || '';
@@ -89,21 +124,41 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
 
         // Map label to standard key (day, month, year, firstname, lastname, etc.)
         const standardKey = mapLabelToStandardKey(subLabel);
+        console.log('[NLP][tryParseComplete][mapping-group]', {
+          index: i,
+          groupValue: trimmedValue,
+          subLabel,
+          standardKey,
+          subId
+        });
 
         if (standardKey) {
           // Use standard key (day, month, year, etc.)
           if (standardKey === 'day' || standardKey === 'month' || standardKey === 'year') {
-            const numValue = parseInt(groupValue, 10);
+            let numValue = parseInt(trimmedValue, 10);
+            // Normalize 2-digit years to 4 digits (61 -> 1961, 05 -> 2005)
+            if (standardKey === 'year' && !isNaN(numValue)) {
+              if (numValue < 100) {
+                numValue = numValue < 50 ? 2000 + numValue : 1900 + numValue;
+              }
+            }
+            console.log('[NLP][tryParseComplete][parsing-date-value]', {
+              standardKey,
+              groupValue: trimmedValue,
+              numValue,
+              isValid: !isNaN(numValue),
+              wasNormalized: standardKey === 'year' && parseInt(trimmedValue, 10) < 100
+            });
             if (!isNaN(numValue)) {
               result[standardKey] = numValue;
               hasValidMapping = true;
             }
           } else if (standardKey === 'firstname' || standardKey === 'lastname') {
-            result[standardKey] = groupValue;
+            result[standardKey] = trimmedValue;
             hasValidMapping = true;
           } else {
             // Other standard keys (street, city, zip, country)
-            result[standardKey] = groupValue;
+            result[standardKey] = trimmedValue;
             hasValidMapping = true;
           }
         } else {
@@ -111,18 +166,33 @@ function tryParseComplete<T>(text: string, regex: string | undefined, node: Extr
           // But prefer to use standard keys when possible
           const fallbackKey = subLabel.toLowerCase().replace(/[^a-z0-9]+/g, '');
           if (fallbackKey) {
-            result[fallbackKey] = groupValue;
+            result[fallbackKey] = trimmedValue;
             hasValidMapping = true;
           }
         }
       }
 
+      console.log('[NLP][tryParseComplete][mapping-result]', {
+        result,
+        hasValidMapping,
+        resultKeys: Object.keys(result),
+        extractedGroups: Object.keys(result),
+        rawGroups: allCaptureGroups.map(g => g !== undefined ? String(g) : 'undefined'),
+        nonEmptyGroups: nonEmptyGroups.map(g => String(g)),
+        subDataCount: allSubs.length,
+        totalGroups: allCaptureGroups.length,
+        nonEmptyCount: nonEmptyGroups.length,
+        isPartialMatch: nonEmptyGroups.length < allSubs.length
+      });
+
       if (hasValidMapping && Object.keys(result).length > 0) {
         console.log('[NLP][tryParseComplete][groups-mapped-to-subdata]', {
           result,
-          captureGroups: captureGroups.map(g => String(g)),
+          extractedKeys: Object.keys(result),
+          nonEmptyGroups: nonEmptyGroups.map(g => String(g)),
           subDataCount: allSubs.length,
-          groupsCount: captureGroups.length
+          nonEmptyGroupsCount: nonEmptyGroups.length,
+          totalGroupsCount: allCaptureGroups.length
         });
         return result as Partial<T>;
       }
@@ -328,6 +398,12 @@ export async function extractField<T>(
       nodeLabel: context.node.label
     });
     const parsedValue = tryParseComplete<T>(text, context.regex, context.node);
+    console.log('[NLP][extractField][tryParseComplete-result]', {
+      text,
+      hasParsedValue: !!parsedValue,
+      parsedValue,
+      parsedValueKeys: parsedValue ? Object.keys(parsedValue) : []
+    });
 
     if (parsedValue && Object.keys(parsedValue).length > 0) {
       // Ensure values are numbers for date validation
@@ -339,11 +415,32 @@ export async function extractField<T>(
         normalizedValue.month = parseInt(String(normalizedValue.month), 10);
       }
       if ('year' in normalizedValue && typeof normalizedValue.year !== 'number') {
-        normalizedValue.year = parseInt(String(normalizedValue.year), 10);
+        let year = parseInt(String(normalizedValue.year), 10);
+        // Normalize 2-digit years to 4 digits (61 -> 1961, 05 -> 2005)
+        if (!isNaN(year) && year < 100) {
+          year = year < 50 ? 2000 + year : 1900 + year;
+        }
+        normalizedValue.year = year;
       }
+      console.log('[NLP][extractField][normalized-value]', {
+        original: parsedValue,
+        normalized: normalizedValue,
+        day: normalizedValue.day,
+        month: normalizedValue.month,
+        year: normalizedValue.year
+      });
 
       // Validate the parsed value
+      console.log('[NLP][extractField][calling-validate]', {
+        normalizedValue,
+        extractorName: ex.name
+      });
       const validation = ex.validate(normalizedValue as any);
+      console.log('[NLP][extractField][validation-result]', {
+        validationOk: validation.ok,
+        validationErrors: validation.errors,
+        normalizedValue
+      });
 
       if (validation.ok) {
         // Complete value parsed and validated successfully

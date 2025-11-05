@@ -36,13 +36,6 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
     el.style.setProperty('font-family', fontStyles.fontFamily, 'important');
     el.style.setProperty('font-weight', fontStyles.fontWeight, 'important');
     el.style.setProperty('line-height', fontStyles.lineHeight, 'important');
-
-    console.log('[NodeRowEditor][FONT_APPLY] Font styles applied directly to DOM', {
-      fontSize: fontStyles.fontSize,
-      fontFamily: fontStyles.fontFamily,
-      fontWeight: fontStyles.fontWeight,
-      lineHeight: fontStyles.lineHeight
-    });
   }, [fontStyles, inputRef]);
 
   // Auto-resize the textarea on value change

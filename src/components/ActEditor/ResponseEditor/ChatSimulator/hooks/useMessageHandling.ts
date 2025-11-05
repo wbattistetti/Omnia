@@ -190,6 +190,22 @@ export function useMessageHandling({
         const originalNode = findOriginalNode(currentDDT, targetNode?.label, targetNode?.id);
         const nlpProfile = originalNode?.nlpProfile || (targetNode as any)?.nlpProfile;
 
+        // ✅ Debug: Log regex loading
+        console.log('[ChatSimulator][extractField][regex-loading]', {
+          fieldName,
+          hasOriginalNode: !!originalNode,
+          originalNodeLabel: originalNode?.label,
+          originalNodeId: originalNode?.id,
+          hasNlpProfile: !!nlpProfile,
+          regexFromProfile: nlpProfile?.regex,
+          regexType: typeof nlpProfile?.regex,
+          regexLength: nlpProfile?.regex?.length,
+          regexPreview: nlpProfile?.regex?.substring(0, 100),
+          targetNodeLabel: targetNode?.label,
+          targetNodeId: targetNode?.id,
+          targetNodeHasNlpProfile: !!(targetNode as any)?.nlpProfile
+        });
+
         // Check if regex exists BEFORE try/catch to determine correct warning message
         const hasRegex = !!(nlpProfile?.regex && nlpProfile.regex.trim());
 
@@ -382,6 +398,14 @@ export function useMessageHandling({
             ? extractionResult.value
             : undefined;
 
+          console.log('[ChatSimulator][extractField][SUCCESS]', {
+            status: extractionResult.status,
+            extractedValue,
+            extractedValueKeys: extractedValue ? Object.keys(extractedValue) : [],
+            willCallSend: true,
+            text: trimmed
+          });
+
           setMessages((prev) => [...prev, {
             id: generateMessageId('user'),
             type: 'user',
@@ -389,7 +413,13 @@ export function useMessageHandling({
             matchStatus: 'match'
           }]);
 
+          console.log('[ChatSimulator][extractField][calling-send]', {
+            text,
+            extractedValue,
+            stateMode: state.mode
+          });
           await send(text, extractedValue);
+          console.log('[ChatSimulator][extractField][send-completed]');
           return;
         } catch (error) {
           console.error('[ChatSimulator][extractField][ERROR-CATCH]', {

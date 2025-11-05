@@ -144,7 +144,27 @@ export default function DDEBubbleChat({
       lastKeyRef.current = key || 'ask.base';
       return;
     }
-    if (lastKeyRef.current === key) return;
+    // Debug: log when entering ConfirmingMain
+    if (state.mode === 'ConfirmingMain') {
+      console.log('[DDEBubbleChat][ConfirmingMain][CHECK]', {
+        lastKey: lastKeyRef.current,
+        currentKey: key,
+        keysMatch: lastKeyRef.current === key,
+        messagesCount: messages.length,
+        willEmitConfirm: lastKeyRef.current !== key
+      });
+    }
+    // ✅ Don't skip message if mode changed to ConfirmingMain (always show confirmation)
+    // Skip only if same key AND not entering ConfirmingMain mode
+    if (lastKeyRef.current === key && state.mode !== 'ConfirmingMain') {
+      console.log('[DDEBubbleChat][SKIP_MESSAGE]', {
+        reason: 'lastKeyRef.current === key AND mode !== ConfirmingMain',
+        lastKey: lastKeyRef.current,
+        currentKey: key,
+        mode: state.mode
+      });
+      return;
+    }
     lastKeyRef.current = key || getPositionKey(state);
     // Push appropriate bot message for new state
     if (state.mode === 'CollectingMain') {
@@ -199,6 +219,12 @@ export default function DDEBubbleChat({
         ? (currentDDT as any)?.mainData[0]
         : (currentDDT as any)?.mainData;
       const { text, key: k } = resolveConfirm(state, main, legacyDict, legacyMain, translations);
+      console.log('[DDEBubbleChat][ConfirmingMain][EMITTING]', {
+        text,
+        textKey: k,
+        positionKey: key,
+        messagesCount: messages.length
+      });
       setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'confirm', textKey: k, color: getStepColor('confirm') }]);
     } else if (state.mode === 'NotConfirmed') {
       const tKey = main?.steps?.notConfirmed?.prompts?.[0];

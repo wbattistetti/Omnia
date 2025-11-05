@@ -1009,29 +1009,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     currentTypeForPicker = typeResolved;
     const has = hasActDDT(row as any, actFound);
 
-    console.log('[NodeRow][VISUALS][BEFORE]', {
-      rowId: row.id,
-      rowText: row.text,
-      typeResolved,
-      has,
-      actFound: !!actFound,
-      actId: actFound?.id
-    });
-
     const visuals = getAgentActVisualsByType(typeResolved, has);
     Icon = visuals.Icon;
     labelTextColor = visuals.labelColor; // Label: sempre colore del tipo
     iconColor = visuals.iconColor; // Icona: grigio se no DDT, colore del tipo se ha DDT
-
-    console.log('[NodeRow][VISUALS][AFTER]', {
-      rowId: row.id,
-      rowText: row.text,
-      typeResolved,
-      has,
-      labelTextColor,
-      iconColor,
-      iconName: Icon?.name || 'Unknown'
-    });
   } else {
     // Since we removed categoryType and userActs from NodeRowData, use defaults
     labelTextColor = (typeof propTextColor === 'string' ? propTextColor : '#111');
@@ -1050,12 +1031,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     const handleInstanceUpdate = (event: CustomEvent) => {
       const { instanceId: updatedInstanceId } = event.detail;
       if (updatedInstanceId === instanceId) {
-        console.log('[NodeRow][INSTANCE_UPDATE]', {
-          rowId: row.id,
-          instanceId,
-          updateType: event.detail.type,
-          willForceReRender: true
-        });
         // Force re-render by updating trigger
         setInstanceUpdateTrigger(prev => prev + 1);
       }

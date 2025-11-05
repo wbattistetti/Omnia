@@ -19,6 +19,7 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
   const [showTooltip, setShowTooltip] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
   const [contentStyle, setContentStyle] = useState<React.CSSProperties>({});
   const [isPositionCalculated, setIsPositionCalculated] = useState(false);
@@ -201,12 +202,42 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
     }
   };
 
+  // Handle mouse enter with delay
+  const handleMouseEnter = () => {
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    // Set tooltip to show after 1.25 seconds (between 1 and 1.5 seconds)
+    timerRef.current = setTimeout(() => {
+      setShowTooltip(true);
+    }, 1250);
+  };
+
+  // Handle mouse leave - clear timer and hide tooltip
+  const handleMouseLeave = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setShowTooltip(false);
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div
       ref={wrapperRef}
       style={{ position: 'relative', display: 'inline-block' }}
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {children}
       {showTooltip && (
@@ -218,8 +249,8 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
             transition: isPositionCalculated ? 'opacity 0.05s ease-in' : 'none', // Smooth fade-in
             pointerEvents: isPositionCalculated ? 'auto' : 'none' // Disabilita interazioni finché non visibile
           }}
-          onMouseEnter={() => setShowTooltip(true)}
-          onMouseLeave={() => setShowTooltip(false)}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
         >
           <div
             className="rounded-lg shadow-lg flex items-center"

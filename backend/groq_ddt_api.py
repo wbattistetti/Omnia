@@ -1737,9 +1737,16 @@ Capture Group Requirements:
 5. Escape special characters properly for JavaScript (use \\\\ for backslashes)
 6. The regex must match realistic examples of the described format
 
+OPTIONAL GROUPS STRATEGY:
+- For fields that can be partially filled (e.g., dates where user might provide only day/month, or years with 2-4 digits), make later groups OPTIONAL using (?:pattern)? or (pattern)? syntax
+- This allows the regex to match partial inputs and extract available components, while missing components will be requested later
+- Example for date with optional year: (\\d{{1,2}})[/-](\\d{{1,2}})(?:[/-](\\d{{2,4}}))?  ← Year group is optional, can match "16/12" or "16/12/61" or "16/12/1961"
+- Example for date with flexible year format: (\\d{{1,2}})[/-](\\d{{1,2}})[/-](\\d{{2,4}})  ← Year accepts 2-4 digits (will be normalized later)
+
 CRITICAL: Each sub-data component needs its own capture group.
 - WRONG: (\\d{1,2}[/-]\\d{1,2}[/-]\\d{4})  ← This captures the entire date as ONE group
 - CORRECT: (\\d{1,2})[/-](\\d{1,2})[/-](\\d{4})  ← This creates 3 separate groups for day, month, year
+- CORRECT WITH OPTIONAL: (\\d{{1,2}})[/-](\\d{{1,2}})(?:[/-](\\d{{2,4}}))?  ← Year is optional, allows partial matches
 """
                 except Exception as prompt_error:
                     print(f"[generate-regex] Error building capture_groups_instructions: {prompt_error}")
