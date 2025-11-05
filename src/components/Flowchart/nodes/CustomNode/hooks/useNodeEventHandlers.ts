@@ -6,8 +6,8 @@ interface NodeEventHandlersProps {
   setNodeTitle: (title: string) => void;
   setIsEditingNode: (editing: boolean) => void;
   setIsHoverHeader: (hover: boolean) => void;
-  hideToolbarTimeoutRef: React.MutableRefObject<NodeJS.Timeout | null>;
   setIsHoveredNode: (hovered: boolean) => void;
+  toolbarElementRef?: React.RefObject<HTMLDivElement>; // Ref della toolbar per verificare hover
 }
 
 /**
@@ -20,10 +20,10 @@ export function useNodeEventHandlers({
   setNodeTitle,
   setIsEditingNode,
   setIsHoverHeader,
-  hideToolbarTimeoutRef,
-  setIsHoveredNode
+  setIsHoveredNode,
+  toolbarElementRef
 }: NodeEventHandlersProps) {
-  
+
   const handleEndTitleEditing = () => {
     setIsEditingNode(false);
     setIsHoverHeader(false);
@@ -32,7 +32,7 @@ export function useNodeEventHandlers({
       const my = (window as any).__lastMouseY ?? 0;
       const elements = document.elementsFromPoint(mx, my);
       const stillOverNode = elements.some((el: Element) => {
-        return el.closest?.('[data-id]') !== null || 
+        return el.closest?.('[data-id]') !== null ||
                el.classList?.contains?.('react-flow__node') ||
                el.closest?.('.react-flow__node') !== null;
       });
@@ -58,33 +58,25 @@ export function useNodeEventHandlers({
   };
 
   const handleNodeMouseEnter = () => {
-    if (hideToolbarTimeoutRef.current) {
-      clearTimeout(hideToolbarTimeoutRef.current);
-      hideToolbarTimeoutRef.current = null;
-    }
     setIsHoveredNode(true);
   };
 
-  const handleNodeMouseLeave = () => {
-    hideToolbarTimeoutRef.current = setTimeout(() => {
-      setIsHoveredNode(false);
-      hideToolbarTimeoutRef.current = null;
-    }, 100);
+  const handleNodeMouseLeave = (e?: React.MouseEvent) => {
+    // Verifica se il mouse sta andando verso la toolbar
+    const relatedTarget = e?.relatedTarget as HTMLElement;
+    if (relatedTarget && toolbarElementRef?.current?.contains(relatedTarget)) {
+      console.log('[handleNodeMouseLeave] Mouse va verso toolbar - MANTIENI visibile');
+      return;
+    }
+    // Non nascondiamo qui - lasciamo che sia la toolbar o il wrapper a gestire
+    // perché il mouse potrebbe ancora transitare
   };
 
   const handleBufferMouseEnter = () => {
-    if (hideToolbarTimeoutRef.current) {
-      clearTimeout(hideToolbarTimeoutRef.current);
-      hideToolbarTimeoutRef.current = null;
-    }
     setIsHoveredNode(true);
   };
 
   const handleBufferMouseLeave = () => {
-    if (hideToolbarTimeoutRef.current) {
-      clearTimeout(hideToolbarTimeoutRef.current);
-      hideToolbarTimeoutRef.current = null;
-    }
     setIsHoveredNode(false);
   };
 

@@ -30,9 +30,6 @@ export function useNodeState({ data }: UseNodeStateProps) {
 
   // Buffer area state - removed as no longer needed
 
-  // Refs
-  const hideToolbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   // Computed states
   const hasTitle = (nodeTitle || '').trim().length > 0;
   const showPermanentHeader = hasTitle || isEditingNode;
@@ -50,14 +47,6 @@ export function useNodeState({ data }: UseNodeStateProps) {
     return () => window.removeEventListener('mousemove', onMove);
   }, []);
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hideToolbarTimeoutRef.current) {
-        clearTimeout(hideToolbarTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Sync nodeTitle with data.title when data changes
   useEffect(() => {
@@ -114,9 +103,6 @@ export function useNodeState({ data }: UseNodeStateProps) {
     // Visibility state
     showUnchecked,
     setShowUnchecked,
-
-    // Refs
-    hideToolbarTimeoutRef,
 
     // Computed
     hasTitle,

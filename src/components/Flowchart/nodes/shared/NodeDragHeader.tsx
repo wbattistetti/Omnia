@@ -27,65 +27,95 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
   const isToolbar = compact === true;
   // showDragHandle controlla se mostrare l'area drag (grip + testo)
 
-  // Log solo quando isToolbarDrag cambia
-  const prevIsToolbarDrag = useRef(isToolbarDrag);
-  useEffect(() => {
-    if (prevIsToolbarDrag.current !== isToolbarDrag) {
-      console.log('🎯 [NodeDragHeader] isToolbarDrag changed:', prevIsToolbarDrag.current, '→', isToolbarDrag);
-      prevIsToolbarDrag.current = isToolbarDrag;
-    }
-  }, [isToolbarDrag]);
+  // Log quando isToolbarDrag cambia - RIMOSSO per ridurre rumore console
 
-  // Calcola dimensione icone dinamicamente basata sul font size del nodo (stessa logica delle icone di riga)
-  const [iconSize, setIconSize] = useState(16);
-  useEffect(() => {
-    const updateSize = () => {
-      // Cerca un elemento con testo nel nodo per ottenere il font size
-      let targetElement: HTMLElement | null = null;
-      if (nodeRef?.current) {
-        // Cerca la prima riga di testo nel nodo (span con classe nodrag o dentro .node-row)
-        const rowLabel = nodeRef.current.querySelector('span.nodrag, .node-row span, span[style*="cursor: grab"]') as HTMLElement;
-        if (rowLabel) {
-          targetElement = rowLabel;
-        } else {
-          // Fallback: cerca qualsiasi span con testo nel nodo
-          const anySpan = nodeRef.current.querySelector('span') as HTMLElement;
-          if (anySpan) {
-            targetElement = anySpan;
-          } else {
-            // Ultimo fallback: usa il nodo stesso
-            targetElement = nodeRef.current;
+        // Calcola dimensione icone dinamicamente basata sul font size del nodo (stessa logica delle icone di riga)
+        // DEVE usare lo stesso elemento di riferimento delle icone di riga (span.nodrag della prima riga)
+        const [iconSize, setIconSize] = useState(16);
+        useEffect(() => {
+          const updateSize = () => {
+            // Cerca lo stesso elemento che usano le icone di riga: span.nodrag della prima riga
+            // STESSA LOGICA DI NodeRowActionsOverlay: usa labelRef.current che è lo span.nodrag
+            let targetElement: HTMLElement | null = null;
+            if (nodeRef?.current) {
+              // Priorità 1: Cerca span.nodrag nella prima riga (stesso selettore usato da NodeRowActionsOverlay)
+              const firstRow = nodeRef.current.querySelector('.node-row') as HTMLElement;
+              if (firstRow) {
+                const nodragSpan = firstRow.querySelector('span.nodrag') as HTMLElement;
+                if (nodragSpan) {
+                  targetElement = nodragSpan;
+                } else {
+                  // Fallback: qualsiasi span nella prima riga
+                  const rowSpan = firstRow.querySelector('span') as HTMLElement;
+                  if (rowSpan) {
+                    targetElement = rowSpan;
+                  }
+                }
+              }
+
+              // Priorità 2: Se non trovato, cerca qualsiasi span.nodrag nel nodo
+              if (!targetElement) {
+                const nodragSpan = nodeRef.current.querySelector('span.nodrag') as HTMLElement;
+                if (nodragSpan) {
+                  targetElement = nodragSpan;
+                }
+              }
+
+              // Priorità 3: Cerca qualsiasi span con cursor: grab (stile delle righe)
+              if (!targetElement) {
+                const grabSpan = nodeRef.current.querySelector('span[style*="cursor: grab"]') as HTMLElement;
+                if (grabSpan) {
+                  targetElement = grabSpan;
+                }
+              }
+
+              // Fallback: qualsiasi span nel nodo
+              if (!targetElement) {
+                const anySpan = nodeRef.current.querySelector('span') as HTMLElement;
+                if (anySpan) {
+                  targetElement = anySpan;
+                } else {
+                  // Ultimo fallback: usa il nodo stesso
+                  targetElement = nodeRef.current;
+                }
+              }
+            }
+
+            if (targetElement) {
+              const computedStyle = window.getComputedStyle(targetElement);
+              const fontSize = parseFloat(computedStyle.fontSize) || 12;
+              // Icone devono essere 119% del font size (STESSA LOGICA ESATTA delle icone di riga)
+              const newSize = Math.max(16, Math.min(32, Math.round(fontSize * 1.19)));
+              setIconSize(newSize);
+            } else {
+              setIconSize(16);
+            }
+          };
+
+          // Esegui subito e poi ogni volta che cambia
+          // Usa requestAnimationFrame per aspettare che il DOM sia renderizzato
+          requestAnimationFrame(() => {
+            updateSize();
+          });
+
+          const observer = new MutationObserver(() => {
+            requestAnimationFrame(updateSize);
+          });
+          if (nodeRef?.current) {
+            observer.observe(nodeRef.current, {
+              attributes: true,
+              attributeFilter: ['style', 'class'],
+              subtree: true,
+              childList: true // Aggiunto per catturare aggiunta/rimozione righe
+            });
+            const resizeHandler = () => requestAnimationFrame(updateSize);
+            window.addEventListener('resize', resizeHandler);
+            return () => {
+              observer.disconnect();
+              window.removeEventListener('resize', resizeHandler);
+            };
           }
-        }
-      }
-
-      if (targetElement) {
-        const computedStyle = window.getComputedStyle(targetElement);
-        const fontSize = parseFloat(computedStyle.fontSize) || 12;
-        // Icone devono essere 119% del font size (stessa logica delle icone di riga)
-        const newSize = Math.max(16, Math.min(32, Math.round(fontSize * 1.19)));
-        setIconSize(newSize);
-      } else {
-        setIconSize(16);
-      }
-    };
-
-    updateSize();
-
-    const observer = new MutationObserver(updateSize);
-    if (nodeRef?.current) {
-      observer.observe(nodeRef.current, {
-        attributes: true,
-        attributeFilter: ['style', 'class'],
-        subtree: true
-      });
-      window.addEventListener('resize', updateSize);
-      return () => {
-        observer.disconnect();
-        window.removeEventListener('resize', updateSize);
-      };
-    }
-  }, [nodeRef]);
+        }, [nodeRef]);
 
 
 
@@ -133,7 +163,6 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               // ✅ Previeni comportamento di default e avvia drag personalizzato
               e.preventDefault();
               e.stopPropagation();
-              console.log('🚀 [DRAG DEBUG] MOVE ICON - Starting custom node drag');
               onDragStart?.();
             }}
           >
@@ -152,16 +181,14 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               display: 'flex',
               alignItems: 'center'
             }}
-            onPointerDownCapture={() => {
-              console.log('🚀 [DRAG DEBUG] ANCHOR ICON - Setting rigid mode');
-              try {
-                (window as any).__flowDragMode = 'rigid';
-                console.log('🚀 [DRAG DEBUG] __flowDragMode set to:', (window as any).__flowDragMode);
-              } catch (e) {
-                console.error('🚀 [DRAG DEBUG] Error setting __flowDragMode:', e);
-              }
-              onDragStart?.();
-            }}
+                  onPointerDownCapture={() => {
+                    try {
+                      (window as any).__flowDragMode = 'rigid';
+                    } catch (e) {
+                      // Silent fail
+                    }
+                    onDragStart?.();
+                  }}
           >
             <Anchor style={{ width: iconSize, height: iconSize }} className="text-slate-200 hover:text-amber-300 drop-shadow" />
           </div>

@@ -201,7 +201,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   }, [showCreatePicker]);
 
   // Calcola la posizione delle icone: appena FUORI dal bordo destro del nodo, all'altezza della label
-  // NO gap - toolbar starts exactly at node right edge
+  // Con piccolo gap per evitare sovrapposizione al bordo
   useEffect(() => {
     if (showIcons && labelRef.current) {
       const labelRect = labelRef.current.getBoundingClientRect();
@@ -209,7 +209,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       const nodeRect = nodeEl ? nodeEl.getBoundingClientRect() : labelRect;
       setIconPos({
         top: labelRect.top,
-        left: nodeRect.right // NO gap - toolbar starts exactly at node edge
+        left: nodeRect.right + 4 // Piccolo gap per evitare sovrapposizione al bordo
       });
     } else {
       setIconPos(null);
