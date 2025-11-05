@@ -209,7 +209,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     handleDeleteNode,
     setIsHoveredNode,
     setIsHoverHeader,
-    id
+    id,
+    isEmpty
   });
   const {
     nodeRowListProps,

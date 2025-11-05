@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { NodeRowData } from '../../../../../types/project';
+import { useDynamicFontSizes } from '../../../../../hooks/useDynamicFontSizes';
 
 interface UseNodeRenderingProps {
     nodeRows: NodeRowData[];
@@ -27,6 +28,7 @@ interface UseNodeRenderingProps {
     setIsHoverHeader: (hovered: boolean) => void;
     id: string;
     nodeWidth?: number | null;
+    isEmpty?: boolean;
 }
 
 /**
@@ -58,8 +60,10 @@ export function useNodeRendering({
     setIsHoveredNode,
     setIsHoverHeader,
     id,
-    nodeWidth = null
+    nodeWidth = null,
+    isEmpty = false
 }: UseNodeRenderingProps) {
+    const fontSizes = useDynamicFontSizes();
 
     // Calcola le righe visibili
     const visibleRows = useMemo(() => {
@@ -142,15 +146,40 @@ export function useNodeRendering({
         id
     ]);
 
+    // Calcola larghezza iniziale per 20 caratteri se nodo è vuoto
+    const calculateInitialWidth = () => {
+        // Se il nodo ha già una larghezza misurata, usala
+        if (nodeWidth !== null) {
+            return nodeWidth;
+        }
+
+        // Se il nodo è vuoto, calcola larghezza per 25 caratteri basata sul font size
+        if (isEmpty) {
+            const fontSizeNum = parseFloat(fontSizes.nodeRow) || 14;
+            const charWidth = fontSizeNum * 0.6; // Approssimazione larghezza carattere (monospace-like)
+            const textWidth = 25 * charWidth; // 25 caratteri
+            const padding = 40; // Padding laterale (sinistra + destra)
+            const minWidth = Math.ceil(textWidth + padding);
+
+            return Math.max(minWidth, 140); // Almeno 140px come minimo assoluto
+        }
+
+        // Default: 140px se nodo non è vuoto e non ha larghezza misurata
+        return 140;
+    };
+
     // Stili dinamici per il nodo
-    const nodeStyles = useMemo(() => ({
-        opacity: normalizedData.hidden ? 0 : 1,
-        minWidth: nodeWidth ? `${nodeWidth}px` : 140,
-        width: nodeWidth ? `${nodeWidth}px` : 'fit-content',
-        position: 'relative' as const,
-        zIndex: 1,
-        flexShrink: 0
-    }), [normalizedData.hidden, nodeWidth]);
+    const nodeStyles = useMemo(() => {
+        const initialWidth = calculateInitialWidth();
+        return {
+            opacity: normalizedData.hidden ? 0 : 1,
+            minWidth: nodeWidth ? `${nodeWidth}px` : `${initialWidth}px`,
+            width: nodeWidth ? `${nodeWidth}px` : 'fit-content',
+            position: 'relative' as const,
+            zIndex: 1,
+            flexShrink: 0
+        };
+    }, [normalizedData.hidden, nodeWidth, isEmpty, fontSizes.nodeRow]);
 
     // Stili per la toolbar
     const toolbarStyles = useMemo(() => ({

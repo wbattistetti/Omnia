@@ -4,6 +4,7 @@ import { useIntellisense } from "../../context/IntellisenseContext";
 import { IntellisenseMenu } from './IntellisenseMenu';
 import { IntellisenseItem } from '../../types/intellisense';
 import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
+import { calculateFontBasedSizes } from '../../utils/fontSizeUtils';
 
 interface IntellisenseStandaloneProps {
     position: { x: number; y: number };
@@ -132,95 +133,113 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         >
             {/* ✅ Row con textbox + 3 pulsanti */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                {/* Textbox - FONT 8px come righe nodo - STRINGATA */}
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={state.query}
-                    onChange={handleInputChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Cerca condizioni o intenti..."
-                    style={{
-                        flex: 0.5,
-                        padding: '4px 6px',
-                        border: '2px solid #3b82f6',
-                        borderRadius: '4px',
-                        fontSize: fontSizes.nodeRow,
-                        lineHeight: 1.2,
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        background: '#fff',
-                        height: '20px'
-                    }}
-                />
+                {/* ✅ Usa utility centralizzata per dimensioni */}
+                {(() => {
+                    const sizes = calculateFontBasedSizes(fontSizes.nodeRow);
 
-                {/* ✅ Button 1: Else - FONT 8px */}
-                <button
-                    onClick={handleElseClick}
-                    style={{
-                        padding: '3px 8px',
-                        fontSize: fontSizes.nodeRow,
-                        fontWeight: 600,
-                        borderRadius: '4px',
-                        border: '1px solid #9333ea',
-                        background: '#9333ea',
-                        color: '#fff',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        transition: 'background 150ms',
-                        height: '20px',
-                        lineHeight: 1
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#7e22ce'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = '#9333ea'}
-                    title="Else: ramo di fallback quando altre condizioni sono false"
-                >
-                    Else
-                </button>
+                    return (
+                        <>
+                            {/* Textbox - proporzionale al font */}
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={state.query}
+                                onChange={handleInputChange}
+                                onKeyDown={handleKeyDown}
+                                placeholder="Cerca condizioni o intenti..."
+                                style={{
+                                    flex: 0.5,
+                                    padding: `${sizes.inputPaddingV}px ${sizes.inputPaddingH}px`,
+                                    border: '2px solid #3b82f6',
+                                    borderRadius: '4px',
+                                    fontSize: fontSizes.nodeRow,
+                                    lineHeight: 1.2,
+                                    outline: 'none',
+                                    boxSizing: 'border-box',
+                                    background: '#fff',
+                                    height: `${sizes.inputHeight}px`,
+                                    minHeight: `${sizes.inputHeight}px`
+                                }}
+                            />
 
-                {/* ✅ Button 2: Unlinked - ICONA PICCOLA (8px proporzionata) */}
-                <button
-                    onClick={handleUnlinkedClick}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '20px',
-                        height: '20px',
-                        background: '#f3f4f6',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        transition: 'background 150ms'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#e5e7eb'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = '#f3f4f6'}
-                    title="Collegamento senza condizione"
-                >
-                    <LinkOff size={8} color="#6b7280" />
-                </button>
+                            {/* ✅ Button 1: Else - proporzionale al font */}
+                            <button
+                                onClick={handleElseClick}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: `${sizes.buttonPaddingV}px ${sizes.buttonPaddingH}px`,
+                                    fontSize: fontSizes.nodeRow,
+                                    fontWeight: 600,
+                                    borderRadius: '4px',
+                                    border: '1px solid #9333ea',
+                                    background: '#9333ea',
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                    transition: 'background 150ms',
+                                    height: `${sizes.buttonHeight}px`,
+                                    minHeight: `${sizes.buttonHeight}px`,
+                                    boxSizing: 'border-box'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#7e22ce'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = '#9333ea'}
+                                title="Else: ramo di fallback quando altre condizioni sono false"
+                            >
+                                Else
+                            </button>
 
-                {/* ✅ Button 3: Cancel - ICONA PICCOLA (8px proporzionata) */}
-                <button
-                    onClick={handleCancelClick}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '20px',
-                        height: '20px',
-                        background: '#fef2f2',
-                        border: '1px solid #fca5a5',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        transition: 'background 150ms'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#fee2e2'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = '#fef2f2'}
-                    title="Annulla (ESC)"
-                >
-                    <X size={8} color="#dc2626" />
-                </button>
+                            {/* ✅ Button 2: Unlinked - proporzionale al font */}
+                            <button
+                                onClick={handleUnlinkedClick}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: `${sizes.iconButtonSize}px`,
+                                    height: `${sizes.iconButtonSize}px`,
+                                    background: '#f3f4f6',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    transition: 'background 150ms',
+                                    minWidth: `${sizes.iconButtonSize}px`,
+                                    minHeight: `${sizes.iconButtonSize}px`
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#e5e7eb'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                                title="Collegamento senza condizione"
+                            >
+                                <LinkOff size={sizes.iconSize} color="#6b7280" />
+                            </button>
+
+                            {/* ✅ Button 3: Cancel - proporzionale al font */}
+                            <button
+                                onClick={handleCancelClick}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: `${sizes.iconButtonSize}px`,
+                                    height: `${sizes.iconButtonSize}px`,
+                                    background: '#fef2f2',
+                                    border: '1px solid #fca5a5',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    transition: 'background 150ms',
+                                    minWidth: `${sizes.iconButtonSize}px`,
+                                    minHeight: `${sizes.iconButtonSize}px`
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#fee2e2'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = '#fef2f2'}
+                                title="Annulla (ESC)"
+                            >
+                                <X size={sizes.iconSize} color="#dc2626" />
+                            </button>
+                        </>
+                    );
+                })()}
             </div>
 
             {/* IntellisenseMenu (solo lista, mode=inline) */}

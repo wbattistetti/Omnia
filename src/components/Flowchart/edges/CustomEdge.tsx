@@ -9,6 +9,7 @@ import { useReactFlow } from 'reactflow';
 import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDataContext';
 import { ProjectDataService } from '../../../services/ProjectDataService';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
+import { calculateFontBasedSizes } from '../../../utils/fontSizeUtils';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -497,73 +498,84 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           }}
         >
           <span>{label}</span>
-          {labelHovered && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: 6 }}>
-              <button
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  cursor: 'pointer',
-                  color: '#8b5cf6',
-                  width: 18 * zoom,
-                  height: 18 * zoom,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-                title="Modifica label"
-                onClick={e => { e.stopPropagation(); /* TODO: azione edit */ }}
-              >
-                <Pencil size={14 * zoom} />
-              </button>
-              {!(props.data && (props.data as any).hasConditionScript) && (
+          {labelHovered && (() => {
+            // ✅ Usa utility centralizzata per dimensioni
+            const sizes = calculateFontBasedSizes(fontSizes.edgeCaption);
+
+            return (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: 6 }}>
                 <button
                   style={{
                     background: 'none',
                     border: 'none',
                     padding: 0,
                     cursor: 'pointer',
-                    color: '#0ea5e9',
-                    width: 18 * zoom,
-                    height: 18 * zoom,
+                    color: '#8b5cf6',
+                    width: `${sizes.iconButtonSize}px`,
+                    height: `${sizes.iconButtonSize}px`,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    minWidth: `${sizes.iconButtonSize}px`,
+                    minHeight: `${sizes.iconButtonSize}px`
                   }}
-                  title="Apri Condition Editor"
-                  onClick={e => {
-                    e.stopPropagation();
-                    try {
-                      const variables = (window as any).__omniaVars || {};
-                      const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script: '', label: String(label || 'Condition'), name: String(label || 'Condition') }, bubbles: true });
-                      document.dispatchEvent(ev);
-                    } catch { }
-                  }}
+                  title="Modifica label"
+                  onClick={e => { e.stopPropagation(); /* TODO: azione edit */ }}
                 >
-                  <Wrench size={14 * zoom} />
+                  <Pencil size={sizes.iconSize} />
                 </button>
-              )}
-              <button
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  cursor: 'pointer',
-                  color: '#888',
-                  width: 18 * zoom,
-                  height: 18 * zoom,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-                title="Rendi unconduitioned"
-                onClick={e => { e.stopPropagation(); if (typeof handleUncondition === 'function') handleUncondition(); }}
-              >
-                <LinkOff size={14 * zoom} />
-              </button>
-            </span>
-          )}
+                {!(props.data && (props.data as any).hasConditionScript) && (
+                  <button
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      color: '#0ea5e9',
+                      width: `${sizes.iconButtonSize}px`,
+                      height: `${sizes.iconButtonSize}px`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: `${sizes.iconButtonSize}px`,
+                      minHeight: `${sizes.iconButtonSize}px`
+                    }}
+                    title="Apri Condition Editor"
+                    onClick={e => {
+                      e.stopPropagation();
+                      try {
+                        const variables = (window as any).__omniaVars || {};
+                        const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script: '', label: String(label || 'Condition'), name: String(label || 'Condition') }, bubbles: true });
+                        document.dispatchEvent(ev);
+                      } catch { }
+                    }}
+                  >
+                    <Wrench size={sizes.iconSize} />
+                  </button>
+                )}
+                <button
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#888',
+                    width: `${sizes.iconButtonSize}px`,
+                    height: `${sizes.iconButtonSize}px`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: `${sizes.iconButtonSize}px`,
+                    minHeight: `${sizes.iconButtonSize}px`
+                  }}
+                  title="Rendi unconduitioned"
+                  onClick={e => { e.stopPropagation(); if (typeof handleUncondition === 'function') handleUncondition(); }}
+                >
+                  <LinkOff size={sizes.iconSize} />
+                </button>
+              </span>
+            );
+          })()}
         </div>,
         document.body
       )}

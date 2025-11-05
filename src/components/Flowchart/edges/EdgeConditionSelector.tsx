@@ -5,6 +5,7 @@ import { IntellisenseItem } from '../../Intellisense/IntellisenseTypes';
 import { useProjectData } from '../../../context/ProjectDataContext';
 import { findAgentAct } from '../utils/actVisuals';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
+import { calculateFontBasedSizes } from '../../../utils/fontSizeUtils';
 
 /**
  * Props per EdgeConditionSelector
@@ -253,36 +254,64 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       </div>
       {/* Input e pulsanti */}
       <div className="flex items-center space-x-2">
-        {/* Campo input */}
-        <div className="flex-1" style={{ maxWidth: 360 }}>
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleInputKeyDown}
-            placeholder="Digita per cercare condizioni..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            style={{ fontSize: fontSizes.nodeRow }}
-          />
-        </div>
-        {/* Pulsante Else accanto alla textbox */}
-        <button
-          onClick={() => { onSelectElse && onSelectElse(); }}
-          className="px-3 py-2 font-semibold rounded-md border border-purple-600 bg-purple-600 text-white hover:bg-purple-500"
-          style={{ fontSize: fontSizes.nodeRow }}
-          title="Else: usa questo collegamento solo se tutte le altre condizioni del nodo sorgente sono false"
-        >
-          Else
-        </button>
-        {/* Pulsante collegamento senza condizione */}
-        <button
-          onClick={handleUnconditionedClick}
-          className="flex items-center justify-center w-10 h-10 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-md transition-colors"
-          title="Collegamento senza condizione"
-        >
-          <LinkOff className="w-4 h-4 text-gray-600" />
-        </button>
+        {/* ✅ Usa utility centralizzata per dimensioni */}
+        {(() => {
+          const sizes = calculateFontBasedSizes(fontSizes.nodeRow);
+
+          return (
+            <>
+              {/* Campo input */}
+              <div className="flex-1" style={{ maxWidth: 360 }}>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={handleInputChange}
+                  onKeyDown={handleInputKeyDown}
+                  placeholder="Digita per cercare condizioni..."
+                  className="w-full border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  style={{
+                    fontSize: fontSizes.nodeRow,
+                    padding: `${sizes.inputPaddingV}px ${sizes.inputPaddingH}px`,
+                    height: `${sizes.inputHeight}px`,
+                    minHeight: `${sizes.inputHeight}px`,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              {/* Pulsante Else accanto alla textbox - proporzionale */}
+              <button
+                onClick={() => { onSelectElse && onSelectElse(); }}
+                className="font-semibold rounded-md border border-purple-600 bg-purple-600 text-white hover:bg-purple-500 flex items-center justify-center"
+                style={{
+                  fontSize: fontSizes.nodeRow,
+                  padding: `${sizes.buttonPaddingV}px ${sizes.buttonPaddingH}px`,
+                  height: `${sizes.buttonHeight}px`,
+                  minHeight: `${sizes.buttonHeight}px`,
+                  boxSizing: 'border-box'
+                }}
+                title="Else: usa questo collegamento solo se tutte le altre condizioni del nodo sorgente sono false"
+              >
+                Else
+              </button>
+              {/* Pulsante collegamento senza condizione - proporzionale */}
+              <button
+                onClick={handleUnconditionedClick}
+                className="flex items-center justify-center bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-md transition-colors"
+                style={{
+                  width: `${sizes.iconButtonSize}px`,
+                  height: `${sizes.iconButtonSize}px`,
+                  minWidth: `${sizes.iconButtonSize}px`,
+                  minHeight: `${sizes.iconButtonSize}px`,
+                  boxSizing: 'border-box'
+                }}
+                title="Collegamento senza condizione"
+              >
+                <LinkOff size={sizes.iconSize} className="text-gray-600" style={{ width: `${sizes.iconSize}px`, height: `${sizes.iconSize}px` }} />
+              </button>
+            </>
+          );
+        })()}
       </div>
       {/* Help text */}
       <div className="text-xs text-gray-500 mt-2">
