@@ -54,6 +54,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ INITIALIZATION: Initialize node data and rows
   const { displayRows, normalizedData } = useNodeInitialization(id, data);
 
+  // ✅ MEASURE NODE WIDTH: Track node width to prevent shrinking when editing
+  const [nodeWidth, setNodeWidth] = useState<number | null>(null);
+  const nodeWidthRef = useRef<number | null>(null);
+
   // ✅ ROW MANAGEMENT: Manage all row operations
   const rowManagement = useNodeRowManagement({ nodeId: id, normalizedData, displayRows });
   const {
@@ -85,6 +89,36 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ CORREZIONE 6: Ref per il container del nodo (dichiarato prima dell'uso)
   const nodeContainerRef = useRef<HTMLDivElement>(null);
+
+  // Measure node width when not editing any row to preserve it during editing
+  useEffect(() => {
+    if (!editingRowId && nodeContainerRef.current) {
+      // Use multiple frames to ensure layout is stable
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!nodeContainerRef.current) return;
+          const rect = nodeContainerRef.current.getBoundingClientRect();
+          const computedStyle = window.getComputedStyle(nodeContainerRef.current);
+          const width = rect.width;
+          setNodeWidth(width);
+          nodeWidthRef.current = width;
+
+          console.log('[CustomNode][WIDTH_MEASURE] Node width measured', {
+            nodeId: id,
+            width,
+            computedWidth: computedStyle.width,
+            editingRowId,
+            nodeRowsCount: nodeRows.length
+          });
+        });
+      });
+    } else if (editingRowId && nodeWidthRef.current && nodeContainerRef.current) {
+      // When editing, enforce the saved width directly on DOM
+      nodeContainerRef.current.style.setProperty('min-width', `${nodeWidthRef.current}px`, 'important');
+      nodeContainerRef.current.style.setProperty('width', `${nodeWidthRef.current}px`, 'important');
+      nodeContainerRef.current.style.setProperty('flex-shrink', '0', 'important');
+    }
+  }, [editingRowId, id, nodeRows.length]);
 
   // ✅ TOOLBAR: Ref per l'elemento toolbar (dichiarato prima dell'uso)
   const toolbarElementRef = useRef<HTMLDivElement>(null);
@@ -157,6 +191,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ RENDERING: Manage rendering logic and props (AFTER state and handlers)
   const rendering = useNodeRendering({
+    nodeWidth: editingRowId ? nodeWidth : null,
     nodeRows,
     normalizedData,
     isHoveredNode,

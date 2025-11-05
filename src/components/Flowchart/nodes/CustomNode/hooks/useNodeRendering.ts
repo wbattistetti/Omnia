@@ -26,6 +26,7 @@ interface UseNodeRenderingProps {
     setIsHoveredNode: (hovered: boolean) => void;
     setIsHoverHeader: (hovered: boolean) => void;
     id: string;
+    nodeWidth?: number | null;
 }
 
 /**
@@ -56,7 +57,8 @@ export function useNodeRendering({
     handleDeleteNode,
     setIsHoveredNode,
     setIsHoverHeader,
-    id
+    id,
+    nodeWidth = null
 }: UseNodeRenderingProps) {
 
     // Calcola le righe visibili
@@ -143,11 +145,12 @@ export function useNodeRendering({
     // Stili dinamici per il nodo
     const nodeStyles = useMemo(() => ({
         opacity: normalizedData.hidden ? 0 : 1,
-        minWidth: 140,
-        width: 'fit-content',
+        minWidth: nodeWidth ? `${nodeWidth}px` : 140,
+        width: nodeWidth ? `${nodeWidth}px` : 'fit-content',
         position: 'relative' as const,
-        zIndex: 1
-    }), [normalizedData.hidden]);
+        zIndex: 1,
+        flexShrink: 0
+    }), [normalizedData.hidden, nodeWidth]);
 
     // Stili per la toolbar
     const toolbarStyles = useMemo(() => ({

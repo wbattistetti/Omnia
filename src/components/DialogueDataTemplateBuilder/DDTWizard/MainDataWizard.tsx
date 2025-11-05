@@ -111,6 +111,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
         background: '#0b1220',
         boxSizing: 'border-box',
         transition: 'border 0.15s',
+        minWidth: 280,
       }}
     >
       <MainHeader

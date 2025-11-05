@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useProjectData } from '../../../../context/ProjectDataContext';
 import { useDDTManager } from '../../../../context/DDTManagerContext';
 import { ProjectDataService } from '../../../../services/ProjectDataService';
@@ -82,6 +82,57 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     iconPos, setIconPos,
     typeToolbarRef, inputRef, nodeContainerRef, labelRef, overlayRef, mousePosRef
   } = rowState;
+
+  // Measure label width and font styles when not editing to prevent shrinking and maintain font consistency
+  const [labelWidth, setLabelWidth] = useState<number | null>(null);
+  const [labelFontStyles, setLabelFontStyles] = useState<{
+    fontSize: string;
+    fontFamily: string;
+    fontWeight: string;
+    lineHeight: string;
+  } | null>(null);
+
+  // Use useLayoutEffect to measure after DOM is fully rendered
+  useLayoutEffect(() => {
+    if (!isEditing && labelRef.current) {
+      // Wait for next frame to ensure layout is complete
+      requestAnimationFrame(() => {
+        if (!labelRef.current) return;
+
+        const rect = labelRef.current.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(labelRef.current);
+        const width = rect.width;
+
+        // Measure full width including parent container and node
+        const parentWidth = labelRef.current.parentElement?.getBoundingClientRect().width;
+        const nodeContainer = labelRef.current.closest('.react-flow__node') as HTMLElement;
+        const nodeWidth = nodeContainer?.getBoundingClientRect().width;
+
+        setLabelWidth(width);
+        setLabelFontStyles({
+          fontSize: computedStyle.fontSize,
+          fontFamily: computedStyle.fontFamily,
+          fontWeight: computedStyle.fontWeight,
+          lineHeight: computedStyle.lineHeight
+        });
+
+        console.log('[NodeRow][WIDTH_MEASURE] Label width and font styles measured', {
+          rowId: row.id,
+          rowText: row.text,
+          isEditing,
+          labelWidth: width,
+          parentWidth,
+          nodeWidth,
+          offsetWidth: labelRef.current.offsetWidth,
+          scrollWidth: labelRef.current.scrollWidth,
+          fontSize: computedStyle.fontSize,
+          fontFamily: computedStyle.fontFamily,
+          fontWeight: computedStyle.fontWeight,
+          lineHeight: computedStyle.lineHeight
+        });
+      });
+    }
+  }, [isEditing, row.id, row.text]);
 
   // Visual states for drag & drop feedback
   const [visualState, setVisualState] = useState<'normal' | 'fade' | 'highlight'>('normal');
@@ -1010,13 +1061,55 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         {...(onMouseMove ? { onMouseMove } : {})}
       >
         {isEditing ? (
-          <div style={{ flex: 1, minWidth: 0 }} data-row-id={row.id}>
+          <div
+            style={{
+              width: labelWidth ? `${labelWidth}px` : undefined,
+              minWidth: labelWidth ? `${labelWidth}px` : 0,
+              flexShrink: 0,
+              flexGrow: 0
+            }}
+            data-row-id={row.id}
+            ref={(divEl) => {
+              if (divEl && isEditing) {
+                setTimeout(() => {
+                  const rect = divEl.getBoundingClientRect();
+                  const computedStyle = window.getComputedStyle(divEl);
+                  const inputRect = inputRef.current?.getBoundingClientRect();
+                  const inputComputedStyle = inputRef.current ? window.getComputedStyle(inputRef.current) : null;
+
+                  console.log('[NodeRow][EDITING_RENDER] Editor container rendered', {
+                    rowId: row.id,
+                    rowText: row.text,
+                    labelWidth,
+                    containerWidth: rect.width,
+                    containerLeft: rect.left,
+                    containerRight: rect.right,
+                    containerComputedWidth: computedStyle.width,
+                    containerComputedMinWidth: computedStyle.minWidth,
+                    containerComputedFlexShrink: computedStyle.flexShrink,
+                    containerComputedFlexGrow: computedStyle.flexGrow,
+                    inputWidth: inputRect?.width,
+                    inputComputedWidth: inputComputedStyle?.width,
+                    inputComputedMinWidth: inputComputedStyle?.minWidth,
+                    parentWidth: divEl.parentElement?.getBoundingClientRect().width,
+                    appliedStyles: {
+                      width: labelWidth ? `${labelWidth}px` : undefined,
+                      minWidth: labelWidth ? `${labelWidth}px` : 0,
+                      flexShrink: 0,
+                      flexGrow: 0
+                    }
+                  });
+                }, 0);
+              }
+            }}
+          >
             <NodeRowEditor
               value={currentText}
               onChange={handleTextChange}
               onKeyDown={handleKeyDownInternal}
               inputRef={inputRef}
               placeholder="Type what you need here..."
+              fontStyles={labelFontStyles}
             />
           </div>
         ) : (

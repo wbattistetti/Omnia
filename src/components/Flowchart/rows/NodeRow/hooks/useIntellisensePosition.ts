@@ -20,7 +20,6 @@ export function useIntellisensePosition({
     // Single source of truth for position calculation
     const calculatePosition = (): { left: number; top: number } | null => {
         if (!inputRef.current) {
-            console.log('[IntellisensePosition] Input ref not available');
             return null;
         }
 
@@ -30,11 +29,6 @@ export function useIntellisensePosition({
             left: rect.left,
             top: rect.bottom + 4 // 4px gap below input
         };
-
-        console.log('[IntellisensePosition] Calculated position:', {
-            inputRect: { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height },
-            menuPosition: position
-        });
 
         // Use simple, reliable screen coordinates
         return position;

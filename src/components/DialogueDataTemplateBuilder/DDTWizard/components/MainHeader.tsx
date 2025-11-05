@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Pencil, Trash2, Plus, Link, Check, X, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw, FileEdit } from 'lucide-react';
 import IconRenderer from './IconRenderer';
 import AnimatedDots from './AnimatedDots';
-import { debug } from '../../../../utils/logger';
 import type { SchemaNode } from '../MainDataCollection';
 import type { FieldErrorState } from '../hooks/useMainEditing';
 import type { FieldProcessingState } from '../hooks/useFieldProcessing';
@@ -64,18 +63,104 @@ export default function MainHeader({
   onRetryField,
   onCreateManually,
 }: MainHeaderProps) {
+  console.log('[MainHeader][COMPONENT] MainHeader component called', { isEditingMain, nodeLabel: node.label, labelDraft });
+
+  const labelRef = useRef<HTMLDivElement>(null);
+  const [labelWidth, setLabelWidth] = useState<number | null>(null);
+
+  // Log when editing state changes
+  useEffect(() => {
+    console.log('[MainHeader][EDITING_STATE] Editing state changed', {
+      isEditingMain,
+      nodeLabel: node.label,
+      labelDraft,
+      labelWidth,
+      labelRefExists: !!labelRef.current,
+      labelRefWidth: labelRef.current?.offsetWidth
+    });
+  }, [isEditingMain, node.label, labelDraft, labelWidth]);
+
+  // Log on every render when editing
+  if (isEditingMain) {
+    console.log('[MainHeader][RENDER] Component rendered in EDITING mode', {
+      labelWidth,
+      labelDraft,
+      nodeLabel: node.label,
+      timestamp: Date.now()
+    });
+  }
+
+  // Measure label width more robustly - always measure when labelRef is available
+  useEffect(() => {
+    if (labelRef.current && !isEditingMain) {
+      const rect = labelRef.current.getBoundingClientRect();
+      const width = rect.width;
+      const computedStyle = window.getComputedStyle(labelRef.current);
+      const offsetWidth = labelRef.current.offsetWidth;
+      const scrollWidth = labelRef.current.scrollWidth;
+
+      console.log('[MainHeader][WIDTH_MEASURE] Label measurement', {
+        nodeLabel: node.label,
+        isEditingMain,
+        getBoundingClientRect: width,
+        offsetWidth,
+        scrollWidth,
+        computedWidth: computedStyle.width,
+        paddingLeft: computedStyle.paddingLeft,
+        paddingRight: computedStyle.paddingRight,
+        marginLeft: computedStyle.marginLeft,
+        marginRight: computedStyle.marginRight,
+        gap: computedStyle.gap,
+        labelRefExists: !!labelRef.current,
+        labelChildren: labelRef.current.children.length
+      });
+
+      setLabelWidth(width);
+    }
+  }, [node.label, isEditingMain]);
+
+  // Use ResizeObserver for dynamic updates
+  useEffect(() => {
+    if (!labelRef.current || isEditingMain) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        console.log('[MainHeader][RESIZE_OBSERVER] Label resized', {
+          width,
+          contentRect: entry.contentRect,
+          borderBoxSize: entry.borderBoxSize,
+          contentBoxSize: entry.contentBoxSize
+        });
+        setLabelWidth(width);
+      }
+    });
+
+    observer.observe(labelRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isEditingMain]);
+
   return (
     <div
-      style={{ display: 'flex', flexDirection: 'column', padding: 12, gap: 6 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        padding: 12,
+        gap: 6,
+        minWidth: labelWidth ? `fit-content` : undefined
+      }}
       onMouseEnter={() => setHoverHeader(true)}
       onMouseLeave={() => setHoverHeader(false)}
     >
       {/* 📐 Riga 1: Label + Percentuale inline */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         {!isEditingMain ? (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
-              <span><IconRenderer name={node.icon} size={16} /></span>
+            <div ref={labelRef} style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap', flexShrink: 0 }}>
+              <span style={{ flexShrink: 0 }}><IconRenderer name={node.icon} size={16} /></span>
               <span style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
 
               {/* 🚀 NEW: Status display for main data */}
@@ -168,26 +253,23 @@ export default function MainHeader({
             )}
           </>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+            {console.log('[MainHeader][RENDER] Rendering editing UI', { isEditingMain, labelWidth, fieldErrors: Object.keys(fieldErrors), labelDraft })}
             {/* 🚀 NEW: Check if this field has an error */}
             {fieldErrors[labelDraft.trim()] ? (
               // 🚀 ERROR UI: Show error state with retry button
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
                 <input
                   autoFocus
                   value={labelDraft}
                   onChange={(e) => {
-                    debug('MAIN_DATA_WIZARD', 'Label changed', { value: e.target.value });
                     setLabelDraft(e.target.value);
                   }}
                   onKeyDown={async (e) => {
-                    debug('MAIN_DATA_WIZARD', 'Key pressed', { key: e.key, value: labelDraft });
                     if (e.key === 'Enter') {
-                      debug('MAIN_DATA_WIZARD', 'Enter pressed, committing', { labelDraft });
                       await commitMain();
                     }
                     if (e.key === 'Escape') {
-                      debug('MAIN_DATA_WIZARD', 'Escape pressed, cancelling');
                       cancelMain();
                     }
                   }}
@@ -198,10 +280,54 @@ export default function MainHeader({
                     border: '1px solid #ef4444', // 🔴 RED BORDER for error
                     borderRadius: 6,
                     padding: '6px 10px',
-                    minWidth: 260,
+                    width: labelWidth ? `${labelWidth}px` : undefined,
+                    minWidth: labelWidth ? `${labelWidth}px` : 260,
+                    flexShrink: 0,
                     fontWeight: 700,
                     transition: 'all 0.3s ease-in-out',
-                    boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.1)'
+                    boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.1)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    boxSizing: 'border-box'
+                  }}
+                  ref={(inputEl) => {
+                    if (inputEl && isEditingMain) {
+                      setTimeout(() => {
+                        const rect = inputEl.getBoundingClientRect();
+                        const computedStyle = window.getComputedStyle(inputEl);
+                        const parentRect = inputEl.parentElement?.getBoundingClientRect();
+                        const containerRect = inputEl.closest('div[style*="padding"]')?.getBoundingClientRect();
+
+                        console.log('[MainHeader][INPUT_RENDER] Input rendered in EDITING mode (ERROR)', {
+                          inputWidth: rect.width,
+                          inputHeight: rect.height,
+                          inputLeft: rect.left,
+                          inputRight: rect.right,
+                          computedWidth: computedStyle.width,
+                          computedMinWidth: computedStyle.minWidth,
+                          computedMaxWidth: computedStyle.maxWidth,
+                          computedFlexShrink: computedStyle.flexShrink,
+                          computedFlexGrow: computedStyle.flexGrow,
+                          computedFlexBasis: computedStyle.flexBasis,
+                          padding: computedStyle.padding,
+                          border: computedStyle.border,
+                          boxSizing: computedStyle.boxSizing,
+                          parentWidth: parentRect?.width,
+                          parentLeft: parentRect?.left,
+                          parentRight: parentRect?.right,
+                          containerWidth: containerRect?.width,
+                          labelWidthStored: labelWidth,
+                          labelDraft: labelDraft,
+                          actualInputValue: inputEl.value,
+                          appliedStyles: {
+                            width: labelWidth ? `${labelWidth}px` : undefined,
+                            minWidth: labelWidth ? `${labelWidth}px` : 260,
+                            flexShrink: 0
+                          }
+                        });
+                      }, 0);
+                    }
                   }}
                 />
                 <div
@@ -259,17 +385,13 @@ export default function MainHeader({
                   autoFocus
                   value={labelDraft}
                   onChange={(e) => {
-                    debug('MAIN_DATA_WIZARD', 'Label changed', { value: e.target.value });
                     setLabelDraft(e.target.value);
                   }}
                   onKeyDown={async (e) => {
-                    debug('MAIN_DATA_WIZARD', 'Key pressed', { key: e.key, value: labelDraft });
                     if (e.key === 'Enter') {
-                      debug('MAIN_DATA_WIZARD', 'Enter pressed, committing', { labelDraft });
                       await commitMain();
                     }
                     if (e.key === 'Escape') {
-                      debug('MAIN_DATA_WIZARD', 'Escape pressed, cancelling');
                       cancelMain();
                     }
                   }}
@@ -280,16 +402,59 @@ export default function MainHeader({
                     border: '1px solid #334155',
                     borderRadius: 6,
                     padding: '6px 10px',
-                    minWidth: 260,
+                    width: labelWidth ? `${labelWidth}px` : undefined,
+                    minWidth: labelWidth ? `${labelWidth}px` : 260,
+                    flexShrink: 0,
                     fontWeight: 700,
                     transition: 'all 0.3s ease-in-out',
-                    boxShadow: '0 0 0 2px rgba(51, 65, 85, 0.1)'
+                    boxShadow: '0 0 0 2px rgba(51, 65, 85, 0.1)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    boxSizing: 'border-box'
+                  }}
+                  ref={(inputEl) => {
+                    if (inputEl && isEditingMain) {
+                      setTimeout(() => {
+                        const rect = inputEl.getBoundingClientRect();
+                        const computedStyle = window.getComputedStyle(inputEl);
+                        const parentRect = inputEl.parentElement?.getBoundingClientRect();
+                        const containerRect = inputEl.closest('div[style*="padding"]')?.getBoundingClientRect();
+
+                        console.log('[MainHeader][INPUT_RENDER] Input rendered in EDITING mode (NORMAL)', {
+                          inputWidth: rect.width,
+                          inputHeight: rect.height,
+                          inputLeft: rect.left,
+                          inputRight: rect.right,
+                          computedWidth: computedStyle.width,
+                          computedMinWidth: computedStyle.minWidth,
+                          computedMaxWidth: computedStyle.maxWidth,
+                          computedFlexShrink: computedStyle.flexShrink,
+                          computedFlexGrow: computedStyle.flexGrow,
+                          computedFlexBasis: computedStyle.flexBasis,
+                          padding: computedStyle.padding,
+                          border: computedStyle.border,
+                          boxSizing: computedStyle.boxSizing,
+                          parentWidth: parentRect?.width,
+                          parentLeft: parentRect?.left,
+                          parentRight: parentRect?.right,
+                          containerWidth: containerRect?.width,
+                          labelWidthStored: labelWidth,
+                          labelDraft: labelDraft,
+                          actualInputValue: inputEl.value,
+                          appliedStyles: {
+                            width: labelWidth ? `${labelWidth}px` : undefined,
+                            minWidth: labelWidth ? `${labelWidth}px` : 260,
+                            flexShrink: 0
+                          }
+                        });
+                      }, 0);
+                    }
                   }}
                 />
                 <button
                   title="Confirm"
                   onClick={async () => {
-                    debug('MAIN_DATA_WIZARD', 'Confirm clicked, committing', { labelDraft });
                     await commitMain();
                   }}
                   disabled={commitLoading}

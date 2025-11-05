@@ -7,6 +7,12 @@ interface NodeRowEditorProps {
   onKeyDown: (e: React.KeyboardEvent) => void;
   inputRef: React.RefObject<HTMLTextAreaElement>;
   placeholder?: string;
+  fontStyles?: {
+    fontSize: string;
+    fontFamily: string;
+    fontWeight: string;
+    lineHeight: string;
+  } | null;
 }
 
 export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
@@ -14,10 +20,30 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
   onChange,
   onKeyDown,
   inputRef,
-  placeholder
+  placeholder,
+  fontStyles
 }) => {
   const DEBUG_FOCUS = (() => { try { return localStorage.getItem('debug.focus') === '1'; } catch { return false; } })();
   const log = (...args: any[]) => { if (DEBUG_FOCUS) { try { console.log('[Focus][RowEditor]', ...args); } catch {} } };
+
+  // Apply font styles directly to DOM element to override CSS classes
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el || !fontStyles) return;
+
+    // Apply font styles directly to override any CSS classes
+    el.style.setProperty('font-size', fontStyles.fontSize, 'important');
+    el.style.setProperty('font-family', fontStyles.fontFamily, 'important');
+    el.style.setProperty('font-weight', fontStyles.fontWeight, 'important');
+    el.style.setProperty('line-height', fontStyles.lineHeight, 'important');
+
+    console.log('[NodeRowEditor][FONT_APPLY] Font styles applied directly to DOM', {
+      fontSize: fontStyles.fontSize,
+      fontFamily: fontStyles.fontFamily,
+      fontWeight: fontStyles.fontWeight,
+      lineHeight: fontStyles.lineHeight
+    });
+  }, [fontStyles, inputRef]);
 
   // Auto-resize the textarea on value change
   useEffect(() => {
@@ -81,9 +107,9 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
         display: 'block',
         resize: 'none',
         overflow: 'hidden',
-        lineHeight: 1.2,
         whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word'
+        wordBreak: 'break-word',
+        lineHeight: fontStyles?.lineHeight || '1.1'
       }}
       placeholder={placeholder}
     />
