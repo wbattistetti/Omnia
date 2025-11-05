@@ -4,10 +4,10 @@ export type EntityType = 'agentActs' | 'userActs' | 'backendActions' | 'conditio
 export type ActType =
   | 'Message'
   | 'DataRequest'
-  | 'Confirmation'
   | 'ProblemClassification'
   | 'Summarizer'
-  | 'BackendCall';
+  | 'BackendCall'
+  | 'Negotiation';
 
 /**
  * Rappresenta un'entità generica di progetto (es. task, backend action, ecc.)

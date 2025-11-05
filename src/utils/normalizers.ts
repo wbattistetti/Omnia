@@ -1,18 +1,19 @@
 export type AgentActType =
   | 'Message'
   | 'DataRequest'
-  | 'Confirmation'
   | 'ProblemClassification'
   | 'Summarizer'
-  | 'BackendCall';
+  | 'BackendCall'
+  | 'Negotiation';
 
 export const modeToType = (mode?: string): AgentActType => {
   switch (mode) {
     case 'DataRequest': return 'DataRequest';
-    case 'DataConfirmation': return 'Confirmation';
+    case 'DataConfirmation': return 'Summarizer'; // DataConfirmation → Summarizer (confirmation è proprietà opzionale)
     case 'ProblemClassification': return 'ProblemClassification';
     case 'Summarizer': return 'Summarizer';
     case 'BackendCall': return 'BackendCall';
+    case 'Negotiation': return 'Negotiation';
     default: return 'Message';
   }
 };
@@ -20,10 +21,10 @@ export const modeToType = (mode?: string): AgentActType => {
 export const typeToMode = (type?: AgentActType): string => {
   switch (type) {
     case 'DataRequest': return 'DataRequest';
-    case 'Confirmation': return 'DataConfirmation';
+    case 'Summarizer': return 'Summarizer'; // Summarizer mantiene il suo mode (non più DataConfirmation)
     case 'ProblemClassification': return 'ProblemClassification';
-    case 'Summarizer': return 'Summarizer';
     case 'BackendCall': return 'BackendCall';
+    case 'Negotiation': return 'Negotiation';
     default: return 'Message';
   }
 };

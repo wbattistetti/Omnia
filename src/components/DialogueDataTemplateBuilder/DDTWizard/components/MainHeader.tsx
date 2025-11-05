@@ -63,58 +63,14 @@ export default function MainHeader({
   onRetryField,
   onCreateManually,
 }: MainHeaderProps) {
-  console.log('[MainHeader][COMPONENT] MainHeader component called', { isEditingMain, nodeLabel: node.label, labelDraft });
-
   const labelRef = useRef<HTMLDivElement>(null);
   const [labelWidth, setLabelWidth] = useState<number | null>(null);
-
-  // Log when editing state changes
-  useEffect(() => {
-    console.log('[MainHeader][EDITING_STATE] Editing state changed', {
-      isEditingMain,
-      nodeLabel: node.label,
-      labelDraft,
-      labelWidth,
-      labelRefExists: !!labelRef.current,
-      labelRefWidth: labelRef.current?.offsetWidth
-    });
-  }, [isEditingMain, node.label, labelDraft, labelWidth]);
-
-  // Log on every render when editing
-  if (isEditingMain) {
-    console.log('[MainHeader][RENDER] Component rendered in EDITING mode', {
-      labelWidth,
-      labelDraft,
-      nodeLabel: node.label,
-      timestamp: Date.now()
-    });
-  }
 
   // Measure label width more robustly - always measure when labelRef is available
   useEffect(() => {
     if (labelRef.current && !isEditingMain) {
       const rect = labelRef.current.getBoundingClientRect();
       const width = rect.width;
-      const computedStyle = window.getComputedStyle(labelRef.current);
-      const offsetWidth = labelRef.current.offsetWidth;
-      const scrollWidth = labelRef.current.scrollWidth;
-
-      console.log('[MainHeader][WIDTH_MEASURE] Label measurement', {
-        nodeLabel: node.label,
-        isEditingMain,
-        getBoundingClientRect: width,
-        offsetWidth,
-        scrollWidth,
-        computedWidth: computedStyle.width,
-        paddingLeft: computedStyle.paddingLeft,
-        paddingRight: computedStyle.paddingRight,
-        marginLeft: computedStyle.marginLeft,
-        marginRight: computedStyle.marginRight,
-        gap: computedStyle.gap,
-        labelRefExists: !!labelRef.current,
-        labelChildren: labelRef.current.children.length
-      });
-
       setLabelWidth(width);
     }
   }, [node.label, isEditingMain]);
@@ -126,12 +82,6 @@ export default function MainHeader({
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const width = entry.contentRect.width;
-        console.log('[MainHeader][RESIZE_OBSERVER] Label resized', {
-          width,
-          contentRect: entry.contentRect,
-          borderBoxSize: entry.borderBoxSize,
-          contentBoxSize: entry.contentBoxSize
-        });
         setLabelWidth(width);
       }
     });
@@ -254,7 +204,6 @@ export default function MainHeader({
           </>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-            {console.log('[MainHeader][RENDER] Rendering editing UI', { isEditingMain, labelWidth, fieldErrors: Object.keys(fieldErrors), labelDraft })}
             {/* 🚀 NEW: Check if this field has an error */}
             {fieldErrors[labelDraft.trim()] ? (
               // 🚀 ERROR UI: Show error state with retry button
@@ -292,42 +241,7 @@ export default function MainHeader({
                     boxSizing: 'border-box'
                   }}
                   ref={(inputEl) => {
-                    if (inputEl && isEditingMain) {
-                      setTimeout(() => {
-                        const rect = inputEl.getBoundingClientRect();
-                        const computedStyle = window.getComputedStyle(inputEl);
-                        const parentRect = inputEl.parentElement?.getBoundingClientRect();
-                        const containerRect = inputEl.closest('div[style*="padding"]')?.getBoundingClientRect();
-
-                        console.log('[MainHeader][INPUT_RENDER] Input rendered in EDITING mode (ERROR)', {
-                          inputWidth: rect.width,
-                          inputHeight: rect.height,
-                          inputLeft: rect.left,
-                          inputRight: rect.right,
-                          computedWidth: computedStyle.width,
-                          computedMinWidth: computedStyle.minWidth,
-                          computedMaxWidth: computedStyle.maxWidth,
-                          computedFlexShrink: computedStyle.flexShrink,
-                          computedFlexGrow: computedStyle.flexGrow,
-                          computedFlexBasis: computedStyle.flexBasis,
-                          padding: computedStyle.padding,
-                          border: computedStyle.border,
-                          boxSizing: computedStyle.boxSizing,
-                          parentWidth: parentRect?.width,
-                          parentLeft: parentRect?.left,
-                          parentRight: parentRect?.right,
-                          containerWidth: containerRect?.width,
-                          labelWidthStored: labelWidth,
-                          labelDraft: labelDraft,
-                          actualInputValue: inputEl.value,
-                          appliedStyles: {
-                            width: labelWidth ? `${labelWidth}px` : undefined,
-                            minWidth: labelWidth ? `${labelWidth}px` : 260,
-                            flexShrink: 0
-                          }
-                        });
-                      }, 0);
-                    }
+                    // Input ref (debug disabled)
                   }}
                 />
                 <div
@@ -414,42 +328,7 @@ export default function MainHeader({
                     boxSizing: 'border-box'
                   }}
                   ref={(inputEl) => {
-                    if (inputEl && isEditingMain) {
-                      setTimeout(() => {
-                        const rect = inputEl.getBoundingClientRect();
-                        const computedStyle = window.getComputedStyle(inputEl);
-                        const parentRect = inputEl.parentElement?.getBoundingClientRect();
-                        const containerRect = inputEl.closest('div[style*="padding"]')?.getBoundingClientRect();
-
-                        console.log('[MainHeader][INPUT_RENDER] Input rendered in EDITING mode (NORMAL)', {
-                          inputWidth: rect.width,
-                          inputHeight: rect.height,
-                          inputLeft: rect.left,
-                          inputRight: rect.right,
-                          computedWidth: computedStyle.width,
-                          computedMinWidth: computedStyle.minWidth,
-                          computedMaxWidth: computedStyle.maxWidth,
-                          computedFlexShrink: computedStyle.flexShrink,
-                          computedFlexGrow: computedStyle.flexGrow,
-                          computedFlexBasis: computedStyle.flexBasis,
-                          padding: computedStyle.padding,
-                          border: computedStyle.border,
-                          boxSizing: computedStyle.boxSizing,
-                          parentWidth: parentRect?.width,
-                          parentLeft: parentRect?.left,
-                          parentRight: parentRect?.right,
-                          containerWidth: containerRect?.width,
-                          labelWidthStored: labelWidth,
-                          labelDraft: labelDraft,
-                          actualInputValue: inputEl.value,
-                          appliedStyles: {
-                            width: labelWidth ? `${labelWidth}px` : undefined,
-                            minWidth: labelWidth ? `${labelWidth}px` : 260,
-                            flexShrink: 0
-                          }
-                        });
-                      }, 0);
-                    }
+                    // Input ref (debug disabled)
                   }}
                 />
                 <button

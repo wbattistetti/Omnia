@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ProblemIntent } from '../types/project';
 import { generateId } from '../utils/idGenerator';
+import { typeToMode } from '../utils/normalizers';
 
 const API_BASE = ''; // Usa la stessa base URL degli altri servizi
 
@@ -25,13 +26,15 @@ class InstanceRepository {
     private instances = new Map<string, ActInstance>();
 
     /**
-     * Crea una nuova istanza di AgentAct
+     * Crea una nuova istanza di AgentAct (salvataggio solo in memoria)
+     * Il salvataggio nel database avviene esplicitamente quando l'utente clicca su "Salva"
      * @param actId ID del template dal catalogo
      * @param initialIntents Intents iniziali (opzionale, default dal template)
      * @param instanceId ID specifico per l'istanza (opzionale, se non fornito viene generato)
+     * @param projectId ID del progetto (opzionale, usato solo per logging)
      * @returns La nuova istanza creata
      */
-    createInstance(actId: string, initialIntents?: ProblemIntent[], instanceId?: string): ActInstance {
+    createInstance(actId: string, initialIntents?: ProblemIntent[], instanceId?: string, projectId?: string): ActInstance {
         const finalInstanceId = instanceId || generateId();
 
         const instance: ActInstance = {
@@ -44,14 +47,11 @@ class InstanceRepository {
 
         this.instances.set(finalInstanceId, instance);
 
-        // Salva automaticamente nel database
-        this.saveInstanceToDatabase(instance).catch(error => {
-            console.error('Failed to save instance to database:', error);
-        });
-
-        console.log('✅ [InstanceRepository] Created new instance:', {
+        // ✅ Salvataggio solo in memoria - il database verrà salvato esplicitamente quando l'utente clicca su "Salva"
+        console.log('✅ [InstanceRepository] Created new instance (in memory only):', {
             instanceId: finalInstanceId,
             actId,
+            projectId: projectId || 'N/A',
             initialIntentsCount: initialIntents?.length || 0
         });
 
@@ -309,10 +309,12 @@ class InstanceRepository {
                 // Salva nel progetto specifico
                 url = `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/instances`;
                 // Il backend si aspetta { baseActId, mode, message, overrides, ddtSnapshot, rowId }
+                // Determina il mode dal tipo (actId è il tipo quando viene da createInstance)
+                const mode = typeToMode(instance.actId as any) || 'Message';
                 payload = {
                     baseActId: instance.actId,
-                    mode: 'DataRequest', // Default, dovrebbe essere determinato dal contesto
-                    message: null,
+                    mode: mode,
+                    message: instance.message || null,
                     overrides: null,
                     ddtSnapshot: instance.ddt || null,
                     rowId: instance.instanceId // ID originale della riga

@@ -221,7 +221,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
       <div className="p-2">
         {query.trim() && isForNodes && allowCreatePicker ? (
           <div className="grid grid-cols-3 gap-2">
-            {[{ key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' }, { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' }, { key: 'Confirmation', label: 'Confirmation', Icon: CheckCircle, color: '#6366f1' }, { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' }, { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' }, { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }].map(({ key, label, Icon, color }) => (
+            {[{ key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' }, { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' }, { key: 'Negotiation', label: 'Negotiation', Icon: CheckCircle, color: '#6366f1' }, { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' }, { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' }, { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }].map(({ key, label, Icon, color }) => (
               <button
                 key={key}
                 className="px-2 py-1 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-1 whitespace-nowrap"

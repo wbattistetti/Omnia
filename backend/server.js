@@ -52,6 +52,67 @@ const dbProjects = 'Projects';
 let templateCache = null;
 let cacheLoaded = false;
 
+// -----------------------------
+// Act Type Patterns Cache Management
+// -----------------------------
+let actTypePatternsCache = null;
+let actTypePatternsCacheLoaded = false;
+
+async function loadActTypePatternsFromDB() {
+  if (actTypePatternsCacheLoaded) {
+    return actTypePatternsCache;
+  }
+
+  try {
+    console.log('[ACT_TYPE_PATTERNS_CACHE] Caricando pattern dal database Factory...');
+    const client = new MongoClient(uri);
+    await client.connect();
+    const db = client.db(dbFactory);
+    const collection = db.collection('act_type_patterns');
+
+    const patterns = await collection.find({}).toArray();
+    await client.close();
+
+    // Raggruppa per lingua
+    const rulesByLang = {};
+
+    patterns.forEach(p => {
+      const lang = p.language || 'IT';
+      if (!rulesByLang[lang]) {
+        rulesByLang[lang] = {
+          MESSAGE: [],
+          REQUEST_DATA: [],
+          PROBLEM_SPEC_DIRECT: [],
+          PROBLEM_REASON: [],
+          PROBLEM: null,
+          SUMMARY: [],
+          BACKEND_CALL: [],
+          NEGOTIATION: []
+        };
+      }
+
+      const type = p.type;
+      if (p.patterns && Array.isArray(p.patterns)) {
+        // Salva pattern come stringhe (frontend le convertirà in RegExp)
+        if (type === 'PROBLEM' && p.patterns.length > 0) {
+          rulesByLang[lang].PROBLEM = p.patterns[0]; // PROBLEM è una singola regex
+        } else if (rulesByLang[lang][type]) {
+          rulesByLang[lang][type] = p.patterns;
+        }
+      }
+    });
+
+    actTypePatternsCache = rulesByLang;
+    actTypePatternsCacheLoaded = true;
+    console.log(`[ACT_TYPE_PATTERNS_CACHE] Caricati pattern per lingue: ${Object.keys(rulesByLang).join(', ')}`);
+    return actTypePatternsCache;
+
+  } catch (error) {
+    console.error('[ACT_TYPE_PATTERNS_CACHE] Errore nel caricamento:', error);
+    return {};
+  }
+}
+
 async function loadTemplatesFromDB() {
   if (cacheLoaded) {
     return templateCache;
@@ -1638,6 +1699,25 @@ app.get('/api/factory/industries', async (req, res) => {
 // -----------------------------
 // Type Templates Endpoints
 // -----------------------------
+// -----------------------------
+// Endpoint: Act Type Patterns (per euristica classificazione)
+// -----------------------------
+app.get('/api/factory/act-type-patterns', async (req, res) => {
+  try {
+    const patterns = await loadActTypePatternsFromDB();
+
+    logInfo('ActTypePatterns.get', {
+      patternsCount: Object.keys(patterns).reduce((sum, lang) => sum + Object.keys(patterns[lang] || {}).length, 0),
+      languages: Object.keys(patterns)
+    });
+
+    res.json(patterns);
+  } catch (e) {
+    logError('ActTypePatterns.get', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 app.get('/api/factory/type-templates', async (req, res) => {
   try {
     const templates = await loadTemplatesFromDB();
@@ -2225,6 +2305,13 @@ app.post('/api/extractors/run', async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
+});
+
+// Preload act type patterns cache at startup
+loadActTypePatternsFromDB().then(() => {
+  console.log('[SERVER] Act type patterns cache preloaded');
+}).catch(err => {
+  console.warn('[SERVER] Failed to preload act type patterns cache:', err.message);
 });
 
 app.listen(3100, () => {

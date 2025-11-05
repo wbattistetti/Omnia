@@ -116,20 +116,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           lineHeight: computedStyle.lineHeight
         });
 
-        console.log('[NodeRow][WIDTH_MEASURE] Label width and font styles measured', {
-          rowId: row.id,
-          rowText: row.text,
-          isEditing,
-          labelWidth: width,
-          parentWidth,
-          nodeWidth,
-          offsetWidth: labelRef.current.offsetWidth,
-          scrollWidth: labelRef.current.scrollWidth,
-          fontSize: computedStyle.fontSize,
-          fontFamily: computedStyle.fontFamily,
-          fontWeight: computedStyle.fontWeight,
-          lineHeight: computedStyle.lineHeight
-        });
+        // Width and font styles measured (debug disabled)
       });
     }
   }, [isEditing, row.id, row.text]);
@@ -363,7 +350,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         if (!instance) {
           // Crea l'istanza in memoria se non esiste
           console.log('[Message][SAVE][CREATE_IN_MEMORY]', { instanceId, baseActId });
-          instanceRepository.createInstance(baseActId, [], instanceId);
+          const projectId = getProjectId?.() || undefined;
+          instanceRepository.createInstance(baseActId, [], instanceId, projectId);
           // Aggiorna il messaggio nell'istanza appena creata
           instanceRepository.updateMessage(instanceId, { text: label });
           console.log('[Message][SAVE][CREATED_AND_UPDATED]', {
@@ -582,8 +570,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     const instanceId = row.id; // ✅ Use existing row ID as instance ID
     console.log('🎯 [INSTANCE_CREATION] Instance ID:', instanceId);
 
-    instanceRepository.createInstance(key, [], instanceId);
-    console.log('🎯 [INSTANCE_CREATION] Instance created successfully');
+    // Get projectId if available
+    const projectId = getProjectId?.() || undefined;
+    instanceRepository.createInstance(key, [], instanceId, projectId);
+    console.log('🎯 [INSTANCE_CREATION] Instance created successfully', { projectId: projectId || 'N/A' });
 
     console.log('🎯 [INSTANCE_CREATION] Row will be updated with ID:', instanceId);
 
@@ -758,7 +748,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
         // Create instance with intents
         const instanceId = generateId(); // Stesso ID per riga e istanza
-        instanceRepository.createInstance(actIdToUse, initialIntents, instanceId);
+        const projectId = getProjectId?.() || undefined;
+        instanceRepository.createInstance(actIdToUse, initialIntents, instanceId, projectId);
 
         console.log('[✅ INTELLISENSE] Instance created in repository', {
           instanceId: instanceId,
@@ -1070,37 +1061,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             }}
             data-row-id={row.id}
             ref={(divEl) => {
-              if (divEl && isEditing) {
-                setTimeout(() => {
-                  const rect = divEl.getBoundingClientRect();
-                  const computedStyle = window.getComputedStyle(divEl);
-                  const inputRect = inputRef.current?.getBoundingClientRect();
-                  const inputComputedStyle = inputRef.current ? window.getComputedStyle(inputRef.current) : null;
-
-                  console.log('[NodeRow][EDITING_RENDER] Editor container rendered', {
-                    rowId: row.id,
-                    rowText: row.text,
-                    labelWidth,
-                    containerWidth: rect.width,
-                    containerLeft: rect.left,
-                    containerRight: rect.right,
-                    containerComputedWidth: computedStyle.width,
-                    containerComputedMinWidth: computedStyle.minWidth,
-                    containerComputedFlexShrink: computedStyle.flexShrink,
-                    containerComputedFlexGrow: computedStyle.flexGrow,
-                    inputWidth: inputRect?.width,
-                    inputComputedWidth: inputComputedStyle?.width,
-                    inputComputedMinWidth: inputComputedStyle?.minWidth,
-                    parentWidth: divEl.parentElement?.getBoundingClientRect().width,
-                    appliedStyles: {
-                      width: labelWidth ? `${labelWidth}px` : undefined,
-                      minWidth: labelWidth ? `${labelWidth}px` : 0,
-                      flexShrink: 0,
-                      flexGrow: 0
-                    }
-                  });
-                }, 0);
-              }
+              // Editor container ref (debug disabled)
             }}
           >
             <NodeRowEditor

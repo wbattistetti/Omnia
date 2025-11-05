@@ -1,26 +1,28 @@
 import { Lang, RuleSet } from './types';
-import { IT_RULES } from './rules/it';
-import { EN_RULES } from './rules/en';
-import { PT_RULES } from './rules/pt';
+import { getPatternCache, loadPatternsFromDatabase } from './patternLoader';
 
-const REGISTRY = new Map<Lang, RuleSet>();
-
-export function registerLanguage(lang: Lang, rules: RuleSet) {
-  REGISTRY.set(lang, rules);
+/**
+ * Inizializza il registry caricando pattern dal database
+ * IMPORTANTE: I pattern hardcoded sono stati disabilitati (rinominati in .disabled)
+ * Il sistema ora usa SOLO i pattern dal database
+ */
+export async function initializeRegistry() {
+  await loadPatternsFromDatabase();
 }
 
+/**
+ * Ottiene il RuleSet per una lingua
+ * Legge SOLO dalla cache database (pattern hardcoded disabilitati)
+ */
 export function getRuleSet(lang: Lang): RuleSet | undefined {
-  return REGISTRY.get(lang);
+  // Legge solo dalla cache database
+  return getPatternCache().get(lang);
 }
 
 export function getLanguageOrder(order?: Lang[]): Lang[] {
   const base: Lang[] = order && order.length ? (order as Lang[]) : ['IT', 'EN', 'PT'];
-  return base.filter(l => REGISTRY.has(l));
+  const available = new Set([...getPatternCache().keys()]);
+  return base.filter(l => available.has(l));
 }
-
-// bootstrap default languages
-registerLanguage('IT', IT_RULES);
-registerLanguage('EN', EN_RULES);
-registerLanguage('PT', PT_RULES);
 
 

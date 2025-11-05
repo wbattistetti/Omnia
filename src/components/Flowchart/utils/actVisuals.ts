@@ -68,7 +68,7 @@ export function resolveActType(row: any, act: any): ActType {
   // Back-compat: map mode -> type when only legacy field is present
   const legacyMode = resolveActMode(row, act);
   if (legacyMode === 'DataRequest') return 'DataRequest';
-  if (legacyMode === 'DataConfirmation') return 'Confirmation';
+  if (legacyMode === 'DataConfirmation') return 'Summarizer'; // DataConfirmation → Summarizer (confirmation è proprietà opzionale)
   return 'Message';
 }
 
@@ -88,10 +88,6 @@ export function getAgentActVisualsByType(type: ActType, hasDDT: boolean) {
       Icon = Ear;
       color = hasDDT ? blue : gray; // grigio se non configurato
       break;
-    case 'Confirmation':
-      Icon = CheckCircle2;
-      color = hasDDT ? indigo : gray;
-      break;
     case 'ProblemClassification':
       Icon = GitBranch;
       color = hasDDT ? amber : gray;
@@ -99,6 +95,10 @@ export function getAgentActVisualsByType(type: ActType, hasDDT: boolean) {
     case 'Summarizer':
       Icon = FileText;
       color = hasDDT ? cyan : gray;
+      break;
+    case 'Negotiation':
+      Icon = CheckCircle2;
+      color = hasDDT ? indigo : gray;
       break;
     case 'BackendCall':
       Icon = Server;

@@ -18,11 +18,6 @@ export const PT_RULES: RuleSet = {
     /^(pergunte|solicite|pe[çc]a)\s+(o\s+)?(motivo|por\s+que)\b/i,
     /^(pergunta|solicita|pede)\s+(o\s+)?(motivo|por\s+que)\b/i,
   ],
-  CONFIRM_DATA: [
-    /^(confirme|verifique|certifique\-se)\b/i,
-    /\b(est[áa]\s+correto)\??$/i,
-    /^(confirma|verifica|certifica\-se)\b/i,
-  ],
   SUMMARY: [
     /^(resuma|fa[çc]a\s+um\s+resumo|recapitule)\b/i,
     /^(resume|fornece\s+um\s+resumo|recapitula)\b/i,
@@ -35,6 +30,12 @@ export const PT_RULES: RuleSet = {
     /^(chama|invoca|executa|busca|atualiza|exclui|cria)\b/i,
     /^(verifique|confira|veja|consulte|cheque)\b/i,
     /^(verifica|confere|v[eê]|consulta|checa)\b/i,
+  ],
+  NEGOTIATION: [
+    /^(negocie|trate|gerencie|concorde|avalie)\b/i,
+    /^(se negocia|se trata|se concorda)\b/i,
+    /^(proponha|sugira|ofere[çc]a|indique)\s+(outra|uma nova|uma alternativa)\b/i,
+    /^(pode propor|tem outras)\b/i,
   ],
 };
 

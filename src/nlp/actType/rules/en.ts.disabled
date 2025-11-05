@@ -19,11 +19,6 @@ export const EN_RULES: RuleSet = {
     /^(asks(\s+for)?|requests)\s+(the\s+)?(reason|why)\b/i,
     /^(ask|asks)\s+why\b/i,
   ],
-  CONFIRM_DATA: [
-    /^(confirm|verify|make\s+sure)\b/i,
-    /\b(is (that )?correct|right)\??$/i,
-    /^(confirms|verifies|makes\s+sure)\b/i,
-  ],
   SUMMARY: [
     /^(summari[sz]e|recap|provide\s+a\s+summary)\b/i,
     /^(summari[sz]es|recaps|provides\s+a\s+summary)\b/i,
@@ -36,6 +31,12 @@ export const EN_RULES: RuleSet = {
     /^(calls|invokes|executes|fetches|updates|deletes|creates)\b/i,
     /^(check|verify|look\s*up)\b/i,
     /^(checks|verifies|looks\s*up)\b/i,
+  ],
+  NEGOTIATION: [
+    /^(negotiate|handle|manage|agree|evaluate)\b/i,
+    /^(is negotiated|is handled|is agreed)\b/i,
+    /^(propose|suggest|offer|indicate)\s+(another|a new|an alternative)\b/i,
+    /^(can you propose|do you have other)\b/i,
   ],
 };
 

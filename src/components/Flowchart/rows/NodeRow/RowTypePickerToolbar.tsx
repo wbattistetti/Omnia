@@ -5,7 +5,7 @@ import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check } from
 const TYPE_OPTIONS = [
     { key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
     { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' },
-    { key: 'Confirmation', label: 'Confirmation', Icon: CheckCircle2, color: '#6366f1' },
+    { key: 'Negotiation', label: 'Negotiation', Icon: CheckCircle2, color: '#6366f1' },
     { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
     { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' },
     { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }
@@ -23,7 +23,7 @@ interface RowTypePickerToolbarProps {
 /**
  * Type picker toolbar for selecting agent act type
  * Keyboard navigable with arrow keys, Enter to confirm, Escape to close
- * Supports keyboard shortcuts: m=Message, d=Data, c=Confirmation, p=Problem, s=Summarizer, b=BackendCall
+ * Supports keyboard shortcuts: m=Message, d=Data, n=Negotiation, p=Problem, s=Summarizer, b=BackendCall
  */
 export function RowTypePickerToolbar({
     left,
@@ -53,7 +53,7 @@ export function RowTypePickerToolbar({
             const map: Record<string, string> = {
                 m: 'Message',
                 d: 'DataRequest',
-                c: 'Confirmation',
+                n: 'Negotiation',
                 p: 'ProblemClassification',
                 s: 'Summarizer',
                 b: 'BackendCall'

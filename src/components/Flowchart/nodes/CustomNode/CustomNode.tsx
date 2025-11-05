@@ -103,13 +103,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           setNodeWidth(width);
           nodeWidthRef.current = width;
 
-          console.log('[CustomNode][WIDTH_MEASURE] Node width measured', {
-            nodeId: id,
-            width,
-            computedWidth: computedStyle.width,
-            editingRowId,
-            nodeRowsCount: nodeRows.length
-          });
+          // Node width measured (debug disabled)
         });
       });
     } else if (editingRowId && nodeWidthRef.current && nodeContainerRef.current) {

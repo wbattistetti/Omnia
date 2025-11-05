@@ -65,6 +65,15 @@ function AppInner() {
     } catch { }
   }, []);
 
+  // Load act type patterns from database at startup
+  React.useEffect(() => {
+    import('../nlp/actType/registry').then(module => {
+      module.initializeRegistry().catch(err => {
+        console.warn('[App] Failed to load act type patterns from database, using fallback:', err);
+      });
+    });
+  }, []);
+
   // Callback da passare ai nodi
   const handlePlayNode = (nodeId: string, nodeRows: any[]) => {
     setTestNodeId(nodeId);
