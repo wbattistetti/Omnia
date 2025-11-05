@@ -223,6 +223,10 @@ export default function RegexInlineEditor({
     extractorType: 'regex',
   });
 
+  // 🆕 Override button label logic: "Create Regex" only if regex is empty, otherwise "Refine Regex"
+  const isRegexEmpty = !currentRegexValue || currentRegexValue.trim().length === 0;
+  const overrideIsCreateMode = isRegexEmpty;
+
   // 🆕 Validate regex ONLY when AI finishes generating (not on every textbox change)
   const prevGeneratingRegex = React.useRef(generatingRegex);
   React.useEffect(() => {
@@ -243,8 +247,8 @@ export default function RegexInlineEditor({
 
   // Show button if:
   // - NOT generating
-  // - AND (user has edited OR there are validation errors to fix)
-  const shouldShowButton = !generatingRegex && (hasUserEdited || (shouldShowValidation && validationResult && !validationResult.valid));
+  // - AND (regex is empty OR user has edited OR there are validation errors to fix)
+  const shouldShowButton = !generatingRegex && (isRegexEmpty || hasUserEdited || (shouldShowValidation && validationResult && !validationResult.valid));
 
   // Custom language configuration for regex
   const regexCustomLanguage: CustomLanguage = React.useMemo(() => ({
@@ -476,7 +480,7 @@ export default function RegexInlineEditor({
       <EditorHeader
         title="🪄 Edit Regex"
         extractorType="regex"
-        isCreateMode={isCreateMode}
+        isCreateMode={overrideIsCreateMode}
         isGenerating={generatingRegex}
         shouldShowButton={!!shouldShowButton}
         onButtonClick={handleButtonClick}
