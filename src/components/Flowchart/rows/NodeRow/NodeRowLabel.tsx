@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
 import { NodeRowData } from '../../types/project';
+import SmartTooltip from '../../../SmartTooltip';
 
 // Component to render checkbox with dynamic size based on font
 const CheckboxButton: React.FC<{
@@ -46,28 +47,29 @@ const CheckboxButton: React.FC<{
   }, [labelRef]);
 
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: checkboxSize,
-        height: checkboxSize,
-        marginRight: 6,
-        borderRadius: 3,
-        border: '1px solid rgba(0,0,0,0.6)',
-        background: included ? 'transparent' : '#e5e7eb',
-      }}
-      title="Include this row in the flow"
-      onClick={(e) => {
-        e.stopPropagation();
-        setIncluded(!included);
-      }}
-    >
-      {included ? (
-        <Check style={{ width: checkIconSize, height: checkIconSize, color: 'rgba(0,0,0,0.9)' }} />
-      ) : null}
-    </span>
+    <SmartTooltip text="Include this row in the flow" tutorId="include_row_help" placement="bottom">
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: checkboxSize,
+          height: checkboxSize,
+          marginRight: 6,
+          borderRadius: 3,
+          border: '1px solid rgba(0,0,0,0.6)',
+          background: included ? 'transparent' : '#e5e7eb',
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIncluded(!included);
+        }}
+      >
+        {included ? (
+          <Check style={{ width: checkIconSize, height: checkIconSize, color: 'rgba(0,0,0,0.9)' }} />
+        ) : null}
+      </span>
+    </SmartTooltip>
   );
 };
 
@@ -120,30 +122,31 @@ const PrimaryIconButton: React.FC<{
   }, [iconSize, labelRef]);
 
   return (
-    <button
-      type="button"
-      title="Change act type"
-      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          console.log('[TypePicker][labelIcon][click]', { rect, labelRect: labelRef.current?.getBoundingClientRect() });
-          onTypeChangeRequest && onTypeChangeRequest(rect);
-        } catch (err) { try { console.warn('[TypePicker][labelIcon][err]', err); } catch { } }
-      }}
-      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', padding: 0, marginRight: 4, cursor: 'pointer' }}
-    >
-      <Icon
-        className="inline-block"
-        style={{
-          width: computedSize,
-          height: computedSize,
-          color: included ? labelTextColor : '#9ca3af'
+    <SmartTooltip text="Change act type" tutorId="change_act_type_help" placement="bottom">
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            console.log('[TypePicker][labelIcon][click]', { rect, labelRect: labelRef.current?.getBoundingClientRect() });
+            onTypeChangeRequest && onTypeChangeRequest(rect);
+          } catch (err) { try { console.warn('[TypePicker][labelIcon][err]', err); } catch { } }
         }}
-      />
-    </button>
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', padding: 0, marginRight: 4, cursor: 'pointer' }}
+      >
+        <Icon
+          className="inline-block"
+          style={{
+            width: computedSize,
+            height: computedSize,
+            color: included ? labelTextColor : '#9ca3af'
+          }}
+        />
+      </button>
+    </SmartTooltip>
   );
 };
 
@@ -255,6 +258,7 @@ interface NodeRowLabelProps {
   onTypeChangeRequest?: (anchor?: DOMRect) => void; // NEW: request to open type picker with anchor rect
   onRequestClosePicker?: () => void; // NEW: ask parent to close type picker
   overlayRef?: React.RefObject<HTMLDivElement>;
+  onAIPromptToSystem?: () => void; // NEW: handle AI prompt to system action
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -283,7 +287,8 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   onLabelHoverChange,
   onTypeChangeRequest,
   onRequestClosePicker,
-  overlayRef
+  overlayRef,
+  onAIPromptToSystem
 }) => (
   <>
     {/* Checkbox: show only when label/text is present. Default is a black tick; unchecked shows grey box. */}
@@ -311,7 +316,6 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
       onMouseEnter={() => onLabelHoverChange && onLabelHoverChange(true)}
       onMouseLeave={() => onLabelHoverChange && onLabelHoverChange(false)}
-      title="Double-click to edit, start typing for intellisense"
     >
       {Icon && <PrimaryIconButton
         Icon={Icon}
@@ -361,6 +365,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           onTypeChangeRequest={onTypeChangeRequest}
           onRequestClosePicker={onRequestClosePicker}
           outerRef={overlayRef}
+          onAIPromptToSystem={onAIPromptToSystem}
         />,
         document.body
       )}

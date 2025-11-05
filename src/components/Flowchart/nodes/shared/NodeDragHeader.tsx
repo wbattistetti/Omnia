@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Move, Edit3, Trash2, Anchor, Eye, EyeOff } from 'lucide-react';
+import SmartTooltip from '../../../SmartTooltip';
 
 interface NodeDragHeaderProps {
   onEditTitle: () => void;
@@ -57,7 +58,6 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
         // DEBUG: Bordo rimosso - problema risolto
         boxSizing: 'border-box'
       }}
-      title={isToolbar ? undefined : "Drag to move node"}
     >
       {/* LEFT: Drag buttons */}
       <div
@@ -67,51 +67,53 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
         }}
       >
         {/* Move icon (4 frecce) - DRAG AREA (not a button) */}
-        <div
-          style={{
-            cursor: 'move',
-            display: 'flex',
-            alignItems: 'center',
-            opacity: 0.85,
-            transition: 'opacity 120ms linear, transform 120ms ease'
-          }}
-          className="hover:opacity-100 hover:scale-110 nodrag"
-          title="Drag to move node"
-          onMouseDown={(e) => {
-            // ✅ Previeni comportamento di default e avvia drag personalizzato
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('🚀 [DRAG DEBUG] MOVE ICON - Starting custom node drag');
-            onDragStart?.();
-          }}
-        >
-          <Move className="w-3 h-3 text-amber-300 drop-shadow" />
-        </div>
+        <SmartTooltip text="Drag to move node" tutorId="drag_node_help" placement="bottom">
+          <div
+            style={{
+              cursor: 'move',
+              display: 'flex',
+              alignItems: 'center',
+              opacity: 0.85,
+              transition: 'opacity 120ms linear, transform 120ms ease'
+            }}
+            className="hover:opacity-100 hover:scale-110 nodrag"
+            onMouseDown={(e) => {
+              // ✅ Previeni comportamento di default e avvia drag personalizzato
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('🚀 [DRAG DEBUG] MOVE ICON - Starting custom node drag');
+              onDragStart?.();
+            }}
+          >
+            <Move className="w-3 h-3 text-amber-300 drop-shadow" />
+          </div>
+        </SmartTooltip>
 
         {/* Anchor icon - RIGID DRAG AREA (not a button) */}
-        <div
-          title="Drag to move with descendants"
-          className="rigid-anchor hover:opacity-100 hover:scale-110"
-          style={{
-            cursor: 'move',
-            opacity: isToolbarDrag ? 0 : 0.85,
-            transition: 'opacity 120ms linear, transform 120ms ease',
-            display: 'flex',
-            alignItems: 'center'
-          }}
-          onPointerDownCapture={() => {
-            console.log('🚀 [DRAG DEBUG] ANCHOR ICON - Setting rigid mode');
-            try {
-              (window as any).__flowDragMode = 'rigid';
-              console.log('🚀 [DRAG DEBUG] __flowDragMode set to:', (window as any).__flowDragMode);
-            } catch (e) {
-              console.error('🚀 [DRAG DEBUG] Error setting __flowDragMode:', e);
-            }
-            onDragStart?.();
-          }}
-        >
-          <Anchor className="w-3 h-3 text-slate-200 hover:text-amber-300 drop-shadow" />
-        </div>
+        <SmartTooltip text="Drag to move with descendants" tutorId="drag_descendants_help" placement="bottom">
+          <div
+            className="rigid-anchor hover:opacity-100 hover:scale-110"
+            style={{
+              cursor: 'move',
+              opacity: isToolbarDrag ? 0 : 0.85,
+              transition: 'opacity 120ms linear, transform 120ms ease',
+              display: 'flex',
+              alignItems: 'center'
+            }}
+            onPointerDownCapture={() => {
+              console.log('🚀 [DRAG DEBUG] ANCHOR ICON - Setting rigid mode');
+              try {
+                (window as any).__flowDragMode = 'rigid';
+                console.log('🚀 [DRAG DEBUG] __flowDragMode set to:', (window as any).__flowDragMode);
+              } catch (e) {
+                console.error('🚀 [DRAG DEBUG] Error setting __flowDragMode:', e);
+              }
+              onDragStart?.();
+            }}
+          >
+            <Anchor className="w-3 h-3 text-slate-200 hover:text-amber-300 drop-shadow" />
+          </div>
+        </SmartTooltip>
       </div>
 
       {/* SPACER: Spazio fisso tra i due gruppi */}
@@ -128,51 +130,54 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
       >
         {/* Eye icon - Toggle visibility of unchecked rows - Only show if there are unchecked rows */}
         {onToggleUnchecked && hasUncheckedRows && (
-          <button
-            className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
-            title={showUnchecked ? "Hide unchecked rows" : "Show unchecked rows"}
-            style={{ background: 'none', border: 'none', opacity: 0.85, transition: 'opacity 120ms linear' }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggleUnchecked();
-            }}
-          >
-            {showUnchecked ? (
-              <Eye className="w-3 h-3 text-slate-200 hover:text-blue-400 drop-shadow hover:drop-shadow-lg transition-colors" />
-            ) : (
-              <EyeOff className="w-3 h-3 text-slate-200 hover:text-blue-400 drop-shadow hover:drop-shadow-lg transition-colors" />
-            )}
-          </button>
+          <SmartTooltip text={showUnchecked ? "Hide unchecked rows" : "Show unchecked rows"} tutorId="toggle_unchecked_help" placement="bottom">
+            <button
+              className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
+              style={{ background: 'none', border: 'none', opacity: 0.85, transition: 'opacity 120ms linear' }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleUnchecked();
+              }}
+            >
+              {showUnchecked ? (
+                <Eye className="w-3 h-3 text-slate-200 hover:text-blue-400 drop-shadow hover:drop-shadow-lg transition-colors" />
+              ) : (
+                <EyeOff className="w-3 h-3 text-slate-200 hover:text-blue-400 drop-shadow hover:drop-shadow-lg transition-colors" />
+              )}
+            </button>
+          </SmartTooltip>
         )}
 
         {/* DEBUG: Log rimosso per ridurre rumore */}
 
-        <button
-          className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
-          title="Edit title"
-          style={{ background: 'none', border: 'none', opacity: 0.85, transition: 'opacity 120ms linear' }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onEditTitle();
-          }}
-        >
-          <Edit3 className="w-3 h-3 text-slate-200 hover:text-amber-300 drop-shadow hover:drop-shadow-lg transition-colors" />
-        </button>
+        <SmartTooltip text="Edit title" tutorId="edit_title_help" placement="bottom">
+          <button
+            className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
+            style={{ background: 'none', border: 'none', opacity: 0.85, transition: 'opacity 120ms linear' }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onEditTitle();
+            }}
+          >
+            <Edit3 className="w-3 h-3 text-slate-200 hover:text-amber-300 drop-shadow hover:drop-shadow-lg transition-colors" />
+          </button>
+        </SmartTooltip>
 
-        <button
-          className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
-          title="Delete node"
-          style={{ background: 'none', border: 'none', opacity: 0.85, transition: 'opacity 120ms linear' }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          <Trash2 className="w-3 h-3 text-slate-200 hover:text-red-400 drop-shadow hover:drop-shadow-lg transition-colors" />
-        </button>
+        <SmartTooltip text="Delete node" tutorId="delete_node_help" placement="bottom">
+          <button
+            className="p-0 hover:opacity-100 transition transform hover:scale-110 nodrag"
+            style={{ background: 'none', border: 'none', opacity: 0.85, transition: 'opacity 120ms linear' }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2 className="w-3 h-3 text-slate-200 hover:text-red-400 drop-shadow hover:drop-shadow-lg transition-colors" />
+          </button>
+        </SmartTooltip>
       </div>
     </div>
   );

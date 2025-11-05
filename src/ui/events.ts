@@ -44,3 +44,8 @@ export function emitActEditorOpen(detail: { id: string; type: string; label?: st
   try { document.dispatchEvent(new CustomEvent('actEditor:open', { detail, bubbles: true })); } catch {}
 }
 
+// Tutor events
+export function emitTutorOpen(tutorId: string) {
+  try { document.dispatchEvent(new CustomEvent('tutor:open', { detail: { tutorId }, bubbles: true })); } catch {}
+}
+
