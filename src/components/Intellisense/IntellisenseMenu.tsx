@@ -129,13 +129,25 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       const viewportWidth = window.innerWidth;
       const menuWidth = 320;
 
-      // Altezza desiderata: più generosa per 1-2 risultati (per vedere payoff senza scroll)
-      // Se non ci sono risultati ma c'è una query, calcola l'altezza per messaggio + pulsanti + 5px sotto
+      // ✅ Calcola altezza item dinamicamente basata sul font size
+      const fontSizeNum = parseFloat(fontSizes.nodeRow) || 14;
+      const paddingV = fontSizeNum * 0.35; // Padding verticale (come in IntellisenseItem)
+      const paddingH = fontSizeNum * 0.5; // Padding orizzontale (non usato per altezza)
+      const lineHeight = fontSizeNum * 1.2; // Line height (come in IntellisenseItem)
+      const itemHeight = (paddingV * 2) + lineHeight; // Altezza item = padding top + line height + padding bottom
+      const paddingTop = fontSizeNum * 0.3; // Padding top del menu
+      const paddingBottom = fontSizeNum * 0.3; // Padding bottom del menu
+      const headerHeight = totalItems > 0 ? fontSizeNum * 0.3 : 0; // Header se ci sono risultati
+
+      // ✅ Calcola altezza desiderata basata sul numero REALE di risultati
       const desiredHeight = totalItems === 0 && query.trim()
-        ? 140 // Altezza precisa: 16px padding top + 60px messaggio + 40px pulsanti + 19px padding bottom (5px sotto i pulsanti)
-        : totalItems <= 2
-          ? Math.min(defaultLayoutConfig.itemHeight * totalItems + 72, defaultLayoutConfig.maxMenuHeight)
-          : Math.min(totalItems * 70 + 60, defaultLayoutConfig.maxMenuHeight);
+        ? 140 // Altezza per messaggio + pulsanti quando non ci sono risultati
+        : totalItems > 0
+          ? Math.min(
+              paddingTop + headerHeight + (itemHeight * totalItems) + paddingBottom,
+              defaultLayoutConfig.maxMenuHeight
+            )
+          : 0;
 
       // Calcola spazio disponibile sopra e sotto
       const spaceBelow = viewportHeight - rect.bottom - 10; // 10px di margine
@@ -144,14 +156,26 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       let top;
       let maxHeight;
 
-      if (spaceBelow >= desiredHeight || spaceBelow >= spaceAbove) {
-        // Posiziona sotto
+      // ✅ Logica migliorata: controlla PRIMA se c'è spazio sotto per il numero reale di risultati
+      if (spaceBelow >= desiredHeight) {
+        // C'è spazio sotto sufficiente → Posiziona sotto
         top = rect.bottom + 5;
         maxHeight = Math.min(desiredHeight, spaceBelow - 5);
-      } else {
-        // Posiziona sopra
+      } else if (spaceAbove >= desiredHeight) {
+        // Non c'è spazio sotto ma c'è sopra sufficiente → Posiziona sopra
         maxHeight = Math.min(desiredHeight, spaceAbove - 5);
         top = rect.top - maxHeight - 5;
+      } else {
+        // ✅ Non c'è spazio sufficiente né sopra né sotto → Usa lo spazio più grande disponibile
+        if (spaceBelow >= spaceAbove) {
+          // Più spazio sotto → Posiziona sotto (anche se non è sufficiente)
+          top = rect.bottom + 5;
+          maxHeight = Math.min(desiredHeight, spaceBelow - 5);
+        } else {
+          // Più spazio sopra → Posiziona sopra (anche se non è sufficiente)
+          maxHeight = Math.min(desiredHeight, spaceAbove - 5);
+          top = rect.top - maxHeight - 5;
+        }
       }
 
       // Assicurati che il menu non vada mai fuori dalla viewport
@@ -204,7 +228,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       window.removeEventListener('scroll', updatePosition, true);
       try { ro && ro.disconnect(); } catch { }
     };
-  }, [isOpen, referenceElement, totalItems, query]);
+  }, [isOpen, referenceElement, totalItems, query, fontSizes.nodeRow]); // ✅ Aggiunto fontSizes.nodeRow alle dipendenze
 
   // Handle click outside
   useEffect(() => {
@@ -591,6 +615,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             projectData={data}
             layoutConfig={defaultLayoutConfig} // ✅ OBBLIGATORIO
             categoryConfig={{}} // ✅ OBBLIGATORIO
+            fontSize={fontSizes.nodeRow} // ✅ Passa font size al renderer
           />
         </div>
       ) : (
@@ -617,6 +642,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             projectData={data}
             layoutConfig={defaultLayoutConfig} // ✅ OBBLIGATORIO
             categoryConfig={{}} // ✅ OBBLIGATORIO
+            fontSize={fontSizes.nodeRow} // ✅ Passa font size al renderer
           />
         </div>
       )}

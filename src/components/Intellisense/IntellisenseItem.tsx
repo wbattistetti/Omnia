@@ -11,6 +11,7 @@ interface IntellisenseItemProps {
   isFromAI?: boolean;
   onClick: () => void;
   onMouseEnter: () => void;
+  fontSize?: string; // ✅ Font size dinamico
 }
 
 export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
@@ -18,7 +19,8 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   isSelected,
   isFromAI = false,
   onClick,
-  onMouseEnter
+  onMouseEnter,
+  fontSize = '14px' // ✅ Default font size
 }) => {
   const { item, matches } = result;
 
@@ -40,6 +42,11 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
 
   // Debug logging removed to prevent excessive console output
 
+  // ✅ Calcola padding proporzionale al font size
+  const fontSizeNum = parseFloat(fontSize) || 14;
+  const paddingV = fontSizeNum * 0.35; // Padding verticale (35% del font size)
+  const paddingH = fontSizeNum * 0.5; // Padding orizzontale (50% del font size)
+
   return (
     <div
       className={`
@@ -47,7 +54,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
         ${isSelected ? 'bg-amber-200 text-black border-2 border-amber-500' : 'border border-transparent'}
       `}
       style={{
-        padding: '4px 6px',
+        padding: `${paddingV}px ${paddingH}px`,
         background: isSelected ? undefined : (item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined)
       }}
       onClick={onClick}
@@ -56,21 +63,26 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
     >
       {/* Icon */}
       <div className="mr-1 mt-0.5 flex-shrink-0">
-        {item.iconComponent ? (
-          <item.iconComponent className="w-3 h-3" style={{ color: foreColor }} />
-        ) : (item.categoryType === 'agentActs') ? (
-          ((item as any)?.mode === 'DataRequest') ? (
-            <Ear className="w-3 h-3" style={{ color: foreColor }} />
-          ) : ((item as any)?.mode === 'DataConfirmation') ? (
-            <CheckCircle2 className="w-3 h-3" style={{ color: foreColor }} />
+        {(() => {
+          const iconSize = fontSizeNum * 0.75; // ✅ Icona proporzionale al font (75% del font size)
+          const iconStyle = { color: foreColor, width: `${iconSize}px`, height: `${iconSize}px` };
+
+          return item.iconComponent ? (
+            <item.iconComponent style={iconStyle} />
+          ) : (item.categoryType === 'agentActs') ? (
+            ((item as any)?.mode === 'DataRequest') ? (
+              <Ear style={iconStyle} />
+            ) : ((item as any)?.mode === 'DataConfirmation') ? (
+              <CheckCircle2 style={iconStyle} />
+            ) : (
+              <Megaphone style={iconStyle} />
+            )
+          ) : IconFromSidebar ? (
+            <IconFromSidebar style={{ ...iconStyle, color: foreColor || '#94a3b8' }} />
           ) : (
-            <Megaphone className="w-3 h-3" style={{ color: foreColor }} />
-          )
-        ) : IconFromSidebar ? (
-          <IconFromSidebar className="w-3 h-3" style={{ color: foreColor || '#94a3b8' }} />
-        ) : (
-          <Circle className="w-3 h-3 text-gray-400" />
-        )}
+            <Circle style={{ ...iconStyle, color: '#9ca3af' }} />
+          );
+        })()}
       </div>
 
       {/* Content */}
@@ -80,7 +92,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
           className="font-normal whitespace-nowrap overflow-hidden text-ellipsis"
           style={{
             color: isSelected ? '#111' : (foreColor as any),
-            fontSize: '8px',
+            fontSize: fontSize, // ✅ Usa font size dinamico
             lineHeight: 1.2
           }}
           title={item.description && item.description.trim() !== '' ? item.description : undefined}
@@ -93,7 +105,7 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
           <div className="mt-1">
             <span
               className="inline-flex items-center px-1 py-0.5 rounded-full font-medium bg-slate-600 text-white"
-              style={{ fontSize: '6px', lineHeight: 1 }}
+              style={{ fontSize: `calc(${fontSize} * 0.75)`, lineHeight: 1 }} // ✅ Badge proporzionale (75% del font size)
             >
               Suggerito AI
             </span>

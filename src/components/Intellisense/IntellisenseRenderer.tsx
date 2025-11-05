@@ -23,6 +23,7 @@ interface IntellisenseRendererProps {
   projectIndustry?: string;
   projectData?: any;
   allowCreatePicker?: boolean;
+  fontSize?: string; // ✅ Font size dinamico
 }
 
 // Configurazione per la virtualizzazione
@@ -46,7 +47,8 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   filterCategoryTypes = [],
   projectIndustry = 'utility-gas',
   projectData,
-  allowCreatePicker = false
+  allowCreatePicker = false,
+  fontSize = '14px' // ✅ Default font size
 }) => {
   // ✅ Log rimosso per evitare spam
   const containerRef = useRef<HTMLDivElement>(null);
@@ -281,6 +283,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
           isFromAI={item.isFromAI}
           onClick={() => onItemSelect(item.result)}
           onMouseEnter={() => handleItemHover(index)}
+          fontSize={fontSize} // ✅ Passa font size agli item
         />
       ))}
     </div>
