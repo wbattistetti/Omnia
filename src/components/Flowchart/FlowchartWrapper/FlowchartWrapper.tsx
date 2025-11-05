@@ -172,8 +172,8 @@ export const FlowchartWrapper: React.FC<FlowchartWrapperProps> = ({
                 ref={panelRef}
                 className="flowchart-panel"
                 style={{
-                    width: flowDimensions.width,
-                    height: flowDimensions.height,
+                    width: Math.max(flowDimensions.width, wrapperDimensions.width || minWidth),
+                    height: Math.max(flowDimensions.height, wrapperDimensions.height || minHeight),
                     position: 'absolute',
                     top: 0,
                     left: 0,
