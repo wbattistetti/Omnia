@@ -7,8 +7,8 @@ let cacheReadyPromise: Promise<void> | null = null;
 
 /**
  * Carica i pattern dal database e li salva in cache
- * IMPORTANTE: I pattern hardcoded sono stati disabilitati (rinominati in .disabled)
- * Il sistema ora usa SOLO i pattern dal database
+ * IMPORTANTE: I pattern hardcoded sono stati completamente rimossi
+ * Il sistema usa SOLO i pattern caricati dal database
  */
 export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
   if (cacheLoaded) {

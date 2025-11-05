@@ -3,8 +3,8 @@ import { getPatternCache, loadPatternsFromDatabase } from './patternLoader';
 
 /**
  * Inizializza il registry caricando pattern dal database
- * IMPORTANTE: I pattern hardcoded sono stati disabilitati (rinominati in .disabled)
- * Il sistema ora usa SOLO i pattern dal database
+ * IMPORTANTE: I pattern hardcoded sono stati completamente rimossi
+ * Il sistema usa SOLO i pattern caricati dal database
  */
 export async function initializeRegistry() {
   await loadPatternsFromDatabase();
@@ -12,7 +12,7 @@ export async function initializeRegistry() {
 
 /**
  * Ottiene il RuleSet per una lingua
- * Legge SOLO dalla cache database (pattern hardcoded disabilitati)
+ * Legge SOLO dalla cache database (pattern hardcoded rimossi)
  */
 export function getRuleSet(lang: Lang): RuleSet | undefined {
   // Legge solo dalla cache database
