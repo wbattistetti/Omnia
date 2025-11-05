@@ -1054,10 +1054,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         {isEditing ? (
           <div
             style={{
-              width: labelWidth ? `${labelWidth}px` : undefined,
-              minWidth: labelWidth ? `${labelWidth}px` : 0,
-              flexShrink: 0,
-              flexGrow: 0
+              flex: 1,
+              minWidth: 0,
+              marginRight: '8px', // Piccola marginatura a destra
+              marginLeft: '4px'  // Piccola marginatura a sinistra
             }}
             data-row-id={row.id}
             ref={(divEl) => {
