@@ -21,7 +21,7 @@ interface NodeRowActionsOverlayProps {
   onOpenDDT?: () => void;
   // NEW: act type icon and handler to open inline picker
   ActIcon?: React.ComponentType<any> | null;
-  actColor?: string;
+  actColor?: string; // iconColor della riga (grigio se no DDT/messaggio, colorato se ha DDT/messaggio)
   onTypeChangeRequest?: (anchor: DOMRect) => void;
   onRequestClosePicker?: () => void;
   outerRef?: React.RefObject<HTMLDivElement>;
@@ -103,7 +103,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
             style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
             className="hover:opacity-100 hover:scale-110"
           >
-            <ActIcon style={{ width: size, height: size, color: actColor || '#fbbf24', filter: 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' }} />
+            <ActIcon style={{ width: size, height: size, color: actColor || '#94a3b8', filter: actColor && actColor !== '#94a3b8' ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
           </button>
         </SmartTooltip>
       )}

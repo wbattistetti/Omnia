@@ -163,6 +163,11 @@ class InstanceRepository {
                 })() : false
             });
 
+            // ✅ Emit event to notify listeners (e.g., NodeRow) that DDT was updated
+            window.dispatchEvent(new CustomEvent('instanceRepository:updated', {
+                detail: { instanceId, type: 'ddt' }
+            }));
+
             // ✅ RIMOSSO: Non salvare automaticamente nel database
             // Il salvataggio nel database avverrà solo quando l'utente clicca esplicitamente su "Save" globale
             // tramite saveAllInstancesToDatabase(), che legge tutte le istanze dalla memoria e le salva
@@ -242,6 +247,11 @@ class InstanceRepository {
             instance.message = message;
             instance.updatedAt = new Date();
 
+            // ✅ Emit event to notify listeners (e.g., NodeRow) that message was updated
+            window.dispatchEvent(new CustomEvent('instanceRepository:updated', {
+                detail: { instanceId, type: 'message' }
+            }));
+
             return true;
         }
 
@@ -260,6 +270,16 @@ class InstanceRepository {
         if (instance) {
             Object.assign(instance, updates);
             instance.updatedAt = new Date();
+
+            // ✅ Emit event to notify listeners (e.g., NodeRow) that instance was updated
+            const updateTypes: string[] = [];
+            if ('message' in updates) updateTypes.push('message');
+            if ('ddt' in updates) updateTypes.push('ddt');
+            if ('problemIntents' in updates) updateTypes.push('intents');
+
+            window.dispatchEvent(new CustomEvent('instanceRepository:updated', {
+                detail: { instanceId, type: updateTypes.length > 0 ? updateTypes.join(',') : 'general' }
+            }));
 
             return true;
         }

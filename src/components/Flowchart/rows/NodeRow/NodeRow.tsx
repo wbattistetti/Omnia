@@ -988,6 +988,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Colore solo testo come in sidebar; sfondo trasparente
   let bgColor = 'transparent';
   let labelTextColor = '';
+  let iconColor = '#94a3b8'; // Default grigio per l'icona
 
   // Icona e colore coerenti con la sidebar
   const { data: projectData } = useProjectData();
@@ -1007,11 +1008,30 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     const typeResolved = resolveActType(row as any, actFound) as any;
     currentTypeForPicker = typeResolved;
     const has = hasActDDT(row as any, actFound);
-    // silent by default; enable only if strictly needed
-    // try { if (localStorage.getItem('debug.mode')) console.log('[Type][NodeRow]', { rowId: row.id, text: row.text, type, hasDDT: has, actFound: !!actFound }); } catch {}
+
+    console.log('[NodeRow][VISUALS][BEFORE]', {
+      rowId: row.id,
+      rowText: row.text,
+      typeResolved,
+      has,
+      actFound: !!actFound,
+      actId: actFound?.id
+    });
+
     const visuals = getAgentActVisualsByType(typeResolved, has);
     Icon = visuals.Icon;
-    labelTextColor = visuals.color;
+    labelTextColor = visuals.labelColor; // Label: sempre colore del tipo
+    iconColor = visuals.iconColor; // Icona: grigio se no DDT, colore del tipo se ha DDT
+
+    console.log('[NodeRow][VISUALS][AFTER]', {
+      rowId: row.id,
+      rowText: row.text,
+      typeResolved,
+      has,
+      labelTextColor,
+      iconColor,
+      iconName: Icon?.name || 'Unknown'
+    });
   } else {
     // Since we removed categoryType and userActs from NodeRowData, use defaults
     labelTextColor = (typeof propTextColor === 'string' ? propTextColor : '#111');
@@ -1021,6 +1041,32 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     }
     Icon = null;
   }
+
+  // ✅ Listen for instance updates to force re-render and update icon color
+  const [instanceUpdateTrigger, setInstanceUpdateTrigger] = useState(0);
+  const instanceId = (row as any)?.instanceId || row.id;
+
+  useEffect(() => {
+    const handleInstanceUpdate = (event: CustomEvent) => {
+      const { instanceId: updatedInstanceId } = event.detail;
+      if (updatedInstanceId === instanceId) {
+        console.log('[NodeRow][INSTANCE_UPDATE]', {
+          rowId: row.id,
+          instanceId,
+          updateType: event.detail.type,
+          willForceReRender: true
+        });
+        // Force re-render by updating trigger
+        setInstanceUpdateTrigger(prev => prev + 1);
+      }
+    };
+
+    window.addEventListener('instanceRepository:updated', handleInstanceUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('instanceRepository:updated', handleInstanceUpdate as EventListener);
+    };
+  }, [instanceId, row.id]);
 
   // LOG: stampa id, forceEditing, isEditing
   useEffect(() => {
@@ -1097,6 +1143,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             setIsEditing={setIsEditing}
             bgColor={bgColor}
             labelTextColor={labelTextColor}
+            iconColor={iconColor}
             hasDDT={hasActDDT(row as any, actFound)}
             gearColor={labelTextColor}
             onOpenDDT={async () => {
