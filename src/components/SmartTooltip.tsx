@@ -66,23 +66,13 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
       const minWidthForWords = calculateMinWidthForWords(minWordsPerLine, tooltipFontSize);
 
       // ✅ Determina il placement effettivo PRIMA del render del tooltip
-      // Usa SEMPRE una stima fissa dell'altezza per evitare flickering dovuto a ri-calcoli
+      // NON fare mai il controllo per mettersi sopra - usa sempre bottom come default per evitare flickering
       let effectivePlacement = placement;
 
-      // Se placement è 'bottom' o non specificato, verifica se c'è spazio sotto
+      // Se placement è 'bottom' o non specificato, usa SEMPRE 'bottom' (non controllare spazio sopra)
       if (placement === 'bottom' || placement === undefined || placement === null) {
-        // ✅ Stima FISSA dell'altezza del tooltip (non cambia mai per evitare flickering)
-        const estimatedTooltipHeight = 60; // Stima conservativa sempre uguale
-        const spaceBelow = viewportHeight - wrapperRect.bottom - padding;
-        const spaceAbove = wrapperRect.top - padding;
-
-        // Se non c'è spazio sotto ma c'è spazio sopra, usa 'top'
-        // Aggiungi un margine di sicurezza (20px) per evitare che il tooltip tocchi i bordi
-        if (spaceBelow < estimatedTooltipHeight + 20 && spaceAbove >= estimatedTooltipHeight + 20) {
-          effectivePlacement = 'top';
-        } else {
-          effectivePlacement = 'bottom';
-        }
+        // ✅ Sempre bottom - non fare mai il controllo per spazio sopra per evitare flickering
+        effectivePlacement = 'bottom';
       }
 
       // Per placement bottom/top: allinea a sinistra con l'elemento
