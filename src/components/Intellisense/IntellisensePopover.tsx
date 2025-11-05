@@ -4,9 +4,11 @@ import { useIntellisense, IntellisenseItem } from "../../context/IntellisenseCon
 import { useNodeRegistry } from "../../context/NodeRegistryContext";
 import { IntellisenseMenu } from "./IntellisenseMenu";
 import { IntellisenseStandalone } from "./IntellisenseStandalone"; // ✅ NUOVO IMPORT
+import { useInMemoryConditions } from '../../context/InMemoryConditionsContext';
 
 export const IntellisensePopover: React.FC = () => {
     const { state, actions } = useIntellisense();
+    const { addCondition, getConditionById } = useInMemoryConditions(); // ✅ Hook per condizioni in memoria
     const { getEl } = useNodeRegistry();
     const [rect, setRect] = useState<DOMRect | null>(null);
     const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
@@ -146,6 +148,7 @@ export const IntellisensePopover: React.FC = () => {
             // ✅ GESTISCI CASI SPECIALI
             let label: string | undefined;
             let isElse = false;
+            let conditionId: string | undefined; // ✅ ID condizione (in memoria o database)
 
             if (item && (item as any).id === '__else__') {
                 // ✅ Caso Else
@@ -159,11 +162,25 @@ export const IntellisensePopover: React.FC = () => {
             } else if (item) {
                 // ✅ Condizione normale dall'Intellisense
                 label = item.label;
-                console.log("🎯 [IntellisensePopover] Condition selected:", label);
+                // ✅ Se è una condizione in memoria, usa il suo ID
+                if ((item as any)?.payload?.inMemory) {
+                    conditionId = (item as any).payload.conditionId;
+                } else if (item.actId) {
+                    conditionId = item.actId;
+                }
+                console.log("🎯 [IntellisensePopover] Condition selected:", label, conditionId ? { conditionId } : '');
             } else {
-                // ✅ Testo digitato (Enter senza selezione)
-                label = state.query || "Condition";
-                console.log("🎯 [IntellisensePopover] Custom text entered:", label);
+                // ✅ Testo digitato (Enter senza selezione) - CREA CONDIZIONE IN MEMORIA
+                const customText = (state.query || "Condition").trim();
+                label = customText;
+
+                // ✅ Crea condizione in memoria
+                const inMemoryCondition = addCondition(customText);
+                conditionId = inMemoryCondition.id;
+                console.log("🎯 [IntellisensePopover] Custom text entered - created in-memory condition:", {
+                    conditionId: inMemoryCondition.id,
+                    name: inMemoryCondition.name
+                });
             }
 
             console.log("🎯 [IntellisensePopover] Processing edge selection:", {
@@ -178,15 +195,24 @@ export const IntellisensePopover: React.FC = () => {
             const setEdges = (window as any).__setEdges;
 
             if (scheduleApplyLabel && label !== undefined) {
-                scheduleApplyLabel(edgeId, label);
-                console.log("🎯 [IntellisensePopover] Edge label scheduled:", label);
+                scheduleApplyLabel(edgeId, label, conditionId); // ✅ Passa conditionId se disponibile
+                console.log("🎯 [IntellisensePopover] Edge label scheduled:", label, conditionId ? { conditionId } : '');
             } else if (setEdges) {
                 setEdges((eds: any[]) => eds.map(e =>
                     e.id === edgeId
-                        ? { ...e, label, data: { ...(e.data || {}), label, isElse } }
+                        ? {
+                            ...e,
+                            label,
+                            data: {
+                                ...(e.data || {}),
+                                label,
+                                isElse,
+                                conditionId: conditionId || (e.data as any)?.conditionId // ✅ Mantieni o aggiorna conditionId
+                            }
+                        }
                         : e
                 ));
-                console.log("🎯 [IntellisensePopover] Edge updated:", { label, isElse });
+                console.log("🎯 [IntellisensePopover] Edge updated:", { label, isElse, conditionId: conditionId || 'none' });
             }
 
             // ✅ 4. Rendi visibile il nodo temporaneo (SENZA modificare il titolo)

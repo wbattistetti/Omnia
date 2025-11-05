@@ -497,13 +497,23 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             gap: 4,
           }}
         >
-          <span>{label}</span>
+          <span style={{ position: 'relative' }}>{label}</span>
           {labelHovered && (() => {
             // ✅ Usa utility centralizzata per dimensioni
             const sizes = calculateFontBasedSizes(fontSizes.edgeCaption);
 
             return (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: 6 }}>
+              <span style={{
+                position: 'absolute', // ✅ Posizionamento assoluto rispetto alla label
+                left: '100%', // ✅ A destra della label
+                marginLeft: '6px', // ✅ Gap tra label e toolbar
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 2,
+                top: '50%', // ✅ Centrato verticalmente
+                transform: 'translateY(-50%)', // ✅ Centrato verticalmente
+                whiteSpace: 'nowrap' // ✅ Evita wrapping
+              }}>
                 <button
                   style={{
                     background: 'none',

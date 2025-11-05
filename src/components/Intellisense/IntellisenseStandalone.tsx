@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Link2Off as LinkOff, X } from 'lucide-react';
 import { useIntellisense } from "../../context/IntellisenseContext";
 import { IntellisenseMenu } from './IntellisenseMenu';
@@ -25,6 +25,12 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
 }) => {
     const { state, actions } = useIntellisense();
     const inputRef = useRef<HTMLInputElement>(null);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const rowContainerRef = useRef<HTMLDivElement>(null);
+    const measureRef = useRef<HTMLSpanElement>(null);
+    const [wrapperPosition, setWrapperPosition] = useState(position);
+    const [inputWidth, setInputWidth] = useState(150); // Larghezza iniziale (verrà calcolata dinamicamente)
+    const [minInputWidth, setMinInputWidth] = useState(150); // ✅ Larghezza minima dinamica
     const fontSizes = useDynamicFontSizes();
 
     // Forza il focus sulla textbox
@@ -34,6 +40,62 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
             console.log("🎯 [IntellisenseStandalone] Focus forced on input");
         }
     }, []);
+
+    // ✅ Calcola larghezza minima quando cambia il font size (anche senza testo)
+    useEffect(() => {
+        const sizes = calculateFontBasedSizes(fontSizes.nodeRow);
+        const padding = sizes.inputPaddingH * 2; // padding sinistra + destra
+        const border = 4; // 2px border sinistra + 2px destra
+
+        // Calcola larghezza minima dinamica per 25 caratteri basata sul font size
+        const fontSizeNum = parseFloat(fontSizes.nodeRow) || 14;
+        const charWidth = fontSizeNum * 0.6; // Approssimazione larghezza carattere (monospace-like)
+        const textWidthFor25Chars = 25 * charWidth; // Larghezza per 25 caratteri
+        const minTextWidth = Math.ceil(textWidthFor25Chars + padding + border); // Larghezza minima totale
+
+        setMinInputWidth(minTextWidth);
+    }, [fontSizes.nodeRow]);
+
+    // ✅ Misura larghezza del testo per allargare la textbox dinamicamente
+    useEffect(() => {
+        if (!measureRef.current || !inputRef.current) {
+            return;
+        }
+
+        const measureText = () => {
+            if (!measureRef.current || !inputRef.current) {
+                return;
+            }
+
+            // Usa il testo attuale o il placeholder per misurare
+            const text = state.query || inputRef.current.placeholder || '';
+            measureRef.current.textContent = text || 'M'; // 'M' come carattere di riferimento
+            const textWidth = measureRef.current.getBoundingClientRect().width;
+
+            // Calcola larghezza minima: larghezza del testo + padding + border
+            const sizes = calculateFontBasedSizes(fontSizes.nodeRow);
+            const padding = sizes.inputPaddingH * 2; // padding sinistra + destra
+            const border = 4; // 2px border sinistra + 2px destra
+
+            // ✅ Calcola larghezza minima dinamica per 25 caratteri basata sul font size
+            const fontSizeNum = parseFloat(fontSizes.nodeRow) || 14;
+            const charWidth = fontSizeNum * 0.6; // Approssimazione larghezza carattere (monospace-like)
+            const textWidthFor25Chars = 25 * charWidth; // Larghezza per 25 caratteri
+            const minTextWidth = Math.ceil(textWidthFor25Chars + padding + border); // Larghezza minima totale
+
+            // ✅ Salva la larghezza minima per usarla nello style
+            setMinInputWidth(minTextWidth);
+
+            const calculatedWidth = Math.max(
+                textWidth + padding + border + 20, // +20 per margine di sicurezza
+                minTextWidth
+            );
+
+            setInputWidth(calculatedWidth);
+        };
+
+        measureText();
+    }, [state.query, fontSizes.nodeRow]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         console.log("🎯 [IntellisenseStandalone] Input change:", e.target.value);
@@ -113,16 +175,69 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         console.log("🎯 [IntellisenseStandalone] Wrapper click - preventing close");
     };
 
+    // ✅ Calcola posizione dinamica per centrare rispetto al referenceElement
+    useEffect(() => {
+        if (!referenceElement || !wrapperRef.current || !rowContainerRef.current) {
+            // Se non c'è referenceElement, usa la posizione iniziale
+            setWrapperPosition(position);
+            return;
+        }
+
+        const updatePosition = () => {
+            if (!referenceElement || !wrapperRef.current || !rowContainerRef.current) {
+                return;
+            }
+
+            // Calcola arrowX (centro del referenceElement)
+            const rect = referenceElement.getBoundingClientRect();
+            const arrowX = rect.left + (rect.width / 2);
+
+            // Misura la larghezza reale del row container (textbox + pulsanti)
+            const rowWidth = rowContainerRef.current.getBoundingClientRect().width;
+
+            // Calcola la posizione left del wrapper per centrare la textbox rispetto a arrowX
+            // Il centro del row container deve essere allineato con arrowX
+            const wrapperLeft = arrowX - (rowWidth / 2);
+
+            // Mantieni la Y originale da position
+            setWrapperPosition({
+                x: wrapperLeft,
+                y: position.y
+            });
+        };
+
+        // Aggiorna posizione quando cambia il contenuto della textbox
+        // Usa requestAnimationFrame per assicurarsi che il DOM sia renderizzato
+        requestAnimationFrame(() => {
+            requestAnimationFrame(updatePosition);
+        });
+
+        // Usa ResizeObserver per rilevare quando la textbox si allarga
+        const resizeObserver = new ResizeObserver(() => {
+            updatePosition();
+        });
+
+        if (rowContainerRef.current) {
+            resizeObserver.observe(rowContainerRef.current);
+        }
+
+        return () => {
+            resizeObserver.disconnect();
+        };
+    }, [state.query, referenceElement, position.y, inputWidth]);
+
     // ✅ Log rimosso per evitare spam
 
     return (
         <div
+            ref={wrapperRef}
             className="intellisense-standalone-wrapper"
             style={{
                 position: 'fixed',
-                top: position.y,
-                left: position.x,
-                width: '420px',
+                top: wrapperPosition.y,
+                left: wrapperPosition.x,
+                width: 'auto',
+                minWidth: '420px', // ✅ Larghezza minima iniziale
                 zIndex: 99999,
                 background: 'transparent',
                 border: 'none',
@@ -132,14 +247,29 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
             onMouseDown={handleWrapperClick}
         >
             {/* ✅ Row con textbox + 3 pulsanti */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+            <div ref={rowContainerRef} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
                 {/* ✅ Usa utility centralizzata per dimensioni */}
                 {(() => {
                     const sizes = calculateFontBasedSizes(fontSizes.nodeRow);
 
                     return (
                         <>
-                            {/* Textbox - proporzionale al font */}
+                            {/* Span invisibile per misurare la larghezza del testo */}
+                            <span
+                                ref={measureRef}
+                                style={{
+                                    position: 'absolute',
+                                    visibility: 'hidden',
+                                    whiteSpace: 'pre',
+                                    fontSize: fontSizes.nodeRow,
+                                    fontWeight: 'normal',
+                                    padding: 0,
+                                    margin: 0,
+                                    height: 'auto',
+                                    width: 'auto'
+                                }}
+                            />
+                            {/* Textbox - larghezza dinamica basata sul contenuto */}
                             <input
                                 ref={inputRef}
                                 type="text"
@@ -148,7 +278,8 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                                 onKeyDown={handleKeyDown}
                                 placeholder="Cerca condizioni o intenti..."
                                 style={{
-                                    flex: 0.5,
+                                    width: `${inputWidth}px`,
+                                    minWidth: `${minInputWidth}px`, // ✅ Larghezza minima dinamica per 25 caratteri
                                     padding: `${sizes.inputPaddingV}px ${sizes.inputPaddingH}px`,
                                     border: '2px solid #3b82f6',
                                     borderRadius: '4px',
@@ -158,7 +289,8 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                                     boxSizing: 'border-box',
                                     background: '#fff',
                                     height: `${sizes.inputHeight}px`,
-                                    minHeight: `${sizes.inputHeight}px`
+                                    minHeight: `${sizes.inputHeight}px`,
+                                    transition: 'width 0.1s ease-out'
                                 }}
                             />
 

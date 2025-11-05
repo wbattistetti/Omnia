@@ -12,6 +12,7 @@ import { prepareIntellisenseData } from '../../services/ProjectDataService';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { useIntellisense } from "../../context/IntellisenseContext"; // ✅ AGGIUNGI IMPORT
 import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
+import { useInMemoryConditions } from '../../context/InMemoryConditionsContext';
 
 const defaultLayoutConfig: IntellisenseLayoutConfig = {
   maxVisibleItems: 12,
@@ -74,6 +75,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   // Debug logging removed to prevent excessive console output
   const { data } = useProjectData();
   const fontSizes = useDynamicFontSizes(); // ✅ Spostato all'inizio per rispettare le regole degli hooks
+  const { conditions: inMemoryConditions } = useInMemoryConditions(); // ✅ Hook per condizioni in memoria
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const [fuzzyResults, setFuzzyResults] = useState<Map<string, IntellisenseResult[]>>(new Map());
@@ -239,15 +241,30 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
 
   // Initialize / refresh fuzzy search when data or activeCats change
   useEffect(() => {
-    // Build dataset as UNION: [extraItems (if any)] + [project data] + [seedItems]
+    // Build dataset as UNION: [extraItems (if any)] + [project data] + [in-memory conditions] + [seedItems]
     let intellisenseData: IntellisenseItem[] = [];
     const usingExtra = Array.isArray(extraItems) && extraItems.length > 0;
     const baseFromProject = data ? prepareIntellisenseData(data) : [] as IntellisenseItem[];
 
+    // ✅ Trasforma condizioni in memoria in IntellisenseItem
+    const inMemoryConditionsItems: IntellisenseItem[] = inMemoryConditions.map((cond) => ({
+      id: cond.id,
+      label: cond.label,
+      shortLabel: cond.label,
+      name: cond.name,
+      description: cond.script || '',
+      category: 'In Memory',
+      categoryType: 'conditions' as const,
+      kind: 'condition' as const,
+      color: SIDEBAR_TYPE_COLORS.conditions?.color || '#8b5cf6',
+      // ✅ Flag per identificare condizioni in memoria
+      payload: { inMemory: true, conditionId: cond.id }
+    }));
+
     if (usingExtra) {
-      intellisenseData = [...(extraItems as IntellisenseItem[]), ...baseFromProject];
+      intellisenseData = [...(extraItems as IntellisenseItem[]), ...baseFromProject, ...inMemoryConditionsItems];
     } else {
-      intellisenseData = baseFromProject;
+      intellisenseData = [...baseFromProject, ...inMemoryConditionsItems];
     }
     if (Array.isArray(seedItems) && seedItems.length) {
       intellisenseData = [...intellisenseData, ...seedItems];
@@ -272,13 +289,18 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     setAllIntellisenseItems(intellisenseData);
     setIsInitialized(true);
     // Immediately compute results for current query so new items appear right away
+  }, [data, extraItems, seedItems, filterCategoryTypes, allowedKinds, inMemoryConditions]); // ✅ Aggiunto inMemoryConditions alle dipendenze
+
+  // Perform search when query changes
+  useEffect(() => {
+    if (!isInitialized) return;
     if (!query.trim()) {
       // ✅ NON mostrare nulla se query è vuota (comportamento corretto)
       setFuzzyResults(new Map());
       setSemanticResults([]);
       setSelectedIndex(0);
     } else {
-      const fres = performFuzzySearch(query, intellisenseData);
+      const fres = performFuzzySearch(query, allIntellisenseItems);
       const flat = new Map<string, IntellisenseResult[]>();
       flat.set('conditions', fres);
       setFuzzyResults(flat);
@@ -287,7 +309,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       const total = fres.length;
       setSelectedIndex((prev) => (prev >= 0 && prev < total ? prev : 0));
     }
-  }, [data, activeCats, query, isOpen, seedItems, extraItems, allowedKinds]);
+  }, [isInitialized, query, allIntellisenseItems]);
 
   // Rimuovi i log dataset (troppo rumorosi)
   useEffect(() => { if (!isOpen) loggedThisOpenRef.current = false; }, [isOpen]);

@@ -15,6 +15,7 @@ import { ThemeProvider } from '../theme/components/ThemeProvider';
 import { ActEditorProvider } from './ActEditor/EditorHost/ActEditorContext';
 import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
+import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -153,7 +154,9 @@ export default function App() {
                 <DDTProvider>
                   <DDTManagerProvider>
                     <ActEditorProvider>
-                      <AppInner />
+                      <InMemoryConditionsProvider>
+                        <AppInner />
+                      </InMemoryConditionsProvider>
                     </ActEditorProvider>
                   </DDTManagerProvider>
                 </DDTProvider>
