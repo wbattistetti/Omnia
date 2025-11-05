@@ -73,12 +73,36 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         categoryType?: EntityType,
         meta?: Partial<NodeRowData>
     ) => {
+        console.log('🎯 [HANDLE_UPDATE_ROW][START]', {
+            rowId,
+            newText,
+            newTextLength: newText?.length,
+            categoryType,
+            meta,
+            metaKeys: meta ? Object.keys(meta) : [],
+            currentRowsCount: nodeRows.length,
+            timestamp: Date.now()
+        });
+
         const prev = nodeRows;
         const idx = prev.findIndex(r => r.id === rowId);
-        if (idx === -1) return;
+        if (idx === -1) {
+            console.log('🎯 [HANDLE_UPDATE_ROW][ROW_NOT_FOUND]', { rowId, prevRowsCount: prev.length });
+            return;
+        }
 
         const wasEmpty = !(prev[idx].text || '').trim();
         const nowFilled = (newText || '').trim().length > 0;
+
+        console.log('🎯 [HANDLE_UPDATE_ROW][BEFORE_UPDATE]', {
+            rowId,
+            idx,
+            oldText: prev[idx].text,
+            newText,
+            wasEmpty,
+            nowFilled,
+            timestamp: Date.now()
+        });
 
         let updatedRows = prev.map(row => {
             if (row.id !== rowId) return row as any;
@@ -97,17 +121,27 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 timestamp: Date.now()
             });
 
-            return {
+            const updatedRow = {
                 ...row,
                 ...incoming,
                 type: finalType,
                 mode: finalMode,
-                text: newText,
+                text: newText, // ✅ Questo è il testo che viene salvato
                 categoryType:
                     (meta && (meta as any).categoryType)
                         ? (meta as any).categoryType
                         : (categoryType ?? row.categoryType)
             } as any;
+
+            console.log('🎯 [HANDLE_UPDATE_ROW][ROW_UPDATED]', {
+                rowId,
+                oldText: row.text,
+                newText: updatedRow.text,
+                textsMatch: updatedRow.text === newText,
+                timestamp: Date.now()
+            });
+
+            return updatedRow;
         });
 
         const isLast = idx === prev.length - 1;
@@ -155,10 +189,39 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             });
         }
 
+        console.log('🎯 [HANDLE_UPDATE_ROW][BEFORE_SET_NODE_ROWS]', {
+            rowId,
+            updatedRowsCount: updatedRows.length,
+            targetRowText: updatedRows.find(r => r.id === rowId)?.text,
+            newText,
+            timestamp: Date.now()
+        });
+
         setNodeRows(updatedRows);
+
+        console.log('🎯 [HANDLE_UPDATE_ROW][AFTER_SET_NODE_ROWS]', {
+            rowId,
+            timestamp: Date.now()
+        });
+
+        const finalRow = updatedRows.find(r => r.id === rowId);
+        console.log('🎯 [HANDLE_UPDATE_ROW][CALLING_ON_UPDATE]', {
+            rowId,
+            finalRowText: finalRow?.text,
+            newText,
+            textsMatch: finalRow?.text === newText,
+            hasOnUpdate: !!normalizedData.onUpdate,
+            timestamp: Date.now()
+        });
+
         // ❌ RIMOSSO - isEmpty si aggiorna SOLO in exitEditing() per mantenere auto-append continuo
         // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
         normalizedData.onUpdate?.({ rows: updatedRows, isTemporary: normalizedData.isTemporary });
+
+        console.log('🎯 [HANDLE_UPDATE_ROW][AFTER_ON_UPDATE]', {
+            rowId,
+            timestamp: Date.now()
+        });
     }, [nodeRows, isEmpty, nodeId, appendEmptyRow, normalizedData]);
 
     // Gestione eliminazione riga

@@ -350,6 +350,7 @@ export class EntityCreationService {
     const newItem = {
       id: newItemId,
       name,
+      label: name, // ✅ Aggiungi label per compatibilità con prepareIntellisenseData
       description: '',
       scope,
       industry,

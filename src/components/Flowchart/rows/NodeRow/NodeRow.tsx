@@ -551,11 +551,160 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Common handler invoked by keyboard or mouse pick
   const handlePickType = async (key: string) => {
+    console.log('🎯 [HANDLE_PICK_TYPE][START]', {
+      key,
+      currentText,
+      rowId: row.id,
+      rowText: row.text,
+      hasOnCreateAgentAct: !!onCreateAgentAct,
+      timestamp: Date.now()
+    });
+
     setShowCreatePicker(false);
     setAllowCreatePicker(false);
     setShowIntellisense(false);
     const label = (currentText || '').trim();
-    if (!label) { setIsEditing(false); return; }
+
+    console.log('🎯 [HANDLE_PICK_TYPE][LABEL]', {
+      label,
+      labelLength: label.length,
+      currentTextBeforeTrim: currentText,
+      isEmpty: !label,
+      timestamp: Date.now()
+    });
+
+    if (!label) {
+      console.log('🎯 [HANDLE_PICK_TYPE][EMPTY_LABEL] - Exiting early');
+      setIsEditing(false);
+      return;
+    }
+
+    // ❌ NON chiudere la riga qui: aspetta che il testo sia salvato nel callback
+
+    // ✅ NUOVO: Crea il template agent act se onCreateAgentAct è disponibile
+    // Questo permette di ritrovare la riga nell'Intellisense quando viene riutilizzata
+    if (onCreateAgentAct) {
+      console.log('🎯 [HANDLE_PICK_TYPE][CALLING_CREATE_AGENT_ACT]', {
+        label,
+        key,
+        timestamp: Date.now()
+      });
+
+      try {
+        // Crea il template agent act con il nome della riga
+        // Il callback onRowUpdate viene chiamato immediatamente da EntityCreationService
+        onCreateAgentAct(label, (createdItem: any) => {
+          console.log('🎯 [TEMPLATE_CREATION][CALLBACK_START]', {
+            label,
+            createdItem,
+            hasCreatedItem: !!createdItem,
+            actId: createdItem?.actId,
+            id: createdItem?.id,
+            type: createdItem?.type,
+            mode: createdItem?.mode,
+            timestamp: Date.now()
+          });
+
+          // Callback che riceve l'item creato con actId e altri metadati
+          const createdActId = createdItem?.actId || createdItem?.id;
+          console.log('🎯 [TEMPLATE_CREATION] Agent act template created:', {
+            label,
+            actId: createdActId,
+            type: createdItem?.type,
+            mode: createdItem?.mode
+          });
+
+          // Aggiorna la riga con i metadati del template creato
+          const instanceId = row.id;
+          const projectId = getProjectId?.() || undefined;
+          instanceRepository.createInstance(key, [], instanceId, projectId);
+
+          const finalType = createdItem?.type || key;
+          const finalMode = createdItem?.mode || typeToMode(key as any);
+
+          const updateMeta = {
+            id: instanceId,
+            type: finalType,
+            mode: finalMode,
+            actId: createdActId,
+            baseActId: createdActId,
+            factoryId: createdItem?.factoryId
+          };
+
+          console.log('🎯 [TEMPLATE_CREATION][BEFORE_UPDATE]', {
+            rowId: row.id,
+            rowTextBefore: row.text,
+            label,
+            updateMeta,
+            hasOnUpdateWithCategory: !!onUpdateWithCategory,
+            hasOnUpdate: !!onUpdate,
+            timestamp: Date.now()
+          });
+
+          if (onUpdateWithCategory) {
+            console.log('🎯 [TEMPLATE_CREATION][CALLING_ON_UPDATE_WITH_CATEGORY]', {
+              rowId: row.id,
+              label,
+              categoryType: 'agentActs',
+              meta: updateMeta
+            });
+            (onUpdateWithCategory as any)(row, label, 'agentActs', updateMeta);
+            console.log('🎯 [TEMPLATE_CREATION][AFTER_ON_UPDATE_WITH_CATEGORY]', {
+              rowId: row.id,
+              label,
+              timestamp: Date.now()
+            });
+          } else {
+            console.log('🎯 [TEMPLATE_CREATION][CALLING_ON_UPDATE]', {
+              rowId: row.id,
+              label
+            });
+            onUpdate(row, label);
+            console.log('🎯 [TEMPLATE_CREATION][AFTER_ON_UPDATE]', {
+              rowId: row.id,
+              label,
+              timestamp: Date.now()
+            });
+          }
+
+          // ✅ CHIUDI LA RIGA DOPO aver salvato il testo
+          console.log('🎯 [TEMPLATE_CREATION][CLOSING_ROW]', {
+            rowId: row.id,
+            timestamp: Date.now()
+          });
+          setIsEditing(false);
+          setShowIntellisense(false);
+          setIntellisenseQuery('');
+
+          // ✅ Log dello stato finale della riga dopo un breve delay
+          setTimeout(() => {
+            console.log('🎯 [TEMPLATE_CREATION][FINAL_STATE_CHECK]', {
+              rowId: row.id,
+              rowTextAfter: row.text,
+              label,
+              textsMatch: row.text === label,
+              timestamp: Date.now()
+            });
+          }, 100);
+
+          try { emitSidebarRefresh(); } catch { }
+        }, 'industry');
+
+        console.log('🎯 [HANDLE_PICK_TYPE][AFTER_CALLING_CREATE_AGENT_ACT]', {
+          label,
+          timestamp: Date.now()
+        });
+
+        // ✅ Il callback viene chiamato immediatamente, quindi non serve il fallback
+        return;
+      } catch (err) {
+        console.warn('[Row][TemplateCreation] Failed to create agent act template:', err);
+        // Fallback al comportamento originale se la creazione fallisce
+        setIsEditing(false); // Chiudi la riga anche in caso di errore
+      }
+    }
+
+    // ✅ Fallback: comportamento originale se onCreateAgentAct non è disponibile
     const immediate = (patch: any) => {
       if (onUpdateWithCategory) {
         (onUpdateWithCategory as any)(row, label, 'agentActs', patch);
@@ -563,7 +712,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         onUpdate(row, label);
       }
     };
-    setIsEditing(false);
 
     // ✅ Create instance when type is determined (Intellisense or inference)
     console.log('🎯 [INSTANCE_CREATION] Creating instance for type:', key);

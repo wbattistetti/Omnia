@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { normalizeProjectData } from '../utils/normalizers';
 import { ProjectData, EntityType, Category, ProjectEntityItem } from '../types/project';
@@ -11,6 +11,7 @@ interface ProjectDataContextType {
 
 interface ProjectDataUpdateContextType {
   refreshData: () => Promise<void>;
+  updateDataDirectly: (updatedData: ProjectData) => void; // ✅ Aggiorna dati direttamente senza ricaricare dal DB
   getCurrentProjectId: () => string | null;
   setCurrentProjectId: (id: string | null) => void;
   isDraft: () => boolean;
@@ -93,6 +94,14 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     await loadData();
   };
 
+  // ✅ Aggiorna i dati direttamente senza ricaricare dal DB (preserva items in memoria)
+  // Usa deep clone per forzare re-render di tutti i componenti che dipendono da data
+  const updateDataDirectly = useCallback((updatedData: ProjectData) => {
+    // Deep clone usando JSON (perfetto per ProjectData che è serializzabile)
+    const cloned = JSON.parse(JSON.stringify(updatedData));
+    setData(cloned);
+  }, []);
+
   const getCurrentProjectId = () => currentProjectId;
   const setCurrentProjectIdSafe = (id: string | null) => setCurrentProjectId(id);
   const isDraft = () => draft;
@@ -162,6 +171,7 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
 
   const updateContextValue: ProjectDataUpdateContextType = {
     refreshData,
+    updateDataDirectly, // ✅ Esposto per aggiornare dati direttamente
     getCurrentProjectId,
     setCurrentProjectId: setCurrentProjectIdSafe,
     isDraft,
