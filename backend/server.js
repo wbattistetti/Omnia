@@ -822,7 +822,28 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
     const update = { updatedAt: new Date() };
     if (payload.message !== undefined) update['message'] = payload.message;
     if (payload.overrides !== undefined) update['overrides'] = payload.overrides;
-    if (payload.ddtSnapshot !== undefined) update['ddtSnapshot'] = payload.ddtSnapshot; // Supporto per ddtSnapshot
+    if (payload.ddtSnapshot !== undefined) {
+      // ✅ Log dettagliato del ddtSnapshot che viene salvato
+      const ddtSnapshot = payload.ddtSnapshot;
+      const firstMain = ddtSnapshot?.mainData?.[0];
+      const steps = firstMain?.steps || {};
+      const stepsKeys = Object.keys(steps);
+
+      console.log('[Backend][INSTANCE_UPDATE][DDT_SNAPSHOT]', {
+        instanceId: iid,
+        ddtId: ddtSnapshot?.id,
+        firstMainKind: firstMain?.kind,
+        stepsKeys,
+        stepsKeysCount: stepsKeys.length,
+        stepsContent: steps,
+        hasStart: !!steps.start,
+        hasNoInput: !!steps.noInput,
+        hasNoMatch: !!steps.noMatch,
+        hasConfirmation: !!steps.confirmation
+      });
+
+      update['ddtSnapshot'] = payload.ddtSnapshot;
+    }
     // ✅ FIX: Aggiorna anche mode e baseActId quando vengono passati nel payload
     if (payload.mode !== undefined) update['mode'] = payload.mode;
     if (payload.baseActId !== undefined) update['baseActId'] = payload.baseActId;
@@ -911,6 +932,27 @@ app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
     }
 
     const saved = await projDb.collection('act_instances').findOne(existing ? { _id: existing._id } : { rowId: iid });
+
+    // ✅ Log dettagliato del ddtSnapshot salvato nel database
+    if (saved?.ddtSnapshot) {
+      const savedDDT = saved.ddtSnapshot;
+      const savedFirstMain = savedDDT?.mainData?.[0];
+      const savedSteps = savedFirstMain?.steps || {};
+      const savedStepsKeys = Object.keys(savedSteps);
+
+      console.log('[Backend][INSTANCE_UPDATE][SAVED_DDT]', {
+        instanceId: iid,
+        ddtId: savedDDT?.id,
+        firstMainKind: savedFirstMain?.kind,
+        savedStepsKeys,
+        savedStepsKeysCount: savedStepsKeys.length,
+        savedStepsContent: savedSteps,
+        hasStart: !!savedSteps.start,
+        hasNoInput: !!savedSteps.noInput,
+        hasNoMatch: !!savedSteps.noMatch,
+        hasConfirmation: !!savedSteps.confirmation
+      });
+    }
 
     console.log('[Backend][INSTANCE_UPDATE][SAVED]', {
       instanceId: iid,

@@ -31,6 +31,18 @@ import { useResponseEditorToolbar } from './ResponseEditorToolbar';
 import IntentListEditorWrapper from './components/IntentListEditorWrapper';
 
 export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
+  console.log('[ResponseEditor][MOUNT]', {
+    actId: act?.id,
+    actType: act?.type,
+    actLabel: act?.label,
+    ddtId: ddt?.id,
+    ddtLabel: ddt?.label,
+    mainDataLength: ddt?.mainData?.length,
+    firstMainKind: ddt?.mainData?.[0]?.kind,
+    hasIntentMessages: ddt ? hasIntentMessages(ddt) : false,
+    steps: ddt?.mainData?.[0]?.steps ? Object.keys(ddt.mainData[0].steps) : []
+  });
+
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
@@ -104,16 +116,40 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
 
   // Persist explicitly on close only (avoid side-effects/flicker on unmount)
   const handleEditorClose = React.useCallback(() => {
+    console.log('[ResponseEditor][handleEditorClose]', {
+      actId: act?.id,
+      actType: act?.type,
+      instanceId: (act as any)?.instanceId,
+      localDDTId: localDDT?.id,
+      hasIntentMessages: hasIntentMessages(localDDT),
+      firstMainKind: localDDT?.mainData?.[0]?.kind,
+      steps: localDDT?.mainData?.[0]?.steps ? Object.keys(localDDT.mainData[0].steps) : [],
+      currentProjectId
+    });
 
     try {
       // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
       if (act?.id || (act as any)?.instanceId) {
         const key = ((act as any)?.instanceId || act?.id) as string;
+        console.log('[ResponseEditor][handleEditorClose] Saving to instance', {
+          key,
+          ddtId: localDDT?.id,
+          projectId: currentProjectId
+        });
+
         const saved = instanceRepository.updateDDT(key, localDDT, currentProjectId || undefined);
+
+        console.log('[ResponseEditor][handleEditorClose] Instance save result', {
+          key,
+          saved,
+          ddtId: localDDT?.id
+        });
 
         // Fallback: salva anche nel provider globale se l'istanza non esiste
         if (!saved) {
-          // Instance save failed, using global provider fallback
+          console.warn('[ResponseEditor][handleEditorClose] Instance save failed, using global provider fallback', {
+            key
+          });
         }
       }
 
@@ -121,14 +157,24 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       // Questo previene l'apertura di ResizableResponseEditor in AppContent mentre si chiude ActEditorOverlay
       if (!act) {
         // Modalità diretta (senza act): aggiorna selectedDDT per compatibilità legacy
+        console.log('[ResponseEditor][handleEditorClose] Calling replaceSelectedDDT (no act prop)', {
+          ddtId: localDDT?.id
+        });
         replaceSelectedDDT(localDDT);
+      } else {
+        console.log('[ResponseEditor][handleEditorClose] Skipping replaceSelectedDDT (has act prop)', {
+          actId: act?.id
+        });
       }
     } catch (e) {
-      console.error('ResponseEditor persist error:', e);
+      console.error('[ResponseEditor][handleEditorClose] Persist error', {
+        actId: act?.id,
+        error: e
+      });
     }
 
     try { onClose && onClose(); } catch { }
-  }, [localDDT, replaceSelectedDDT, onClose, act?.id, (act as any)?.instanceId]);
+  }, [localDDT, replaceSelectedDDT, onClose, act?.id, (act as any)?.instanceId, currentProjectId]);
 
   const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
   // Aggregated view: show a group header when there are multiple mains
@@ -148,8 +194,22 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   // ✅ Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
   const needsIntentMessages = useMemo(() => {
     const firstMain = mainList[0];
-    return firstMain?.kind === 'intent' && !hasIntentMessages(localDDT);
-  }, [mainList, localDDT]);
+    const hasMessages = hasIntentMessages(localDDT);
+    const result = firstMain?.kind === 'intent' && !hasMessages;
+
+    console.log('[ResponseEditor][needsIntentMessages]', {
+      actId: act?.id,
+      actType: act?.type,
+      firstMainKind: firstMain?.kind,
+      hasMessages,
+      needsIntentMessages: result,
+      localDDTId: localDDT?.id,
+      mainDataLength: localDDT?.mainData?.length,
+      steps: firstMain?.steps ? Object.keys(firstMain.steps) : []
+    });
+
+    return result;
+  }, [mainList, localDDT, act?.id, act?.type]);
 
   // Wizard/general layout flags
   // ✅ Se kind === "intent" non ha bisogno di wizard (nessuna struttura dati)
@@ -456,13 +516,68 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
             <IntentMessagesBuilder
               intentLabel={act?.label || localDDT?.label || 'chiedi il problema'}
               onComplete={(messages) => {
+                console.log('[ResponseEditor][IntentMessagesBuilder][onComplete]', {
+                  actId: act?.id,
+                  actType: act?.type,
+                  instanceId: (act as any)?.instanceId,
+                  messagesCount: {
+                    start: messages.start?.length || 0,
+                    noInput: messages.noInput?.length || 0,
+                    noMatch: messages.noMatch?.length || 0,
+                    confirmation: messages.confirmation?.length || 0
+                  },
+                  localDDTBefore: {
+                    id: localDDT?.id,
+                    mainDataLength: localDDT?.mainData?.length,
+                    firstMainKind: localDDT?.mainData?.[0]?.kind
+                  }
+                });
+
                 const updatedDDT = saveIntentMessagesToDDT(localDDT, messages);
+
+                console.log('[ResponseEditor][saveIntentMessagesToDDT]', {
+                  actId: act?.id,
+                  updatedDDTId: updatedDDT?.id,
+                  firstMainKind: updatedDDT?.mainData?.[0]?.kind,
+                  steps: updatedDDT?.mainData?.[0]?.steps ? Object.keys(updatedDDT.mainData[0].steps) : [],
+                  hasMessagesAfter: hasIntentMessages(updatedDDT)
+                });
+
                 setLocalDDT(updatedDDT);
+
+                // ✅ CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
+                // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
+                if (act?.id || (act as any)?.instanceId) {
+                  const key = ((act as any)?.instanceId || act?.id) as string;
+                  console.log('[ResponseEditor][IntentMessagesBuilder][onComplete] Saving to instance', {
+                    key,
+                    ddtId: updatedDDT?.id,
+                    projectId: currentProjectId,
+                    hasMessages: hasIntentMessages(updatedDDT)
+                  });
+
+                  const saved = instanceRepository.updateDDT(key, updatedDDT, currentProjectId || undefined);
+
+                  console.log('[ResponseEditor][IntentMessagesBuilder][onComplete] Instance save result', {
+                    key,
+                    saved,
+                    ddtId: updatedDDT?.id
+                  });
+                }
+
                 try {
                   replaceSelectedDDT(updatedDDT);
+                  console.log('[ResponseEditor][replaceSelectedDDT] SUCCESS', {
+                    actId: act?.id,
+                    ddtId: updatedDDT?.id
+                  });
                 } catch (err) {
-                  console.error('[ResponseEditor] Failed to save intent messages:', err);
+                  console.error('[ResponseEditor][replaceSelectedDDT] FAILED', {
+                    actId: act?.id,
+                    error: err
+                  });
                 }
+
                 // After saving, show normal editor (needsIntentMessages will become false)
               }}
             />

@@ -112,21 +112,68 @@ class InstanceRepository {
      * @returns True se aggiornato con successo, false altrimenti
      */
     updateDDT(instanceId: string, ddt: any, projectId?: string): boolean {
+        console.log('[InstanceRepository][updateDDT][START]', {
+            instanceId,
+            projectId,
+            ddtId: ddt?.id,
+            ddtLabel: ddt?.label,
+            mainDataLength: ddt?.mainData?.length,
+            firstMainKind: ddt?.mainData?.[0]?.kind,
+            hasIntentMessages: ddt ? (() => {
+                try {
+                    const firstMain = ddt.mainData?.[0];
+                    if (firstMain?.kind !== 'intent') return false;
+                    const steps = firstMain.steps || {};
+                    return ['start', 'noInput', 'noMatch', 'confirmation'].every(key => {
+                        const step = steps[key];
+                        return step?.escalations?.length > 0 && step.escalations.some((esc: any) =>
+                            esc.actions?.some((action: any) =>
+                                action.parameters?.some((param: any) => param.value || param.textKey)
+                            )
+                        );
+                    });
+                } catch { return false; }
+            })() : false
+        });
         const instance = this.getInstance(instanceId);
 
         if (instance) {
+            const oldDDTId = instance.ddt?.id;
             instance.ddt = ddt;
             instance.updatedAt = new Date();
 
-            // Salva automaticamente nel database
-            this.updateInstanceInDatabase(instance, projectId).catch(error => {
-                console.error('Failed to update instance in database:', error);
+            console.log('[InstanceRepository][updateDDT][INSTANCE_UPDATED]', {
+                instanceId,
+                oldDDTId,
+                newDDTId: ddt?.id,
+                hasIntentMessages: ddt ? (() => {
+                    try {
+                        const firstMain = ddt.mainData?.[0];
+                        if (firstMain?.kind !== 'intent') return false;
+                        const steps = firstMain.steps || {};
+                        return ['start', 'noInput', 'noMatch', 'confirmation'].every(key => {
+                            const step = steps[key];
+                            return step?.escalations?.length > 0 && step.escalations.some((esc: any) =>
+                                esc.actions?.some((action: any) =>
+                                    action.parameters?.some((param: any) => param.value || param.textKey)
+                                )
+                            );
+                        });
+                    } catch { return false; }
+                })() : false
             });
+
+            // ✅ RIMOSSO: Non salvare automaticamente nel database
+            // Il salvataggio nel database avverrà solo quando l'utente clicca esplicitamente su "Save" globale
+            // tramite saveAllInstancesToDatabase(), che legge tutte le istanze dalla memoria e le salva
 
             return true;
         }
 
-        console.error('❌ [InstanceRepository] ISTANZA NON TROVATA per instanceId:', instanceId);
+        console.error('[InstanceRepository][updateDDT][INSTANCE_NOT_FOUND]', {
+            instanceId,
+            availableInstances: Array.from(this.instances.keys())
+        });
         return false;
     }
 
@@ -366,12 +413,29 @@ class InstanceRepository {
 
                     this.instances.set(instanceId, actInstance);
 
+                    const loadedSteps = actInstance.ddt?.mainData?.[0]?.steps || {};
+                    const loadedStepsKeys = Object.keys(loadedSteps);
+
                     console.log('[InstanceRepository][LOAD][STORED]', {
                         instanceId,
                         storedMessage: actInstance.message?.text?.substring(0, 50) || 'N/A',
                         storedMessageFull: actInstance.message ? JSON.stringify(actInstance.message) : 'undefined',
                         hasProblemIntents: !!actInstance.problemIntents,
-                        problemIntentsCount: actInstance.problemIntents?.length || 0
+                        problemIntentsCount: actInstance.problemIntents?.length || 0,
+                        hasDDT: !!actInstance.ddt,
+                        ddtId: actInstance.ddt?.id,
+                        firstMainKind: actInstance.ddt?.mainData?.[0]?.kind,
+                        stepsKeys: loadedStepsKeys,
+                        stepsKeysCount: loadedStepsKeys.length,
+                        stepsContent: JSON.stringify(loadedSteps),
+                        hasStart: !!loadedSteps.start,
+                        hasNoInput: !!loadedSteps.noInput,
+                        hasNoMatch: !!loadedSteps.noMatch,
+                        hasConfirmation: !!loadedSteps.confirmation,
+                        startEscalations: loadedSteps.start?.escalations?.length || 0,
+                        noInputEscalations: loadedSteps.noInput?.escalations?.length || 0,
+                        noMatchEscalations: loadedSteps.noMatch?.escalations?.length || 0,
+                        confirmationEscalations: loadedSteps.confirmation?.escalations?.length || 0
                     });
                 });
 

@@ -338,10 +338,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         const isOverNode = nodeContainerRef.current?.contains(el) || wrapperRef.current?.contains(el);
 
         if (isCanvas && !selected && !isOverToolbar && !isOverNode) {
-          console.log('[CANVAS MOUSE] Mouse sul canvas - Nascondo toolbar', {
-            element: el.tagName,
-            className: el.className
-          });
           setIsHoveredNode(false);
         }
       });
@@ -360,17 +356,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   useEffect(() => {
     const shouldShow = (isHoveredNode || selected) && !isEditingNode;
 
-    console.log('[TOOLBAR POSITION] Effect triggered', {
-      isHoveredNode,
-      selected,
-      isEditingNode,
-      shouldShow,
-      nodeContainer: !!nodeContainerRef.current,
-      toolbarPos: !!toolbarPos
-    });
-
     if (!shouldShow || !nodeContainerRef.current) {
-      console.log('[TOOLBAR POSITION] Nascondo toolbar - shouldShow:', shouldShow, 'nodeContainer:', !!nodeContainerRef.current);
       setToolbarPos(null);
       return;
     }
@@ -432,12 +418,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             minHeight: toolbarPos.height || '32px'
           }}
           onMouseEnter={() => {
-            console.log('[TOOLBAR HOVER] Mouse ENTER toolbar', {
-              isHoveredNode,
-              selected,
-              toolbarElement: !!toolbarElementRef.current,
-              nodeContainer: !!nodeContainerRef.current
-            });
             setIsHoveredNode(true);
           }}
           onMouseLeave={(e) => {
@@ -450,30 +430,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             // Verifica se il mouse è sul canvas
             const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
 
-            console.log('[TOOLBAR HOVER] Mouse LEAVE toolbar', {
-              elementFromPoint: el?.tagName,
-              elementClass: el?.className,
-              isOverNode,
-              isOverToolbar,
-              isOverCanvas,
-              selected
-            });
-
             // Se il nodo è selected, mantieni sempre visibile
             if (selected) {
-              console.log('[TOOLBAR HOVER] Nodo selected - MANTIENI visibile');
               return;
             }
 
             // Se il mouse è ancora sul nodo o sulla toolbar, mantieni visibile
             if (isOverNode || isOverToolbar) {
-              console.log('[TOOLBAR HOVER] Mouse ancora su nodo/toolbar - MANTIENI visibile');
               return;
             }
 
             // Se il mouse è sul canvas, nascondi immediatamente
             if (isOverCanvas) {
-              console.log('[TOOLBAR HOVER] Mouse sul canvas - Nascondi toolbar');
               setIsHoveredNode(false);
               return;
             }
@@ -483,12 +451,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             const isGoingToNode = relatedTarget && (nodeContainerRef.current?.contains(relatedTarget) || wrapperRef.current?.contains(relatedTarget));
 
             if (isGoingToNode) {
-              console.log('[TOOLBAR HOVER] Fallback: Mouse va verso nodo - MANTIENI visibile');
               return;
             }
 
             // Altrimenti nascondi
-            console.log('[TOOLBAR HOVER] Nascondi toolbar - mouse esce verso canvas');
             setIsHoveredNode(false);
           }}
         >
@@ -610,7 +576,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         ref={wrapperRef}
         style={{ position: 'relative', display: 'inline-block' }}
         onMouseEnter={() => {
-          console.log('[NODE HOVER] Mouse ENTER wrapper/nodo - Mostra toolbar');
           setIsHoveredNode(true);
         }}
         onMouseLeave={(e) => {
@@ -622,30 +587,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           const isOverNode = el && (nodeContainerRef.current?.contains(el) || wrapperRef.current?.contains(el));
           const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
 
-          console.log('[NODE HOVER] Mouse LEAVE wrapper', {
-            elementFromPoint: el?.tagName,
-            elementClass: el?.className,
-            isOverToolbar,
-            isOverNode,
-            isOverCanvas,
-            selected
-          });
-
           // Se il nodo è selected, mantieni sempre visibile
           if (selected) {
-            console.log('[NODE HOVER] Nodo selected - MANTIENI visibile');
             return;
           }
 
           // Se il mouse è ancora sulla toolbar o sul nodo, mantieni visibile
           if (isOverToolbar || isOverNode) {
-            console.log('[NODE HOVER] Mouse ancora su toolbar/nodo - MANTIENI visibile');
             return;
           }
 
           // Se il mouse è sul canvas, nascondi immediatamente
           if (isOverCanvas) {
-            console.log('[NODE HOVER] Mouse sul canvas - Nascondi toolbar');
             setIsHoveredNode(false);
             return;
           }
@@ -656,12 +609,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           const isGoingToNodeContainer = relatedTarget && (nodeContainerRef.current?.contains(relatedTarget) || wrapperRef.current?.contains(relatedTarget));
 
           if (isGoingToToolbar || isGoingToNodeContainer) {
-            console.log('[NODE HOVER] Fallback: Mouse va verso toolbar/nodo - MANTIENI visibile');
             return;
           }
 
           // Altrimenti nascondi
-          console.log('[NODE HOVER] Nascondi toolbar - mouse esce verso canvas');
           setIsHoveredNode(false);
         }}
       >
@@ -678,7 +629,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         tabIndex={-1}
         draggable={false}
         onMouseEnter={() => {
-          console.log('[NODE CONTAINER] Mouse ENTER container - Mostra toolbar');
           setIsHoveredNode(true);
         }}
         onMouseLeave={(e) => {
@@ -690,30 +640,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           const isOverNode = el && (wrapperRef.current?.contains(el) || nodeContainerRef.current?.contains(el));
           const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
 
-          console.log('[NODE CONTAINER] Mouse LEAVE container', {
-            elementFromPoint: el?.tagName,
-            elementClass: el?.className,
-            isOverToolbar,
-            isOverNode,
-            isOverCanvas,
-            selected
-          });
-
           // Se il nodo è selected, mantieni sempre visibile
           if (selected) {
-            console.log('[NODE CONTAINER] Nodo selected - MANTIENI visibile');
             return;
           }
 
           // Se il mouse è ancora sulla toolbar o sul nodo, mantieni visibile
           if (isOverToolbar || isOverNode) {
-            console.log('[NODE CONTAINER] Mouse ancora su toolbar/nodo - MANTIENI visibile');
             return;
           }
 
           // Se il mouse è sul canvas, nascondi immediatamente
           if (isOverCanvas) {
-            console.log('[NODE CONTAINER] Mouse sul canvas - Nascondi toolbar');
             setIsHoveredNode(false);
             return;
           }
@@ -724,12 +662,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           const isStillInWrapper = relatedTarget && (wrapperRef.current?.contains(relatedTarget) || nodeContainerRef.current?.contains(relatedTarget));
 
           if (isGoingToToolbar || isStillInWrapper) {
-            console.log('[NODE CONTAINER] Fallback: Mouse va verso toolbar/nodo - MANTIENI visibile');
             return;
           }
 
           // Altrimenti nascondi
-          console.log('[NODE CONTAINER] Nascondi toolbar - mouse esce verso canvas');
           setIsHoveredNode(false);
         }}
         onMouseDownCapture={(e) => {

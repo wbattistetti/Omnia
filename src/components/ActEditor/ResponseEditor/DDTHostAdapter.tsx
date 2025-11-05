@@ -31,6 +31,18 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     const instance = instanceRepository.getInstance(instanceKey);
     const instanceDDT = instance?.ddt;
 
+    console.log('[DDTHostAdapter][INIT]', {
+      instanceKey,
+      actId: act.id,
+      actType: act.type,
+      hasInstance: !!instance,
+      hasInstanceDDT: !!instanceDDT,
+      instanceDDTId: instanceDDT?.id,
+      firstMainKind: instanceDDT?.mainData?.[0]?.kind,
+      steps: instanceDDT?.mainData?.[0]?.steps ? Object.keys(instanceDDT.mainData[0].steps) : [],
+      stepsContent: instanceDDT?.mainData?.[0]?.steps || {}
+    });
+
     // ✅ Se ProblemClassification, verifica che il DDT abbia kind === "intent"
     if (act.type === 'ProblemClassification') {
       // Verifica se il DDT esistente ha kind === "intent"
@@ -39,6 +51,14 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
       // Se NON esiste DDT o ha kind sbagliato, inizializza/resetta con kind: "intent"
       if (!instanceDDT || !hasCorrectKind) {
+        console.warn('[DDTHostAdapter][INIT] Creating new DDT because:', {
+          instanceKey,
+          hasInstanceDDT: !!instanceDDT,
+          hasCorrectKind,
+          firstMainKind: firstMain?.kind,
+          reason: !instanceDDT ? 'NO_DDT' : 'WRONG_KIND'
+        });
+
         const newDDT = {
           id: `temp_ddt_${act.id}`,
           label: act.label || 'Data',
@@ -66,6 +86,12 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
       }
 
       // Se il DDT esiste e ha kind === "intent", usalo
+      console.log('[DDTHostAdapter][INIT] Using existing DDT with intent kind', {
+        instanceKey,
+        ddtId: instanceDDT.id,
+        steps: Object.keys(firstMain.steps || {}),
+        hasSteps: !!firstMain.steps && Object.keys(firstMain.steps).length > 0
+      });
       return instanceDDT;
     }
 

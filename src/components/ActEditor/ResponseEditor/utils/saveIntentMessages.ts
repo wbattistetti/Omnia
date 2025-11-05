@@ -6,7 +6,23 @@ import type { IntentMessages } from '../components/IntentMessagesBuilder';
  * Per ProblemClassification, i messaggi vanno in mainData[0].steps quando kind === "intent"
  */
 export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any {
-  if (!ddt || !messages) return ddt;
+  console.log('[saveIntentMessagesToDDT][START]', {
+    ddtId: ddt?.id,
+    ddtLabel: ddt?.label,
+    mainDataLength: ddt?.mainData?.length,
+    firstMainKind: ddt?.mainData?.[0]?.kind,
+    messages: {
+      start: messages.start?.length || 0,
+      noInput: messages.noInput?.length || 0,
+      noMatch: messages.noMatch?.length || 0,
+      confirmation: messages.confirmation?.length || 0
+    }
+  });
+
+  if (!ddt || !messages) {
+    console.warn('[saveIntentMessagesToDDT] Missing ddt or messages', { ddt: !!ddt, messages: !!messages });
+    return ddt;
+  }
 
   // Crea una copia del DDT
   const updated = JSON.parse(JSON.stringify(ddt));
@@ -73,6 +89,17 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
   if (messages.confirmation && messages.confirmation.length > 0) {
     firstMain.steps.confirmation = createStep('confirmation', messages.confirmation);
   }
+
+  console.log('[saveIntentMessagesToDDT][END]', {
+    updatedDDTId: updated.id,
+    firstMainKind: updated.mainData[0].kind,
+    stepsCreated: Object.keys(firstMain.steps),
+    stepDetails: Object.entries(firstMain.steps).map(([key, step]: [string, any]) => ({
+      stepKey: key,
+      escalationsCount: step.escalations?.length || 0,
+      firstMessage: step.escalations?.[0]?.actions?.[0]?.parameters?.[0]?.value || 'N/A'
+    }))
+  });
 
   return updated;
 }
