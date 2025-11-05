@@ -16,6 +16,7 @@ interface InMemoryConditionsContextType {
   addCondition: (name: string, script?: string) => InMemoryCondition;
   getConditionById: (id: string) => InMemoryCondition | undefined;
   updateCondition: (id: string, updates: Partial<InMemoryCondition>) => void;
+  removeCondition: (id: string) => void;
   clearConditions: () => void;
 }
 
@@ -71,6 +72,10 @@ export const InMemoryConditionsProvider: React.FC<InMemoryConditionsProviderProp
     );
   }, []);
 
+  const removeCondition = useCallback((id: string) => {
+    setConditions((prev) => prev.filter(c => c.id !== id));
+  }, []);
+
   const clearConditions = useCallback(() => {
     setConditions([]);
   }, []);
@@ -82,6 +87,7 @@ export const InMemoryConditionsProvider: React.FC<InMemoryConditionsProviderProp
         addCondition,
         getConditionById,
         updateCondition,
+        removeCondition,
         clearConditions
       }}
     >

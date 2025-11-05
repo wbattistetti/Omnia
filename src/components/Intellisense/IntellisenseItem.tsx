@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { IntellisenseItem as IntellisenseItemType, IntellisenseResult } from './IntellisenseTypes';
 import { highlightMatches } from './IntellisenseSearch';
-import { Circle, Ear, CheckCircle2, Megaphone } from 'lucide-react';
+import { Circle, Ear, CheckCircle2, Megaphone, Trash2 } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from '../Sidebar/sidebarTheme';
 import { getAgentActIconColor } from '../../utils/agentActIconColor';
 
@@ -11,6 +11,7 @@ interface IntellisenseItemProps {
   isFromAI?: boolean;
   onClick: () => void;
   onMouseEnter: () => void;
+  onDelete?: (item: IntellisenseItemType) => void; // ✅ Callback per cancellazione
   fontSize?: string; // ✅ Font size dinamico
 }
 
@@ -20,9 +21,12 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   isFromAI = false,
   onClick,
   onMouseEnter,
+  onDelete,
   fontSize = '14px' // ✅ Default font size
 }) => {
   const { item, matches } = result;
+  const [isHovered, setIsHovered] = useState(false);
+  const [isTrashHovered, setIsTrashHovered] = useState(false);
 
   // ✅ Log rimosso per evitare spam
 
@@ -47,6 +51,17 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
   const paddingV = fontSizeNum * 0.35; // Padding verticale (35% del font size)
   const paddingH = fontSizeNum * 0.5; // Padding orizzontale (50% del font size)
 
+  // ✅ Mostra cestino solo per condizioni
+  const isCondition = item.categoryType === 'conditions' || item.kind === 'condition';
+  const showDelete = isCondition && isHovered && onDelete;
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onDelete) {
+      onDelete(item);
+    }
+  };
+
   return (
     <div
       className={`
@@ -58,7 +73,11 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
         background: isSelected ? undefined : (item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined)
       }}
       onClick={onClick}
-      onMouseEnter={onMouseEnter}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        onMouseEnter();
+      }}
+      onMouseLeave={() => setIsHovered(false)}
       data-intellisense-item
     >
       {/* Icon */}
@@ -112,6 +131,27 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
           </div>
         )}
       </div>
+
+      {/* ✅ Cestino per cancellare (solo per condizioni, visibile su hover) */}
+      {showDelete && (
+        <div
+          className="flex-shrink-0 ml-2 flex items-center"
+          onMouseEnter={() => setIsTrashHovered(true)}
+          onMouseLeave={() => setIsTrashHovered(false)}
+        >
+          <button
+            onClick={handleDelete}
+            className="p-1 rounded transition-colors"
+            style={{
+              color: isTrashHovered ? '#dc2626' : '#9ca3af', // ✅ Rosso su hover, grigio di default
+              cursor: 'pointer'
+            }}
+            title="Elimina condizione"
+          >
+            <Trash2 size={fontSizeNum * 0.75} /> {/* ✅ Icona proporzionale (75% del font size) */}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

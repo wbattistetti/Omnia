@@ -14,6 +14,7 @@ interface IntellisenseRendererProps {
   categoryConfig: Record<string, { title: string; icon: React.ReactNode; color: string }>;
   onItemSelect: (result: IntellisenseResult) => void;
   onItemHover: (index: number) => void;
+  onItemDelete?: (item: any) => void; // ✅ Callback per cancellazione
   onCreateNew?: (name: string, scope?: 'global' | 'industry') => void;
   onCreateAgentAct?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateBackendCall?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
@@ -39,6 +40,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   categoryConfig,
   onItemSelect,
   onItemHover,
+  onItemDelete,
   onCreateNew,
   onCreateAgentAct,
   onCreateBackendCall,
@@ -283,6 +285,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
           isFromAI={item.isFromAI}
           onClick={() => onItemSelect(item.result)}
           onMouseEnter={() => handleItemHover(index)}
+          onDelete={onItemDelete ? () => onItemDelete(item.result.item) : undefined} // ✅ Passa callback di cancellazione
           fontSize={fontSize} // ✅ Passa font size agli item
         />
       ))}

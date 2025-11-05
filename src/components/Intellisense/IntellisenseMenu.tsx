@@ -7,7 +7,7 @@ import {
   performSemanticSearch
 } from './IntellisenseSearch';
 import { IntellisenseItem, IntellisenseResult, IntellisenseLayoutConfig } from './IntellisenseTypes';
-import { useProjectData } from '../../context/ProjectDataContext';
+import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { prepareIntellisenseData } from '../../services/ProjectDataService';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { useIntellisense } from "../../context/IntellisenseContext"; // ✅ AGGIUNGI IMPORT
@@ -74,8 +74,9 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   ), []);
   // Debug logging removed to prevent excessive console output
   const { data } = useProjectData();
+  const { deleteItem } = useProjectDataUpdate(); // ✅ Hook per cancellazione dal database
   const fontSizes = useDynamicFontSizes(); // ✅ Spostato all'inizio per rispettare le regole degli hooks
-  const { conditions: inMemoryConditions } = useInMemoryConditions(); // ✅ Hook per condizioni in memoria
+  const { conditions: inMemoryConditions, removeCondition } = useInMemoryConditions(); // ✅ Hook per condizioni in memoria
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const [fuzzyResults, setFuzzyResults] = useState<Map<string, IntellisenseResult[]>>(new Map());
@@ -337,6 +338,47 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
 
   // Rimuovi i log dataset (troppo rumorosi)
   useEffect(() => { if (!isOpen) loggedThisOpenRef.current = false; }, [isOpen]);
+
+  // ✅ Handler per cancellazione condizioni
+  const handleDelete = async (item: IntellisenseItem) => {
+    try {
+      // Verifica se è una condizione in memoria
+      const isInMemory = (item.payload as any)?.inMemory === true;
+
+      if (isInMemory) {
+        // Cancella condizione in memoria
+        const conditionId = (item.payload as any)?.conditionId;
+        if (conditionId) {
+          removeCondition(conditionId);
+          console.log('[IntellisenseMenu] ✅ Condizione in memoria cancellata:', conditionId);
+        }
+      } else {
+        // Cancella condizione dal database
+        // Trova categoryId cercando nella struttura data.conditions
+        if (data?.conditions && item.actId) {
+          let categoryId: string | null = null;
+
+          // Cerca la categoria che contiene l'item
+          for (const category of data.conditions) {
+            const foundItem = category.items.find((i: any) => i.id === item.actId);
+            if (foundItem) {
+              categoryId = category.id;
+              break;
+            }
+          }
+
+          if (categoryId) {
+            await deleteItem('conditions', categoryId, item.actId);
+            console.log('[IntellisenseMenu] ✅ Condizione dal database cancellata:', { categoryId, itemId: item.actId });
+          } else {
+            console.warn('[IntellisenseMenu] ⚠️ Categoria non trovata per item:', item.actId);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[IntellisenseMenu] ❌ Errore durante cancellazione:', error);
+    }
+  };
 
   // Perform search when query changes
   useEffect(() => {
@@ -606,6 +648,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
               onSelect(result.item);
             }}
             onItemHover={(index) => setSelectedIndex(index)}
+            onItemDelete={handleDelete} // ✅ Callback per cancellazione
             onCreateNew={onCreateNew}
             onCreateAgentAct={onCreateAgentAct}
             onCreateBackendCall={onCreateBackendCall}
@@ -633,6 +676,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
               onSelect(result.item);
             }}
             onItemHover={(index) => setSelectedIndex(index)}
+            onItemDelete={handleDelete} // ✅ Callback per cancellazione
             onCreateNew={onCreateNew}
             onCreateAgentAct={onCreateAgentAct}
             onCreateBackendCall={onCreateBackendCall}
