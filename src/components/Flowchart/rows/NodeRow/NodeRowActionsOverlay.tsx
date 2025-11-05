@@ -50,7 +50,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   outerRef
 }) => {
   if (!showIcons || !iconPos) return null;
-  const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? Math.max(12, Math.min(20, Math.round(labelRef.current.getBoundingClientRect().height * 0.7))) : 14);
+  // Calculate icon size based on label height - make them larger (119% = 103.5% * 1.15)
+  const size = typeof iconSize === 'number' ? iconSize : (labelRef.current ? Math.max(18, Math.min(32, Math.round(labelRef.current.getBoundingClientRect().height * 1.19))) : 21);
   return (
     <div
       ref={outerRef}

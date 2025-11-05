@@ -1,8 +1,151 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { NodeRowActionsOverlay } from './NodeRowActionsOverlay';
 import { NodeRowData } from '../../types/project';
+
+// Component to render checkbox with dynamic size based on font
+const CheckboxButton: React.FC<{
+  labelRef: React.RefObject<HTMLSpanElement>;
+  included: boolean;
+  setIncluded: (val: boolean) => void;
+}> = ({ labelRef, included, setIncluded }) => {
+  const [checkboxSize, setCheckboxSize] = useState(16);
+  const checkIconSize = Math.round(checkboxSize * 0.7);
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (labelRef.current) {
+        const computedStyle = window.getComputedStyle(labelRef.current);
+        const fontSize = parseFloat(computedStyle.fontSize) || 12;
+        // Checkbox should be about 105.8% of font size (92% * 1.15), with min/max bounds
+        const newSize = Math.max(18, Math.min(29, Math.round(fontSize * 1.058)));
+        setCheckboxSize(newSize);
+      } else {
+        setCheckboxSize(16);
+      }
+    };
+
+    updateSize();
+
+    // Watch for font size changes
+    const observer = new MutationObserver(updateSize);
+    if (labelRef.current) {
+      observer.observe(labelRef.current, {
+        attributes: true,
+        attributeFilter: ['style', 'class'],
+        subtree: false
+      });
+
+      window.addEventListener('resize', updateSize);
+      return () => {
+        observer.disconnect();
+        window.removeEventListener('resize', updateSize);
+      };
+    }
+  }, [labelRef]);
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: checkboxSize,
+        height: checkboxSize,
+        marginRight: 6,
+        borderRadius: 3,
+        border: '1px solid rgba(0,0,0,0.6)',
+        background: included ? 'transparent' : '#e5e7eb',
+      }}
+      title="Include this row in the flow"
+      onClick={(e) => {
+        e.stopPropagation();
+        setIncluded(!included);
+      }}
+    >
+      {included ? (
+        <Check style={{ width: checkIconSize, height: checkIconSize, color: 'rgba(0,0,0,0.9)' }} />
+      ) : null}
+    </span>
+  );
+};
+
+// Component to render primary icon with dynamic size based on font
+const PrimaryIconButton: React.FC<{
+  Icon: React.ComponentType<any>;
+  iconSize?: number;
+  labelRef: React.RefObject<HTMLSpanElement>;
+  included: boolean;
+  labelTextColor: string;
+  onTypeChangeRequest?: (anchor?: DOMRect) => void;
+}> = ({ Icon, iconSize, labelRef, included, labelTextColor, onTypeChangeRequest }) => {
+  const [computedSize, setComputedSize] = useState(12);
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (typeof iconSize === 'number') {
+        setComputedSize(iconSize);
+        return;
+      }
+      if (labelRef.current) {
+        const computedStyle = window.getComputedStyle(labelRef.current);
+        const fontSize = parseFloat(computedStyle.fontSize) || 12;
+        // Icon should be about 119% of font size (103.5% * 1.15), with min/max bounds
+        const newSize = Math.max(16, Math.min(32, Math.round(fontSize * 1.19)));
+        setComputedSize(newSize);
+      } else {
+        setComputedSize(12);
+      }
+    };
+
+    updateSize();
+
+    // Watch for font size changes
+    const observer = new MutationObserver(updateSize);
+    if (labelRef.current) {
+      observer.observe(labelRef.current, {
+        attributes: true,
+        attributeFilter: ['style', 'class'],
+        subtree: false
+      });
+
+      // Also listen to resize events
+      window.addEventListener('resize', updateSize);
+      return () => {
+        observer.disconnect();
+        window.removeEventListener('resize', updateSize);
+      };
+    }
+  }, [iconSize, labelRef]);
+
+  return (
+    <button
+      type="button"
+      title="Change act type"
+      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          console.log('[TypePicker][labelIcon][click]', { rect, labelRect: labelRef.current?.getBoundingClientRect() });
+          onTypeChangeRequest && onTypeChangeRequest(rect);
+        } catch (err) { try { console.warn('[TypePicker][labelIcon][err]', err); } catch { } }
+      }}
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', padding: 0, marginRight: 4, cursor: 'pointer' }}
+    >
+      <Icon
+        className="inline-block"
+        style={{
+          width: computedSize,
+          height: computedSize,
+          color: included ? labelTextColor : '#9ca3af'
+        }}
+      />
+    </button>
+  );
+};
 
 // Invisible overlay for empty space between end of text and node right edge
 const EmptySpaceOverlay: React.FC<{
@@ -74,6 +217,8 @@ const EmptySpaceOverlay: React.FC<{
       style={{
         position: 'fixed',
         background: 'transparent',
+        border: 'none', // Transparent - no visible border
+        borderRadius: '4px',
         pointerEvents: 'auto',
         zIndex: 998,
       }}
@@ -143,28 +288,11 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   <>
     {/* Checkbox: show only when label/text is present. Default is a black tick; unchecked shows grey box. */}
     {(row.text && row.text.trim().length > 0) && (
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 14,
-          height: 14,
-          marginRight: 6,
-          borderRadius: 3,
-          border: '1px solid rgba(0,0,0,0.6)',
-          background: included ? 'transparent' : '#e5e7eb',
-        }}
-        title="Include this row in the flow"
-        onClick={(e) => {
-          e.stopPropagation();
-          setIncluded(!included);
-        }}
-      >
-        {included ? (
-          <Check className="w-3 h-3" style={{ color: 'rgba(0,0,0,0.9)' }} />
-        ) : null}
-      </span>
+      <CheckboxButton
+        labelRef={labelRef}
+        included={included}
+        setIncluded={setIncluded}
+      />
     )}
     <span
       ref={labelRef}
@@ -185,39 +313,21 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       onMouseLeave={() => onLabelHoverChange && onLabelHoverChange(false)}
       title="Double-click to edit, start typing for intellisense"
     >
-      {Icon && (
-        <button
-          type="button"
-          title="Change act type"
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try {
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              console.log('[TypePicker][labelIcon][click]', { rect, labelRect: labelRef.current?.getBoundingClientRect() });
-              onTypeChangeRequest && onTypeChangeRequest(rect);
-            } catch (err) { try { console.warn('[TypePicker][labelIcon][err]', err); } catch { } }
-          }}
-          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', padding: 0, marginRight: 4, cursor: 'pointer' }}
-        >
-          <Icon
-            className="inline-block"
-            style={{
-              width: typeof iconSize === 'number' ? iconSize : 12,
-              height: typeof iconSize === 'number' ? iconSize : 12,
-              color: included ? labelTextColor : '#9ca3af'
-            }}
-          />
-        </button>
-      )}
+      {Icon && <PrimaryIconButton
+        Icon={Icon}
+        iconSize={iconSize}
+        labelRef={labelRef}
+        included={included}
+        labelTextColor={labelTextColor}
+        onTypeChangeRequest={onTypeChangeRequest}
+      />}
       {/* Gear icon intentionally omitted next to label; shown only in the external actions strip */}
       {row.text}
-      {/* Invisible overlay for empty space - only when toolbar is visible */}
-      {showIcons && createPortal(
+      {/* Yellow bordered hover area - always visible to trigger toolbar */}
+      {createPortal(
         <EmptySpaceOverlay
           labelRef={labelRef}
-          iconPos={iconPos}
+          iconPos={iconPos || { top: 0, left: 0 }}
           onHoverEnter={() => onLabelHoverChange && onLabelHoverChange(true)}
           onHoverLeave={() => onLabelHoverChange && onLabelHoverChange(false)}
         />,

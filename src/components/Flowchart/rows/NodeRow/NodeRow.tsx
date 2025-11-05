@@ -1031,7 +1031,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             }}
             labelRef={labelRef}
             Icon={Icon}
-            iconSize={Math.max(10, Math.min(18, Math.round(12 * getZoom())))}
+            iconSize={undefined}
             showIcons={toolbarSM.showIcons}
             iconPos={iconPos}
             canDelete={canDelete}
