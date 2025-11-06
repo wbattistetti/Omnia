@@ -1,13 +1,15 @@
 import React from 'react';
 import { useEditorContext } from './EditorContext';
 import { iconMap } from './ddtUtils';
+import { useFontClasses } from '../../../hooks/useFontClasses';
 
 const ActionCatalog: React.FC = () => {
   const { actionCatalog, showLabel } = useEditorContext();
+  const { combinedClass } = useFontClasses();
 
   if (!actionCatalog || actionCatalog.length === 0) {
     return (
-      <div style={{ padding: 16, background: '#f9f9f9', borderRadius: 8 }}>
+      <div className={combinedClass} style={{ padding: 16, background: '#f9f9f9', borderRadius: 8 }}>
         <h4>📚 Catalogo Azioni</h4>
         <p>Nessuna azione disponibile</p>
       </div>
@@ -15,7 +17,7 @@ const ActionCatalog: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: 16, background: '#f9f9f9', borderRadius: 8 }}>
+    <div className={combinedClass} style={{ padding: 16, background: '#f9f9f9', borderRadius: 8 }}>
       <h4>📚 Catalogo Azioni ({actionCatalog.length})</h4>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
         {actionCatalog.map((action: any, index: number) => (
@@ -48,11 +50,11 @@ const ActionCatalog: React.FC = () => {
               </div>
             )}
             <div>
-              <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
+              <div style={{ fontWeight: 'bold' }}>
                 {typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label}
               </div>
               {showLabel && action.description && (
-                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: 4 }}>
+                <div style={{ color: '#6b7280', marginTop: 4 }}>
                   {typeof action.description === 'object' ? action.description.it || action.description.en : action.description}
                 </div>
               )}

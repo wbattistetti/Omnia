@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ActionItem from './ActionItem';
 import { MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Tag, Clock, ServerCog } from 'lucide-react';
 import { useActionsCatalog } from '../../../context/ActionsCatalogContext';
+import { useFontContext } from '../../../context/FontContext';
 
 const MIN_THUMBNAIL_WIDTH = 100;
 
@@ -14,6 +15,7 @@ const iconMap: Record<string, React.ReactNode> = {
 const DEFAULT_LANG = 'it';
 
 const ActionList: React.FC = () => {
+  const { combinedClass } = useFontContext();
   const { actionsCatalog } = useActionsCatalog();
   const [columns, setColumns] = useState(4);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -44,7 +46,7 @@ const ActionList: React.FC = () => {
   }, []);
 
   return (
-    <div className="action-list-grid" style={{ width: '100%' }}>
+    <div className={`action-list-grid ${combinedClass}`} style={{ width: '100%' }}>
       {/* Se vuoi permettere la selezione lingua, aggiungi qui un select */}
       {/* <select value={lang} onChange={e => setLang(e.target.value)}>
         <option value="it">Italiano</option>
@@ -99,4 +101,4 @@ const ActionList: React.FC = () => {
   );
 };
 
-export default ActionList; 
+export default ActionList;

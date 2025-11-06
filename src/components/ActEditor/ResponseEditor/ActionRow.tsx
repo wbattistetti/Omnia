@@ -3,6 +3,7 @@ import { Check, X } from 'lucide-react';
 import ActionRowActions from './ActionRowActions';
 import ActionText from './ActionText';
 import styles from './ActionRow.module.css';
+import { useFontContext } from '../../../context/FontContext';
 
 interface ActionRowProps {
   icon?: React.ReactNode;
@@ -35,6 +36,7 @@ function ActionRowInner({
   autoEdit = false,
   onEditingChange
 }: ActionRowProps) {
+  const { combinedClass } = useFontContext();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -135,7 +137,7 @@ function ActionRowInner({
   };
 
   return (
-    <div>
+    <div className={combinedClass}>
       <div
         className={styles.row}
         style={{

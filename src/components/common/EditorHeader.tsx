@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import SmartTooltip from '../SmartTooltip';
+import { useFontContext } from '../../context/FontContext';
 
 type ToolbarButton = {
   icon: React.ReactNode;
@@ -33,9 +34,10 @@ const THEMES: Record<string, { bg: string; fg: string; border: string; accent?: 
 
 export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButtons = [], rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
   const theme = THEMES[color] || THEMES.orange;
+  const { combinedClass } = useFontContext();
   return (
     <div
-      className={className}
+      className={`${combinedClass} ${className || ''}`}
       style={{
         minHeight: 44,
         display: 'flex',
@@ -53,7 +55,7 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
         {icon ? <div style={{ width: 18, height: 18, flexShrink: 0 }}>{icon}</div> : null}
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <div style={{ fontWeight: 600, lineHeight: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-          {subtitle ? <div style={{ fontSize: 11, opacity: 0.8 }}>{subtitle}</div> : null}
+          {subtitle ? <div style={{ opacity: 0.8 }}>{subtitle}</div> : null}
         </div>
         {titleActions && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
@@ -88,7 +90,6 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
                       cursor: btn.disabled ? 'not-allowed' : 'pointer',
                       opacity: btn.disabled ? 0.5 : 1,
                       fontWeight: btn.primary ? 600 : 400,
-                      fontSize: 14,
                       whiteSpace: 'nowrap',
                     }}
                   >
@@ -113,7 +114,6 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
                     cursor: btn.disabled ? 'not-allowed' : 'pointer',
                     opacity: btn.disabled ? 0.5 : 1,
                     fontWeight: btn.primary ? 600 : 400,
-                    fontSize: 14,
                     whiteSpace: 'nowrap',
                   }}
                 >

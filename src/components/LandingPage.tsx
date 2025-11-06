@@ -34,6 +34,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   // Stati per filtri combo box
   const [availableClients, setAvailableClients] = useState<string[]>([]);
@@ -87,7 +89,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   // Carica clienti, nomi progetti e owners all'inizio
   useEffect(() => {
-    setLoadingProjects(true);
+    // Solo al primo mount imposta loading
+    if (!initialLoadComplete) {
+      console.log('🔄 [LANDING] Starting initial data load', { allProjectsCount: allProjects.length });
+      setLoadingProjects(true);
+      setDataReady(false);
+    } else {
+      console.log('🔄 [LANDING] Data changed (not initial load)', { allProjectsCount: allProjects.length });
+    }
+
     fetch('/api/projects/catalog/clients')
       .then(res => res.json())
       .then(data => {
@@ -139,9 +149,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     const recovered = uniqueAllProjects.filter((p: any) => p.status === 'draft');
     setRecoveredProjectsCount(recovered.length);
 
-    // Caricamento completato
-    setLoadingProjects(false);
-  }, [allProjects]);
+    console.log('🔄 [LANDING] Data processing complete', {
+      allProjectsCount: allProjects.length,
+      uniqueProjectsCount: uniqueAllProjects.length,
+      recoveredCount: recovered.length,
+      hasProjects: uniqueAllProjects.length > 0,
+      initialLoadComplete
+    });
+
+    // Caricamento completato - ritarda leggermente solo al primo caricamento
+    if (!initialLoadComplete) {
+      setTimeout(() => {
+        console.log('🔄 [LANDING] Setting loadingProjects=false');
+        setLoadingProjects(false);
+        // Attendi ancora un po' prima di rendere i dati "pronti" per evitare flash
+        setTimeout(() => {
+          console.log('🔄 [LANDING] Setting dataReady=true', {
+            allProjectsCount: allProjects.length,
+            hasProjects: uniqueAllProjects.length > 0
+          });
+          setDataReady(true);
+          setInitialLoadComplete(true);
+        }, 300);
+      }, 100);
+    }
+  }, [allProjects, initialLoadComplete]);
 
 
 
@@ -250,12 +282,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 )}
               </button>
 
-              {/* Messaggio quando non ci sono progetti */}
-              {showDropdown && !hasProjects && (
-                <div className="mt-2 text-emerald-100 text-lg">
-                  Nessun progetto
-                </div>
-              )}
+              {/* Messaggio quando non ci sono progetti - solo se i dati sono pronti */}
+              {(() => {
+                const shouldShow = showDropdown && !hasProjects && dataReady;
+                console.log('🔄 [LANDING] "Nessun progetto" render check', {
+                  showDropdown,
+                  hasProjects,
+                  dataReady,
+                  shouldShow,
+                  allProjectsLength: allProjects.length
+                });
+                return shouldShow ? (
+                  <div className="mt-2 text-emerald-100 text-lg">
+                    Nessun progetto
+                  </div>
+                ) : null;
+              })()}
               {false && showDropdown && (
                 <div
                   className="absolute left-0 right-0 top-full mt-0 bg-white rounded-b-lg shadow-2xl z-30 p-2 min-w-[320px] border-t border-emerald-100"

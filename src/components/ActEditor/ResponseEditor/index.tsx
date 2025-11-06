@@ -29,8 +29,9 @@ import { useNodePersistence } from './hooks/useNodePersistence';
 import { useDDTInitialization } from './hooks/useDDTInitialization';
 import { useResponseEditorToolbar } from './ResponseEditorToolbar';
 import IntentListEditorWrapper from './components/IntentListEditorWrapper';
+import { FontProvider, useFontContext } from '../../../context/FontContext';
 
-export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
+function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
   console.log('[ResponseEditor][MOUNT]', {
     actId: act?.id,
     actType: act?.type,
@@ -46,13 +47,9 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
-  // Font zoom (Ctrl+wheel) like sidebar
-  const MIN_FONT_SIZE = 12;
-  const MAX_FONT_SIZE = 24;
-  const DEFAULT_FONT_SIZE = 16;
-  const [fontSize, setFontSize] = useState<number>(DEFAULT_FONT_SIZE);
+  // Font centralizzato dal Context
+  const { combinedClass } = useFontContext();
   const rootRef = useRef<HTMLDivElement>(null);
-  const fontScale = useMemo(() => Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, fontSize)) / DEFAULT_FONT_SIZE, [fontSize]);
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
   const { ideTranslations, dataDialogueTranslations, replaceSelectedDDT } = useDDTManager();
@@ -426,36 +423,10 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
     }
   };
 
-  const handleWheelFontZoom = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (e.ctrlKey) {
-      e.preventDefault();
-      setFontSize(prev => {
-        const next = prev + (e.deltaY < 0 ? 1 : -1);
-        return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, next));
-      });
-    }
-  };
-
-  // Attach non-passive wheel listener to block browser zoom and adjust only editor font
-  useEffect(() => {
-    const node = rootRef.current;
-    if (!node) return;
-    const onWheel = (ev: WheelEvent) => {
-      if (ev.ctrlKey) {
-        ev.preventDefault();
-        setFontSize(prev => {
-          const next = prev + (ev.deltaY < 0 ? 1 : -1);
-          return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, next));
-        });
-      }
-    };
-    node.addEventListener('wheel', onWheel, { passive: false } as any);
-    return () => node.removeEventListener('wheel', onWheel as any);
-  }, []);
 
   // Layout
   return (
-    <div ref={rootRef} style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', fontSize: `${fontSize}px`, zoom: fontScale as unknown as string }} onKeyDown={handleGlobalKeyDown} onWheel={handleWheelFontZoom}>
+    <div ref={rootRef} className={combinedClass} style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column' }} onKeyDown={handleGlobalKeyDown}>
 
       {/* Header sempre visibile (minimale durante wizard, completo dopo) */}
       <EditorHeader
@@ -951,5 +922,13 @@ export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: 
       {/* Drag layer for visual feedback when dragging actions */}
       <ActionDragLayer />
     </div>
+  );
+}
+
+export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
+  return (
+    <FontProvider>
+      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} act={act} />
+    </FontProvider>
   );
 }

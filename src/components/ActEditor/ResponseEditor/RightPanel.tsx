@@ -4,6 +4,7 @@ import ResponseSimulator from '../../ChatSimulator/ResponseSimulator';
 import DDEBubbleChat from '../../ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
 import { useDDTManager } from '../../../context/DDTManagerContext';
+import { useFontContext } from '../../../context/FontContext';
 
 export type RightPanelMode = 'actions' | 'validator' | 'testset' | 'chat' | 'styles' | 'none';
 
@@ -139,6 +140,7 @@ function StylesView() {
 }
 
 export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode, onUpdateDDT }: Props) {
+  const { combinedClass } = useFontContext();
   const minWidth = 160;
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -147,7 +149,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
   const useNewEngine = true;
 
   return (
-    <div style={{ display: 'flex', flex: 'none', minWidth: minWidth, width, maxWidth: width, borderLeft: '1px solid #e5e7eb', background: '#fafaff' }}>
+    <div className={combinedClass} style={{ display: 'flex', flex: 'none', minWidth: minWidth, width, maxWidth: width, borderLeft: '1px solid #e5e7eb', background: '#fafaff' }}>
       {/* Splitter handle */}
       <div
         onMouseDown={handleMouseDown}

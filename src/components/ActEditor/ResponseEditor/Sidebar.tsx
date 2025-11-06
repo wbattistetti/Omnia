@@ -4,6 +4,7 @@ import { Check, Plus, Pencil, Trash2 } from 'lucide-react';
 import { getLabel, getSubDataList } from './ddtSelectors';
 import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
+import { useFontContext } from '../../../context/FontContext';
 
 interface SidebarProps {
   mainList: any[];
@@ -25,6 +26,7 @@ interface SidebarProps {
 }
 
 const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onChangeSubRequired, onReorderSub, onAddMain, onRenameMain, onDeleteMain, onAddSub, onRenameSub, onDeleteSub }, ref) {
+  const { combinedClass } = useFontContext();
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
   if (!Array.isArray(mainList) || mainList.length === 0) return null;
   // Pastel/silver palette
@@ -41,7 +43,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
 
   // Expanded state for accordion collapse/expand
   const [expandedMainIndex, setExpandedMainIndex] = React.useState<number | null>(selectedMainIndex);
-  
+
   // Sync expanded state when external selection changes
   React.useEffect(() => {
     if (selectedMainIndex !== expandedMainIndex) {
@@ -174,6 +176,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       ref={containerRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      className={combinedClass}
       style={{ width: measuredW, background: '#121621', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none', position: 'relative' }}
     >
       {aggregated && (
@@ -255,30 +258,30 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                   role="button"
                   tabIndex={0}
                   title={(expandedMainIndex === idx) ? 'Collapse' : 'Expand'}
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    if (expandedMainIndex === idx) { 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (expandedMainIndex === idx) {
                       // Accordion già espanso → collassa (chiudi)
                       setExpandedMainIndex(null);
-                    } else { 
+                    } else {
                       // Accordion chiuso → espandi e seleziona
                       setExpandedMainIndex(idx);
-                      onSelectMain(idx); 
-                      onSelectSub && onSelectSub(undefined); 
-                    } 
+                      onSelectMain(idx);
+                      onSelectSub && onSelectSub(undefined);
+                    }
                   }}
-                  onKeyDown={(e) => { 
-                    if (e.key === 'Enter' || e.key === ' ') { 
-                      e.preventDefault(); 
-                      e.stopPropagation(); 
-                      if (expandedMainIndex === idx) { 
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (expandedMainIndex === idx) {
                         setExpandedMainIndex(null);
-                      } else { 
+                      } else {
                         setExpandedMainIndex(idx);
-                        onSelectMain(idx); 
-                        onSelectSub && onSelectSub(undefined); 
-                      } 
-                    } 
+                        onSelectMain(idx);
+                        onSelectSub && onSelectSub(undefined);
+                      }
+                    }
                   }}
                   style={{ marginLeft: 6, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0, display: 'inline-flex' }}
                 >

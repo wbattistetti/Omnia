@@ -8,6 +8,7 @@ import useActionCommands from './useActionCommands';
 import { ensureHexColor } from './utils/color';
 import CanvasDropWrapper from './CanvasDropWrapper';
 import PanelEmptyDropZone from './PanelEmptyDropZone';
+import { useFontContext } from '../../../context/FontContext';
 
 type Props = {
   node: any;
@@ -98,6 +99,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
 }
 
 export default function StepEditor({ node, stepKey, translations, onDeleteEscalation, onModelChange }: Props) {
+  const { combinedClass } = useFontContext();
   // No special-case: notConfirmed behaves like other steps (escalations UI)
   const meta = (stepMeta as any)[stepKey];
   const color = meta?.color || '#fb923c';
