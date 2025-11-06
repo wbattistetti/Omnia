@@ -1376,7 +1376,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 clearTimeout(buttonCloseTimeoutRef.current);
                 buttonCloseTimeoutRef.current = null;
               }
-              setShowCreatePicker(false);
+              toolbarSM.picker.close();
             }}
             buttonCloseTimeoutRef={buttonCloseTimeoutRef}
             overlayRef={overlayRef}
@@ -1407,7 +1407,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               onPick={(key) => handlePickType(key)}
               rootRef={typeToolbarRef}
               currentType={pickerCurrentType}
-              onRequestClose={() => setShowCreatePicker(false)}
+              onRequestClose={() => toolbarSM.picker.close()}
               buttonCloseTimeoutRef={buttonCloseTimeoutRef}
             />
           </FontProvider>

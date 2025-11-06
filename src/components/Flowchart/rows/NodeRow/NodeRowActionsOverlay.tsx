@@ -104,20 +104,13 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
               onTypeChangeRequest && onTypeChangeRequest(anchor);
             }}
             onMouseLeave={() => {
-              // Close picker when mouse leaves button
-              // The picker itself will cancel this timeout if mouse enters it
-              if (buttonCloseTimeoutRef) {
-                if (buttonCloseTimeoutRef.current) {
-                  clearTimeout(buttonCloseTimeoutRef.current);
-                }
-                buttonCloseTimeoutRef.current = setTimeout(() => {
-                  onRequestClosePicker && onRequestClosePicker();
-                }, 200);
-              } else {
-                setTimeout(() => {
-                  onRequestClosePicker && onRequestClosePicker();
-                }, 200);
+              // Close picker immediately when mouse leaves button
+              if (buttonCloseTimeoutRef && buttonCloseTimeoutRef.current) {
+                clearTimeout(buttonCloseTimeoutRef.current);
+                buttonCloseTimeoutRef.current = null;
               }
+              // Close immediately, no delay
+              onRequestClosePicker && onRequestClosePicker();
             }}
             style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
             className="hover:opacity-100 hover:scale-110"
