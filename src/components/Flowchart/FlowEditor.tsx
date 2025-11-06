@@ -882,6 +882,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     createNodeAt(x, y);
   }, [createNodeAt]);
 
+  // Hide tooltip when first node is created
+  useEffect(() => {
+    if (nodes.length > 0) {
+      setCursorTooltip(null);
+    }
+  }, [nodes.length, setCursorTooltip]);
+
   // Inserter hover: custom cursor + label
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
