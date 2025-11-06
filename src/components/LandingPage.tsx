@@ -32,6 +32,36 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
 
+  // Helper: formatta il nome del client (mostra "Client ?" in grigio se vuoto)
+  const formatClientName = (clientName: string | null | undefined): { text: string; isGrey: boolean } => {
+    const client = (clientName || '').trim();
+    if (!client) {
+      return { text: 'Client ?', isGrey: true };
+    }
+    return { text: client, isGrey: false };
+  };
+
+  // Helper: ordina progetti (prima senza client, poi con client ordinati per client e progetto)
+  const sortProjects = (projects: any[]) => {
+    const withoutClient = projects.filter(p => !(p.clientName || '').trim());
+    const withClient = projects.filter(p => (p.clientName || '').trim());
+
+    // Ordina quelli con client: prima per clientName, poi per projectName
+    withClient.sort((a, b) => {
+      const clientA = (a.clientName || '').trim().toLowerCase();
+      const clientB = (b.clientName || '').trim().toLowerCase();
+      if (clientA !== clientB) {
+        return clientA.localeCompare(clientB);
+      }
+      const projectA = (a.projectName || a.name || '').trim().toLowerCase();
+      const projectB = (b.projectName || b.name || '').trim().toLowerCase();
+      return projectA.localeCompare(projectB);
+    });
+
+    // Prima quelli senza client, poi quelli con client
+    return [...withoutClient, ...withClient];
+  };
+
   // Filtra progetti per ricerca nella modale
   const uniqueRecentProjects = Array.from(new Map(recentProjects.map(p => [p._id || p.projectId, p])).values());
   const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id || p.projectId, p])).values());
@@ -40,6 +70,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       ((p.projectName || p.name || '') as string).toLowerCase().includes(searchTerm.toLowerCase()) ||
       ((p.clientName || '') as string).toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Ordina i progetti
+  const sortedRecentProjects = sortProjects(uniqueRecentProjects);
+  const sortedFilteredAll = sortProjects(filteredAll);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-900 flex flex-col items-center justify-center relative overflow-hidden">
@@ -58,7 +92,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-white rounded-full blur-3xl"></div>
         <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-emerald-300 rounded-full blur-3xl"></div>
       </div>
-      
+
       {/* Main content */}
       <div className="relative z-10 text-center">
         {/* OMNIA title with glow effect */}
@@ -69,12 +103,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <span className="omnia-glow-letter" style={{ animationDelay: '0.6s' }}>I</span>
           <span className="omnia-glow-letter" style={{ animationDelay: '0.8s' }}>A</span>
         </h1>
-        
+
         {/* Payoff */}
         <p className="text-3xl md:text-4xl text-emerald-100 mb-12 font-light tracking-normal max-w-xl mx-auto">
           The platform for the customer care.
         </p>
-        
+
         {/* Main action buttons */}
         <div className="flex flex-col items-center">
           <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
@@ -114,56 +148,59 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   </button>
                   <div className="my-2 border-t border-emerald-100" />
                   {/* Ultimi 10 progetti */}
-                  {uniqueRecentProjects.length === 0 && (
+                  {sortedRecentProjects.length === 0 && (
                     <div className="text-slate-400 px-4 py-2">Nessun progetto recente</div>
                   )}
-                  {uniqueRecentProjects.map((proj) => (
-                    <div key={proj._id} className="flex items-center justify-between px-4 py-2 hover:bg-emerald-50 rounded group">
-                      <button
-                        className="text-left flex-1 truncate"
-                        title={`${proj.clientName || ''} — ${proj.projectName || proj.name || ''}`}
-                        onClick={async () => {
-                          const id = (proj._id || proj.projectId) as string;
-                          setLoadingProjectId(id);
-                          try {
-                            const maybe = onSelectProject(id);
-                            if ((maybe as any)?.then) await (maybe as any);
-                            // chiudi solo dopo che il caricamento ha completato
-                            setShowDropdown(false);
-                          } catch (e) {
-                            setLoadingProjectId(null);
-                          }
-                        }}
-                      >
-                        <span className="inline-flex items-center gap-4">
-                          <span className="inline-flex items-center gap-2 text-emerald-900 font-semibold">
-                            <Building2 className="w-5 h-5 text-emerald-700" />
-                            <span>{proj.clientName || 'Cliente'}</span>
+                  {sortedRecentProjects.map((proj) => {
+                    const clientInfo = formatClientName(proj.clientName);
+                    return (
+                      <div key={proj._id} className="flex items-center justify-between px-4 py-2 hover:bg-emerald-50 rounded group">
+                        <button
+                          className="text-left flex-1 truncate"
+                          title={`${clientInfo.text} — ${proj.projectName || proj.name || ''}`}
+                          onClick={async () => {
+                            const id = (proj._id || proj.projectId) as string;
+                            setLoadingProjectId(id);
+                            try {
+                              const maybe = onSelectProject(id);
+                              if ((maybe as any)?.then) await (maybe as any);
+                              // chiudi solo dopo che il caricamento ha completato
+                              setShowDropdown(false);
+                            } catch (e) {
+                              setLoadingProjectId(null);
+                            }
+                          }}
+                        >
+                          <span className="inline-flex items-center gap-4">
+                            <span className={`inline-flex items-center gap-2 font-semibold ${clientInfo.isGrey ? 'text-gray-500' : 'text-emerald-900'}`}>
+                              <Building2 className={`w-5 h-5 ${clientInfo.isGrey ? 'text-gray-400' : 'text-emerald-700'}`} />
+                              <span>{clientInfo.text}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-2 text-emerald-900">
+                              {loadingProjectId === (proj._id || proj.projectId)
+                                ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
+                                : <Folder className="w-5 h-5 text-emerald-900" />}
+                              <span>{proj.projectName || proj.name || '(senza nome)'}</span>
+                            </span>
                           </span>
-                          <span className="inline-flex items-center gap-2 text-emerald-900">
-                            {loadingProjectId === (proj._id || proj.projectId)
-                              ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
-                              : <Folder className="w-5 h-5 text-emerald-900" />}
-                            <span>{proj.projectName || proj.name || '(senza nome)'}</span>
-                          </span>
-                        </span>
-                      </button>
-                      <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
-                      <button
-                        className="ml-2 text-red-500 opacity-70 hover:opacity-100"
-                        title="Elimina progetto"
-                        onClick={async () => {
-                          const id = proj._id || proj.projectId;
-                          setDeletingId(id);
-                          try { await onDeleteProject(id); } finally { setDeletingId(null); }
-                        }}
-                      >
-                        {deletingId === (proj._id || proj.projectId)
-                          ? <Loader2 className="w-5 h-5 animate-spin" />
-                          : <XCircle className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  ))}
+                        </button>
+                        <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
+                        <button
+                          className="ml-2 text-red-500 opacity-70 hover:opacity-100"
+                          title="Elimina progetto"
+                          onClick={async () => {
+                            const id = proj._id || proj.projectId;
+                            setDeletingId(id);
+                            try { await onDeleteProject(id); } finally { setDeletingId(null); }
+                          }}
+                        >
+                          {deletingId === (proj._id || proj.projectId)
+                            ? <Loader2 className="w-5 h-5 animate-spin" />
+                            : <XCircle className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -211,62 +248,65 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
               )}
               <div className="max-h-96 overflow-y-auto divide-y divide-emerald-50">
-                {filteredAll.length === 0 && (
+                {sortedFilteredAll.length === 0 && (
                   <div className="text-slate-400 px-4 py-8 text-center">Nessun progetto trovato</div>
                 )}
-                {filteredAll.map((proj) => (
-                  <div key={proj._id} className="flex items-center justify-between px-2 py-2 hover:bg-emerald-50 rounded group">
-                    <button
-                      className="text-left flex-1 truncate"
-                      title={`${proj.clientName || ''} — ${proj.projectName || proj.name || ''}`}
-                      onClick={async () => {
-                        const id = (proj._id || proj.projectId) as string;
-                        setLoadingProjectId(id);
-                        try {
-                          const maybe = onSelectProject(id);
-                          if ((maybe as any)?.then) await (maybe as any);
-                          // chiudi solo dopo che il caricamento ha completato
-                          setShowAllProjectsModal(false);
-                        } catch (e) {
-                          setLoadingProjectId(null);
-                        }
-                      }}
-                    >
-                      <span className="inline-flex items-center gap-4">
-                        <span className="inline-flex items-center gap-2">
-                          <Building2 className="w-5 h-5 text-emerald-700" />
-                          <span className="font-semibold text-emerald-900">{proj.clientName || 'Cliente'}</span>
+                {sortedFilteredAll.map((proj) => {
+                  const clientInfo = formatClientName(proj.clientName);
+                  return (
+                    <div key={proj._id} className="flex items-center justify-between px-2 py-2 hover:bg-emerald-50 rounded group">
+                      <button
+                        className="text-left flex-1 truncate"
+                        title={`${clientInfo.text} — ${proj.projectName || proj.name || ''}`}
+                        onClick={async () => {
+                          const id = (proj._id || proj.projectId) as string;
+                          setLoadingProjectId(id);
+                          try {
+                            const maybe = onSelectProject(id);
+                            if ((maybe as any)?.then) await (maybe as any);
+                            // chiudi solo dopo che il caricamento ha completato
+                            setShowAllProjectsModal(false);
+                          } catch (e) {
+                            setLoadingProjectId(null);
+                          }
+                        }}
+                      >
+                        <span className="inline-flex items-center gap-4">
+                          <span className={`inline-flex items-center gap-2 ${clientInfo.isGrey ? 'text-gray-500' : ''}`}>
+                            <Building2 className={`w-5 h-5 ${clientInfo.isGrey ? 'text-gray-400' : 'text-emerald-700'}`} />
+                            <span className={`font-semibold ${clientInfo.isGrey ? 'text-gray-500' : 'text-emerald-900'}`}>{clientInfo.text}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-2">
+                            {loadingProjectId === (proj._id || proj.projectId)
+                              ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
+                              : <Folder className="w-5 h-5 text-emerald-900" />}
+                            <span className="text-emerald-900">{proj.projectName || proj.name || '(senza nome)'}</span>
+                          </span>
                         </span>
-                        <span className="inline-flex items-center gap-2">
-                          {loadingProjectId === (proj._id || proj.projectId)
-                            ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
-                            : <Folder className="w-5 h-5 text-emerald-900" />}
-                          <span>{proj.projectName || proj.name || '(senza nome)'}</span>
-                        </span>
-                      </span>
-                    </button>
-                    <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
-                    <button
-                      className="ml-2 text-red-500 opacity-70 hover:opacity-100"
-                      title="Elimina progetto"
-                      onClick={async () => {
-                        const id = proj._id || proj.projectId;
-                        setDeletingId(id);
-                        try { await onDeleteProject(id); } finally { setDeletingId(null); }
-                      }}
-        >
-                      {deletingId === (proj._id || proj.projectId)
-                        ? <Loader2 className="w-5 h-5 animate-spin" />
-                        : <XCircle className="w-5 h-5" />}
-        </button>
-                  </div>
-                ))}
+                      </button>
+                      <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
+                      <button
+                        className="ml-2 text-red-500 opacity-70 hover:opacity-100"
+                        title="Elimina progetto"
+                        onClick={async () => {
+                          const id = proj._id || proj.projectId;
+                          setDeletingId(id);
+                          try { await onDeleteProject(id); } finally { setDeletingId(null); }
+                        }}
+                      >
+                        {deletingId === (proj._id || proj.projectId)
+                          ? <Loader2 className="w-5 h-5 animate-spin" />
+                          : <XCircle className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
       </div>
-      
+
       {/* Subtle animation elements */}
       <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2">
         <div className="w-1 h-8 bg-white/30 rounded-full animate-pulse"></div>

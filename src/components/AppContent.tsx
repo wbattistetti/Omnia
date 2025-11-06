@@ -348,7 +348,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientName: projectInfo.clientName || 'Client',
+          clientName: projectInfo.clientName || null,
           projectName: projectInfo.name || 'Project',
           industry: projectInfo.industry || 'utility_gas',
           language: projectInfo.language || 'pt',
@@ -459,7 +459,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       const newProject: any = {
         id,
         name: meta.projectName || 'Project',
-        clientName: meta.clientName || 'Client',
+        clientName: meta.clientName || null,
         template: meta.industry || 'utility_gas',
         industry: meta.industry || 'utility_gas',
         agentActs: data.agentActs,

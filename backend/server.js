@@ -239,7 +239,7 @@ function randomId(len = 8) {
 }
 
 function makeProjectDbName(clientName, projectName) {
-  const c = abbreviateSlug(clientName, 6);
+  const c = clientName ? abbreviateSlug(clientName, 6) : 'no-client';
   const p = abbreviateSlug(projectName, 6);
   let name = `t_${c}__p_${p}__${randomId(8)}`;
   if (name.length > 63) name = name.slice(0, 63);
@@ -301,10 +301,10 @@ app.get('/api/projects/catalog', async (req, res) => {
 
 app.post('/api/projects/catalog', async (req, res) => {
   const payload = req.body || {};
-  const clientName = payload.clientName;
+  const clientName = payload.clientName || null; // Permette null/vuoto
   const projectName = payload.projectName;
-  if (!clientName || !projectName) {
-    return res.status(400).json({ error: 'clientName_and_projectName_required' });
+  if (!projectName) {
+    return res.status(400).json({ error: 'projectName_required' });
   }
   const client = new MongoClient(uri);
   try {
@@ -318,9 +318,9 @@ app.post('/api/projects/catalog', async (req, res) => {
       _id: projectId,
       projectId,
       tenantId: payload.tenantId || null,
-      clientName,
+      clientName: clientName || null,
       projectName,
-      clientSlug: slugifyName(clientName),
+      clientSlug: clientName ? slugifyName(clientName) : null,
       projectSlug: slugifyName(projectName),
       industry: payload.industry || null,
       dbName,
@@ -393,12 +393,12 @@ app.get('/api/factory/agent-acts', async (req, res) => {
 // -----------------------------
 app.post('/api/projects/bootstrap', async (req, res) => {
   const payload = req.body || {};
-  const clientName = payload.clientName;
+  const clientName = payload.clientName || null; // Permette null/vuoto
   const projectName = payload.projectName;
   const industry = payload.industry || null;
   const language = payload.language || 'pt';
-  if (!clientName || !projectName) {
-    return res.status(400).json({ error: 'clientName_and_projectName_required' });
+  if (!projectName) {
+    return res.status(400).json({ error: 'projectName_required' });
   }
 
   const client = new MongoClient(uri);
@@ -416,9 +416,9 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       _id: projectId,
       projectId,
       tenantId: payload.tenantId || null,
-      clientName,
+      clientName: clientName || null,
       projectName,
-      clientSlug: slugifyName(clientName),
+      clientSlug: clientName ? slugifyName(clientName) : null,
       projectSlug: slugifyName(projectName),
       industry,
       language,
@@ -444,9 +444,9 @@ app.post('/api/projects/bootstrap', async (req, res) => {
         $set: {
           projectId,
           tenantId: payload.tenantId || null,
-          clientName,
+          clientName: clientName || null,
           projectName,
-          clientSlug: slugifyName(clientName),
+          clientSlug: clientName ? slugifyName(clientName) : null,
           projectSlug: slugifyName(projectName),
           industry,
           language,
