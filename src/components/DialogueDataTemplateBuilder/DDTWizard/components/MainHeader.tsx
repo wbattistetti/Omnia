@@ -5,6 +5,7 @@ import AnimatedDots from './AnimatedDots';
 import type { SchemaNode } from '../MainDataCollection';
 import type { FieldErrorState } from '../hooks/useMainEditing';
 import type { FieldProcessingState } from '../hooks/useFieldProcessing';
+import { useFontContext } from '../../../../context/FontContext';
 
 interface MainHeaderProps {
   node: SchemaNode;
@@ -63,6 +64,7 @@ export default function MainHeader({
   onRetryField,
   onCreateManually,
 }: MainHeaderProps) {
+  const { combinedClass } = useFontContext();
   const labelRef = useRef<HTMLDivElement>(null);
   const [labelWidth, setLabelWidth] = useState<number | null>(null);
 
@@ -111,7 +113,7 @@ export default function MainHeader({
           <>
             <div ref={labelRef} style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap', flexShrink: 0 }}>
               <span style={{ flexShrink: 0 }}><IconRenderer name={node.icon} size={16} /></span>
-              <span style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
+              <span className={combinedClass} style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
 
               {/* 🚀 NEW: Status display for main data */}
               {(() => {
@@ -123,7 +125,7 @@ export default function MainHeader({
 
                 if (progress > 0 || state) {
                   return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '12px' }}>
+                    <div className={combinedClass} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       {getStatusIcon(fieldId)}
                       <span style={{ color: hasError ? '#ef4444' : (progress >= 100 ? '#22c55e' : '#3b82f6') }}>
                         {Math.round(progress)}%
@@ -136,13 +138,13 @@ export default function MainHeader({
                         <>
                           <button
                             onClick={() => onRetryField(fieldId)}
+                            className={combinedClass}
                             style={{
                               background: '#ef4444',
                               color: 'white',
                               border: 'none',
                               borderRadius: 4,
                               padding: '2px 8px',
-                              fontSize: '11px',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
@@ -157,13 +159,13 @@ export default function MainHeader({
                           {(state?.retryCount ?? 0) >= 2 && onCreateManually && (
                             <button
                               onClick={() => onCreateManually()}
+                              className={combinedClass}
                               style={{
                                 background: '#fbbf24',
                                 color: '#0b1220',
                                 border: 'none',
                                 borderRadius: 4,
                                 padding: '2px 8px',
-                                fontSize: '11px',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -223,6 +225,7 @@ export default function MainHeader({
                     }
                   }}
                   placeholder="data label ..."
+                  className={combinedClass}
                   style={{
                     background: '#0f172a',
                     color: '#e2e8f0',
@@ -261,6 +264,7 @@ export default function MainHeader({
                 <button
                   onClick={() => retryField(labelDraft.trim())}
                   disabled={retryLoading[labelDraft.trim()] || false}
+                  className={combinedClass}
                   style={{
                     background: retryLoading[labelDraft.trim()] ? '#64748b' : '#ef4444',
                     color: 'white',
@@ -268,7 +272,6 @@ export default function MainHeader({
                     borderRadius: 4,
                     padding: '4px 8px',
                     cursor: retryLoading[labelDraft.trim()] ? 'not-allowed' : 'pointer',
-                    fontSize: '12px',
                     fontWeight: 'bold',
                     display: 'flex',
                     alignItems: 'center',
@@ -310,6 +313,7 @@ export default function MainHeader({
                     }
                   }}
                   placeholder="data label ..."
+                  className={combinedClass}
                   style={{
                     background: '#0f172a',
                     color: '#e2e8f0',

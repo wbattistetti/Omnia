@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calendar, Bell } from 'lucide-react';
+import { useFontContext } from '../../../context/FontContext';
 
 interface Props {
   userDesc: string;
@@ -18,6 +19,7 @@ const WizardInputStep: React.FC<Props> = ({
   dataNode,
   onAutoDetect
 }) => {
+  const { combinedClass } = useFontContext();
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const autoDetectTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -94,7 +96,7 @@ const WizardInputStep: React.FC<Props> = ({
         gap: '16px',
         flexWrap: 'wrap' // Responsive: wrap su riga successiva se necessario
       }}>
-        <div style={{ fontSize: 15, fontWeight: 500, color: '#cbd5e1', flex: '1 1 auto' }}>
+        <div className={combinedClass} style={{ fontWeight: 500, color: '#cbd5e1', flex: '1 1 auto' }}>
           Describe in detail the data or information the virtual agent must ask to the user:
         </div>
 
@@ -107,12 +109,11 @@ const WizardInputStep: React.FC<Props> = ({
         }}>
 
           {/* Bell icon + text */}
-          <div style={{
+          <div className={combinedClass} style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             color: '#9ca3af',
-            fontSize: '13px',
             whiteSpace: 'nowrap'
           }}>
             <Bell size={16} />
@@ -132,8 +133,8 @@ const WizardInputStep: React.FC<Props> = ({
         }}
         placeholder={dataNode?.name || ''}
         rows={2}
+        className={combinedClass}
         style={{
-          fontSize: 17,
           padding: '10px 16px',
           width: '100%',
           borderRadius: 8,
@@ -161,13 +162,13 @@ const WizardInputStep: React.FC<Props> = ({
         {/* 🎨 Pulsante Annulla: sfondo bianco, bordo nero, testo nero */}
         <button
           onClick={onCancel}
+          className={combinedClass}
           style={{
             background: '#fff',
             color: '#000',
             border: '1px solid #000',
             borderRadius: 8,
             fontWeight: 600,
-            fontSize: 14,
             cursor: 'pointer',
             padding: '6px 16px',
             transition: 'all 0.2s ease'
@@ -183,13 +184,13 @@ const WizardInputStep: React.FC<Props> = ({
             onNext();
           }}
           disabled={!userDesc.trim()}
+          className={combinedClass}
           style={{
             background: '#22c55e',
             color: '#fff',
             border: '1px solid #22c55e',
             borderRadius: 8,
             fontWeight: 600,
-            fontSize: 14,
             cursor: userDesc.trim() ? 'pointer' : 'not-allowed',
             padding: '8px 28px',
             opacity: userDesc.trim() ? 1 : 0.6,

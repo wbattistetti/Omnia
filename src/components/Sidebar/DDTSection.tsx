@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import SidebarEntityAccordion from './SidebarEntityAccordion';
 import { Calendar, Mail, MapPin, FileText, Settings, Trash2, Loader, Plus, Save } from 'lucide-react';
 import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
+import { FontProvider } from '../../context/FontContext';
 
 interface DDTSectionProps {
   ddtList: any[];
@@ -133,12 +134,14 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
         <>
           {showDDTBuilder && (
             <div data-ddt-section style={{ background: 'var(--sidebar-content-bg)', borderBottom: '1px solid #e5e7eb', paddingBottom: 8, marginBottom: 8, borderRadius: 8 }}>
-              <DDTBuilder
-                onComplete={handleBuilderComplete}
-                onCancel={handleBuilderCancel}
-                initialDDT={builderInitialDDT || undefined}
-                startOnStructure={builderStartOnStructure}
-              />
+              <FontProvider>
+                <DDTBuilder
+                  onComplete={handleBuilderComplete}
+                  onCancel={handleBuilderCancel}
+                  initialDDT={builderInitialDDT || undefined}
+                  startOnStructure={builderStartOnStructure}
+                />
+              </FontProvider>
             </div>
           )}
           <div style={{ maxHeight: 300, overflowY: 'auto', background: 'var(--sidebar-content-bg)' }}>

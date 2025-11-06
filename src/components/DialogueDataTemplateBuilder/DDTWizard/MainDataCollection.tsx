@@ -1,6 +1,7 @@
 import React from 'react';
 import { Folder, Plus } from 'lucide-react';
 import MainDataWizard from './MainDataWizard';
+import { useFontContext } from '../../../context/FontContext';
 
 export interface SchemaNode {
   label: string;
@@ -38,6 +39,7 @@ interface MainDataCollectionProps {
 }
 
 const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap, onRetryField, onCreateManually }) => {
+  const { combinedClass } = useFontContext();
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
     next[idx] = nextNode;
@@ -56,12 +58,12 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         {/* 📍 "Create a dialogue for" + Percentuale inline */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ fontWeight: 700 }}>Create a dialogue for</div>
+          <div className={combinedClass} style={{ fontWeight: 700 }}>Create a dialogue for</div>
           {/* Mostra percentuale solo se presente */}
           {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
             const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
             return (
-              <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600 }}>
+              <span className={combinedClass} style={{ color: '#93c5fd', fontWeight: 600 }}>
                 {percentage}%
               </span>
             );
@@ -70,6 +72,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
         <button
           onClick={onAddMain}
           title="Add data"
+          className={combinedClass}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -90,7 +93,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
           {/* 📐 Riga 1: Label + Percentuale inline */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, whiteSpace: 'nowrap', fontSize: 16, padding: '4px 10px', borderRadius: 12, border: '1px solid #334155', background: '#1f2937', color: '#e2e8f0' }}>
+            <span className={combinedClass} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, whiteSpace: 'nowrap', padding: '4px 10px', borderRadius: 12, border: '1px solid #334155', background: '#1f2937', color: '#e2e8f0' }}>
               <Folder size={18} color="#fb923c" />
               {rootLabel}
             </span>
@@ -98,7 +101,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
             {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
               const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
               return (
-                <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600, marginLeft: 4 }}>
+                <span className={combinedClass} style={{ color: '#93c5fd', fontWeight: 600, marginLeft: 4 }}>
                   {percentage}%
                 </span>
               );
