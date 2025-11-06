@@ -262,6 +262,7 @@ interface NodeRowLabelProps {
   onLabelHoverChange?: (v: boolean) => void;
   onTypeChangeRequest?: (anchor?: DOMRect) => void; // NEW: request to open type picker with anchor rect
   onRequestClosePicker?: () => void; // NEW: ask parent to close type picker
+  buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   overlayRef?: React.RefObject<HTMLDivElement>;
   onAIPromptToSystem?: () => void; // NEW: handle AI prompt to system action
 }
@@ -293,6 +294,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   onLabelHoverChange,
   onTypeChangeRequest,
   onRequestClosePicker,
+  buttonCloseTimeoutRef,
   overlayRef,
   onAIPromptToSystem
 }) => (
@@ -375,6 +377,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           actColor={iconColor || labelTextColor}
           onTypeChangeRequest={onTypeChangeRequest}
           onRequestClosePicker={onRequestClosePicker}
+          buttonCloseTimeoutRef={buttonCloseTimeoutRef}
           outerRef={overlayRef}
           onAIPromptToSystem={onAIPromptToSystem}
         />,

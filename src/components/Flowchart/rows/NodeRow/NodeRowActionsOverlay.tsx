@@ -24,6 +24,7 @@ interface NodeRowActionsOverlayProps {
   actColor?: string; // iconColor della riga (grigio se no DDT/messaggio, colorato se ha DDT/messaggio)
   onTypeChangeRequest?: (anchor: DOMRect) => void;
   onRequestClosePicker?: () => void;
+  buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   outerRef?: React.RefObject<HTMLDivElement>;
   onAIPromptToSystem?: () => void;
 }
@@ -49,6 +50,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   actColor,
   onTypeChangeRequest,
   onRequestClosePicker,
+  buttonCloseTimeoutRef,
   outerRef,
   onAIPromptToSystem
 }) => {
@@ -88,21 +90,34 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       {ActIcon && (
         <SmartTooltip text="Change act type" tutorId="act_type_help" placement="bottom">
           <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              // Anchor to the icon itself (client coordinates for fixed positioning)
-              const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              onTypeChangeRequest && onTypeChangeRequest(anchor);
-            }}
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
             }}
             onMouseEnter={(e) => {
+              // Clear any pending close timeout when mouse enters button
+              if (buttonCloseTimeoutRef && buttonCloseTimeoutRef.current) {
+                clearTimeout(buttonCloseTimeoutRef.current);
+                buttonCloseTimeoutRef.current = null;
+              }
               const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
               onTypeChangeRequest && onTypeChangeRequest(anchor);
-              // Removed verbose log
+            }}
+            onMouseLeave={() => {
+              // Close picker when mouse leaves button
+              // The picker itself will cancel this timeout if mouse enters it
+              if (buttonCloseTimeoutRef) {
+                if (buttonCloseTimeoutRef.current) {
+                  clearTimeout(buttonCloseTimeoutRef.current);
+                }
+                buttonCloseTimeoutRef.current = setTimeout(() => {
+                  onRequestClosePicker && onRequestClosePicker();
+                }, 200);
+              } else {
+                setTimeout(() => {
+                  onRequestClosePicker && onRequestClosePicker();
+                }, 200);
+              }
             }}
             style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
             className="hover:opacity-100 hover:scale-110"

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check } from 'lucide-react';
+import { useFontContext } from '../../../../context/FontContext';
 
 // Keyboard navigable type picker toolbar
 const TYPE_OPTIONS = [
@@ -18,6 +19,7 @@ interface RowTypePickerToolbarProps {
     rootRef?: React.RefObject<HTMLDivElement>;
     currentType?: string;
     onRequestClose?: () => void;
+    buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
 }
 
 /**
@@ -31,15 +33,32 @@ export function RowTypePickerToolbar({
     onPick,
     rootRef,
     currentType,
-    onRequestClose
+    onRequestClose,
+    buttonCloseTimeoutRef
 }: RowTypePickerToolbarProps) {
+    // Get font from context with fallback
+    let combinedClass = 'font-intent-sans text-intent-base';
+
+    try {
+        const context = useFontContext();
+        combinedClass = context.combinedClass;
+    } catch {
+        // Not within FontProvider, use defaults
+    }
+
     const [focusIdx, setFocusIdx] = React.useState(0);
     const btnRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+    const isMouseInsideRef = React.useRef(false);
+    const closeTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
     React.useEffect(() => {
         setFocusIdx(0);
         setTimeout(() => btnRefs.current[0]?.focus(), 0);
-        return () => { };
+        return () => {
+            if (closeTimeoutRef.current) {
+                clearTimeout(closeTimeoutRef.current);
+            }
+        };
     }, []);
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -67,7 +86,37 @@ export function RowTypePickerToolbar({
         else if (key === 'Enter') {
             const opt = TYPE_OPTIONS[focusIdx];
             if (opt && opt.key !== currentType) onPick(opt.key);
+        } else if (key === 'Escape') {
+            onRequestClose && onRequestClose();
         }
+    };
+
+    const handleMouseEnter = () => {
+        isMouseInsideRef.current = true;
+        // Clear any pending close timeouts
+        if (closeTimeoutRef.current) {
+            clearTimeout(closeTimeoutRef.current);
+            closeTimeoutRef.current = null;
+        }
+        // Cancel button's close timeout when mouse enters picker
+        if (buttonCloseTimeoutRef && buttonCloseTimeoutRef.current) {
+            clearTimeout(buttonCloseTimeoutRef.current);
+            buttonCloseTimeoutRef.current = null;
+        }
+    };
+
+    const handleMouseLeave = () => {
+        isMouseInsideRef.current = false;
+        // Clear any existing timeout
+        if (closeTimeoutRef.current) {
+            clearTimeout(closeTimeoutRef.current);
+        }
+        // Delay closing to allow moving mouse back to button
+        closeTimeoutRef.current = setTimeout(() => {
+            if (!isMouseInsideRef.current) {
+                try { onRequestClose && onRequestClose(); } catch { }
+            }
+        }, 200);
     };
 
     return (
@@ -84,23 +133,20 @@ export function RowTypePickerToolbar({
                 maxWidth: 220,
                 borderRadius: 12,
                 backdropFilter: 'blur(3px) saturate(120%)',
-                WebkitBackdropFilter: 'blur(3px) saturate(120%)'
+                WebkitBackdropFilter: 'blur(3px) saturate(120%)',
             }}
+            className={combinedClass}
             role="menu"
             tabIndex={0}
             onKeyDown={onKeyDown}
             aria-label="Pick act type"
             ref={rootRef as any}
             onPointerDown={(e) => { e.stopPropagation(); }}
-            onPointerLeave={() => { setTimeout(() => { try { onRequestClose && onRequestClose(); } catch { } }, 100); }}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
         >
             <div
                 style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
-                onMouseEnter={() => { try { console.log('[Picker][enter]'); } catch { } }}
-                onMouseLeave={() => {
-                    try { console.log('[Picker][leave]'); } catch { }
-                    setTimeout(() => { try { onRequestClose && onRequestClose(); } catch { } }, 100);
-                }}
             >
                 {TYPE_OPTIONS.map((opt, i) => {
                     const isCurrent = currentType === opt.key;
@@ -121,8 +167,9 @@ export function RowTypePickerToolbar({
                                 background: isCurrent ? 'rgba(30,41,59,0.7)' : 'rgba(0,0,0,0.75)',
                                 color: isCurrent ? '#94a3b8' : '#e5e7eb',
                                 cursor: isCurrent ? 'default' : 'pointer',
-                                outline: i === focusIdx ? '1px solid rgba(234,179,8,0.45)' : 'none'
+                                outline: i === focusIdx ? '1px solid rgba(234,179,8,0.45)' : 'none',
                             }}
+                            className={combinedClass}
                             tabIndex={i === focusIdx ? 0 : -1}
                             aria-selected={i === focusIdx}
                             onMouseEnter={() => setFocusIdx(i)}

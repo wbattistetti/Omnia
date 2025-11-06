@@ -40,6 +40,7 @@ export function useRowState({ row, forceEditing = false }: UseRowStateProps) {
     const labelRef = useRef<HTMLSpanElement>(null);
     const overlayRef = useRef<HTMLDivElement>(null);
     const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const buttonCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Track global mouse position for stability buffer
     useEffect(() => {
@@ -48,6 +49,16 @@ export function useRowState({ row, forceEditing = false }: UseRowStateProps) {
         };
         window.addEventListener('mousemove', onMove, { passive: true });
         return () => window.removeEventListener('mousemove', onMove);
+    }, []);
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (buttonCloseTimeoutRef.current) {
+                clearTimeout(buttonCloseTimeoutRef.current);
+                buttonCloseTimeoutRef.current = null;
+            }
+        };
     }, []);
 
     // Hide action overlay while editing to avoid ghost bars
@@ -99,7 +110,8 @@ export function useRowState({ row, forceEditing = false }: UseRowStateProps) {
         nodeContainerRef,
         labelRef,
         overlayRef,
-        mousePosRef
+        mousePosRef,
+        buttonCloseTimeoutRef
     };
 }
 

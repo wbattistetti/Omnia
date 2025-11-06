@@ -17,6 +17,7 @@ import { SIDEBAR_TYPE_COLORS } from '../../../Sidebar/sidebarTheme';
 import { NodeRowLabel } from './NodeRowLabel';
 import { NodeRowIntellisense } from './NodeRowIntellisense';
 import { RowTypePickerToolbar } from './RowTypePickerToolbar';
+import { FontProvider } from '../../../../context/FontContext';
 import { useRowToolbar } from '../../hooks/useRowToolbar';
 import { useRowState } from './hooks/useRowState';
 import { useIntellisensePosition } from './hooks/useIntellisensePosition';
@@ -80,7 +81,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     showCreatePicker, setShowCreatePicker,
     showIcons, setShowIcons,
     iconPos, setIconPos,
-    typeToolbarRef, inputRef, nodeContainerRef, labelRef, overlayRef, mousePosRef
+    typeToolbarRef, inputRef, nodeContainerRef, labelRef, overlayRef, mousePosRef, buttonCloseTimeoutRef
   } = rowState;
 
   // Measure label width and font styles when not editing to prevent shrinking and maintain font consistency
@@ -1370,7 +1371,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             onIconsHoverChange={(v: boolean) => { v ? toolbarSM.overlay.onEnter() : toolbarSM.overlay.onLeave(); }}
             onLabelHoverChange={(v: boolean) => { v ? toolbarSM.row.onEnter() : toolbarSM.row.onLeave({ relatedTarget: null } as any); }}
             onTypeChangeRequest={(anchor) => openTypePickerFromIcon(anchor, currentTypeForPicker)}
-            onRequestClosePicker={() => setShowCreatePicker(false)}
+            onRequestClosePicker={() => {
+              if (buttonCloseTimeoutRef.current) {
+                clearTimeout(buttonCloseTimeoutRef.current);
+                buttonCloseTimeoutRef.current = null;
+              }
+              setShowCreatePicker(false);
+            }}
+            buttonCloseTimeoutRef={buttonCloseTimeoutRef}
             overlayRef={overlayRef}
           />
         )}
@@ -1392,14 +1400,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
       {toolbarSM.showPicker && pickerPosition && createPortal(
         <>
-          <RowTypePickerToolbar
-            left={pickerPosition.left}
-            top={pickerPosition.top}
-            onPick={(key) => handlePickType(key)}
-            rootRef={typeToolbarRef}
-            currentType={pickerCurrentType}
-            onRequestClose={() => setShowCreatePicker(false)}
-          />
+          <FontProvider>
+            <RowTypePickerToolbar
+              left={pickerPosition.left}
+              top={pickerPosition.top}
+              onPick={(key) => handlePickType(key)}
+              rootRef={typeToolbarRef}
+              currentType={pickerCurrentType}
+              onRequestClose={() => setShowCreatePicker(false)}
+              buttonCloseTimeoutRef={buttonCloseTimeoutRef}
+            />
+          </FontProvider>
         </>, document.body
       )}
     </>
