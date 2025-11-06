@@ -34,7 +34,14 @@ const THEMES: Record<string, { bg: string; fg: string; border: string; accent?: 
 
 export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButtons = [], rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
   const theme = THEMES[color] || THEMES.orange;
-  const { combinedClass } = useFontContext();
+  let combinedClass = '';
+  try {
+    const context = useFontContext();
+    combinedClass = context.combinedClass;
+  } catch {
+    // Not within FontProvider, use default font classes
+    combinedClass = 'font-intent-sans text-intent-base';
+  }
   return (
     <div
       className={`${combinedClass} ${className || ''}`}

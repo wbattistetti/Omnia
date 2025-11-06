@@ -25,7 +25,27 @@ const BotMessage: React.FC<BotMessageProps> = ({
   onCancel,
   onHover
 }) => {
-  const { combinedClass } = useFontContext();
+  const { combinedClass, fontType, fontSize } = useFontContext();
+
+  // Map fontSize to actual pixel values
+  const fontSizeMap: Record<string, string> = {
+    xs: '10px',
+    sm: '12px',
+    base: '14px',
+    md: '16px',
+    lg: '18px',
+  };
+
+  const fontFamilyMap: Record<string, string> = {
+    sans: 'Inter, system-ui, sans-serif',
+    serif: 'Georgia, serif',
+    mono: 'Monaco, Consolas, monospace',
+  };
+
+  const fontStyle = {
+    fontFamily: fontFamilyMap[fontType],
+    fontSize: fontSizeMap[fontSize],
+  };
   const isEditing = editingId === message.id;
 
   return (
@@ -86,10 +106,7 @@ const BotMessage: React.FC<BotMessageProps> = ({
                       onEdit(message.id, message.text);
                     }
                   }}
-                  style={{
-                    fontFamily: 'inherit',
-                    fontSize: 'inherit'
-                  }}
+                  style={fontStyle}
                 >
                   {message.text}
                 </div>
