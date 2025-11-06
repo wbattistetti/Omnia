@@ -575,9 +575,9 @@ export const AppContent: React.FC<AppContentProps> = ({
         <div className="flex flex-col h-screen">
           {/* Toolbar a tutta larghezza */}
           <Toolbar
-              onNewProject={() => alert('Nuovo progetto')}
-              onOpenProject={() => alert('Apri progetto')}
+              onHome={() => setAppState('landing')}
               isSaving={isCreatingProject}
+              currentProject={currentProject}
               onSave={async () => {
                 try {
                   // show spinner in toolbar while saving
@@ -677,7 +677,6 @@ export const AppContent: React.FC<AppContentProps> = ({
               }}
               onRun={() => setShowGlobalDebugger(s => !s)}
               onSettings={() => setShowBackendBuilder(true)}
-              projectName={currentProject?.name}
             />
 
           {/* Area principale: Library Label + Sidebar + Canvas */}
