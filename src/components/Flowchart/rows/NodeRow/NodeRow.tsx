@@ -556,6 +556,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       currentText,
       rowId: row.id,
       rowText: row.text,
+      isEditing,
       hasOnCreateAgentAct: !!onCreateAgentAct,
       timestamp: Date.now()
     });
@@ -570,12 +571,55 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       labelLength: label.length,
       currentTextBeforeTrim: currentText,
       isEmpty: !label,
+      isEditing,
       timestamp: Date.now()
     });
 
     if (!label) {
       console.log('🎯 [HANDLE_PICK_TYPE][EMPTY_LABEL] - Exiting early');
       setIsEditing(false);
+      return;
+    }
+
+    // ✅ CAMBIO TIPO: Se non siamo in editing, stiamo cambiando il tipo di una riga esistente
+    // In questo caso aggiorniamo solo il tipo senza creare un nuovo agent act
+    if (!isEditing && onUpdateWithCategory) {
+      console.log('🎯 [CHANGE_TYPE][EXISTING_ROW]', {
+        rowId: row.id,
+        oldType: row.categoryType,
+        newType: key,
+        timestamp: Date.now()
+      });
+
+      const finalType = key;
+      const finalMode = typeToMode(key as any);
+
+      const updateMeta = {
+        id: row.id,
+        type: finalType,
+        mode: finalMode,
+        actId: (row as any).actId,
+        baseActId: (row as any).baseActId,
+        factoryId: (row as any).factoryId,
+        instanceId: (row as any).instanceId
+      };
+
+      console.log('🎯 [CHANGE_TYPE][CALLING_UPDATE]', {
+        rowId: row.id,
+        label: row.text,
+        categoryType: 'agentActs',
+        meta: updateMeta
+      });
+
+      (onUpdateWithCategory as any)(row, row.text, 'agentActs', updateMeta);
+
+      console.log('🎯 [CHANGE_TYPE][COMPLETE]', {
+        rowId: row.id,
+        timestamp: Date.now()
+      });
+
+      // Chiudi il picker e aggiorna lo stato del toolbar
+      toolbarSM.picker.close();
       return;
     }
 
@@ -964,6 +1008,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     setShowIcons(true);
     setShowCreatePicker(true);
     setPickerCurrentType(currentType);
+    // Update toolbar state machine to show picker
+    toolbarSM.picker.open();
     // close on outside click (not when moving between toolbar and picker)
     const onDocClick = (ev: MouseEvent) => {
       const target = ev.target as Node | null;

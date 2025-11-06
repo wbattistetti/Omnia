@@ -95,6 +95,10 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
               const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
               onTypeChangeRequest && onTypeChangeRequest(anchor);
             }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onMouseEnter={(e) => {
               const anchor = (e.currentTarget as HTMLElement).getBoundingClientRect();
               onTypeChangeRequest && onTypeChangeRequest(anchor);

@@ -159,7 +159,7 @@ export function Toolbar({
           style={{ position: 'relative' }}
         >
           {isSaving && <Loader2 className="animate-spin w-5 h-5" />}
-          <span>Salva Progetti</span>
+          <span>Salva Progetto</span>
           {(!isSaving && saveSuccess) && <CheckCircle className="w-5 h-5 text-green-400" />}
           {/* Tooltip errore */}
           {saveError && (
