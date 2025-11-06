@@ -1,15 +1,17 @@
 import React from 'react';
-import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check, Bot } from 'lucide-react';
 import { useFontContext } from '../../../../context/FontContext';
 
 // Keyboard navigable type picker toolbar
+// ORDINATI ALFABETICAMENTE
 const TYPE_OPTIONS = [
-    { key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
+    { key: 'AIAgent', label: 'AI Agent', Icon: Bot, color: '#a855f7' },
+    { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' },
     { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' },
+    { key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
     { key: 'Negotiation', label: 'Negotiation', Icon: CheckCircle2, color: '#6366f1' },
     { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
-    { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' },
-    { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' }
+    { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' }
 ];
 
 interface RowTypePickerToolbarProps {
@@ -25,7 +27,7 @@ interface RowTypePickerToolbarProps {
 /**
  * Type picker toolbar for selecting agent act type
  * Keyboard navigable with arrow keys, Enter to confirm, Escape to close
- * Supports keyboard shortcuts: m=Message, d=Data, n=Negotiation, p=Problem, s=Summarizer, b=BackendCall
+ * Supports keyboard shortcuts: a=AI Agent, m=Message, d=Data, n=Negotiation, p=Problem, s=Summarizer, b=BackendCall
  */
 export function RowTypePickerToolbar({
     left,
@@ -70,6 +72,7 @@ export function RowTypePickerToolbar({
         // Keyboard shortcuts
         if (lower.length === 1 && /[a-z]/.test(lower)) {
             const map: Record<string, string> = {
+                a: 'AIAgent',
                 m: 'Message',
                 d: 'DataRequest',
                 n: 'Negotiation',

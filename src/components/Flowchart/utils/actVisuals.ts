@@ -1,4 +1,4 @@
-import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot } from 'lucide-react';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
 import { classifyActMode } from '../../../nlp/actInteractivity';
 import type { ActType } from '../../types/project';
@@ -106,12 +106,18 @@ export function getAgentActVisualsByType(type: ActType, hasDDT: boolean) {
   const amber = '#f59e0b';
   const cyan = '#06b6d4';
   const gray = '#94a3b8';
+  const purple = '#a855f7'; // Viola per AI Agent
 
   let Icon: any = Megaphone;
   let labelColor = green; // Colore della label: sempre del tipo (anche senza DDT)
   let iconColor = gray; // Colore dell'icona: grigio se no DDT, colore del tipo se ha DDT
 
   switch (type) {
+    case 'AIAgent':
+      Icon = Bot;
+      labelColor = purple; // Label sempre viola
+      iconColor = hasDDT ? purple : gray; // Icona: viola se ha DDT, grigio se no
+      break;
     case 'DataRequest':
       Icon = Ear;
       labelColor = blue; // Label sempre blu

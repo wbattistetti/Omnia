@@ -2,6 +2,7 @@ export type EntityType = 'agentActs' | 'userActs' | 'backendActions' | 'conditio
 
 // New explicit Agent Act types (authoritative)
 export type ActType =
+  | 'AIAgent'
   | 'Message'
   | 'DataRequest'
   | 'ProblemClassification'

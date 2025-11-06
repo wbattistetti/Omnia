@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, Edit3, Settings, Wrench, Brain } from 'lucide-react';
+import { Trash2, Edit3, Settings, Wrench } from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
 
 interface NodeRowActionsOverlayProps {
@@ -26,7 +26,6 @@ interface NodeRowActionsOverlayProps {
   onRequestClosePicker?: () => void;
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   outerRef?: React.RefObject<HTMLDivElement>;
-  onAIPromptToSystem?: () => void;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -51,8 +50,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   onTypeChangeRequest,
   onRequestClosePicker,
   buttonCloseTimeoutRef,
-  outerRef,
-  onAIPromptToSystem
+  outerRef
 }) => {
   if (!showIcons || !iconPos) return null;
   // Calculate icon size based on font size (same as primary icons) - 119% of font size
@@ -180,29 +178,6 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           }}
         >
           <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
-        </button>
-      </SmartTooltip>
-      {/* AI Prompt to System (Brain) */}
-      <SmartTooltip
-        text="Handle by AI at runtime instead of rule-based logic"
-        tutorId="ai_prompt_help"
-        placement="bottom"
-      >
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onAIPromptToSystem && onAIPromptToSystem();
-          }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110 nodrag"
-          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
-          onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
-        >
-          <Brain style={{ width: size, height: size }} />
         </button>
       </SmartTooltip>
       {/* Cestino (delete) */}

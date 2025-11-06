@@ -264,7 +264,6 @@ interface NodeRowLabelProps {
   onRequestClosePicker?: () => void; // NEW: ask parent to close type picker
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   overlayRef?: React.RefObject<HTMLDivElement>;
-  onAIPromptToSystem?: () => void; // NEW: handle AI prompt to system action
 }
 
 export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
@@ -295,8 +294,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   onTypeChangeRequest,
   onRequestClosePicker,
   buttonCloseTimeoutRef,
-  overlayRef,
-  onAIPromptToSystem
+  overlayRef
 }) => (
   <>
     {/* Checkbox: show only when label/text is present. Default is a black tick; unchecked shows grey box. */}
@@ -379,7 +377,6 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           onRequestClosePicker={onRequestClosePicker}
           buttonCloseTimeoutRef={buttonCloseTimeoutRef}
           outerRef={overlayRef}
-          onAIPromptToSystem={onAIPromptToSystem}
         />,
         document.body
       )}
