@@ -29,7 +29,11 @@ const entityTypes: EntityType[] = [
   'tasks'
 ];
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  onClose?: () => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const { openAccordion, setOpenAccordion } = useSidebarState();
   const [forceTick, setForceTick] = useState(0);
   const { data } = useProjectData();
@@ -354,7 +358,7 @@ const Sidebar: React.FC = () => {
 
   return (
     <SidebarContainer>
-      <SidebarHeader />
+      <SidebarHeader onClose={onClose} />
       {/* Search bar */}
       <div className="px-4 py-2 border-b" style={{ background: 'var(--sidebar-content-bg)', borderBottom: '1px solid var(--sidebar-border)' }}>
         <input

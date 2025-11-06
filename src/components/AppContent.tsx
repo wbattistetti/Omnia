@@ -5,6 +5,7 @@ import { Toolbar } from './Toolbar';
 import { useFontClasses } from '../hooks/useFontClasses';
 import { NewProjectModal } from './NewProjectModal';
 import Sidebar from './Sidebar/Sidebar';
+import LibraryLabel from './Sidebar/LibraryLabel';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
@@ -563,14 +564,11 @@ export const AppContent: React.FC<AppContentProps> = ({
           />
         </>
       )}
-      {/* Main App: Sidebar + FlowEditor */}
+      {/* Main App: Toolbar a tutta larghezza + Sidebar collassabile + FlowEditor */}
       {appState === 'mainApp' && (
-        <div className="min-h-screen flex">
-          <SidebarThemeProvider>
-            <Sidebar />
-          </SidebarThemeProvider>
-          <div className="flex-1 flex flex-col">
-            <Toolbar
+        <div className="flex flex-col h-screen">
+          {/* Toolbar a tutta larghezza */}
+          <Toolbar
               onNewProject={() => alert('Nuovo progetto')}
               onOpenProject={() => alert('Apri progetto')}
               isSaving={isCreatingProject}
@@ -671,7 +669,33 @@ export const AppContent: React.FC<AppContentProps> = ({
               onSettings={() => setShowBackendBuilder(true)}
               projectName={currentProject?.name}
             />
-            <div id="flow-canvas-host" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? '1fr 380px' : '1fr', position: 'relative' }}>
+
+          {/* Area principale: Library Label + Sidebar + Canvas */}
+          <div className="flex flex-1 relative overflow-hidden">
+            {/* Library Label quando sidebar chiusa */}
+            {isSidebarCollapsed && (
+              <LibraryLabel onOpen={() => setIsSidebarCollapsed(false)} />
+            )}
+
+            {/* Sidebar con animazione slide */}
+            <div
+              className={`
+                transition-transform duration-300 ease-in-out
+                ${isSidebarCollapsed
+                  ? 'transform -translate-x-full absolute left-0 h-full pointer-events-none'
+                  : 'transform translate-x-0 relative pointer-events-auto'
+                }
+              `}
+              style={{ zIndex: 40 }}
+            >
+              <SidebarThemeProvider>
+                <Sidebar onClose={() => setIsSidebarCollapsed(true)} />
+              </SidebarThemeProvider>
+            </div>
+
+            {/* Canvas */}
+            <div className="flex-1 flex flex-col min-w-0">
+              <div id="flow-canvas-host" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? '1fr 380px' : '1fr', position: 'relative' }}>
               {showBackendBuilder ? (
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
@@ -757,9 +781,9 @@ export const AppContent: React.FC<AppContentProps> = ({
                   />
                 </div>
               )}
-            </div>
-            {/* Act Editor - parte del layout normale, riduce lo spazio del canvas sopra */}
-            <ActEditorPanel />
+              </div>
+              {/* Act Editor - parte del layout normale, riduce lo spazio del canvas sopra */}
+              <ActEditorPanel />
 
             {nonInteractiveEditor && (
               <ResizableNonInteractiveEditor
@@ -802,7 +826,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                 }}
                 accentColor={(nonInteractiveEditor as any).accentColor}
               />
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wrench } from 'lucide-react';
+import { Wrench, X } from 'lucide-react';
 import { useThemeManager } from '../../theme/ThemeManager';
 import { useThemeElement } from '../../theme/utils/elementRegistry';
 
@@ -7,7 +7,11 @@ import { useThemeElement } from '../../theme/utils/elementRegistry';
 // SIDEBAR HEADER - ENTERPRISE GRADE
 // ============================================================================
 
-export default function SidebarHeader() {
+interface SidebarHeaderProps {
+  onClose?: () => void;
+}
+
+export default function SidebarHeader({ onClose }: SidebarHeaderProps) {
   const { isEditMode, createClickHandler } = useThemeManager();
 
   // Auto-registrazione del componente
@@ -60,17 +64,29 @@ export default function SidebarHeader() {
             </p>
           </div>
         </div>
-        <button
-          title="Backend Builder"
-          onClick={() => {
-            try {
-              document.dispatchEvent(new CustomEvent('backendBuilder:open'));
-            } catch {}
-          }}
-          className="p-2 text-gray-300 hover:text-white"
-        >
-          <Wrench className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            title="Backend Builder"
+            onClick={() => {
+              try {
+                document.dispatchEvent(new CustomEvent('backendBuilder:open'));
+              } catch {}
+            }}
+            className="p-2 text-gray-300 hover:text-white transition-colors"
+          >
+            <Wrench className="w-5 h-5" />
+          </button>
+          {onClose && (
+            <button
+              title="Chiudi Library"
+              onClick={onClose}
+              className="p-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
+              aria-label="Chiudi Library"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

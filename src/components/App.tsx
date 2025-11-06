@@ -23,7 +23,7 @@ function AppInner() {
   const [appState, setAppState] = useState<AppState>('landing');
   const [currentProject, setCurrentProject] = useState<ProjectData | null>(null);
 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Inizia chiusa di default
   const [testPanelOpen, setTestPanelOpen] = useState(false);
   const [testNodeId, setTestNodeId] = useState<string | null>(null);
   const [testNodeRows, setTestNodeRows] = useState<any[]>([]); // nuovo stato
