@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Folder, FileText, Zap, CircleSlash, ChevronDown } from 'lucide-react';
+import { X, Folder, FileText, Zap, CircleSlash } from 'lucide-react';
 import { ProjectData, ProjectInfo } from '../types/project';
+import { OmniaSelect } from './common/OmniaSelect';
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -44,18 +45,16 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     template: 'utility_gas',
     language: 'pt',
     clientName: '',
-    industry: 'undefined'
+    industry: 'undefined',
+    ownerCompany: '',
+    ownerClient: ''
   });
   const [errors, setErrors] = useState<Partial<ProjectInfo>>({});
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
   const [selectedProjectIdx, setSelectedProjectIdx] = useState<number | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const [isIndustryOpen, setIsIndustryOpen] = useState(false);
+  const [availableIndustries, setAvailableIndustries] = useState<string[]>([]);
   const [availableClients, setAvailableClients] = useState<string[]>([]);
-  const [isClientOpen, setIsClientOpen] = useState(false);
-  const [clientInputValue, setClientInputValue] = useState('');
-  const [selectedClientIndex, setSelectedClientIndex] = useState<number>(-1);
-  const clientDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -73,27 +72,51 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
           }
         })
         .catch(() => setAvailableClients([]));
+
+      // Carica lista industry: unifica da catalog e factory
+      Promise.all([
+        fetch('/api/projects/catalog/industries').then(res => res.json()).catch(() => []),
+        fetch('/api/factory/industries').then(res => res.json()).catch(() => [])
+      ]).then(([catalogIndustries, factoryIndustries]) => {
+        const industriesSet = new Set<string>();
+        // Aggiungi da catalog (sono stringhe)
+        if (Array.isArray(catalogIndustries)) {
+          catalogIndustries.forEach((ind: string) => {
+            if (ind && typeof ind === 'string' && ind.trim()) {
+              industriesSet.add(ind.trim());
+            }
+          });
+        }
+        // Aggiungi da factory (sono oggetti con name o industryId)
+        if (Array.isArray(factoryIndustries)) {
+          factoryIndustries.forEach((ind: any) => {
+            const name = ind?.name || ind?.industryId || '';
+            if (name && typeof name === 'string' && name.trim()) {
+              industriesSet.add(name.trim());
+            }
+          });
+        }
+        // Aggiungi le industry hardcoded (incluso 'undefined' se necessario)
+        industries.forEach(ind => {
+          if (ind.id) {
+            industriesSet.add(ind.id);
+          }
+        });
+        const uniqueIndustries = Array.from(industriesSet).sort();
+        setAvailableIndustries(uniqueIndustries);
+      }).catch(() => {
+        // Fallback: usa solo le industry hardcoded (incluso 'undefined')
+        const hardcoded = industries.map(ind => ind.id);
+        setAvailableIndustries(hardcoded);
+      });
     }
   }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && nameInputRef.current) {
       nameInputRef.current.focus();
-      // Reset client input quando si apre il modal
-      setClientInputValue('');
-    } else if (!isOpen) {
-      // Reset quando si chiude
-      setClientInputValue('');
-      setIsClientOpen(false);
     }
   }, [isOpen]);
-
-  // Sincronizza clientInputValue con formData.clientName
-  useEffect(() => {
-    if (formData.clientName && clientInputValue !== formData.clientName) {
-      setClientInputValue(formData.clientName);
-    }
-  }, [formData.clientName]);
 
   const handleLoadSelectedProject = () => {
     if (selectedProjectIdx === null || !recentProjects[selectedProjectIdx]) return;
@@ -109,10 +132,32 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     if (!formData.name.trim()) {
       newErrors.name = 'Il nome del progetto è obbligatorio';
     }
+    if (!formData.ownerCompany?.trim()) {
+      newErrors.ownerCompany = 'Owner azienda è obbligatorio';
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
+    }
+
+    // Se l'industry è nuova (non esiste nella lista), salvala nel factory
+    if (formData.industry && formData.industry.trim() && formData.industry !== 'undefined') {
+      const industryName = formData.industry.trim();
+      if (!availableIndustries.includes(industryName)) {
+        try {
+          await fetch('/api/factory/industries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: industryName })
+          });
+          // Aggiungi alla lista locale per evitare duplicati
+          setAvailableIndustries(prev => [...prev, industryName].sort());
+        } catch (err) {
+          // Ignora errori (es. industry già esistente) e procedi comunque
+          console.warn('Errore nel salvare industry nel factory:', err);
+        }
+      }
     }
 
     // Attendi il risultato della creazione
@@ -132,7 +177,11 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
         name: '',
         description: '',
         template: 'utility_gas',
-        language: 'en'
+        language: 'en',
+        clientName: '',
+        industry: 'undefined',
+        ownerCompany: '',
+        ownerClient: ''
       });
       setErrors({});
     }
@@ -148,96 +197,37 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     }
   };
 
-  const handleSelectIndustry = (id: string) => {
-    setIsIndustryOpen(false);
-    handleInputChange('industry', id);
-    // keep template aligned when a known template industry is picked
-    if (id && id !== 'undefined') {
-      handleInputChange('template', id);
+  const handleIndustryChange = (value: string | null) => {
+    if (value) {
+      handleInputChange('industry', value);
+      // keep template aligned when a known template industry is picked
+      if (value !== 'undefined') {
+        handleInputChange('template', value);
+      }
+    } else {
+      handleInputChange('industry', 'undefined');
     }
   };
 
-  const handleClientSelect = (clientName: string) => {
-    setIsClientOpen(false);
-    setClientInputValue('');
-    handleInputChange('clientName', clientName);
-  };
-
-  const handleClientInputChange = (value: string) => {
-    setClientInputValue(value);
-    handleInputChange('clientName', value);
-  };
-
-  // Filtra clienti per autocomplete (usa il valore corrente dell'input)
-  const currentClientValue = formData.clientName || clientInputValue || '';
-  const searchTerm = currentClientValue.toLowerCase();
-  const filteredClients = availableClients.filter(client =>
-    client.toLowerCase().includes(searchTerm)
-  );
-  const canCreateNew = currentClientValue && !availableClients.includes(currentClientValue);
-
-  // Reset indice selezionato quando cambia il filtro
-  useEffect(() => {
-    if (isClientOpen) {
-      setSelectedClientIndex(-1);
-    }
-  }, [searchTerm, isClientOpen]);
-
-  // Scroll automatico quando si naviga con le frecce
-  useEffect(() => {
-    if (selectedClientIndex >= 0 && clientDropdownRef.current) {
-      const items = clientDropdownRef.current.querySelectorAll('[data-client-index]');
-      const selectedItem = items[selectedClientIndex] as HTMLElement;
-      if (selectedItem) {
-        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  const handleIndustryCreate = async (inputValue: string) => {
+    // Salva la nuova industry nel factory
+    if (inputValue && inputValue.trim() && inputValue !== 'undefined') {
+      try {
+        await fetch('/api/factory/industries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: inputValue.trim() })
+        });
+        // Aggiungi alla lista locale
+        setAvailableIndustries(prev => [...prev, inputValue.trim()].sort());
+      } catch (err) {
+        console.warn('Errore nel salvare industry nel factory:', err);
       }
     }
-  }, [selectedClientIndex]);
+  };
 
-  // Gestione navigazione da tastiera
-  const handleClientKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!isClientOpen) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        setIsClientOpen(true);
-        setSelectedClientIndex(0);
-        e.preventDefault();
-      }
-      return;
-    }
-
-    const items = currentClientValue ? filteredClients : availableClients;
-    const maxIndex = items.length - 1;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSelectedClientIndex(prev => {
-          const next = prev < maxIndex ? prev + 1 : 0;
-          return next;
-        });
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSelectedClientIndex(prev => {
-          const next = prev > 0 ? prev - 1 : maxIndex;
-          return next;
-        });
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedClientIndex >= 0 && selectedClientIndex < items.length) {
-          handleClientSelect(items[selectedClientIndex]);
-        } else if (currentClientValue && canCreateNew) {
-          // Se non c'è selezione ma c'è un valore nuovo, lo accetta
-          handleClientSelect(currentClientValue);
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        setIsClientOpen(false);
-        setSelectedClientIndex(-1);
-        break;
-    }
+  const handleClientChange = (value: string | null) => {
+    handleInputChange('clientName', value || '');
   };
 
   if (!isOpen) return null;
@@ -268,119 +258,54 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Project Name */}
-          <div className="relative">
-            <label className="block text-base font-medium text-slate-200 mb-2">
-              Nome Progetto *
-            </label>
-            <input
-              ref={nameInputRef}
-              type="text"
-              value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
-              className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
-                errors.name || duplicateNameError ? 'border-red-500' : 'border-slate-600'
-              }`}
-              placeholder="Inserisci il nome del progetto"
-              disabled={isLoading}
-            />
-            {/* Messaggio errore duplicato sotto la textbox */}
-            {duplicateNameError && formData.name.trim() && (
-              <p className="mt-1 text-sm text-red-400">{duplicateNameError}</p>
-            )}
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-400">{errors.name}</p>
-            )}
-          </div>
-
-          {/* Client Name - Combo box creatable */}
-          <div className="relative">
-            <label className="block text-base font-medium text-slate-200 mb-2">
-              Cliente *
-            </label>
+          {/* Riga 1: Nome Progetto + Cliente */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Project Name */}
             <div className="relative">
+              <label className="block text-base font-medium text-slate-200 mb-2">
+                Nome Progetto *
+              </label>
               <input
+                ref={nameInputRef}
                 type="text"
-                value={formData.clientName || ''}
-                onChange={(e) => {
-                  handleClientInputChange(e.target.value);
-                  setIsClientOpen(true);
-                }}
-                onKeyDown={handleClientKeyDown}
-                onFocus={() => setIsClientOpen(true)}
-                onBlur={() => {
-                  // Delay per permettere il click su un item della lista
-                  setTimeout(() => {
-                    setIsClientOpen(false);
-                    setSelectedClientIndex(-1);
-                  }, 200);
-                }}
-                className={`w-full px-4 py-3 pr-10 bg-slate-700 border rounded-lg placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
-                  errors.clientName ? 'border-red-500' : 'border-slate-600'
-                } ${
-                  canCreateNew && currentClientValue ? 'text-blue-400' : 'text-white'
+                value={formData.name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
+                  errors.name || duplicateNameError ? 'border-red-500' : 'border-slate-600'
                 }`}
-                placeholder="Nome del cliente (es. Indesit)"
+                placeholder="Inserisci il nome del progetto"
                 disabled={isLoading}
               />
-              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
-              {isClientOpen && (
-                <div
-                  ref={clientDropdownRef}
-                  className="absolute z-50 mt-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
-                >
-                  {currentClientValue ? (
-                    // Se c'è un valore, mostra solo clienti filtrati
-                    filteredClients.length > 0 && filteredClients.map((client, index) => (
-                      <button
-                        key={client}
-                        data-client-index={index}
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault(); // Prevenire onBlur
-                          handleClientSelect(client);
-                        }}
-                        onMouseEnter={() => setSelectedClientIndex(index)}
-                        className={`w-full text-left px-4 py-2 text-white ${
-                          selectedClientIndex === index
-                            ? 'bg-slate-600'
-                            : 'hover:bg-slate-700'
-                        }`}
-                      >
-                        {client}
-                      </button>
-                    ))
-                  ) : (
-                    // Se il campo è vuoto, mostra tutti i clienti disponibili
-                    availableClients.length > 0 && availableClients.map((client, index) => (
-                      <button
-                        key={client}
-                        data-client-index={index}
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          handleClientSelect(client);
-                        }}
-                        onMouseEnter={() => setSelectedClientIndex(index)}
-                        className={`w-full text-left px-4 py-2 text-white ${
-                          selectedClientIndex === index
-                            ? 'bg-slate-600'
-                            : 'hover:bg-slate-700'
-                        }`}
-                      >
-                        {client}
-                      </button>
-                    ))
-                  )}
-                </div>
+              {/* Messaggio errore duplicato sotto la textbox */}
+              {duplicateNameError && formData.name.trim() && (
+                <p className="mt-1 text-sm text-red-400">{duplicateNameError}</p>
+              )}
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-400">{errors.name}</p>
               )}
             </div>
-            {errors.clientName && (
-              <p className="mt-1 text-sm text-red-400">{String(errors.clientName)}</p>
-            )}
+
+            {/* Client Name - Combo box creatable */}
+            <div className="relative">
+              <label className="block text-base font-medium text-slate-200 mb-2">
+                Cliente *
+              </label>
+              <OmniaSelect
+                variant="dark"
+                options={availableClients}
+                value={formData.clientName || null}
+                onChange={handleClientChange}
+                placeholder="Nome del cliente (es. Indesit)"
+                isDisabled={isLoading}
+                isInvalid={!!errors.clientName}
+              />
+              {errors.clientName && (
+                <p className="mt-1 text-sm text-red-400">{String(errors.clientName)}</p>
+              )}
+            </div>
           </div>
 
-          {/* Description */}
+          {/* Riga 2: Descrizione */}
           <div>
             <label className="block text-sm font-medium text-slate-200 mb-2">
               Descrizione
@@ -400,73 +325,89 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
             )}
           </div>
 
-          {/* Industry (combo con icone) */}
-          <div>
-            <label className="block text-sm font-medium text-slate-200 mb-3">
-              Industry
-            </label>
+          {/* Riga 3: Industry + Lingua */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Industry - Combo box creatable */}
             <div className="relative">
-              {(() => {
-                const sel = industries.find(i => i.id === (formData.industry || 'undefined')) || industries[0];
-                const SelectedIcon = sel.Icon;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setIsIndustryOpen(o => !o)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/60 border border-slate-600 rounded-lg text-white hover:border-slate-500 transition-colors"
-                    disabled={isLoading}
-                  >
-                    <span className="flex items-center gap-3">
-                      <SelectedIcon className={`w-5 h-5 ${sel.color}`} />
-                      <span className="text-white font-medium">{sel.name}</span>
-                      <span className="text-slate-400 text-sm">{sel.description}</span>
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
-                  </button>
-                );
-              })()}
-              {isIndustryOpen && (
-                <div className="absolute z-50 mt-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-lg overflow-hidden">
-                  {industries.map(opt => {
-                    const OptIcon = opt.Icon;
-                    const active = (formData.industry || 'undefined') === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => handleSelectIndustry(opt.id)}
-                        className={`w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-3 ${active ? 'bg-slate-700' : ''}`}
-                      >
-                        <OptIcon className={`w-5 h-5 ${opt.color}`} />
-                        <div>
-                          <div className="text-white font-medium">{opt.name}</div>
-                          <div className="text-slate-400 text-xs">{opt.description}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">
+                Industry
+              </label>
+              <OmniaSelect
+                variant="dark"
+                options={availableIndustries}
+                value={formData.industry || null}
+                onChange={handleIndustryChange}
+                onCreateOption={handleIndustryCreate}
+                placeholder="Nome industry (es. utility_gas)"
+                isDisabled={isLoading}
+                isInvalid={!!errors.industry}
+              />
+              {errors.industry && (
+                <p className="mt-1 text-sm text-red-400">{String(errors.industry)}</p>
               )}
+            </div>
+
+            {/* Language Selection */}
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">
+                Lingua
+              </label>
+              <select
+                value={formData.language}
+                onChange={(e) => handleInputChange('language', e.target.value)}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
+                disabled={isLoading}
+              >
+                {languages.map((lang) => (
+                  <option key={lang.id} value={lang.id}>
+                    {lang.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Language Selection */}
-          <div>
-            <label className="block text-sm font-medium text-slate-200 mb-2">
-              Lingua
-            </label>
-            <select
-              value={formData.language}
-              onChange={(e) => handleInputChange('language', e.target.value)}
-              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
-              disabled={isLoading}
-            >
-              {languages.map((lang) => (
-                <option key={lang.id} value={lang.id}>
-                  {lang.name}
-                </option>
-              ))}
-            </select>
+          {/* Riga 4: Owner Azienda + Owner Cliente */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Owner Company */}
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">
+                Owner (Azienda) *
+              </label>
+              <input
+                type="text"
+                value={formData.ownerCompany || ''}
+                onChange={(e) => handleInputChange('ownerCompany', e.target.value)}
+                className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
+                  errors.ownerCompany ? 'border-red-500' : 'border-slate-600'
+                }`}
+                placeholder="Owner del progetto (chi lo costruisce)"
+                disabled={isLoading}
+              />
+              {errors.ownerCompany && (
+                <p className="mt-1 text-sm text-red-400">{String(errors.ownerCompany)}</p>
+              )}
+            </div>
+
+            {/* Owner Client */}
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">
+                Owner (Cliente)
+              </label>
+              <input
+                type="text"
+                value={formData.ownerClient || ''}
+                onChange={(e) => handleInputChange('ownerClient', e.target.value)}
+                className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
+                  errors.ownerClient ? 'border-red-500' : 'border-slate-600'
+                }`}
+                placeholder="Owner del progetto (chi lo commissiona)"
+                disabled={isLoading}
+              />
+              {errors.ownerClient && (
+                <p className="mt-1 text-sm text-red-400">{String(errors.ownerClient)}</p>
+              )}
+            </div>
           </div>
 
           {/* Actions */}

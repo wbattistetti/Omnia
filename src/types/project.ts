@@ -46,6 +46,9 @@ export type ProjectData = {
   id?: string;
   name: string;
   industry: string;
+  clientName?: string;
+  ownerCompany?: string; // Owner del progetto lato azienda (chi lo costruisce)
+  ownerClient?: string; // Owner del progetto lato cliente (chi lo commissiona)
   agentActs?: { id?: string; name?: string; items: AgentActItem[] }[];
   userActs?: any[];
   backendActions?: any[];
@@ -92,6 +95,8 @@ export interface ProjectInfo {
   language: string;
   clientName?: string;
   industry?: string;
+  ownerCompany?: string; // Owner del progetto lato azienda (chi lo costruisce) - obbligatorio
+  ownerClient?: string; // Owner del progetto lato cliente (chi lo commissiona) - opzionale
 }
 
 /**

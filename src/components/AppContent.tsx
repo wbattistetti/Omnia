@@ -353,6 +353,8 @@ export const AppContent: React.FC<AppContentProps> = ({
           projectName: projectInfo.name || 'Project',
           industry: projectInfo.industry || 'utility_gas',
           language: projectInfo.language || 'pt',
+          ownerCompany: projectInfo.ownerCompany || null,
+          ownerClient: projectInfo.ownerClient || null,
           tenantId: 'tenant_default'
         })
       });
@@ -376,6 +378,8 @@ export const AppContent: React.FC<AppContentProps> = ({
         ...projectInfo,
         id: projectId,
         industry: projectInfo.industry || 'utility_gas',
+        ownerCompany: projectInfo.ownerCompany || null,
+        ownerClient: projectInfo.ownerClient || null,
         agentActs: data.agentActs,
         userActs: data.userActs,
         backendActions: data.backendActions,
@@ -463,6 +467,8 @@ export const AppContent: React.FC<AppContentProps> = ({
         clientName: meta.clientName || null,
         template: meta.industry || 'utility_gas',
         industry: meta.industry || 'utility_gas',
+        ownerCompany: meta.ownerCompany || null,
+        ownerClient: meta.ownerClient || null,
         agentActs: data.agentActs,
         userActs: data.userActs,
         backendActions: data.backendActions,
@@ -582,12 +588,16 @@ export const AppContent: React.FC<AppContentProps> = ({
                     console.warn('[Save] No project ID available');
                     return;
                   }
-                  // Aggiorna updatedAt nel catalog
+                  // Aggiorna updatedAt e owner nel catalog
                   try {
                     await fetch('/api/projects/catalog/update-timestamp', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ projectId: pid })
+                      body: JSON.stringify({
+                        projectId: pid,
+                        ownerCompany: currentProject?.ownerCompany || null,
+                        ownerClient: currentProject?.ownerClient || null
+                      })
                     });
                   } catch (e) {
                     console.warn('[Save] Failed to update catalog timestamp', e);

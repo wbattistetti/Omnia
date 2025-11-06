@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HelpCircle, ChevronDown, XCircle, Trash2, Building2, Folder, Loader2, Search, RotateCcw } from 'lucide-react';
+import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown } from 'lucide-react';
 import { useFontClasses } from '../hooks/useFontClasses';
+import { OmniaSelect } from './common/OmniaSelect';
 
 interface LandingPageProps {
   onNewProject: () => void;
@@ -36,23 +37,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   // Stati per filtri combo box
   const [availableClients, setAvailableClients] = useState<string[]>([]);
   const [availableProjectNames, setAvailableProjectNames] = useState<string[]>([]);
-  const [availableOwners, setAvailableOwners] = useState<string[]>([]);
+  const [availableIndustries, setAvailableIndustries] = useState<string[]>([]);
+  const [availableOwnerCompanies, setAvailableOwnerCompanies] = useState<string[]>([]);
+  const [availableOwnerClients, setAvailableOwnerClients] = useState<string[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [selectedProjectName, setSelectedProjectName] = useState<string>('');
+  const [selectedIndustry, setSelectedIndustry] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedOwner, setSelectedOwner] = useState<string>('');
-  const [isClientOpen, setIsClientOpen] = useState(false);
-  const [isProjectOpen, setIsProjectOpen] = useState(false);
-  const [isDateOpen, setIsDateOpen] = useState(false);
-  const [isOwnerOpen, setIsOwnerOpen] = useState(false);
-  const [selectedClientIndex, setSelectedClientIndex] = useState<number>(-1);
-  const [selectedProjectIndex, setSelectedProjectIndex] = useState<number>(-1);
-  const [selectedDateIndex, setSelectedDateIndex] = useState<number>(-1);
-  const [selectedOwnerIndex, setSelectedOwnerIndex] = useState<number>(-1);
-  const clientDropdownRef = useRef<HTMLDivElement>(null);
-  const projectDropdownRef = useRef<HTMLDivElement>(null);
-  const dateDropdownRef = useRef<HTMLDivElement>(null);
-  const ownerDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedOwnerCompany, setSelectedOwnerCompany] = useState<string>('');
+  const [selectedOwnerClient, setSelectedOwnerClient] = useState<string>('');
 
   // Stato per tipo di progetti visualizzati
   const [projectViewType, setProjectViewType] = useState<'all' | 'recent' | 'recovered'>('all');
@@ -111,138 +104,41 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       })
       .catch(() => setAvailableProjectNames([]));
 
-    // Estrai owners unici dai progetti (per ora usiamo tenantId o un campo placeholder)
+    // Carica industries
+    fetch('/api/projects/catalog/industries')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setAvailableIndustries(data);
+        }
+      })
+      .catch(() => setAvailableIndustries([]));
+
+    // Estrai owners unici dai progetti (separati per ownerCompany e ownerClient)
     const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id || p.projectId, p])).values());
-    const owners = new Set<string>();
+    const ownerCompanies = new Set<string>();
+    const ownerClients = new Set<string>();
     uniqueAllProjects.forEach((p: any) => {
-      const owner = (p.owner || p.createdBy || p.tenantId || 'N/A').toString().trim();
-      if (owner && owner !== 'N/A') {
-        owners.add(owner);
+      // Aggiungi ownerCompany se presente
+      const ownerCompany = (p.ownerCompany || '').toString().trim();
+      if (ownerCompany) {
+        ownerCompanies.add(ownerCompany);
+      }
+      // Aggiungi ownerClient se presente
+      const ownerClient = (p.ownerClient || '').toString().trim();
+      if (ownerClient) {
+        ownerClients.add(ownerClient);
       }
     });
-    setAvailableOwners(Array.from(owners).sort());
+    setAvailableOwnerCompanies(Array.from(ownerCompanies).sort());
+    setAvailableOwnerClients(Array.from(ownerClients).sort());
 
     // Conta progetti recuperati (status='draft')
     const recovered = uniqueAllProjects.filter((p: any) => p.status === 'draft');
     setRecoveredProjectsCount(recovered.length);
   }, [allProjects]);
 
-  // Reset indice selezionato quando cambia il filtro
-  useEffect(() => {
-    if (isClientOpen) {
-      setSelectedClientIndex(-1);
-    }
-  }, [selectedClient, isClientOpen]);
 
-  useEffect(() => {
-    if (isProjectOpen) {
-      setSelectedProjectIndex(-1);
-    }
-  }, [selectedProjectName, isProjectOpen]);
-
-  // Scroll automatico per combo box clienti
-  useEffect(() => {
-    if (selectedClientIndex >= 0 && clientDropdownRef.current) {
-      const items = clientDropdownRef.current.querySelectorAll('[data-client-index]');
-      const selectedItem = items[selectedClientIndex] as HTMLElement;
-      if (selectedItem) {
-        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
-    }
-  }, [selectedClientIndex]);
-
-  // Scroll automatico per combo box progetti
-  useEffect(() => {
-    if (selectedProjectIndex >= 0 && projectDropdownRef.current) {
-      const items = projectDropdownRef.current.querySelectorAll('[data-project-index]');
-      const selectedItem = items[selectedProjectIndex] as HTMLElement;
-      if (selectedItem) {
-        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
-    }
-  }, [selectedProjectIndex]);
-
-  // Gestione navigazione da tastiera per combo box clienti
-  const handleClientKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!isClientOpen) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        setIsClientOpen(true);
-        setSelectedClientIndex(0);
-        e.preventDefault();
-      }
-      return;
-    }
-
-    const filtered = availableClients.filter(client =>
-      client.toLowerCase().includes(selectedClient.toLowerCase())
-    );
-    const maxIndex = filtered.length - 1;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSelectedClientIndex(prev => prev < maxIndex ? prev + 1 : 0);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSelectedClientIndex(prev => prev > 0 ? prev - 1 : maxIndex);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedClientIndex >= 0 && selectedClientIndex < filtered.length) {
-          setSelectedClient(filtered[selectedClientIndex]);
-          setIsClientOpen(false);
-          setSelectedClientIndex(-1);
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        setIsClientOpen(false);
-        setSelectedClientIndex(-1);
-        break;
-    }
-  };
-
-  // Gestione navigazione da tastiera per combo box progetti
-  const handleProjectKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!isProjectOpen) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        setIsProjectOpen(true);
-        setSelectedProjectIndex(0);
-        e.preventDefault();
-      }
-      return;
-    }
-
-    const filtered = availableProjectNames.filter(name =>
-      name.toLowerCase().includes(selectedProjectName.toLowerCase())
-    );
-    const maxIndex = filtered.length - 1;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSelectedProjectIndex(prev => prev < maxIndex ? prev + 1 : 0);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSelectedProjectIndex(prev => prev > 0 ? prev - 1 : maxIndex);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedProjectIndex >= 0 && selectedProjectIndex < filtered.length) {
-          setSelectedProjectName(filtered[selectedProjectIndex]);
-          setIsProjectOpen(false);
-          setSelectedProjectIndex(-1);
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        setIsProjectOpen(false);
-        setSelectedProjectIndex(-1);
-        break;
-    }
-  };
 
   // Filtra progetti per tipo di vista
   const uniqueRecentProjects = Array.from(new Map(recentProjects.map(p => [p._id || p.projectId, p])).values());
@@ -270,18 +166,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }).filter((d): d is string => d !== null)
   )).sort();
 
-  // Filtra per cliente, progetto, data e owner
+  // Filtra per cliente, progetto, industry, data e owner (separati)
   const filteredProjects = projectsToShow.filter((p: any) => {
     const clientMatch = !selectedClient ||
       ((p.clientName || '').trim().toLowerCase() === selectedClient.toLowerCase());
     const projectMatch = !selectedProjectName ||
       ((p.projectName || p.name || '').trim().toLowerCase() === selectedProjectName.toLowerCase());
+    const industryMatch = !selectedIndustry ||
+      ((p.industry || '').toString().trim().toLowerCase() === selectedIndustry.toLowerCase());
     const dateMatch = !selectedDate ||
       (new Date(p.updatedAt || p.createdAt).toLocaleDateString() === selectedDate);
-    const ownerValue = (p.owner || p.createdBy || p.tenantId || 'N/A').toString().trim();
-    const ownerMatch = !selectedOwner ||
-      (ownerValue.toLowerCase() === selectedOwner.toLowerCase());
-    return clientMatch && projectMatch && dateMatch && ownerMatch;
+    const ownerCompany = (p.ownerCompany || '').toString().trim();
+    const ownerClient = (p.ownerClient || '').toString().trim();
+    const ownerCompanyMatch = !selectedOwnerCompany ||
+      (ownerCompany.toLowerCase() === selectedOwnerCompany.toLowerCase());
+    const ownerClientMatch = !selectedOwnerClient ||
+      (ownerClient.toLowerCase() === selectedOwnerClient.toLowerCase());
+    return clientMatch && projectMatch && industryMatch && dateMatch && ownerCompanyMatch && ownerClientMatch;
   });
 
   // Ordina i progetti
@@ -468,227 +369,94 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             {/* Tabella con combo box nelle intestazioni */}
             <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
-              <table className="border-collapse table-auto" style={{ width: 'auto' }}>
+              <table className="border-collapse" style={{ width: 'auto', tableLayout: 'auto' }}>
+                <colgroup>
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '60px' }} />
+                </colgroup>
                 <thead className="bg-emerald-100 sticky top-0 z-10">
                   <tr>
                     {/* Intestazione Cliente con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: 'auto' }}>
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-emerald-600 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={selectedClient}
-                          onChange={(e) => {
-                            setSelectedClient(e.target.value);
-                            setIsClientOpen(true);
-                          }}
-                          onKeyDown={handleClientKeyDown}
-                          onFocus={() => setIsClientOpen(true)}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              setIsClientOpen(false);
-                              setSelectedClientIndex(-1);
-                            }, 200);
-                          }}
-                          placeholder="Cliente"
-                          className={`pl-7 pr-5 py-0.5 border border-emerald-200 rounded focus:outline-none focus:border-emerald-500 ${combinedClass}`}
-                          style={{ minWidth: '100px', width: 'auto' }}
-                        />
-                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
-                        {isClientOpen && (
-                          <div
-                            ref={clientDropdownRef}
-                            className="absolute z-50 mt-1 w-full bg-white border border-emerald-200 rounded shadow-lg max-h-60 overflow-y-auto"
-                          >
-                            {availableClients
-                              .filter(client =>
-                                client.toLowerCase().includes(selectedClient.toLowerCase())
-                              )
-                              .map((client, index) => (
-                                <button
-                                  key={client}
-                                  data-client-index={index}
-                                  type="button"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    setSelectedClient(client);
-                                    setIsClientOpen(false);
-                                    setSelectedClientIndex(-1);
-                                  }}
-                                  onMouseEnter={() => setSelectedClientIndex(index)}
-                                  className={`w-full text-left px-3 py-1.5 text-emerald-900 ${combinedClass} ${
-                                    selectedClientIndex === index
-                                      ? 'bg-emerald-100'
-                                      : 'hover:bg-emerald-50'
-                                  }`}
-                                >
-                                  {client}
-                                </button>
-                              ))}
-                          </div>
-                        )}
-                      </div>
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '120px', maxWidth: '120px' }}>
+                      <OmniaSelect
+                        variant="light"
+                        options={availableClients}
+                        value={selectedClient || null}
+                        onChange={(value) => setSelectedClient(value || '')}
+                        placeholder="Cliente"
+                        showSearchIcon={true}
+                        className={combinedClass}
+                      />
                     </th>
 
                     {/* Intestazione Progetto con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: 'auto' }}>
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={selectedProjectName}
-                          onChange={(e) => {
-                            setSelectedProjectName(e.target.value);
-                            setIsProjectOpen(true);
-                          }}
-                          onKeyDown={handleProjectKeyDown}
-                          onFocus={() => setIsProjectOpen(true)}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              setIsProjectOpen(false);
-                              setSelectedProjectIndex(-1);
-                            }, 200);
-                          }}
-                          placeholder="Progetto"
-                          className={`pl-7 pr-5 py-0.5 border border-emerald-200 rounded focus:outline-none focus:border-emerald-500 ${combinedClass}`}
-                          style={{ minWidth: '100px', width: 'auto' }}
-                        />
-                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
-                        {isProjectOpen && (
-                          <div
-                            ref={projectDropdownRef}
-                            className="absolute z-50 mt-1 w-full bg-white border border-emerald-200 rounded shadow-lg max-h-60 overflow-y-auto"
-                          >
-                            {availableProjectNames
-                              .filter(name =>
-                                name.toLowerCase().includes(selectedProjectName.toLowerCase())
-                              )
-                              .map((name, index) => (
-                                <button
-                                  key={name}
-                                  data-project-index={index}
-                                  type="button"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    setSelectedProjectName(name);
-                                    setIsProjectOpen(false);
-                                    setSelectedProjectIndex(-1);
-                                  }}
-                                  onMouseEnter={() => setSelectedProjectIndex(index)}
-                                  className={`w-full text-left px-3 py-1.5 text-emerald-900 ${combinedClass} ${
-                                    selectedProjectIndex === index
-                                      ? 'bg-emerald-100'
-                                      : 'hover:bg-emerald-50'
-                                  }`}
-                                >
-                                  {name}
-                                </button>
-                              ))}
-                          </div>
-                        )}
-                      </div>
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '200px' }}>
+                      <OmniaSelect
+                        variant="light"
+                        options={availableProjectNames}
+                        value={selectedProjectName || null}
+                        onChange={(value) => setSelectedProjectName(value || '')}
+                        placeholder="Progetto"
+                        showSearchIcon={true}
+                        className={combinedClass}
+                      />
+                    </th>
+
+                    {/* Intestazione Industry con combo box */}
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '120px', maxWidth: '120px' }}>
+                      <OmniaSelect
+                        variant="light"
+                        options={availableIndustries}
+                        value={selectedIndustry || null}
+                        onChange={(value) => setSelectedIndustry(value || '')}
+                        placeholder="Industry"
+                        showSearchIcon={true}
+                        className={combinedClass}
+                      />
                     </th>
 
                     {/* Intestazione Data con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: 'auto' }}>
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={selectedDate}
-                          onChange={(e) => {
-                            setSelectedDate(e.target.value);
-                            setIsDateOpen(true);
-                          }}
-                          onFocus={() => setIsDateOpen(true)}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              setIsDateOpen(false);
-                              setSelectedDateIndex(-1);
-                            }, 200);
-                          }}
-                          placeholder="Data"
-                          className={`pl-7 pr-5 py-0.5 border border-emerald-200 rounded focus:outline-none focus:border-emerald-500 ${combinedClass}`}
-                          style={{ minWidth: '90px', width: 'auto' }}
-                        />
-                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
-                        {isDateOpen && (
-                          <div
-                            ref={dateDropdownRef}
-                            className="absolute z-50 mt-1 w-full bg-white border border-emerald-200 rounded shadow-lg max-h-60 overflow-y-auto"
-                          >
-                            {availableDates
-                              .filter(date =>
-                                date.toLowerCase().includes(selectedDate.toLowerCase())
-                              )
-                              .map((date, index) => (
-                                <button
-                                  key={date}
-                                  type="button"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    setSelectedDate(date);
-                                    setIsDateOpen(false);
-                                  }}
-                                  className={`w-full text-left px-3 py-1.5 text-emerald-900 ${combinedClass} hover:bg-emerald-50`}
-                                >
-                                  {date}
-                                </button>
-                              ))}
-                          </div>
-                        )}
-                      </div>
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '110px', maxWidth: '110px' }}>
+                      <OmniaSelect
+                        variant="light"
+                        options={availableDates}
+                        value={selectedDate || null}
+                        onChange={(value) => setSelectedDate(value || '')}
+                        placeholder="Data"
+                        showSearchIcon={true}
+                        className={combinedClass}
+                      />
                     </th>
 
-                    {/* Intestazione Owner con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: 'auto' }}>
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={selectedOwner}
-                          onChange={(e) => {
-                            setSelectedOwner(e.target.value);
-                            setIsOwnerOpen(true);
-                          }}
-                          onFocus={() => setIsOwnerOpen(true)}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              setIsOwnerOpen(false);
-                              setSelectedOwnerIndex(-1);
-                            }, 200);
-                          }}
-                          placeholder="Owner"
-                          className={`pl-7 pr-5 py-0.5 border border-emerald-200 rounded focus:outline-none focus:border-emerald-500 ${combinedClass}`}
-                          style={{ minWidth: '100px', width: 'auto' }}
-                        />
-                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
-                        {isOwnerOpen && (
-                          <div
-                            ref={ownerDropdownRef}
-                            className="absolute z-50 mt-1 w-full bg-white border border-emerald-200 rounded shadow-lg max-h-60 overflow-y-auto"
-                          >
-                            {availableOwners
-                              .filter(owner =>
-                                owner.toLowerCase().includes(selectedOwner.toLowerCase())
-                              )
-                              .map((owner, index) => (
-                                <button
-                                  key={owner}
-                                  type="button"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    setSelectedOwner(owner);
-                                    setIsOwnerOpen(false);
-                                  }}
-                                  className={`w-full text-left px-3 py-1.5 text-emerald-900 ${combinedClass} hover:bg-emerald-50`}
-                                >
-                                  {owner}
-                                </button>
-                              ))}
-                          </div>
-                        )}
-                      </div>
+                    {/* Intestazione Owner (Azienda) con combo box */}
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '180px', maxWidth: '220px' }}>
+                      <OmniaSelect
+                        variant="light"
+                        options={availableOwnerCompanies}
+                        value={selectedOwnerCompany || null}
+                        onChange={(value) => setSelectedOwnerCompany(value || '')}
+                        placeholder="Owner (Azienda)"
+                        showSearchIcon={true}
+                        className={combinedClass}
+                      />
+                    </th>
+
+                    {/* Intestazione Owner (Cliente) con combo box */}
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '180px', maxWidth: '220px' }}>
+                      <OmniaSelect
+                        variant="light"
+                        options={availableOwnerClients}
+                        value={selectedOwnerClient || null}
+                        onChange={(value) => setSelectedOwnerClient(value || '')}
+                        placeholder="Owner (Cliente)"
+                        showSearchIcon={true}
+                        className={combinedClass}
+                      />
                     </th>
 
                     {/* Colonna azioni */}
@@ -698,7 +466,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <tbody>
                   {sortedFilteredProjects.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="text-center py-4 text-slate-400">
+                      <td colSpan={8} className="text-center py-4 text-slate-400">
                         Nessun progetto trovato
                       </td>
                     </tr>
@@ -706,8 +474,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   {sortedFilteredProjects.map((proj) => {
                     const clientInfo = formatClientName(proj.clientName);
                     const projectDate = (proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : '';
-                    // Owner: mostra solo se presente, altrimenti stringa vuota
-                    const ownerValue = (proj.owner || proj.createdBy || '').toString().trim() || '';
+                    // Filtra valori "undefined" e stringhe vuote
+                    let industryValue = (proj.industry || '').toString().trim();
+                    if (!industryValue || industryValue === 'undefined' || industryValue === 'null') {
+                      industryValue = '';
+                    }
+                    let ownerCompany = (proj.ownerCompany || '').toString().trim();
+                    if (!ownerCompany || ownerCompany === 'undefined' || ownerCompany === 'null') {
+                      ownerCompany = '';
+                    }
+                    let ownerClient = (proj.ownerClient || '').toString().trim();
+                    if (!ownerClient || ownerClient === 'undefined' || ownerClient === 'null') {
+                      ownerClient = '';
+                    }
                     const isRecovered = projectViewType === 'recovered';
                     return (
                       <tr
@@ -724,7 +503,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           }
                         }}
                       >
-                        <td className={`border border-emerald-200 p-1.5 text-left ${combinedClass}`}>
+                        <td className={`border border-emerald-200 p-1.5 text-left ${combinedClass}`} style={{ width: '120px', maxWidth: '120px' }}>
                           <div className="flex items-center gap-1.5">
                             <Building2 className={`w-4 h-4 ${clientInfo.isGrey ? 'text-gray-400' : 'text-emerald-700'}`} />
                             <span className={clientInfo.isGrey ? 'text-gray-500' : 'text-emerald-900'}>
@@ -732,7 +511,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             </span>
                           </div>
                         </td>
-                        <td className={`border border-emerald-200 p-1.5 text-left ${combinedClass}`}>
+                        <td className={`border border-emerald-200 p-1.5 text-left ${combinedClass}`} style={{ width: '200px' }}>
                           <div className="flex items-center gap-1.5">
                             {loadingProjectId === (proj._id || proj.projectId)
                               ? <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
@@ -740,11 +519,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             <span className="text-emerald-900">{proj.projectName || proj.name || '(senza nome)'}</span>
                           </div>
                         </td>
-                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`}>
+                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`} style={{ width: '120px', maxWidth: '120px' }}>
+                          {industryValue || '-'}
+                        </td>
+                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`} style={{ width: '110px', maxWidth: '110px' }}>
                           {projectDate}
                         </td>
-                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`}>
-                          {ownerValue}
+                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`} style={{ width: '180px', maxWidth: '220px' }}>
+                          {ownerCompany || '-'}
+                        </td>
+                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`} style={{ width: '180px', maxWidth: '220px' }}>
+                          {ownerClient || '-'}
                         </td>
                         <td className="border border-emerald-200 p-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                           <button

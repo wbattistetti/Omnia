@@ -383,6 +383,8 @@ app.post('/api/projects/catalog', async (req, res) => {
       clientSlug: clientName ? slugifyName(clientName) : null,
       projectSlug: slugifyName(projectName),
       industry: payload.industry || null,
+      ownerCompany: payload.ownerCompany || null,
+      ownerClient: payload.ownerClient || null,
       dbName,
       status: 'draft',
       createdAt: now,
@@ -457,6 +459,8 @@ app.post('/api/projects/bootstrap', async (req, res) => {
   const projectName = payload.projectName;
   const industry = payload.industry || null;
   const language = payload.language || 'pt';
+  const ownerCompany = payload.ownerCompany || null; // Owner del progetto lato azienda (obbligatorio)
+  const ownerClient = payload.ownerClient || null; // Owner del progetto lato cliente (opzionale)
   if (!projectName) {
     return res.status(400).json({ error: 'projectName_required' });
   }
@@ -482,6 +486,8 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       projectSlug: slugifyName(projectName),
       industry,
       language,
+      ownerCompany: ownerCompany || null,
+      ownerClient: ownerClient || null,
       dbName,
       status: 'active',
       createdAt: now,
@@ -510,6 +516,8 @@ app.post('/api/projects/bootstrap', async (req, res) => {
           projectSlug: slugifyName(projectName),
           industry,
           language,
+          ownerCompany: ownerCompany || null,
+          ownerClient: ownerClient || null,
           updatedAt: now
         },
         $setOnInsert: { createdAt: now }
@@ -1756,6 +1764,69 @@ app.get('/api/factory/industries', async (req, res) => {
   }
 });
 
+// GET: Lista industry uniche dai progetti (come per i clienti)
+app.get('/api/projects/catalog/industries', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbProjects);
+    const coll = db.collection('projects_catalog');
+    const projects = await coll.find({}, { projection: { industry: 1 } }).toArray();
+    const industries = new Set();
+    projects.forEach(p => {
+      if (p.industry && typeof p.industry === 'string' && p.industry.trim()) {
+        industries.add(p.industry.trim());
+      }
+    });
+    const uniqueIndustries = Array.from(industries).sort();
+    res.json(uniqueIndustries);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// POST: Crea nuova industry nel factory
+app.post('/api/factory/industries', async (req, res) => {
+  const payload = req.body || {};
+  const industryName = payload.name || payload.industryName || null;
+  if (!industryName || typeof industryName !== 'string' || !industryName.trim()) {
+    return res.status(400).json({ error: 'industry_name_required' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('Industries');
+    // Verifica se esiste già
+    const existing = await coll.findOne({
+      $or: [
+        { industryId: industryName.trim() },
+        { name: industryName.trim() }
+      ]
+    });
+    if (existing) {
+      return res.status(409).json({ error: 'industry_already_exists', industry: existing });
+    }
+    // Crea nuova industry
+    const now = new Date();
+    const newIndustry = {
+      industryId: industryName.trim(),
+      name: industryName.trim(),
+      description: payload.description || '',
+      createdAt: now,
+      updatedAt: now
+    };
+    await coll.insertOne(newIndustry);
+    res.json(newIndustry);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
 // -----------------------------
 // Type Templates Endpoints
 // -----------------------------
@@ -2371,7 +2442,7 @@ app.post('/api/extractors/run', async (req, res) => {
 // Endpoint: Update catalog timestamp
 // -----------------------------
 app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
-  const { projectId } = req.body;
+  const { projectId, ownerCompany, ownerClient } = req.body;
   if (!projectId) {
     return res.status(400).json({ error: 'projectId_required' });
   }
@@ -2380,15 +2451,51 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
     await client.connect();
     const db = client.db(dbProjects);
     const cat = db.collection('projects_catalog');
+    const now = new Date();
+    const updateDoc = { updatedAt: now };
+
+    // Aggiorna ownerCompany se fornito
+    if (ownerCompany !== undefined) {
+      updateDoc.ownerCompany = ownerCompany || null;
+    }
+
+    // Aggiorna ownerClient se fornito
+    if (ownerClient !== undefined) {
+      updateDoc.ownerClient = ownerClient || null;
+    }
+
     const result = await cat.updateOne(
       { _id: projectId },
-      { $set: { updatedAt: new Date() } }
+      { $set: updateDoc }
     );
     if (result.matchedCount === 0) {
       logInfo('Catalog.updateTimestamp', { projectId, warning: 'project_not_found_in_catalog' });
     } else {
-      logInfo('Catalog.updateTimestamp', { projectId, updated: true });
+      logInfo('Catalog.updateTimestamp', { projectId, updated: true, ownerCompany: ownerCompany !== undefined, ownerClient: ownerClient !== undefined });
     }
+
+    // Aggiorna anche project_meta se esiste
+    try {
+      const catalogDoc = await cat.findOne({ _id: projectId });
+      if (catalogDoc && catalogDoc.dbName) {
+        const projDb = client.db(catalogDoc.dbName);
+        const metaUpdate = { updatedAt: now };
+        if (ownerCompany !== undefined) {
+          metaUpdate.ownerCompany = ownerCompany || null;
+        }
+        if (ownerClient !== undefined) {
+          metaUpdate.ownerClient = ownerClient || null;
+        }
+        await projDb.collection('project_meta').updateOne(
+          { _id: 'meta' },
+          { $set: metaUpdate }
+        );
+      }
+    } catch (metaErr) {
+      // Non bloccare se project_meta non esiste o errore
+      console.warn('[Catalog.updateTimestamp] Failed to update project_meta:', metaErr);
+    }
+
     res.json({ ok: true });
   } catch (e) {
     logError('Catalog.updateTimestamp', e);
