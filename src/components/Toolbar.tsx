@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Home, Save, Settings, Play, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { ProjectData } from '../types/project';
+import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
+import { useFontStore } from '../state/fontStore';
 
 export interface ToolbarProps {
   onHome: () => void;
@@ -23,6 +25,12 @@ export function Toolbar({
   onSettings,
   currentProject
 }: ToolbarProps) {
+  const { provider, model, setProvider, setModel, providerConfig, availableModels } = useAIProvider();
+  const { fontType, fontSize, setFontType, setFontSize } = useFontStore();
+  const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   // Verifica se il progetto è vuoto (non ha contenuti)
   const isProjectEmpty = !currentProject ||
     (!currentProject.agentActs?.length &&
@@ -31,6 +39,39 @@ export function Toolbar({
      !currentProject.conditions?.length &&
      !currentProject.tasks?.length &&
      !currentProject.macrotasks?.length);
+
+  // Chiudi dropdown quando si clicca fuori
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        settingsButtonRef.current &&
+        !settingsButtonRef.current.contains(event.target as Node)
+      ) {
+        setShowSettingsDropdown(false);
+      }
+    };
+
+    if (showSettingsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSettingsDropdown]);
+
+  const fontTypes: { value: 'sans' | 'serif' | 'mono'; label: string }[] = [
+    { value: 'sans', label: 'Sans' },
+    { value: 'serif', label: 'Serif' },
+    { value: 'mono', label: 'Mono' },
+  ];
+
+  const fontSizes: { value: 'xs' | 'sm' | 'base' | 'md' | 'lg'; label: string }[] = [
+    { value: 'xs', label: 'XS' },
+    { value: 'sm', label: 'SM' },
+    { value: 'base', label: 'Base' },
+    { value: 'md', label: 'MD' },
+    { value: 'lg', label: 'LG' },
+  ];
 
   // Renderizza le informazioni del progetto con colori
   const renderProjectInfo = () => {
@@ -110,7 +151,7 @@ export function Toolbar({
       </div>
 
       {/* Center - Save button */}
-      <div className="flex items-center">
+      <div className="flex items-center mr-8">
         <button
           onClick={onSave}
           className={`relative flex items-center gap-2 px-4 py-2 rounded bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-colors disabled:opacity-60`}
@@ -118,7 +159,7 @@ export function Toolbar({
           style={{ position: 'relative' }}
         >
           {isSaving && <Loader2 className="animate-spin w-5 h-5" />}
-          <span>Salva</span>
+          <span>Salva Progetti</span>
           {(!isSaving && saveSuccess) && <CheckCircle className="w-5 h-5 text-green-400" />}
           {/* Tooltip errore */}
           {saveError && (
@@ -130,14 +171,90 @@ export function Toolbar({
       </div>
 
       {/* Right side - Settings and Run */}
-      <div className="flex items-center space-x-3 flex-shrink-0">
-        <button
-          onClick={onSettings}
-          className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors duration-200"
-          title="Impostazioni"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+      <div className="flex items-center space-x-3 flex-shrink-0 relative">
+        <div className="relative">
+          <button
+            ref={settingsButtonRef}
+            onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+            className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors duration-200"
+            title="Impostazioni"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          {/* Settings Dropdown */}
+          {showSettingsDropdown && (
+            <div
+              ref={dropdownRef}
+              className="absolute right-0 top-full mt-2 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-50 p-3 min-w-[280px]"
+            >
+              {/* Riga 1: Provider AI e Model AI */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1">
+                  <label className="text-xs text-slate-400 mb-1 block">Provider</label>
+                  <select
+                    value={provider}
+                    onChange={(e) => setProvider(e.target.value as 'groq' | 'openai')}
+                    className="w-full bg-slate-700 text-slate-200 text-sm border border-slate-600 rounded px-2 py-1.5 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 hover:bg-slate-600 transition-colors"
+                  >
+                    {Object.values(AI_PROVIDERS).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-slate-400 mb-1 block">Model</label>
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full bg-slate-700 text-slate-200 text-sm border border-slate-600 rounded px-2 py-1.5 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 hover:bg-slate-600 transition-colors"
+                    title={availableModels.find(m => m.id === model)?.description}
+                  >
+                    {availableModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Riga 2: Font Type e Font Size */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="text-xs text-slate-400 mb-1 block">Font</label>
+                  <select
+                    value={fontType}
+                    onChange={(e) => setFontType(e.target.value as 'sans' | 'serif' | 'mono')}
+                    className="w-full bg-slate-700 text-slate-200 text-sm border border-slate-600 rounded px-2 py-1.5 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 hover:bg-slate-600 transition-colors"
+                  >
+                    {fontTypes.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-slate-400 mb-1 block">Size</label>
+                  <select
+                    value={fontSize}
+                    onChange={(e) => setFontSize(e.target.value as 'xs' | 'sm' | 'base' | 'md' | 'lg')}
+                    className="w-full bg-slate-700 text-slate-200 text-sm border border-slate-600 rounded px-2 py-1.5 cursor-pointer outline-none focus:ring-2 focus:ring-blue-500 hover:bg-slate-600 transition-colors"
+                  >
+                    {fontSizes.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {!isProjectEmpty && (
           <button
