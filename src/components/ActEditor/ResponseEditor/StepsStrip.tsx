@@ -88,7 +88,6 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
               borderRadius: 10,
               padding: '5px 10px',
               cursor: 'pointer',
-              fontSize: 13,
               transition: 'border 0.15s',
               minWidth: 0,
               whiteSpace: 'nowrap',

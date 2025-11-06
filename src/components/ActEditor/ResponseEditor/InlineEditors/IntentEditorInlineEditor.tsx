@@ -114,7 +114,7 @@ export default function IntentEditorInlineEditor({
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 600 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #e5e7eb' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Intent Classifier (Embeddings)</h3>
+          <h3 style={{ margin: 0, fontWeight: 600 }}>Intent Classifier (Embeddings)</h3>
           {/* Train Model button - subito dopo la label */}
           <button
             onClick={() => editorRef.current?.handleTrain()}
@@ -126,7 +126,6 @@ export default function IntentEditorInlineEditor({
               background: trainState.modelReady ? '#fef3c7' : '#fff',
               color: trainState.modelReady ? '#92400e' : '#374151',
               cursor: trainState.canTrain && !trainState.training ? 'pointer' : 'not-allowed',
-              fontSize: 14,
               fontWeight: 500,
               display: 'flex',
               alignItems: 'center',

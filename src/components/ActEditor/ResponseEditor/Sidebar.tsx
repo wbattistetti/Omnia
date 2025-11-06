@@ -112,7 +112,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
     borderRadius: 10,
     padding: '8px 10px',
     cursor: 'pointer',
-    fontSize: isSub ? 13 : 14,
     textAlign: 'left' as const,
     outline: 'none',
     outlineOffset: 0,

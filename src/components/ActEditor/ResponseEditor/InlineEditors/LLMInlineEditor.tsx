@@ -200,7 +200,7 @@ export default function LLMInlineEditor({
                   animation: 'spin 0.8s linear infinite',
                 }}
               />
-              <span style={{ fontSize: 14, color: '#f1f5f9' }}>
+              <span style={{ color: '#f1f5f9' }}>
                 {isCreateMode ? '🪄 Generating LLM prompt...' : '🔄 Refining LLM prompt...'}
               </span>
             </div>

@@ -24,7 +24,7 @@ const ActionRowActions: React.FC<ActionRowActionsProps> = ({ onEdit, onDelete, c
       {onEdit && (
         <button
           onClick={() => (typeof onEdit === 'function' ? onEdit() : undefined)}
-          style={{ background: 'none', border: 'none', color, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', padding: 0 }}
+          style={{ background: 'none', border: 'none', color, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
           tabIndex={-1}
           title="Modifica messaggio"
           aria-label="Edit message"
@@ -35,7 +35,7 @@ const ActionRowActions: React.FC<ActionRowActionsProps> = ({ onEdit, onDelete, c
       {onDelete && (
         <button
           onClick={onDelete}
-          style={{ background: 'none', border: 'none', color, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', padding: 0 }}
+          style={{ background: 'none', border: 'none', color, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
           tabIndex={-1}
           title="Elimina messaggio"
           aria-label="Delete message"

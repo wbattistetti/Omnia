@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Play, RotateCcw, Bot, Bug } from 'lucide-react';
 import { ResponseFlowEngine, FlowState } from './ResponseFlowEngine';
 import { usePanelZoom } from '../../../../hooks/usePanelZoom';
+import { useFontContext } from '../../../../context/FontContext';
 
 interface ResponseSimulatorProps {
   ddt: any;
@@ -9,11 +10,12 @@ interface ResponseSimulatorProps {
   selectedNode?: any;
 }
 
-const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({ 
-  ddt, 
-  translations, 
+const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
+  ddt,
+  translations,
   selectedNode
 }) => {
+  const { combinedClass, fontSize } = useFontContext();
   const [flowState, setFlowState] = useState<FlowState | null>(null);
   const [engine, setEngine] = useState(() => new ResponseFlowEngine(ddt, translations, selectedNode));
   const [showDebug, setShowDebug] = useState(false);
@@ -116,14 +118,14 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Bot size={16} className="text-purple-600" />
-            <h3 className="font-semibold text-gray-800">Chat Simulator</h3>
+            <h3 className={`font-semibold text-gray-800 ${combinedClass}`}>Chat Simulator</h3>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setShowDebug(!showDebug)}
-              className={`flex items-center gap-1 px-2 py-1 text-xs rounded border ${
-                showDebug 
-                  ? 'bg-orange-100 border-orange-300 text-orange-800' 
+              className={`flex items-center gap-1 px-2 py-1 rounded border ${combinedClass} ${
+                showDebug
+                  ? 'bg-orange-100 border-orange-300 text-orange-800'
                   : 'bg-gray-100 border-gray-300 text-gray-600'
               }`}
               title="Toggle debug mode"
@@ -134,7 +136,7 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
             {!flowState ? (
               <button
                 onClick={handleStart}
-                className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition-colors"
+                className={`flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors ${combinedClass}`}
               >
                 <Play size={14} />
                 Start
@@ -142,7 +144,7 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
             ) : (
               <button
                 onClick={handleReset}
-                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"
+                className={`flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors ${combinedClass}`}
               >
                 <RotateCcw size={14} />
                 Reset
@@ -151,21 +153,21 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
           </div>
         </div>
         {flowState && (
-          <div className="mt-2 text-xs text-gray-600">
+          <div className={`mt-2 text-gray-600 ${combinedClass}`}>
             <div className="flex items-center gap-4">
-              <span>
+              <span className={combinedClass}>
                 <strong>Step:</strong> <code className="bg-gray-200 px-1 rounded">{flowState.currentStep}</code>
               </span>
               {flowState.escalationLevel > 1 && (
-                <span>
+                <span className={combinedClass}>
                   <strong>Escalation:</strong> <code className="bg-yellow-200 px-1 rounded">{flowState.escalationLevel}</code>
                 </span>
               )}
               {flowState.completed && (
-                <span className="text-green-600 font-medium">✅ Completed</span>
+                <span className={`text-green-600 font-medium ${combinedClass}`}>✅ Completed</span>
               )}
             </div>
-            <div className="mt-1">
+            <div className={`mt-1 ${combinedClass}`}>
               💡 <strong>Commands:</strong> Empty Enter = noInput • "xxxx" + Enter = noMatch • Other = normal flow
             </div>
           </div>
@@ -175,10 +177,10 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {!flowState ? (
-          <div className="text-center text-gray-500 mt-8">
+          <div className={`text-center text-gray-500 mt-8 ${combinedClass}`}>
             <Play size={48} className="mx-auto mb-4 text-gray-300" />
-            <p className="text-lg font-medium">Ready to test dialogue flow</p>
-            <p className="text-sm mt-2 text-gray-400">Press Start to begin simulation</p>
+            <p className={`font-medium ${combinedClass}`}>Ready to test dialogue flow</p>
+            <p className={`mt-2 text-gray-400 ${combinedClass}`}>Press Start to begin simulation</p>
           </div>
         ) : (
           <>
@@ -189,9 +191,9 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
                     <div className="flex items-start gap-2">
                       {message.type === 'bot' && <Bot size={16} className="mt-1 flex-shrink-0" />}
                       <div className="flex-1">
-                        <p className="text-sm">{message.text || '[NO TEXT]'}</p>
+                        <p className={combinedClass}>{message.text || '[NO TEXT]'}</p>
                         {message.stepType && (
-                          <span className="text-xs opacity-70 font-mono mt-1 block">{message.stepType}{message.escalationLevel && message.escalationLevel > 1 && ` #${message.escalationLevel}`}</span>
+                          <span className={`opacity-70 font-mono mt-1 block ${combinedClass}`}>{message.stepType}{message.escalationLevel && message.escalationLevel > 1 && ` #${message.escalationLevel}`}</span>
                         )}
                       </div>
                     </div>
@@ -206,12 +208,22 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
 
       {/* Input Area */}
       {flowState && flowState.waitingForInput && !flowState.completed && (
-        <div className="border-t p-4 bg-gray-50" onMouseDown={() => ensureFocus()}>
+        <div className={`border-t p-4 bg-gray-50 ${combinedClass}`} onMouseDown={() => ensureFocus()}>
+          <style dangerouslySetInnerHTML={{__html: `
+            .response-simulator-input-placeholder::placeholder {
+              font-family: inherit !important;
+              font-size: inherit !important;
+            }
+          `}} />
           <div className="flex gap-2">
             <input
               type="text"
               placeholder="Type response or press Enter for noInput..."
-              className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className={`response-simulator-input-placeholder flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${combinedClass}`}
+              style={{
+                fontFamily: 'inherit',
+                fontSize: 'inherit'
+              }}
               ref={inputRef}
               onFocus={() => logFocus('input-onFocus')}
               onKeyPress={(e) => {
@@ -228,7 +240,7 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
       )}
 
       {flowState?.completed && (
-        <div className="p-4 bg-green-50 border-t text-center text-green-800">🎉 Dialogue completed successfully!</div>
+        <div className={`p-4 bg-green-50 border-t text-center text-green-800 ${combinedClass}`}>🎉 Dialogue completed successfully!</div>
       )}
     </div>
   );

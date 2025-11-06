@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useFontContext } from '../../../../context/FontContext';
 
 type Props = {
     onExpandAll: () => void;
@@ -42,6 +43,7 @@ export default function MessageReviewToolbar({
     onParamChange,
     activeParams = new Set()
 }: Props) {
+    const { combinedClass } = useFontContext();
     const [cultureDropdownOpen, setCultureDropdownOpen] = React.useState(false);
     const cultureDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -93,10 +95,10 @@ export default function MessageReviewToolbar({
                             borderRadius: 6,
                             padding: '4px 8px',
                             cursor: 'pointer',
-                            fontSize: 11,
                             color: style.color,
                             transition: 'all 0.2s'
                         }}
+                        className={combinedClass}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = style.color;
                             e.currentTarget.style.color = 'white';
@@ -126,10 +128,10 @@ export default function MessageReviewToolbar({
                                 borderRadius: 6,
                                 padding: '4px 8px',
                                 cursor: 'pointer',
-                                fontSize: 11,
                                 color: isActive ? 'white' : param.color,
                                 transition: 'all 0.2s'
                             }}
+                            className={combinedClass}
                             onMouseEnter={(e) => {
                                 if (!isActive) {
                                     e.currentTarget.style.background = param.color;
@@ -160,13 +162,13 @@ export default function MessageReviewToolbar({
                         borderRadius: 6,
                         padding: '4px 12px',
                         cursor: 'pointer',
-                        fontSize: 11,
                         color: 'white',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 6,
                         transition: 'all 0.2s'
                     }}
+                    className={combinedClass}
                     onMouseEnter={(e) => {
                         e.currentTarget.style.opacity = '0.9';
                     }}
@@ -205,13 +207,13 @@ export default function MessageReviewToolbar({
                                     background: activeCulture.key === culture.key ? '#f3f4f6' : 'transparent',
                                     border: 'none',
                                     cursor: 'pointer',
-                                    fontSize: 11,
                                     color: '#1f2937',
                                     textAlign: 'left',
                                     display: 'flex',
                                     alignItems: 'center',
                                     transition: 'background 0.15s'
                                 }}
+                                className={combinedClass}
                                 onMouseEnter={(e) => {
                                     e.currentTarget.style.background = '#f9fafb';
                                 }}

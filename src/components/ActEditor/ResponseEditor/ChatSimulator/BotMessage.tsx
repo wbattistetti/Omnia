@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, X as XIcon, Pencil, AlertTriangle, AlertCircle } from 'lucide-react';
 import { getStepIcon } from './chatSimulatorUtils';
 import type { Message } from './UserMessage';
+import { useFontContext } from '../../../../context/FontContext';
 
 interface BotMessageProps {
   message: Message;
@@ -24,13 +25,14 @@ const BotMessage: React.FC<BotMessageProps> = ({
   onCancel,
   onHover
 }) => {
+  const { combinedClass } = useFontContext();
   const isEditing = editingId === message.id;
 
   return (
-    <div className="flex flex-col items-start">
+    <div className={`flex flex-col items-start ${combinedClass}`}>
       <div className="flex flex-row items-start gap-2 w-full flex-wrap">
         <div
-          className="bg-gray-100 border border-gray-200 relative max-w-xs lg:max-w-md px-4 py-2 rounded-lg flex-shrink-0"
+          className={`bg-gray-100 border border-gray-200 relative max-w-xs lg:max-w-md px-4 py-2 rounded-lg flex-shrink-0 ${combinedClass}`}
           onMouseEnter={() => onHover(message.id)}
           onMouseLeave={() => onHover(null)}
         >
@@ -38,7 +40,11 @@ const BotMessage: React.FC<BotMessageProps> = ({
             <div className="flex items-center gap-2">
               <input
                 autoFocus
-                className="w-full px-2 py-1 border rounded text-sm"
+                className={`w-full px-2 py-1 border rounded ${combinedClass}`}
+                style={{
+                  fontFamily: 'inherit',
+                  fontSize: 'inherit'
+                }}
                 value={draftText}
                 onChange={(e) => onEdit(message.id, e.target.value)}
                 onKeyDown={(e) => {
@@ -61,11 +67,11 @@ const BotMessage: React.FC<BotMessageProps> = ({
             </div>
           ) : (
             <>
-              <div className="flex items-start gap-2">
+              <div className={`flex items-start gap-2 ${combinedClass}`}>
                 {message.stepType && (
-                  <div className="mt-0.5 flex items-center gap-1" style={{ color: message.color }}>
+                  <div className={`mt-0.5 flex items-center gap-1 ${combinedClass}`} style={{ color: message.color }}>
                     {message.escalationNumber !== undefined && message.escalationNumber > 0 && (
-                      <span className="text-xs font-medium" style={{ color: message.color }}>
+                      <span className={`font-medium ${combinedClass}`} style={{ color: message.color }}>
                         {message.escalationNumber}°
                       </span>
                     )}
@@ -73,12 +79,16 @@ const BotMessage: React.FC<BotMessageProps> = ({
                   </div>
                 )}
                 <div
-                  className="text-sm cursor-pointer flex-1"
+                  className={`cursor-pointer flex-1 ${combinedClass}`}
                   title={message.textKey ? 'Click to edit' : undefined}
                   onClick={() => {
                     if (message.textKey) {
                       onEdit(message.id, message.text);
                     }
+                  }}
+                  style={{
+                    fontFamily: 'inherit',
+                    fontSize: 'inherit'
                   }}
                 >
                   {message.text}
@@ -94,14 +104,14 @@ const BotMessage: React.FC<BotMessageProps> = ({
         </div>
         {/* Warning incorporato */}
         {message.warningMessage && (
-          <div className="flex items-center gap-2 text-xs text-yellow-700 flex-shrink-0 whitespace-nowrap">
+          <div className={`flex items-center gap-2 text-yellow-700 flex-shrink-0 whitespace-nowrap ${combinedClass}`}>
             <AlertTriangle size={12} className="flex-shrink-0 text-yellow-600" />
             <span>{message.warningMessage}</span>
           </div>
         )}
         {/* Error incorporato (per futuri utilizzi) */}
         {message.errorMessage && (
-          <div className="flex items-center gap-2 text-xs text-red-700 flex-shrink-0 whitespace-nowrap">
+          <div className={`flex items-center gap-2 text-red-700 flex-shrink-0 whitespace-nowrap ${combinedClass}`}>
             <AlertCircle size={12} className="flex-shrink-0 text-red-600" />
             <span>{message.errorMessage}</span>
           </div>

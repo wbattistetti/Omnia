@@ -501,7 +501,6 @@ export default function RegexInlineEditor({
               style={{
                 padding: '4px 12px',
                 borderRadius: 6,
-                fontSize: 12,
                 fontWeight: 500,
                 display: 'flex',
                 alignItems: 'center',
@@ -602,7 +601,7 @@ export default function RegexInlineEditor({
                         animation: 'spin 0.8s linear infinite',
                       }}
                     />
-                    <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>
+                    <div style={{ color: '#fff', fontWeight: 500 }}>
                       Generating regex...
                     </div>
                   </div>

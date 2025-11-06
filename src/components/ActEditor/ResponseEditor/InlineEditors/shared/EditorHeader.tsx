@@ -51,12 +51,11 @@ export default function EditorHeader({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{title}</h3>
+        <h3 style={{ margin: 0, fontWeight: 600 }}>{title}</h3>
         {validationBadge && <div style={{ flexShrink: 0 }}>{validationBadge}</div>}
         {errorMessage && (
           <span
             style={{
-              fontSize: 10,
               color: '#ef4444',
               fontStyle: 'italic',
               flex: 1,
@@ -83,7 +82,6 @@ export default function EditorHeader({
               border: 'none',
               borderRadius: 4,
               cursor: isGenerating ? 'not-allowed' : 'pointer',
-              fontSize: 12,
               fontWeight: 500,
               display: 'flex',
               alignItems: 'center',
@@ -104,7 +102,6 @@ export default function EditorHeader({
             borderRadius: 4,
             padding: '6px 12px',
             cursor: 'pointer',
-            fontSize: 12,
             fontWeight: 500,
           }}
         >

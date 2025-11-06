@@ -160,7 +160,7 @@ export default function TestValuesColumn({
       >
         {/* Header */}
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#f1f5f9', marginBottom: 8 }}>
+          <div style={{ fontWeight: 600, color: '#f1f5f9', marginBottom: 8 }}>
             Test Values
           </div>
 
@@ -184,7 +184,6 @@ export default function TestValuesColumn({
                 borderRadius: 4,
                 background: '#0f172a',
                 color: '#f1f5f9',
-                fontSize: 11,
               }}
             />
             <button
@@ -202,7 +201,6 @@ export default function TestValuesColumn({
                 background: newTestCase.trim() ? '#3b82f6' : '#334155',
                 color: '#fff',
                 cursor: newTestCase.trim() ? 'pointer' : 'not-allowed',
-                fontSize: 11,
               }}
             >
               +
@@ -241,7 +239,7 @@ export default function TestValuesColumn({
                       paddingRight: 8,
                     }}
                   >
-                    <span style={{ flex: 1, fontSize: 11, color: '#f1f5f9' }}>
+                    <span style={{ flex: 1, color: '#f1f5f9' }}>
                       {testCase}
                     </span>
                     <button
@@ -251,7 +249,6 @@ export default function TestValuesColumn({
                         border: 'none',
                         color: '#94a3b8',
                         cursor: 'pointer',
-                        fontSize: 12,
                         padding: '2px 4px',
                         marginLeft: 4,
                       }}
@@ -272,11 +269,11 @@ export default function TestValuesColumn({
                   >
                     {result.matched ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
-                        <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 500 }}>
+                        <span style={{ color: '#22c55e', fontWeight: 500 }}>
                           ✓ {result.fullMatch || 'Match'}
                         </span>
                         {result.extracted && Object.keys(result.extracted).length > 0 && (
-                          <div style={{ fontSize: 10, color: '#94a3b8', fontStyle: 'italic' }}>
+                          <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>
                             {Object.entries(result.extracted)
                               .map(([k, v]) => `${k}: ${v}`)
                               .join(', ')}
@@ -284,7 +281,7 @@ export default function TestValuesColumn({
                         )}
                       </div>
                     ) : (
-                      <span style={{ fontSize: 11, color: '#ef4444' }}>
+                      <span style={{ color: '#ef4444' }}>
                         ✗ {result.error || 'No match'}
                       </span>
                     )}
@@ -294,7 +291,7 @@ export default function TestValuesColumn({
             })}
           </div>
         ) : (
-          <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
+          <div style={{ color: '#64748b', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
             Nessun test case. Aggiungi valori da testare.
           </div>
         )}

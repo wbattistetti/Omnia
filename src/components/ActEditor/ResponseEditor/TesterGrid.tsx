@@ -200,7 +200,6 @@ function renderStackedSummary(
                     border: '1px solid #94a3b8',
                     background: '#fff',
                     color: '#111827',
-                    fontSize: 14,
                     lineHeight: 1.1,
                     resize: 'none',
                     overflow: 'hidden',
@@ -237,7 +236,7 @@ function renderTimeBar(ms?: number, maxMs?: number) {
         {seg2Pct > 0 && <div style={{ height: 4, width: `${seg2Pct}%`, background: '#fbbf24' }} />}
         {seg3Pct > 0 && <div style={{ height: 4, width: `${seg3Pct}%`, background: '#ef4444' }} />}
       </div>
-      <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2 }}>{m ? `${m} ms` : ''}</div>
+      <div style={{ opacity: 0.75, marginTop: 2 }}>{m ? `${m} ms` : ''}</div>
     </div>
   );
 }
@@ -321,8 +320,8 @@ export default function TesterGrid({
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: '#f9fafb' }}>Frase</th>
-            <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.regex, opacity: enabledMethods.regex ? 1 : 0.4 }} title={COLUMN_LABELS.regex.tooltip}>
+            <th style={{ textAlign: 'left', padding: 8, background: '#f9fafb' }}>Frase</th>
+            <th style={{ textAlign: 'left', padding: 8, background: EXTRACTOR_COLORS.regex, opacity: enabledMethods.regex ? 1 : 0.4 }} title={COLUMN_LABELS.regex.tooltip}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
@@ -333,7 +332,7 @@ export default function TesterGrid({
                   />
                   <div>
                     <span style={{ fontWeight: 600, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.regex.main}</span>
-                    <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.regex.tech})</span>
+                    <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.regex.tech})</span>
                   </div>
                 </div>
                 <button
@@ -355,7 +354,7 @@ export default function TesterGrid({
               </div>
             </th>
             {showDeterministic && (
-              <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.deterministic, opacity: enabledMethods.deterministic ? 1 : 0.4 }} title={COLUMN_LABELS.deterministic.tooltip}>
+              <th style={{ textAlign: 'left', padding: 8, background: EXTRACTOR_COLORS.deterministic, opacity: enabledMethods.deterministic ? 1 : 0.4 }} title={COLUMN_LABELS.deterministic.tooltip}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
@@ -366,7 +365,7 @@ export default function TesterGrid({
                   />
                   <div>
                     <span style={{ fontWeight: 600, color: enabledMethods.deterministic ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.deterministic.main}</span>
-                    <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.deterministic ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.deterministic.tech})</span>
+                    <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.deterministic ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.deterministic.tech})</span>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
@@ -409,7 +408,7 @@ export default function TesterGrid({
             </th>
             )}
             {showNER && (
-              <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.ner, opacity: enabledMethods.ner ? 1 : 0.4 }} title={COLUMN_LABELS.ner.tooltip}>
+              <th style={{ textAlign: 'left', padding: 8, background: EXTRACTOR_COLORS.ner, opacity: enabledMethods.ner ? 1 : 0.4 }} title={COLUMN_LABELS.ner.tooltip}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
@@ -420,7 +419,7 @@ export default function TesterGrid({
                   />
                   <div>
                     <span style={{ fontWeight: 600, color: enabledMethods.ner ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.ner.main}</span>
-                    <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.ner ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.ner.tech})</span>
+                    <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.ner ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.ner.tech})</span>
                   </div>
                 </div>
                 <button
@@ -443,7 +442,7 @@ export default function TesterGrid({
             </th>
             )}
             {showEmbeddings && (
-              <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.embeddings, opacity: enabledMethods.regex ? 1 : 0.4 }} title={COLUMN_LABELS.embeddings.tooltip}>
+              <th style={{ textAlign: 'left', padding: 8, background: EXTRACTOR_COLORS.embeddings, opacity: enabledMethods.regex ? 1 : 0.4 }} title={COLUMN_LABELS.embeddings.tooltip}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input
@@ -455,7 +454,7 @@ export default function TesterGrid({
                     />
                     <div>
                       <span style={{ fontWeight: 600, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.embeddings.main}</span>
-                      <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.embeddings.tech})</span>
+                      <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.embeddings.tech})</span>
                     </div>
                   </div>
                   <button
@@ -477,7 +476,7 @@ export default function TesterGrid({
                 </div>
               </th>
             )}
-            <th style={{ textAlign: 'left', padding: 8, fontSize: 13, background: EXTRACTOR_COLORS.llm, opacity: enabledMethods.llm ? 1 : 0.4 }} title={COLUMN_LABELS.llm.tooltip}>
+            <th style={{ textAlign: 'left', padding: 8, background: EXTRACTOR_COLORS.llm, opacity: enabledMethods.llm ? 1 : 0.4 }} title={COLUMN_LABELS.llm.tooltip}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
@@ -488,7 +487,7 @@ export default function TesterGrid({
                   />
                   <div>
                     <span style={{ fontWeight: 600, color: enabledMethods.llm ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.llm.main}</span>
-                    <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 4, color: enabledMethods.llm ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.llm.tech})</span>
+                    <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.llm ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.llm.tech})</span>
                   </div>
                 </div>
                 <button
@@ -522,12 +521,12 @@ export default function TesterGrid({
             const maxMs = Math.max(rr.detMs || 0, rr.nerMs || 0, rr.llmMs || 0);
             return (
               <tr key={i} style={{ borderTop: '1px solid #e5e7eb', cursor: 'pointer', background: selectedRow === i ? '#fff7ed' : '#fff' }} onClick={() => { setSelectedRow(i); }}>
-                <td style={{ padding: 8, fontSize: 15, wordBreak: 'break-word' }}>
+                <td style={{ padding: 8, wordBreak: 'break-word' }}>
                   {leading}
                   {renderPhraseWithSpans(ex, rr.spans)}
                 </td>
                 <td
-                  style={{ padding: 8, fontSize: 15, color: enabledMethods.regex ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.regex, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.regex ? 1 : 0.6 }}
+                  style={{ padding: 8, color: enabledMethods.regex ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.regex, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.regex ? 1 : 0.6 }}
                   onMouseEnter={() => setHovered(i, 'regex')}
                   onMouseLeave={() => setHovered(null, null)}
                 >
@@ -560,7 +559,7 @@ export default function TesterGrid({
                 </td>
                 {showDeterministic && (
                   <td
-                    style={{ padding: 8, fontSize: 15, color: enabledMethods.deterministic ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.deterministic, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.deterministic ? 1 : 0.6 }}
+                    style={{ padding: 8, color: enabledMethods.deterministic ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.deterministic, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.deterministic ? 1 : 0.6 }}
                     onMouseEnter={() => setHovered(i, 'deterministic')}
                     onMouseLeave={() => setHovered(null, null)}
                   >
@@ -600,7 +599,7 @@ export default function TesterGrid({
                 )}
                 {showNER && (
                   <td
-                    style={{ padding: 8, fontSize: 15, color: enabledMethods.ner ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.ner, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.ner ? 1 : 0.6 }}
+                    style={{ padding: 8, color: enabledMethods.ner ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.ner, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.ner ? 1 : 0.6 }}
                     onMouseEnter={() => setHovered(i, 'ner')}
                     onMouseLeave={() => setHovered(null, null)}
                   >
@@ -640,7 +639,7 @@ export default function TesterGrid({
                 )}
                 {showEmbeddings && (
                   <td
-                    style={{ padding: 8, fontSize: 15, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.embeddings, position: 'relative', verticalAlign: 'top', opacity: 1 }}
+                    style={{ padding: 8, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.embeddings, position: 'relative', verticalAlign: 'top', opacity: 1 }}
                     onMouseEnter={() => setHovered(i, 'embeddings')}
                     onMouseLeave={() => setHovered(null, null)}
                   >
@@ -674,7 +673,7 @@ export default function TesterGrid({
                   </td>
                 )}
                 <td
-                  style={{ padding: 8, fontSize: 15, color: enabledMethods.llm ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.llm, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.llm ? 1 : 0.6 }}
+                  style={{ padding: 8, color: enabledMethods.llm ? '#374151' : '#9ca3af', overflow: 'visible', background: EXTRACTOR_COLORS.llm, position: 'relative', verticalAlign: 'top', opacity: enabledMethods.llm ? 1 : 0.6 }}
                   onMouseEnter={() => setHovered(i, 'llm')}
                   onMouseLeave={() => setHovered(null, null)}
                 >
@@ -721,7 +720,7 @@ export default function TesterGrid({
           })}
           {examplesList.length === 0 && (
             <tr>
-              <td colSpan={colSpanEmpty} style={{ padding: 10, fontSize: 12, opacity: 0.7 }}>— nessuna frase —</td>
+              <td colSpan={colSpanEmpty} style={{ padding: 10, opacity: 0.7 }}>— nessuna frase —</td>
             </tr>
           )}
         </tbody>

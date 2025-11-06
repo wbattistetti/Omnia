@@ -5,6 +5,7 @@ import { ReviewItem } from './types';
 import { getActionIconNode, getActionMeta } from '../actionMeta';
 import { ensureHexColor, tailwindToHex } from '../utils/color';
 import ActionText from '../ActionText';
+import { useFontContext } from '../../../../context/FontContext';
 
 type Props = {
     item: ReviewItem;
@@ -13,6 +14,7 @@ type Props = {
 };
 
 export default function MessageReviewMessage({ item, onSave, updateSelectedNode }: Props) {
+    const { combinedClass } = useFontContext();
     const { updateTranslation } = useDDTManager();
     const [editing, setEditing] = useState(false);
     const [editValue, setEditValue] = useState(item.text);
@@ -167,7 +169,6 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                                 color: '#22c55e',
                                 cursor: 'pointer',
                                 marginRight: 6,
-                                fontSize: 18,
                                 display: 'flex',
                                 alignItems: 'center',
                                 flexShrink: 0,
@@ -185,7 +186,6 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                                 border: 'none',
                                 color: '#ef4444',
                                 cursor: 'pointer',
-                                fontSize: 18,
                                 display: 'flex',
                                 alignItems: 'center',
                                 flexShrink: 0,
@@ -201,11 +201,11 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                     <div
                         title={(item.textKey || item.actionId === 'sayMessage' || item.actionId === 'askQuestion') ? 'Click to edit' : undefined}
                         onClick={handleEdit}
+                        className={combinedClass}
                         style={{
                             cursor: (item.textKey || item.actionId === 'sayMessage' || item.actionId === 'askQuestion') ? 'pointer' : 'default',
                             flex: 1,
                             wordBreak: 'break-word',
-                            fontSize: 14,
                             lineHeight: '1.5',
                             minHeight: '40px',
                         }}

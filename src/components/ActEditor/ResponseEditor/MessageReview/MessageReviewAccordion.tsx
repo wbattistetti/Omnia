@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { stepMeta } from '../ddtUtils';
 import { StepGroup } from './types';
 import MessageReviewMessage from './MessageReviewMessage';
+import { useFontContext } from '../../../../context/FontContext';
 
 type Props = {
     group: StepGroup;
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export default function MessageReviewAccordion({ group, expanded, onToggle, updateSelectedNode }: Props) {
+    const { combinedClass } = useFontContext();
     const meta = stepMeta[group.stepKey];
 
     if (!meta) {
@@ -67,10 +69,10 @@ export default function MessageReviewAccordion({ group, expanded, onToggle, upda
                 <span style={{ color: borderColor, display: 'flex', alignItems: 'center' }}>
                     {meta?.icon || null}
                 </span>
-                <span style={{ fontWeight: 700, fontSize: 15, color: borderColor, flex: 1 }}>
+                <span className={combinedClass} style={{ fontWeight: 700, color: borderColor, flex: 1 }}>
                     {meta?.label || group.stepKey}
                 </span>
-                <span style={{ fontSize: 12, color: textColor, opacity: 0.7 }}>
+                <span className={combinedClass} style={{ color: textColor, opacity: 0.7 }}>
                     {(() => {
                         const totalMessages = group.recoveries.reduce((sum, r) => sum + r.items.length, 0);
                         return `${totalMessages} ${totalMessages === 1 ? 'message' : 'messages'}`;
@@ -82,7 +84,7 @@ export default function MessageReviewAccordion({ group, expanded, onToggle, upda
             {expanded && (
                 <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {group.recoveries.length === 0 ? (
-                        <div style={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>
+                        <div className={combinedClass} style={{ color: '#64748b', fontStyle: 'italic' }}>
                             No messages for this step type.
                         </div>
                     ) : (
@@ -98,9 +100,8 @@ export default function MessageReviewAccordion({ group, expanded, onToggle, upda
                             >
                                 {/* Recovery header (optional, can be hidden if not needed) */}
                                 {recovery.escIndex !== null && (
-                                    <div style={{
+                                    <div className={combinedClass} style={{
                                         marginBottom: 8,
-                                        fontSize: 12,
                                         fontWeight: 600,
                                         color: textColor,
                                         opacity: 0.8
@@ -112,7 +113,7 @@ export default function MessageReviewAccordion({ group, expanded, onToggle, upda
                                 {/* Messages inside recovery - no individual boxes */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {recovery.items.length === 0 ? (
-                                        <div style={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>
+                                        <div className={combinedClass} style={{ color: '#64748b', fontStyle: 'italic' }}>
                                             No messages in this recovery.
                                         </div>
                                     ) : (

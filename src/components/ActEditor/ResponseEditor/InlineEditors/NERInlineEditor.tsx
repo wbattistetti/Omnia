@@ -154,7 +154,7 @@ export default function NERInlineEditor({
         >
           <div style={{ textAlign: 'center' }}>
             <p>NER configuration editor coming soon...</p>
-            <p style={{ fontSize: 12, marginTop: 8, color: '#64748b' }}>
+            <p style={{ marginTop: 8, color: '#64748b' }}>
               Enable/disable NER and set confidence threshold
             </p>
           </div>

@@ -9,6 +9,7 @@ import { AlertTriangle } from 'lucide-react';
 import UserMessage, { type Message } from './UserMessage';
 import BotMessage from './BotMessage';
 import { getStepColor } from './chatSimulatorUtils';
+import { useFontContext } from '../../../../context/FontContext';
 import {
   getMain,
   getSub,
@@ -32,6 +33,7 @@ export default function DDEBubbleChat({
   translations?: Record<string, string>;
   onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
 }) {
+  const { combinedClass, fontSize } = useFontContext();
   const template: DDTTemplateV2 = React.useMemo(() => adaptCurrentToV2(currentDDT), [currentDDT]);
   // Enable simulator debug logs only when explicitly toggled
   const debugEnabled = (() => { try { return localStorage.getItem('debug.chatSimulator') === '1'; } catch { return false; } })();
@@ -297,7 +299,7 @@ export default function DDEBubbleChat({
   // handleSend function moved to useMessageHandling hook (see hooks/useMessageHandling.ts)
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className={`h-full flex flex-col bg-white ${combinedClass}`}>
       <div className="border-b p-3 bg-gray-50 flex items-center gap-2">
         <button
           onClick={() => {
@@ -308,18 +310,18 @@ export default function DDEBubbleChat({
             setNoMatchCounts({});
             setNoInputCounts({});
           }}
-          className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
+          className={`px-2 py-1 rounded border bg-gray-100 border-gray-300 text-gray-700 ${combinedClass}`}
         >
           Reset
         </button>
         <button
           onClick={() => setConfig({ typingIndicatorMs: 150 })}
-          className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
+          className={`px-2 py-1 rounded border bg-gray-100 border-gray-300 text-gray-700 ${combinedClass}`}
         >
           Typing 150ms
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={scrollContainerRef}>
+      <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${combinedClass}`} ref={scrollContainerRef}>
         {messages.map((m) => {
           // Render user message
           if (m.type === 'user') {
@@ -357,7 +359,7 @@ export default function DDEBubbleChat({
           // Render system message (legacy - dovrebbe essere raro ora)
           if (m.type === 'system') {
             return (
-              <div key={m.id} className="flex items-center gap-2 text-xs text-yellow-700">
+              <div key={m.id} className={`flex items-center gap-2 text-yellow-700 ${combinedClass}`}>
                 <AlertTriangle size={12} className="flex-shrink-0 text-yellow-600" />
                 <span>{m.text}</span>
               </div>
@@ -367,10 +369,20 @@ export default function DDEBubbleChat({
           return null;
         })}
         {/* Input field DOPO tutti i messaggi */}
-        <div className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3">
+        <div className={`bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3 ${combinedClass}`}>
+          <style dangerouslySetInnerHTML={{__html: `
+            .chat-simulator-input-placeholder::placeholder {
+              font-family: inherit !important;
+              font-size: inherit !important;
+            }
+          `}} />
           <input
             type="text"
-            className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+            className={`chat-simulator-input-placeholder w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 ${combinedClass}`}
+            style={{
+              fontFamily: 'inherit',
+              fontSize: 'inherit'
+            }}
             ref={inlineInputRef}
             onFocus={() => {
               try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }

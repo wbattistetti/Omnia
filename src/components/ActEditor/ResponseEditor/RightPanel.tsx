@@ -92,8 +92,8 @@ function TestsetView({ node }: { node: any }) {
           {cases.map((tc: any, i: number) => (
             <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 8 }}>
               <div style={{ fontWeight: 700 }}>{tc?.name || `case ${i + 1}`}</div>
-              <div style={{ fontSize: 12, color: '#334155' }}>input: {JSON.stringify(tc?.input)}</div>
-              <div style={{ fontSize: 12, color: '#334155' }}>expect: {JSON.stringify(tc?.expect)}</div>
+              <div style={{ color: '#334155' }}>input: {JSON.stringify(tc?.input)}</div>
+              <div style={{ color: '#334155' }}>expect: {JSON.stringify(tc?.expect)}</div>
             </div>
           ))}
         </div>
@@ -134,7 +134,7 @@ function StylesView() {
           </React.Fragment>
         ))}
       </div>
-      <div style={{ marginTop: 12, color: '#64748b', fontSize: 12 }}>Note: presets are suggestions for wording; use Message review to edit texts. We can wire these presets to an AI rewrite later.</div>
+      <div style={{ marginTop: 12, color: '#64748b' }}>Note: presets are suggestions for wording; use Message review to edit texts. We can wire these presets to an AI rewrite later.</div>
     </div>
   );
 }

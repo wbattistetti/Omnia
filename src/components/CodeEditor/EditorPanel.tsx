@@ -5,6 +5,7 @@ import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution'
 import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js';
 import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js';
+import { useFontContext } from '../../context/FontContext';
 
 const TEMPLATE = `// Describe below, in detail, when the condition should be TRUE.
 // You can write pseudo-code or a plain natural-language description.
@@ -37,7 +38,25 @@ interface EditorPanelProps {
   useTemplate?: boolean; // Whether to inject template for empty code (default: true for conditions)
 }
 
-export default function EditorPanel({ code, onChange, fontSize = 13, varKeys = [], language = 'javascript', customLanguage, useTemplate = true }: EditorPanelProps) {
+export default function EditorPanel({ code, onChange, fontSize: propFontSize, varKeys = [], language = 'javascript', customLanguage, useTemplate = true }: EditorPanelProps) {
+  // Use font from Context if available, otherwise fallback to prop
+  let fontSize: number;
+  try {
+    const { fontSize: contextFontSize } = useFontContext();
+    // Convert fontSize from 'xs' | 'sm' | 'base' | 'md' | 'lg' to pixels
+    const fontSizeMap: Record<string, number> = {
+      xs: 11,
+      sm: 12,
+      base: 13,
+      md: 14,
+      lg: 15,
+    };
+    fontSize = fontSizeMap[contextFontSize] || propFontSize || 13;
+  } catch {
+    // Not within FontProvider, use prop or default
+    fontSize = propFontSize || 13;
+  }
+
   const safeCode: string = typeof code === 'string' ? code : (code == null ? '' : (() => { try { return JSON.stringify(code, null, 2); } catch { return String(code); } })());
   // If customLanguage is provided, use its id. Otherwise use language prop (or 'javascript' as fallback)
   const editorLanguage = customLanguage ? customLanguage.id : (language || 'javascript');

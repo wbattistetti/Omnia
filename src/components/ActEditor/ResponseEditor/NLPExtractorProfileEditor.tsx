@@ -326,7 +326,6 @@ export default function NLPExtractorProfileEditor({
             <div>
               <label
                 style={{
-                  fontSize: 12,
                   opacity: 0.8,
                   display: 'flex',
                   alignItems: 'center',
@@ -381,7 +380,7 @@ export default function NLPExtractorProfileEditor({
         <div style={{ marginTop: 10, display: 'none' }}>
           {activeTab === 'regex' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={{ fontSize: 12, opacity: 0.8 }}>Regex</label>
+              <label style={{ opacity: 0.8 }}>Regex</label>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input
                   ref={regexInputRef}
@@ -535,7 +534,6 @@ export default function NLPExtractorProfileEditor({
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8,
-                      fontSize: 13,
                       fontWeight: 500,
                       minWidth: 120,
                       justifyContent: 'center',
@@ -576,7 +574,7 @@ export default function NLPExtractorProfileEditor({
             <PostProcessEditor value={postProcessText} onChange={setPostProcessText} />
           )}
           {jsonError && (
-            <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 6 }}>JSON non valido: {jsonError}</div>
+            <div style={{ color: '#b91c1c', marginTop: 6 }}>JSON non valido: {jsonError}</div>
           )}
         </div>
       </div>
@@ -598,7 +596,6 @@ export default function NLPExtractorProfileEditor({
                     borderRadius: 4,
                     background: testPhraseMode === 'all-training' ? '#dbeafe' : '#fff',
                     cursor: 'pointer',
-                    fontSize: 12,
                     fontWeight: testPhraseMode === 'all-training' ? 600 : 400
                   }}
                   title="Mostra tutte le frasi di training di tutti gli intenti"
@@ -615,7 +612,6 @@ export default function NLPExtractorProfileEditor({
                     background: testPhraseMode === 'selected-training' ? '#dbeafe' : '#fff',
                     cursor: intentSelected ? 'pointer' : 'not-allowed',
                     opacity: intentSelected ? 1 : 0.5,
-                    fontSize: 12,
                     fontWeight: testPhraseMode === 'selected-training' ? 600 : 400
                   }}
                   title={intentSelected ? "Mostra solo le frasi di training dell'intento selezionato" : "Seleziona un intento per vedere le sue frasi"}
@@ -630,7 +626,6 @@ export default function NLPExtractorProfileEditor({
                     borderRadius: 4,
                     background: testPhraseMode === 'test-phrases' ? '#dbeafe' : '#fff',
                     cursor: 'pointer',
-                    fontSize: 12,
                     fontWeight: testPhraseMode === 'test-phrases' ? 600 : 400
                   }}
                   title="Mostra le frasi di test (non usate per il training)"
@@ -777,7 +772,7 @@ export default function NLPExtractorProfileEditor({
           {activeEditor === 'post' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Post Process Configuration</h3>
+                <h3 style={{ margin: 0, fontWeight: 600 }}>Post Process Configuration</h3>
                 <button
                   onClick={closeEditor}
                   style={{
@@ -785,8 +780,7 @@ export default function NLPExtractorProfileEditor({
                     border: '1px solid #d1d5db',
                     borderRadius: 6,
                     background: '#fff',
-                    cursor: 'pointer',
-                    fontSize: 14
+                    cursor: 'pointer'
                   }}
                 >
                   Close
@@ -794,7 +788,7 @@ export default function NLPExtractorProfileEditor({
               </div>
               <PostProcessEditor value={postProcessText} onChange={setPostProcessText} />
               {jsonError && (
-                <div style={{ color: '#b91c1c', fontSize: 12, padding: 8, background: '#fee2e2', borderRadius: 6 }}>
+                <div style={{ color: '#b91c1c', padding: 8, background: '#fee2e2', borderRadius: 6 }}>
                   JSON Error: {jsonError}
                 </div>
               )}

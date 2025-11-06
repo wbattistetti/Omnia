@@ -162,7 +162,6 @@ function ActionRowInner({
               color: '#fff',
               borderRadius: 8,
               padding: '2px 8px',
-              fontSize: 15,
               fontWeight: 500,
               marginRight: 8,
               display: 'inline-block',
@@ -189,7 +188,7 @@ function ActionRowInner({
           <>
             <button
               onClick={handleEditConfirm}
-              style={{ background: 'none', border: 'none', color: '#22c55e', cursor: 'pointer', marginRight: 6, fontSize: 18, display: 'flex', alignItems: 'center' }}
+              style={{ background: 'none', border: 'none', color: '#22c55e', cursor: 'pointer', marginRight: 6, display: 'flex', alignItems: 'center' }}
               tabIndex={-1}
               title="Conferma modifica"
               aria-label="Conferma modifica"
@@ -198,7 +197,7 @@ function ActionRowInner({
             </button>
             <button
               onClick={handleEditCancel}
-              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center' }}
+              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
               tabIndex={-1}
               title="Annulla modifica"
               aria-label="Annulla modifica"

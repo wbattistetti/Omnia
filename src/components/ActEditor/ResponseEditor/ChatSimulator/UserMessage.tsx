@@ -1,5 +1,6 @@
 import React from 'react';
 import { Check, X as XIcon, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { useFontContext } from '../../../../context/FontContext';
 
 export interface Message {
   id: string;
@@ -33,17 +34,18 @@ const UserMessage: React.FC<UserMessageProps> = ({
   onCancel,
   onHover
 }) => {
+  const { combinedClass } = useFontContext();
   const isEditing = editingId === message.id;
 
   return (
-    <div className="flex flex-row items-start gap-2 w-full flex-wrap">
+    <div className={`flex flex-row items-start gap-2 w-full flex-wrap ${combinedClass}`}>
       <div
         className={`${message.matchStatus === 'noMatch'
           ? 'bg-red-50 border border-red-300 text-red-900'
           : message.matchStatus === 'partialMatch'
             ? 'bg-orange-50 border border-orange-300 text-orange-900'
             : 'bg-purple-50 border border-purple-300 text-purple-900'
-          } relative max-w-xs lg:max-w-md px-4 py-2 rounded-lg flex-shrink-0`}
+          } relative max-w-xs lg:max-w-md px-4 py-2 rounded-lg flex-shrink-0 ${combinedClass}`}
         onMouseEnter={() => onHover(message.id)}
         onMouseLeave={() => onHover(null)}
       >
@@ -51,7 +53,11 @@ const UserMessage: React.FC<UserMessageProps> = ({
           <div className="flex items-center gap-2">
             <input
               autoFocus
-              className="w-full px-2 py-1 border rounded text-sm"
+              className={`w-full px-2 py-1 border rounded ${combinedClass}`}
+              style={{
+                fontFamily: 'inherit',
+                fontSize: 'inherit'
+              }}
               value={draftText}
               onChange={(e) => onEdit(message.id, e.target.value)}
               onKeyDown={(e) => {
@@ -74,9 +80,9 @@ const UserMessage: React.FC<UserMessageProps> = ({
           </div>
         ) : (
           <>
-            <div className="flex items-start gap-2">
+            <div className={`flex items-start gap-2 ${combinedClass}`}>
               {message.matchStatus && (
-                <div className="mt-0.5 flex-shrink-0">
+                <div className={`mt-0.5 flex-shrink-0 ${combinedClass}`}>
                   {message.matchStatus === 'match' && (
                     <CheckCircle size={16} className="text-green-600" />
                   )}
@@ -88,7 +94,13 @@ const UserMessage: React.FC<UserMessageProps> = ({
                   )}
                 </div>
               )}
-              <div className={`text-sm flex-1 ${message.matchStatus === 'noMatch' ? 'text-red-700 font-medium' : ''}`}>
+              <div
+                className={`flex-1 ${message.matchStatus === 'noMatch' ? 'text-red-700 font-medium' : ''} ${combinedClass}`}
+                style={{
+                  fontFamily: 'inherit',
+                  fontSize: 'inherit'
+                }}
+              >
                 {message.text}
               </div>
             </div>
@@ -97,14 +109,14 @@ const UserMessage: React.FC<UserMessageProps> = ({
       </div>
       {/* Warning incorporato */}
       {message.warningMessage && (
-        <div className="flex items-center gap-2 text-xs text-yellow-700 flex-shrink-0 whitespace-nowrap">
+        <div className={`flex items-center gap-2 text-yellow-700 flex-shrink-0 whitespace-nowrap ${combinedClass}`}>
           <AlertTriangle size={12} className="flex-shrink-0 text-yellow-600" />
           <span>{message.warningMessage}</span>
         </div>
       )}
       {/* Error incorporato (per futuri utilizzi) */}
       {message.errorMessage && (
-        <div className="flex items-center gap-2 text-xs text-red-700 flex-shrink-0 whitespace-nowrap">
+        <div className={`flex items-center gap-2 text-red-700 flex-shrink-0 whitespace-nowrap ${combinedClass}`}>
           <AlertCircle size={12} className="flex-shrink-0 text-red-600" />
           <span>{message.errorMessage}</span>
         </div>
