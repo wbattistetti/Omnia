@@ -1,239 +1,214 @@
+// backend/clear_factory_db.js
+/*
+ * Script per pulire le collezioni principali del DB Factory
+ *
+ * Collezioni che verranno pulite:
+ * - AgentActs
+ * - BackendCalls
+ * - Conditions
+ * - Tasks
+ * - MacroTasks
+ *
+ * Usage:
+ *   node backend/clear_factory_db.js
+ *   node backend/clear_factory_db.js --force (salta conferma)
+ */
+
 const { MongoClient } = require('mongodb');
 
 const uri = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
 const dbFactory = 'factory';
 
-// Mapping da HeuristicType a InternalType
-const typeMapping = {
-  'MESSAGE': 'Message',
-  'REQUEST_DATA': 'DataRequest',
-  'PROBLEM_SPEC_DIRECT': 'ProblemClassification',
-  'PROBLEM_REASON': 'ProblemClassification',
-  'PROBLEM': 'ProblemClassification',
-  'SUMMARY': 'Summarizer',
-  'BACKEND_CALL': 'BackendCall',
-  'NEGOTIATION': 'Negotiation'
-};
+// Collezioni da pulire
+const COLLECTIONS_TO_CLEAR = [
+  'AgentActs',
+  'BackendCalls',
+  'Conditions',
+  'Tasks',
+  'MacroTasks'
+];
 
-// Pattern estratti dai file .disabled
-const patterns = {
-  IT: {
-    MESSAGE: [
-      '^(di|comunica|informa|mostra|avvisa|spiega|annuncia)\\b',
-      '^(dice|comunica|informa|mostra|avvisa|spiega|annuncia)\\b',
-      '^(mostragli|mostrale|spiegagli|spiegale|raccontagli|raccontale)\\b',
-      '^(dice che|comunica che|informa che)\\b',
-    ],
-    REQUEST_DATA: [
-      '^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\b',
-      '^(chiede|richiede|domanda|acquisisce|raccoglie)\\b',
-      '^(chiedigli|chiedile|chiedimi|richiedigli|richiedile)\\b',
-      '^(interroga|interroga su|acquisisci da)\\b',
-    ],
-    PROBLEM: '\\b(problema|errore|guasto|bug|sintom[oi])\\b',
-    PROBLEM_SPEC_DIRECT: [
-      '^(descrivi|spiega|indica|racconta)\\s+(il\\s+)?(problema|errore|guasto|bug|sintom[oi])\\b',
-      '^(descrive|spiega|indica|racconta)\\s+(il\\s+)?(problema|errore|guasto|bug|sintom[oi])\\b',
-      '^(raccontami|descrivimi|spiegami)\\s+(il\\s+)?(problema|errore|guasto|bug|sintom[oi])\\b',
-      '^(mi racconta|mi descrive|mi spiega)\\s+(il\\s+)?(problema|errore|guasto|bug|sintom[oi])\\b',
-    ],
-    PROBLEM_REASON: [
-      '^(chiedi|richiedi|domanda)\\s+(il\\s+)?(motivo|perch[eéè])\\b',
-      '^(chiede|richiede|domanda)\\s+(il\\s+)?(motivo|perch[eéè])\\b',
-      '^(chiedi|richiedi|domanda)\\s+(il\\s+)?(problema|motivo\\s+della\\s+(chiamata|telefonata|richiesta|segnalazione))\\b',
-      '^(chiede|richiede|domanda)\\s+(il\\s+)?(problema|motivo\\s+della\\s+(chiamata|telefonata|richiesta|segnalazione))\\b',
-      '^(chiedigli|chiedile)\\s+(perch[eéè]|il\\s+motivo)\\b',
-      '^(domandagli|domandale)\\s+(perch[eéè]|il\\s+motivo)\\b',
-    ],
-    SUMMARY: [
-      '^(riassumi|riepiloga|ricapitola|recap)\\b',
-      '^(riassume|riepiloga|ricapitola)\\b',
-      '\\b(in sintesi|in breve|per riassumere|in parole povere)\\b',
-      '^(fammi\\s+un\\s+riassunto|dammi\\s+un\\s+riepilogo)\\b',
-    ],
-    BACKEND_CALL: [
-      '\\b(api|webhook|endpoint|crm|erp|token)\\b',
-      '\\b(get|post|put|patch|delete)\\b',
-      '^(chiama|invoca|esegui|effettua|recupera|aggiorna|elimina|crea)\\b',
-      '^(chiama|invoca|esegue|recupera|aggiorna|elimina|crea)\\b',
-      '^(controlla|verifica|guarda)\\b',
-      '^(controlla|verifica|guarda)\\s+se\\b',
-      '^(interroga\\s+l\'api|manda\\s+una\\s+richiesta|recupera\\s+dal\\s+crm)\\b',
-      '^(esegui\\s+una\\s+chiamata|effettua\\s+una\\s+query)\\b',
-    ],
-    NEGOTIATION: [
-      '^(negozia|tratta|gestisci|concorda|valuta)\\b',
-      '^(si negozia|si tratta|si concorda)\\b',
-      '^(proponi|suggerisci|offri|indica)\\s+(un\'altra|una nuova|un\'alternativa)\\b',
-      '^(puoi\\s+proporre|hai\\s+altre)\\b',
-    ],
-  },
-  EN: {
-    MESSAGE: [
-      '^(say|tell|notify|display|announce|explain)\\b',
-      '^(says|tells|notifies|displays|announces|explains)\\b',
-    ],
-    REQUEST_DATA: [
-      '^(ask(\\s+for)?|request|collect|prompt(\\s+for)?|capture)\\b',
-      '^(asks(\\s+for)?|requests|collects|prompts(\\s+for)?|captures)\\b',
-    ],
-    PROBLEM: '\\b(issue|problem|error|failure|bug|symptom[s]?)\\b',
-    PROBLEM_SPEC_DIRECT: [
-      '^(describe|explain|detail|list)\\s+(the\\s+)?(issue|problem|error|failure|bug|symptom[s]?)\\b',
-      '^(describes|explains|details|lists)\\s+(the\\s+)?(issue|problem|error|failure|bug|symptom[s]?)\\b',
-    ],
-    PROBLEM_REASON: [
-      '^(ask(\\s+for)?|request)\\s+(the\\s+)?(reason|why)\\b',
-      '^(asks(\\s+for)?|requests)\\s+(the\\s+)?(reason|why)\\b',
-      '^(ask|asks)\\s+why\\b',
-    ],
-    SUMMARY: [
-      '^(summari[sz]e|recap|provide\\s+a\\s+summary)\\b',
-      '^(summari[sz]es|recaps|provides\\s+a\\s+summary)\\b',
-      '\\b(in summary|in short)\\b',
-    ],
-    BACKEND_CALL: [
-      '\\b(api|webhook|endpoint|crm|erp|token)\\b',
-      '\\b(get|post|put|patch|delete)\\b',
-      '^(call|invoke|execute|fetch|update|delete|create)\\b',
-      '^(calls|invokes|executes|fetches|updates|deletes|creates)\\b',
-      '^(check|verify|look\\s*up)\\b',
-      '^(checks|verifies|looks\\s*up)\\b',
-    ],
-    NEGOTIATION: [
-      '^(negotiate|handle|manage|agree|evaluate)\\b',
-      '^(is negotiated|is handled|is agreed)\\b',
-      '^(propose|suggest|offer|indicate)\\s+(another|a new|an alternative)\\b',
-      '^(can you propose|do you have other)\\b',
-    ],
-  },
-  PT: {
-    MESSAGE: [
-      '^(diga|informe|mostre|avise|explique|anuncie)\\b',
-      '^(diz|informa|mostra|avisa|explica|anuncia)\\b',
-    ],
-    REQUEST_DATA: [
-      '^(pe[çc]a|solicite|pergunte|colete)\\b',
-      '^(pede|solicita|pergunta|coleta)\\b',
-    ],
-    PROBLEM: '\\b(problema|erro|falha|bug|sintoma[s]?)\\b',
-    PROBLEM_SPEC_DIRECT: [
-      '^(descreva|explique|liste|relate)\\s+(o\\s+)?(problema|erro|falha|bug|sintoma[s]?)\\b',
-      '^(descreve|explica|lista|relata)\\s+(o\\s+)?(problema|erro|falha|bug|sintoma[s]?)\\b',
-    ],
-    PROBLEM_REASON: [
-      '^(pergunte|solicite|pe[çc]a)\\s+(o\\s+)?(motivo|por\\s+que)\\b',
-      '^(pergunta|solicita|pede)\\s+(o\\s+)?(motivo|por\\s+que)\\b',
-    ],
-    SUMMARY: [
-      '^(resuma|fa[çc]a\\s+um\\s+resumo|recapitule)\\b',
-      '^(resume|fornece\\s+um\\s+resumo|recapitula)\\b',
-      '\\b(em resumo|em s[ií]ntese)\\b',
-    ],
-    BACKEND_CALL: [
-      '\\b(api|webhook|endpoint|crm|erp|token)\\b',
-      '\\b(get|post|put|patch|delete)\\b',
-      '^(chame|invoque|execute|busque|atualize|exclua|crie)\\b',
-      '^(chama|invoca|executa|busca|atualiza|exclui|cria)\\b',
-      '^(verifique|confira|veja|consulte|cheque)\\b',
-      '^(verifica|confere|v[eê]|consulta|checa)\\b',
-    ],
-    NEGOTIATION: [
-      '^(negocie|trate|gerencie|concorde|avalie)\\b',
-      '^(se negocia|se trata|se concorda)\\b',
-      '^(proponha|sugira|ofere[çc]a|indique)\\s+(outra|uma nova|uma alternativa)\\b',
-      '^(pode propor|tem outras)\\b',
-    ],
-  },
-};
-
-async function seedActTypePatterns() {
+async function clearFactoryDB(options = {}) {
+  const { force = false } = options;
   const client = new MongoClient(uri);
 
   try {
+    console.log('🔗 Connecting to MongoDB...');
     await client.connect();
-    console.log('[SEED] Connected to MongoDB');
-
     const db = client.db(dbFactory);
-    const collection = db.collection('act_type_patterns');
 
-    // Rimuovi documenti esistenti (opzionale - commenta se vuoi mantenere)
-    // await collection.deleteMany({});
-    // console.log('[SEED] Cleared existing patterns');
+    // Lista tutte le collezioni esistenti nel DB
+    console.log('\n🔍 Scanning Factory DB for collections...');
+    const allCollections = await db.listCollections().toArray();
+    const existingCollectionNames = allCollections.map(c => c.name);
 
-    const documents = [];
+    console.log(`\n📋 Found ${existingCollectionNames.length} collections in Factory DB:`);
+    existingCollectionNames.forEach(name => console.log(`   - ${name}`));
 
-    // Crea documenti per ogni tipo e lingua
-    for (const lang of ['IT', 'EN', 'PT']) {
-      const langPatterns = patterns[lang];
+    // Filtra solo le collezioni che esistono e che vogliamo pulire
+    const collectionsToProcess = COLLECTIONS_TO_CLEAR.filter(name =>
+      existingCollectionNames.includes(name)
+    );
 
-      for (const [type, patternData] of Object.entries(langPatterns)) {
-        const _id = `${type}_${lang}`;
-        const internalType = typeMapping[type] || type;
+    const missingCollections = COLLECTIONS_TO_CLEAR.filter(name =>
+      !existingCollectionNames.includes(name)
+    );
 
-        // PROBLEM è un singolo pattern, gli altri sono array
-        const patternsArray = Array.isArray(patternData)
-          ? patternData
-          : [patternData];
+    if (missingCollections.length > 0) {
+      console.log('\n⚠️  Collections not found (will be skipped):');
+      missingCollections.forEach(name => console.log(`   - ${name}`));
+    }
 
-        const doc = {
-          _id,
-          type,
-          internalType,
-          language: lang,
-          patterns: patternsArray,
-          version: '1.0.0',
-          updatedAt: new Date().toISOString(),
-        };
+    if (collectionsToProcess.length === 0) {
+      console.log('\n❌ No collections to clear!');
+      return;
+    }
 
-        documents.push(doc);
+    // Conta documenti prima della pulizia
+    console.log('\n📊 Document counts BEFORE clearing:');
+    console.log('='.repeat(80));
+    const countsBefore = {};
+    let totalBefore = 0;
+
+    for (const collectionName of collectionsToProcess) {
+      const collection = db.collection(collectionName);
+      const count = await collection.countDocuments({});
+      countsBefore[collectionName] = count;
+      totalBefore += count;
+      console.log(`   ${collectionName.padEnd(30)} : ${count.toString().padStart(6)} documents`);
+    }
+    console.log('='.repeat(80));
+    console.log(`   TOTAL${' '.repeat(25)} : ${totalBefore.toString().padStart(6)} documents`);
+
+    if (totalBefore === 0) {
+      console.log('\n✅ Factory DB collections are already empty. Nothing to delete.');
+      return;
+    }
+
+    // Conferma prima di cancellare (a meno che non sia --force)
+    if (!force) {
+      console.log('\n⚠️  ⚠️  ⚠️  WARNING  ⚠️  ⚠️  ⚠️');
+      console.log(`About to delete ${totalBefore} documents from ${collectionsToProcess.length} collections!`);
+      console.log('This action CANNOT be undone!');
+      console.log('\nCollections to clear:');
+      collectionsToProcess.forEach(name => {
+        console.log(`   - ${name} (${countsBefore[name]} documents)`);
+      });
+      console.log('\n⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️');
+      console.log('\nTo proceed without confirmation, use: node backend/clear_factory_db.js --force');
+      console.log('Press Ctrl+C to cancel, or wait 10 seconds to proceed...');
+
+      // Attendi 10 secondi o input utente
+      await new Promise(resolve => {
+        const timeout = setTimeout(() => {
+          console.log('\n⏱️  Timeout reached. Proceeding with deletion...');
+          resolve();
+        }, 10000);
+
+        // Se l'utente preme Enter, procedi immediatamente
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.once('data', () => {
+          clearTimeout(timeout);
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
+          console.log('\n✅ Proceeding with deletion...');
+          resolve();
+        });
+      });
+    }
+
+    // Cancella documenti da ogni collezione
+    console.log('\n🗑️  Clearing collections...');
+    console.log('='.repeat(80));
+
+    const results = {};
+    let totalDeleted = 0;
+
+    for (const collectionName of collectionsToProcess) {
+      const collection = db.collection(collectionName);
+
+      try {
+        const result = await collection.deleteMany({});
+        results[collectionName] = result.deletedCount;
+        totalDeleted += result.deletedCount;
+        console.log(`   ✅ ${collectionName.padEnd(30)} : ${result.deletedCount.toString().padStart(6)} documents deleted`);
+      } catch (error) {
+        console.error(`   ❌ ${collectionName.padEnd(30)} : ERROR - ${error.message}`);
+        results[collectionName] = 0;
       }
     }
 
-    // Inserisci o aggiorna documenti
-    let inserted = 0;
-    let updated = 0;
+    console.log('='.repeat(80));
+    console.log(`   TOTAL DELETED${' '.repeat(16)} : ${totalDeleted.toString().padStart(6)} documents`);
 
-    for (const doc of documents) {
-      const result = await collection.updateOne(
-        { _id: doc._id },
-        { $set: doc },
-        { upsert: true }
-      );
+    // Verifica che siano vuote
+    console.log('\n🔍 Verifying collections are empty...');
+    const countsAfter = {};
+    let totalAfter = 0;
 
-      if (result.upsertedCount > 0) {
-        inserted++;
-      } else if (result.modifiedCount > 0) {
-        updated++;
+    for (const collectionName of collectionsToProcess) {
+      const collection = db.collection(collectionName);
+      const count = await collection.countDocuments({});
+      countsAfter[collectionName] = count;
+      totalAfter += count;
+
+      if (count === 0) {
+        console.log(`   ✅ ${collectionName.padEnd(30)} : EMPTY`);
+      } else {
+        console.log(`   ⚠️  ${collectionName.padEnd(30)} : ${count} documents still remain!`);
       }
     }
 
-    console.log(`[SEED] ✅ Completed:`);
-    console.log(`  - Inserted: ${inserted} documents`);
-    console.log(`  - Updated: ${updated} documents`);
-    console.log(`  - Total: ${documents.length} documents`);
+    // Riepilogo finale
+    console.log('\n' + '='.repeat(80));
+    console.log('📊 FINAL SUMMARY:');
+    console.log('='.repeat(80));
+    console.log(`   Collections processed: ${collectionsToProcess.length}`);
+    console.log(`   Documents before:     ${totalBefore}`);
+    console.log(`   Documents deleted:    ${totalDeleted}`);
+    console.log(`   Documents after:      ${totalAfter}`);
 
-    // Verifica
-    const count = await collection.countDocuments();
-    console.log(`[SEED] Total documents in collection: ${count}`);
+    if (totalAfter === 0) {
+      console.log('\n✅ ✅ ✅ Factory DB successfully cleared! ✅ ✅ ✅');
+    } else {
+      console.log(`\n⚠️  Warning: ${totalAfter} documents still remain in Factory DB`);
+    }
 
-  } catch (error) {
-    console.error('[SEED] ❌ Error:', error);
-    throw error;
+    // Mostra dettagli per collezione
+    console.log('\n📋 Per-collection details:');
+    for (const collectionName of collectionsToProcess) {
+      const before = countsBefore[collectionName];
+      const deleted = results[collectionName];
+      const after = countsAfter[collectionName];
+      console.log(`   ${collectionName}:`);
+      console.log(`      Before:  ${before}`);
+      console.log(`      Deleted: ${deleted}`);
+      console.log(`      After:   ${after} ${after === 0 ? '✅' : '⚠️'}`);
+    }
+
+  } catch (err) {
+    console.error('\n❌ Error clearing Factory DB:', err);
+    throw err;
   } finally {
     await client.close();
-    console.log('[SEED] Connection closed');
+    console.log('\n🔌 Disconnected from MongoDB');
   }
 }
 
-// Esegui lo script
-seedActTypePatterns()
+// Parse command line arguments
+const args = process.argv.slice(2);
+const options = {
+  force: args.includes('--force')
+};
+
+// Run script
+clearFactoryDB(options)
   .then(() => {
-    console.log('[SEED] ✅ Script completed successfully');
+    console.log('\n🎉 Script completed successfully!');
     process.exit(0);
   })
-  .catch((error) => {
-    console.error('[SEED] ❌ Script failed:', error);
+  .catch((err) => {
+    console.error('\n❌ Script failed:', err);
     process.exit(1);
   });
-

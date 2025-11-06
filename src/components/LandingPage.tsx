@@ -248,6 +248,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const uniqueRecentProjects = Array.from(new Map(recentProjects.map(p => [p._id || p.projectId, p])).values());
   const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id || p.projectId, p])).values());
 
+  // Controlla se ci sono progetti
+  const hasProjects = uniqueAllProjects.length > 0;
+
   // Filtra per tipo di vista (tutti/recenti/recuperati)
   let projectsToShow: any[] = [];
   if (projectViewType === 'recent') {
@@ -328,20 +331,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             >
               Nuovo Progetto
             </button>
-            <div className="relative flex flex-col items-start">
-              <button
-                onClick={() => setShowDropdown((v) => !v)}
-                className={`bg-white text-emerald-800 px-10 py-4 text-xl font-semibold flex items-center gap-2 shadow-2xl transition-all duration-300
-                  ${showDropdown ? 'rounded-t-lg rounded-b-none' : 'rounded-full'}`}
-                style={{
-                  borderBottomLeftRadius: showDropdown ? 0 : '9999px',
-                  borderBottomRightRadius: showDropdown ? 0 : '9999px',
-                }}
-              >
-                Carica Progetto
-                <ChevronDown className="w-5 h-5" />
-              </button>
-              {showDropdown && (
+            {hasProjects && (
+              <div className="relative flex flex-col items-start">
+                <button
+                  onClick={() => setShowDropdown((v) => !v)}
+                  className={`bg-white text-emerald-800 px-10 py-4 text-xl font-semibold flex items-center gap-2 shadow-2xl transition-all duration-300
+                    ${showDropdown ? 'rounded-t-lg rounded-b-none' : 'rounded-full'}`}
+                  style={{
+                    borderBottomLeftRadius: showDropdown ? 0 : '9999px',
+                    borderBottomRightRadius: showDropdown ? 0 : '9999px',
+                  }}
+                >
+                  Carica Progetto
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+                {showDropdown && (
                 <div
                   className="absolute left-0 right-0 top-full mt-0 bg-white rounded-b-lg shadow-2xl z-30 p-2 min-w-[320px] border-t border-emerald-100"
                   style={{
@@ -412,12 +416,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     );
                   })}
                 </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Pannello progetti sempre visibile sotto Carica Progetto */}
-          <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`}>
+          {/* Pannello progetti sempre visibile sotto Carica Progetto - solo se ci sono progetti */}
+          {hasProjects && (
+            <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`}>
             {/* Header con 3 pulsanti/tab */}
             <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl">
               <div className="flex items-center gap-2">
@@ -706,7 +712,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     return (
                       <tr
                         key={proj._id}
-                        className="hover:bg-emerald-50 cursor-pointer"
+                        className="group hover:bg-emerald-50 cursor-pointer"
                         onClick={async () => {
                           const id = (proj._id || proj.projectId) as string;
                           setLoadingProjectId(id);
@@ -742,7 +748,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         </td>
                         <td className="border border-emerald-200 p-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                           <button
-                            className="text-red-500 opacity-70 hover:opacity-100"
+                            className="text-red-500 opacity-0 group-hover:opacity-70 hover:opacity-100 transition-opacity"
                             title="Elimina progetto"
                             onClick={async () => {
                               const id = proj._id || proj.projectId;
@@ -762,6 +768,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </table>
             </div>
           </div>
+          )}
 
           {/* Modal conferma eliminazione */}
           {showDeleteAllConfirm && (
