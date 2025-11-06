@@ -444,73 +444,60 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {act?.type === 'Summarizer' && isDDTEmpty(localDDT) ? (
           /* Placeholder for Summarizer when DDT is empty */
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
+          <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 className={combinedClass} style={{ fontWeight: 700, marginBottom: '16px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 🧠 Summarizing (in arrivo)
               </h2>
-              <p style={{ marginBottom: '16px', fontSize: '16px' }}>
-                Questo modulo permetterà di riepilogare in linguaggio naturale una serie di dati raccolti o generati durante la conversazione. L'agente potrà:
+              <p className={combinedClass} style={{ marginBottom: '16px' }}>
+                Questo modulo (generale) riepiloga dati raccolti e chiede conferma (opzionale) con gestione delle correzioni.
               </p>
-              <ul style={{ marginBottom: '16px', paddingLeft: '24px', fontSize: '16px' }}>
-                <li>Presentare un riepilogo sintetico e ordinato</li>
-                <li>Chiedere conferma implicita o esplicita</li>
-                <li>Gestire correzioni e rettifiche in modo fluido</li>
-                <li>Ripetere le informazioni su richiesta</li>
-                <li>Adattare il riepilogo in base alle modifiche dell'utente</li>
-              </ul>
-              <p style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>📌 Esempio di dialogo di riepilogo e conferma:</p>
-              <div style={{ marginBottom: '16px', padding: '16px', background: '#1e293b', borderRadius: '8px', fontSize: '14px', lineHeight: 1.8 }}>
+              <p className={combinedClass} style={{ marginBottom: '16px' }}>
+                Il designer deve solo specificare quali dati vanno riepilogati.
+              </p>
+              <p className={combinedClass} style={{ marginBottom: '16px', fontWeight: 600 }}>📌 Esempio:</p>
+              <div className={combinedClass} style={{ marginBottom: '16px', padding: '16px', background: '#1e293b', borderRadius: '8px', lineHeight: 1.8 }}>
                 <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Salve, buongiorno.</div>
                 <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Buongiorno! Riepilogo i dati: Mario Rossi, nato a Milano il 17 maggio 1980, residente in via Ripamonti numero 13. Giusto?</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Allora… mi ha detto via Rigamonti numero 17.</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Glielo rileggo: via Rigamonti 17.</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Lo rilegge più lentamente?</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Certamente. Via… Rigamonti… numero… diciassette.</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> E nato il 18 maggio. È corretto?</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Sì. Le altre informazioni sono corrette?</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Sì, ma me le può ripetere?</div>
+                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> No, l'indirizzo esatto è via RI-GA-MON-TI non Ripamonti e sono nato il 18 maggio non il 17</div>
                 <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Certo. Mario Rossi, nato a Milano il 18 maggio 1980, residente in via Rigamonti al numero 17. Giusto?</div>
                 <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Giusto!</div>
                 <div><strong>🤖 Agente:</strong> Perfetto.</div>
-              </div>
-              <div style={{ marginTop: '24px', padding: '12px', background: '#1e293b', borderRadius: '8px', textAlign: 'center', color: '#94a3b8' }}>
-                🛠️ Summarizing soon...
               </div>
             </div>
           </div>
         ) : act?.type === 'Negotiation' && isDDTEmpty(localDDT) ? (
           /* Placeholder for Negotiation when DDT is empty */
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
+          <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🧠 Negotiation (in arrivo)
+              <h2 className={combinedClass} style={{ fontWeight: 700, marginBottom: '16px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                Negotiation (in arrivo)
               </h2>
-              <p style={{ marginBottom: '16px', fontSize: '16px' }}>
-                Questo modulo permetterà di gestire dialoghi di negoziazione tra l'agente e l'utente per selezionare un'opzione tra più alternative. Le opzioni possono essere date, orari, modalità di pagamento, luoghi, servizi o qualsiasi altro insieme di scelte.
+              <p className={combinedClass} style={{ marginBottom: '16px' }}>
+                Questo modulo gestisce la negoziazione di una serie di "estrazioni con vincoli" da una insieme di opzioni. Vale per date, orari, o in generale insieme di opzioni.
               </p>
-              <p style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Il modulo supporterà:</p>
-              <ul style={{ marginBottom: '16px', paddingLeft: '24px', fontSize: '16px' }}>
+              <p className={combinedClass} style={{ marginBottom: '16px', fontWeight: 600 }}>Il modulo supporta:</p>
+              <ul className={combinedClass} style={{ marginBottom: '16px', paddingLeft: '24px' }}>
                 <li>Proposte e controproposte</li>
                 <li>Riformulazioni e chiarimenti</li>
                 <li>Ripetizione delle opzioni</li>
                 <li>Navigazione avanti e indietro tra le alternative</li>
                 <li>Impostazione di vincoli o preferenze (es. "solo dopo le 17", "non il lunedì")</li>
               </ul>
-              <p style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>📌 Esempio di dialogo di negoziazione (data appuntamento):</p>
-              <div style={{ marginBottom: '16px', padding: '16px', background: '#1e293b', borderRadius: '8px', fontSize: '14px', lineHeight: 1.8 }}>
+              <p className={combinedClass} style={{ marginBottom: '16px', fontWeight: 600 }}>📌 Esempio di dialogo di negoziazione (data appuntamento):</p>
+              <div className={combinedClass} style={{ marginBottom: '16px', padding: '16px', background: '#1e293b', borderRadius: '8px', lineHeight: 1.8 }}>
                 <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Salve, buongiorno.</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Buongiorno! La pianta è disponibile. Dopodomani alle 12 le andrebbe bene?</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> No, guardi, dopodomani non va bene. Va bene la settimana prossima? Ci sono date? Io potrei solo da giovedì.</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Certo! Giovedì abbiamo alle 17:46, poi venerdì alle 12:51. Altrimenti possiamo andare a lunedì successivo alle 14:00.</div>
+                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Buongiorno! Abbiamo disponibilità per dopodomani alle 12, le andrebbe bene?</div>
+                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> No, guardi, dopodomani non va bene. La settimana prossima? Ci sono date? Io potrei da giovedì.</div>
+                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Certo! Giovedì abbiamo alle 17:45, poi venerdì alle 12. Altrimenti possiamo andare a lunedì successivo alle 14:00.</div>
                 <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Mi scusi, mi può ripetere gli orari di giovedì?</div>
-                <div><strong>🤖 Agente:</strong> Certamente. Giovedì abbiamo disponibilità alle 17:46.</div>
-              </div>
-              <p style={{ marginBottom: '16px', fontSize: '16px', fontStyle: 'italic', color: '#94a3b8' }}>
-                IMPORTANTE: Questo modulo permetterà di negoziare in linguaggio naturale qualsiasi lista di opzioni, gestendo estrazioni successive e vincoli posti dall'utente nel corso del dialogo.
-              </p>
-              <div style={{ marginTop: '24px', padding: '12px', background: '#1e293b', borderRadius: '8px', textAlign: 'center', color: '#94a3b8' }}>
-                🛠️ Negotiation soon...
+                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Certamente. Giovedì alle 17:45.</div>
+                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Mmm, è troppo tardi. Invece lunedi?</div>
+                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Martedi 23?</div>
+                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Martedi 23 abbiamo disponibilita alle 19.</div>
+                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Ancora peggio. Allora facciamo gioved' alle 17:45.</div>
+                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Ok Va bene per giovedi alle 17:45 allora?</div>
+                <div><strong>👤 Utente:</strong> Si va bene.</div>
               </div>
             </div>
           </div>

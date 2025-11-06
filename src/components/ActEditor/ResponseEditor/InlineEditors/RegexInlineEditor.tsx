@@ -178,6 +178,9 @@ export default function RegexInlineEditor({
   const [validationResult, setValidationResult] = React.useState<ValidationResult | null>(null);
   const [shouldShowValidation, setShouldShowValidation] = React.useState(false);
 
+  // Debounce timer for profile updates to avoid too many calls
+  const profileUpdateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
   // 🔍 LOG: Verifica profile ricevuto come prop
   React.useEffect(() => {
     console.log('[RegexInlineEditor] 📥 Profile prop received:', {
@@ -195,6 +198,16 @@ export default function RegexInlineEditor({
     profile || { slotId: '', locale: 'it-IT', kind: kind || 'generic', synonyms: [] },
     onProfileUpdate || (() => { })
   );
+
+  // Cleanup debounce timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (profileUpdateTimeoutRef.current) {
+        clearTimeout(profileUpdateTimeoutRef.current);
+        profileUpdateTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Debug: Log test cases to verify they're being passed
   React.useEffect(() => {
@@ -631,14 +644,20 @@ export default function RegexInlineEditor({
                     if (newValue !== regex) {
                       setHasUserEdited(true);
                     }
-                    // ✅ Save regex to profile immediately (no timing issues)
-                    if (onProfileUpdate && profile) {
-                      const updatedProfile = {
-                        ...profile,
-                        regex: newValue || undefined
-                      };
-                      onProfileUpdate(updatedProfile);
+                    // ✅ Debounce profile update to avoid too many calls and prevent editor freezing
+                    if (profileUpdateTimeoutRef.current) {
+                      clearTimeout(profileUpdateTimeoutRef.current);
                     }
+                    profileUpdateTimeoutRef.current = setTimeout(() => {
+                      if (onProfileUpdate && profile) {
+                        const updatedProfile = {
+                          ...profile,
+                          regex: newValue || undefined
+                        };
+                        onProfileUpdate(updatedProfile);
+                      }
+                      profileUpdateTimeoutRef.current = null;
+                    }, 500); // 500ms debounce - wait for user to stop typing
                   }
                 }}
                 language={regexAiMode ? 'plaintext' : undefined}

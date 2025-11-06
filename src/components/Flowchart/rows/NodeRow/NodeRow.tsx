@@ -1003,8 +1003,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const openTypePickerFromIcon = (anchor?: DOMRect, currentType?: string) => {
     const rect = anchor || labelRef.current?.getBoundingClientRect();
     if (!rect) { return; }
-    // Position menu close to icon with minimal padding to avoid right whitespace
-    const finalPos = { left: rect.left, top: (rect as any).bottom } as { left: number; top: number };
+    // Position menu directly under icon with small negative offset to eliminate dead zone
+    // Overlap by a few pixels to ensure smooth transition from button to picker
+    const finalPos = { left: rect.left, top: (rect as any).bottom - 4 } as { left: number; top: number };
     // Removed verbose log
     setPickerPosition(finalPos);
     setShowIntellisense(false);
