@@ -14,10 +14,6 @@ interface ProjectDataUpdateContextType {
   updateDataDirectly: (updatedData: ProjectData) => void; // ✅ Aggiorna dati direttamente senza ricaricare dal DB
   getCurrentProjectId: () => string | null;
   setCurrentProjectId: (id: string | null) => void;
-  isDraft: () => boolean;
-  setDraft: (draft: boolean) => void;
-  getTempId: () => string | null;
-  setTempId: (id: string | null) => void;
   addCategory: (type: EntityType, name: string) => Promise<void>;
   deleteCategory: (type: EntityType, categoryId: string) => Promise<void>;
   updateCategory: (type: EntityType, categoryId: string, updates: Partial<Category>) => Promise<void>;
@@ -54,11 +50,9 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<boolean>(false);
-  const [tempId, setTempId] = useState<string | null>(null);
   useEffect(() => {
-    import('../state/runtime').then(r => { r.setCurrentProjectId(currentProjectId); r.setDraft(draft); r.setTempId(tempId); }).catch(() => {});
-  }, [currentProjectId, draft, tempId]);
+    import('../state/runtime').then(r => { r.setCurrentProjectId(currentProjectId); }).catch(() => {});
+  }, [currentProjectId]);
 
   const loadData = async () => {
     try {
@@ -104,10 +98,6 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
 
   const getCurrentProjectId = () => currentProjectId;
   const setCurrentProjectIdSafe = (id: string | null) => setCurrentProjectId(id);
-  const isDraft = () => draft;
-  const setDraftSafe = (v: boolean) => setDraft(v);
-  const getTempId = () => tempId;
-  const setTempIdSafe = (id: string | null) => setTempId(id);
 
   const addCategory = async (type: EntityType, name: string) => {
     try {
@@ -174,10 +164,6 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
     updateDataDirectly, // ✅ Esposto per aggiornare dati direttamente
     getCurrentProjectId,
     setCurrentProjectId: setCurrentProjectIdSafe,
-    isDraft,
-    setDraft: setDraftSafe,
-    getTempId,
-    setTempId: setTempIdSafe,
     addCategory,
     deleteCategory,
     updateCategory,

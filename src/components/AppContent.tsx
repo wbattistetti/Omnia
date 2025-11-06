@@ -342,30 +342,39 @@ export const AppContent: React.FC<AppContentProps> = ({
     setCreateError(null);
     setIsCreatingProject(true);
     try {
-      // DRAFT MODE: nessun bootstrap al server; set flag e temp id
-      const tempId = (crypto?.randomUUID ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2));
-      pdUpdate.setDraft(true);
-      pdUpdate.setTempId(tempId);
-      try { localStorage.setItem('current.projectId', tempId); } catch { }
-      const boot = { projectId: tempId } as any;
+      // Bootstrap immediato: crea DB e catalog subito
+      console.log('[AppContent] Creating project with bootstrap...');
+      const resp = await fetch('/api/projects/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: projectInfo.clientName || 'Client',
+          projectName: projectInfo.name || 'Project',
+          industry: projectInfo.industry || 'utility_gas',
+          language: projectInfo.language || 'pt',
+          tenantId: 'tenant_default'
+        })
+      });
+      if (!resp.ok) throw new Error('bootstrap_failed');
+      const boot = await resp.json();
+      const projectId = boot.projectId;
 
-      // Carica atti direttamente dalla Factory (mode deterministico) rispettando industry
-      console.log('[AppContent] Loading acts from factory...');
-
+      // Carica atti dal progetto appena creato
+      console.log('[AppContent] Loading acts from project...');
       try {
-        await ProjectDataService.loadActsFromFactory(projectInfo.industry);
-        console.log('[AppContent] Factory acts loaded successfully');
+        await ProjectDataService.loadActsFromProject(projectId);
+        console.log('[AppContent] Project acts loaded successfully');
       } catch (error) {
-        console.error('[AppContent] Error loading factory acts:', error);
+        console.error('[AppContent] Error loading project acts:', error);
       }
 
       const data = await ProjectDataService.loadProjectData();
 
-      // 3) Inizializza stato UI
+      // Inizializza stato UI
       const newProject: ProjectData & ProjectInfo = {
         ...projectInfo,
-        id: boot.projectId,
-        industry: projectInfo.industry || 'defaultIndustry',
+        id: projectId,
+        industry: projectInfo.industry || 'utility_gas',
         agentActs: data.agentActs,
         userActs: data.userActs,
         backendActions: data.backendActions,
@@ -375,7 +384,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       };
       setCurrentProject(newProject);
       try { localStorage.setItem('project.lang', String(projectInfo.language || 'pt')); } catch { }
-      try { pdUpdate.setCurrentProjectId(boot.projectId); console.log('[Bootstrap][projectId][DRAFT]', boot.projectId); } catch { }
+      try { localStorage.setItem('current.projectId', projectId); } catch { }
+      pdUpdate.setCurrentProjectId(projectId);
       try {
         (window as any).__flowNodes = [];
         (window as any).__flowEdges = [];
@@ -384,12 +394,13 @@ export const AppContent: React.FC<AppContentProps> = ({
       setAppState('mainApp');
       return true;
     } catch (e) {
+      console.error('[AppContent] Error creating project:', e);
       setCreateError('Errore nella creazione del progetto');
       return false;
     } finally {
       setIsCreatingProject(false);
     }
-  }, [refreshData, setAppState]);
+  }, [refreshData, setAppState, pdUpdate]);
 
   const handleCloseNewProjectModal = useCallback(() => setAppState('landing'), [setAppState]);
 
@@ -403,7 +414,6 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (!catRes.ok) throw new Error('Errore nel recupero catalogo');
       const list = await catRes.json();
       const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
-      pdUpdate.setDraft(false);
       pdUpdate.setCurrentProjectId(id);
       try { localStorage.setItem('current.projectId', id); } catch { }
       // Carica atti dal DB progetto
@@ -574,50 +584,22 @@ export const AppContent: React.FC<AppContentProps> = ({
                   // show spinner in toolbar while saving
                   setIsCreatingProject(true);
                   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  const dataSvc: any = (ProjectDataService as any);
-                  // 1) bootstrap (solo se siamo in draft)
-                  let pid = pdUpdate.getCurrentProjectId();
-                  if (pdUpdate.isDraft()) {
-                    const tb = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    const resp = await fetch('/api/projects/bootstrap', {
-                      method: 'POST', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        clientName: (currentProject as any)?.clientName || (currentProject as any)?.name || 'Client',
-                        projectName: (currentProject as any)?.name || 'Project',
-                        industry: (currentProject as any)?.template || 'utility_gas',
-                        tenantId: 'tenant_default'
-                      })
+                  const pid = pdUpdate.getCurrentProjectId();
+                  if (!pid) {
+                    console.warn('[Save] No project ID available');
+                    return;
+                  }
+                  // Aggiorna updatedAt nel catalog
+                  try {
+                    await fetch('/api/projects/catalog/update-timestamp', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ projectId: pid })
                     });
-                    if (!resp.ok) throw new Error('bootstrap_failed');
-                    const boot = await resp.json();
-                    // Aggiorna sia il context che la variabile locale da usare in questo save
-                    pdUpdate.setCurrentProjectId(boot.projectId);
-                    pid = boot.projectId;
-                    try { localStorage.setItem('current.projectId', boot.projectId); } catch { }
-                    pdUpdate.setDraft(false);
-                    // Nota: non chiamare /api/projects/catalog qui; il bootstrap registra già nel catalogo
-                    const te = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    try { console.log('[Save][timing] bootstrap ms', Math.round(te - tb)); } catch { }
+                  } catch (e) {
+                    console.warn('[Save] Failed to update catalog timestamp', e);
                   }
-                  // Usa sempre la variabile locale pid (aggiornata sopra se bootstrap)
-                  try { console.log('[Save][begin]', { pid, draft: pdUpdate.isDraft() }); } catch { }
-                  // 2) persisti tutte le istanze dal draft store (se esistono)
-                  const key = pdUpdate.getTempId();
-                  const draft = (dataSvc as any).__draftInstances?.get?.(key);
-                  if (draft && pid) {
-                    const tI0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    const items: any[] = [];
-                    for (const [, inst] of draft.entries()) {
-                      items.push({ baseActId: inst.baseActId, mode: inst.mode, message: inst.message, overrides: inst.overrides });
-                    }
-                    if (items.length) {
-                      try { console.log('[Save][instances][bulk]', { pid, count: items.length }); } catch { }
-                      await (ProjectDataService as any).bulkCreateInstances(pid, items);
-                    }
-                    (dataSvc as any).__draftInstances.delete(key);
-                    const tI1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    try { console.log('[Save][timing] instances ms', Math.round(tI1 - tI0), 'count', items.length); } catch { }
-                  }
+                  try { console.log('[Save][begin]', { pid }); } catch { }
                   // 2c) Persisti tutte le istanze con DDT da InstanceRepository
                   if (pid) {
                     try {

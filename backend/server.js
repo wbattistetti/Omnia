@@ -2307,6 +2307,37 @@ app.post('/api/extractors/run', async (req, res) => {
   }
 });
 
+// -----------------------------
+// Endpoint: Update catalog timestamp
+// -----------------------------
+app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
+  const { projectId } = req.body;
+  if (!projectId) {
+    return res.status(400).json({ error: 'projectId_required' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbProjects);
+    const cat = db.collection('projects_catalog');
+    const result = await cat.updateOne(
+      { _id: projectId },
+      { $set: { updatedAt: new Date() } }
+    );
+    if (result.matchedCount === 0) {
+      logInfo('Catalog.updateTimestamp', { projectId, warning: 'project_not_found_in_catalog' });
+    } else {
+      logInfo('Catalog.updateTimestamp', { projectId, updated: true });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    logError('Catalog.updateTimestamp', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
 // Preload act type patterns cache at startup
 loadActTypePatternsFromDB().then(() => {
   console.log('[SERVER] Act type patterns cache preloaded');

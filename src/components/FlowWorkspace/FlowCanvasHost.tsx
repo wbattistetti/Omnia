@@ -11,20 +11,12 @@ export const FlowCanvasHost: React.FC<Props> = ({ projectId, flowId, onCreateTas
   const { flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph } = useFlowActions();
   const pd = useProjectDataUpdate();
-  const isDraft = (() => { try { return pd.isDraft(); } catch { return false; } })();
 
   useEffect(() => {
     (async () => {
       if (!flows[flowId] || (!flows[flowId].nodes?.length && !flows[flowId].edges?.length)) {
-        if (isDraft) {
-          // RIMOSSO: console.log che causava loop infinito
-          upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: [], edges: [] });
-        } else {
-          // RIMOSSO: console.log che causava loop infinito
-          const data = await loadFlow(projectId, flowId);
-          upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: data.nodes, edges: data.edges });
-          // RIMOSSO: console.log che causava loop infinito
-        }
+        const data = await loadFlow(projectId, flowId);
+        upsertFlow({ id: flowId, title: flowId === 'main' ? 'Main' : flowId, nodes: data.nodes, edges: data.edges });
       }
     })();
   }, [projectId, flowId]);

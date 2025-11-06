@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 // import { getLabelColor } from '../utils/labelColor';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
-import { isDraft as runtimeIsDraft, getTempId as runtimeGetTempId } from '../state/runtime';
 import { modeToType } from '../utils/normalizers';
 import { generateId } from '../utils/idGenerator';
 
@@ -177,88 +176,37 @@ export const ProjectDataService = {
 
   // --- Instances API helpers ---
   async createInstance(projectId: string, payload: { baseActId: string; mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
-    if (this.isDraft()) {
-      const key = this.getDraftKey();
-      const store = this.getDraftStore(key);
-      const id = this.makeId();
-      const now = new Date().toISOString();
-      const inst = { _id: id, projectId: key, baseActId: payload.baseActId, ddtRefId: payload.baseActId, mode: payload.mode, message: payload.message || null, overrides: payload.overrides || null, createdAt: now, updatedAt: now };
-      store.set(id, inst);
-      return inst;
-    } else {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error('createInstance_failed');
-      return res.json();
-    }
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('createInstance_failed');
+    return res.json();
   },
   async updateInstance(projectId: string, instanceId: string, updates: any): Promise<any> {
-    if (this.isDraft()) {
-      const key = this.getDraftKey();
-      const store = this.getDraftStore(key);
-      const prev = store.get(instanceId) || { _id: instanceId };
-      const next = { ...prev, ...updates, updatedAt: new Date().toISOString() };
-      store.set(instanceId, next);
-      return next;
-    } else {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/${encodeURIComponent(instanceId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      });
-      if (!res.ok) throw new Error('updateInstance_failed');
-      return res.json();
-    }
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/${encodeURIComponent(instanceId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    if (!res.ok) throw new Error('updateInstance_failed');
+    return res.json();
   },
   async getInstances(projectId: string, ids?: string[]): Promise<any> {
-    if (this.isDraft()) {
-      const key = this.getDraftKey();
-      const store = this.getDraftStore(key);
-      const items = ids && ids.length ? ids.map(id => store.get(id)).filter(Boolean) : Array.from(store.values());
-      return { count: items.length, items };
-    } else {
-      const qs = ids && ids.length ? `?ids=${ids.map(encodeURIComponent).join(',')}` : '';
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances${qs}`);
-      if (!res.ok) throw new Error('getInstances_failed');
-      return res.json();
-    }
+    const qs = ids && ids.length ? `?ids=${ids.map(encodeURIComponent).join(',')}` : '';
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances${qs}`);
+    if (!res.ok) throw new Error('getInstances_failed');
+    return res.json();
   },
 
   async bulkCreateInstances(projectId: string, items: Array<{ baseActId: string; mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }>): Promise<any> {
     if (!items || items.length === 0) return { ok: true, inserted: 0 };
-    if (this.isDraft()) {
-      const key = this.getDraftKey();
-      const store = this.getDraftStore(key);
-      const now = new Date().toISOString();
-      for (const it of items) {
-        const id = this.makeId();
-        store.set(id, { _id: id, projectId: key, baseActId: it.baseActId, ddtRefId: it.baseActId, mode: it.mode, message: it.message || null, overrides: it.overrides || null, createdAt: now, updatedAt: now });
-      }
-      return { ok: true, inserted: items.length };
-    } else {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/bulk`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items })
-      });
-      if (!res.ok) throw new Error('bulkCreateInstances_failed');
-      return res.json();
-    }
-  },
-
-  // --- Draft storage helpers ---
-  __draftInstances: new Map<string, Map<string, any>>(),
-  isDraft(): boolean {
-    try { return Boolean(runtimeIsDraft()); } catch { return false; }
-  },
-  getDraftKey(): string {
-    try { return String(runtimeGetTempId() || 'draft'); } catch { return 'draft'; }
-  },
-  getDraftStore(key: string): Map<string, any> {
-    let s = this.__draftInstances.get(key);
-    if (!s) { s = new Map(); this.__draftInstances.set(key, s); }
-    return s;
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/bulk`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items })
+    });
+    if (!res.ok) throw new Error('bulkCreateInstances_failed');
+    return res.json();
   },
   makeId(): string {
     return generateId();

@@ -11,23 +11,17 @@ const FlowHost: React.FC<{ projectId: string }> = ({ projectId }) => {
   const { activeFlowId, flows } = useFlowWorkspace();
   const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground } = useFlowActions();
   const pdUpdate = useProjectDataUpdate();
-  const isDraft = (() => { try { return pdUpdate.isDraft(); } catch { return false; } })();
 
   // Lazy load del flusso se non presente
   useEffect(() => {
     (async () => {
       if (!flows[activeFlowId] || (flows[activeFlowId].nodes?.length === 0 && flows[activeFlowId].edges?.length === 0)) {
-        if (isDraft) {
-          upsertFlow({ id: activeFlowId, title: activeFlowId === 'main' ? 'Main' : activeFlowId, nodes: [], edges: [] });
-          dlog('flow', '[workspace.loaded][draft]', { projectId, activeFlowId });
-        } else {
-          const data = await loadFlow(projectId, activeFlowId);
-          upsertFlow({ id: activeFlowId, title: activeFlowId === 'main' ? 'Main' : activeFlowId, nodes: data.nodes, edges: data.edges });
-          dlog('flow', '[workspace.loaded]', { projectId, activeFlowId, nodes: data.nodes.length, edges: data.edges.length });
-        }
+        const data = await loadFlow(projectId, activeFlowId);
+        upsertFlow({ id: activeFlowId, title: activeFlowId === 'main' ? 'Main' : activeFlowId, nodes: data.nodes, edges: data.edges });
+        dlog('flow', '[workspace.loaded]', { projectId, activeFlowId, nodes: data.nodes.length, edges: data.edges.length });
       }
     })();
-  }, [activeFlowId, projectId, isDraft]);
+  }, [activeFlowId, projectId]);
 
   const flow = flows[activeFlowId];
   return (
@@ -53,11 +47,9 @@ const FlowHost: React.FC<{ projectId: string }> = ({ projectId }) => {
             // Apri la tab in background per evitare flicker
             upsertFlow({ id: newFlowId, title: derivedTitle, nodes, edges });
             setTimeout(() => openFlowBackground(newFlowId), 0);
-            if (!isDraft) {
-              saveFlow(projectId, newFlowId, nodes, edges).catch((e) => {
-                try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
-              });
-            }
+            saveFlow(projectId, newFlowId, nodes, edges).catch((e) => {
+              try { console.warn('[flow] save subflow failed (kept in memory)', e); } catch {}
+            });
           }}
         />
       </div>
