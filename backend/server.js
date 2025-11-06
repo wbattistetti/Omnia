@@ -299,6 +299,66 @@ app.get('/api/projects/catalog', async (req, res) => {
   }
 });
 
+// Endpoint: Get unique clients from catalog
+app.get('/api/projects/catalog/clients', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbProjects);
+    const projects = await db.collection('projects_catalog').find({}).toArray();
+
+    // Estrai tutti i clientName validi (escludendo null/vuoti)
+    const clients = new Set();
+    projects.forEach((p) => {
+      const clientName = (p.clientName || '').trim();
+      if (clientName) {
+        clients.add(clientName);
+      }
+    });
+
+    // Converti in array e ordina alfabeticamente
+    const uniqueClients = Array.from(clients).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    logInfo('Catalog.clients', { count: uniqueClients.length });
+    res.json(uniqueClients);
+  } catch (e) {
+    logError('Catalog.clients', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// Endpoint: Get unique project names from catalog
+app.get('/api/projects/catalog/project-names', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbProjects);
+    const projects = await db.collection('projects_catalog').find({}).toArray();
+
+    // Estrai tutti i projectName validi
+    const projectNames = new Set();
+    projects.forEach((p) => {
+      const projectName = (p.projectName || p.name || '').trim();
+      if (projectName) {
+        projectNames.add(projectName);
+      }
+    });
+
+    // Converti in array e ordina alfabeticamente
+    const uniqueProjectNames = Array.from(projectNames).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    logInfo('Catalog.projectNames', { count: uniqueProjectNames.length });
+    res.json(uniqueProjectNames);
+  } catch (e) {
+    logError('Catalog.projectNames', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
 app.post('/api/projects/catalog', async (req, res) => {
   const payload = req.body || {};
   const clientName = payload.clientName || null; // Permette null/vuoto

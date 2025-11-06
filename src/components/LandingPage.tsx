@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { HelpCircle, ChevronDown, XCircle, Trash2, Building2, Folder, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { HelpCircle, ChevronDown, XCircle, Trash2, Building2, Folder, Loader2, Search, RotateCcw } from 'lucide-react';
+import { useFontClasses } from '../hooks/useFontClasses';
 
 interface LandingPageProps {
   onNewProject: () => void;
@@ -32,6 +33,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
 
+  // Stati per filtri combo box
+  const [availableClients, setAvailableClients] = useState<string[]>([]);
+  const [availableProjectNames, setAvailableProjectNames] = useState<string[]>([]);
+  const [availableOwners, setAvailableOwners] = useState<string[]>([]);
+  const [selectedClient, setSelectedClient] = useState<string>('');
+  const [selectedProjectName, setSelectedProjectName] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedOwner, setSelectedOwner] = useState<string>('');
+  const [isClientOpen, setIsClientOpen] = useState(false);
+  const [isProjectOpen, setIsProjectOpen] = useState(false);
+  const [isDateOpen, setIsDateOpen] = useState(false);
+  const [isOwnerOpen, setIsOwnerOpen] = useState(false);
+  const [selectedClientIndex, setSelectedClientIndex] = useState<number>(-1);
+  const [selectedProjectIndex, setSelectedProjectIndex] = useState<number>(-1);
+  const [selectedDateIndex, setSelectedDateIndex] = useState<number>(-1);
+  const [selectedOwnerIndex, setSelectedOwnerIndex] = useState<number>(-1);
+  const clientDropdownRef = useRef<HTMLDivElement>(null);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
+  const dateDropdownRef = useRef<HTMLDivElement>(null);
+  const ownerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Stato per tipo di progetti visualizzati
+  const [projectViewType, setProjectViewType] = useState<'all' | 'recent' | 'recovered'>('all');
+  const [recoveredProjectsCount, setRecoveredProjectsCount] = useState(0);
+
+  // Font centralizzato dal designer
+  const { combinedClass } = useFontClasses();
+
   // Helper: formatta il nome del client (mostra "Client ?" in grigio se vuoto)
   const formatClientName = (clientName: string | null | undefined): { text: string; isGrey: boolean } => {
     const client = (clientName || '').trim();
@@ -62,18 +91,199 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return [...withoutClient, ...withClient];
   };
 
-  // Filtra progetti per ricerca nella modale
+  // Carica clienti, nomi progetti e owners all'inizio
+  useEffect(() => {
+    fetch('/api/projects/catalog/clients')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setAvailableClients(data);
+        }
+      })
+      .catch(() => setAvailableClients([]));
+
+    fetch('/api/projects/catalog/project-names')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setAvailableProjectNames(data);
+        }
+      })
+      .catch(() => setAvailableProjectNames([]));
+
+    // Estrai owners unici dai progetti (per ora usiamo tenantId o un campo placeholder)
+    const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id || p.projectId, p])).values());
+    const owners = new Set<string>();
+    uniqueAllProjects.forEach((p: any) => {
+      const owner = (p.owner || p.createdBy || p.tenantId || 'N/A').toString().trim();
+      if (owner && owner !== 'N/A') {
+        owners.add(owner);
+      }
+    });
+    setAvailableOwners(Array.from(owners).sort());
+
+    // Conta progetti recuperati (status='draft')
+    const recovered = uniqueAllProjects.filter((p: any) => p.status === 'draft');
+    setRecoveredProjectsCount(recovered.length);
+  }, [allProjects]);
+
+  // Reset indice selezionato quando cambia il filtro
+  useEffect(() => {
+    if (isClientOpen) {
+      setSelectedClientIndex(-1);
+    }
+  }, [selectedClient, isClientOpen]);
+
+  useEffect(() => {
+    if (isProjectOpen) {
+      setSelectedProjectIndex(-1);
+    }
+  }, [selectedProjectName, isProjectOpen]);
+
+  // Scroll automatico per combo box clienti
+  useEffect(() => {
+    if (selectedClientIndex >= 0 && clientDropdownRef.current) {
+      const items = clientDropdownRef.current.querySelectorAll('[data-client-index]');
+      const selectedItem = items[selectedClientIndex] as HTMLElement;
+      if (selectedItem) {
+        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [selectedClientIndex]);
+
+  // Scroll automatico per combo box progetti
+  useEffect(() => {
+    if (selectedProjectIndex >= 0 && projectDropdownRef.current) {
+      const items = projectDropdownRef.current.querySelectorAll('[data-project-index]');
+      const selectedItem = items[selectedProjectIndex] as HTMLElement;
+      if (selectedItem) {
+        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [selectedProjectIndex]);
+
+  // Gestione navigazione da tastiera per combo box clienti
+  const handleClientKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isClientOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        setIsClientOpen(true);
+        setSelectedClientIndex(0);
+        e.preventDefault();
+      }
+      return;
+    }
+
+    const filtered = availableClients.filter(client =>
+      client.toLowerCase().includes(selectedClient.toLowerCase())
+    );
+    const maxIndex = filtered.length - 1;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedClientIndex(prev => prev < maxIndex ? prev + 1 : 0);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedClientIndex(prev => prev > 0 ? prev - 1 : maxIndex);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedClientIndex >= 0 && selectedClientIndex < filtered.length) {
+          setSelectedClient(filtered[selectedClientIndex]);
+          setIsClientOpen(false);
+          setSelectedClientIndex(-1);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setIsClientOpen(false);
+        setSelectedClientIndex(-1);
+        break;
+    }
+  };
+
+  // Gestione navigazione da tastiera per combo box progetti
+  const handleProjectKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isProjectOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        setIsProjectOpen(true);
+        setSelectedProjectIndex(0);
+        e.preventDefault();
+      }
+      return;
+    }
+
+    const filtered = availableProjectNames.filter(name =>
+      name.toLowerCase().includes(selectedProjectName.toLowerCase())
+    );
+    const maxIndex = filtered.length - 1;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedProjectIndex(prev => prev < maxIndex ? prev + 1 : 0);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedProjectIndex(prev => prev > 0 ? prev - 1 : maxIndex);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedProjectIndex >= 0 && selectedProjectIndex < filtered.length) {
+          setSelectedProjectName(filtered[selectedProjectIndex]);
+          setIsProjectOpen(false);
+          setSelectedProjectIndex(-1);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setIsProjectOpen(false);
+        setSelectedProjectIndex(-1);
+        break;
+    }
+  };
+
+  // Filtra progetti per tipo di vista
   const uniqueRecentProjects = Array.from(new Map(recentProjects.map(p => [p._id || p.projectId, p])).values());
   const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id || p.projectId, p])).values());
-  const filteredAll = uniqueAllProjects.filter(
-    (p) =>
-      ((p.projectName || p.name || '') as string).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ((p.clientName || '') as string).toLowerCase().includes(searchTerm.toLowerCase())
-  );
+
+  // Filtra per tipo di vista (tutti/recenti/recuperati)
+  let projectsToShow: any[] = [];
+  if (projectViewType === 'recent') {
+    projectsToShow = uniqueRecentProjects;
+  } else if (projectViewType === 'recovered') {
+    projectsToShow = uniqueAllProjects.filter((p: any) => p.status === 'draft');
+  } else {
+    // 'all' mostra TUTTI i progetti (sia draft che non-draft)
+    projectsToShow = uniqueAllProjects;
+  }
+
+  // Estrai date uniche per filtro
+  const availableDates = Array.from(new Set(
+    projectsToShow.map((p: any) => {
+      const date = p.updatedAt || p.createdAt;
+      return date ? new Date(date).toLocaleDateString() : null;
+    }).filter((d): d is string => d !== null)
+  )).sort();
+
+  // Filtra per cliente, progetto, data e owner
+  const filteredProjects = projectsToShow.filter((p: any) => {
+    const clientMatch = !selectedClient ||
+      ((p.clientName || '').trim().toLowerCase() === selectedClient.toLowerCase());
+    const projectMatch = !selectedProjectName ||
+      ((p.projectName || p.name || '').trim().toLowerCase() === selectedProjectName.toLowerCase());
+    const dateMatch = !selectedDate ||
+      (new Date(p.updatedAt || p.createdAt).toLocaleDateString() === selectedDate);
+    const ownerValue = (p.owner || p.createdBy || p.tenantId || 'N/A').toString().trim();
+    const ownerMatch = !selectedOwner ||
+      (ownerValue.toLowerCase() === selectedOwner.toLowerCase());
+    return clientMatch && projectMatch && dateMatch && ownerMatch;
+  });
 
   // Ordina i progetti
   const sortedRecentProjects = sortProjects(uniqueRecentProjects);
-  const sortedFilteredAll = sortProjects(filteredAll);
+  const sortedFilteredProjects = sortProjects(filteredProjects);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-900 flex flex-col items-center justify-center relative overflow-hidden">
@@ -118,7 +328,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             >
               Nuovo Progetto
             </button>
-            <div className="relative">
+            <div className="relative flex flex-col items-start">
               <button
                 onClick={() => setShowDropdown((v) => !v)}
                 className={`bg-white text-emerald-800 px-10 py-4 text-xl font-semibold flex items-center gap-2 shadow-2xl transition-all duration-300
@@ -142,7 +352,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   {/* Prima voce: Tutti i progetti */}
                   <button
                     className="w-full text-left px-4 py-2 font-semibold text-emerald-700 hover:bg-emerald-100 rounded flex items-center gap-2"
-                    onClick={() => { setShowDropdown(false); setShowAllProjectsModal(true); }}
+                    onClick={() => { setShowDropdown(false); setProjectViewType('all'); }}
                   >
                     <span>Tutti i progetti</span>
                   </button>
@@ -205,102 +415,374 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               )}
             </div>
           </div>
-          {/* Pannello espanso sotto i pulsanti */}
-          {showAllProjectsModal && (
-            <div className="mt-8 w-full max-w-2xl bg-white rounded-xl shadow-2xl p-6 relative animate-fade-in">
-              <button
-                className="absolute top-3 right-3 text-emerald-800 hover:text-emerald-600 text-2xl"
-                onClick={() => setShowAllProjectsModal(false)}
-                title="Chiudi"
-              >
-                ×
-              </button>
-              <h2 className="text-xl font-bold mb-4 text-emerald-900">Tutti i progetti</h2>
-              <div className="flex items-center gap-2 mb-4">
-                <input
-                  type="text"
-                  placeholder="Cerca progetto..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="flex-1 border border-emerald-200 rounded px-3 py-2 focus:outline-none focus:border-emerald-500"
-                />
+
+          {/* Pannello progetti sempre visibile sotto Carica Progetto */}
+          <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`}>
+            {/* Header con 3 pulsanti/tab */}
+            <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl">
+              <div className="flex items-center gap-2">
                 <button
-                  className="flex items-center gap-1 text-red-600 border border-red-200 rounded px-3 py-2 hover:bg-red-50 font-semibold"
-                  onClick={() => setShowDeleteAllConfirm(true)}
+                  onClick={() => setProjectViewType('all')}
+                  className={`px-3 py-1 rounded font-semibold transition-colors ${
+                    projectViewType === 'all'
+                      ? 'bg-emerald-700 text-white'
+                      : 'bg-white text-emerald-700 hover:bg-emerald-100'
+                  }`}
                 >
-                  <Trash2 className="w-4 h-4" /> Elimina tutti
+                  Tutti
+                </button>
+                <button
+                  onClick={() => setProjectViewType('recent')}
+                  className={`px-3 py-1 rounded font-semibold transition-colors ${
+                    projectViewType === 'recent'
+                      ? 'bg-emerald-700 text-white'
+                      : 'bg-white text-emerald-700 hover:bg-emerald-100'
+                  }`}
+                >
+                  Recenti
+                </button>
+                <button
+                  onClick={() => setProjectViewType('recovered')}
+                  className={`px-3 py-1 rounded font-semibold transition-colors ${
+                    projectViewType === 'recovered'
+                      ? 'bg-emerald-700 text-white'
+                      : 'bg-white text-emerald-700 hover:bg-emerald-100'
+                  }`}
+                >
+                  Da recuperare {recoveredProjectsCount > 0 && `(${recoveredProjectsCount})`}
                 </button>
               </div>
-              {showDeleteAllConfirm && (
-                <div className="mt-2 flex gap-2 items-center bg-red-50 border border-red-200 rounded px-3 py-2">
-                  <button
-                    className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 font-semibold"
-                    onClick={() => { setShowDeleteAllConfirm(false); onDeleteAllProjects(); }}
-                  >
-                    Conferma
-                  </button>
-                  <button
-                    className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 font-semibold"
-                    onClick={() => setShowDeleteAllConfirm(false)}
-                  >
-                    Annulla
-                  </button>
-                </div>
-              )}
-              <div className="max-h-96 overflow-y-auto divide-y divide-emerald-50">
-                {sortedFilteredAll.length === 0 && (
-                  <div className="text-slate-400 px-4 py-8 text-center">Nessun progetto trovato</div>
-                )}
-                {sortedFilteredAll.map((proj) => {
-                  const clientInfo = formatClientName(proj.clientName);
-                  return (
-                    <div key={proj._id} className="flex items-center justify-between px-2 py-2 hover:bg-emerald-50 rounded group">
-                      <button
-                        className="text-left flex-1 truncate"
-                        title={`${clientInfo.text} — ${proj.projectName || proj.name || ''}`}
+              <button
+                className="flex items-center gap-1 text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50 font-semibold"
+                onClick={() => setShowDeleteAllConfirm(true)}
+              >
+                <Trash2 className="w-3 h-3" /> Elimina tutti
+              </button>
+            </div>
+
+            {/* Tabella con combo box nelle intestazioni */}
+            <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+              <table className="border-collapse table-auto" style={{ width: 'auto' }}>
+                <thead className="bg-emerald-100 sticky top-0 z-10">
+                  <tr>
+                    {/* Intestazione Cliente con combo box */}
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: 'auto' }}>
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-emerald-600 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={selectedClient}
+                          onChange={(e) => {
+                            setSelectedClient(e.target.value);
+                            setIsClientOpen(true);
+                          }}
+                          onKeyDown={handleClientKeyDown}
+                          onFocus={() => setIsClientOpen(true)}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setIsClientOpen(false);
+                              setSelectedClientIndex(-1);
+                            }, 200);
+                          }}
+                          placeholder="Cliente"
+                          className={`pl-7 pr-5 py-0.5 border border-emerald-200 rounded focus:outline-none focus:border-emerald-500 ${combinedClass}`}
+                          style={{ minWidth: '100px', width: 'auto' }}
+                        />
+                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
+                        {isClientOpen && (
+                          <div
+                            ref={clientDropdownRef}
+                            className="absolute z-50 mt-1 w-full bg-white border border-emerald-200 rounded shadow-lg max-h-60 overflow-y-auto"
+                          >
+                            {availableClients
+                              .filter(client =>
+                                client.toLowerCase().includes(selectedClient.toLowerCase())
+                              )
+                              .map((client, index) => (
+                                <button
+                                  key={client}
+                                  data-client-index={index}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setSelectedClient(client);
+                                    setIsClientOpen(false);
+                                    setSelectedClientIndex(-1);
+                                  }}
+                                  onMouseEnter={() => setSelectedClientIndex(index)}
+                                  className={`w-full text-left px-3 py-1.5 text-emerald-900 ${combinedClass} ${
+                                    selectedClientIndex === index
+                                      ? 'bg-emerald-100'
+                                      : 'hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  {client}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Intestazione Progetto con combo box */}
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: 'auto' }}>
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={selectedProjectName}
+                          onChange={(e) => {
+                            setSelectedProjectName(e.target.value);
+                            setIsProjectOpen(true);
+                          }}
+                          onKeyDown={handleProjectKeyDown}
+                          onFocus={() => setIsProjectOpen(true)}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setIsProjectOpen(false);
+                              setSelectedProjectIndex(-1);
+                            }, 200);
+                          }}
+                          placeholder="Progetto"
+                          className={`pl-7 pr-5 py-0.5 border border-emerald-200 rounded focus:outline-none focus:border-emerald-500 ${combinedClass}`}
+                          style={{ minWidth: '100px', width: 'auto' }}
+                        />
+                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
+                        {isProjectOpen && (
+                          <div
+                            ref={projectDropdownRef}
+                            className="absolute z-50 mt-1 w-full bg-white border border-emerald-200 rounded shadow-lg max-h-60 overflow-y-auto"
+                          >
+                            {availableProjectNames
+                              .filter(name =>
+                                name.toLowerCase().includes(selectedProjectName.toLowerCase())
+                              )
+                              .map((name, index) => (
+                                <button
+                                  key={name}
+                                  data-project-index={index}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setSelectedProjectName(name);
+                                    setIsProjectOpen(false);
+                                    setSelectedProjectIndex(-1);
+                                  }}
+                                  onMouseEnter={() => setSelectedProjectIndex(index)}
+                                  className={`w-full text-left px-3 py-1.5 text-emerald-900 ${combinedClass} ${
+                                    selectedProjectIndex === index
+                                      ? 'bg-emerald-100'
+                                      : 'hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  {name}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Intestazione Data con combo box */}
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: 'auto' }}>
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={selectedDate}
+                          onChange={(e) => {
+                            setSelectedDate(e.target.value);
+                            setIsDateOpen(true);
+                          }}
+                          onFocus={() => setIsDateOpen(true)}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setIsDateOpen(false);
+                              setSelectedDateIndex(-1);
+                            }, 200);
+                          }}
+                          placeholder="Data"
+                          className={`pl-7 pr-5 py-0.5 border border-emerald-200 rounded focus:outline-none focus:border-emerald-500 ${combinedClass}`}
+                          style={{ minWidth: '90px', width: 'auto' }}
+                        />
+                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
+                        {isDateOpen && (
+                          <div
+                            ref={dateDropdownRef}
+                            className="absolute z-50 mt-1 w-full bg-white border border-emerald-200 rounded shadow-lg max-h-60 overflow-y-auto"
+                          >
+                            {availableDates
+                              .filter(date =>
+                                date.toLowerCase().includes(selectedDate.toLowerCase())
+                              )
+                              .map((date, index) => (
+                                <button
+                                  key={date}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setSelectedDate(date);
+                                    setIsDateOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-1.5 text-emerald-900 ${combinedClass} hover:bg-emerald-50`}
+                                >
+                                  {date}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Intestazione Owner con combo box */}
+                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: 'auto' }}>
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={selectedOwner}
+                          onChange={(e) => {
+                            setSelectedOwner(e.target.value);
+                            setIsOwnerOpen(true);
+                          }}
+                          onFocus={() => setIsOwnerOpen(true)}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setIsOwnerOpen(false);
+                              setSelectedOwnerIndex(-1);
+                            }, 200);
+                          }}
+                          placeholder="Owner"
+                          className={`pl-7 pr-5 py-0.5 border border-emerald-200 rounded focus:outline-none focus:border-emerald-500 ${combinedClass}`}
+                          style={{ minWidth: '100px', width: 'auto' }}
+                        />
+                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-emerald-600 pointer-events-none" />
+                        {isOwnerOpen && (
+                          <div
+                            ref={ownerDropdownRef}
+                            className="absolute z-50 mt-1 w-full bg-white border border-emerald-200 rounded shadow-lg max-h-60 overflow-y-auto"
+                          >
+                            {availableOwners
+                              .filter(owner =>
+                                owner.toLowerCase().includes(selectedOwner.toLowerCase())
+                              )
+                              .map((owner, index) => (
+                                <button
+                                  key={owner}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setSelectedOwner(owner);
+                                    setIsOwnerOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-1.5 text-emerald-900 ${combinedClass} hover:bg-emerald-50`}
+                                >
+                                  {owner}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Colonna azioni */}
+                    <th className="border border-emerald-200 p-1.5" style={{ width: 'auto' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedFilteredProjects.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-4 text-slate-400">
+                        Nessun progetto trovato
+                      </td>
+                    </tr>
+                  )}
+                  {sortedFilteredProjects.map((proj) => {
+                    const clientInfo = formatClientName(proj.clientName);
+                    const projectDate = (proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : '';
+                    // Owner: mostra solo se presente, altrimenti stringa vuota
+                    const ownerValue = (proj.owner || proj.createdBy || '').toString().trim() || '';
+                    const isRecovered = projectViewType === 'recovered';
+                    return (
+                      <tr
+                        key={proj._id}
+                        className="hover:bg-emerald-50 cursor-pointer"
                         onClick={async () => {
                           const id = (proj._id || proj.projectId) as string;
                           setLoadingProjectId(id);
                           try {
                             const maybe = onSelectProject(id);
                             if ((maybe as any)?.then) await (maybe as any);
-                            // chiudi solo dopo che il caricamento ha completato
-                            setShowAllProjectsModal(false);
                           } catch (e) {
                             setLoadingProjectId(null);
                           }
                         }}
                       >
-                        <span className="inline-flex items-center gap-4">
-                          <span className={`inline-flex items-center gap-2 ${clientInfo.isGrey ? 'text-gray-500' : ''}`}>
-                            <Building2 className={`w-5 h-5 ${clientInfo.isGrey ? 'text-gray-400' : 'text-emerald-700'}`} />
-                            <span className={`font-semibold ${clientInfo.isGrey ? 'text-gray-500' : 'text-emerald-900'}`}>{clientInfo.text}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-2">
+                        <td className={`border border-emerald-200 p-1.5 text-left ${combinedClass}`}>
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className={`w-4 h-4 ${clientInfo.isGrey ? 'text-gray-400' : 'text-emerald-700'}`} />
+                            <span className={clientInfo.isGrey ? 'text-gray-500' : 'text-emerald-900'}>
+                              {clientInfo.text}
+                            </span>
+                          </div>
+                        </td>
+                        <td className={`border border-emerald-200 p-1.5 text-left ${combinedClass}`}>
+                          <div className="flex items-center gap-1.5">
                             {loadingProjectId === (proj._id || proj.projectId)
-                              ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
-                              : <Folder className="w-5 h-5 text-emerald-900" />}
+                              ? <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
+                              : <Folder className={`w-4 h-4 ${isRecovered ? 'text-red-600' : 'text-emerald-900'}`} />}
                             <span className="text-emerald-900">{proj.projectName || proj.name || '(senza nome)'}</span>
-                          </span>
-                        </span>
-                      </button>
-                      <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
-                      <button
-                        className="ml-2 text-red-500 opacity-70 hover:opacity-100"
-                        title="Elimina progetto"
-                        onClick={async () => {
-                          const id = proj._id || proj.projectId;
-                          setDeletingId(id);
-                          try { await onDeleteProject(id); } finally { setDeletingId(null); }
-                        }}
-                      >
-                        {deletingId === (proj._id || proj.projectId)
-                          ? <Loader2 className="w-5 h-5 animate-spin" />
-                          : <XCircle className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  );
-                })}
+                          </div>
+                        </td>
+                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`}>
+                          {projectDate}
+                        </td>
+                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`}>
+                          {ownerValue}
+                        </td>
+                        <td className="border border-emerald-200 p-1.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="text-red-500 opacity-70 hover:opacity-100"
+                            title="Elimina progetto"
+                            onClick={async () => {
+                              const id = proj._id || proj.projectId;
+                              setDeletingId(id);
+                              try { await onDeleteProject(id); } finally { setDeletingId(null); }
+                            }}
+                          >
+                            {deletingId === (proj._id || proj.projectId)
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Modal conferma eliminazione */}
+          {showDeleteAllConfirm && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md">
+                <h3 className="text-xl font-bold mb-4 text-emerald-900">Elimina tutti i progetti</h3>
+                <p className="mb-4 text-emerald-900">Sei sicuro di voler eliminare tutti i progetti?</p>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 font-semibold"
+                    onClick={() => { setShowDeleteAllConfirm(false); onDeleteAllProjects(); }}
+                  >
+                    Conferma
+                  </button>
+                  <button
+                    className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 font-semibold"
+                    onClick={() => setShowDeleteAllConfirm(false)}
+                  >
+                    Annulla
+                  </button>
+                </div>
               </div>
             </div>
           )}

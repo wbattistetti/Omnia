@@ -513,18 +513,13 @@ export const AppContent: React.FC<AppContentProps> = ({
     if (createError) setCreateError(null);
   }, [createError]);
 
-  // Carica progetti recenti ogni volta che si entra nella landing
+  // Carica progetti recenti e tutti i progetti ogni volta che si entra nella landing
   useEffect(() => {
     if (appState === 'landing') {
       fetchRecentProjects();
+      fetchAllProjects(); // Carica anche tutti i progetti per la vista "tutti"
     }
-  }, [appState, fetchRecentProjects]);
-
-  useEffect(() => {
-    if (showAllProjectsModal) {
-      fetchAllProjects();
-    }
-  }, [showAllProjectsModal, fetchAllProjects]);
+  }, [appState, fetchRecentProjects, fetchAllProjects]);
 
   // ✅ Applica font globali dallo store
   const { combinedClass } = useFontClasses();

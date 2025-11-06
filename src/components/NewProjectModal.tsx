@@ -51,6 +51,11 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
   const [selectedProjectIdx, setSelectedProjectIdx] = useState<number | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [isIndustryOpen, setIsIndustryOpen] = useState(false);
+  const [availableClients, setAvailableClients] = useState<string[]>([]);
+  const [isClientOpen, setIsClientOpen] = useState(false);
+  const [clientInputValue, setClientInputValue] = useState('');
+  const [selectedClientIndex, setSelectedClientIndex] = useState<number>(-1);
+  const clientDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -58,14 +63,37 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
         .then(res => res.json())
         .then(data => setRecentProjects(data))
         .catch(() => setRecentProjects([]));
+
+      // Carica lista clienti esistenti
+      fetch('/api/projects/catalog/clients')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setAvailableClients(data);
+          }
+        })
+        .catch(() => setAvailableClients([]));
     }
   }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && nameInputRef.current) {
       nameInputRef.current.focus();
+      // Reset client input quando si apre il modal
+      setClientInputValue('');
+    } else if (!isOpen) {
+      // Reset quando si chiude
+      setClientInputValue('');
+      setIsClientOpen(false);
     }
   }, [isOpen]);
+
+  // Sincronizza clientInputValue con formData.clientName
+  useEffect(() => {
+    if (formData.clientName && clientInputValue !== formData.clientName) {
+      setClientInputValue(formData.clientName);
+    }
+  }, [formData.clientName]);
 
   const handleLoadSelectedProject = () => {
     if (selectedProjectIdx === null || !recentProjects[selectedProjectIdx]) return;
@@ -129,6 +157,89 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     }
   };
 
+  const handleClientSelect = (clientName: string) => {
+    setIsClientOpen(false);
+    setClientInputValue('');
+    handleInputChange('clientName', clientName);
+  };
+
+  const handleClientInputChange = (value: string) => {
+    setClientInputValue(value);
+    handleInputChange('clientName', value);
+  };
+
+  // Filtra clienti per autocomplete (usa il valore corrente dell'input)
+  const currentClientValue = formData.clientName || clientInputValue || '';
+  const searchTerm = currentClientValue.toLowerCase();
+  const filteredClients = availableClients.filter(client =>
+    client.toLowerCase().includes(searchTerm)
+  );
+  const canCreateNew = currentClientValue && !availableClients.includes(currentClientValue);
+
+  // Reset indice selezionato quando cambia il filtro
+  useEffect(() => {
+    if (isClientOpen) {
+      setSelectedClientIndex(-1);
+    }
+  }, [searchTerm, isClientOpen]);
+
+  // Scroll automatico quando si naviga con le frecce
+  useEffect(() => {
+    if (selectedClientIndex >= 0 && clientDropdownRef.current) {
+      const items = clientDropdownRef.current.querySelectorAll('[data-client-index]');
+      const selectedItem = items[selectedClientIndex] as HTMLElement;
+      if (selectedItem) {
+        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [selectedClientIndex]);
+
+  // Gestione navigazione da tastiera
+  const handleClientKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isClientOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        setIsClientOpen(true);
+        setSelectedClientIndex(0);
+        e.preventDefault();
+      }
+      return;
+    }
+
+    const items = currentClientValue ? filteredClients : availableClients;
+    const maxIndex = items.length - 1;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedClientIndex(prev => {
+          const next = prev < maxIndex ? prev + 1 : 0;
+          return next;
+        });
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedClientIndex(prev => {
+          const next = prev > 0 ? prev - 1 : maxIndex;
+          return next;
+        });
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedClientIndex >= 0 && selectedClientIndex < items.length) {
+          handleClientSelect(items[selectedClientIndex]);
+        } else if (currentClientValue && canCreateNew) {
+          // Se non c'è selezione ma c'è un valore nuovo, lo accetta
+          handleClientSelect(currentClientValue);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setIsClientOpen(false);
+        setSelectedClientIndex(-1);
+        break;
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -182,21 +293,88 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
             )}
           </div>
 
-          {/* Client Name */}
+          {/* Client Name - Combo box creatable */}
           <div className="relative">
             <label className="block text-base font-medium text-slate-200 mb-2">
               Cliente *
             </label>
-            <input
-              type="text"
-              value={formData.clientName || ''}
-              onChange={(e) => handleInputChange('clientName', e.target.value)}
-              className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
-                errors.clientName ? 'border-red-500' : 'border-slate-600'
-              }`}
-              placeholder="Nome del cliente (es. Indesit)"
-              disabled={isLoading}
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={formData.clientName || ''}
+                onChange={(e) => {
+                  handleClientInputChange(e.target.value);
+                  setIsClientOpen(true);
+                }}
+                onKeyDown={handleClientKeyDown}
+                onFocus={() => setIsClientOpen(true)}
+                onBlur={() => {
+                  // Delay per permettere il click su un item della lista
+                  setTimeout(() => {
+                    setIsClientOpen(false);
+                    setSelectedClientIndex(-1);
+                  }, 200);
+                }}
+                className={`w-full px-4 py-3 pr-10 bg-slate-700 border rounded-lg placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
+                  errors.clientName ? 'border-red-500' : 'border-slate-600'
+                } ${
+                  canCreateNew && currentClientValue ? 'text-blue-400' : 'text-white'
+                }`}
+                placeholder="Nome del cliente (es. Indesit)"
+                disabled={isLoading}
+              />
+              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+              {isClientOpen && (
+                <div
+                  ref={clientDropdownRef}
+                  className="absolute z-50 mt-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                >
+                  {currentClientValue ? (
+                    // Se c'è un valore, mostra solo clienti filtrati
+                    filteredClients.length > 0 && filteredClients.map((client, index) => (
+                      <button
+                        key={client}
+                        data-client-index={index}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // Prevenire onBlur
+                          handleClientSelect(client);
+                        }}
+                        onMouseEnter={() => setSelectedClientIndex(index)}
+                        className={`w-full text-left px-4 py-2 text-white ${
+                          selectedClientIndex === index
+                            ? 'bg-slate-600'
+                            : 'hover:bg-slate-700'
+                        }`}
+                      >
+                        {client}
+                      </button>
+                    ))
+                  ) : (
+                    // Se il campo è vuoto, mostra tutti i clienti disponibili
+                    availableClients.length > 0 && availableClients.map((client, index) => (
+                      <button
+                        key={client}
+                        data-client-index={index}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleClientSelect(client);
+                        }}
+                        onMouseEnter={() => setSelectedClientIndex(index)}
+                        className={`w-full text-left px-4 py-2 text-white ${
+                          selectedClientIndex === index
+                            ? 'bg-slate-600'
+                            : 'hover:bg-slate-700'
+                        }`}
+                      >
+                        {client}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
             {errors.clientName && (
               <p className="mt-1 text-sm text-red-400">{String(errors.clientName)}</p>
             )}
