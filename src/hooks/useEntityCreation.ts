@@ -4,7 +4,7 @@ import { useProjectData } from '../context/ProjectDataContext';
 import { useProjectDataUpdate } from '../context/ProjectDataContext';
 
 export interface UseEntityCreationReturn {
-  createAgentAct: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  createAgentAct: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: string) => void;
   createBackendCall: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   createTask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   createCondition: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
@@ -31,16 +31,18 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
     name: string,
     onRowUpdate?: (item: any) => void,
     scope?: 'global' | 'industry',
-    categoryName?: string
+    categoryName?: string,
+    type?: string
   ) => {
-    try { console.log('[CreateAct][hook][enter]', { entityType, name, scope, hasOnRowUpdate: !!onRowUpdate, categoryName }); } catch { }
+    try { console.log('[CreateAct][hook][enter]', { entityType, name, scope, hasOnRowUpdate: !!onRowUpdate, categoryName, type }); } catch { }
     const options: EntityCreationOptions = {
       name,
       onRowUpdate, // ✅ Pass callback to service
       projectData,
       projectIndustry: projectData?.industry as any,
       scope,
-      categoryName
+      categoryName,
+      type: type as any
     };
 
     let result;
@@ -72,8 +74,8 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
     }
   }, [projectData, updateDataDirectly]);
 
-  const createAgentAct = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
-    createEntity('agentActs', name, onRowUpdate, scope, categoryName);
+  const createAgentAct = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: string) => {
+    createEntity('agentActs', name, onRowUpdate, scope, categoryName, type);
   }, [createEntity]);
 
   const createBackendCall = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {

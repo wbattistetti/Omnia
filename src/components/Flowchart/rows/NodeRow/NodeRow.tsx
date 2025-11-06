@@ -509,12 +509,16 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       }
       // Heuristica multilingua: IT/EN/PT con fallback a Message
       try {
-        const inf = inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
+        console.log('🔮 [INFERENCE] Starting inference for text:', q);
+        const inf = await inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
+        console.log('🔮 [INFERENCE] Result:', inf);
         const internal = heuristicToInternal(inf.type as any);
+        console.log('🔮 [INFERENCE] Internal type:', internal);
         if (dbg) { }
         await handlePickType(internal);
         return;
       } catch (err) {
+        console.error('🔮 [INFERENCE] ERROR:', err);
         try { console.warn('[Heuristics] failed, fallback to picker', err); } catch { }
         setIntellisenseQuery(q);
         setShowIntellisense(false);
@@ -635,7 +639,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       });
 
       try {
-        // Crea il template agent act con il nome della riga
+        // Crea il template agent act con il nome della riga e il tipo inferito
         // Il callback onRowUpdate viene chiamato immediatamente da EntityCreationService
         onCreateAgentAct(label, (createdItem: any) => {
           console.log('🎯 [TEMPLATE_CREATION][CALLBACK_START]', {
@@ -732,7 +736,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           }, 100);
 
           try { emitSidebarRefresh(); } catch { }
-        }, 'industry');
+        }, 'industry', undefined, key);
 
         console.log('🎯 [HANDLE_PICK_TYPE][AFTER_CALLING_CREATE_AGENT_ACT]', {
           label,

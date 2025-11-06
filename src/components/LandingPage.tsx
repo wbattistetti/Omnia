@@ -33,6 +33,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
+  const [loadingProjects, setLoadingProjects] = useState(true);
 
   // Stati per filtri combo box
   const [availableClients, setAvailableClients] = useState<string[]>([]);
@@ -86,6 +87,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   // Carica clienti, nomi progetti e owners all'inizio
   useEffect(() => {
+    setLoadingProjects(true);
     fetch('/api/projects/catalog/clients')
       .then(res => res.json())
       .then(data => {
@@ -136,6 +138,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     // Conta progetti recuperati (status='draft')
     const recovered = uniqueAllProjects.filter((p: any) => p.status === 'draft');
     setRecoveredProjectsCount(recovered.length);
+
+    // Caricamento completato
+    setLoadingProjects(false);
   }, [allProjects]);
 
 
@@ -232,21 +237,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             >
               Nuovo Progetto
             </button>
-            {hasProjects && (
-              <div className="relative flex flex-col items-start">
-                <button
-                  onClick={() => setShowDropdown((v) => !v)}
-                  className={`bg-white text-emerald-800 px-10 py-4 text-xl font-semibold flex items-center gap-2 shadow-2xl transition-all duration-300
-                    ${showDropdown ? 'rounded-t-lg rounded-b-none' : 'rounded-full'}`}
-                  style={{
-                    borderBottomLeftRadius: showDropdown ? 0 : '9999px',
-                    borderBottomRightRadius: showDropdown ? 0 : '9999px',
-                  }}
-                >
-                  Carica Progetto
+            <div className="relative flex flex-col items-start">
+              <button
+                onClick={() => setShowDropdown((v) => !v)}
+                className={`bg-white text-emerald-800 px-10 py-4 text-xl font-semibold flex items-center gap-2 shadow-2xl transition-all duration-300 rounded-full hover:bg-emerald-50 hover:scale-105`}
+              >
+                Progetti esistenti
+                {loadingProjects ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
                   <ChevronDown className="w-5 h-5" />
-                </button>
-                {showDropdown && (
+                )}
+              </button>
+
+              {/* Messaggio quando non ci sono progetti */}
+              {showDropdown && !hasProjects && (
+                <div className="mt-2 text-emerald-100 text-lg">
+                  Nessun progetto
+                </div>
+              )}
+              {false && showDropdown && (
                 <div
                   className="absolute left-0 right-0 top-full mt-0 bg-white rounded-b-lg shadow-2xl z-30 p-2 min-w-[320px] border-t border-emerald-100"
                   style={{
@@ -318,12 +328,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   })}
                 </div>
                 )}
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* Pannello progetti sempre visibile sotto Carica Progetto - solo se ci sono progetti */}
-          {hasProjects && (
+          {/* Pannello progetti visibile solo quando showDropdown è true */}
+          {hasProjects && showDropdown && (
             <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`}>
             {/* Header con 3 pulsanti/tab */}
             <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl">

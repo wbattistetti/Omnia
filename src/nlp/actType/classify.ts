@@ -2,24 +2,20 @@ import { HeuristicType, Inference, InferOptions, Lang } from './types';
 import { getLanguageOrder, getRuleSet } from './registry';
 import { isCacheLoaded, getPatternCache, waitForCache } from './patternLoader';
 
-// Cache locale per evitare chiamate multiple a waitForCache
-let cacheReadyChecked = false;
-
-export function classify(label: string, opts?: InferOptions): Inference {
+export async function classify(label: string, opts?: InferOptions): Promise<Inference> {
   const txt = (label || '').trim();
   if (!txt) return { type: 'MESSAGE', reason: 'empty' };
 
-  // Verifica che la cache sia caricata
+  // Verifica e aspetta che la cache sia caricata
   if (!isCacheLoaded()) {
-    // Se non è ancora caricata, avvia il caricamento in background (non bloccante)
-    if (!cacheReadyChecked) {
-      cacheReadyChecked = true;
-      waitForCache().catch(() => {
-        console.warn('[ACT_TYPE_CLASSIFY] ⚠️ Cache loading failed');
-      });
+    console.log('[ACT_TYPE_CLASSIFY] ⏳ Cache not loaded yet, waiting...');
+    try {
+      await waitForCache();
+      console.log('[ACT_TYPE_CLASSIFY] ✅ Cache loaded successfully');
+    } catch (error) {
+      console.error('[ACT_TYPE_CLASSIFY] ❌ Failed to load cache:', error);
+      return { type: 'MESSAGE', reason: 'cache_load_failed' };
     }
-    console.warn('[ACT_TYPE_CLASSIFY] ⚠️ Cache not loaded yet! Patterns may not be available. Returning MESSAGE as fallback.');
-    return { type: 'MESSAGE', reason: 'cache_not_loaded' };
   }
 
   const langs = getLanguageOrder(opts?.languageOrder);
@@ -87,7 +83,9 @@ export function classify(label: string, opts?: InferOptions): Inference {
 
     // 5. REQUEST_DATA
     if (RS.REQUEST_DATA?.some(r => {
+      console.log(`[ACT_TYPE_CLASSIFY] 🔍 Testing REQUEST_DATA pattern: ${r.source} against "${txt}"`);
       const match = r.test(txt);
+      console.log(`[ACT_TYPE_CLASSIFY] ${match ? '✅ MATCH!' : '❌ No match'}`);
       if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ REQUEST_DATA match! Pattern: ${r.source}`);
       return match;
     })) {
