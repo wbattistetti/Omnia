@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, Edit3, Settings, Wrench } from 'lucide-react';
+import { Trash2, Edit3, Settings, Wrench, Check } from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
 
 interface NodeRowActionsOverlayProps {
@@ -26,6 +26,8 @@ interface NodeRowActionsOverlayProps {
   onRequestClosePicker?: () => void;
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
   outerRef?: React.RefObject<HTMLDivElement>;
+  included?: boolean;
+  setIncluded?: (val: boolean) => void;
 }
 
 export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
@@ -50,7 +52,9 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   onTypeChangeRequest,
   onRequestClosePicker,
   buttonCloseTimeoutRef,
-  outerRef
+  outerRef,
+  included,
+  setIncluded
 }) => {
   if (!showIcons || !iconPos) return null;
   // Calculate icon size based on font size (same as primary icons) - 119% of font size
@@ -86,7 +90,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
     >
       {/* Current ActType icon → opens inline type picker below */}
       {ActIcon && (
-        <SmartTooltip text="Change act type" tutorId="act_type_help" placement="bottom">
+        <SmartTooltip text="Change act type" tutorId="act_type_help" placement="top">
           <button
             onMouseDown={(e) => {
               e.preventDefault();
@@ -102,18 +106,41 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
               onTypeChangeRequest && onTypeChangeRequest(anchor);
             }}
             onMouseLeave={() => {
-              // Close picker immediately when mouse leaves button
+              // Use timeout instead of closing immediately to allow mouse to reach menu
               if (buttonCloseTimeoutRef && buttonCloseTimeoutRef.current) {
                 clearTimeout(buttonCloseTimeoutRef.current);
-                buttonCloseTimeoutRef.current = null;
               }
-              // Close immediately, no delay
-              onRequestClosePicker && onRequestClosePicker();
+              // Set timeout to close picker after delay (allows mouse to reach menu)
+              if (buttonCloseTimeoutRef) {
+                buttonCloseTimeoutRef.current = setTimeout(() => {
+                  onRequestClosePicker && onRequestClosePicker();
+                  if (buttonCloseTimeoutRef) {
+                    buttonCloseTimeoutRef.current = null;
+                  }
+                }, 200); // Same delay as menu's handleMouseLeave
+              }
             }}
-            style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 2,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: size,
+              height: size,
+              opacity: 0.9,
+              transition: 'opacity 120ms linear, transform 120ms ease'
+            }}
             className="hover:opacity-100 hover:scale-110"
           >
-            <ActIcon style={{ width: size, height: size, color: actColor || '#94a3b8', filter: actColor && actColor !== '#94a3b8' ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
+            <ActIcon style={{
+              width: size,
+              height: size,
+              color: (!included) ? '#9ca3af' : (actColor || '#94a3b8'), // Grigio se unchecked
+              filter: (included && actColor && actColor !== '#94a3b8') ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined
+            }} />
           </button>
         </SmartTooltip>
       )}
@@ -130,7 +157,19 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
             e.stopPropagation();
           }}
           className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110 nodrag"
-          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 2,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: size,
+            height: size,
+            opacity: 0.9,
+            transition: 'opacity 120ms linear, transform 120ms ease'
+          }}
           onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
         >
           <Edit3 style={{ width: size, height: size }} />
@@ -150,7 +189,19 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
               e.stopPropagation();
             }}
             className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110 nodrag"
-            style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 2,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: size,
+              height: size,
+              opacity: 0.9,
+              transition: 'opacity 120ms linear, transform 120ms ease'
+            }}
             onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
           >
             <Wrench style={{ width: size, height: size }} />
@@ -164,7 +215,19 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
         placement="bottom"
       >
         <button
-          style={{ display: 'flex', alignItems: 'center', padding: 2, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.9, transition: 'opacity 120ms linear, transform 120ms ease' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 2,
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            width: size,
+            height: size,
+            opacity: 0.9,
+            transition: 'opacity 120ms linear, transform 120ms ease'
+          }}
           className="hover:opacity-100 hover:scale-110 nodrag"
           onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
           onMouseDown={(e) => {
@@ -180,6 +243,43 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
         </button>
       </SmartTooltip>
+      {/* Checkbox: moved from left side to toolbar, before trash icon */}
+      {included !== undefined && setIncluded && (
+        <SmartTooltip text="Include this row in the flow" tutorId="include_row_help" placement="bottom">
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIncluded(!included);
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110 nodrag"
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 2,
+              cursor: 'pointer',
+              opacity: 0.9,
+              transition: 'opacity 120ms linear, transform 120ms ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: size,
+              height: size,
+              borderRadius: 3,
+              border: included ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(0,0,0,0.6)',
+              background: included ? 'transparent' : '#e5e7eb',
+            }}
+          >
+            {included ? (
+              <Check style={{ width: size * 0.7, height: size * 0.7, color: 'rgba(255,255,255,0.9)' }} />
+            ) : null}
+          </button>
+        </SmartTooltip>
+      )}
       {/* Cestino (delete) */}
       {canDelete && (
         <SmartTooltip text="Delete row" tutorId="delete_row_help" placement="bottom">
@@ -194,7 +294,19 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
               e.stopPropagation();
             }}
             className="text-red-400 hover:text-red-500 transition-colors hover:opacity-100 hover:scale-110 nodrag"
-            style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', opacity: 0.95, transition: 'opacity 120ms linear, transform 120ms ease' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 2,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: size,
+              height: size,
+              opacity: 0.95,
+              transition: 'opacity 120ms linear, transform 120ms ease'
+            }}
             onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
           >
             <Trash2 style={{ width: size, height: size }} />

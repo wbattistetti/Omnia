@@ -42,6 +42,7 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
       Object.keys(rulesByLang).forEach(lang => {
         const rules = rulesByLang[lang];
         const ruleSet: RuleSet = {
+          AI_AGENT: rules.AI_AGENT?.map((s: string) => new RegExp(s, 'i')) || [],
           MESSAGE: rules.MESSAGE?.map((s: string) => new RegExp(s, 'i')) || [],
           REQUEST_DATA: rules.REQUEST_DATA?.map((s: string) => new RegExp(s, 'i')) || [],
           PROBLEM: rules.PROBLEM ? new RegExp(rules.PROBLEM, 'i') : /\b()\b/i,

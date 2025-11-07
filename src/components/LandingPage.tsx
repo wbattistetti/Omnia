@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown } from 'lucide-react';
+import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown, FileText } from 'lucide-react';
 import { useFontClasses } from '../hooks/useFontClasses';
 import { OmniaSelect } from './common/OmniaSelect';
 
@@ -410,12 +410,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Da recuperare {recoveredProjectsCount > 0 && `(${recoveredProjectsCount})`}
                 </button>
               </div>
-              <button
-                className="flex items-center gap-1 text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50 font-semibold"
-                onClick={() => setShowDeleteAllConfirm(true)}
-              >
-                <Trash2 className="w-3 h-3" /> Elimina tutti
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  className="flex items-center gap-1 text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50 font-semibold"
+                  onClick={() => setShowDeleteAllConfirm(!showDeleteAllConfirm)}
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <FileText className="w-3 h-3" />
+                  Elimina tutti
+                </button>
+
+                {/* Pulsanti Conferma/Annulla appaiono sotto quando showDeleteAllConfirm è true */}
+                {showDeleteAllConfirm && (
+                  <div className="flex gap-2">
+                    <button
+                      className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm font-semibold"
+                      onClick={() => { setShowDeleteAllConfirm(false); onDeleteAllProjects(); }}
+                    >
+                      Conferma
+                    </button>
+                    <button
+                      className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 text-sm font-semibold"
+                      onClick={() => setShowDeleteAllConfirm(false)}
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Tabella con combo box nelle intestazioni */}
@@ -606,29 +628,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
           )}
 
-          {/* Modal conferma eliminazione */}
-          {showDeleteAllConfirm && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-              <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md">
-                <h3 className="text-xl font-bold mb-4 text-emerald-900">Elimina tutti i progetti</h3>
-                <p className="mb-4 text-emerald-900">Sei sicuro di voler eliminare tutti i progetti?</p>
-                <div className="flex gap-2 justify-end">
-                  <button
-                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 font-semibold"
-                    onClick={() => { setShowDeleteAllConfirm(false); onDeleteAllProjects(); }}
-                  >
-                    Conferma
-                  </button>
-                  <button
-                    className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 font-semibold"
-                    onClick={() => setShowDeleteAllConfirm(false)}
-                  >
-                    Annulla
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

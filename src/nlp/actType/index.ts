@@ -6,6 +6,7 @@ import { HeuristicType, InternalType } from './types';
 
 export function heuristicToInternal(t: HeuristicType): InternalType {
   switch (t) {
+    case 'AI_AGENT': return 'AIAgent';
     case 'MESSAGE': return 'Message';
     case 'REQUEST_DATA': return 'DataRequest';
     case 'PROBLEM_SPEC': return 'ProblemClassification';

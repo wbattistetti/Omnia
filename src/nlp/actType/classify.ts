@@ -31,6 +31,7 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
     }
 
     console.log(`[ACT_TYPE_CLASSIFY] 📋 Testing language: ${L}`, {
+      hasAI_AGENT: RS.AI_AGENT?.length || 0,
       hasNEGOTIATION: RS.NEGOTIATION?.length || 0,
       hasPROBLEM_SPEC_DIRECT: RS.PROBLEM_SPEC_DIRECT?.length || 0,
       hasPROBLEM_REASON: RS.PROBLEM_REASON?.length || 0,
@@ -40,6 +41,16 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
       hasMESSAGE: RS.MESSAGE?.length || 0,
       hasPROBLEM: !!RS.PROBLEM
     });
+
+    // 0. AI_AGENT (priorità massima - riconosce "AI:" o "AI :" all'inizio)
+    if (RS.AI_AGENT?.some(r => {
+      const match = r.test(txt);
+      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ AI_AGENT match! Pattern: ${r.source}, Text: "${txt}"`);
+      return match;
+    })) {
+      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: AI_AGENT (lang: ${L})`);
+      return { type: 'AI_AGENT', lang: L, reason: 'AI_AGENT' };
+    }
 
     // 1. NEGOTIATION (priorità massima)
     if (RS.NEGOTIATION?.some(r => {

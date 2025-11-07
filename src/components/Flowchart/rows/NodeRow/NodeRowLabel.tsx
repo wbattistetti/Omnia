@@ -146,7 +146,7 @@ const PrimaryIconButton: React.FC<{
           style={{
             width: computedSize,
             height: computedSize,
-            color: iconColor // Sempre usa iconColor (grigio se no DDT/messaggio, colorato se ha DDT/messaggio)
+            color: (!included) ? '#9ca3af' : iconColor // Grigio se unchecked, altrimenti usa iconColor
           }}
         />
       </button>
@@ -297,14 +297,6 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   overlayRef
 }) => (
   <>
-    {/* Checkbox: show only when label/text is present. Default is a black tick; unchecked shows grey box. */}
-    {(row.text && row.text.trim().length > 0) && (
-      <CheckboxButton
-        labelRef={labelRef}
-        included={included}
-        setIncluded={setIncluded}
-      />
-    )}
     <span
       ref={labelRef}
       className="block cursor-pointer transition-colors flex items-center relative nodrag"
@@ -377,6 +369,8 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           onRequestClosePicker={onRequestClosePicker}
           buttonCloseTimeoutRef={buttonCloseTimeoutRef}
           outerRef={overlayRef}
+          included={included}
+          setIncluded={setIncluded}
         />,
         document.body
       )}

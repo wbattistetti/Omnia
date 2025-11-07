@@ -1,4 +1,5 @@
 export type HeuristicType =
+  | 'AI_AGENT'
   | 'MESSAGE'
   | 'REQUEST_DATA'
   | 'PROBLEM_SPEC'
@@ -7,6 +8,7 @@ export type HeuristicType =
   | 'NEGOTIATION';
 
 export type InternalType =
+  | 'AIAgent'
   | 'Message'
   | 'DataRequest'
   | 'ProblemClassification'
@@ -17,6 +19,7 @@ export type InternalType =
 export type Lang = 'IT' | 'EN' | 'PT';
 
 export type RuleSet = {
+  AI_AGENT: RegExp[];
   MESSAGE: RegExp[];
   REQUEST_DATA: RegExp[];
   PROBLEM: RegExp;

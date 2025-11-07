@@ -80,6 +80,7 @@ async function loadActTypePatternsFromDB() {
       const lang = p.language || 'IT';
       if (!rulesByLang[lang]) {
         rulesByLang[lang] = {
+          AI_AGENT: [],
           MESSAGE: [],
           REQUEST_DATA: [],
           PROBLEM_SPEC_DIRECT: [],

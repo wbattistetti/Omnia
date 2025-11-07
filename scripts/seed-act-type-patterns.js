@@ -5,6 +5,7 @@ const dbFactory = 'factory';
 
 // Mapping da HeuristicType a InternalType
 const typeMapping = {
+    'AI_AGENT': 'AIAgent',
     'MESSAGE': 'Message',
     'REQUEST_DATA': 'DataRequest',
     'PROBLEM_SPEC_DIRECT': 'ProblemClassification',
@@ -18,6 +19,9 @@ const typeMapping = {
 // Pattern estratti dai file .disabled
 const patterns = {
     IT: {
+        AI_AGENT: [
+            '^AI\\s*:'
+        ],
         MESSAGE: [
             '^(di|comunica|informa|mostra|avvisa|spiega|annuncia)\\b',
             '^(dice|comunica|informa|mostra|avvisa|spiega|annuncia)\\b',
@@ -69,6 +73,9 @@ const patterns = {
         ],
     },
     EN: {
+        AI_AGENT: [
+            '^AI\\s*:'
+        ],
         MESSAGE: [
             '^(say|tell|notify|display|announce|explain)\\b',
             '^(says|tells|notifies|displays|announces|explains)\\b',
@@ -108,6 +115,9 @@ const patterns = {
         ],
     },
     PT: {
+        AI_AGENT: [
+            '^AI\\s*:'
+        ],
         MESSAGE: [
             '^(diga|informe|mostre|avise|explique|anuncie)\\b',
             '^(diz|informa|mostra|avisa|explica|anuncia)\\b',
