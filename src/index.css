@@ -129,6 +129,17 @@
   }
 }
 
+/* Voice Textbox Active States */
+.voice-textbox-active {
+  border-color: #22c55e !important; /* Green border when long pressing */
+  border-width: 2px !important;
+}
+
+.voice-textbox-listening {
+  border-color: #22c55e !important; /* Green border when listening */
+  border-width: 2px !important;
+}
+
 /* Node drop highlight during row drag - Verde sottile */
 .node-drop-highlight {
   border: 1px solid #10b981 !important; /* Verde emerald-500 */

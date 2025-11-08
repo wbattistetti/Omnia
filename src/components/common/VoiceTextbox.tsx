@@ -1,5 +1,22 @@
 import React, { useEffect, useRef, useState, useCallback, forwardRef } from 'react';
 import { Mic } from 'lucide-react';
+import SmartTooltip, { ToolbarButton } from '../SmartTooltip';
+
+export interface VoiceTextboxPayoffConfig {
+  message?: string;
+  delay?: number;
+  persistent?: boolean;
+  storageKey?: string;
+  foreColor?: string;
+  backColor?: string;
+  opacity?: number;
+  position?: 'top' | 'bottom';
+  align?: 'left' | 'right' | 'center';
+  toolbar?: ToolbarButton[];
+  showQuestionMark?: boolean;
+  onDismiss?: () => void;
+  onShow?: () => void;
+}
 
 interface VoiceTextboxProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   value: string;
@@ -8,16 +25,19 @@ interface VoiceTextboxProps extends React.TextareaHTMLAttributes<HTMLTextAreaEle
   placeholder?: string;
   className?: string;
   style?: React.CSSProperties;
+  payoffConfig?: VoiceTextboxPayoffConfig;
 }
 
 /**
- * Universal textarea component with automatic speech recognition.
+ * Universal textarea component with speech recognition via long press.
  *
  * Features:
- * - Auto-starts dictation when focused and empty
- * - Shows microphone icon inside the textarea automatically
- * - Handles cleanup automatically
- * - Each VoiceTextbox has its own recognition instance (no interference)
+ * - Click briefly (< 300ms) → normal focus for manual typing
+ * - Long press (> 300ms) → activates voice dictation
+ * - Microphone icon turns green and pulses when listening
+ * - Text is inserted in real-time
+ * - Release click → stops dictation
+ * - Uses browser language automatically
  */
 export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>(({
   value,
@@ -26,23 +46,42 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
   placeholder,
   className,
   style,
+  payoffConfig,
   ...rest
 }, forwardedRef) => {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = (forwardedRef as React.RefObject<HTMLTextAreaElement>) || internalRef;
 
-  // Each VoiceTextbox has its own recognition instance - no sharing, no interference
   const recognitionRef = useRef<any>(null);
   const [isSupported, setIsSupported] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const initialTextRef = useRef<string>('');
-  const accumulatedFinalTextRef = useRef<string>('');
-  const lastInterimTextRef = useRef<string>('');
-  const isStartingRef = useRef<boolean>(false);
-  const sessionIdRef = useRef<number>(0);
-  const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isLongPressing, setIsLongPressing] = useState(false); // Track when long press is active (before dictation starts)
 
-  // Create dedicated recognition instance for THIS VoiceTextbox
+  // Track long press state
+  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressActiveRef = useRef<boolean>(false);
+
+  // Track recognition session
+  const baseTextRef = useRef<string>(''); // Text at start of dictation
+  const isListeningRef = useRef<boolean>(false); // Track listening state without causing re-renders
+  const onChangeRef = useRef(onChange); // Store onChange in ref to avoid dependency issues
+  const valueRef = useRef(value); // Store value in ref to avoid dependency issues
+  const lastProcessedIndexRef = useRef<number>(0); // Track last processed result index to avoid duplicates
+
+  // Update refs when values change
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  // Initialize Web Speech API
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -53,11 +92,13 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
 
     setIsSupported(true);
 
-    // Create OWN recognition instance - independent from other VoiceTextboxes
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'it-IT';
+
+    // Use browser language
+    const browserLang = navigator.language || navigator.languages?.[0] || 'en-US';
+    recognition.lang = browserLang;
 
     recognitionRef.current = recognition;
 
@@ -73,286 +114,224 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
     };
   }, []);
 
-  // Helper function to find longest common suffix-prefix match
-  const findLongestCommonSuffixPrefix = useCallback((existing: string, newText: string) => {
-    const existingTrimmed = existing.trim();
-    const newTrimmed = newText.trim();
+  // Start dictation
+  const startDictation = useCallback(() => {
+    const textarea = textareaRef.current;
+    const recognition = recognitionRef.current;
 
-    if (!existingTrimmed || !newTrimmed) {
-      return { commonLength: 0, newPart: newTrimmed, commonPart: '' };
-    }
+    if (!textarea || !recognition || isListening) return;
 
-    let maxCommonLength = 0;
-    const existingLower = existingTrimmed.toLowerCase();
-    const newLower = newTrimmed.toLowerCase();
+    // Save current text as base and reset processed index
+    baseTextRef.current = value || '';
+    lastProcessedIndexRef.current = 0; // Reset index to start fresh
 
-    for (let len = Math.min(existingLower.length, newLower.length); len > 0; len--) {
-      const existingSuffix = existingLower.slice(-len);
-      const newPrefix = newLower.slice(0, len);
-
-      if (existingSuffix === newPrefix) {
-        maxCommonLength = len;
-        break;
+    try {
+      setIsListening(true);
+      recognition.start();
+      console.log('🎤 [START] Dictation started');
+    } catch (err: any) {
+      if (!err.message?.includes('already')) {
+        console.error('🎤 [ERROR] Start:', err.message);
       }
+      setIsListening(false);
+    }
+  }, [value, isListening]);
+
+  // Stop dictation
+  const stopDictation = useCallback(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition || !isListening) return;
+
+    try {
+      recognition.stop();
+      console.log('🎤 [STOP] Dictation stopped');
+    } catch (e) {
+      // Ignore errors
+    }
+    setIsListening(false);
+    baseTextRef.current = '';
+    lastProcessedIndexRef.current = 0; // Reset index
+  }, [isListening]);
+
+  // Handle mouse down - start long press timer
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    console.log('🎤 [MOUSE_DOWN] Event received, isSupported:', isSupported);
+    if (!isSupported) {
+      console.log('🎤 [MOUSE_DOWN] ❌ Not supported, returning');
+      return;
     }
 
-    if (maxCommonLength > 0) {
-      const commonPart = existingTrimmed.slice(-maxCommonLength);
-      const newPart = newTrimmed.slice(maxCommonLength).trim();
-      return { commonLength: maxCommonLength, newPart, commonPart };
+    // Stop propagation to prevent canvas click interference
+    e.stopPropagation();
+
+    // Clear any existing timeout
+    if (longPressTimeoutRef.current) {
+      console.log('🎤 [MOUSE_DOWN] Clearing existing timeout');
+      clearTimeout(longPressTimeoutRef.current);
     }
 
-    return { commonLength: 0, newPart: newTrimmed, commonPart: '' };
-  }, []);
+    isLongPressActiveRef.current = false;
+    setIsLongPressing(false);
+    console.log('🎤 [MOUSE_DOWN] Starting 300ms timer...');
 
-  // Start recognition when focused and empty
+    // Start timer for long press (300ms)
+    longPressTimeoutRef.current = setTimeout(() => {
+      console.log('🎤 [LONG_PRESS] 300ms timer fired, starting dictation');
+      isLongPressActiveRef.current = true;
+      setIsLongPressing(true); // Show visual feedback (microphone cursor, green border)
+      startDictation();
+    }, 300);
+  }, [isSupported, startDictation]);
+
+  // Handle mouse up - check if it was a short click or long press release
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    console.log('🎤 [MOUSE_UP] Event received, isListening:', isListening, 'hasTimeout:', !!longPressTimeoutRef.current);
+
+    // Stop propagation to prevent canvas click interference
+    e.stopPropagation();
+
+    // Clear long press timer if it hasn't fired yet (short click)
+    if (longPressTimeoutRef.current) {
+      console.log('🎤 [MOUSE_UP] Clearing timeout (was short click)');
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    } else {
+      console.log('🎤 [MOUSE_UP] No timeout to clear (long press was active)');
+    }
+
+    // If dictation was active, stop it and simulate Enter to finalize
+    if (isListening) {
+      console.log('🎤 [MOUSE_UP] Stopping dictation and simulating Enter to finalize');
+      stopDictation();
+
+      // Wait a bit for the recognition to finalize, then simulate Enter
+      setTimeout(() => {
+        const textarea = textareaRef.current;
+        if (textarea && onKeyDown) {
+          // Create a synthetic Enter keydown event
+          const enterEvent = {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            shiftKey: false,
+            altKey: false,
+            ctrlKey: false,
+            metaKey: false,
+            preventDefault: () => {},
+            stopPropagation: () => {},
+            currentTarget: textarea,
+            target: textarea,
+            bubbles: true,
+            cancelable: true,
+            nativeEvent: {} as any,
+            isDefaultPrevented: () => false,
+            isPropagationStopped: () => false,
+            persist: () => {},
+            timeStamp: Date.now(),
+            type: 'keydown',
+          } as React.KeyboardEvent<HTMLTextAreaElement>;
+
+          console.log('🎤 [MOUSE_UP] Simulating Enter keydown event');
+          onKeyDown(enterEvent);
+        }
+      }, 100); // Small delay to ensure recognition has finalized
+    }
+
+    isLongPressActiveRef.current = false;
+    setIsLongPressing(false); // Reset visual feedback
+  }, [isListening, stopDictation, onKeyDown]);
+
+  // Handle mouse leave - cancel long press if mouse leaves
+  const handleMouseLeave = useCallback(() => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+
+    // If dictation was active, stop it
+    if (isListening) {
+      stopDictation();
+    }
+
+    isLongPressActiveRef.current = false;
+    setIsLongPressing(false); // Reset visual feedback
+  }, [isListening, stopDictation]);
+
+  // Setup recognition event handlers (only once when supported)
   useEffect(() => {
     const textarea = textareaRef.current;
     const recognition = recognitionRef.current;
 
-    if (!textarea || !isSupported || !recognition) return;
-
-    const handleFocus = () => {
-      // Cancel any pending blur timeout (focus was restored quickly)
-      if (blurTimeoutRef.current) {
-        clearTimeout(blurTimeoutRef.current);
-        blurTimeoutRef.current = null;
-      }
-
-      // Prevent multiple simultaneous starts
-      if (isStartingRef.current || isListening) return;
-
-      const currentTextarea = textareaRef.current;
-      if (!currentTextarea || document.activeElement !== currentTextarea) return;
-
-      const isEmpty = !currentTextarea.value || currentTextarea.value.trim() === '';
-      if (!isEmpty) return;
-
-      // Stop any previous recognition first
-      if (recognition) {
-        try {
-          recognition.stop();
-        } catch (e) {
-          // Ignore errors if not running
-        }
-      }
-
-      // Mark as starting to prevent re-entry
-      isStartingRef.current = true;
-
-      // Start recognition after DOM is ready
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const currentTextarea = textareaRef.current;
-          if (currentTextarea && document.activeElement === currentTextarea && !currentTextarea.value && !isListening) {
-            // Set initialTextRef to current textarea value (empty in this case)
-            const startValue = currentTextarea.value || '';
-            initialTextRef.current = startValue;
-            accumulatedFinalTextRef.current = startValue;
-            lastInterimTextRef.current = '';
-
-            // Generate new session ID to prevent cross-contamination
-            sessionIdRef.current = Date.now();
-
-            console.log('🎤 [START]', startValue ? `"${startValue}"` : 'empty', `[session: ${sessionIdRef.current}]`);
-
-            try {
-              setIsListening(true);
-
-              // Start recognition with a small delay to ensure previous one stopped
-              requestAnimationFrame(() => {
-                try {
-                  recognition.start();
-                  isStartingRef.current = false; // Reset flag after successful start
-                } catch (err: any) {
-                  if (!err.message?.includes('already')) {
-                    console.error('🎤 [ERROR] Start:', err.message);
-                  }
-                  setIsListening(false);
-                  isStartingRef.current = false;
-                }
-              });
-            } catch (error: any) {
-              console.error('🎤 [ERROR] Start:', error.message);
-              setIsListening(false);
-              isStartingRef.current = false;
-            }
-          } else {
-            isStartingRef.current = false;
-          }
-        });
-      });
-    };
-
-    const handleBlur = () => {
-      // Clear any pending blur timeout
-      if (blurTimeoutRef.current) {
-        clearTimeout(blurTimeoutRef.current);
-        blurTimeoutRef.current = null;
-      }
-
-      // Check if textarea is actually still focused (prevent false blur during React re-renders)
-      // Use a small delay to allow focus to be restored
-      blurTimeoutRef.current = setTimeout(() => {
-        const currentTextarea = textareaRef.current;
-        if (currentTextarea && document.activeElement === currentTextarea) {
-          // Still focused, ignore this blur event (probably a false blur from React re-render)
-          blurTimeoutRef.current = null;
-          return;
-        }
-
-        // Actually lost focus - stop recognition
-        isStartingRef.current = false;
-        if (recognition) {
-          try {
-            recognition.stop();
-          } catch (e) {
-            // Ignore errors if not running
-          }
-        }
-        setIsListening(false);
-        // Invalidate session to prevent stale results from applying
-        sessionIdRef.current = 0;
-        initialTextRef.current = '';
-        accumulatedFinalTextRef.current = '';
-        lastInterimTextRef.current = '';
-        blurTimeoutRef.current = null;
-        console.log('🎤 [STOP] blur');
-      }, 50); // Small delay to check if focus was restored
-    };
-
-    textarea.addEventListener('focus', handleFocus);
-    textarea.addEventListener('focusin', handleFocus);
-    textarea.addEventListener('blur', handleBlur);
-
-    // Trigger focus check immediately if already focused
-    if (document.activeElement === textarea) {
-      handleFocus();
-    }
-
-    return () => {
-      textarea.removeEventListener('focus', handleFocus);
-      textarea.removeEventListener('focusin', handleFocus);
-      textarea.removeEventListener('blur', handleBlur);
-      // Cleanup: clear blur timeout
-      if (blurTimeoutRef.current) {
-        clearTimeout(blurTimeoutRef.current);
-        blurTimeoutRef.current = null;
-      }
-      // Cleanup: stop recognition and reset flags
-      if (recognition) {
-        try {
-          recognition.stop();
-        } catch (e) {
-          // Ignore
-        }
-      }
-      isStartingRef.current = false;
-    };
-  }, [isSupported]); // Removed value and isListening from dependencies to prevent infinite loops
-
-  // Setup recognition handlers
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    const recognition = recognitionRef.current;
     if (!textarea || !recognition || !isSupported) return;
 
     const handleResult = (event: any) => {
-      if (document.activeElement !== textarea) return;
+      const currentTextarea = textareaRef.current;
+      if (!isListeningRef.current || !currentTextarea || document.activeElement !== currentTextarea) {
+        return;
+      }
 
       // Check if element is still in DOM
-      if (!document.body.contains(textarea)) {
-        recognition.stop();
+      if (!document.body.contains(currentTextarea)) {
+        const recognition = recognitionRef.current;
+        if (recognition) {
+          try {
+            recognition.stop();
+          } catch (e) {}
+        }
         setIsListening(false);
         return;
       }
 
-      // CRITICAL: Check if this session is still valid (not from a previous textarea)
-      if (sessionIdRef.current === 0) {
-        // Session was invalidated (blur happened), ignore these stale results
-        return;
-      }
+      const results = event.results;
+      if (!results || results.length === 0) return;
 
-      // Get current textarea value to sync with refs if they're out of sync
-      const currentValue = textarea.value || '';
+      // Process only NEW final results (from lastProcessedIndex onwards)
+      // This prevents duplicates and overwrites when API reorganizes results
+      let finalText = baseTextRef.current;
+      let processedAnyNew = false;
 
-      // If initialTextRef doesn't match current textarea value, we switched textareas mid-recognition
-      // Reset to current value and start fresh
-      if (initialTextRef.current !== currentValue) {
-        console.log('🎤 [SYNC] Textarea value changed, resetting refs', {
-          initialRef: initialTextRef.current,
-          textareaValue: currentValue,
-          session: sessionIdRef.current
-        });
-        initialTextRef.current = currentValue;
-        accumulatedFinalTextRef.current = currentValue;
-        lastInterimTextRef.current = '';
-      }
-
-      // Process results with suffix-prefix matching
-      let accumulatedFinal = accumulatedFinalTextRef.current || initialTextRef.current || '';
-      let useReconstruction = false;
-
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
+      for (let i = lastProcessedIndexRef.current; i < results.length; i++) {
+        const result = results[i];
+        if (result.isFinal && result[0]) {
           const transcript = result[0].transcript;
-          const matchResult = findLongestCommonSuffixPrefix(accumulatedFinal, transcript);
-
-          if (matchResult.commonLength > 0 && matchResult.newPart) {
-            const needsSpace = accumulatedFinal && !accumulatedFinal.endsWith(' ') && !matchResult.newPart.startsWith(' ');
-            accumulatedFinal += (needsSpace ? ' ' : '') + matchResult.newPart;
-          } else if (matchResult.commonLength === 0) {
-            useReconstruction = true;
-            break;
+          // Add space if needed
+          if (finalText && !finalText.endsWith(' ') && !transcript.startsWith(' ')) {
+            finalText += ' ';
           }
+          finalText += transcript;
+          processedAnyNew = true;
         }
       }
 
-      // Fallback: full reconstruction
-      if (useReconstruction) {
-        accumulatedFinal = initialTextRef.current || '';
-        for (let i = 0; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) {
-            const transcript = result[0].transcript;
-            const needsSpace = accumulatedFinal && !accumulatedFinal.endsWith(' ') && !transcript.startsWith(' ');
-            accumulatedFinal += (needsSpace ? ' ' : '') + transcript;
-          }
-        }
+      // Update last processed index only if we processed new results
+      if (processedAnyNew) {
+        lastProcessedIndexRef.current = results.length;
+        // Update baseTextRef to current finalText so next iteration starts from here
+        baseTextRef.current = finalText;
       }
 
-      accumulatedFinalTextRef.current = accumulatedFinal;
-
-      // Find last interim result
-      let lastInterimTranscript = '';
-      for (let i = event.results.length - 1; i >= 0; i--) {
-        const result = event.results[i];
-        if (!result.isFinal) {
-          lastInterimTranscript = result[0].transcript;
+      // Find last interim result for preview
+      let lastInterim = '';
+      for (let i = results.length - 1; i >= 0; i--) {
+        const result = results[i];
+        if (!result.isFinal && result[0]) {
+          lastInterim = result[0].transcript;
           break;
         }
       }
 
-      lastInterimTextRef.current = lastInterimTranscript;
-
-      // Build display value
-      const finalTextForDisplay = accumulatedFinal;
-      let displayValue = '';
-
-      if (finalTextForDisplay !== (initialTextRef.current || '')) {
-        displayValue = finalTextForDisplay;
-        if (lastInterimTranscript) {
-          const needsSpace = displayValue && !displayValue.endsWith(' ') && !lastInterimTranscript.startsWith(' ');
-          displayValue += (needsSpace ? ' ' : '') + lastInterimTranscript;
+      // Build display value: current final text + last interim
+      let displayValue = finalText;
+      if (lastInterim) {
+        if (displayValue && !displayValue.endsWith(' ') && !lastInterim.startsWith(' ')) {
+          displayValue += ' ';
         }
-      } else {
-        displayValue = lastInterimTranscript || '';
+        displayValue += lastInterim;
       }
 
-      // Update React state via onChange
-      if (displayValue !== value) {
-        console.log('🎤 [UPDATE]', `"${displayValue}"`);
+      // Update React state
+      if (displayValue !== valueRef.current) {
         const syntheticEvent = {
           target: { value: displayValue },
           currentTarget: { value: displayValue },
@@ -361,7 +340,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
           cancelable: true,
         } as React.ChangeEvent<HTMLTextAreaElement>;
 
-        onChange(syntheticEvent);
+        onChangeRef.current(syntheticEvent);
       }
     };
 
@@ -371,14 +350,22 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
         return;
       }
       // For other errors (network, service, etc), stop listening
+      console.error('🎤 [ERROR]', event.error);
+      const recognition = recognitionRef.current;
+      if (recognition) {
+        try {
+          recognition.stop();
+        } catch (e) {}
+      }
       setIsListening(false);
+      baseTextRef.current = '';
+      lastProcessedIndexRef.current = 0; // Reset index
     };
 
     const handleEnd = () => {
       setIsListening(false);
-      initialTextRef.current = '';
-      accumulatedFinalTextRef.current = '';
-      lastInterimTextRef.current = '';
+      baseTextRef.current = '';
+      lastProcessedIndexRef.current = 0; // Reset index
     };
 
     recognition.onresult = handleResult;
@@ -386,7 +373,8 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
     recognition.onend = handleEnd;
 
     return () => {
-      if (isListening) {
+      // Cleanup on unmount
+      if (isListeningRef.current) {
         try {
           recognition.stop();
         } catch (e) {
@@ -394,11 +382,17 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
         }
       }
     };
-  }, [isSupported, value, onChange, findLongestCommonSuffixPrefix, isListening, textareaRef]);
+  }, [isSupported]); // Only re-run if isSupported changes
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      // Clear long press timeout
+      if (longPressTimeoutRef.current) {
+        clearTimeout(longPressTimeoutRef.current);
+      }
+
+      // Stop recognition
       const recognition = recognitionRef.current;
       if (recognition && isListening) {
         try {
@@ -410,64 +404,177 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
     };
   }, [isListening]);
 
-  // Handle Enter key to stop recognition
+  // Handle keyboard events
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const recognition = recognitionRef.current;
-
-    const stopRecognitionAndReset = () => {
-      if (isListening && recognition) {
-        try {
-          recognition.stop();
-          setIsListening(false);
-          sessionIdRef.current = 0; // Invalidate session
-          initialTextRef.current = '';
-          accumulatedFinalTextRef.current = '';
-          lastInterimTextRef.current = '';
-          console.log('🎤 [STOP] Enter/Escape');
-        } catch (error) {
-          // Ignore errors
-        }
-      }
-    };
-
-    if (e.key === 'Enter' && !e.shiftKey) {
-      stopRecognitionAndReset();
-    }
-
-    if (e.key === 'Escape') {
+    // Stop dictation on Escape
+    if (e.key === 'Escape' && isListening) {
       e.preventDefault();
-      stopRecognitionAndReset();
+      stopDictation();
     }
 
     // Call external onKeyDown if provided
     if (onKeyDown) {
       onKeyDown(e);
     }
-  }, [isListening, onKeyDown]);
+  }, [isListening, stopDictation, onKeyDown]);
+
+  // Also handle pointer events (works for both mouse and touch)
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
+    console.log('🎤 [POINTER_DOWN] Event received');
+    e.stopPropagation();
+    // Convert to mouse event format for our handler
+    const mouseEvent = e as unknown as React.MouseEvent<HTMLTextAreaElement>;
+    handleMouseDown(mouseEvent);
+  }, [handleMouseDown]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
+    console.log('🎤 [POINTER_UP] Event received');
+    e.stopPropagation();
+    // Convert to mouse event format for our handler
+    const mouseEvent = e as unknown as React.MouseEvent<HTMLTextAreaElement>;
+    handleMouseUp(mouseEvent);
+  }, [handleMouseUp]);
+
+  // Combine pointer handlers with external ones
+  const combinedPointerDown = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
+    console.log('🎤 [COMBINED_POINTER_DOWN] Called');
+    handlePointerDown(e);
+    if (rest.onPointerDown) {
+      console.log('🎤 [COMBINED_POINTER_DOWN] Calling external handler');
+      rest.onPointerDown(e);
+    }
+  }, [handlePointerDown, rest.onPointerDown]);
+
+  const combinedPointerUp = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
+    console.log('🎤 [COMBINED_POINTER_UP] Called');
+    handlePointerUp(e);
+    if (rest.onPointerUp) {
+      console.log('🎤 [COMBINED_POINTER_UP] Calling external handler');
+      rest.onPointerUp(e);
+    }
+  }, [handlePointerUp, rest.onPointerUp]);
+
+  // Combine internal handlers with external ones from props
+  // IMPORTANT: Call our handler FIRST, then external one
+  const combinedMouseDown = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    console.log('🎤 [COMBINED_MOUSE_DOWN] Called');
+    // Call our handler FIRST - it will stop propagation
+    handleMouseDown(e);
+    // Then call external handler if it exists
+    if (rest.onMouseDown) {
+      console.log('🎤 [COMBINED_MOUSE_DOWN] Calling external handler');
+      rest.onMouseDown(e);
+    }
+  }, [handleMouseDown, rest.onMouseDown]);
+
+  const combinedMouseUp = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    console.log('🎤 [COMBINED_MOUSE_UP] Called');
+    // Call our handler FIRST - it will stop propagation
+    handleMouseUp(e);
+    // Then call external handler if it exists
+    if (rest.onMouseUp) {
+      console.log('🎤 [COMBINED_MOUSE_UP] Calling external handler');
+      rest.onMouseUp(e);
+    }
+  }, [handleMouseUp, rest.onMouseUp]);
+
+  const combinedMouseLeave = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    handleMouseLeave(e);
+    if (rest.onMouseLeave) {
+      rest.onMouseLeave(e);
+    }
+  }, [handleMouseLeave, rest.onMouseLeave]);
+
+  // Extract mouse/pointer handlers from rest to avoid passing them twice
+  const { onMouseDown, onMouseUp, onMouseLeave, onPointerDown, onPointerUp, ...restWithoutMouseHandlers } = rest;
 
   return (
     <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={onChange}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        className={className}
-        style={{
-          ...style,
-          paddingRight: isSupported ? '24px' : (style?.paddingRight || undefined),
-        }}
-        {...rest}
-      />
+      {/* SmartTooltip wrapper if payoffConfig is provided */}
+      {payoffConfig && isSupported ? (
+        <SmartTooltip
+          text={payoffConfig.message || "Keep the mouse pressed and dictate"}
+          showOnMount={true}
+          delay={payoffConfig.delay ?? 1000}
+          persistent={payoffConfig.persistent ?? false}
+          storageKey={payoffConfig.storageKey || 'voice-textbox-payoff-dismissed'}
+          foreColor={payoffConfig.foreColor || '#22c55e'}
+          backColor={payoffConfig.backColor || '#1f2937'}
+          opacity={payoffConfig.opacity ?? 0.95}
+          placement={payoffConfig.position || 'top'}
+          align={payoffConfig.align || 'left'}
+          toolbar={payoffConfig.toolbar || [
+            {
+              label: 'Got it!',
+              onClick: () => {},
+              variant: 'primary',
+            },
+          ]}
+          showQuestionMark={payoffConfig.showQuestionMark ?? false}
+          onDismiss={payoffConfig.onDismiss}
+          onShow={payoffConfig.onShow}
+        >
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={onChange}
+            onKeyDown={handleKeyDown}
+            onMouseDown={combinedMouseDown}
+            onMouseUp={combinedMouseUp}
+            onMouseLeave={combinedMouseLeave}
+            onPointerDown={combinedPointerDown}
+            onPointerUp={combinedPointerUp}
+            placeholder={placeholder}
+            className={`${className || ''} ${isLongPressing || isListening ? 'voice-textbox-active' : ''} ${isListening ? 'voice-textbox-listening' : ''}`.trim()}
+            style={{
+              ...style,
+              paddingRight: isSupported ? '24px' : (style?.paddingRight || undefined),
+              ...((isLongPressing || isListening) ? {
+                borderColor: '#22c55e',
+                borderWidth: '2px',
+                borderStyle: style?.borderStyle || 'solid',
+              } : {}),
+              transition: 'border-color 0.2s ease, border-width 0.2s ease',
+              cursor: isLongPressing ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2322c55e\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z\'/%3E%3Cpath d=\'M19 10v2a7 7 0 0 1-14 0v-2\'/%3E%3Cline x1=\'12\' y1=\'19\' x2=\'12\' y2=\'23\'/%3E%3Cline x1=\'8\' y1=\'23\' x2=\'16\' y2=\'23\'/%3E%3C/svg%3E") 12 12, auto' : isListening ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'2\' fill=\'%2322c55e\' opacity=\'0.8\'%3E%3Canimate attributeName=\'r\' values=\'2;6;2\' dur=\'1s\' repeatCount=\'indefinite\'/%3E%3Canimate attributeName=\'opacity\' values=\'0.8;0.2;0.8\' dur=\'1s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'4\' fill=\'%2322c55e\' opacity=\'0.4\'%3E%3Canimate attributeName=\'r\' values=\'4;8;4\' dur=\'1.5s\' repeatCount=\'indefinite\'/%3E%3Canimate attributeName=\'opacity\' values=\'0.4;0;0.4\' dur=\'1.5s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3C/svg%3E") 12 12, auto' : (style?.cursor || undefined),
+            }}
+            {...restWithoutMouseHandlers}
+          />
+        </SmartTooltip>
+      ) : (
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={onChange}
+          onKeyDown={handleKeyDown}
+          onMouseDown={combinedMouseDown}
+          onMouseUp={combinedMouseUp}
+          onMouseLeave={combinedMouseLeave}
+          onPointerDown={combinedPointerDown}
+          onPointerUp={combinedPointerUp}
+          placeholder={placeholder}
+          className={`${className || ''} ${isLongPressing || isListening ? 'voice-textbox-active' : ''} ${isListening ? 'voice-textbox-listening' : ''}`.trim()}
+          style={{
+            ...style,
+            paddingRight: isSupported ? '24px' : (style?.paddingRight || undefined),
+            ...((isLongPressing || isListening) ? {
+              borderColor: '#22c55e',
+              borderWidth: '2px',
+              borderStyle: style?.borderStyle || 'solid',
+            } : {}),
+            transition: 'border-color 0.2s ease, border-width 0.2s ease',
+            cursor: isLongPressing ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2322c55e\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z\'/%3E%3Cpath d=\'M19 10v2a7 7 0 0 1-14 0v-2\'/%3E%3Cline x1=\'12\' y1=\'19\' x2=\'12\' y2=\'23\'/%3E%3Cline x1=\'8\' y1=\'23\' x2=\'16\' y2=\'23\'/%3E%3C/svg%3E") 12 12, auto' : isListening ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'2\' fill=\'%2322c55e\' opacity=\'0.8\'%3E%3Canimate attributeName=\'r\' values=\'2;6;2\' dur=\'1s\' repeatCount=\'indefinite\'/%3E%3Canimate attributeName=\'opacity\' values=\'0.8;0.2;0.8\' dur=\'1s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'4\' fill=\'%2322c55e\' opacity=\'0.4\'%3E%3Canimate attributeName=\'r\' values=\'4;8;4\' dur=\'1.5s\' repeatCount=\'indefinite\'/%3E%3Canimate attributeName=\'opacity\' values=\'0.4;0;0.4\' dur=\'1.5s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3C/svg%3E") 12 12, auto' : (style?.cursor || undefined),
+          }}
+          {...restWithoutMouseHandlers}
+        />
+      )}
 
       {/* Microphone icon - inside textarea, top-right corner, fixed position */}
       {isSupported && (
         <div
           style={{
             position: 'absolute',
-            top: '2px', // Fixed 2px from top
-            right: '2px', // Fixed 2px from right
+            top: '2px',
+            right: '2px',
             zIndex: 10,
             pointerEvents: 'none',
             display: 'flex',

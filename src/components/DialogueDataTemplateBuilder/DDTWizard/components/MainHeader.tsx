@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Pencil, Trash2, Plus, Link, Check, X, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw, FileEdit } from 'lucide-react';
+import { Pencil, Trash2, Plus, Link, Check, X, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import IconRenderer from './IconRenderer';
-import AnimatedDots from './AnimatedDots';
+import FieldStatusDisplay from './FieldStatusDisplay';
 import type { SchemaNode } from '../MainDataCollection';
 import type { FieldErrorState } from '../hooks/useMainEditing';
 import type { FieldProcessingState } from '../hooks/useFieldProcessing';
@@ -111,80 +111,36 @@ export default function MainHeader({
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         {!isEditingMain ? (
           <>
-            <div ref={labelRef} style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap', flexShrink: 0 }}>
-              <span style={{ flexShrink: 0 }}><IconRenderer name={node.icon} size={16} /></span>
-              <span className={combinedClass} style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
+            <div ref={labelRef} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                <span style={{ flexShrink: 0 }}><IconRenderer name={node.icon} size={16} /></span>
+                <span className={combinedClass} style={{ fontWeight: 700, color: '#e2e8f0', whiteSpace: 'nowrap' }}>{node.label || 'Field'}</span>
 
-              {/* 🚀 NEW: Status display for main data */}
-              {(() => {
-                const fieldId = node.label || '';
-                const state = getFieldProcessingState(fieldId);
-                const progress = progressByPath?.[fieldId] || 0;
-                const message = getStatusMessage(fieldId);
-                const hasError = state?.status === 'error';
+                {/* 🚀 NEW: Status display for main data - Row 1 only (icon + percentage + buttons) */}
+                {(() => {
+                  const fieldId = node.label || '';
+                  const state = getFieldProcessingState(fieldId);
+                  const progress = progressByPath?.[fieldId] || 0;
+                  const message = getStatusMessage(fieldId);
+                  const hasError = state?.status === 'error';
 
-                if (progress > 0 || state) {
                   return (
-                    <div className={combinedClass} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {getStatusIcon(fieldId)}
-                      <span style={{ color: hasError ? '#ef4444' : (progress >= 100 ? '#22c55e' : '#3b82f6') }}>
-                        {Math.round(progress)}%
-                      </span>
-                      <span style={{ color: hasError ? '#ef4444' : '#64748b' }}>
-                        {message}
-                      </span>
-                      {progress > 0 && progress < 100 && !hasError && <AnimatedDots />}
-                      {hasError && onRetryField && (
-                        <>
-                          <button
-                            onClick={() => onRetryField(fieldId)}
-                            className={combinedClass}
-                            style={{
-                              background: '#ef4444',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: 4,
-                              padding: '2px 8px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4
-                            }}
-                            title={state?.retryCount ? `Retry (attempt ${state.retryCount + 1})` : 'Retry'}
-                          >
-                            <RefreshCw size={12} />
-                            Retry {state?.retryCount ? `(${state.retryCount})` : ''}
-                          </button>
-                          {/* Show manual creation button after 2+ failed retries */}
-                          {(state?.retryCount ?? 0) >= 2 && onCreateManually && (
-                            <button
-                              onClick={() => onCreateManually()}
-                              className={combinedClass}
-                              style={{
-                                background: '#fbbf24',
-                                color: '#0b1220',
-                                border: 'none',
-                                borderRadius: 4,
-                                padding: '2px 8px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                fontWeight: 600
-                              }}
-                              title="Crea i messaggi manualmente nell'editor"
-                            >
-                              <FileEdit size={12} />
-                              Crea manualmente
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
+                    <FieldStatusDisplay
+                      fieldId={fieldId}
+                      state={state}
+                      progress={progress}
+                      message={message}
+                      hasError={hasError}
+                      onRetryField={onRetryField}
+                      onCreateManually={onCreateManually}
+                      getStatusIcon={getStatusIcon}
+                      className={combinedClass}
+                      compact={false}
+                      showPayoff={true}
+                    />
                   );
-                }
-                return null;
-              })()}
+                })()}
+              </div>
             </div>
             {/* Action buttons */}
             {hoverHeader && (

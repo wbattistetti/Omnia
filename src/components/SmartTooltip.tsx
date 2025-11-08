@@ -1,13 +1,34 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { HelpCircle, GraduationCap } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { HelpCircle, GraduationCap, X } from 'lucide-react';
 import { useFontStore } from '../state/fontStore';
 import { emitTutorOpen } from '../ui/events';
+
+export interface ToolbarButton {
+  icon?: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  variant?: 'primary' | 'secondary' | 'danger' | 'default';
+}
 
 type SmartTooltipProps = {
   text: string;
   tutorId?: string;
   placement?: 'right' | 'left' | 'top' | 'bottom';
   children: React.ReactNode;
+  // New extended props
+  showOnMount?: boolean; // Show on mount instead of hover
+  delay?: number; // Override default delay (default: 1250ms, -1 = persistent until dismissed)
+  persistent?: boolean; // Show until dismissed (delay ignored)
+  storageKey?: string; // localStorage key for persistence
+  foreColor?: string; // Text color (default: based on placement)
+  backColor?: string; // Background color (default: '#fefce8')
+  opacity?: number; // Opacity 0-1 (default: 1)
+  align?: 'left' | 'right' | 'center'; // Horizontal alignment (for top/bottom placement)
+  offset?: number; // Distance from target (default: 12px)
+  toolbar?: ToolbarButton[]; // Custom toolbar buttons
+  showQuestionMark?: boolean; // Show default "?" button (default: true if tutorId exists)
+  onDismiss?: () => void; // Callback when dismissed
+  onShow?: () => void; // Callback when shown
 };
 
 const SmartTooltip: React.FC<SmartTooltipProps> = ({
@@ -15,6 +36,19 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
   tutorId,
   placement = 'bottom',
   children,
+  showOnMount = false,
+  delay,
+  persistent = false,
+  storageKey,
+  foreColor,
+  backColor,
+  opacity,
+  align = 'left',
+  offset,
+  toolbar,
+  showQuestionMark,
+  onDismiss,
+  onShow,
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -24,6 +58,28 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
   const [contentStyle, setContentStyle] = useState<React.CSSProperties>({});
   const [isPositionCalculated, setIsPositionCalculated] = useState(false);
   const { fontSize } = useFontStore();
+
+  // Check localStorage for dismissed state
+  const isDismissed = useCallback(() => {
+    if (!storageKey) return false;
+    try {
+      const dismissed = localStorage.getItem(storageKey);
+      return dismissed === 'true';
+    } catch {
+      return false;
+    }
+  }, [storageKey]);
+
+  // Mark as dismissed
+  const markDismissed = useCallback(() => {
+    if (storageKey) {
+      try {
+        localStorage.setItem(storageKey, 'true');
+      } catch {}
+    }
+    setShowTooltip(false);
+    onDismiss?.();
+  }, [storageKey, onDismiss]);
 
   // Font size mapping basato sul font centralizzato
   const sizeMap = {
@@ -75,7 +131,7 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
         effectivePlacement = 'bottom';
       }
 
-      // Per placement bottom/top: allinea a sinistra con l'elemento
+      // Per placement bottom/top: allinea secondo align prop
       if (effectivePlacement === 'bottom' || effectivePlacement === 'top') {
         // Spazio disponibile a destra dall'elemento
         const spaceRight = viewportWidth - wrapperRect.left - padding;
@@ -94,12 +150,22 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
         const needsWrap = idealWidth < estimatedTextWidth || words > 20;
         const finalWidth = needsWrap ? Math.max(minWidthForWords, idealWidth) : idealWidth;
 
-        // Verifica se esce dal viewport a destra quando allineato a sinistra
-        let leftPosition = 0; // Di default allineato a sinistra con l'elemento
-        if (wrapperRect.left + finalWidth > viewportWidth - padding) {
+        // Calcola posizione orizzontale basata su align
+        let leftPosition = 0;
+        if (align === 'right') {
+          leftPosition = wrapperRect.width - finalWidth; // Allinea a destra
+        } else if (align === 'center') {
+          leftPosition = (wrapperRect.width - finalWidth) / 2; // Centrato
+        } else {
+          // 'left' è default: allineato a sinistra
+          leftPosition = 0;
+        }
+
+        // Verifica se esce dal viewport e aggiusta se necessario
+        if (wrapperRect.left + leftPosition + finalWidth > viewportWidth - padding) {
           // Esce a destra: calcola quanto spostare a sinistra
-          const wouldExceed = (wrapperRect.left + finalWidth) - (viewportWidth - padding);
-          leftPosition = -wouldExceed;
+          const wouldExceed = (wrapperRect.left + leftPosition + finalWidth) - (viewportWidth - padding);
+          leftPosition = leftPosition - wouldExceed;
 
           // Verifica che non esca a sinistra
           if (wrapperRect.left + leftPosition < padding) {
@@ -111,34 +177,41 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
           }
         }
 
-        // Posizionamento: allineato a sinistra, eventualmente spostato
+        // Posizionamento: allineato secondo align, eventualmente spostato
+        const marginOffset = offset ?? 12;
         const tooltipPosStyle: React.CSSProperties = {
           position: 'absolute',
           zIndex: 10000,
           ...(effectivePlacement === 'bottom' && {
             top: '100%',
             left: leftPosition,
-            marginTop: 12,
+            marginTop: marginOffset,
           }),
           ...(effectivePlacement === 'top' && {
             bottom: '100%',
             left: leftPosition,
-            marginBottom: 12,
+            marginBottom: marginOffset,
           }),
         };
 
+        const defaultBackColor = backColor || '#fefce8';
+        const defaultForeColor = foreColor || '#854d0e';
+        const defaultBorderColor = foreColor || '#fde68a';
+        const tooltipOpacity = opacity ?? 1;
+
         const contentPosStyle: React.CSSProperties = {
-          backgroundColor: '#fefce8',
-          color: '#854d0e',
-          border: '1px solid #fde68a',
+          backgroundColor: defaultBackColor,
+          color: defaultForeColor,
+          border: `1px solid ${defaultBorderColor}`,
           fontSize: tooltipFontSize,
           lineHeight: 1.4,
-          padding: '6px 8px',
+          padding: '4px 6px',
           width: needsWrap ? 'auto' : 'max-content',
           maxWidth: idealWidth,
           minWidth: needsWrap ? minWidthForWords : 'auto',
           pointerEvents: 'auto',
           boxSizing: 'border-box',
+          opacity: tooltipOpacity,
         };
 
         setTooltipStyle(tooltipPosStyle);
@@ -153,17 +226,23 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
           ...(placement === 'left' && { top: '50%', right: '100%', transform: 'translateY(-50%)', marginRight: 12 }),
         };
 
+        const defaultBackColor = backColor || '#fefce8';
+        const defaultForeColor = foreColor || '#854d0e';
+        const defaultBorderColor = foreColor || '#fde68a';
+        const tooltipOpacity = opacity ?? 1;
+
         const contentPosStyle: React.CSSProperties = {
-          backgroundColor: '#fefce8',
-          color: '#854d0e',
-          border: '1px solid #fde68a',
+          backgroundColor: defaultBackColor,
+          color: defaultForeColor,
+          border: `1px solid ${defaultBorderColor}`,
           fontSize: tooltipFontSize,
           lineHeight: 1.4,
-          padding: '6px 8px',
+          padding: '4px 6px',
           width: 'max-content',
           maxWidth: 500,
           pointerEvents: 'auto',
           boxSizing: 'border-box',
+          opacity: tooltipOpacity,
         };
 
         setTooltipStyle(tooltipPosStyle);
@@ -194,24 +273,62 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
 
   // Handle mouse enter with delay
   const handleMouseEnter = () => {
+    // Don't show on hover if showOnMount is true or if dismissed
+    if (showOnMount || isDismissed()) return;
+
     // Clear any existing timer
     if (timerRef.current) {
       clearTimeout(timerRef.current);
     }
-    // Set tooltip to show after 1.25 seconds (between 1 and 1.5 seconds)
+
+    // Use custom delay or default 1250ms
+    const delayMs = delay !== undefined ? (delay === -1 ? 0 : delay) : 1250;
+
+    // Set tooltip to show after delay
     timerRef.current = setTimeout(() => {
-      setShowTooltip(true);
-    }, 1250);
+      if (!isDismissed()) {
+        setShowTooltip(true);
+        onShow?.();
+      }
+    }, delayMs);
   };
 
-  // Handle mouse leave - clear timer and hide tooltip
+  // Handle mouse leave - clear timer and hide tooltip (unless persistent)
   const handleMouseLeave = () => {
+    if (persistent) return; // Don't hide if persistent
+
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
     setShowTooltip(false);
   };
+
+  // Show on mount if configured
+  useEffect(() => {
+    if (!showOnMount) return;
+    if (isDismissed()) return;
+
+    const delayMs = delay !== undefined ? (delay === -1 ? 0 : delay) : 0;
+
+    if (delayMs === 0) {
+      setShowTooltip(true);
+      onShow?.();
+    } else {
+      timerRef.current = setTimeout(() => {
+        if (!isDismissed()) {
+          setShowTooltip(true);
+          onShow?.();
+        }
+      }, delayMs);
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [showOnMount, delay, onShow, isDismissed]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -221,6 +338,23 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
       }
     };
   }, []);
+
+  // Don't render if dismissed
+  if (isDismissed()) {
+    return <>{children}</>;
+  }
+
+  const shouldShowQuestionMark = showQuestionMark !== false && tutorId !== undefined;
+  const hasToolbar = toolbar && toolbar.length > 0;
+  const hasCloseButton = persistent;
+  const showToolbar = hasToolbar || shouldShowQuestionMark || hasCloseButton;
+
+  const buttonVariants = {
+    primary: { background: foreColor || '#2563eb', color: '#fff', border: 'none' },
+    secondary: { background: '#64748b', color: '#fff', border: 'none' },
+    danger: { background: '#ef4444', color: '#fff', border: 'none' },
+    default: { background: 'transparent', color: foreColor || '#2563eb', border: `1px solid ${foreColor || '#2563eb'}` },
+  };
 
   return (
     <div
@@ -235,61 +369,145 @@ const SmartTooltip: React.FC<SmartTooltipProps> = ({
           ref={tooltipRef}
           style={{
             ...tooltipStyle,
-            opacity: isPositionCalculated ? 1 : 0, // ✅ Invisibile finché posizionamento non calcolato
+            opacity: isPositionCalculated ? (opacity ?? 1) : 0, // ✅ Invisibile finché posizionamento non calcolato
             transition: isPositionCalculated ? 'opacity 0.05s ease-in' : 'none', // Smooth fade-in
             pointerEvents: isPositionCalculated ? 'auto' : 'none' // Disabilita interazioni finché non visibile
           }}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
+          onMouseEnter={persistent ? handleMouseEnter : handleMouseEnter}
+          onMouseLeave={persistent ? undefined : handleMouseLeave}
         >
           <div
-            className="rounded-lg shadow-lg flex items-center"
-            style={contentStyle}
+            className="rounded-lg shadow-lg"
+            style={{
+              ...contentStyle,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: hasToolbar ? 4 : 0,
+            }}
             role="tooltip"
           >
-            <GraduationCap
-              size={16}
+            {/* Main content row - text and question mark icon on same line */}
+            <div
               style={{
-                color: '#ca8a04',
-                flexShrink: 0,
-                marginRight: 6,
-              }}
-            />
-            <span
-              style={{
-                whiteSpace: contentStyle.width === 'auto' ? 'normal' : 'nowrap',
-                wordBreak: 'break-word',
-                overflowWrap: 'break-word',
-                flex: contentStyle.width === 'auto' ? '1 1 auto' : '0 0 auto',
-                minWidth: 0,
-              }}
-            >
-              {text}
-            </span>
-            <button
-              onClick={handleTutorClick}
-              className="focus:outline-none"
-              aria-label={tutorId ? "Open help" : "Help"}
-              tabIndex={0}
-              disabled={!tutorId}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                marginLeft: 6,
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: tutorId ? 'pointer' : 'default',
-                flexShrink: 0,
-                opacity: tutorId ? 1 : 0.5,
-                color: '#2563eb',
-                width: 16,
-                height: 16,
+                alignItems: 'flex-start',
+                gap: 4,
+                position: 'relative',
               }}
             >
-              <HelpCircle size={16} />
-            </button>
+              {!hasToolbar && (
+                <GraduationCap
+                  size={16}
+                  style={{
+                    color: foreColor || '#ca8a04',
+                    flexShrink: 0,
+                    marginTop: 1, // Slight alignment adjustment
+                  }}
+                />
+              )}
+              <span
+                style={{
+                  whiteSpace: contentStyle.width === 'auto' ? 'normal' : 'nowrap',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
+                  flex: '1 1 auto',
+                  minWidth: 0,
+                  lineHeight: 1.4,
+                }}
+              >
+                {text}
+              </span>
+              {/* Question mark icon - inline with text, or top-right if wrapped */}
+              {shouldShowQuestionMark && (
+                <button
+                  onClick={handleTutorClick}
+                  className="focus:outline-none"
+                  aria-label={tutorId ? "Open help" : "Help"}
+                  tabIndex={0}
+                  disabled={!tutorId}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    justifyContent: 'center',
+                    cursor: tutorId ? 'pointer' : 'default',
+                    flexShrink: 0,
+                    opacity: tutorId ? 1 : 0.5,
+                    color: foreColor || '#2563eb',
+                    width: 16,
+                    height: 16,
+                    marginTop: 0, // Align to top when text wraps
+                    marginLeft: 4,
+                  }}
+                >
+                  <HelpCircle size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Toolbar row - only for custom toolbar buttons and close button */}
+            {(hasToolbar || hasCloseButton) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', marginTop: hasToolbar ? 0 : 0 }}>
+                {/* Custom toolbar buttons */}
+                {toolbar?.map((btn, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      btn.onClick();
+                      // Auto-dismiss if button label contains "got it" or similar
+                      if (btn.label.toLowerCase().includes('got it') || btn.label.toLowerCase().includes('ok')) {
+                        markDismissed();
+                      }
+                    }}
+                    style={{
+                      ...buttonVariants[btn.variant || 'default'],
+                      borderRadius: 4,
+                      padding: '4px 12px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontWeight: 500,
+                      transition: 'opacity 0.2s',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+                    onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+                  >
+                    {btn.icon}
+                    {btn.label}
+                  </button>
+                ))}
+
+                {/* Close button for persistent mode */}
+                {hasCloseButton && (
+                  <button
+                    onClick={markDismissed}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: foreColor || '#854d0e',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      borderRadius: 4,
+                      transition: 'background 0.2s',
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    title="Close"
+                    aria-label="Close"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

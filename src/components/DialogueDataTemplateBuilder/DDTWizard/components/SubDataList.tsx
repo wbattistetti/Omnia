@@ -1,7 +1,7 @@
 import React from 'react';
-import { Pencil, Trash2, Link, Check, X, RefreshCw, FileEdit } from 'lucide-react';
+import { Pencil, Trash2, Link, Check, X } from 'lucide-react';
 import IconRenderer from './IconRenderer';
-import AnimatedDots from './AnimatedDots';
+import FieldStatusDisplay from './FieldStatusDisplay';
 import ConstraintsList from './ConstraintsList';
 import type { SchemaNode } from '../MainDataCollection';
 import type { FieldProcessingState } from '../hooks/useFieldProcessing';
@@ -115,67 +115,20 @@ export default function SubDataList({
                   const message = getStatusMessage(fieldId);
                   const hasError = state?.status === 'error';
 
-                  if (progress > 0 || state) {
-                    return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px' }}>
-                        {getStatusIcon(fieldId)}
-                        <span style={{ color: hasError ? '#ef4444' : (progress >= 100 ? '#22c55e' : '#3b82f6') }}>
-                          {Math.round(progress)}%
-                        </span>
-                        <span style={{ color: hasError ? '#ef4444' : '#64748b' }}>
-                          {message}
-                        </span>
-                        {progress > 0 && progress < 100 && !hasError && <AnimatedDots />}
-                        {hasError && onRetryField && (
-                          <>
-                            <button
-                              onClick={() => onRetryField(fieldId)}
-                              style={{
-                                background: '#ef4444',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: 4,
-                                padding: '2px 8px',
-                                fontSize: '11px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}
-                              title={state?.retryCount ? `Retry (attempt ${state.retryCount + 1})` : 'Retry'}
-                            >
-                              <RefreshCw size={12} />
-                              Retry {state?.retryCount ? `(${state.retryCount})` : ''}
-                            </button>
-                            {/* Show manual creation button after 2+ failed retries */}
-                            {(state?.retryCount ?? 0) >= 2 && onCreateManually && (
-                              <button
-                                onClick={() => onCreateManually()}
-                                style={{
-                                  background: '#fbbf24',
-                                  color: '#0b1220',
-                                  border: 'none',
-                                  borderRadius: 4,
-                                  padding: '2px 8px',
-                                  fontSize: '11px',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  fontWeight: 600
-                                }}
-                                title="Crea i messaggi manualmente nell'editor"
-                              >
-                                <FileEdit size={12} />
-                                Crea manualmente
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
+                  return (
+                    <FieldStatusDisplay
+                      fieldId={fieldId}
+                      state={state}
+                      progress={progress}
+                      message={message}
+                      hasError={hasError}
+                      onRetryField={onRetryField}
+                      onCreateManually={onCreateManually}
+                      getStatusIcon={getStatusIcon}
+                      compact={true}
+                      showPayoff={true}
+                    />
+                  );
                 })()}
                 {hoverSubIdx === i && (
                   <>
