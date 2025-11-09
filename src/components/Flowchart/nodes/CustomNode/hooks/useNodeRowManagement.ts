@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
 import { typeToMode } from '../../../../../utils/normalizers';
+import { createRowWithTask } from '../../../../../utils/taskHelpers';
 
 interface UseNodeRowManagementProps {
     nodeId: string;
@@ -42,14 +43,11 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     }, []);
 
     // Funzione per aggiungere una riga vuota
+    // Migration: Now creates Task in TaskRepository (dual mode)
     const appendEmptyRow = useCallback((rows: NodeRowData[]) => {
         const newRowId = makeRowId();
-        const newRow: NodeRowData = {
-            id: newRowId,
-            text: '',
-            included: true,
-            mode: 'Message' as const
-        };
+        // Create row with Task (dual mode: Task + InstanceRepository)
+        const newRow = createRowWithTask(newRowId, 'Message', '');
         return { nextRows: [...rows, newRow], newRowId };
     }, [makeRowId]);
 
@@ -238,19 +236,18 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     }, [nodeRows, computeIsEmpty, normalizedData]);
 
     // Gestione inserimento riga
+    // Migration: Now creates Task in TaskRepository (dual mode)
     const handleInsertRow = useCallback((index: number) => {
         // Inserisci una riga solo se l'ultima riga è valida (non vuota e con tipo)
         const last = nodeRows[nodeRows.length - 1];
         const lastValid = last ? Boolean((last.text || '').trim().length > 0 && ((last as any).type || (last as any).mode)) : true;
         if (!lastValid) return;
 
-        const newRow: NodeRowData = {
-            id: makeRowId(),
-            text: '',
-            isNew: true,
-            included: true,
-            mode: 'Message' as const
-        };
+        const newRowId = makeRowId();
+        // Create row with Task (dual mode: Task + InstanceRepository)
+        const newRow = createRowWithTask(newRowId, 'Message', '');
+        (newRow as any).isNew = true; // Preserve isNew flag
+
         const updatedRows = [...nodeRows];
         updatedRows.splice(index, 0, newRow);
         setNodeRows(updatedRows);
