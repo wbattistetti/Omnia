@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown, FileText, ExternalLink } from 'lucide-react';
+import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown, FileText, ExternalLink, Search } from 'lucide-react';
 import { useFontClasses } from '../hooks/useFontClasses';
-import { OmniaSelect } from './common/OmniaSelect';
+import { OmniaSelect, OmniaSelectOption } from './common/OmniaSelect';
 
 interface LandingPageProps {
   onNewProject: () => void;
@@ -52,12 +52,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [selectedOwnerCompany, setSelectedOwnerCompany] = useState<string>('');
   const [selectedOwnerClient, setSelectedOwnerClient] = useState<string>('');
 
+  // Stato per tracciare quale colonna è in modalità ricerca
+  const [searchingColumn, setSearchingColumn] = useState<string | null>(null);
+
   // Stato per tipo di progetti visualizzati
   const [projectViewType, setProjectViewType] = useState<'all' | 'recent' | 'recovered'>('all');
   const [recoveredProjectsCount, setRecoveredProjectsCount] = useState(0);
 
   // Font centralizzato dal designer
   const { combinedClass } = useFontClasses();
+
+  // Helper: prepara opzioni con "All" come prima opzione e separatore
+  const prepareOptionsWithAll = (options: string[]): OmniaSelectOption[] => {
+    const sorted = [...options].sort();
+    return [
+      { value: '', label: 'All' },
+      { value: '__separator__', label: '──────────', isDisabled: true },
+      ...sorted.map(opt => ({ value: opt, label: opt }))
+    ];
+  };
+
+  // Helper: gestisce il cambio valore e chiude la ricerca se "All" è selezionato
+  const handleColumnChange = (column: string, value: string | null, setter: (v: string) => void) => {
+    // Ignora il separatore
+    if (value === '__separator__') {
+      return;
+    }
+    setter(value || '');
+    // Se si seleziona "All" (value === ''), chiudi la ricerca
+    if (value === '') {
+      setSearchingColumn(null);
+    }
+  };
 
   // Helper: formatta il nome del client (mostra "Client ?" in grigio se vuoto)
   const formatClientName = (clientName: string | null | undefined): { text: string; isGrey: boolean } => {
@@ -451,70 +477,148 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               >
                 {/* Header row */}
                 <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
-                  <OmniaSelect
-                    variant="light"
-                    options={availableClients}
-                    value={selectedClient || null}
-                    onChange={(value) => setSelectedClient(value || '')}
-                    placeholder="Cliente"
-                    showSearchIcon={true}
-                    className={combinedClass}
-                  />
+                  {searchingColumn === 'cliente' ? (
+                    <OmniaSelect
+                      variant="light"
+                      options={prepareOptionsWithAll(availableClients)}
+                      value={selectedClient || null}
+                      onChange={(value) => handleColumnChange('cliente', value, setSelectedClient)}
+                      onBlur={() => setSearchingColumn(null)}
+                      onMenuClose={() => setSearchingColumn(null)}
+                      placeholder="Cliente"
+                      className={combinedClass}
+                      menuIsOpen={true}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Cliente</span>
+                      <Search
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        onClick={() => setSearchingColumn('cliente')}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
-                  <OmniaSelect
-                    variant="light"
-                    options={availableProjectNames}
-                    value={selectedProjectName || null}
-                    onChange={(value) => setSelectedProjectName(value || '')}
-                    placeholder="Progetto"
-                    showSearchIcon={true}
-                    className={combinedClass}
-                  />
+                  {searchingColumn === 'progetto' ? (
+                    <OmniaSelect
+                      variant="light"
+                      options={prepareOptionsWithAll(availableProjectNames)}
+                      value={selectedProjectName || null}
+                      onChange={(value) => handleColumnChange('progetto', value, setSelectedProjectName)}
+                      onBlur={() => setSearchingColumn(null)}
+                      onMenuClose={() => setSearchingColumn(null)}
+                      placeholder="Progetto"
+                      className={combinedClass}
+                      menuIsOpen={true}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Progetto</span>
+                      <Search
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        onClick={() => setSearchingColumn('progetto')}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
-                  <OmniaSelect
-                    variant="light"
-                    options={availableIndustries}
-                    value={selectedIndustry || null}
-                    onChange={(value) => setSelectedIndustry(value || '')}
-                    placeholder="Industry"
-                    showSearchIcon={true}
-                    className={combinedClass}
-                  />
+                  {searchingColumn === 'industry' ? (
+                    <OmniaSelect
+                      variant="light"
+                      options={prepareOptionsWithAll(availableIndustries)}
+                      value={selectedIndustry || null}
+                      onChange={(value) => handleColumnChange('industry', value, setSelectedIndustry)}
+                      onBlur={() => setSearchingColumn(null)}
+                      onMenuClose={() => setSearchingColumn(null)}
+                      placeholder="Industry"
+                      className={combinedClass}
+                      menuIsOpen={true}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Industry</span>
+                      <Search
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        onClick={() => setSearchingColumn('industry')}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
-                  <OmniaSelect
-                    variant="light"
-                    options={availableDates}
-                    value={selectedDate || null}
-                    onChange={(value) => setSelectedDate(value || '')}
-                    placeholder="Data"
-                    showSearchIcon={true}
-                    className={combinedClass}
-                  />
+                  {searchingColumn === 'data' ? (
+                    <OmniaSelect
+                      variant="light"
+                      options={prepareOptionsWithAll(availableDates)}
+                      value={selectedDate || null}
+                      onChange={(value) => handleColumnChange('data', value, setSelectedDate)}
+                      onBlur={() => setSearchingColumn(null)}
+                      onMenuClose={() => setSearchingColumn(null)}
+                      placeholder="Data"
+                      className={combinedClass}
+                      menuIsOpen={true}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Data</span>
+                      <Search
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        onClick={() => setSearchingColumn('data')}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
-                  <OmniaSelect
-                    variant="light"
-                    options={availableOwnerCompanies}
-                    value={selectedOwnerCompany || null}
-                    onChange={(value) => setSelectedOwnerCompany(value || '')}
-                    placeholder="Owner (Azienda)"
-                    showSearchIcon={true}
-                    className={combinedClass}
-                  />
+                  {searchingColumn === 'ownerAzienda' ? (
+                    <OmniaSelect
+                      variant="light"
+                      options={prepareOptionsWithAll(availableOwnerCompanies)}
+                      value={selectedOwnerCompany || null}
+                      onChange={(value) => handleColumnChange('ownerAzienda', value, setSelectedOwnerCompany)}
+                      onBlur={() => setSearchingColumn(null)}
+                      onMenuClose={() => setSearchingColumn(null)}
+                      placeholder="Owner (Azienda)"
+                      className={combinedClass}
+                      menuIsOpen={true}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Owner (Azienda)</span>
+                      <Search
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        onClick={() => setSearchingColumn('ownerAzienda')}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
-                  <OmniaSelect
-                    variant="light"
-                    options={availableOwnerClients}
-                    value={selectedOwnerClient || null}
-                    onChange={(value) => setSelectedOwnerClient(value || '')}
-                    placeholder="Owner (Cliente)"
-                    showSearchIcon={true}
-                    className={combinedClass}
-                  />
+                  {searchingColumn === 'ownerCliente' ? (
+                    <OmniaSelect
+                      variant="light"
+                      options={prepareOptionsWithAll(availableOwnerClients)}
+                      value={selectedOwnerClient || null}
+                      onChange={(value) => handleColumnChange('ownerCliente', value, setSelectedOwnerClient)}
+                      onBlur={() => setSearchingColumn(null)}
+                      onMenuClose={() => setSearchingColumn(null)}
+                      placeholder="Owner (Cliente)"
+                      className={combinedClass}
+                      menuIsOpen={true}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className={`${combinedClass} text-emerald-900 font-semibold`}>Owner (Cliente)</span>
+                      <Search
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        onClick={() => setSearchingColumn('ownerCliente')}
+                      />
+                    </div>
+                  )}
                 </div>
                 {/* Empty state */}
                 {sortedFilteredProjects.length === 0 && (
