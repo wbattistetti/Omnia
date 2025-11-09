@@ -103,11 +103,16 @@ export interface ProjectInfo {
 /**
  * Rappresenta una riga/azione di un nodo del flowchart
  * Tutti gli altri dati (type, templateId, intents) vengono dall'istanza
+ *
+ * Migration note: taskId is optional for backward compatibility
+ * - If taskId is present: use it to reference Task
+ * - If taskId is absent: use row.id as instanceId (legacy behavior)
  */
 export interface NodeRowData {
-  id: string;     // UUID della riga = instanceId
+  id: string;     // UUID della riga (topological ID)
   text: string;   // Testo visualizzato
   included?: boolean; // true se la row è inclusa nel flusso
+  taskId?: string; // Reference to Task (new model) - if absent, row.id is used as instanceId (legacy)
 }
 
 // --- Macrotask model (for grouping nodes into a macro action) ---
