@@ -633,6 +633,17 @@ export const AppContent: React.FC<AppContentProps> = ({
                       } else {
                         try { console.warn('[Save][instances][repository]', { pid, ms: Math.round(tI2_1 - tI2_0), warning: 'some_failed' }); } catch { }
                       }
+
+                      // Migration: Also save Tasks to database (dual mode)
+                      // Note: Tasks are stored as instances, so this is mainly for logging/consistency
+                      try {
+                        const { taskRepository } = await import('../services/TaskRepository');
+                        await taskRepository.saveAllTasksToDatabase(pid);
+                        try { console.log('[Save][tasks][repository]', { pid }); } catch { }
+                      } catch (taskError) {
+                        console.warn('[Save][tasks][repository] error', taskError);
+                        // Non bloccare il salvataggio del progetto se questo fallisce
+                      }
                     } catch (e) {
                       console.error('[Save][instances][repository] error', e);
                       // Non bloccare il salvataggio del progetto se questo fallisce
