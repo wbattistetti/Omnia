@@ -1,4 +1,4 @@
-import { ProjectData, EntityType, Category, ProjectEntityItem, AgentActItem, FlowTask, FlowTaskPayloadNode, FlowTaskPayloadEdge } from '../types/project';
+import { ProjectData, EntityType, Category, ProjectEntityItem, AgentActItem, Macrotask, MacrotaskPayloadNode, MacrotaskPayloadEdge } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 // import { getLabelColor } from '../utils/labelColor';
@@ -272,13 +272,19 @@ export const ProjectDataService = {
 
       if (totalItems > 0) {
         // Convert to categories format
+        // Migrate tasks to macrotasks (tasks is now deprecated)
+        const tasksCategories = this.convertToCategories(tasks, 'macrotasks');
+        const macroTasksCategories = this.convertToCategories(macroTasks, 'macrotasks');
+        // Merge tasks and macrotasks into macrotasks
+        const allMacrotasks = [...tasksCategories, ...macroTasksCategories];
+
         const groupedData = {
           agentActs: this.convertToCategories(agentActsItems, 'agentActs'),
           userActs: [], // Will be loaded from legacy system
           backendActions: this.convertToCategories(backendCalls, 'backendActions'),
           conditions: this.convertToCategories(conditions, 'conditions'),
-          tasks: this.convertToCategories(tasks, 'tasks'),
-          macrotasks: this.convertToCategories(macroTasks, 'macrotasks')
+          tasks: [], // Deprecated: kept empty for backward compatibility
+          macrotasks: allMacrotasks
         };
 
         projectData = {
@@ -335,8 +341,11 @@ export const ProjectDataService = {
       userActs: convertTemplateDataToCategories(languageData.userActs),
       backendActions: convertTemplateDataToCategories(languageData.backendActions),
       conditions: convertTemplateDataToCategories(languageData.conditions),
-      tasks: convertTemplateDataToCategories(languageData.tasks),
-      macrotasks: convertTemplateDataToCategories(languageData.macrotasks)
+      tasks: [], // Deprecated: tasks migrated to macrotasks
+      macrotasks: [
+        ...convertTemplateDataToCategories(languageData.tasks || []),
+        ...convertTemplateDataToCategories(languageData.macrotasks || [])
+      ]
     };
   },
 
@@ -452,11 +461,11 @@ export const ProjectDataService = {
     return Object.values(categoriesMap);
   },
 
-  // Create a FlowTask entity and return it
-  async addTask(name: string, description = '', payload: { nodes: FlowTaskPayloadNode[]; edges: FlowTaskPayloadEdge[] },
-    meta?: { nodeIds?: string[]; edgeIds?: string[]; entryEdges?: string[]; exitEdges?: string[]; bounds?: { x: number; y: number; w: number; h: number } }): Promise<FlowTask> {
-    const cat = findOrCreateTaskCategory('Tasks');
-    const task: FlowTask = {
+  // Create a Macrotask entity and return it
+  async addMacrotask(name: string, description = '', payload: { nodes: MacrotaskPayloadNode[]; edges: MacrotaskPayloadEdge[] },
+    meta?: { nodeIds?: string[]; edgeIds?: string[]; entryEdges?: string[]; exitEdges?: string[]; bounds?: { x: number; y: number; w: number; h: number } }): Promise<Macrotask> {
+    const cat = findOrCreateMacrotaskCategory('Macrotasks');
+    const macrotask: Macrotask = {
       id: uuidv4(),
       name,
       description,
@@ -467,21 +476,21 @@ export const ProjectDataService = {
       bounds: meta?.bounds || { x: 0, y: 0, w: 0, h: 0 },
       payload
     };
-    (cat.items as any).push(task);
-    return task;
+    (cat.items as any).push(macrotask);
+    return macrotask;
   },
 
-  async updateTask(taskId: string, updates: Partial<FlowTask>): Promise<void> {
-    const cats = ensureTasksCategories();
+  async updateMacrotask(macrotaskId: string, updates: Partial<Macrotask>): Promise<void> {
+    const cats = ensureMacrotasksCategories();
     for (const c of cats) {
-      const t = (c.items as any).find((it: any) => it.id === taskId);
+      const t = (c.items as any).find((it: any) => it.id === macrotaskId);
       if (t) { Object.assign(t, updates); return; }
     }
   },
 
-  async getTasks(): Promise<FlowTask[]> {
-    const out: FlowTask[] = [];
-    const cats = ensureTasksCategories();
+  async getMacrotasks(): Promise<Macrotask[]> {
+    const out: Macrotask[] = [];
+    const cats = ensureMacrotasksCategories();
     for (const c of cats) out.push(...(c.items as any));
     return out;
   },
@@ -726,19 +735,20 @@ export const ProjectDataService = {
 };
 
 // --- Task helpers ---
-function ensureTasksCategories(): Category[] {
-  if (!projectData.tasks) projectData.tasks = [] as any;
-  return projectData.tasks as unknown as Category[];
+function ensureMacrotasksCategories(): Category[] {
+  if (!projectData.macrotasks) projectData.macrotasks = [] as any;
+  return projectData.macrotasks as unknown as Category[];
 }
 
-function findOrCreateTaskCategory(preferredName: string = 'Uncategorized'): Category {
-  const cats = ensureTasksCategories();
+function findOrCreateMacrotaskCategory(preferredName: string = 'Uncategorized'): Category {
+  const cats = ensureMacrotasksCategories();
   // If any category already exists, reuse the first one to avoid duplicate lists
   if (cats.length > 0) return cats[0];
   const created: Category = { id: uuidv4(), name: preferredName, items: [] };
   cats.push(created);
   return created;
 }
+
 
 export async function getAllDialogueTemplates() {
   const res = await fetch('/api/factory/dialogue-templates');

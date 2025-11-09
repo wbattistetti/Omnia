@@ -60,7 +60,7 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
               handleIntellisenseClose();
             }}
             allowCreatePicker={!!allowCreatePicker}
-            filterCategoryTypes={['agentActs', 'backendActions', 'tasks']}
+            filterCategoryTypes={['agentActs', 'backendActions', 'macrotasks']}
             onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
               return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);
             } : undefined}

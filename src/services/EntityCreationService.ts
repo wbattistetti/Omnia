@@ -4,10 +4,10 @@ import { modeToType, typeToMode } from '../utils/normalizers';
 import { classifyScopeFromLabel, Scope, Industry } from './ScopeClassificationService';
 
 export interface EntityCreationConfig {
-  entityType: 'agentActs' | 'backendActions' | 'tasks' | 'conditions';
+  entityType: 'agentActs' | 'backendActions' | 'macrotasks' | 'conditions';
   defaultCategoryName: string;
-  ddtEditorType: 'agentAct' | 'backendAction' | 'task';
-  sidebarEventType: 'agentActs' | 'backendActions' | 'tasks' | 'conditions';
+  ddtEditorType: 'agentAct' | 'backendAction' | 'macrotask';
+  sidebarEventType: 'agentActs' | 'backendActions' | 'macrotasks' | 'conditions';
 }
 
 export interface CreatedEntity {
@@ -47,13 +47,12 @@ const ENTITY_CONFIGS: Record<string, EntityCreationConfig> = {
     ddtEditorType: 'backendAction',
     sidebarEventType: 'backendActions'
   },
-  tasks: {
-    entityType: 'tasks',
-    defaultCategoryName: 'Default Tasks',
-    ddtEditorType: 'task',
-    sidebarEventType: 'tasks'
-  }
-  ,
+  macrotasks: {
+    entityType: 'macrotasks',
+    defaultCategoryName: 'Default Macrotasks',
+    ddtEditorType: 'macrotask',
+    sidebarEventType: 'macrotasks'
+  },
   conditions: {
     entityType: 'conditions',
     defaultCategoryName: 'Default Conditions',
@@ -203,7 +202,7 @@ export class EntityCreationService {
     const endpointMap: { [key: string]: string } = {
       'agentActs': 'http://localhost:8000/api/agent-acts-from-cache',
       'backendActions': '/api/factory/backend-calls',
-      'tasks': '/api/factory/tasks'
+      'macrotasks': '/api/factory/macrotasks'
     };
 
     const endpoint = endpointMap[entityType];
@@ -479,10 +478,17 @@ export class EntityCreationService {
   }
 
   /**
-   * Factory method per creare Task
+   * Factory method per creare Macrotask
+   */
+  static createMacrotask(options: EntityCreationOptions): CreatedEntity | null {
+    return this.createEntity('macrotasks', options);
+  }
+
+  /**
+   * @deprecated Use createMacrotask instead. Kept for backward compatibility.
    */
   static createTask(options: EntityCreationOptions): CreatedEntity | null {
-    return this.createEntity('tasks', options);
+    return this.createMacrotask(options);
   }
 
   /**

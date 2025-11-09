@@ -6,8 +6,10 @@ import { useProjectDataUpdate } from '../context/ProjectDataContext';
 export interface UseEntityCreationReturn {
   createAgentAct: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: string) => void;
   createBackendCall: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
-  createTask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  createMacrotask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   createCondition: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  // @deprecated Use createMacrotask instead
+  createTask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
 
 /**
@@ -27,7 +29,7 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
   const { refreshData, updateDataDirectly } = projectDataUpdateContext;
 
   const createEntity = useCallback((
-    entityType: 'agentActs' | 'backendActions' | 'tasks' | 'conditions',
+    entityType: 'agentActs' | 'backendActions' | 'macrotasks' | 'conditions',
     name: string,
     onRowUpdate?: (item: any) => void,
     scope?: 'global' | 'industry',
@@ -53,8 +55,8 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
       case 'backendActions':
         result = EntityCreationService.createBackendCall(options);
         break;
-      case 'tasks':
-        result = EntityCreationService.createTask(options);
+      case 'macrotasks':
+        result = EntityCreationService.createMacrotask(options);
         break;
       case 'conditions':
         result = EntityCreationService.createCondition(options);
@@ -82,16 +84,22 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
     createEntity('backendActions', name, onRowUpdate, scope, categoryName);
   }, [createEntity]);
 
-  const createTask = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
-    createEntity('tasks', name, onRowUpdate, scope, categoryName);
+  const createMacrotask = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
+    createEntity('macrotasks', name, onRowUpdate, scope, categoryName);
   }, [createEntity]);
+
+  // @deprecated Use createMacrotask instead
+  const createTask = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
+    createMacrotask(name, onRowUpdate, scope, categoryName);
+  }, [createMacrotask]);
 
   return {
     createAgentAct,
     createBackendCall,
-    createTask,
+    createMacrotask,
     createCondition: useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
       createEntity('conditions', name, onRowUpdate, scope, categoryName);
-    }, [createEntity])
+    }, [createEntity]),
+    createTask // @deprecated
   };
 };

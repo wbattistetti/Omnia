@@ -26,7 +26,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 // We will render Speech Acts and Backend Calls separately; keep only Conditions and Tasks here
 const entityTypes: EntityType[] = [
   'conditions',
-  'tasks'
+  'macrotasks'
 ];
 
 interface SidebarProps {
@@ -440,7 +440,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         />
 
         {/* Conditions and Tasks */}
-        {(['conditions', 'tasks'] as const).map(type => (
+        {(['conditions', 'macrotasks'] as const).map(type => (
           <EntityAccordion
             key={type}
             entityKey={type}

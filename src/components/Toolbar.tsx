@@ -37,7 +37,6 @@ export function Toolbar({
      !currentProject.userActs?.length &&
      !currentProject.backendActions?.length &&
      !currentProject.conditions?.length &&
-     !currentProject.tasks?.length &&
      !currentProject.macrotasks?.length);
 
   // Chiudi dropdown quando si clicca fuori

@@ -88,7 +88,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   // ❌ RIMUOVI: const [query, setQuery] = useState(''); // query è già una prop!
 
   // Include 'conditions' by default so condition items are not filtered out
-  const defaultCats = ['agentActs', 'userActs', 'backendActions', 'conditions', 'tasks'];
+  const defaultCats = ['agentActs', 'userActs', 'backendActions', 'conditions', 'macrotasks'];
   const [activeCats, setActiveCats] = useState<string[]>(filterCategoryTypes && filterCategoryTypes.length ? filterCategoryTypes : defaultCats);
   const loggedThisOpenRef = useRef(false);
 

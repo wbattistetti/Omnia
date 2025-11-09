@@ -303,7 +303,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
                       console.log("🎯 [NodeHeader] TITLE INTELLISENSE CLOSED", { nodeId: nodeId });
                       setShowIntellisense(false);
                     }}
-                    filterCategoryTypes={['tasks', 'macroTasks']}
+                    filterCategoryTypes={['macrotasks']}
                   />
                 </div>,
                 document.body

@@ -384,7 +384,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         userActs: data.userActs,
         backendActions: data.backendActions,
         conditions: data.conditions,
-        tasks: data.tasks,
+        tasks: [], // Deprecated: tasks migrated to macrotasks
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);
@@ -473,7 +473,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         userActs: data.userActs,
         backendActions: data.backendActions,
         conditions: data.conditions,
-        tasks: data.tasks,
+        tasks: [], // Deprecated: tasks migrated to macrotasks
         macrotasks: data.macrotasks
       };
       setCurrentProject(newProject);

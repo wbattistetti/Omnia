@@ -1,4 +1,4 @@
-export type EntityType = 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'tasks' | 'macrotasks';
+export type EntityType = 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
 
 // New explicit Agent Act types (authoritative)
 export type ActType =
@@ -54,8 +54,8 @@ export type ProjectData = {
   userActs?: any[];
   backendActions?: any[];
   conditions?: any[];
-  tasks?: any[];
-  macrotasks?: any[];
+  tasks?: any[]; // Legacy: mantenuto per compatibilità, i nuovi dati vanno in macrotasks
+  macrotasks?: { id?: string; name?: string; items: Macrotask[] }[];
   // ...other fields as needed
 };
 
@@ -110,14 +110,14 @@ export interface NodeRowData {
   included?: boolean; // true se la row è inclusa nel flusso
 }
 
-// --- Flow Task model (for grouping nodes into a macro action) ---
-export interface FlowTaskPayloadNode {
+// --- Macrotask model (for grouping nodes into a macro action) ---
+export interface MacrotaskPayloadNode {
   id: string;
   position: { x: number; y: number };
   data: { title: string; rows: NodeRowData[] };
 }
 
-export interface FlowTaskPayloadEdge {
+export interface MacrotaskPayloadEdge {
   id: string;
   source: string;
   target: string;
@@ -126,14 +126,14 @@ export interface FlowTaskPayloadEdge {
   label?: string;
 }
 
-export interface FlowTask extends ProjectEntityItem {
-  nodeIds: string[];          // nodes included in the task (original ids)
+export interface Macrotask extends ProjectEntityItem {
+  nodeIds: string[];          // nodes included in the macrotask (original ids)
   edgeIds: string[];          // internal edges removed from canvas
   entryEdges: string[];       // incoming from outside → inside
   exitEdges: string[];        // outgoing from inside → outside
   bounds: { x: number; y: number; w: number; h: number };
   payload: {
-    nodes: FlowTaskPayloadNode[];
-    edges: FlowTaskPayloadEdge[];
+    nodes: MacrotaskPayloadNode[];
+    edges: MacrotaskPayloadEdge[];
   };
 }
