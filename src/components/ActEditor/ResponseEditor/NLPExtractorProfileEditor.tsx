@@ -703,10 +703,15 @@ export default function NLPExtractorProfileEditor({
           border: '1px solid #e5e7eb',
           borderRadius: 12,
           padding: 12,
-          minHeight: 600,
+          height: '100%',
+          maxHeight: '100%',
           width: '100%',
           maxWidth: '100%',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
         }}>
           {activeEditor === 'regex' && (
             <RegexInlineEditor

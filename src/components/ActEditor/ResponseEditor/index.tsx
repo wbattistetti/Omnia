@@ -426,7 +426,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
 
   // Layout
   return (
-    <div ref={rootRef} className={combinedClass} style={{ height: '100%', maxHeight: '100vh', background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onKeyDown={handleGlobalKeyDown}>
+    <div ref={rootRef} className={combinedClass} style={{ height: '100%', maxHeight: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onKeyDown={handleGlobalKeyDown}>
 
       {/* Header sempre visibile (minimale durante wizard, completo dopo) */}
       <EditorHeader
@@ -441,7 +441,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
       {(() => {
         return null;
       })()}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, maxHeight: '100%' }}>
         {act?.type === 'Summarizer' && isDDTEmpty(localDDT) ? (
           /* Placeholder for Summarizer when DDT is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
@@ -778,17 +778,17 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                 </div>
               )}
               {/* Content */}
-              <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: showMessageReview ? '16px' : '16px 16px 0 16px' }}>
+              <div style={{ display: 'flex', minHeight: 0, flex: 1, maxHeight: '100%' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, maxHeight: '100%', padding: showMessageReview ? '16px' : '16px 16px 0 16px' }}>
                   {showMessageReview ? (
-                    <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
                       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                         <MessageReviewView node={selectedNode} translations={localTranslations} updateSelectedNode={updateSelectedNode} />
                       </div>
                     </div>
                   ) : (
-                    <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%' }}>
-                      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                      <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                         {showSynonyms ? (
                           <div style={{ padding: 12, flex: 1, display: 'flex', flexDirection: 'column' }}>
                             <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 }}>

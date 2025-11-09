@@ -49,7 +49,6 @@ export default function TestValuesColumn({
   const [newTestCase, setNewTestCase] = React.useState('');
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
-  const [hoveredToolbar, setHoveredToolbar] = useState<number | null>(null);
   const [notaAttiva, setNotaAttiva] = useState<Record<number, boolean>>({});
   const [editingValue, setEditingValue] = useState<number | null>(null);
   const [editingValueText, setEditingValueText] = useState<string>('');
@@ -238,9 +237,12 @@ export default function TestValuesColumn({
           minWidth: 150,
           maxWidth: typeof window !== 'undefined' ? `${Math.min(800, window.innerWidth * 0.5)}px` : '50%',
           width: testColumnWidth > 0 ? `${Math.min(testColumnWidth, typeof window !== 'undefined' ? window.innerWidth * 0.5 : 800)}px` : 'auto',
-          height: '100%',
+          flex: 1,
+          minHeight: 0,
           maxHeight: '100%',
-          overflow: 'visible', // Allow toolbar to be visible outside
+          height: '100%',
+          overflow: 'hidden', // Hide overflow but allow absolute positioned toolbar
+          position: 'relative', // For absolute positioned toolbar
         }}
       >
         {/* Header - Fixed */}
@@ -296,7 +298,6 @@ export default function TestValuesColumn({
             overflowX: 'hidden',
             minHeight: 0,
             position: 'relative',
-            paddingRight: 60, // Space for external toolbar
           }}
         >
           {testCases.length > 0 ? (
@@ -307,7 +308,7 @@ export default function TestValuesColumn({
                 .map(({ testCase, originalIdx }, displayIdx) => {
                 const result = testFunction(testCase);
                 const isSelected = selectedRow === originalIdx;
-                const isHoveredRow = hoveredRow === originalIdx || hoveredToolbar === originalIdx;
+                const isHoveredRow = hoveredRow === originalIdx;
                 const noteValue = getNote(originalIdx, 'note');
                 const hasNoteValue = hasNote(originalIdx, 'note');
                 const isRowNotaAttiva = notaAttiva[originalIdx] === true;
@@ -332,8 +333,7 @@ export default function TestValuesColumn({
                       }
                     }}
                     onMouseLeave={() => {
-                      // Only hide if not hovering toolbar and not editing
-                      if (hoveredToolbar !== originalIdx && !isEditingValue) {
+                      if (!isEditingValue) {
                         setHoveredRow(null);
                       }
                     }}
@@ -347,84 +347,9 @@ export default function TestValuesColumn({
                       background: isSelected ? 'rgba(59, 130, 246, 0.2)' : 'transparent', // Azzurrino se selezionata, trasparente altrimenti
                       cursor: 'pointer',
                       position: 'relative',
+                      alignItems: 'center',
                     }}
                   >
-                    {/* Vertical Toolbar - Show on hover, positioned externally to the right */}
-                    {isHoveredRow && !isEditingValue && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          right: -50,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 4,
-                          zIndex: 10,
-                          background: 'rgba(15, 23, 42, 0.95)',
-                          padding: '4px',
-                          borderRadius: 6,
-                          border: '1px solid rgba(148, 163, 184, 0.3)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.stopPropagation();
-                          setHoveredToolbar(originalIdx);
-                        }}
-                        onMouseLeave={(e) => {
-                          e.stopPropagation();
-                          setHoveredToolbar(null);
-                          setHoveredRow(null);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {/* Trash icon - Delete row */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onTestCasesChange(testCases.filter((_, i) => i !== originalIdx));
-                          }}
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.2)',
-                            border: '1px solid rgba(239, 68, 68, 0.5)',
-                            borderRadius: 4,
-                            padding: '4px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 28,
-                            height: 28,
-                          }}
-                          title="Cancella riga"
-                        >
-                          <Trash2 size={14} color="#ef4444" />
-                        </button>
-
-                        {/* Note icon - Toggle note column */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleNotaAttiva(originalIdx);
-                          }}
-                          style={{
-                            background: isRowNotaAttiva ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                            border: `1px solid ${isRowNotaAttiva ? 'rgba(59, 130, 246, 0.6)' : 'rgba(148, 163, 184, 0.3)'}`,
-                            borderRadius: 4,
-                            padding: '4px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 28,
-                            height: 28,
-                          }}
-                          title={isRowNotaAttiva ? 'Nascondi nota' : 'Mostra nota'}
-                        >
-                          <MessageCircle size={14} color={isRowNotaAttiva ? '#3b82f6' : '#94a3b8'} />
-                        </button>
-                      </div>
-                    )}
 
                     {/* Left: Test Value - Editable */}
                     <div
@@ -437,7 +362,7 @@ export default function TestValuesColumn({
                         paddingRight: 8,
                       }}
                       onClick={(e) => {
-                        if (!isEditingValue && !isHoveredRow) {
+                        if (!isEditingValue) {
                           e.stopPropagation();
                           setEditingValue(originalIdx);
                           setEditingValueText(testCase);
@@ -505,6 +430,85 @@ export default function TestValuesColumn({
                         </span>
                       )}
                     </div>
+
+                    {/* Toolbar Icons - Show on hover, inside the row */}
+                    {isHoveredRow && !isEditingValue && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'row',
+                          gap: 4,
+                          alignItems: 'center',
+                          flexShrink: 0,
+                          marginLeft: 'auto',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Trash icon - Delete row */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTestCasesChange(testCases.filter((_, i) => i !== originalIdx));
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            borderRadius: 4,
+                            padding: '4px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 24,
+                            height: 24,
+                            color: '#ef4444',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                          title="Cancella riga"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+
+                        {/* Note icon - Toggle note column */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleNotaAttiva(originalIdx);
+                          }}
+                          style={{
+                            background: isRowNotaAttiva ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                            border: 'none',
+                            borderRadius: 4,
+                            padding: '4px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 24,
+                            height: 24,
+                            color: isRowNotaAttiva ? '#3b82f6' : '#94a3b8',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isRowNotaAttiva) {
+                              e.currentTarget.style.background = 'rgba(148, 163, 184, 0.1)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isRowNotaAttiva) {
+                              e.currentTarget.style.background = 'transparent';
+                            }
+                          }}
+                          title={isRowNotaAttiva ? 'Nascondi nota' : 'Mostra nota'}
+                        >
+                          <MessageCircle size={14} />
+                        </button>
+                      </div>
+                    )}
 
                     {/* Right: Note Column - Only if notaAttiva === true */}
                     {isRowNotaAttiva && (

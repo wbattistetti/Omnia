@@ -498,6 +498,13 @@ export default function RegexInlineEditor({
         padding: 16,
         background: '#f9fafb',
         animation: 'fadeIn 0.2s ease-in',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        maxHeight: '100%',
+        overflow: 'hidden',
+        width: '100%',
+        maxWidth: '100%',
       }}
     >
       <EditorHeader
@@ -554,16 +561,23 @@ export default function RegexInlineEditor({
         gap: 8,
         width: '100%',
         maxWidth: '100%',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        flex: 1,
+        minHeight: 0,
+        maxHeight: '100%',
+        height: '100%',
       }}>
         <div
           style={{
             display: 'flex',
             gap: 0,
-            alignItems: 'flex-start',
+            alignItems: 'stretch',
             width: '100%',
             maxWidth: '100%',
             overflow: 'hidden',
+            flex: 1,
+            minHeight: 0,
+            maxHeight: '100%',
           }}
         >
           <div style={{
@@ -571,11 +585,19 @@ export default function RegexInlineEditor({
             position: 'relative',
             minWidth: 0,
             flexShrink: 1,
-            overflow: 'hidden'
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: 0,
+            maxHeight: '100%',
           }}>
             <div
               style={{
-                height: 500,
+                flex: 1,
+                minHeight: 0,
+                maxHeight: '100%',
+                height: '100%',
                 border: regexAiMode ? '2px solid #3b82f6' : '1px solid #334155',
                 borderRadius: 8,
                 overflow: 'hidden',

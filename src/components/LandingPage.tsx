@@ -32,6 +32,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -413,11 +414,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <div className="flex flex-col items-end gap-1" style={{ marginRight: 0 }}>
                 <button
-                  className="flex items-center gap-1 text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50 font-semibold"
+                  className="text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50 font-semibold"
                   onClick={() => setShowDeleteAllConfirm(!showDeleteAllConfirm)}
                 >
-                  <Trash2 className="w-3 h-3" />
-                  <FileText className="w-3 h-3" />
                   Elimina tutti
                 </button>
 
@@ -442,11 +441,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Griglia con combo box nelle intestazioni */}
-            <div className="max-h-[60vh] overflow-y-auto overflow-x-auto">
+            <div className="max-h-[60vh] overflow-y-auto overflow-x-visible">
               <div
                 className="grid border-collapse"
                 style={{
-                  gridTemplateColumns: 'minmax(120px, 200px) minmax(200px, 300px) minmax(120px, 200px) minmax(110px, 150px) minmax(180px, 250px) minmax(180px, 250px) 60px',
+                  gridTemplateColumns: 'minmax(120px, 200px) minmax(200px, 300px) minmax(120px, 200px) minmax(110px, 150px) minmax(180px, 250px) minmax(180px, 250px)',
                   width: '100%'
                 }}
               >
@@ -517,14 +516,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     className={combinedClass}
                   />
                 </div>
-                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
-                  {/* Colonna azioni header - vuota */}
-                </div>
-
                 {/* Empty state */}
                 {sortedFilteredProjects.length === 0 && (
                   <>
-                    <div className="col-span-7 text-center py-4 text-slate-400 border border-emerald-200">
+                    <div className="col-span-6 text-center py-4 text-slate-400 border border-emerald-200">
                       Nessun progetto trovato
                     </div>
                   </>
@@ -732,24 +727,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                               return (!ownerClient || ownerClient === 'undefined' || ownerClient === 'null') ? '-' : ownerClient;
                             })()}
                           </span>
-                        </div>
-                        {/* Azioni */}
-                        <div
-                          className={`border border-emerald-200 p-1.5 flex items-center justify-center ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} relative`}
-                          onMouseEnter={() => setHoveredRowId(projectId)}
-                          onMouseLeave={(e) => {
-                            const relatedTarget = e.relatedTarget as HTMLElement;
-                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
-                              return;
-                            }
-                            if (!isLoading) {
-                              setHoveredRowId(null);
-                            }
-                          }}
-                        >
+                          {/* Toolbar azioni - posizionata assolutamente fuori dalla griglia */}
                           {isHovered && !isLoading && (
                             <div
-                              className="action-buttons-container flex flex-row gap-2 z-20"
+                              className="action-buttons-container flex flex-row gap-2 z-20 absolute"
                               data-row-id={projectId}
                               onClick={(e) => e.stopPropagation()}
                               onMouseEnter={() => setHoveredRowId(projectId)}
@@ -760,7 +741,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                                 }
                                 setHoveredRowId(null);
                               }}
-                              style={{ pointerEvents: 'auto' }}
+                              style={{
+                                pointerEvents: 'auto',
+                                right: '-60px',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                              }}
                             >
                               {/* Pulsante Apri */}
                               <button
@@ -780,19 +766,49 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                                 <ExternalLink className="w-3 h-3" />
                               </button>
                               {/* Pulsante Elimina */}
-                              <button
-                                className="bg-transparent hover:bg-red-100 text-red-600 p-1 rounded transition-colors flex-shrink-0"
-                                title="Elimina progetto"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  setDeletingId(projectId);
-                                  try { await onDeleteProject(projectId); } finally { setDeletingId(null); }
-                                }}
-                              >
-                                {deletingId === projectId
-                                  ? <Loader2 className="w-3 h-3 animate-spin" />
-                                  : <Trash2 className="w-3 h-3" />}
-                              </button>
+                              {confirmingDeleteId === projectId ? (
+                                <div className="flex flex-row gap-1 items-center">
+                                  <button
+                                    className="bg-red-600 text-white px-2 py-1 rounded text-xs font-semibold hover:bg-red-700 transition-colors"
+                                    title="Conferma eliminazione"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      setDeletingId(projectId);
+                                      setConfirmingDeleteId(null);
+                                      try {
+                                        await onDeleteProject(projectId);
+                                      } finally {
+                                        setDeletingId(null);
+                                      }
+                                    }}
+                                  >
+                                    Conferma
+                                  </button>
+                                  <button
+                                    className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-semibold hover:bg-gray-300 transition-colors"
+                                    title="Annulla eliminazione"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setConfirmingDeleteId(null);
+                                    }}
+                                  >
+                                    Annulla
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  className="bg-transparent hover:bg-red-100 text-red-600 p-1 rounded transition-colors flex-shrink-0"
+                                  title="Elimina progetto"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmingDeleteId(projectId);
+                                  }}
+                                >
+                                  {deletingId === projectId
+                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                    : <Trash2 className="w-3 h-3" />}
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
