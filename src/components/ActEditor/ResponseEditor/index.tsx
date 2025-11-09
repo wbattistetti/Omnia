@@ -426,7 +426,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
 
   // Layout
   return (
-    <div ref={rootRef} className={combinedClass} style={{ height: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column' }} onKeyDown={handleGlobalKeyDown}>
+    <div ref={rootRef} className={combinedClass} style={{ height: '100%', maxHeight: '100vh', background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onKeyDown={handleGlobalKeyDown}>
 
       {/* Header sempre visibile (minimale durante wizard, completo dopo) */}
       <EditorHeader

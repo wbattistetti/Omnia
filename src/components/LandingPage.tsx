@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown, FileText } from 'lucide-react';
+import { HelpCircle, XCircle, Trash2, Building2, Folder, Loader2, RotateCcw, ChevronDown, FileText, ExternalLink } from 'lucide-react';
 import { useFontClasses } from '../hooks/useFontClasses';
 import { OmniaSelect } from './common/OmniaSelect';
 
@@ -33,6 +33,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
+  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [dataReady, setDataReady] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -375,9 +376,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           {/* Pannello progetti visibile solo quando showDropdown è true */}
           {hasProjects && showDropdown && (
-            <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`}>
+            <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`} style={{ overflow: 'visible' }}>
             {/* Header con 3 pulsanti/tab */}
-            <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl">
+            <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl" style={{ paddingRight: '80px', marginRight: 0 }}>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setProjectViewType('all')}
@@ -410,7 +411,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Da recuperare {recoveredProjectsCount > 0 && `(${recoveredProjectsCount})`}
                 </button>
               </div>
-              <div className="flex flex-col items-end gap-1">
+              <div className="flex flex-col items-end gap-1" style={{ marginRight: 0 }}>
                 <button
                   className="flex items-center gap-1 text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50 font-semibold"
                   onClick={() => setShowDeleteAllConfirm(!showDeleteAllConfirm)}
@@ -440,110 +441,94 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            {/* Tabella con combo box nelle intestazioni */}
-            <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
-              <table className="border-collapse" style={{ width: 'auto', tableLayout: 'auto' }}>
-                <colgroup>
-                  <col style={{ width: '120px' }} />
-                  <col style={{ width: '200px' }} />
-                  <col style={{ width: '120px' }} />
-                  <col style={{ width: '110px' }} />
-                  <col style={{ width: '180px' }} />
-                  <col style={{ width: '180px' }} />
-                  <col style={{ width: '60px' }} />
-                </colgroup>
-                <thead className="bg-emerald-100 sticky top-0 z-10">
-                  <tr>
-                    {/* Intestazione Cliente con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '120px', maxWidth: '120px' }}>
-                      <OmniaSelect
-                        variant="light"
-                        options={availableClients}
-                        value={selectedClient || null}
-                        onChange={(value) => setSelectedClient(value || '')}
-                        placeholder="Cliente"
-                        showSearchIcon={true}
-                        className={combinedClass}
-                      />
-                    </th>
+            {/* Griglia con combo box nelle intestazioni */}
+            <div className="max-h-[60vh] overflow-y-auto overflow-x-auto">
+              <div
+                className="grid border-collapse"
+                style={{
+                  gridTemplateColumns: 'minmax(120px, 200px) minmax(200px, 300px) minmax(120px, 200px) minmax(110px, 150px) minmax(180px, 250px) minmax(180px, 250px) 60px',
+                  width: '100%'
+                }}
+              >
+                {/* Header row */}
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                  <OmniaSelect
+                    variant="light"
+                    options={availableClients}
+                    value={selectedClient || null}
+                    onChange={(value) => setSelectedClient(value || '')}
+                    placeholder="Cliente"
+                    showSearchIcon={true}
+                    className={combinedClass}
+                  />
+                </div>
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                  <OmniaSelect
+                    variant="light"
+                    options={availableProjectNames}
+                    value={selectedProjectName || null}
+                    onChange={(value) => setSelectedProjectName(value || '')}
+                    placeholder="Progetto"
+                    showSearchIcon={true}
+                    className={combinedClass}
+                  />
+                </div>
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                  <OmniaSelect
+                    variant="light"
+                    options={availableIndustries}
+                    value={selectedIndustry || null}
+                    onChange={(value) => setSelectedIndustry(value || '')}
+                    placeholder="Industry"
+                    showSearchIcon={true}
+                    className={combinedClass}
+                  />
+                </div>
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                  <OmniaSelect
+                    variant="light"
+                    options={availableDates}
+                    value={selectedDate || null}
+                    onChange={(value) => setSelectedDate(value || '')}
+                    placeholder="Data"
+                    showSearchIcon={true}
+                    className={combinedClass}
+                  />
+                </div>
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                  <OmniaSelect
+                    variant="light"
+                    options={availableOwnerCompanies}
+                    value={selectedOwnerCompany || null}
+                    onChange={(value) => setSelectedOwnerCompany(value || '')}
+                    placeholder="Owner (Azienda)"
+                    showSearchIcon={true}
+                    className={combinedClass}
+                  />
+                </div>
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                  <OmniaSelect
+                    variant="light"
+                    options={availableOwnerClients}
+                    value={selectedOwnerClient || null}
+                    onChange={(value) => setSelectedOwnerClient(value || '')}
+                    placeholder="Owner (Cliente)"
+                    showSearchIcon={true}
+                    className={combinedClass}
+                  />
+                </div>
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                  {/* Colonna azioni header - vuota */}
+                </div>
 
-                    {/* Intestazione Progetto con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '200px' }}>
-                      <OmniaSelect
-                        variant="light"
-                        options={availableProjectNames}
-                        value={selectedProjectName || null}
-                        onChange={(value) => setSelectedProjectName(value || '')}
-                        placeholder="Progetto"
-                        showSearchIcon={true}
-                        className={combinedClass}
-                      />
-                    </th>
-
-                    {/* Intestazione Industry con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '120px', maxWidth: '120px' }}>
-                      <OmniaSelect
-                        variant="light"
-                        options={availableIndustries}
-                        value={selectedIndustry || null}
-                        onChange={(value) => setSelectedIndustry(value || '')}
-                        placeholder="Industry"
-                        showSearchIcon={true}
-                        className={combinedClass}
-                      />
-                    </th>
-
-                    {/* Intestazione Data con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '110px', maxWidth: '110px' }}>
-                      <OmniaSelect
-                        variant="light"
-                        options={availableDates}
-                        value={selectedDate || null}
-                        onChange={(value) => setSelectedDate(value || '')}
-                        placeholder="Data"
-                        showSearchIcon={true}
-                        className={combinedClass}
-                      />
-                    </th>
-
-                    {/* Intestazione Owner (Azienda) con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '180px', maxWidth: '220px' }}>
-                      <OmniaSelect
-                        variant="light"
-                        options={availableOwnerCompanies}
-                        value={selectedOwnerCompany || null}
-                        onChange={(value) => setSelectedOwnerCompany(value || '')}
-                        placeholder="Owner (Azienda)"
-                        showSearchIcon={true}
-                        className={combinedClass}
-                      />
-                    </th>
-
-                    {/* Intestazione Owner (Cliente) con combo box */}
-                    <th className="border border-emerald-200 p-1.5 whitespace-nowrap" style={{ width: '180px', maxWidth: '220px' }}>
-                      <OmniaSelect
-                        variant="light"
-                        options={availableOwnerClients}
-                        value={selectedOwnerClient || null}
-                        onChange={(value) => setSelectedOwnerClient(value || '')}
-                        placeholder="Owner (Cliente)"
-                        showSearchIcon={true}
-                        className={combinedClass}
-                      />
-                    </th>
-
-                    {/* Colonna azioni */}
-                    <th className="border border-emerald-200 p-1.5" style={{ width: 'auto' }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedFilteredProjects.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="text-center py-4 text-slate-400">
-                        Nessun progetto trovato
-                      </td>
-                    </tr>
-                  )}
+                {/* Empty state */}
+                {sortedFilteredProjects.length === 0 && (
+                  <>
+                    <div className="col-span-7 text-center py-4 text-slate-400 border border-emerald-200">
+                      Nessun progetto trovato
+                    </div>
+                  </>
+                )}
                   {sortedFilteredProjects.map((proj) => {
                     const clientInfo = formatClientName(proj.clientName);
                     const projectDate = (proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : '';
@@ -556,74 +541,265 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     if (!ownerCompany || ownerCompany === 'undefined' || ownerCompany === 'null') {
                       ownerCompany = '';
                     }
-                    let ownerClient = (proj.ownerClient || '').toString().trim();
-                    if (!ownerClient || ownerClient === 'undefined' || ownerClient === 'null') {
-                      ownerClient = '';
-                    }
                     const isRecovered = projectViewType === 'recovered';
+                    const projectId = (proj._id || proj.projectId) as string;
+                    const isHovered = hoveredRowId === projectId;
+                    const isLoading = loadingProjectId === projectId;
+                    const projectName = proj.projectName || proj.name || '(senza nome)';
                     return (
-                      <tr
-                        key={proj._id}
-                        className="group hover:bg-emerald-50 cursor-pointer"
-                        onClick={async () => {
-                          const id = (proj._id || proj.projectId) as string;
-                          setLoadingProjectId(id);
-                          try {
-                            const maybe = onSelectProject(id);
-                            if ((maybe as any)?.then) await (maybe as any);
-                          } catch (e) {
-                            setLoadingProjectId(null);
-                          }
-                        }}
-                      >
-                        <td className={`border border-emerald-200 p-1.5 text-left ${combinedClass}`} style={{ width: '120px', maxWidth: '120px' }}>
+                      <React.Fragment key={proj._id}>
+                        {/* Cliente */}
+                        <div
+                          className={`border border-emerald-200 p-1.5 text-left ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
+                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            if (!isLoading) {
+                              setHoveredRowId(null);
+                            }
+                          }}
+                          onClick={async () => {
+                            if (!isLoading) {
+                              setLoadingProjectId(projectId);
+                              try {
+                                const maybe = onSelectProject(projectId);
+                                if ((maybe as any)?.then) await (maybe as any);
+                              } catch (e) {
+                                setLoadingProjectId(null);
+                              }
+                            }
+                          }}
+                        >
                           <div className="flex items-center gap-1.5">
-                            <Building2 className={`w-4 h-4 ${clientInfo.isGrey ? 'text-gray-400' : 'text-emerald-700'}`} />
-                            <span className={clientInfo.isGrey ? 'text-gray-500' : 'text-emerald-900'}>
+                            <Building2 className={`w-4 h-4 flex-shrink-0 ${clientInfo.isGrey ? 'text-gray-400' : 'text-emerald-700'}`} />
+                            <span className={`${clientInfo.isGrey ? 'text-gray-500' : 'text-emerald-900'} break-words`}>
                               {clientInfo.text}
                             </span>
                           </div>
-                        </td>
-                        <td className={`border border-emerald-200 p-1.5 text-left ${combinedClass}`} style={{ width: '200px' }}>
-                          <div className="flex items-center gap-1.5">
-                            {loadingProjectId === (proj._id || proj.projectId)
-                              ? <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
-                              : <Folder className={`w-4 h-4 ${isRecovered ? 'text-red-600' : 'text-emerald-900'}`} />}
-                            <span className="text-emerald-900">{proj.projectName || proj.name || '(senza nome)'}</span>
-                          </div>
-                        </td>
-                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`} style={{ width: '120px', maxWidth: '120px' }}>
-                          {industryValue || '-'}
-                        </td>
-                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`} style={{ width: '110px', maxWidth: '110px' }}>
-                          {projectDate}
-                        </td>
-                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`} style={{ width: '180px', maxWidth: '220px' }}>
-                          {ownerCompany || '-'}
-                        </td>
-                        <td className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass}`} style={{ width: '180px', maxWidth: '220px' }}>
-                          {ownerClient || '-'}
-                        </td>
-                        <td className="border border-emerald-200 p-1.5 text-right" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            className="text-red-500 opacity-0 group-hover:opacity-70 hover:opacity-100 transition-opacity"
-                            title="Elimina progetto"
-                            onClick={async () => {
-                              const id = proj._id || proj.projectId;
-                              setDeletingId(id);
-                              try { await onDeleteProject(id); } finally { setDeletingId(null); }
-                            }}
-                          >
-                            {deletingId === (proj._id || proj.projectId)
-                              ? <Loader2 className="w-4 h-4 animate-spin" />
-                              : <Trash2 className="w-4 h-4" />}
-                          </button>
-                        </td>
-                      </tr>
+                        </div>
+                        {/* Progetto */}
+                        <div
+                          className={`border border-emerald-200 p-1.5 text-left ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
+                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            if (!isLoading) {
+                              setHoveredRowId(null);
+                            }
+                          }}
+                          onClick={async () => {
+                            if (!isLoading) {
+                              setLoadingProjectId(projectId);
+                              try {
+                                const maybe = onSelectProject(projectId);
+                                if ((maybe as any)?.then) await (maybe as any);
+                              } catch (e) {
+                                setLoadingProjectId(null);
+                              }
+                            }
+                          }}
+                        >
+                          {isLoading ? (
+                            <div className="flex items-center gap-2 bg-black/20 rounded p-2">
+                              <Loader2 className="w-4 h-4 animate-spin text-emerald-700 flex-shrink-0" />
+                              <span className="text-emerald-900 break-words">
+                                Caricando {projectName}
+                                <span className="animate-pulse">...</span>
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <Folder className={`w-4 h-4 flex-shrink-0 ${isRecovered ? 'text-red-600' : 'text-emerald-900'}`} />
+                              <span className="text-emerald-900 break-words">{projectName}</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Industry */}
+                        <div
+                          className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
+                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            if (!isLoading) {
+                              setHoveredRowId(null);
+                            }
+                          }}
+                          onClick={async () => {
+                            if (!isLoading) {
+                              setLoadingProjectId(projectId);
+                              try {
+                                const maybe = onSelectProject(projectId);
+                                if ((maybe as any)?.then) await (maybe as any);
+                              } catch (e) {
+                                setLoadingProjectId(null);
+                              }
+                            }
+                          }}
+                        >
+                          <span className="break-words">{industryValue || '-'}</span>
+                        </div>
+                        {/* Data */}
+                        <div
+                          className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
+                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            if (!isLoading) {
+                              setHoveredRowId(null);
+                            }
+                          }}
+                          onClick={async () => {
+                            if (!isLoading) {
+                              setLoadingProjectId(projectId);
+                              try {
+                                const maybe = onSelectProject(projectId);
+                                if ((maybe as any)?.then) await (maybe as any);
+                              } catch (e) {
+                                setLoadingProjectId(null);
+                              }
+                            }
+                          }}
+                        >
+                          <span className="break-words">{projectDate}</span>
+                        </div>
+                        {/* Owner (Azienda) */}
+                        <div
+                          className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
+                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            if (!isLoading) {
+                              setHoveredRowId(null);
+                            }
+                          }}
+                          onClick={async () => {
+                            if (!isLoading) {
+                              setLoadingProjectId(projectId);
+                              try {
+                                const maybe = onSelectProject(projectId);
+                                if ((maybe as any)?.then) await (maybe as any);
+                              } catch (e) {
+                                setLoadingProjectId(null);
+                              }
+                            }
+                          }}
+                        >
+                          <span className="break-words">{ownerCompany || '-'}</span>
+                        </div>
+                        {/* Owner (Cliente) */}
+                        <div
+                          className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer relative`}
+                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            if (!isLoading) {
+                              setHoveredRowId(null);
+                            }
+                          }}
+                          onClick={async () => {
+                            if (!isLoading) {
+                              setLoadingProjectId(projectId);
+                              try {
+                                const maybe = onSelectProject(projectId);
+                                if ((maybe as any)?.then) await (maybe as any);
+                              } catch (e) {
+                                setLoadingProjectId(null);
+                              }
+                            }
+                          }}
+                        >
+                          <span className="break-words">
+                            {(() => {
+                              const ownerClient = (proj.ownerClient || '').toString().trim();
+                              return (!ownerClient || ownerClient === 'undefined' || ownerClient === 'null') ? '-' : ownerClient;
+                            })()}
+                          </span>
+                        </div>
+                        {/* Azioni */}
+                        <div
+                          className={`border border-emerald-200 p-1.5 flex items-center justify-center ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} relative`}
+                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            if (!isLoading) {
+                              setHoveredRowId(null);
+                            }
+                          }}
+                        >
+                          {isHovered && !isLoading && (
+                            <div
+                              className="action-buttons-container flex flex-row gap-2 z-20"
+                              data-row-id={projectId}
+                              onClick={(e) => e.stopPropagation()}
+                              onMouseEnter={() => setHoveredRowId(projectId)}
+                              onMouseLeave={(e) => {
+                                const relatedTarget = e.relatedTarget as HTMLElement;
+                                if (relatedTarget && relatedTarget.closest('[data-row-id]')) {
+                                  return;
+                                }
+                                setHoveredRowId(null);
+                              }}
+                              style={{ pointerEvents: 'auto' }}
+                            >
+                              {/* Pulsante Apri */}
+                              <button
+                                className="bg-transparent hover:bg-emerald-100 text-emerald-700 p-1 rounded transition-colors flex-shrink-0"
+                                title="Apri progetto"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  setLoadingProjectId(projectId);
+                                  try {
+                                    const maybe = onSelectProject(projectId);
+                                    if ((maybe as any)?.then) await (maybe as any);
+                                  } catch (e) {
+                                    setLoadingProjectId(null);
+                                  }
+                                }}
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </button>
+                              {/* Pulsante Elimina */}
+                              <button
+                                className="bg-transparent hover:bg-red-100 text-red-600 p-1 rounded transition-colors flex-shrink-0"
+                                title="Elimina progetto"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  setDeletingId(projectId);
+                                  try { await onDeleteProject(projectId); } finally { setDeletingId(null); }
+                                }}
+                              >
+                                {deletingId === projectId
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <Trash2 className="w-3 h-3" />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </React.Fragment>
                     );
                   })}
-                </tbody>
-              </table>
+              </div>
             </div>
           </div>
           )}

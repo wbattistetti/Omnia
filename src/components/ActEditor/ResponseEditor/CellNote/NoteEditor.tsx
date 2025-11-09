@@ -11,11 +11,11 @@ interface NoteEditorProps {
  * Inline editor for cell notes
  * Textarea with save/delete/cancel buttons
  */
-export default function NoteEditor({ 
-  value, 
-  onSave, 
-  onDelete, 
-  onCancel 
+export default function NoteEditor({
+  value,
+  onSave,
+  onDelete,
+  onCancel
 }: NoteEditorProps) {
   const [text, setText] = React.useState(value);
 
@@ -40,8 +40,13 @@ export default function NoteEditor({
     <div onClick={(e) => e.stopPropagation()}>
       <textarea
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Add note..."
+        onChange={(e) => {
+          setText(e.target.value);
+          // Auto-resize textarea
+          e.target.style.height = 'auto';
+          e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+        }}
+        placeholder="Aggiungi una nota..."
         rows={2}
         autoFocus
         style={{
@@ -52,6 +57,11 @@ export default function NoteEditor({
           borderRadius: 4,
           background: 'rgba(255,255,255,0.9)',
           resize: 'vertical',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          lineHeight: 1.5,
+          minHeight: '2em',
+          maxHeight: '200px',
         }}
       />
       <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>

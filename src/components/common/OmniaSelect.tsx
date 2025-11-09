@@ -91,7 +91,9 @@ const getStyles = (variant: OmniaSelectVariant, isInvalid?: boolean, showSearchI
         color: '#94a3b8', // slate-400
         padding: '0 0.125rem',
         '& svg': {
-          strokeWidth: 1,
+          strokeWidth: 0.5, // Più fine
+          width: '10px', // Più piccola
+          height: '10px',
         },
         '&:hover': {
           color: '#ffffff',
@@ -161,7 +163,9 @@ const getStyles = (variant: OmniaSelectVariant, isInvalid?: boolean, showSearchI
         color: '#10b981', // emerald-600
         padding: '0 0.125rem',
         '& svg': {
-          strokeWidth: 1,
+          strokeWidth: 0.5, // Più fine
+          width: '10px', // Più piccola
+          height: '10px',
         },
         '&:hover': {
           color: '#059669',
