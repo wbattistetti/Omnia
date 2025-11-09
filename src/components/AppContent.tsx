@@ -440,6 +440,24 @@ export const AppContent: React.FC<AppContentProps> = ({
             messageText: inst.message?.text?.substring(0, 50) || 'N/A'
           }))
         });
+
+        // Migration: Also load Tasks from database (dual mode)
+        // Tasks are automatically created from instances, but we ensure they're loaded
+        try {
+          const { taskRepository } = await import('../services/TaskRepository');
+          const tasks = await taskRepository.loadAllTasksFromDatabase(id);
+          console.log('[OpenProject][LOAD_TASKS][RESULT]', {
+            projectId: id,
+            tasksCount: tasks.length,
+            tasksWithValue: tasks.filter(t => t.value && Object.keys(t.value).length > 0).length
+          });
+        } catch (taskError) {
+          console.warn('[OpenProject][LOAD_TASKS][ERROR]', {
+            projectId: id,
+            error: String(taskError),
+            // Non bloccare l'apertura del progetto se questo fallisce
+          });
+        }
       } catch (e) {
         console.error('[OpenProject][LOAD_INSTANCES][ERROR]', {
           projectId: id,

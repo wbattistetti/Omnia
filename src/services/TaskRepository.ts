@@ -265,12 +265,17 @@ class TaskRepository {
   /**
    * Get all Tasks (converts all instances)
    */
-  getAllTasks(actTypeMap?: Map<string, string>): Task[] {
-    // Get all instances from InstanceRepository
-    // Note: InstanceRepository doesn't have getAllInstances, so we'll need to track them
-    // For now, return empty array - will be populated as tasks are accessed
-    // This is a limitation we'll address in later phases
-    return [];
+  getAllTasks(): Task[] {
+    // Get all instances from InstanceRepository and convert to Tasks
+    const allInstances = instanceRepository.getAllInstances();
+    const tasks: Task[] = [];
+
+    for (const instance of allInstances) {
+      const action = taskTemplateService.mapActionIdToTemplateId(instance.actId);
+      tasks.push(this.instanceToTask(instance, action));
+    }
+
+    return tasks;
   }
 }
 

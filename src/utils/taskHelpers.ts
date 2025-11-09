@@ -255,3 +255,32 @@ export function updateRowData(
   });
 }
 
+/**
+ * Enrich loaded rows with taskId if Task exists
+ * This is called after loading instances from database to ensure rows have taskId
+ *
+ * @param rows - Array of NodeRowData rows to enrich
+ * @returns Array of rows with taskId set if Task exists
+ */
+export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
+  return rows.map(row => {
+    // If row already has taskId, keep it
+    if (row.taskId) {
+      return row;
+    }
+
+    // Check if Task exists for this row (by row.id)
+    const task = taskRepository.getTask(row.id);
+    if (task) {
+      // Row has a corresponding Task, add taskId
+      return {
+        ...row,
+        taskId: task.id
+      };
+    }
+
+    // No Task found, return row as-is (backward compatibility)
+    return row;
+  });
+}
+
