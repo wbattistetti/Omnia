@@ -419,17 +419,18 @@ class InstanceRepository {
 
                     const ddtValue = instance.ddtSnapshot || instance.ddt || null;
 
-                    console.log('[InstanceRepository][LOAD]', {
-                        dbId: instance._id,
-                        rowId: instance.rowId,
-                        instanceId: instance.instanceId,
-                        finalInstanceId: instanceId,
-                        mode: instance.mode,
-                        baseActId: instance.baseActId,
-                        hasMessage: !!instance.message,
-                        messageText: instance.message?.text?.substring(0, 50) || 'N/A',
-                        messageFull: instance.message ? JSON.stringify(instance.message) : 'null'
-                    });
+                    // Reduced logging: only log if there's an issue or for ProblemClassification
+                    if (instance.mode === 'ProblemClassification' || instance.baseActId?.includes('Problem')) {
+                        console.log('[InstanceRepository][LOAD]', {
+                            dbId: instance._id,
+                            rowId: instance.rowId,
+                            finalInstanceId: instanceId,
+                            mode: instance.mode,
+                            baseActId: instance.baseActId,
+                            hasDDT: !!ddtValue,
+                            ddtId: ddtValue?.id
+                        });
+                    }
 
                     const actInstance: ActInstance = {
                         instanceId,
@@ -446,27 +447,18 @@ class InstanceRepository {
                     const loadedSteps = actInstance.ddt?.mainData?.[0]?.steps || {};
                     const loadedStepsKeys = Object.keys(loadedSteps);
 
-                    console.log('[InstanceRepository][LOAD][STORED]', {
-                        instanceId,
-                        storedMessage: actInstance.message?.text?.substring(0, 50) || 'N/A',
-                        storedMessageFull: actInstance.message ? JSON.stringify(actInstance.message) : 'undefined',
-                        hasProblemIntents: !!actInstance.problemIntents,
-                        problemIntentsCount: actInstance.problemIntents?.length || 0,
-                        hasDDT: !!actInstance.ddt,
-                        ddtId: actInstance.ddt?.id,
-                        firstMainKind: actInstance.ddt?.mainData?.[0]?.kind,
-                        stepsKeys: loadedStepsKeys,
-                        stepsKeysCount: loadedStepsKeys.length,
-                        stepsContent: JSON.stringify(loadedSteps),
-                        hasStart: !!loadedSteps.start,
-                        hasNoInput: !!loadedSteps.noInput,
-                        hasNoMatch: !!loadedSteps.noMatch,
-                        hasConfirmation: !!loadedSteps.confirmation,
-                        startEscalations: loadedSteps.start?.escalations?.length || 0,
-                        noInputEscalations: loadedSteps.noInput?.escalations?.length || 0,
-                        noMatchEscalations: loadedSteps.noMatch?.escalations?.length || 0,
-                        confirmationEscalations: loadedSteps.confirmation?.escalations?.length || 0
-                    });
+                    // Reduced logging: only log for ProblemClassification or if DDT exists
+                    if (actInstance.actId?.includes('Problem') || actInstance.ddt) {
+                        console.log('[InstanceRepository][LOAD][STORED]', {
+                            instanceId,
+                            actId: actInstance.actId,
+                            hasDDT: !!actInstance.ddt,
+                            ddtId: actInstance.ddt?.id,
+                            firstMainKind: actInstance.ddt?.mainData?.[0]?.kind,
+                            stepsKeysCount: loadedStepsKeys.length,
+                            problemIntentsCount: actInstance.problemIntents?.length || 0
+                        });
+                    }
                 });
 
                 // Removed verbose logs

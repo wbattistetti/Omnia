@@ -160,6 +160,22 @@ class TaskRepository {
     }
 
     const task = this.instanceToTask(instance, actType);
+
+    // DEBUG: Log per ProblemClassification per capire perché DDT non viene mappato
+    if (instance.actId?.includes('Problem') || actType === 'ProblemClassification') {
+      console.log('[TaskRepository][getTask][DEBUG]', {
+        taskId,
+        actId: instance.actId,
+        actType,
+        instanceHasDDT: !!instance.ddt,
+        instanceDDTId: instance.ddt?.id,
+        taskHasDDT: !!task.value?.ddt,
+        taskDDTId: task.value?.ddt?.id,
+        taskValueKeys: Object.keys(task.value || {}),
+        action: task.action
+      });
+    }
+
     // Sincronizza nello storage interno
     this.tasks.set(taskId, task);
     return task;
@@ -375,6 +391,11 @@ class TaskRepository {
           tasksCount: this.tasks.size,
           instancesCount: allInstances.length
         });
+
+        // Emit event to notify components that tasks have been loaded
+        window.dispatchEvent(new CustomEvent('tasks:loaded', {
+          detail: { projectId, tasksCount: this.tasks.size }
+        }));
       }
 
       return loaded;

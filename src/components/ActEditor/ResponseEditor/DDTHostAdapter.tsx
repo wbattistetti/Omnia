@@ -17,7 +17,9 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   // FIX: Aggiungiamo un refresh trigger per forzare il ricalcolo quando necessario
   const [refreshTrigger, setRefreshTrigger] = React.useState(0);
   const existingDDT = React.useMemo(() => {
-    let task = taskRepository.getTask(instanceKey);
+    // FIX: Passa actType per garantire mapping corretto del DDT
+    const actType = act.type as any;
+    let task = taskRepository.getTask(instanceKey, actType);
 
     if (!task) {
       const actId = act.id || '';
@@ -29,21 +31,25 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     const ddt = task?.value?.ddt || null;
     console.log('[DDTHostAdapter][existingDDT][useMemo]', {
       instanceKey,
+      actType,
       hasTask: !!task,
       hasDDT: !!ddt,
       ddtId: ddt?.id,
       firstMainKind: ddt?.mainData?.[0]?.kind,
       stepsKeys: ddt?.mainData?.[0]?.steps ? Object.keys(ddt.mainData[0].steps) : [],
+      taskValueKeys: Object.keys(task?.value || {}),
       refreshTrigger
     });
     return ddt;
-  }, [instanceKey, act.id, refreshTrigger]); // Aggiunto refreshTrigger per forzare ricalcolo
+  }, [instanceKey, act.id, act.type, refreshTrigger]); // Aggiunto act.type per forzare ricalcolo quando cambia
 
   // 2. STATE per mantenere il DDT corrente (aggiornato dopo salvataggio)
   // Questo risolve il problema: useMemo non ricalcola quando il Task viene aggiornato
   const [currentDDT, setCurrentDDT] = React.useState<any>(() => {
     // FASE 3: Inizializza dal Task se esiste, altrimenti placeholder
-    const task = taskRepository.getTask(instanceKey);
+    // FIX: Passa actType per garantire mapping corretto del DDT
+    const actType = act.type as any;
+    const task = taskRepository.getTask(instanceKey, actType);
     const instanceDDT = task?.value?.ddt;
 
     // DEBUG: Log dettagliato per verificare se il DDT viene caricato correttamente
@@ -142,6 +148,45 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
       mainData: []
     };
   });
+
+  // FIX: Listener per aggiornare quando i Task vengono caricati dal database
+  React.useEffect(() => {
+    const handleTaskLoaded = () => {
+      // Forza il ricalcolo di existingDDT quando i Task vengono caricati
+      console.log('[DDTHostAdapter][TASKS_LOADED] Refreshing DDT after tasks loaded', { instanceKey });
+      setRefreshTrigger(prev => prev + 1);
+    };
+
+    // Ascolta eventi di caricamento Task
+    window.addEventListener('tasks:loaded', handleTaskLoaded);
+
+    // Polling: controlla periodicamente se il Task è stato caricato (fallback, solo se non c'è DDT)
+    // Si ferma dopo 5 secondi o quando trova il DDT
+    let pollCount = 0;
+    const maxPolls = 10; // 5 secondi totali (500ms * 10)
+    const pollInterval = setInterval(() => {
+      pollCount++;
+      const task = taskRepository.getTask(instanceKey);
+      if (task?.value?.ddt && !existingDDT) {
+        console.log('[DDTHostAdapter][POLLING] Task loaded, refreshing DDT', {
+          instanceKey,
+          hasDDT: !!task.value.ddt,
+          ddtId: task.value.ddt?.id,
+          pollCount
+        });
+        setRefreshTrigger(prev => prev + 1);
+        clearInterval(pollInterval);
+      } else if (pollCount >= maxPolls) {
+        console.log('[DDTHostAdapter][POLLING] Stopped polling after max attempts', { instanceKey, pollCount });
+        clearInterval(pollInterval);
+      }
+    }, 500); // Controlla ogni 500ms
+
+    return () => {
+      window.removeEventListener('tasks:loaded', handleTaskLoaded);
+      clearInterval(pollInterval);
+    };
+  }, [instanceKey, existingDDT]);
 
   // Aggiorna currentDDT quando existingDDT cambia (al primo load se c'è un DDT salvato)
   React.useEffect(() => {

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { enableDebug } from '../utils/logger';
-import { instanceRepository } from '../services/InstanceRepository';
 import { DockPanel } from './TestEngine/DockPanel';
 import { ChatPanel } from './TestEngine/ChatPanel';
 import { ProjectDataProvider } from '../context/ProjectDataContext';
