@@ -36,7 +36,8 @@ import ConditionEditor from './conditions/ConditionEditor';
 import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
 import { useDDTContext } from '../context/DDTContext';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from './Sidebar/sidebarTheme';
-import { instanceRepository } from '../services/InstanceRepository';
+// FASE 2: InstanceRepository import removed - using TaskRepository instead
+// TaskRepository automatically syncs with InstanceRepository for backward compatibility
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -123,17 +124,20 @@ export const AppContent: React.FC<AppContentProps> = ({
       const d = (e && e.detail) || {};
       const instanceId = d.instanceId;
 
-      // Read message text from instance (create if doesn't exist, like DDTHostAdapter)
+      // FASE 2: Read message text from Task (TaskRepository sincronizza con InstanceRepository)
       let template = '';
       if (instanceId) {
-        let instance = instanceRepository.getInstance(instanceId);
-        // Create instance if it doesn't exist (will be saved when closing)
-        if (!instance) {
-          // Try to get actId from row (passed in event detail) or use empty string
-          const actId = d.actId || d.baseActId || '';
-          instance = instanceRepository.createInstanceWithId(instanceId, actId, []);
+        const { taskRepository } = require('../services/TaskRepository');
+        let task = taskRepository.getTask(instanceId);
+        // Create Task if it doesn't exist (will be saved when closing)
+        if (!task) {
+          // Try to get actId from row (passed in event detail) or use 'Message' as default
+          const actId = d.actId || d.baseActId || 'Message';
+          // Map actId to action (e.g., 'Message' -> 'SayMessage')
+          const action = actId === 'Message' ? 'SayMessage' : actId;
+          task = taskRepository.createTask(action, undefined, instanceId);
         }
-        template = instance?.message?.text || '';
+        template = task?.value?.text || '';
       }
 
       setNonInteractiveEditor({ title: d.title || 'Agent message', value: { template, samples: {}, vars: [] } as any, accentColor: d.accentColor });
@@ -423,43 +427,26 @@ export const AppContent: React.FC<AppContentProps> = ({
       try { localStorage.setItem('current.projectId', id); } catch { }
       // Carica atti dal DB progetto
       await ProjectDataService.loadActsFromProject(id);
-      // Carica istanze dal DB progetto
+      // FASE 2: Carica Tasks dal DB progetto (TaskRepository ora gestisce tutto)
       try {
-        console.log('[OpenProject][LOAD_INSTANCES][START]', { projectId: id });
-        const { instanceRepository } = await import('../services/InstanceRepository');
-        const success = await instanceRepository.loadInstancesFromDatabase(id);
-        console.log('[OpenProject][LOAD_INSTANCES][RESULT]', {
+        console.log('[OpenProject][LOAD_TASKS][START]', { projectId: id });
+        const { taskRepository } = await import('../services/TaskRepository');
+        const success = await taskRepository.loadAllTasksFromDatabase(id);
+        console.log('[OpenProject][LOAD_TASKS][RESULT]', {
           projectId: id,
           success,
-          instancesCount: instanceRepository.getAllInstances().length,
-          messageInstances: instanceRepository.getAllInstances().filter(inst => {
-            const instance = instanceRepository.getInstance(inst.instanceId);
-            return instance?.message?.text;
-          }).map(inst => ({
-            instanceId: inst.instanceId,
-            messageText: inst.message?.text?.substring(0, 50) || 'N/A'
+          tasksCount: taskRepository.getInternalTasksCount(),
+          tasksWithValue: taskRepository.getAllTasks().filter(t => t.value && Object.keys(t.value).length > 0).length,
+          messageTasks: taskRepository.getAllTasks().filter(t => t.value?.text).map(t => ({
+            taskId: t.id,
+            messageText: t.value?.text?.substring(0, 50) || 'N/A'
           }))
         });
 
-        // Migration: Also load Tasks from database (dual mode)
-        // Tasks are automatically created from instances, but we ensure they're loaded
-        try {
-          const { taskRepository } = await import('../services/TaskRepository');
-          const tasks = await taskRepository.loadAllTasksFromDatabase(id);
-          console.log('[OpenProject][LOAD_TASKS][RESULT]', {
-            projectId: id,
-            tasksCount: tasks.length,
-            tasksWithValue: tasks.filter(t => t.value && Object.keys(t.value).length > 0).length
-          });
-        } catch (taskError) {
-          console.warn('[OpenProject][LOAD_TASKS][ERROR]', {
-            projectId: id,
-            error: String(taskError),
-            // Non bloccare l'apertura del progetto se questo fallisce
-          });
-        }
+        // FASE 2: TaskRepository sincronizza automaticamente con InstanceRepository
+        // Quindi InstanceRepository è aggiornato automaticamente (backward compatibility)
       } catch (e) {
-        console.error('[OpenProject][LOAD_INSTANCES][ERROR]', {
+        console.error('[OpenProject][LOAD_TASKS][ERROR]', {
           projectId: id,
           error: String(e),
           stack: e?.stack?.substring(0, 200)
@@ -621,31 +608,23 @@ export const AppContent: React.FC<AppContentProps> = ({
                     console.warn('[Save] Failed to update catalog timestamp', e);
                   }
                   try { console.log('[Save][begin]', { pid }); } catch { }
-                  // 2c) Persisti tutte le istanze con DDT da InstanceRepository
+                  // FASE 2: Salva tutte le Tasks da TaskRepository (gestisce tutto)
                   if (pid) {
                     try {
                       const tI2_0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      const { instanceRepository } = await import('../services/InstanceRepository');
-                      const saved = await instanceRepository.saveAllInstancesToDatabase(pid);
+                      const { taskRepository } = await import('../services/TaskRepository');
+                      const saved = await taskRepository.saveAllTasksToDatabase(pid);
                       const tI2_1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       if (saved) {
-                        try { console.log('[Save][instances][repository]', { pid, ms: Math.round(tI2_1 - tI2_0) }); } catch { }
+                        try { console.log('[Save][tasks][repository]', { pid, ms: Math.round(tI2_1 - tI2_0), tasksCount: taskRepository.getInternalTasksCount() }); } catch { }
                       } else {
-                        try { console.warn('[Save][instances][repository]', { pid, ms: Math.round(tI2_1 - tI2_0), warning: 'some_failed' }); } catch { }
+                        try { console.warn('[Save][tasks][repository]', { pid, ms: Math.round(tI2_1 - tI2_0), warning: 'some_failed' }); } catch { }
                       }
 
-                      // Migration: Also save Tasks to database (dual mode)
-                      // Note: Tasks are stored as instances, so this is mainly for logging/consistency
-                      try {
-                        const { taskRepository } = await import('../services/TaskRepository');
-                        await taskRepository.saveAllTasksToDatabase(pid);
-                        try { console.log('[Save][tasks][repository]', { pid }); } catch { }
-                      } catch (taskError) {
-                        console.warn('[Save][tasks][repository] error', taskError);
-                        // Non bloccare il salvataggio del progetto se questo fallisce
-                      }
+                      // FASE 2: TaskRepository sincronizza automaticamente con InstanceRepository
+                      // Quindi InstanceRepository è aggiornato automaticamente (backward compatibility)
                     } catch (e) {
-                      console.error('[Save][instances][repository] error', e);
+                      console.error('[Save][tasks][repository] error', e);
                       // Non bloccare il salvataggio del progetto se questo fallisce
                     }
                   }
@@ -847,8 +826,9 @@ export const AppContent: React.FC<AppContentProps> = ({
                         .then(() => {
                           try {
                             console.log('[NI][close][PUT ok]', { instanceId: niSource?.instanceId, text });
-                            // Ensure instanceRepository is also updated (defensive)
-                            instanceRepository.updateMessage(niSource.instanceId, { text });
+                            // FASE 2: Update Task (TaskRepository sincronizza automaticamente con InstanceRepository)
+                            const { taskRepository } = require('../services/TaskRepository');
+                            taskRepository.updateTaskValue(niSource.instanceId, { text }, pid);
                           } catch { }
                         })
                         .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
