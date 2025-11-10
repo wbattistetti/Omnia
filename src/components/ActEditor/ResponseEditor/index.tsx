@@ -32,25 +32,6 @@ import IntentListEditorWrapper from './components/IntentListEditorWrapper';
 import { FontProvider, useFontContext } from '../../../context/FontContext';
 
 function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
-  console.log('[ResponseEditor][MOUNT]', {
-    actId: act?.id,
-    actType: act?.type,
-    actLabel: act?.label,
-    ddtId: ddt?.id,
-    ddtLabel: ddt?.label,
-    mainDataLength: ddt?.mainData?.length,
-    firstMainKind: ddt?.mainData?.[0]?.kind,
-    hasIntentMessages: ddt ? hasIntentMessages(ddt) : false,
-    steps: ddt?.mainData?.[0]?.steps ? Object.keys(ddt.mainData[0].steps) : [],
-    stepsContent: ddt?.mainData?.[0]?.steps || {},
-    // DEBUG: Log dettagliato per capire perché hasIntentMessages ritorna false
-    debugSteps: ddt?.mainData?.[0]?.steps ? Object.entries(ddt.mainData[0].steps).map(([key, step]: [string, any]) => ({
-      stepKey: key,
-      hasEscalations: !!step?.escalations,
-      escalationsCount: step?.escalations?.length || 0,
-      firstEscalation: step?.escalations?.[0] || null
-    })) : []
-  });
 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
@@ -119,58 +100,37 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
   }, [ddt, mergedBase, localDDT?.id, localDDT?._id]);
 
+  // FIX: Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
+  React.useEffect(() => {
+    const handleProjectSave = () => {
+      if (act?.id || (act as any)?.instanceId) {
+        const key = ((act as any)?.instanceId || act?.id) as string;
+        taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
+      }
+    };
+
+    window.addEventListener('project:save', handleProjectSave);
+    return () => {
+      window.removeEventListener('project:save', handleProjectSave);
+    };
+  }, [localDDT, act?.id, (act as any)?.instanceId, currentProjectId]);
+
   // Persist explicitly on close only (avoid side-effects/flicker on unmount)
   const handleEditorClose = React.useCallback(() => {
-    console.log('[ResponseEditor][handleEditorClose]', {
-      actId: act?.id,
-      actType: act?.type,
-      instanceId: (act as any)?.instanceId,
-      localDDTId: localDDT?.id,
-      hasIntentMessages: hasIntentMessages(localDDT),
-      firstMainKind: localDDT?.mainData?.[0]?.kind,
-      steps: localDDT?.mainData?.[0]?.steps ? Object.keys(localDDT.mainData[0].steps) : [],
-      currentProjectId
-    });
 
     try {
       // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
       if (act?.id || (act as any)?.instanceId) {
         const key = ((act as any)?.instanceId || act?.id) as string;
-        console.log('[ResponseEditor][handleEditorClose] Saving to instance', {
-          key,
-          ddtId: localDDT?.id,
-          projectId: currentProjectId
-        });
+        taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
 
-        // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-        const saved = taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
-
-        console.log('[ResponseEditor][handleEditorClose] Instance save result', {
-          key,
-          saved,
-          ddtId: localDDT?.id
-        });
-
-        // Fallback: salva anche nel provider globale se l'istanza non esiste
-        if (!saved) {
-          console.warn('[ResponseEditor][handleEditorClose] Instance save failed, using global provider fallback', {
-            key
-          });
-        }
       }
 
       // NON chiamare replaceSelectedDDT se abbiamo act prop (siamo in ActEditorOverlay)
       // Questo previene l'apertura di ResizableResponseEditor in AppContent mentre si chiude ActEditorOverlay
       if (!act) {
         // Modalità diretta (senza act): aggiorna selectedDDT per compatibilità legacy
-        console.log('[ResponseEditor][handleEditorClose] Calling replaceSelectedDDT (no act prop)', {
-          ddtId: localDDT?.id
-        });
         replaceSelectedDDT(localDDT);
-      } else {
-        console.log('[ResponseEditor][handleEditorClose] Skipping replaceSelectedDDT (has act prop)', {
-          actId: act?.id
-        });
       }
     } catch (e) {
       console.error('[ResponseEditor][handleEditorClose] Persist error', {
@@ -201,20 +161,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
   const needsIntentMessages = useMemo(() => {
     const firstMain = mainList[0];
     const hasMessages = hasIntentMessages(localDDT);
-    const result = firstMain?.kind === 'intent' && !hasMessages;
-
-    console.log('[ResponseEditor][needsIntentMessages]', {
-      actId: act?.id,
-      actType: act?.type,
-      firstMainKind: firstMain?.kind,
-      hasMessages,
-      needsIntentMessages: result,
-      localDDTId: localDDT?.id,
-      mainDataLength: localDDT?.mainData?.length,
-      steps: firstMain?.steps ? Object.keys(firstMain.steps) : []
-    });
-
-    return result;
+    return firstMain?.kind === 'intent' && !hasMessages;
   }, [mainList, localDDT, act?.id, act?.type]);
 
   // Wizard/general layout flags
@@ -555,71 +502,24 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
             <IntentMessagesBuilder
               intentLabel={act?.label || localDDT?.label || 'chiedi il problema'}
               onComplete={(messages) => {
-                console.log('[ResponseEditor][IntentMessagesBuilder][onComplete]', {
-                  actId: act?.id,
-                  actType: act?.type,
-                  instanceId: (act as any)?.instanceId,
-                  messagesCount: {
-                    start: messages.start?.length || 0,
-                    noInput: messages.noInput?.length || 0,
-                    noMatch: messages.noMatch?.length || 0,
-                    confirmation: messages.confirmation?.length || 0
-                  },
-                  localDDTBefore: {
-                    id: localDDT?.id,
-                    mainDataLength: localDDT?.mainData?.length,
-                    firstMainKind: localDDT?.mainData?.[0]?.kind
-                  }
-                });
-
                 const updatedDDT = saveIntentMessagesToDDT(localDDT, messages);
-
-                console.log('[ResponseEditor][saveIntentMessagesToDDT]', {
-                  actId: act?.id,
-                  updatedDDTId: updatedDDT?.id,
-                  firstMainKind: updatedDDT?.mainData?.[0]?.kind,
-                  steps: updatedDDT?.mainData?.[0]?.steps ? Object.keys(updatedDDT.mainData[0].steps) : [],
-                  hasMessagesAfter: hasIntentMessages(updatedDDT)
-                });
-
                 setLocalDDT(updatedDDT);
 
                 // ✅ CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
                 // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
                 if (act?.id || (act as any)?.instanceId) {
                   const key = ((act as any)?.instanceId || act?.id) as string;
-                  console.log('[ResponseEditor][IntentMessagesBuilder][onComplete] Saving to instance', {
-                    key,
-                    ddtId: updatedDDT?.id,
-                    projectId: currentProjectId,
-                    hasMessages: hasIntentMessages(updatedDDT)
-                  });
-
-                  // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-                  const saved = taskRepository.updateTaskValue(key, { ddt: updatedDDT }, currentProjectId || undefined);
-
-                  console.log('[ResponseEditor][IntentMessagesBuilder][onComplete] Instance save result', {
-                    key,
-                    saved,
-                    ddtId: updatedDDT?.id
-                  });
+                  // FIX: Salva con projectId per garantire persistenza nel database
+                  taskRepository.updateTaskValue(key, { ddt: updatedDDT }, currentProjectId || undefined);
 
                   // ✅ FIX: Notifica il parent (DDTHostAdapter) che il DDT è stato aggiornato
-                  // Questo assicura che currentDDT in DDTHostAdapter venga aggiornato immediatamente
                   onWizardComplete?.(updatedDDT);
                 }
 
                 try {
                   replaceSelectedDDT(updatedDDT);
-                  console.log('[ResponseEditor][replaceSelectedDDT] SUCCESS', {
-                    actId: act?.id,
-                    ddtId: updatedDDT?.id
-                  });
                 } catch (err) {
-                  console.error('[ResponseEditor][replaceSelectedDDT] FAILED', {
-                    actId: act?.id,
-                    error: err
-                  });
+                  console.error('[ResponseEditor][replaceSelectedDDT] FAILED', err);
                 }
 
                 // After saving, show normal editor (needsIntentMessages will become false)
@@ -826,37 +726,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                                   }
                                 } catch {}
 
-                                // 🔍 LOG: Verifica test cases nel profile ricevuto
-                                console.log('[ResponseEditor][onChange] 📥 Profile received:', {
-                                  nodeLabel: (selectedNode as any)?.label,
-                                  testCasesCount: Array.isArray(profile.testCases) ? profile.testCases.length : 'not array or missing',
-                                  testCasesValue: profile.testCases,
-                                  profileKeys: Object.keys(profile),
-                                });
 
                                 updateSelectedNode((node) => {
                                   const next: any = { ...(node || {}), nlpProfile: profile };
                                   if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }
                                   if (Array.isArray(profile.synonyms)) next.synonyms = profile.synonyms;
                                   // Ensure testCases are persisted to node.nlpProfile
-                                  if (Array.isArray(profile.testCases)) {
-                                    console.log('[ResponseEditor] 💾 Saving test cases to node:', profile.testCases.length, 'cases');
-                                    console.log('[ResponseEditor] 💾 Test cases values:', profile.testCases);
-                                  } else {
-                                    console.log('[ResponseEditor] ⚠️ No test cases to save or not an array:', {
-                                      hasTestCases: 'testCases' in profile,
-                                      testCasesType: typeof profile.testCases,
-                                      testCasesValue: profile.testCases,
-                                    });
-                                  }
-
-                                  // 🔍 LOG: Verifica dopo il salvataggio
-                                  console.log('[ResponseEditor][updateSelectedNode] ✅ Node updated:', {
-                                    nodeLabel: next?.label,
-                                    hasNlpProfile: !!(next.nlpProfile),
-                                    testCasesInUpdatedNode: Array.isArray(next.nlpProfile?.testCases) ? next.nlpProfile.testCases.length : 'not array or missing',
-                                    testCasesValue: next.nlpProfile?.testCases,
-                                  });
 
                                   return next;
                                 });

@@ -119,11 +119,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   useEffect(() => {
     // Solo al primo mount imposta loading
     if (!initialLoadComplete) {
-      console.log('🔄 [LANDING] Starting initial data load', { allProjectsCount: allProjects.length });
       setLoadingProjects(true);
       setDataReady(false);
-    } else {
-      console.log('🔄 [LANDING] Data changed (not initial load)', { allProjectsCount: allProjects.length });
     }
 
     fetch('/api/projects/catalog/clients')
@@ -177,25 +174,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     const recovered = uniqueAllProjects.filter((p: any) => p.status === 'draft');
     setRecoveredProjectsCount(recovered.length);
 
-    console.log('🔄 [LANDING] Data processing complete', {
-      allProjectsCount: allProjects.length,
-      uniqueProjectsCount: uniqueAllProjects.length,
-      recoveredCount: recovered.length,
-      hasProjects: uniqueAllProjects.length > 0,
-      initialLoadComplete
-    });
 
     // Caricamento completato - ritarda leggermente solo al primo caricamento
     if (!initialLoadComplete) {
       setTimeout(() => {
-        console.log('🔄 [LANDING] Setting loadingProjects=false');
         setLoadingProjects(false);
         // Attendi ancora un po' prima di rendere i dati "pronti" per evitare flash
         setTimeout(() => {
-          console.log('🔄 [LANDING] Setting dataReady=true', {
-            allProjectsCount: allProjects.length,
-            hasProjects: uniqueAllProjects.length > 0
-          });
           setDataReady(true);
           setInitialLoadComplete(true);
         }, 300);
@@ -313,13 +298,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               {/* Messaggio quando non ci sono progetti - solo se i dati sono pronti */}
               {(() => {
                 const shouldShow = showDropdown && !hasProjects && dataReady;
-                console.log('🔄 [LANDING] "Nessun progetto" render check', {
-                  showDropdown,
-                  hasProjects,
-                  dataReady,
-                  shouldShow,
-                  allProjectsLength: allProjects.length
-                });
                 return shouldShow ? (
                   <div className="mt-2 text-emerald-100 text-lg">
                     Nessun progetto

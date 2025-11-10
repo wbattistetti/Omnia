@@ -22,7 +22,6 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
 
   cacheLoadingPromise = (async () => {
     try {
-      console.log('[ACT_TYPE_PATTERNS] Loading patterns from database...');
       const res = await fetch('/api/factory/act-type-patterns');
 
       if (!res.ok) {
@@ -30,8 +29,6 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
       }
 
       const rulesByLang = await res.json();
-
-      console.log('[ACT_TYPE_PATTERNS] 📦 Raw data from database:', JSON.stringify(rulesByLang, null, 2));
 
       // Verifica che ci siano pattern nel database
       if (!rulesByLang || Object.keys(rulesByLang).length === 0) {
@@ -57,19 +54,6 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
       });
 
       cacheLoaded = true;
-      console.log(`[ACT_TYPE_PATTERNS] ✅ Loaded patterns for languages: ${Array.from(patternCache.keys()).join(', ')}`);
-      console.log(`[ACT_TYPE_PATTERNS] Pattern counts:`, {
-        IT: {
-          NEGOTIATION: patternCache.get('IT')?.NEGOTIATION?.length || 0,
-          REQUEST_DATA: patternCache.get('IT')?.REQUEST_DATA?.length || 0,
-          MESSAGE: patternCache.get('IT')?.MESSAGE?.length || 0
-        }
-      });
-      console.log('[ACT_TYPE_PATTERNS] 🔧 Pattern converted to RegExp:', {
-        languages: Array.from(patternCache.keys()),
-        IT_REQUEST_DATA_patterns: patternCache.get('IT')?.REQUEST_DATA?.map(r => r.source) || [],
-        IT_REQUEST_DATA_count: patternCache.get('IT')?.REQUEST_DATA?.length || 0,
-      });
 
       // Risolvi la promise di readiness se esiste
       if (cacheReadyPromise) {

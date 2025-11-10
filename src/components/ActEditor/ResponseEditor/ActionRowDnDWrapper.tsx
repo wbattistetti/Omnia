@@ -35,14 +35,12 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
   const [{ isDragging }, drag] = useDrag({
     type: DND_TYPE,
     item: () => {
-      console.log('[DnD][ActionRow][begin]', { escalationIdx, actionIdx, label: action?.label || action?.actionId });
       return { type: DND_TYPE, escalationIdx, actionIdx, action };
     },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
     end: (item, monitor) => {
-      console.log('[DnD][ActionRow][end]', { didDrop: monitor.didDrop() });
     },
     canDrag: !isEditing, // Disable drag when editing
   });
@@ -90,17 +88,13 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
 
       if (item.type === DND_TYPE) {
         if (item.escalationIdx === escalationIdx && item.actionIdx === actionIdx) return;
-        console.log('[DnD drop:move]', 'from', item.escalationIdx, item.actionIdx, 'to', escalationIdx, actionIdx, position);
         if (onMoveAction) {
-          console.log('[DnD][drop] Calling onMoveAction');
           onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
         }
         if (onDropAction) {
-          console.log('[DnD][drop] Calling onDropAction');
           onDropAction(item, { escalationIdx, actionIdx }, position);
         }
       } else if (allowViewerDrop && item.type === DND_TYPE_VIEWER) {
-        console.log('[DnD drop:new]', item.label, '→', escalationIdx, actionIdx, position);
         if (onDropNewAction) {
           onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
         } else {

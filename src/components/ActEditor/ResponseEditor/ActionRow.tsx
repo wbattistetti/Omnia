@@ -117,17 +117,8 @@ function ActionRowInner({
 
     // Always call onEdit when saving, regardless of whether value changed
     // This ensures edits are saved even if text prop hasn't updated yet
-    console.error('🔍 [ActionRow][handleEditConfirm] Called', {
-      newValue,
-      oldValue: text,
-      hasOnEdit: !!onEdit,
-      actionId
-    });
     if (onEdit) {
       onEdit(newValue);
-      console.error('🔍 [ActionRow][handleEditConfirm] onEdit called with', newValue);
-    } else {
-      console.error('🔍 [ActionRow][handleEditConfirm] ERROR: onEdit is not defined!');
     }
   };
 

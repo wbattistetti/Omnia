@@ -12,16 +12,6 @@ const map: Record<string, EditorKind> = {
 export function resolveEditorKind(act: ActMeta): EditorKind {
   const actType = act?.type || 'unknown';
   const resolvedKind = map[actType] ?? 'message';
-
-  // ✅ Log per debug
-  console.log('[resolveEditorKind]', {
-    actType,
-    resolvedKind,
-    actId: act?.id,
-    actLabel: act?.label,
-    timestamp: Date.now()
-  });
-
   return resolvedKind;
 }
 

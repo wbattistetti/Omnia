@@ -3,7 +3,6 @@
 
 export function hasIntentMessages(ddt: any): boolean {
   if (!ddt) {
-    console.log('[hasIntentMessages] No DDT provided');
     return false;
   }
 
@@ -13,10 +12,6 @@ export function hasIntentMessages(ddt: any): boolean {
 
   // Verifica che il primo mainData abbia kind === "intent"
   if (!firstMain || firstMain.kind !== 'intent') {
-    console.log('[hasIntentMessages] Not intent kind or no firstMain', {
-      hasFirstMain: !!firstMain,
-      firstMainKind: firstMain?.kind
-    });
     return false;
   }
 
@@ -30,13 +25,11 @@ export function hasIntentMessages(ddt: any): boolean {
   for (const stepKey of requiredSteps) {
     const step = steps[stepKey];
     if (!step) {
-      console.log('[hasIntentMessages] Missing step', { stepKey, availableSteps: Object.keys(steps) });
       return false;
     }
 
     const escalations = Array.isArray(step.escalations) ? step.escalations : [];
     if (escalations.length === 0) {
-      console.log('[hasIntentMessages] No escalations in step', { stepKey });
       return false;
     }
 
@@ -53,19 +46,10 @@ export function hasIntentMessages(ddt: any): boolean {
     });
 
     if (!hasMessage) {
-      console.log('[hasIntentMessages] No message in step escalations', {
-        stepKey,
-        escalationsCount: escalations.length,
-        firstEscalation: escalations[0]
-      });
       return false;
     }
   }
 
-  console.log('[hasIntentMessages] All checks passed - DDT has intent messages', {
-    ddtId: ddt.id,
-    steps: Object.keys(steps)
-  });
   return true;
 }
 

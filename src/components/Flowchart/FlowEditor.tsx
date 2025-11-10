@@ -220,7 +220,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Hook centralizzato per la creazione di entità (solo se il context è pronto)
   const entityCreation = useEntityCreation();
-  const { createAgentAct, createBackendCall, createTask, createCondition } = entityCreation;
+  const { createAgentAct, createBackendCall, createMacrotask, createCondition } = entityCreation;
 
   // Adapter functions per matchare le signature expected da useFlowConnect
   const createAgentActAdapter = useCallback(() => {
@@ -232,8 +232,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [createBackendCall]);
 
   const createTaskAdapter = useCallback(() => {
-    createTask(''); // Solo name, scope opzionale
-  }, [createTask]);
+    createMacrotask(''); // Solo name, scope opzionale
+  }, [createMacrotask]);
 
   // Sostituisco onConnect
   const { onConnect, onConnectStart } = useFlowConnect(

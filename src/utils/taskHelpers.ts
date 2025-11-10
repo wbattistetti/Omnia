@@ -30,7 +30,7 @@ export function getTaskIdFromRow(row: NodeRowData): string {
     return task.id;
   }
 
-  // Create Task for legacy row
+  // Create Task for row without taskId
   const newTask = taskRepository.createTask('Message', row.text ? { text: row.text } : undefined, row.id);
   (row as any).taskId = newTask.id;
   return newTask.id;
@@ -40,7 +40,7 @@ export function getTaskIdFromRow(row: NodeRowData): string {
  * Check if a row has been migrated to new Task model
  *
  * @param row - NodeRowData row
- * @returns true if row has taskId (migrated), false if using legacy (row.id = instanceId)
+ * @returns true if row has taskId, false if using row.id as instanceId
  */
 export function isRowMigrated(row: NodeRowData): boolean {
   return !!row.taskId;
@@ -249,9 +249,9 @@ export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
     // Check if Task exists for this row (by row.id)
     let task = taskRepository.getTask(row.id);
     if (!task) {
-      // Auto-create Task for legacy row
+      // Auto-create Task for row without taskId
       // row.text is the user-written label, keep it as is
-      console.warn('[enrichRowsWithTaskId] Auto-creating Task for legacy row', { rowId: row.id });
+      console.warn('[enrichRowsWithTaskId] Auto-creating Task for row without taskId', { rowId: row.id });
       task = taskRepository.createTask('Message', undefined, row.id);
     }
 

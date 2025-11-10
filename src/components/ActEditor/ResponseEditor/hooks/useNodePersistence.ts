@@ -13,7 +13,9 @@ export function useNodePersistence(
   updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void
 ) {
   const normalizeAndPersistModel = useCallback((nextEscalations: any[]) => {
-    updateSelectedNode((node) => {
+    // Postpone updateSelectedNode to avoid setState during render
+    setTimeout(() => {
+      updateSelectedNode((node) => {
       // Normalizza azioni: conserva anche azioni non testuali senza testo
       const normalized = (nextEscalations || []).map((esc: any) => ({
         actions: (esc.actions || []).map((a: any) => {
@@ -78,7 +80,8 @@ export function useNodePersistence(
         obj[selectedStepKey] = { ...group, escalations: escs, type: selectedStepKey };
         return { ...(node || {}), steps: obj };
       }
-    }, false); // notifyProvider = false (gestito internamente)
+      }, false); // notifyProvider = false (gestito internamente)
+    }, 0);
   }, [selectedStepKey, updateSelectedNode]);
 
   return { normalizeAndPersistModel };

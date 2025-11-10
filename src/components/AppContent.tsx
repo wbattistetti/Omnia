@@ -607,7 +607,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                   } catch (e) {
                     console.warn('[Save] Failed to update catalog timestamp', e);
                   }
-                  try { console.log('[Save][begin]', { pid }); } catch { }
+
+                  // FIX: Emetti evento per salvare modifiche in corso negli editor aperti
+                  window.dispatchEvent(new CustomEvent('project:save', {
+                    detail: { projectId: pid }
+                  }));
+
                   // FASE 2: Salva tutte le Tasks da TaskRepository (gestisce tutto)
                   if (pid) {
                     try {
@@ -616,7 +621,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                       const saved = await taskRepository.saveAllTasksToDatabase(pid);
                       const tI2_1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       if (saved) {
-                        try { console.log('[Save][tasks][repository]', { pid, ms: Math.round(tI2_1 - tI2_0), tasksCount: taskRepository.getInternalTasksCount() }); } catch { }
                       } else {
                         try { console.warn('[Save][tasks][repository]', { pid, ms: Math.round(tI2_1 - tI2_0), warning: 'some_failed' }); } catch { }
                       }
@@ -634,7 +638,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                       try {
                         const flows = (window as any).__flows || {};
                         const main = flows?.main || { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] };
-                        console.log('[Save][precheck]', { pid, mainNodes: main.nodes?.length || 0, mainEdges: main.edges?.length || 0 });
                       } catch { }
                       const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
@@ -646,7 +649,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                         }
                       } catch { }
                       const tA1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      try { console.log('[Save][timing] acts ms', Math.round(tA1 - tA0)); } catch { }
                     }
                   } catch { }
                   // 3) salva flusso (nodi/edge) - stato così com'è, senza guard
@@ -656,7 +658,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                       try {
                         const flows = (window as any).__flows || {};
                         const main = flows?.main || { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] };
-                        console.log('[Flow][save][begin]', { pid, flowId: 'main', nodes: main.nodes?.length || 0, edges: main.edges?.length || 0 });
                       } catch { }
                       const svc = await import('../services/FlowPersistService');
                       await svc.flushFlowPersist();
@@ -669,13 +670,11 @@ export const AppContent: React.FC<AppContentProps> = ({
                       if (!putRes.ok) {
                         try { console.warn('[Flow][save][error]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0), status: putRes.status, statusText: putRes.statusText, body: await putRes.text() }); } catch { }
                       } else {
-                        try { console.log('[Flow][save][ok]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0) }); } catch { }
                       }
                       // Reload automatico e overlay rimossi per test semplificato
                     } catch { }
                   }
                   const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  try { console.log('[Save][end]', { totalMs: Math.round(t1 - t0) }); } catch { }
                   // Removed noisy meta POST; language is already stored during bootstrap
                 } catch (e) {
                   console.error('[SaveProject] commit error', e);

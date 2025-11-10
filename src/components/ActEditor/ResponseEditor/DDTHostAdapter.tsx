@@ -29,17 +29,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     }
 
     const ddt = task?.value?.ddt || null;
-    console.log('[DDTHostAdapter][existingDDT][useMemo]', {
-      instanceKey,
-      actType,
-      hasTask: !!task,
-      hasDDT: !!ddt,
-      ddtId: ddt?.id,
-      firstMainKind: ddt?.mainData?.[0]?.kind,
-      stepsKeys: ddt?.mainData?.[0]?.steps ? Object.keys(ddt.mainData[0].steps) : [],
-      taskValueKeys: Object.keys(task?.value || {}),
-      refreshTrigger
-    });
     return ddt;
   }, [instanceKey, act.id, act.type, refreshTrigger]); // Aggiunto act.type per forzare ricalcolo quando cambia
 
@@ -69,17 +58,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
       });
     }
 
-    console.log('[DDTHostAdapter][INIT]', {
-      instanceKey,
-      actId: act.id,
-      actType: act.type,
-      hasTask: !!task,
-      hasInstanceDDT: !!instanceDDT,
-      instanceDDTId: instanceDDT?.id,
-      firstMainKind: instanceDDT?.mainData?.[0]?.kind,
-      steps: instanceDDT?.mainData?.[0]?.steps ? Object.keys(instanceDDT.mainData[0].steps) : [],
-      stepsContent: instanceDDT?.mainData?.[0]?.steps || {}
-    });
 
     // ✅ Se ProblemClassification, verifica che il DDT abbia kind === "intent"
     if (act.type === 'ProblemClassification') {
@@ -89,13 +67,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
       // Se NON esiste DDT o ha kind sbagliato, inizializza/resetta con kind: "intent"
       if (!instanceDDT || !hasCorrectKind) {
-        console.warn('[DDTHostAdapter][INIT] Creating new DDT because:', {
-          instanceKey,
-          hasInstanceDDT: !!instanceDDT,
-          hasCorrectKind,
-          firstMainKind: firstMain?.kind,
-          reason: !instanceDDT ? 'NO_DDT' : 'WRONG_KIND'
-        });
 
         const newDDT = {
           id: `temp_ddt_${act.id}`,
@@ -112,11 +83,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
         // ✅ Se il Task esiste ma ha DDT con kind sbagliato, correggilo
         if (task && instanceDDT && !hasCorrectKind) {
-          console.log('[DDTHostAdapter] Correcting DDT with wrong kind for ProblemClassification', {
-            instanceId: instanceKey,
-            oldKind: firstMain?.kind,
-            newKind: 'intent'
-          });
           // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
           taskRepository.updateTaskValue(instanceKey, { ddt: newDDT }, currentProjectId || undefined);
         }
@@ -125,12 +91,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
       }
 
       // Se il DDT esiste e ha kind === "intent", usalo
-      console.log('[DDTHostAdapter][INIT] Using existing DDT with intent kind', {
-        instanceKey,
-        ddtId: instanceDDT.id,
-        steps: Object.keys(firstMain.steps || {}),
-        hasSteps: !!firstMain.steps && Object.keys(firstMain.steps).length > 0
-      });
       return instanceDDT;
     }
 
@@ -153,7 +113,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   React.useEffect(() => {
     const handleTaskLoaded = () => {
       // Forza il ricalcolo di existingDDT quando i Task vengono caricati
-      console.log('[DDTHostAdapter][TASKS_LOADED] Refreshing DDT after tasks loaded', { instanceKey });
       setRefreshTrigger(prev => prev + 1);
     };
 
@@ -177,7 +136,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
         setRefreshTrigger(prev => prev + 1);
         clearInterval(pollInterval);
       } else if (pollCount >= maxPolls) {
-        console.log('[DDTHostAdapter][POLLING] Stopped polling after max attempts', { instanceKey, pollCount });
         clearInterval(pollInterval);
       }
     }, 500); // Controlla ogni 500ms
@@ -198,15 +156,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
       const ddtHasChanged = JSON.stringify(currentDDT) !== JSON.stringify(existingDDT);
 
       if (currentIsPlaceholder || ddtHasChanged) {
-        console.log('[DDTHostAdapter][useEffect] Updating currentDDT from existingDDT', {
-          instanceKey,
-          currentIsPlaceholder,
-          ddtHasChanged,
-          existingDDTId: existingDDT?.id,
-          currentDDTId: currentDDT?.id,
-          hasSteps: existingDDT?.mainData?.[0]?.steps ? Object.keys(existingDDT.mainData[0].steps).length : 0,
-          stepsKeys: existingDDT?.mainData?.[0]?.steps ? Object.keys(existingDDT.mainData[0].steps) : []
-        });
         setCurrentDDT(existingDDT);
       }
     }

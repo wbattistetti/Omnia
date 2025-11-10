@@ -15,7 +15,6 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropAction, col
     accept: [DND_TYPE_VIEWER],
     drop: (item: any) => {
       const normalized = normalizeActionFromViewer(item);
-      console.log('[DnD][CanvasDropWrapper] Action dropped');
       onDropAction(normalized);
     },
     collect: (monitor) => ({ isOver: monitor.isOver({ shallow: true }) })

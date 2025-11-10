@@ -481,15 +481,6 @@ class InstanceRepository {
      */
     async updateInstanceInDatabase(instance: ActInstance, projectId?: string): Promise<boolean> {
         try {
-            console.log('[InstanceRepository][UPDATE_IN_DB][START]', {
-                instanceId: instance.instanceId,
-                projectId,
-                hasMessage: !!instance.message,
-                messageText: instance.message?.text?.substring(0, 50) || 'N/A',
-                hasDDT: !!instance.ddt,
-                actId: instance.actId
-            });
-
             if (projectId) {
                 // Usa endpoint progetto-specifico
                 const url = `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/instances/${instance.instanceId}`;
@@ -504,29 +495,6 @@ class InstanceRepository {
                     baseActId: instance.actId || 'Message' // Aggiungi baseActId
                 };
 
-                // Log dettagliato del payload - espandi tutto per vedere esattamente cosa viene inviato
-                console.log('[InstanceRepository][UPDATE_IN_DB][PAYLOAD]', {
-                    instanceId: instance.instanceId,
-                    projectId,
-                    hasMessage: !!payload.message,
-                    messageText: payload.message?.text || 'N/A',
-                    messageObject: payload.message,
-                    hasProblemIntents: !!payload.problemIntents,
-                    problemIntentsCount: payload.problemIntents?.length || 0,
-                    problemIntents: payload.problemIntents?.map((it: any) => ({
-                        id: it.id,
-                        name: it.name,
-                        matchingCount: it.phrases?.matching?.length || 0,
-                        notMatchingCount: it.phrases?.notMatching?.length || 0
-                    })) || [],
-                    mode: payload.mode,
-                    baseActId: payload.baseActId,
-                    hasDDT: !!payload.ddtSnapshot,
-                    payloadComplete: payload
-                });
-                // Log anche come stringa JSON per vedere esattamente cosa viene inviato
-                console.log('[InstanceRepository][UPDATE_IN_DB][PAYLOAD_JSON]', JSON.stringify(payload, null, 2));
-
                 const response = await fetch(url, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -534,31 +502,9 @@ class InstanceRepository {
                 });
 
                 if (response.ok) {
-                    const result = await response.json().catch(() => null);
-                    // Log dettagliato del risultato - espandi tutto per vedere cosa viene salvato nel DB
-                    console.log('[InstanceRepository][UPDATE_IN_DB][SUCCESS]', {
-                        instanceId: instance.instanceId,
-                        projectId,
-                        result_id: result?._id,
-                        result_rowId: result?.rowId,
-                        result_mode: result?.mode,
-                        result_baseActId: result?.baseActId,
-                        result_hasMessage: !!result?.message,
-                        result_messageText: result?.message?.text || 'N/A',
-                        result_messageObject: result?.message,
-                        result_complete: result
-                    });
-                    // Log anche come stringa JSON per vedere esattamente cosa viene salvato
-                    if (result) {
-                        console.log('[InstanceRepository][UPDATE_IN_DB][RESULT_JSON]', JSON.stringify(result, null, 2));
-                    }
                     return true;
                 } else if (response.status === 404) {
                     // Se l'istanza non esiste (404), creala con POST
-                    console.log('[InstanceRepository][UPDATE_IN_DB][NOT_FOUND_CREATE]', {
-                        instanceId: instance.instanceId,
-                        projectId
-                    });
                     return await this.saveInstanceToDatabase(instance, projectId);
                 } else {
                     const errorText = await response.text().catch(() => response.statusText);
@@ -606,53 +552,13 @@ class InstanceRepository {
         try {
             const allInstances = Array.from(this.instances.values());
 
-            console.log('[InstanceRepository][SAVE_ALL][START]', {
-                projectId,
-                instancesCount: allInstances.length
-            });
-
-            // Log dettagliato di ogni istanza - espandi per vedere tutto
-            allInstances.forEach((inst, idx) => {
-                console.log(`[InstanceRepository][SAVE_ALL][INSTANCE_${idx}]`, {
-                    instanceId: inst.instanceId,
-                    actId: inst.actId,
-                    hasMessage: !!inst.message,
-                    messageText: inst.message?.text || 'N/A',
-                    messageObject: inst.message,
-                    hasDDT: !!inst.ddt,
-                    instanceComplete: {
-                        instanceId: inst.instanceId,
-                        actId: inst.actId,
-                        message: inst.message,
-                        ddt: inst.ddt ? '[DDT present]' : null
-                    }
-                });
-                // Log anche come JSON per vedere esattamente la struttura
-                console.log(`[InstanceRepository][SAVE_ALL][INSTANCE_${idx}_JSON]`, JSON.stringify({
-                    instanceId: inst.instanceId,
-                    actId: inst.actId,
-                    message: inst.message
-                }, null, 2));
-            });
-
             if (allInstances.length === 0) {
-                console.log('ℹ️ [InstanceRepository] No instances to save');
                 return true;
             }
 
-            console.log(`📦 [InstanceRepository] Saving ${allInstances.length} instances to database${projectId ? ` (project: ${projectId})` : ''}...`);
-
             // Salva tutte le istanze (crea quelle che non esistono, aggiorna quelle che esistono)
             const results = await Promise.allSettled(
-                allInstances.map(instance => {
-                    console.log('[InstanceRepository][SAVE_ALL][SAVING_INSTANCE]', {
-                        instanceId: instance.instanceId,
-                        actId: instance.actId,
-                        hasMessage: !!instance.message,
-                        messageText: instance.message?.text?.substring(0, 50) || 'N/A'
-                    });
-                    return this.updateInstanceInDatabase(instance, projectId);
-                })
+                allInstances.map(instance => this.updateInstanceInDatabase(instance, projectId))
             );
 
             const successful = results.filter(r => r.status === 'fulfilled' && r.value === true).length;

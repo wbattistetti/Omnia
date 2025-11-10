@@ -65,8 +65,14 @@ export function useNodeUpdate(
             delete next.introduction;
           }
         }
+        // FIX: Postpone replaceSelectedDDT to avoid setState during render
         if (notifyProvider) {
-          try { replaceSelectedDDT(next); } catch { }
+          try {
+            // Use setTimeout to defer the call until after render
+            setTimeout(() => {
+              replaceSelectedDDT(next);
+            }, 0);
+          } catch { }
         }
         return next;
       }
@@ -113,12 +119,17 @@ export function useNodeUpdate(
             kind: m?.kind,
             manual: (m as any)?._kindManual
           }));
-          console.log('[KindPersist][ResponseEditor][updateSelectedNode->replaceSelectedDDT]', mainsKinds);
         } catch { }
       } catch { }
 
+      // FIX: Postpone replaceSelectedDDT to avoid setState during render
       if (notifyProvider) {
-        try { replaceSelectedDDT(next); } catch { }
+        try {
+          // Use setTimeout to defer the call until after render
+          setTimeout(() => {
+            replaceSelectedDDT(next);
+          }, 0);
+        } catch { }
       }
       return next;
     });

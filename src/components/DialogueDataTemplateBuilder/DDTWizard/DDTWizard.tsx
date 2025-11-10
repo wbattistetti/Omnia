@@ -522,36 +522,18 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Effect to handle closing when all mains are completed
   React.useEffect(() => {
-    console.log('[WIZARD_FLOW] useEffect pendingCloseRef check', {
-      hasPendingClose: !!pendingCloseRef.current,
-      schemaMainsLength: schemaMains.length,
-      partialResultsKeys: Object.keys(partialResults),
-      completedCount: Object.keys(partialResults).length,
-      allCompleted: Object.keys(partialResults).length === schemaMains.length
-    });
+    if (!pendingCloseRef.current) return;
 
     if (pendingCloseRef.current && schemaMains.length > 0) {
       const completedCount = Object.keys(partialResults).length;
       // Only close if all mains are completed
       if (completedCount === schemaMains.length) {
         const { ddt, translations } = pendingCloseRef.current;
-        console.log('[WIZARD_FLOW] All mains completed - calling handleClose', {
-          ddtId: ddt?.id,
-          ddtLabel: ddt?.label,
-          mainDataLength: Array.isArray(ddt?.mainData) ? ddt.mainData.length : 'not-array'
-        });
         pendingCloseRef.current = null; // Clear before calling to avoid re-triggering
         // Use setTimeout to defer to next tick, avoiding setState during render
         setTimeout(() => {
-          console.log('[WIZARD_FLOW] setTimeout callback - about to call handleClose');
           handleClose(ddt, translations);
-          console.log('[WIZARD_FLOW] handleClose called');
         }, 0);
-      } else {
-        console.log('[WIZARD_FLOW] Not all mains completed yet', {
-          completedCount,
-          expectedCount: schemaMains.length
-        });
       }
     }
   }, [partialResults, schemaMains.length]);
@@ -849,26 +831,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Handler per chiusura (annulla o completamento)
   const handleClose = (result?: any, messages?: any) => {
-    console.log('[WIZARD_FLOW] handleClose called', {
-      hasResult: !!result,
-      hasOnComplete: !!onComplete,
-      resultId: result?.id,
-      resultLabel: result?.label,
-      mainsCount: Array.isArray(result?.mainData) ? result.mainData.length : 'not-array',
-      onCompleteType: typeof onComplete
-    });
     debug('DDT_WIZARD', 'Handle close', { hasResult: !!result, hasOnComplete: !!onComplete, resultId: result?.id, resultLabel: result?.label, mainsCount: Array.isArray(result?.mainData) ? result.mainData.length : 'not-array' });
     setClosed(true);
     if (result && onComplete) {
-      console.log('[WIZARD_FLOW] Calling onComplete callback with result');
       debug('DDT_WIZARD', 'Calling onComplete callback');
       onComplete(result, messages);
-      console.log('[WIZARD_FLOW] onComplete callback returned');
     } else {
-      console.log('[WIZARD_FLOW] No result or onComplete - calling onCancel instead', {
-        hasResult: !!result,
-        hasOnComplete: !!onComplete
-      });
       debug('DDT_WIZARD', 'Calling onCancel');
       onCancel();
     }
@@ -946,9 +914,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
                   <button
                     onClick={() => {
-                      console.log(`[DDTWizard] Build Messages button clicked! Current step: ${step}`);
                       try { dlog('[DDT][UI] step → pipeline'); } catch { }
-                      console.log(`[DDTWizard] Setting step to pipeline, current step: ${step}`);
                       // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
                       setShowRight(true);
                       // reset progress state to avoid stale 100%
@@ -958,7 +924,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       // Apri il primo main data
                       setSelectedIdx(0);
                       setStep('pipeline');
-                      console.log(`[DDTWizard] Step set to pipeline`);
                     }}
                     style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
                   >
@@ -1018,32 +983,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           }));
 
                           const progressMap = taskCounter.calculateRecursiveProgress(mainDataArray);
-                          console.log('[DDTWizard] TaskCounter progress calculation:', {
-                            mainDataArray,
-                            progressMap,
-                            rootProgress: progressMap.__root__
-                          });
                           return progressMap.__root__ || 0;
                         });
                       }}
                       onComplete={(partialDDT) => {
-                        console.log(`[DDT][Wizard][parallel] Main ${mainIdx + 1}/${schemaMains.length} completed:`, {
-                          mainLabel: mainItem.label,
-                          hasDDT: !!partialDDT,
-                          mainsCount: Array.isArray(partialDDT?.mainData) ? partialDDT.mainData.length : 'not-array'
-                        });
-
                         // Accumulate partial result
                         setPartialResults(prev => {
                           const updated = { ...prev, [mainIdx]: partialDDT };
 
                           // Check if all mains completed
                           const completedCount = Object.keys(updated).length;
-                          console.log(`[DDT][Wizard][parallel] Progress: ${completedCount}/${schemaMains.length} mains completed`);
 
                           if (completedCount === schemaMains.length) {
                             // All mains completed - assemble final DDT
-                            console.log('[DDT][Wizard][parallel] All mains completed, assembling final DDT...');
 
                             try {
                               // Merge all mainData from partial results
@@ -1072,14 +1024,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 _fromWizard: true  // Flag to identify wizard-generated DDTs
                               };
 
-                              console.log('[DDT][Wizard][parallel] Final DDT assembled:', {
-                                id: finalDDT.id,
-                                label: finalDDT.label,
-                                mainsCount: finalDDT.mainData.length,
-                                mainLabels: finalDDT.mainData.map((m: any) => m?.label),
-                                translationsCount: Object.keys(mergedTranslations).length
-                              });
-
                               // Preserve _userLabel and _sourceAct
                               if ((dataNode as any)?._userLabel && !(finalDDT as any)._userLabel) {
                                 (finalDDT as any)._userLabel = (dataNode as any)._userLabel;
@@ -1088,22 +1032,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 (finalDDT as any)._sourceAct = (dataNode as any)._sourceAct;
                               }
 
-                              console.log('[DDT][Wizard][parallel] Setting pending close with final DDT');
-                              console.log('[WIZARD_FLOW] Setting pendingCloseRef', {
-                                finalDDTId: finalDDT.id,
-                                finalDDTLabel: finalDDT.label,
-                                mainDataLength: finalDDT.mainData.length,
-                                translationsCount: Object.keys(mergedTranslations).length
-                              });
                               // Store in ref instead of calling handleClose directly
                               pendingCloseRef.current = {
                                 ddt: finalDDT,
                                 translations: finalDDT.translations || {}
                               };
-                              console.log('[WIZARD_FLOW] pendingCloseRef.current set', {
-                                hasPendingClose: !!pendingCloseRef.current,
-                                ddtId: pendingCloseRef.current?.ddt?.id
-                              });
                             } catch (err) {
                               console.error('[DDT][Wizard][parallel] Failed to assemble final DDT:', err);
                             }

@@ -5,21 +5,14 @@ import type { ProblemIntent } from '../types/project';
 import { taskTemplateService } from './TaskTemplateService';
 
 /**
- * TaskRepository: Wrapper around InstanceRepository
- * Converts between ActInstance (old) and Task (new) formats
+ * TaskRepository: Primary repository for Task data
  *
- * This service is added alongside InstanceRepository for gradual migration
- * - All operations go through InstanceRepository (maintains compatibility)
- * - Conversion happens in memory only
- * - No data is lost or duplicated
- *
- * FASE 1A: Aggiunto storage interno per futura indipendenza
- * - tasks: Map interna per storage diretto (non ancora usata, solo preparazione)
- * - Metodi loadAllTasksFromDatabase/saveAllTasksToDatabase per gestione diretta DB
+ * Manages Task objects (new model) with internal storage.
+ * Uses InstanceRepository internally for database operations (backward compatibility with existing database format).
+ * All components use TaskRepository, which handles conversion between Task and ActInstance formats.
  */
 class TaskRepository {
-  // FASE 1A: Storage interno (preparazione per futura indipendenza)
-  // Per ora non usato, manteniamo compatibilità con InstanceRepository
+  // Internal storage for Task objects
   private tasks = new Map<string, Task>();
   /**
    * Map ActType/actId to TaskTemplate action ID
@@ -86,7 +79,7 @@ class TaskRepository {
         value.ddt = instance.ddt;
       }
     } else if (action === 'callBackend' || action === 'BackendCall') {
-      // BackendCall: value.config (placeholder, will be populated from instance data)
+      // BackendCall: value.config
       value.config = {};
     } else {
       // Generic: preserve all instance data
@@ -125,7 +118,7 @@ class TaskRepository {
   }
 
   /**
-   * Map TaskTemplate action ID back to actId (for backward compatibility)
+   * Map TaskTemplate action ID back to actId (for database compatibility)
    */
   private mapActionToActId(action: string, fallbackActId?: string): string {
     // Reverse mapping
@@ -144,16 +137,15 @@ class TaskRepository {
 
   /**
    * Get Task by ID
-   * FASE 1B: Usa storage interno, sincronizza con InstanceRepository se necessario
    */
   getTask(taskId: string, actType?: string): Task | null {
-    // FASE 1B: Prima controlla storage interno
+    // Check internal storage first
     const cachedTask = this.tasks.get(taskId);
     if (cachedTask) {
       return cachedTask;
     }
 
-    // Se non in cache, carica da InstanceRepository e sincronizza
+    // If not in cache, load from InstanceRepository and sync
     const instance = instanceRepository.getInstance(taskId);
     if (!instance) {
       return null;
@@ -161,29 +153,13 @@ class TaskRepository {
 
     const task = this.instanceToTask(instance, actType);
 
-    // DEBUG: Log per ProblemClassification per capire perché DDT non viene mappato
-    if (instance.actId?.includes('Problem') || actType === 'ProblemClassification') {
-      console.log('[TaskRepository][getTask][DEBUG]', {
-        taskId,
-        actId: instance.actId,
-        actType,
-        instanceHasDDT: !!instance.ddt,
-        instanceDDTId: instance.ddt?.id,
-        taskHasDDT: !!task.value?.ddt,
-        taskDDTId: task.value?.ddt?.id,
-        taskValueKeys: Object.keys(task.value || {}),
-        action: task.action
-      });
-    }
-
-    // Sincronizza nello storage interno
+    // Sync to internal storage
     this.tasks.set(taskId, task);
     return task;
   }
 
   /**
    * Create a new Task
-   * FASE 1B: Crea nello storage interno E in InstanceRepository (sincronizzazione)
    */
   createTask(action: string, value?: Record<string, any>, taskId?: string, projectId?: string): Task {
     const actId = this.mapActionToActId(action);
@@ -202,7 +178,7 @@ class TaskRepository {
       initialIntents = value?.intents;
     }
 
-    // FASE 1B: Crea Task nello storage interno
+    // Create Task in internal storage
     const task: Task = {
       id: finalTaskId,
       action,
@@ -211,10 +187,10 @@ class TaskRepository {
       updatedAt: new Date()
     };
 
-    // Salva nello storage interno
+    // Save to internal storage
     this.tasks.set(finalTaskId, task);
 
-    // FASE 1B: Sincronizza con InstanceRepository (per sicurezza durante migrazione)
+    // Sync with InstanceRepository (for database compatibility)
     const instance = instanceRepository.createInstance(
       actId,
       initialIntents,
@@ -235,38 +211,37 @@ class TaskRepository {
 
   /**
    * Update Task
-   * FASE 1B: Aggiorna nello storage interno E in InstanceRepository (sincronizzazione)
    */
   updateTask(taskId: string, updates: Partial<Task>, projectId?: string): boolean {
-    // FASE 1B: Prima controlla storage interno
+    // Check internal storage first
     const existingTask = this.tasks.get(taskId);
     if (!existingTask) {
-      // Se non in cache, prova a caricare da InstanceRepository
+      // If not in cache, try to load from InstanceRepository
       const instance = instanceRepository.getInstance(taskId);
       if (!instance) {
         console.warn('[TaskRepository] Task not found:', taskId);
         return false;
       }
-      // Sincronizza nello storage interno
+      // Sync to internal storage
       const task = this.instanceToTask(instance);
       this.tasks.set(taskId, task);
     }
 
-    // Aggiorna nello storage interno
+    // Update in internal storage
     const currentTask = this.tasks.get(taskId)!;
     const updatedTask: Task = {
       ...currentTask,
       ...updates,
       updatedAt: updates.updatedAt || new Date(),
-      // Merge value: se updates.value è undefined, mantieni currentTask.value
-      // Se updates.value è definito, fa merge profondo
+      // Merge value: if updates.value is undefined, keep currentTask.value
+      // If updates.value is defined, do deep merge
       value: updates.value !== undefined
         ? { ...(currentTask.value || {}), ...updates.value }
         : currentTask.value
     };
     this.tasks.set(taskId, updatedTask);
 
-    // FASE 1B: Sincronizza con InstanceRepository (per sicurezza durante migrazione)
+    // Sync with InstanceRepository (for database compatibility)
     const instanceUpdates: Partial<ActInstance> = {};
 
     if (updates.value) {
@@ -310,13 +285,12 @@ class TaskRepository {
 
   /**
    * Delete Task
-   * FASE 1B: Rimuove da storage interno E da InstanceRepository (sincronizzazione)
    */
   deleteTask(taskId: string, projectId?: string): boolean {
-    // FASE 1B: Rimuovi da storage interno
+    // Remove from internal storage
     const deleted = this.tasks.delete(taskId);
 
-    // FASE 1B: Sincronizza con InstanceRepository
+    // Sync with InstanceRepository
     const instanceDeleted = instanceRepository.deleteInstance(taskId);
 
     return deleted || instanceDeleted;
@@ -324,24 +298,22 @@ class TaskRepository {
 
   /**
    * Check if Task exists
-   * FASE 1B: Controlla prima storage interno, poi InstanceRepository
    */
   hasTask(taskId: string): boolean {
-    // FASE 1B: Prima controlla storage interno
+    // Check internal storage first
     if (this.tasks.has(taskId)) {
       return true;
     }
 
-    // Se non in cache, controlla InstanceRepository
+    // If not in cache, check InstanceRepository
     return instanceRepository.getInstance(taskId) !== undefined;
   }
 
   /**
    * Get all Tasks
-   * FASE 1B: Usa storage interno, sincronizza con InstanceRepository se necessario
    */
   getAllTasks(): Task[] {
-    // FASE 1B: Se storage interno è vuoto, sincronizza da InstanceRepository
+    // If internal storage is empty, sync from InstanceRepository
     if (this.tasks.size === 0) {
       const allInstances = instanceRepository.getAllInstances();
       for (const instance of allInstances) {
@@ -351,32 +323,23 @@ class TaskRepository {
       }
     }
 
-    // Ritorna tutti i task dallo storage interno
+    // Return all tasks from internal storage
     return Array.from(this.tasks.values());
   }
 
-  // ============================================
-  // FASE 1A: Metodi per gestione database diretta
-  // (Preparazione per futura indipendenza da InstanceRepository)
-  // ============================================
-
   /**
-   * Load all Tasks from database directly
-   * FASE 1A: Metodo preparato per futura indipendenza
-   * Per ora mantiene compatibilità: carica da InstanceRepository e sincronizza storage interno
+   * Load all Tasks from database
    *
    * @param projectId - Project ID to load tasks for
    * @returns True if loaded successfully
    */
   async loadAllTasksFromDatabase(projectId?: string): Promise<boolean> {
     try {
-      // FASE 1A: Per ora carichiamo da InstanceRepository (compatibilità)
-      // In futuro questo metodo caricherà direttamente dal database
+      // Load from InstanceRepository (database compatibility)
       const loaded = await instanceRepository.loadInstancesFromDatabase(projectId);
 
       if (loaded) {
-        // Sincronizza storage interno con InstanceRepository
-        // (preparazione per futura indipendenza)
+        // Sync internal storage with InstanceRepository
         const allInstances = instanceRepository.getAllInstances();
         this.tasks.clear();
 
@@ -385,12 +348,6 @@ class TaskRepository {
           const task = this.instanceToTask(instance, action);
           this.tasks.set(task.id, task);
         }
-
-        console.log('[TaskRepository][LOAD_ALL] Loaded and synced', {
-          projectId,
-          tasksCount: this.tasks.size,
-          instancesCount: allInstances.length
-        });
 
         // Emit event to notify components that tasks have been loaded
         window.dispatchEvent(new CustomEvent('tasks:loaded', {
@@ -406,22 +363,18 @@ class TaskRepository {
   }
 
   /**
-   * Save all Tasks to database directly
-   * FASE 1A: Metodo preparato per futura indipendenza
-   * Per ora mantiene compatibilità: salva tramite InstanceRepository
+   * Save all Tasks to database
    *
    * @param projectId - Project ID to save tasks for
    * @returns True if saved successfully
    */
   async saveAllTasksToDatabase(projectId?: string): Promise<boolean> {
     try {
-      // FASE 1A: Per ora salviamo tramite InstanceRepository (compatibilità)
-      // In futuro questo metodo salverà direttamente nel database
+      // Save via InstanceRepository (database compatibility)
       const saved = await instanceRepository.saveAllInstancesToDatabase(projectId);
 
       if (saved) {
-        // Sincronizza storage interno con InstanceRepository
-        // (preparazione per futura indipendenza)
+        // Sync internal storage with InstanceRepository
         const allInstances = instanceRepository.getAllInstances();
         this.tasks.clear();
 
@@ -430,12 +383,6 @@ class TaskRepository {
           const task = this.instanceToTask(instance, action);
           this.tasks.set(task.id, task);
         }
-
-        console.log('[TaskRepository][SAVE_ALL] Saved and synced', {
-          projectId,
-          tasksCount: this.tasks.size,
-          instancesCount: allInstances.length
-        });
       }
 
       return saved;
@@ -447,7 +394,6 @@ class TaskRepository {
 
   /**
    * Get internal tasks count (for debugging)
-   * FASE 1A: Metodo di utilità per verificare lo stato dello storage interno
    */
   getInternalTasksCount(): number {
     return this.tasks.size;

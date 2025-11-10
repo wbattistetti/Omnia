@@ -168,19 +168,10 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   // Commit esplicito: chiamato solo da useActionCommands dopo ogni azione (drop, append, edit, delete, move)
   const commitUp = React.useCallback((next: EscalationModel[]) => {
-    console.error('🔍 [StepEditor][commitUp] Notifying parent of change', {
-      stepKey,
-      escalationsCount: next.length,
-      nodeLabel: node?.label,
-      nodeId: node?.id,
-      firstActionText: next[0]?.actions?.[0]?.text,
-      firstActionTextKey: next[0]?.actions?.[0]?.textKey
-    });
     try {
       onModelChange?.(next);
-      console.error('🔍 [StepEditor][commitUp] onModelChange called successfully');
     } catch (error) {
-      console.error('🔍 [StepEditor][commitUp] ERROR calling onModelChange', error);
+      console.error('[StepEditor][commitUp] ERROR calling onModelChange', error);
     }
   }, [onModelChange, stepKey, node]);
   const { editAction, deleteAction, moveAction, dropFromViewer, appendAction } = useActionCommands(setLocalModel as any, commitUp as any);
@@ -214,14 +205,6 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   // Wrapper per editAction che resetta autoEditTarget quando l'edit è completato
   const handleEdit = React.useCallback((escalationIdx: number, actionIdx: number, newText: string) => {
-    console.error('🔍 [StepEditor][handleEdit] Called', {
-      stepKey,
-      nodeLabel: node?.label,
-      escalationIdx,
-      actionIdx,
-      newText,
-      oldText: localModel[escalationIdx]?.actions?.[actionIdx]?.text
-    });
     editAction(escalationIdx, actionIdx, newText);
     // Reset autoEditTarget se corrisponde all'azione editata
     if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === actionIdx) {

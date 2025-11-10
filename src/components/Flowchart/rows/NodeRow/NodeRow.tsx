@@ -1384,41 +1384,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             gearColor={labelTextColor}
             onOpenDDT={async () => {
               try {
-                // ✅ Log per debug
-                console.log('[NodeRow][onOpenDDT] Opening editor', {
-                  rowId: row.id,
-                  rowText: row.text,
-                  rowType: (row as any)?.type,
-                  hasActFound: !!actFound,
-                  actFoundType: actFound?.type,
-                  timestamp: Date.now()
-                });
-              } catch { }
-              try {
                 // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType
                 const baseId = (row as any).baseActId || (row as any).actId || (row as any).factoryId || row.id;
                 const type = resolveActType(row as any, actFound) as any;
 
-                // ✅ Log per debug
-                console.log('[NodeRow][onOpenDDT] Calling actEditorCtx.open', {
-                  baseId,
-                  type,
-                  resolvedType: type,
-                  label: row.text,
-                  instanceId: row.id,
-                  expectedEditor: type === 'ProblemClassification' ? 'ResponseEditor (ddt)' : type === 'DataRequest' ? 'ResponseEditor (ddt)' : 'Other',
-                  timestamp: Date.now()
-                });
-
                 // Host present → open deterministically
                 actEditorCtx.open({ id: String(baseId), type, label: row.text, instanceId: row.id });
-
-                // ✅ Log per debug
-                console.log('[NodeRow][onOpenDDT] Editor opened', {
-                  type,
-                  baseId,
-                  timestamp: Date.now()
-                });
                 return;
               } catch (e) {
                 console.error('[NodeRow][onOpenDDT] Failed to open editor', {

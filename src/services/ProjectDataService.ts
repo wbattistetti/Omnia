@@ -272,7 +272,7 @@ export const ProjectDataService = {
 
       if (totalItems > 0) {
         // Convert to categories format
-        // Migrate tasks to macrotasks (tasks is now deprecated)
+        // Migrate tasks to macrotasks
         const tasksCategories = this.convertToCategories(tasks, 'macrotasks');
         const macroTasksCategories = this.convertToCategories(macroTasks, 'macrotasks');
         // Merge tasks and macrotasks into macrotasks
@@ -280,10 +280,10 @@ export const ProjectDataService = {
 
         const groupedData = {
           agentActs: this.convertToCategories(agentActsItems, 'agentActs'),
-          userActs: [], // Will be loaded from legacy system
+          userActs: [],
           backendActions: this.convertToCategories(backendCalls, 'backendActions'),
           conditions: this.convertToCategories(conditions, 'conditions'),
-          tasks: [], // Deprecated: kept empty for backward compatibility
+          tasks: [], // Deprecated: kept empty for compatibility
           macrotasks: allMacrotasks
         };
 
@@ -297,10 +297,10 @@ export const ProjectDataService = {
         return;
       }
     } catch (error) {
-      console.warn('>>> [ProjectDataService] Separate collections system not available, falling back to legacy system:', error);
+      console.warn('>>> [ProjectDataService] Separate collections system not available, falling back to template system:', error);
     }
 
-    // Fallback to legacy template system
+    // Fallback to template system
     const template = templateData[templateName as keyof typeof templateData];
     if (!template) {
       console.warn(`Template ${templateName} not found, using empty data`);
@@ -333,7 +333,7 @@ export const ProjectDataService = {
       return;
     }
 
-    // Legacy fallback to bundled JSON
+    // Fallback to bundled JSON
     projectData = {
       name: '',
       industry: projectIndustry || templateName,
@@ -649,7 +649,6 @@ export const ProjectDataService = {
           console.warn('[Acts][bulk][error.no-body]', { status: res.status, statusText: res.statusText });
         }
       } else {
-        try { console.log('[Acts][bulk][ok]', { count: itemsToPersist.length }); } catch { }
       }
     } catch { }
   },

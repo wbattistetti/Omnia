@@ -37,7 +37,7 @@ export interface AgentActItem extends ProjectEntityItem {
   type?: ActType;
   // Optional category name; undefined means shown at root in the sidebar
   category?: string;
-  // Legacy: list of user acts for interactive acts (kept for backward compat)
+  // List of user acts for interactive acts (kept for compatibility)
   userActs?: string[];
   // ProblemClassification payload (act-owned). Present only when type === 'ProblemClassification'
   problem?: ProblemPayload;
@@ -54,7 +54,7 @@ export type ProjectData = {
   userActs?: any[];
   backendActions?: any[];
   conditions?: any[];
-  tasks?: any[]; // Legacy: mantenuto per compatibilità, i nuovi dati vanno in macrotasks
+  tasks?: any[]; // Deprecated: kept for compatibility, new data goes to macrotasks
   macrotasks?: { id?: string; name?: string; items: Macrotask[] }[];
   // ...other fields as needed
 };
