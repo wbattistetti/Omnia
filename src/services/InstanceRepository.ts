@@ -121,7 +121,7 @@ class InstanceRepository {
         } catch (err) {
             // Ignore if TaskRepository not available (backward compatibility)
         }
-        
+
         console.log('[InstanceRepository][updateDDT][START]', {
             instanceId,
             projectId,
@@ -208,7 +208,7 @@ class InstanceRepository {
         } catch (err) {
             // Ignore if TaskRepository not available (backward compatibility)
         }
-        
+
         console.log('[InstanceRepository][UPDATE_INTENTS][START]', {
             instanceId,
             intentsCount: intents.length,

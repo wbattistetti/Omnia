@@ -2,6 +2,7 @@ import type { Task } from '../types/taskTypes';
 import { instanceRepository, type ActInstance } from './InstanceRepository';
 import { generateId } from '../utils/idGenerator';
 import type { ProblemIntent } from '../types/project';
+import { taskTemplateService } from './TaskTemplateService';
 
 /**
  * TaskRepository: Wrapper around InstanceRepository
@@ -11,8 +12,15 @@ import type { ProblemIntent } from '../types/project';
  * - All operations go through InstanceRepository (maintains compatibility)
  * - Conversion happens in memory only
  * - No data is lost or duplicated
+ *
+ * FASE 1A: Aggiunto storage interno per futura indipendenza
+ * - tasks: Map interna per storage diretto (non ancora usata, solo preparazione)
+ * - Metodi loadAllTasksFromDatabase/saveAllTasksToDatabase per gestione diretta DB
  */
 class TaskRepository {
+  // FASE 1A: Storage interno (preparazione per futura indipendenza)
+  // Per ora non usato, manteniamo compatibilità con InstanceRepository
+  private tasks = new Map<string, Task>();
   /**
    * Map ActType/actId to TaskTemplate action ID
    */
@@ -273,6 +281,99 @@ class TaskRepository {
     }
 
     return tasks;
+  }
+
+  // ============================================
+  // FASE 1A: Metodi per gestione database diretta
+  // (Preparazione per futura indipendenza da InstanceRepository)
+  // ============================================
+
+  /**
+   * Load all Tasks from database directly
+   * FASE 1A: Metodo preparato per futura indipendenza
+   * Per ora mantiene compatibilità: carica da InstanceRepository e sincronizza storage interno
+   *
+   * @param projectId - Project ID to load tasks for
+   * @returns True if loaded successfully
+   */
+  async loadAllTasksFromDatabase(projectId?: string): Promise<boolean> {
+    try {
+      // FASE 1A: Per ora carichiamo da InstanceRepository (compatibilità)
+      // In futuro questo metodo caricherà direttamente dal database
+      const loaded = await instanceRepository.loadInstancesFromDatabase(projectId);
+
+      if (loaded) {
+        // Sincronizza storage interno con InstanceRepository
+        // (preparazione per futura indipendenza)
+        const allInstances = instanceRepository.getAllInstances();
+        this.tasks.clear();
+
+        for (const instance of allInstances) {
+          const action = taskTemplateService.mapActionIdToTemplateId(instance.actId);
+          const task = this.instanceToTask(instance, action);
+          this.tasks.set(task.id, task);
+        }
+
+        console.log('[TaskRepository][LOAD_ALL] Loaded and synced', {
+          projectId,
+          tasksCount: this.tasks.size,
+          instancesCount: allInstances.length
+        });
+      }
+
+      return loaded;
+    } catch (error) {
+      console.error('[TaskRepository][LOAD_ALL] Error loading tasks:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Save all Tasks to database directly
+   * FASE 1A: Metodo preparato per futura indipendenza
+   * Per ora mantiene compatibilità: salva tramite InstanceRepository
+   *
+   * @param projectId - Project ID to save tasks for
+   * @returns True if saved successfully
+   */
+  async saveAllTasksToDatabase(projectId?: string): Promise<boolean> {
+    try {
+      // FASE 1A: Per ora salviamo tramite InstanceRepository (compatibilità)
+      // In futuro questo metodo salverà direttamente nel database
+      const saved = await instanceRepository.saveAllInstancesToDatabase(projectId);
+
+      if (saved) {
+        // Sincronizza storage interno con InstanceRepository
+        // (preparazione per futura indipendenza)
+        const allInstances = instanceRepository.getAllInstances();
+        this.tasks.clear();
+
+        for (const instance of allInstances) {
+          const action = taskTemplateService.mapActionIdToTemplateId(instance.actId);
+          const task = this.instanceToTask(instance, action);
+          this.tasks.set(task.id, task);
+        }
+
+        console.log('[TaskRepository][SAVE_ALL] Saved and synced', {
+          projectId,
+          tasksCount: this.tasks.size,
+          instancesCount: allInstances.length
+        });
+      }
+
+      return saved;
+    } catch (error) {
+      console.error('[TaskRepository][SAVE_ALL] Error saving tasks:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get internal tasks count (for debugging)
+   * FASE 1A: Metodo di utilità per verificare lo stato dello storage interno
+   */
+  getInternalTasksCount(): number {
+    return this.tasks.size;
   }
 }
 
