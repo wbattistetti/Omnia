@@ -112,6 +112,16 @@ class InstanceRepository {
      * @returns True se aggiornato con successo, false altrimenti
      */
     updateDDT(instanceId: string, ddt: any, projectId?: string): boolean {
+        // Migration: Sync with TaskRepository if Task exists
+        try {
+            const { taskRepository } = require('./TaskRepository');
+            if (taskRepository.hasTask(instanceId)) {
+                taskRepository.updateTaskValue(instanceId, { ddt }, projectId);
+            }
+        } catch (err) {
+            // Ignore if TaskRepository not available (backward compatibility)
+        }
+        
         console.log('[InstanceRepository][updateDDT][START]', {
             instanceId,
             projectId,
@@ -189,6 +199,16 @@ class InstanceRepository {
      * @returns True se aggiornata con successo, false altrimenti
      */
     updateIntents(instanceId: string, intents: ProblemIntent[]): boolean {
+        // Migration: Sync with TaskRepository if Task exists
+        try {
+            const { taskRepository } = require('./TaskRepository');
+            if (taskRepository.hasTask(instanceId)) {
+                taskRepository.updateTaskValue(instanceId, { intents });
+            }
+        } catch (err) {
+            // Ignore if TaskRepository not available (backward compatibility)
+        }
+        
         console.log('[InstanceRepository][UPDATE_INTENTS][START]', {
             instanceId,
             intentsCount: intents.length,
@@ -241,6 +261,15 @@ class InstanceRepository {
      * @returns True se aggiornata con successo, false altrimenti
      */
     updateMessage(instanceId: string, message: { text: string }): boolean {
+        // Migration: Sync with TaskRepository if Task exists
+        try {
+            const { taskRepository } = require('./TaskRepository');
+            if (taskRepository.hasTask(instanceId)) {
+                taskRepository.updateTaskValue(instanceId, { text: message.text });
+            }
+        } catch (err) {
+            // Ignore if TaskRepository not available (backward compatibility)
+        }
         const instance = this.getInstance(instanceId);
 
         if (instance) {

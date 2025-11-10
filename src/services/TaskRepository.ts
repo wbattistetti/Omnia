@@ -200,20 +200,17 @@ class TaskRepository {
 
     if (updates.value) {
       // Map value updates to instance fields
+      // NOTE: We use updateInstance directly to avoid circular calls
+      // InstanceRepository.updateMessage/updateDDT/updateIntents will sync back to TaskRepository
+      // So we only update the instance directly here
       if (updates.value.text !== undefined) {
         instanceUpdates.message = { text: updates.value.text };
-        // Also update via updateMessage for consistency
-        instanceRepository.updateMessage(taskId, { text: updates.value.text });
       }
       if (updates.value.ddt !== undefined) {
         instanceUpdates.ddt = updates.value.ddt;
-        // Also update via updateDDT for consistency
-        instanceRepository.updateDDT(taskId, updates.value.ddt, projectId);
       }
       if (updates.value.intents !== undefined) {
         instanceUpdates.problemIntents = updates.value.intents;
-        // Also update via updateIntents for consistency
-        instanceRepository.updateIntents(taskId, updates.value.intents);
       }
     }
 

@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
 import { typeToMode } from '../../../../../utils/normalizers';
-import { createRowWithTask } from '../../../../../utils/taskHelpers';
+import { createRowWithTask, getTaskIdFromRow, updateRowData } from '../../../../../utils/taskHelpers';
 
 interface UseNodeRowManagementProps {
     nodeId: string;
@@ -203,6 +203,12 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         });
 
         const finalRow = updatedRows.find(r => r.id === rowId);
+
+        // Migration: row.text is the task name/label (not the message content)
+        // task.value.text contains the actual message content (saved in instance)
+        // When row.text is updated, it's updating the task name, not the message content
+        // The message content is updated separately when editing the task in ResponseEditor
+
         console.log('🎯 [HANDLE_UPDATE_ROW][CALLING_ON_UPDATE]', {
             rowId,
             finalRowText: finalRow?.text,

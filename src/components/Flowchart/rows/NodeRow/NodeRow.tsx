@@ -356,15 +356,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
           // Migration: Create Task if row doesn't have taskId
           if (!row.taskId) {
-            // Create Task for this row (dual mode)
+            // Create Task for this row
             const task = createRowWithTask(instanceId, baseActId, label, projectId);
             // Update row to include taskId (will be persisted via onUpdate)
             (row as any).taskId = task.taskId;
           } else {
-            // Row already has Task, just update InstanceRepository for backward compatibility
-            instanceRepository.createInstance(baseActId, [], instanceId, projectId);
-            instanceRepository.updateMessage(instanceId, { text: label });
-            // Also update Task
+            // Row already has Task, update it
             const { taskRepository } = await import('../../../../services/TaskRepository');
             taskRepository.updateTaskValue(row.taskId, { text: label }, projectId);
           }
@@ -381,13 +378,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             oldText: instance.message?.text?.substring(0, 50) || 'N/A',
             newText: label.substring(0, 50)
           });
-          instanceRepository.updateMessage(instanceId, { text: label });
 
-          // Migration: Also update Task if row has taskId
-          if (row.taskId) {
-            const { taskRepository } = await import('../../../../services/TaskRepository');
-            taskRepository.updateTaskValue(row.taskId, { text: label }, getProjectId?.() || undefined);
-          }
+          // Migration: Update Task (TaskRepository internally updates InstanceRepository)
+          const taskId = getTaskIdFromRow(row);
+          const { taskRepository } = await import('../../../../services/TaskRepository');
+          taskRepository.updateTaskValue(taskId, { text: label }, getProjectId?.() || undefined);
         }
 
         // Verifica dopo l'aggiornamento
@@ -690,14 +685,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
           // Migration: Create or update Task
           if (!row.taskId) {
-            // Create Task for this row (dual mode)
+            // Create Task for this row
             const task = createRowWithTask(instanceId, key, '', projectId);
             (row as any).taskId = task.taskId;
           } else {
             // Update Task action
             updateRowTaskAction(row, key, projectId);
-            // Also create InstanceRepository for backward compatibility
-            instanceRepository.createInstance(key, [], instanceId, projectId);
           }
 
           const finalType = createdItem?.type || key;
@@ -804,14 +797,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
     // Migration: Create or update Task
     if (!row.taskId) {
-      // Create Task for this row (dual mode)
+      // Create Task for this row
       const task = createRowWithTask(instanceId, key, row.text || '', projectId);
       (row as any).taskId = task.taskId;
     } else {
       // Update Task action
       updateRowTaskAction(row, key, projectId);
-      // Also create InstanceRepository for backward compatibility
-      instanceRepository.createInstance(key, [], instanceId, projectId);
     }
     console.log('🎯 [INSTANCE_CREATION] Instance/Task created successfully', {
       projectId: projectId || 'N/A',
@@ -1006,8 +997,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         } else {
           // Update Task action
           updateRowTaskAction(row, actIdToUse, projectId);
-          // Also create InstanceRepository for backward compatibility
-          instanceRepository.createInstance(actIdToUse, initialIntents, instanceId, projectId);
         }
 
         console.log('[✅ INTELLISENSE] Instance/Task created in repository', {

@@ -10,13 +10,30 @@ import { generateId } from './idGenerator';
 
 /**
  * Get Task ID from a row
- * Backward compatible: if taskId is not present, uses row.id as instanceId
+ * Assumes taskId is always present (new model)
+ * If missing, creates Task automatically
  *
  * @param row - NodeRowData row
- * @returns Task ID (taskId if present, otherwise row.id)
+ * @returns Task ID
  */
 export function getTaskIdFromRow(row: NodeRowData): string {
-  return row.taskId || row.id;
+  if (row.taskId) {
+    return row.taskId;
+  }
+
+  // Auto-create Task if missing (migration helper)
+  console.warn('[getTaskIdFromRow] Row missing taskId, creating Task automatically', { rowId: row.id });
+  const task = taskRepository.getTask(row.id);
+  if (task) {
+    // Task exists, just add taskId to row
+    (row as any).taskId = task.id;
+    return task.id;
+  }
+
+  // Create Task for legacy row
+  const newTask = taskRepository.createTask('Message', row.text ? { text: row.text } : undefined, row.id);
+  (row as any).taskId = newTask.id;
+  return newTask.id;
 }
 
 /**
@@ -157,7 +174,7 @@ export function updateRowTaskAction(
 
 /**
  * Get row data (message text, DDT, intents, etc.)
- * Dual mode: Uses Task if row has taskId, otherwise uses InstanceRepository
+ * Uses TaskRepository (new model)
  *
  * @param row - NodeRowData row
  * @returns Row data object with message, ddt, intents, etc.
@@ -169,28 +186,14 @@ export function getRowData(row: NodeRowData): {
   action?: string;
 } {
   const taskId = getTaskIdFromRow(row);
+  const task = taskRepository.getTask(taskId);
 
-  // If row has taskId, use TaskRepository
-  if (row.taskId) {
-    const task = taskRepository.getTask(taskId);
-    if (task) {
-      return {
-        message: task.value?.text ? { text: task.value.text } : undefined,
-        ddt: task.value?.ddt,
-        intents: task.value?.intents,
-        action: task.action
-      };
-    }
-  }
-
-  // Fallback to InstanceRepository (backward compatibility)
-  const instance = instanceRepository.getInstance(taskId);
-  if (instance) {
+  if (task) {
     return {
-      message: instance.message,
-      ddt: instance.ddt,
-      intents: instance.problemIntents,
-      action: instance.actId
+      message: task.value?.text ? { text: task.value.text } : undefined,
+      ddt: task.value?.ddt,
+      intents: task.value?.intents,
+      action: task.action
     };
   }
 
@@ -199,7 +202,8 @@ export function getRowData(row: NodeRowData): {
 
 /**
  * Update row data (message text, DDT, intents, etc.)
- * Dual mode: Updates both Task and InstanceRepository
+ * Uses TaskRepository (new model)
+ * Note: TaskRepository internally updates InstanceRepository for compatibility
  *
  * @param row - NodeRowData row to update
  * @param data - Data to update (message, ddt, intents)
@@ -216,33 +220,19 @@ export function updateRowData(
 ): void {
   const taskId = getTaskIdFromRow(row);
 
-  // Update Task if row has taskId
-  if (row.taskId) {
-    const taskValue: Record<string, any> = {};
-    if (data.message?.text !== undefined) {
-      taskValue.text = data.message.text;
-    }
-    if (data.ddt !== undefined) {
-      taskValue.ddt = data.ddt;
-    }
-    if (data.intents !== undefined) {
-      taskValue.intents = data.intents;
-    }
-
-    if (Object.keys(taskValue).length > 0) {
-      taskRepository.updateTaskValue(taskId, taskValue, projectId);
-    }
-  }
-
-  // Also update InstanceRepository for backward compatibility
+  const taskValue: Record<string, any> = {};
   if (data.message?.text !== undefined) {
-    instanceRepository.updateMessage(taskId, data.message);
+    taskValue.text = data.message.text;
   }
   if (data.ddt !== undefined) {
-    instanceRepository.updateDDT(taskId, data.ddt, projectId);
+    taskValue.ddt = data.ddt;
   }
   if (data.intents !== undefined) {
-    instanceRepository.updateIntents(taskId, data.intents);
+    taskValue.intents = data.intents;
+  }
+
+  if (Object.keys(taskValue).length > 0) {
+    taskRepository.updateTaskValue(taskId, taskValue, projectId);
   }
 
   console.log('[updateRowData] Updated row data', {
@@ -256,31 +246,41 @@ export function updateRowData(
 }
 
 /**
- * Enrich loaded rows with taskId if Task exists
+ * Enrich loaded rows with taskId
  * This is called after loading instances from database to ensure rows have taskId
+ * Auto-creates Task if missing (migration helper)
+ *
+ * IMPORTANT: row.text is a descriptive label written by the user in the node row
+ * It remains fixed and is NOT synchronized with task.value.text
+ * task.value.text is the message content (saved in instance, edited in ResponseEditor)
+ * These are completely separate - row.text is just a label for the flowchart
  *
  * @param rows - Array of NodeRowData rows to enrich
- * @returns Array of rows with taskId set if Task exists
+ * @returns Array of rows with taskId set (row.text remains unchanged)
  */
 export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
   return rows.map(row => {
-    // If row already has taskId, keep it
+    // If row already has taskId, just return it (row.text stays as is)
     if (row.taskId) {
       return row;
     }
 
     // Check if Task exists for this row (by row.id)
-    const task = taskRepository.getTask(row.id);
-    if (task) {
-      // Row has a corresponding Task, add taskId
-      return {
-        ...row,
-        taskId: task.id
-      };
+    let task = taskRepository.getTask(row.id);
+    if (!task) {
+      // Auto-create Task for legacy row
+      // row.text is the user-written label, keep it as is
+      console.warn('[enrichRowsWithTaskId] Auto-creating Task for legacy row', { rowId: row.id });
+      task = taskRepository.createTask('Message', undefined, row.id);
     }
 
-    // No Task found, return row as-is (backward compatibility)
-    return row;
+    // Row has a corresponding Task, add taskId
+    // row.text remains unchanged - it's the user's label, not synced with task.value.text
+    return {
+      ...row,
+      taskId: task.id
+      // row.text stays as written by user - no synchronization
+    };
   });
 }
 

@@ -150,77 +150,77 @@ export default function TestValuesColumn({
   return (
     <>
       {/* Resize Handle - Always visible */}
-      <div
-        onMouseDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsResizing(true);
-          const startX = e.clientX;
-          const startWidth = testColumnWidth;
-
-          const onMouseMove = (ev: MouseEvent) => {
-            ev.preventDefault();
-            const delta = ev.clientX - startX;
-            const maxAllowed = typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.5) : 800;
-            const newWidth = Math.max(150, Math.min(maxAllowed, startWidth - delta));
-            handleResize(newWidth);
-          };
-
-          const onMouseUp = () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-            setIsResizing(false);
-          };
-
-          document.addEventListener('mousemove', onMouseMove);
-          document.addEventListener('mouseup', onMouseUp);
-          document.body.style.cursor = 'col-resize';
-          document.body.style.userSelect = 'none';
-        }}
-        style={{
-          width: 8,
-          minWidth: 8,
-          cursor: 'col-resize',
-          background: isResizing
-            ? 'rgba(59, 130, 246, 0.6)'
-            : 'rgba(148, 163, 184, 0.2)',
-          borderLeft: '1px solid rgba(148, 163, 184, 0.3)',
-          borderRight: '1px solid rgba(148, 163, 184, 0.3)',
-          flexShrink: 0,
-          position: 'relative',
-          zIndex: 10,
-          transition: isResizing ? 'none' : 'background 0.2s',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-        onMouseEnter={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.4)';
-            e.currentTarget.style.borderLeft = '1px solid rgba(59, 130, 246, 0.6)';
-            e.currentTarget.style.borderRight = '1px solid rgba(59, 130, 246, 0.6)';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.background = 'rgba(148, 163, 184, 0.2)';
-            e.currentTarget.style.borderLeft = '1px solid rgba(148, 163, 184, 0.3)';
-            e.currentTarget.style.borderRight = '1px solid rgba(148, 163, 184, 0.3)';
-          }
-        }}
-        title="Trascina per ridimensionare il pannello"
-      >
         <div
-          style={{
-            width: 2,
-            height: 20,
-            background: isResizing ? '#3b82f6' : 'rgba(148, 163, 184, 0.5)',
-            borderRadius: 1,
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsResizing(true);
+            const startX = e.clientX;
+            const startWidth = testColumnWidth;
+
+            const onMouseMove = (ev: MouseEvent) => {
+              ev.preventDefault();
+              const delta = ev.clientX - startX;
+            const maxAllowed = typeof window !== 'undefined' ? Math.min(800, window.innerWidth * 0.5) : 800;
+              const newWidth = Math.max(150, Math.min(maxAllowed, startWidth - delta));
+              handleResize(newWidth);
+            };
+
+            const onMouseUp = () => {
+              document.removeEventListener('mousemove', onMouseMove);
+              document.removeEventListener('mouseup', onMouseUp);
+              document.body.style.cursor = '';
+              document.body.style.userSelect = '';
+              setIsResizing(false);
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
           }}
-        />
-      </div>
+          style={{
+            width: 8,
+            minWidth: 8,
+            cursor: 'col-resize',
+            background: isResizing
+              ? 'rgba(59, 130, 246, 0.6)'
+              : 'rgba(148, 163, 184, 0.2)',
+            borderLeft: '1px solid rgba(148, 163, 184, 0.3)',
+            borderRight: '1px solid rgba(148, 163, 184, 0.3)',
+            flexShrink: 0,
+            position: 'relative',
+            zIndex: 10,
+            transition: isResizing ? 'none' : 'background 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onMouseEnter={(e) => {
+            if (!isResizing) {
+              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.4)';
+              e.currentTarget.style.borderLeft = '1px solid rgba(59, 130, 246, 0.6)';
+              e.currentTarget.style.borderRight = '1px solid rgba(59, 130, 246, 0.6)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isResizing) {
+              e.currentTarget.style.background = 'rgba(148, 163, 184, 0.2)';
+              e.currentTarget.style.borderLeft = '1px solid rgba(148, 163, 184, 0.3)';
+              e.currentTarget.style.borderRight = '1px solid rgba(148, 163, 184, 0.3)';
+            }
+          }}
+          title="Trascina per ridimensionare il pannello"
+        >
+          <div
+            style={{
+              width: 2,
+              height: 20,
+              background: isResizing ? '#3b82f6' : 'rgba(148, 163, 184, 0.5)',
+              borderRadius: 1,
+            }}
+          />
+        </div>
 
       {/* Test Values Column */}
       <div
@@ -300,13 +300,13 @@ export default function TestValuesColumn({
             position: 'relative',
           }}
         >
-          {testCases.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {testCases.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {testCases
                 .map((testCase, idx) => ({ testCase, originalIdx: idx }))
                 .sort((a, b) => a.testCase.localeCompare(b.testCase, undefined, { sensitivity: 'base' }))
                 .map(({ testCase, originalIdx }, displayIdx) => {
-                const result = testFunction(testCase);
+              const result = testFunction(testCase);
                 const isSelected = selectedRow === originalIdx;
                 const isHoveredRow = hoveredRow === originalIdx;
                 const noteValue = getNote(originalIdx, 'note');
@@ -316,8 +316,8 @@ export default function TestValuesColumn({
 
                 const isEditingValue = editingValue === originalIdx;
 
-                return (
-                  <div
+              return (
+                <div
                     key={originalIdx}
                     ref={(el) => {
                       if (el) rowRefs.current[originalIdx] = el;
@@ -337,30 +337,30 @@ export default function TestValuesColumn({
                         setHoveredRow(null);
                       }
                     }}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      gap: 8,
-                      padding: 8,
-                      border: '1px solid #334155',
-                      borderRadius: 6,
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    gap: 8,
+                    padding: 8,
+                    border: '1px solid #334155',
+                    borderRadius: 6,
                       background: isSelected ? 'rgba(59, 130, 246, 0.2)' : 'transparent', // Azzurrino se selezionata, trasparente altrimenti
                       cursor: 'pointer',
                       position: 'relative',
                       alignItems: 'center',
-                    }}
-                  >
+                  }}
+                >
 
                     {/* Left: Test Value - Editable */}
-                    <div
-                      style={{
-                        display: 'flex',
+                  <div
+                    style={{
+                      display: 'flex',
                         alignItems: 'flex-start',
                         flex: showNoteColumn ? '0 1 auto' : '1 1 auto',
                         minWidth: 100,
                         maxWidth: showNoteColumn ? '60%' : '100%',
-                        paddingRight: 8,
-                      }}
+                      paddingRight: 8,
+                    }}
                       onClick={(e) => {
                         if (!isEditingValue) {
                           e.stopPropagation();
@@ -426,8 +426,8 @@ export default function TestValuesColumn({
                             setEditingValueText(testCase);
                           }}
                         >
-                          {testCase}
-                        </span>
+                      {testCase}
+                    </span>
                       )}
                     </div>
 
@@ -445,14 +445,14 @@ export default function TestValuesColumn({
                         onClick={(e) => e.stopPropagation()}
                       >
                         {/* Trash icon - Delete row */}
-                        <button
+                    <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onTestCasesChange(testCases.filter((_, i) => i !== originalIdx));
                           }}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
                             borderRadius: 4,
                             padding: '4px',
                             cursor: 'pointer',
@@ -485,7 +485,7 @@ export default function TestValuesColumn({
                             border: 'none',
                             borderRadius: 4,
                             padding: '4px',
-                            cursor: 'pointer',
+                        cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -502,25 +502,25 @@ export default function TestValuesColumn({
                             if (!isRowNotaAttiva) {
                               e.currentTarget.style.background = 'transparent';
                             }
-                          }}
+                      }}
                           title={isRowNotaAttiva ? 'Nascondi nota' : 'Mostra nota'}
-                        >
+                    >
                           <MessageCircle size={14} />
-                        </button>
-                      </div>
+                    </button>
+                  </div>
                     )}
 
                     {/* Right: Note Column - Only if notaAttiva === true */}
                     {isRowNotaAttiva && (
-                      <div
-                        style={{
+                  <div
+                    style={{
                           flex: '1 1 auto',
                           minWidth: 150,
                           maxWidth: '40%',
                           borderLeft: '1px solid #334155',
                           paddingLeft: 8,
-                        }}
-                      >
+                    }}
+                  >
                         {isEditingNote ? (
                           <textarea
                             value={noteValue}
@@ -595,15 +595,15 @@ export default function TestValuesColumn({
                         )}
                       </div>
                     )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ color: '#64748b', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
-              Nessun test case. Aggiungi valori da testare.
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ color: '#64748b', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
+            Nessun test case. Aggiungi valori da testare.
+          </div>
+        )}
         </div>
       </div>
     </>

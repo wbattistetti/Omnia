@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { NodeRowData } from '../../../../../types/project';
+import { enrichRowsWithTaskId } from '../../../../../utils/taskHelpers';
 
 // Helper per ID robusti
 function newUid() {
@@ -24,11 +25,15 @@ function initRows(nodeId: string, rows?: NodeRowData[], nodeData?: any): NodeRow
 /**
  * Hook per gestire l'inizializzazione dei dati del nodo
  * Centralizza la logica di setup iniziale e validazione
+ * Migration: Enriches rows with taskId and syncs text from Task.value.text
  */
 export function useNodeInitialization(nodeId: string, data: any) {
     // Inizializzazione delle righe con memoization
+    // Migration: Enrich rows with taskId and sync text from Task
     const displayRows = useMemo(() => {
-        return initRows(nodeId, data.rows, data);
+        const initialRows = initRows(nodeId, data.rows, data);
+        // Enrich with taskId and sync text from task.value.text (Task is source of truth)
+        return enrichRowsWithTaskId(initialRows);
     }, [nodeId, data.rows, data.focusRowId]);
 
     // Validazione e normalizzazione dei dati
