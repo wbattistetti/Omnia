@@ -247,12 +247,12 @@ export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
     }
 
     // Check if Task exists for this row (by row.id)
-    let task = taskRepository.getTask(row.id);
+    // Rule: row.id === task.id, so task MUST exist in memory
+    const task = taskRepository.getTask(row.id);
     if (!task) {
-      // Auto-create Task for row without taskId
-      // row.text is the user-written label, keep it as is
-      console.warn('[enrichRowsWithTaskId] Auto-creating Task for row without taskId', { rowId: row.id });
-      task = taskRepository.createTask('Message', undefined, row.id);
+      // Task must exist - do not create it automatically
+      // This is an error condition: task should have been loaded from database
+      throw new Error(`[enrichRowsWithTaskId] Task not found for row ${row.id}. Task must exist in memory (loaded from database or created explicitly).`);
     }
 
     // Row has a corresponding Task, add taskId

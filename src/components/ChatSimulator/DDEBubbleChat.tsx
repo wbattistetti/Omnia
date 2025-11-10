@@ -18,7 +18,7 @@ import {
 } from './messageResolvers';
 import { useMessageEditing } from './hooks/useMessageEditing';
 import { useMessageHandling } from './hooks/useMessageHandling';
-import { useFlowOrchestrator } from './hooks/useFlowOrchestrator';
+import { useNewFlowOrchestrator } from './hooks/useNewFlowOrchestrator';
 import { Node, Edge } from 'reactflow';
 import { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
 
@@ -46,14 +46,53 @@ export default function DDEBubbleChat({
 }: DDEBubbleChatProps) {
   // Flow orchestrator reads directly from window.__flowNodes in flow mode
   // This ensures it always has the latest nodes/rows order without polling or synchronization
-  const orchestrator = useFlowOrchestrator(
-    mode === 'flow'
-      ? {
-          nodes: (() => { try { return (window as any).__flowNodes || propNodes || []; } catch { return propNodes || []; } })(),
-          edges: (() => { try { return (window as any).__flowEdges || propEdges || []; } catch { return propEdges || []; } })()
-        }
-      : { nodes: propNodes || [], edges: propEdges || [] }
-  );
+  // Using new compiler-based orchestrator
+  const getCurrentNodes = React.useCallback(() => {
+    if (mode === 'flow') {
+      try {
+        return (window as any).__flowNodes || propNodes || [];
+      } catch {
+        return propNodes || [];
+      }
+    }
+    return propNodes || [];
+  }, [mode, propNodes]);
+
+  const getCurrentEdges = React.useCallback(() => {
+    if (mode === 'flow') {
+      try {
+        return (window as any).__flowEdges || propEdges || [];
+      } catch {
+        return propEdges || [];
+      }
+    }
+    return propEdges || [];
+  }, [mode, propEdges]);
+
+  const orchestrator = useNewFlowOrchestrator({
+    nodes: getCurrentNodes(),
+    edges: getCurrentEdges(),
+    onMessage: (message) => {
+      // Add message to chat
+      setMessages((prev) => [...prev, {
+        id: message.id || `msg-${Date.now()}-${Math.random()}`,
+        type: 'bot',
+        text: message.text,
+        stepType: message.stepType || 'message',
+        color: getStepColor(message.stepType || 'message')
+      }]);
+    },
+    onDDTStart: (ddt) => {
+      // Set DDT as active
+      if (onUpdateDDT) {
+        onUpdateDDT(() => ddt);
+      }
+    },
+    onDDTComplete: () => {
+      // DDT completed, continue flow
+      // Engine will automatically continue
+    }
+  });
 
   // Determine current DDT: from orchestrator in flow mode, from prop in single-ddt mode
   const currentDDT = React.useMemo(() => {
@@ -154,9 +193,7 @@ export default function DDEBubbleChat({
     `${s.mode}|${s.currentIndex}|${s.currentSubId || 'main'}`
   ), []);
 
-  // Handle non-interactive messages from orchestrator (flow mode)
-  const [nonInteractiveMessages, setNonInteractiveMessages] = React.useState<Message[]>([]);
-  const lastDrainedIndexRef = React.useRef<number>(-1);
+  // Non-interactive messages are now handled directly by orchestrator.onMessage callback
 
   // Expose variables globally for ConditionEditor and other panels (flow mode)
   React.useEffect(() => {
@@ -185,119 +222,8 @@ export default function DDEBubbleChat({
     }
   }, [mode, state.mode, orchestrator.isRunning, orchestrator.onDDTCompleted]);
 
-  // Auto-drain all'avvio quando isRunning diventa true e currentNodeId è impostato
-  const hasStartedRef = React.useRef<boolean>(false);
-  React.useEffect(() => {
-    if (mode === 'flow' && orchestrator.isRunning && orchestrator.currentNodeId && !hasStartedRef.current) {
-      hasStartedRef.current = true;
-      // Wait a tick for orchestrator.start() to complete its drain
-      setTimeout(() => {
-        try {
-          console.log('[DDEBubbleChat][start-drain] Calling drainInitialMessages');
-        } catch { }
-        const result = orchestrator.drainInitialMessages();
-        lastDrainedIndexRef.current = result.nextIndex;
-
-        try {
-          console.log('[DDEBubbleChat][start-drain] Drain result', { messagesCount: result.messages.length, messages: result.messages.map(m => ({ text: m.text.substring(0, 50), role: m.role })) });
-        } catch { }
-
-        if (result.messages.length > 0) {
-          const newMessages: Message[] = result.messages.map((msg, idx) => ({
-            id: `noninteractive-start-${Date.now()}-${idx}`,
-            type: msg.role === 'user' ? 'user' : 'bot',
-            text: msg.text,
-            stepType: 'ask' as const,
-            color: getStepColor('ask')
-          }));
-          try {
-            console.log('[DDEBubbleChat][start-drain] Setting messages', { count: newMessages.length });
-          } catch { }
-          setNonInteractiveMessages(newMessages);
-        }
-
-        if (result.nextDDT) {
-          orchestrator.setCurrentDDT(result.nextDDT);
-        }
-      }, 10);
-    } else if (!orchestrator.isRunning) {
-      hasStartedRef.current = false;
-    }
-  }, [mode, orchestrator.isRunning, orchestrator.currentNodeId, orchestrator.drainInitialMessages, orchestrator.setCurrentDDT]);
-
-  // Track last node/act combination to detect changes
-  const lastNodeActKeyRef = React.useRef<string>('');
-
-  React.useEffect(() => {
-    if (mode === 'flow' && orchestrator.isRunning && orchestrator.currentNodeId) {
-      // Don't drain if we already have an active DDT (waiting for user input)
-      if (orchestrator.currentDDT) {
-        return;
-      }
-
-      const currentKey = `${orchestrator.currentNodeId}:${orchestrator.currentActIndex}`;
-
-      // Only drain if we haven't already drained from this exact position
-      // This prevents infinite loops - once we drain, we mark it and don't drain again
-      const alreadyDrained = lastNodeActKeyRef.current === currentKey && lastDrainedIndexRef.current >= orchestrator.currentActIndex;
-
-      if (!alreadyDrained) {
-        const result = orchestrator.drainSequentialNonInteractiveFrom(orchestrator.currentActIndex);
-
-        // Always update refs to mark we've drained from this position
-        lastDrainedIndexRef.current = result.nextIndex;
-        lastNodeActKeyRef.current = currentKey;
-
-        if (result.messages.length > 0) {
-          // Messages are already in PlayedMessage format (from playMessage/playDDT)
-          // They include stepType, color, textKey, etc. - just use them directly
-          setNonInteractiveMessages(prev => [...prev, ...result.messages]);
-        }
-
-        if (result.nextDDT) {
-          // Found interactive act - set DDT and update currentActIndex
-          // Setting currentDDT will prevent further draining in future useEffect runs
-          try {
-            const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
-            if (debugEnabled) {
-              console.log('[DDEBubbleChat][DDT_FOUND_IN_DRAIN]', {
-                nextIndex: result.nextIndex,
-                ddtId: result.nextDDT?.id,
-                ddtLabel: result.nextDDT?.label,
-                mainDataKind: Array.isArray(result.nextDDT?.mainData)
-                  ? result.nextDDT.mainData[0]?.kind
-                  : (result.nextDDT?.mainData as any)?.kind,
-                hasStartStep: Array.isArray(result.nextDDT?.mainData)
-                  ? !!result.nextDDT.mainData[0]?.steps?.start
-                  : !!(result.nextDDT?.mainData as any)?.steps?.start,
-                startStepDetails: Array.isArray(result.nextDDT?.mainData)
-                  ? (result.nextDDT.mainData[0]?.steps?.start ? {
-                      type: result.nextDDT.mainData[0].steps.start.type,
-                      escalationsCount: result.nextDDT.mainData[0].steps.start.escalations?.length || 0
-                    } : null)
-                  : ((result.nextDDT?.mainData as any)?.steps?.start ? {
-                      type: (result.nextDDT.mainData as any).steps.start.type,
-                      escalationsCount: (result.nextDDT.mainData as any).steps.start.escalations?.length || 0
-                    } : null)
-              });
-            }
-          } catch { }
-
-          orchestrator.setCurrentDDT(result.nextDDT);
-          orchestrator.updateCurrentActIndex(result.nextIndex);
-        } else {
-          // No interactive act found - update index to the position we reached
-          // This marks the position so we don't drain again from the same place
-          orchestrator.updateCurrentActIndex(result.nextIndex);
-        }
-      }
-    } else if (!orchestrator.isRunning) {
-      // Clear when stopped
-      setNonInteractiveMessages([]);
-      lastDrainedIndexRef.current = -1;
-      lastNodeActKeyRef.current = '';
-    }
-  }, [mode, orchestrator.isRunning, orchestrator.currentNodeId, orchestrator.currentDDT, orchestrator.drainSequentialNonInteractiveFrom, orchestrator.setCurrentDDT, orchestrator.updateCurrentActIndex]);
+  // Removed auto-start - user must click Start button manually
+  // This ensures tasks are loaded in memory before compilation
 
   React.useEffect(() => {
     // Skip if no DDT active
@@ -624,13 +550,10 @@ export default function DDEBubbleChat({
 
   // handleSend function moved to useMessageHandling hook (see hooks/useMessageHandling.ts)
 
-  // Combined messages: non-interactive (flow mode) + DDT messages
+  // Combined messages: all messages from orchestrator
   const allMessages = React.useMemo(() => {
-    if (mode === 'flow') {
-      return [...nonInteractiveMessages, ...messages];
-    }
     return messages;
-  }, [mode, nonInteractiveMessages, messages]);
+  }, [messages]);
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -654,14 +577,13 @@ export default function DDEBubbleChat({
           onClick={() => {
             reset();
             setMessages([]);
-            setNonInteractiveMessages([]);
             lastKeyRef.current = '';
             messageIdCounter.current = 0;
             initialMessageEmittedRef.current = '';
             setNoMatchCounts({});
             setNoInputCounts({});
             if (mode === 'flow') {
-              orchestrator.stop();
+              orchestrator.reset();
             }
           }}
           className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
@@ -735,8 +657,8 @@ export default function DDEBubbleChat({
 
           return null;
         })}
-        {/* Input field DOPO tutti i messaggi - only show when DDT is active */}
-        {currentDDT && (
+        {/* Input field DOPO tutti i messaggi - show when DDT is active OR task is WaitingUserInput */}
+        {(currentDDT || (mode === 'flow' && orchestrator.currentTask?.state === 'WaitingUserInput')) && (
           <div className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3">
             <input
               type="text"
@@ -752,15 +674,38 @@ export default function DDEBubbleChat({
                 if (e.key === 'Enter') {
                   const v = inlineDraft.trim();
                   if (!v) return;
-                  // 🆕 Freeze text: save it so we can clear input when it appears as a message
-                  // The text will become a frozen message label, then engine processes it
-                  sentTextRef.current = v;
-                  void handleSend(v);
+
+                  // If there's a DDT active, use handleSend (existing DDT flow)
+                  if (currentDDT) {
+                    // 🆕 Freeze text: save it so we can clear input when it appears as a message
+                    sentTextRef.current = v;
+                    void handleSend(v);
+                  } else if (mode === 'flow' && orchestrator.currentTask?.state === 'WaitingUserInput') {
+                    // NEW: Handle input for WaitingUserInput task (interactive message in recovery)
+                    // Add user message to chat
+                    setMessages((prev) => [...prev, {
+                      id: `msg-${Date.now()}-${Math.random()}`,
+                      type: 'user',
+                      text: v,
+                      matchStatus: 'match'
+                    }]);
+
+                    // Complete the waiting task
+                    const waitingTask = orchestrator.currentTask;
+                    if (waitingTask && orchestrator.onDDTCompleted) {
+                      // For interactive messages, we don't have a retrievalState, so use 'saturated'
+                      orchestrator.onDDTCompleted('saturated');
+                    }
+
+                    // Clear input
+                    sentTextRef.current = v;
+                    setInlineDraft('');
+                  }
                   // Focus will be handled after input is cleared (see useEffect below)
                 }
               }}
               autoFocus
-              disabled={!currentDDT}
+              disabled={!currentDDT && !(mode === 'flow' && orchestrator.currentTask?.state === 'WaitingUserInput')}
             />
           </div>
         )}
