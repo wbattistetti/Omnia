@@ -140,20 +140,30 @@ class TaskRepository {
 
   /**
    * Get Task by ID
-   * Converts from InstanceRepository on-the-fly
+   * FASE 1B: Usa storage interno, sincronizza con InstanceRepository se necessario
    */
   getTask(taskId: string, actType?: string): Task | null {
+    // FASE 1B: Prima controlla storage interno
+    const cachedTask = this.tasks.get(taskId);
+    if (cachedTask) {
+      return cachedTask;
+    }
+
+    // Se non in cache, carica da InstanceRepository e sincronizza
     const instance = instanceRepository.getInstance(taskId);
     if (!instance) {
       return null;
     }
 
-    return this.instanceToTask(instance, actType);
+    const task = this.instanceToTask(instance, actType);
+    // Sincronizza nello storage interno
+    this.tasks.set(taskId, task);
+    return task;
   }
 
   /**
    * Create a new Task
-   * Creates underlying ActInstance in InstanceRepository
+   * FASE 1B: Crea nello storage interno E in InstanceRepository (sincronizzazione)
    */
   createTask(action: string, value?: Record<string, any>, taskId?: string, projectId?: string): Task {
     const actId = this.mapActionToActId(action);
@@ -172,7 +182,19 @@ class TaskRepository {
       initialIntents = value?.intents;
     }
 
-    // Create instance in InstanceRepository
+    // FASE 1B: Crea Task nello storage interno
+    const task: Task = {
+      id: finalTaskId,
+      action,
+      value: value || undefined,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Salva nello storage interno
+    this.tasks.set(finalTaskId, task);
+
+    // FASE 1B: Sincronizza con InstanceRepository (per sicurezza durante migrazione)
     const instance = instanceRepository.createInstance(
       actId,
       initialIntents,
@@ -188,29 +210,46 @@ class TaskRepository {
       instanceRepository.updateInstance(finalTaskId, { message: initialMessage }, projectId);
     }
 
-    // Convert to Task
-    return this.instanceToTask(instance, action);
+    return task;
   }
 
   /**
    * Update Task
-   * Updates underlying ActInstance in InstanceRepository
+   * FASE 1B: Aggiorna nello storage interno E in InstanceRepository (sincronizzazione)
    */
   updateTask(taskId: string, updates: Partial<Task>, projectId?: string): boolean {
-    const existingInstance = instanceRepository.getInstance(taskId);
-    if (!existingInstance) {
-      console.warn('[TaskRepository] Task not found:', taskId);
-      return false;
+    // FASE 1B: Prima controlla storage interno
+    const existingTask = this.tasks.get(taskId);
+    if (!existingTask) {
+      // Se non in cache, prova a caricare da InstanceRepository
+      const instance = instanceRepository.getInstance(taskId);
+      if (!instance) {
+        console.warn('[TaskRepository] Task not found:', taskId);
+        return false;
+      }
+      // Sincronizza nello storage interno
+      const task = this.instanceToTask(instance);
+      this.tasks.set(taskId, task);
     }
 
-    // Convert Task updates to ActInstance updates
+    // Aggiorna nello storage interno
+    const currentTask = this.tasks.get(taskId)!;
+    const updatedTask: Task = {
+      ...currentTask,
+      ...updates,
+      updatedAt: updates.updatedAt || new Date(),
+      // Merge value: se updates.value è undefined, mantieni currentTask.value
+      // Se updates.value è definito, fa merge profondo
+      value: updates.value !== undefined
+        ? { ...(currentTask.value || {}), ...updates.value }
+        : currentTask.value
+    };
+    this.tasks.set(taskId, updatedTask);
+
+    // FASE 1B: Sincronizza con InstanceRepository (per sicurezza durante migrazione)
     const instanceUpdates: Partial<ActInstance> = {};
 
     if (updates.value) {
-      // Map value updates to instance fields
-      // NOTE: We use updateInstance directly to avoid circular calls
-      // InstanceRepository.updateMessage/updateDDT/updateIntents will sync back to TaskRepository
-      // So we only update the instance directly here
       if (updates.value.text !== undefined) {
         instanceUpdates.message = { text: updates.value.text };
       }
@@ -251,36 +290,49 @@ class TaskRepository {
 
   /**
    * Delete Task
-   * Deletes underlying ActInstance from InstanceRepository
-   * Note: Database deletion will be handled by InstanceRepository's saveAllInstancesToDatabase
+   * FASE 1B: Rimuove da storage interno E da InstanceRepository (sincronizzazione)
    */
   deleteTask(taskId: string, projectId?: string): boolean {
-    // Delete from InstanceRepository (in-memory)
-    // Database cleanup will happen when saveAllInstancesToDatabase is called
-    return instanceRepository.deleteInstance(taskId);
+    // FASE 1B: Rimuovi da storage interno
+    const deleted = this.tasks.delete(taskId);
+
+    // FASE 1B: Sincronizza con InstanceRepository
+    const instanceDeleted = instanceRepository.deleteInstance(taskId);
+
+    return deleted || instanceDeleted;
   }
 
   /**
    * Check if Task exists
+   * FASE 1B: Controlla prima storage interno, poi InstanceRepository
    */
   hasTask(taskId: string): boolean {
+    // FASE 1B: Prima controlla storage interno
+    if (this.tasks.has(taskId)) {
+      return true;
+    }
+
+    // Se non in cache, controlla InstanceRepository
     return instanceRepository.getInstance(taskId) !== undefined;
   }
 
   /**
-   * Get all Tasks (converts all instances)
+   * Get all Tasks
+   * FASE 1B: Usa storage interno, sincronizza con InstanceRepository se necessario
    */
   getAllTasks(): Task[] {
-    // Get all instances from InstanceRepository and convert to Tasks
-    const allInstances = instanceRepository.getAllInstances();
-    const tasks: Task[] = [];
-
-    for (const instance of allInstances) {
-      const action = taskTemplateService.mapActionIdToTemplateId(instance.actId);
-      tasks.push(this.instanceToTask(instance, action));
+    // FASE 1B: Se storage interno è vuoto, sincronizza da InstanceRepository
+    if (this.tasks.size === 0) {
+      const allInstances = instanceRepository.getAllInstances();
+      for (const instance of allInstances) {
+        const action = taskTemplateService.mapActionIdToTemplateId(instance.actId);
+        const task = this.instanceToTask(instance, action);
+        this.tasks.set(task.id, task);
+      }
     }
 
-    return tasks;
+    // Ritorna tutti i task dallo storage interno
+    return Array.from(this.tasks.values());
   }
 
   // ============================================
