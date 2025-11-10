@@ -6,7 +6,7 @@ import { useIntentStore } from './state/intentStore';
 import { useTestStore } from './state/testStore';
 import type { ProblemPayload, ProblemIntent, ProblemEditorState } from '../../types/project';
 import { ProjectDataService } from '../../services/ProjectDataService';
-import { instanceRepository } from '../../services/InstanceRepository';
+import { taskRepository } from '../../services/TaskRepository';
 import { Brain, Loader2 } from 'lucide-react';
 
 function toEditorState(payload?: ProblemPayload) {
@@ -57,26 +57,21 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
     useIntentStore.setState({ intents });
     useTestStore.setState({ items: tests } as any);
 
-    // Update InstanceRepository with current intents
+    // FASE 6D: Update TaskRepository with current intents
     try {
       const instanceId = (props.act as any)?.instanceId;
       if (instanceId) {
-        // console.log('✅ [IntentEditor] Extracted instanceId:', instanceId); // RIMOSSO
+        const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
         const problemIntents = fromEditorState().intents.map(it => ({
           id: it.id,
           name: it.name,
           threshold: it.threshold,
           phrases: it.phrases
         }));
-        // console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents); // RIMOSSO
-        instanceRepository.updateIntents(instanceId, problemIntents);
-        // console.log('✅ [IntentEditor] Updated InstanceRepository with intents', { // RIMOSSO
-        //   instanceId,
-        //   intentsCount: problemIntents.length
-        // });
+        taskRepository.updateTaskValue(instanceId, { intents: problemIntents }, pid || undefined);
       }
     } catch (err) {
-      console.warn('[IntentEditor] Could not update InstanceRepository:', err);
+      console.warn('[IntentEditor] Could not update TaskRepository:', err);
     }
 
     // Debounced persist back to act shadow (local only; actual write to act model should be done by host when available)
@@ -89,9 +84,10 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           // Also reflect into in-memory project graph so explicit Save includes it
           try { ProjectDataService.setAgentActProblemById(props.act.id, next); } catch { }
 
-          // Update InstanceRepository when intents change
+          // FASE 6D: Update TaskRepository when intents change
           try {
             const instanceId = (props.act as any)?.instanceId;
+            const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
             console.log('[IntentEditor][SAVE][DEBOUNCED]', {
               actId: props.act.id,
               instanceId: instanceId || 'NOT_FOUND',
@@ -114,7 +110,7 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
                 phrases: it.phrases
               }));
 
-              console.log('[IntentEditor][UPDATE_INSTANCE_REPO][START]', {
+              console.log('[IntentEditor][UPDATE_TASK_REPO][START]', {
                 instanceId,
                 intentsCount: problemIntents.length,
                 firstIntent: problemIntents[0] ? {
@@ -125,22 +121,21 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
                 } : null
               });
 
-              const updated = instanceRepository.updateIntents(instanceId, problemIntents);
+              taskRepository.updateTaskValue(instanceId, { intents: problemIntents }, pid || undefined);
 
-              console.log('[IntentEditor][UPDATE_INSTANCE_REPO][RESULT]', {
+              console.log('[IntentEditor][UPDATE_TASK_REPO][RESULT]', {
                 instanceId,
-                updated,
-                note: updated ? 'InstanceRepository updated in memory - will be saved to DB on project save' : 'FAILED - instance not found'
+                note: 'TaskRepository updated - will be saved to DB on project save'
               });
             } else {
-              console.warn('[IntentEditor][UPDATE_INSTANCE_REPO][SKIP]', {
+              console.warn('[IntentEditor][UPDATE_TASK_REPO][SKIP]', {
                 actId: props.act.id,
                 reason: 'instanceId not found in act',
                 actKeys: Object.keys(props.act)
               });
             }
           } catch (err) {
-            console.error('[IntentEditor][UPDATE_INSTANCE_REPO][ERROR]', {
+            console.error('[IntentEditor][UPDATE_TASK_REPO][ERROR]', {
               actId: props.act.id,
               error: String(err),
               stack: err?.stack?.substring(0, 200)
@@ -156,22 +151,21 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           localStorage.setItem(key, JSON.stringify(next));
           try { ProjectDataService.setAgentActProblemById(props.act.id, next); } catch { }
 
-          // Update InstanceRepository when tests change (which might affect intents)
+          // FASE 6D: Update TaskRepository when tests change (which might affect intents)
           try {
             const instanceId = (props.act as any)?.instanceId;
             if (instanceId) {
-              // console.log('✅ [IntentEditor] Extracted instanceId:', instanceId); // RIMOSSO
+              const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
               const problemIntents = next.intents.map(it => ({
                 id: it.id,
                 name: it.name,
                 threshold: it.threshold,
                 phrases: it.phrases
               }));
-              // console.log('✅ [IntentEditor] OutIntents structure before saving:', problemIntents); // RIMOSSO
-              instanceRepository.updateIntents(instanceId, problemIntents);
+              taskRepository.updateTaskValue(instanceId, { intents: problemIntents }, pid || undefined);
             }
           } catch (err) {
-            console.warn('[IntentEditor] Could not update InstanceRepository:', err);
+            console.warn('[IntentEditor] Could not update TaskRepository:', err);
           }
         } catch { }
       }, 700);

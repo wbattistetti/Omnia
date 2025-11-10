@@ -2,7 +2,7 @@ import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot } from '
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
 import { classifyActMode } from '../../../nlp/actInteractivity';
 import type { ActType } from '../../types/project';
-import { instanceRepository } from '../../../services/InstanceRepository';
+import { taskRepository } from '../../../services/TaskRepository';
 
 export type ActMode = 'Message' | 'DataRequest' | 'DataConfirmation';
 
@@ -51,7 +51,7 @@ export function resolveActMode(row: any, act: any): ActMode {
 }
 
 export function hasActDDT(row: any, act: any): boolean {
-  // ✅ CONTROLLA SOLO L'ISTANZA (non più row?.ddt o act?.ddt)
+  // FASE 6A: CONTROLLA IL TASK (non più InstanceRepository)
   const actType = resolveActType(row, act);
   const instanceId = row?.id || row?.instanceId;
 
@@ -60,20 +60,20 @@ export function hasActDDT(row: any, act: any): boolean {
   }
 
   try {
-    const instance = instanceRepository.getInstance(instanceId);
+    const task = taskRepository.getTask(instanceId);
 
-    if (!instance) {
+    if (!task) {
       return false;
     }
 
     // Per Message: controlla se c'è un messaggio
     if (actType === 'Message') {
-      const hasMessage = Boolean(instance?.message?.text && instance.message.text.trim().length > 0);
+      const hasMessage = Boolean(task?.value?.text && task.value.text.trim().length > 0);
       return hasMessage;
     }
 
-    // Per altri tipi: controlla se c'è un DDT nell'istanza
-    const hasDDT = Boolean(instance?.ddt);
+    // Per altri tipi: controlla se c'è un DDT nel Task
+    const hasDDT = Boolean(task?.value?.ddt);
     return hasDDT;
   } catch (err) {
     return false;

@@ -1,6 +1,6 @@
 import { IntellisenseItem } from "../types/intellisense";
 import { asArray, collectProblemRows, dedupeByKey, extractIntentsFromProblemRow, sortItems } from "../utils/intellisenseUtils";
-import { instanceRepository } from './InstanceRepository';
+import { taskRepository } from './TaskRepository';
 
 // Provider di dati (iniettabili → no window globals)
 export type GraphProviders = {
@@ -55,20 +55,20 @@ export class IntellisenseService {
             return [];
         }
 
-        // L'ID della row È l'instanceId
-        const instanceId = problemRow?.id;
+        // FASE 7A: L'ID della row è il taskId
+        const taskId = problemRow?.id;
 
-        // Cerca l'istanza nel InstanceRepository
-        const instance = instanceRepository.getInstance(instanceId);
+        // FASE 7A: Cerca il Task nel TaskRepository
+        const task = taskRepository.getTask(taskId);
 
-        if (!instance) {
-            // L'istanza non esiste ancora - restituiamo array vuoto
-            console.log('[IntellisenseService] Instance not found, returning empty intents');
+        if (!task) {
+            // Il Task non esiste ancora - restituiamo array vuoto
+            console.log('[IntellisenseService] Task not found, returning empty intents');
             return [];
         }
 
-        // Prendi gli intent dall'istanza
-        const intents = instance.problemIntents || [];
+        // FASE 7A: Prendi gli intent dal Task
+        const intents = task.value?.intents || [];
 
         // Converti gli intent in IntellisenseItem
         return intents.map((intent: any) => ({

@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
-import { instanceRepository } from '../../../services/InstanceRepository';
-import { useProjectData } from '../../../context/ProjectDataContext';
+import { taskRepository } from '../../../services/TaskRepository';
+import { useProjectData, useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { findAgentAct } from '../utils/actVisuals';
+import { createRowWithTask } from '../../../utils/taskHelpers';
 
 export function useIntellisenseHandlers(
   nodeIntellisenseTarget: string | null,
@@ -10,6 +11,7 @@ export function useIntellisenseHandlers(
   setNodeIntellisenseTarget: any
 ) {
   const { data: projectData } = useProjectData();
+  const pdUpdate = useProjectDataUpdate();
 
   // Handler per gestire selezione items nell'IntellisenseMenu
   const handleIntellisenseSelect = useCallback((item: any) => {
@@ -36,17 +38,26 @@ export function useIntellisenseHandlers(
       const templateAct = projectData ? findAgentAct(projectData, { actId }) : null;
       const initialIntents = templateAct?.problem?.intents || [];
 
-      // Crea istanza nel repository
+      // FASE 6C: Crea Task nel TaskRepository (createRowWithTask gestisce anche InstanceRepository per compatibilità)
       if (!actId) {
-        console.error('[INTELLISENSE] Cannot create instance: actId is undefined');
+        console.error('[INTELLISENSE] Cannot create Task: actId is undefined');
         return;
       }
 
-      const instance = instanceRepository.createInstance(actId, initialIntents);
-      instanceId = instance.instanceId;
+      const projectId = pdUpdate?.getCurrentProjectId() || undefined;
+      // Genera un ID temporaneo per la row (sarà sostituito quando la row viene creata definitivamente)
+      const tempRowId = `${nodeIntellisenseTarget}-${Date.now()}`;
+      const rowWithTask = createRowWithTask(tempRowId, actId, '', projectId);
+      instanceId = rowWithTask.taskId;
 
-      console.log("✅ [INTELLISENSE] Created instance for ProblemClassification:", {
+      // Se ci sono intents iniziali, aggiorna il Task
+      if (initialIntents.length > 0) {
+        taskRepository.updateTaskValue(instanceId, { intents: initialIntents }, projectId);
+      }
+
+      console.log("✅ [INTELLISENSE] Created Task for ProblemClassification:", {
         instanceId,
+        taskId: rowWithTask.taskId,
         actId,
         initialIntentsCount: initialIntents.length,
         timestamp: Date.now()

@@ -132,7 +132,8 @@ export default function IntentListEditor({
   };
 
   const handleClearAll = () => {
-    instanceRepository.updateIntents(instanceId, []);
+    // FASE 6: Use TaskRepository (already migrated in previous phases)
+    taskRepository.updateTaskValue(instanceId, { intents: [] });
     onIntentChange?.([]);
   };
 

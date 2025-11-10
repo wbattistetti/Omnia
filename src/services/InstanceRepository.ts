@@ -112,15 +112,8 @@ class InstanceRepository {
      * @returns True se aggiornato con successo, false altrimenti
      */
     updateDDT(instanceId: string, ddt: any, projectId?: string): boolean {
-        // Migration: Sync with TaskRepository if Task exists
-        try {
-            const { taskRepository } = require('./TaskRepository');
-            if (taskRepository.hasTask(instanceId)) {
-                taskRepository.updateTaskValue(instanceId, { ddt }, projectId);
-            }
-        } catch (err) {
-            // Ignore if TaskRepository not available (backward compatibility)
-        }
+        // FASE 6: Sincronizzazione rimossa - tutti i componenti usano direttamente TaskRepository
+        // TaskRepository sincronizza con InstanceRepository quando aggiorna, quindi non serve sincronizzazione inversa
 
         console.log('[InstanceRepository][updateDDT][START]', {
             instanceId,
@@ -199,15 +192,8 @@ class InstanceRepository {
      * @returns True se aggiornata con successo, false altrimenti
      */
     updateIntents(instanceId: string, intents: ProblemIntent[]): boolean {
-        // Migration: Sync with TaskRepository if Task exists
-        try {
-            const { taskRepository } = require('./TaskRepository');
-            if (taskRepository.hasTask(instanceId)) {
-                taskRepository.updateTaskValue(instanceId, { intents });
-            }
-        } catch (err) {
-            // Ignore if TaskRepository not available (backward compatibility)
-        }
+        // FASE 6: Sincronizzazione rimossa - tutti i componenti usano direttamente TaskRepository
+        // TaskRepository sincronizza con InstanceRepository quando aggiorna, quindi non serve sincronizzazione inversa
 
         console.log('[InstanceRepository][UPDATE_INTENTS][START]', {
             instanceId,
@@ -261,15 +247,8 @@ class InstanceRepository {
      * @returns True se aggiornata con successo, false altrimenti
      */
     updateMessage(instanceId: string, message: { text: string }): boolean {
-        // Migration: Sync with TaskRepository if Task exists
-        try {
-            const { taskRepository } = require('./TaskRepository');
-            if (taskRepository.hasTask(instanceId)) {
-                taskRepository.updateTaskValue(instanceId, { text: message.text });
-            }
-        } catch (err) {
-            // Ignore if TaskRepository not available (backward compatibility)
-        }
+        // FASE 6: Sincronizzazione rimossa - tutti i componenti usano direttamente TaskRepository
+        // TaskRepository sincronizza con InstanceRepository quando aggiorna, quindi non serve sincronizzazione inversa
         const instance = this.getInstance(instanceId);
 
         if (instance) {
