@@ -25,11 +25,40 @@ class TaskTemplateService {
   }
 
   /**
-   * Load templates from Action Catalog JSON file
+   * Load templates from Factory database
    */
   private async loadTemplates(): Promise<void> {
     try {
-      // Load Action Catalog (same way as existing code)
+      // Try to load from Factory first
+      const factoryResponse = await fetch('/api/factory/task-templates');
+      if (factoryResponse.ok) {
+        const factoryTemplates = await factoryResponse.json();
+        if (Array.isArray(factoryTemplates) && factoryTemplates.length > 0) {
+          factoryTemplates.forEach((template: any) => {
+            // Map database document to TaskTemplate
+            const mapped: TaskTemplate = {
+              id: template.id || template._id,
+              label: template.label || '',
+              description: template.description || '',
+              icon: template.icon || 'Circle',
+              color: template.color || 'text-gray-500',
+              signature: template.signature,
+              valueSchema: template.valueSchema,
+              scope: template.scope,
+              industry: template.industry,
+              createdAt: template.createdAt ? new Date(template.createdAt) : undefined,
+              updatedAt: template.updatedAt ? new Date(template.updatedAt) : undefined
+            };
+            this.templates.set(mapped.id, mapped);
+          });
+          this.initialized = true;
+          console.log('[TaskTemplateService] Loaded', this.templates.size, 'templates from Factory');
+          return;
+        }
+      }
+
+      // Fallback: Load from Action Catalog JSON file (legacy)
+      console.warn('[TaskTemplateService] Factory templates empty, falling back to actionsCatalog.json');
       const response = await fetch('/data/actionsCatalog.json');
       if (!response.ok) {
         console.warn('[TaskTemplateService] Failed to load actionsCatalog.json');
@@ -50,12 +79,50 @@ class TaskTemplateService {
       this.addActTypeTemplates();
 
       this.initialized = true;
-      console.log('[TaskTemplateService] Initialized with', this.templates.size, 'templates');
+      console.log('[TaskTemplateService] Initialized with', this.templates.size, 'templates from Action Catalog');
     } catch (error) {
       console.error('[TaskTemplateService] Error loading templates:', error);
-      // Add ActType templates even if Action Catalog fails
+      // Add ActType templates even if loading fails
       this.addActTypeTemplates();
       this.initialized = true;
+    }
+  }
+
+  /**
+   * Load project-specific templates
+   */
+  async loadProjectTemplates(projectId: string): Promise<void> {
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/task-templates`);
+      if (!response.ok) {
+        console.warn('[TaskTemplateService] Failed to load project templates');
+        return;
+      }
+
+      const data = await response.json();
+      const projectTemplates = Array.isArray(data.items) ? data.items : [];
+
+      // Merge project templates (override factory templates with same ID)
+      projectTemplates.forEach((template: any) => {
+        const mapped: TaskTemplate = {
+          id: template.id || template._id,
+          label: template.label || '',
+          description: template.description || '',
+          icon: template.icon || 'Circle',
+          color: template.color || 'text-gray-500',
+          signature: template.signature,
+          valueSchema: template.valueSchema,
+          scope: template.scope,
+          industry: template.industry,
+          createdAt: template.createdAt ? new Date(template.createdAt) : undefined,
+          updatedAt: template.updatedAt ? new Date(template.updatedAt) : undefined
+        };
+        this.templates.set(mapped.id, mapped);
+      });
+
+      console.log('[TaskTemplateService] Loaded', projectTemplates.length, 'project templates');
+    } catch (error) {
+      console.error('[TaskTemplateService] Error loading project templates:', error);
     }
   }
 

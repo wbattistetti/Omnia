@@ -240,7 +240,7 @@ export default function NLPExtractorProfileEditor({
       return;
     }
 
-    // FASE 3: Read intents from Task (TaskRepository syncs with InstanceRepository automatically)
+    // Read intents from Task
     const task = taskRepository.getTask(act.instanceId);
     if (!task?.value?.intents) return;
 

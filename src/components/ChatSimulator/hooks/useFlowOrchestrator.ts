@@ -3,7 +3,8 @@ import { Node, Edge } from 'reactflow';
 import { NodeData, EdgeData } from '../../Flowchart/types/flowTypes';
 import { useProjectData } from '../../../context/ProjectDataContext';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
-import { instanceRepository } from '../../../services/InstanceRepository';
+// TODO: Flow orchestrator will be refactored - temporarily isolated
+// import { instanceRepository } from '../../../services/InstanceRepository';
 import { getDDTForRow, validateDDT, isRowInteractive } from './rowHelpers';
 import { playMessage, type PlayedMessage } from './flowRowPlayer';
 
@@ -167,9 +168,11 @@ export function useFlowOrchestrator({ nodes, edges }: UseFlowOrchestratorProps) 
 
   const actMessage = useCallback((row: any) => {
     // For Message acts, read text from instance (row.id is the instanceId)
+    // TODO: Flow orchestrator will be refactored - temporarily isolated
     const instanceId = row?.id;
     if (instanceId) {
-      const instance = instanceRepository.getInstance(instanceId);
+      // const instance = instanceRepository.getInstance(instanceId);
+      const instance = null; // Temporarily disabled - will be refactored
       try {
         console.log('[FlowOrchestrator][actMessage] Checking instance', {
           instanceId,

@@ -22,7 +22,7 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
 
   cacheLoadingPromise = (async () => {
     try {
-      const res = await fetch('/api/factory/act-type-patterns');
+      const res = await fetch('/api/factory/task-heuristics');
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -63,8 +63,8 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
 
       return patternCache;
     } catch (error) {
-      console.error('[ACT_TYPE_PATTERNS] ERROR: Failed to load patterns from database:', error);
-      console.error('[ACT_TYPE_PATTERNS] The system requires patterns to be loaded from the database. Please ensure the database is populated.');
+      console.error('[TASK_HEURISTICS] ERROR: Failed to load patterns from database:', error);
+      console.error('[TASK_HEURISTICS] The system requires patterns to be loaded from the database. Please ensure the database is populated.');
       cacheLoadingPromise = null; // Reset per permettere retry
       throw error; // Lancia errore invece di fallback - forziamo l'uso del database
     }

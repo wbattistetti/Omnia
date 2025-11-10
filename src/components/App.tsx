@@ -34,17 +34,7 @@ function AppInner() {
   const [showChat, setShowChat] = useState(true); // nuovo stato
   const { setActionsCatalog } = useSetActionsCatalog();
 
-  // Non carichiamo istanze all'avvio senza un progetto aperto
-  // Le istanze verranno caricate quando si apre un progetto (in AppContent.tsx)
-  // React.useEffect(() => {
-  //   instanceRepository.loadInstancesFromDatabase().then(success => {
-  //     if (success) {
-  //       console.log('✅ [App] Instances loaded from database');
-  //     } else {
-  //       console.log('⚠️ [App] Failed to load instances from database (continuing anyway)');
-  //     }
-  //   });
-  // }, []);
+  // Tasks are loaded when a project is opened (in AppContent.tsx)
 
   React.useEffect(() => {
     fetch('/data/actionsCatalog.json')

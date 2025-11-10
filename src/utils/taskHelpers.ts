@@ -47,7 +47,7 @@ export function isRowMigrated(row: NodeRowData): boolean {
 }
 
 /**
- * Get instance ID from a row (for backward compatibility with InstanceRepository)
+ * Get instance ID from a row
  *
  * @param row - NodeRowData row
  * @returns Instance ID (taskId if present, otherwise row.id)

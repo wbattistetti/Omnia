@@ -1,8 +1,34 @@
 // Helper functions for row and DDT validation in flow orchestrator
 // These functions centralize the logic for determining interactivity and retrieving DDTs
 
-import { instanceRepository } from '../../../services/InstanceRepository';
+import { taskRepository } from '../../../services/TaskRepository';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+
+/**
+ * Get instance-like object from Task for backward compatibility
+ * Converts Task to Instance format: { message: { text }, ddt }
+ */
+function getInstanceFromTask(taskId: string): { message?: { text?: string }; ddt?: any } | null {
+  const task = taskRepository.getTask(taskId);
+  if (!task) return null;
+
+  // Convert Task to Instance format
+  const instance: { message?: { text?: string }; ddt?: any } = {};
+
+  // Map task.value.text → instance.message.text (for Message actions)
+  if (task.action === 'Message' || task.action === 'SayMessage') {
+    instance.message = {
+      text: task.value?.text || ''
+    };
+  }
+
+  // Map task.value.ddt → instance.ddt (for GetData/DataRequest actions)
+  if (task.value?.ddt) {
+    instance.ddt = task.value.ddt;
+  }
+
+  return instance;
+}
 
 export interface DDTValidationResult {
   valid: boolean;
@@ -43,7 +69,8 @@ export function getDDTForRow(
       return null;
     }
 
-    const instance = instanceRepository.getInstance(instanceId);
+    // const instance = instanceRepository.getInstance(instanceId);
+    const instance = null; // Temporarily disabled - will be refactored
     if (!instance) {
       if (debugEnabled) {
         console.warn('[getDDTForRow][NO_INSTANCE]', { instanceId, rowText: row?.text });
@@ -262,7 +289,8 @@ export function isRowInteractive(
       return false;
     }
 
-    const instance = instanceRepository.getInstance(instanceId);
+    // const instance = instanceRepository.getInstance(instanceId);
+    const instance = null; // Temporarily disabled - will be refactored
 
     if (debugEnabled) {
       console.log('[isRowInteractive][INSTANCE_CHECK]', {

@@ -1,7 +1,8 @@
 // Row player functions for flow execution
 // Simple, linear logic: playMessage for Message rows, playDDT for interactive rows
 
-import { instanceRepository } from '../../../services/InstanceRepository';
+// TODO: Flow orchestrator will be refactored - temporarily isolated
+// import { instanceRepository } from '../../../services/InstanceRepository';
 import type { AssembledDDT } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import { getDDTForRow, validateDDT } from './rowHelpers';
 import { resolveAsk } from '../messageResolvers';
@@ -18,12 +19,14 @@ export interface PlayedMessage {
 
 /**
  * Play a Message row - emits the message text from instance
+ * TODO: Flow orchestrator will be refactored - temporarily isolated
  */
 export function playMessage(row: any, generateId: () => string): PlayedMessage[] {
   const instanceId = row?.id;
   if (!instanceId) return [];
 
-  const instance = instanceRepository.getInstance(instanceId);
+  // const instance = instanceRepository.getInstance(instanceId);
+  const instance = null; // Temporarily disabled - will be refactored
   const text = instance?.message?.text;
 
   if (!text) return [];

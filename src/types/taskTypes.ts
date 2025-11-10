@@ -3,12 +3,12 @@
 
 /**
  * TaskTemplate: Defines a type of executable task
- * Replaces: Action Catalog entries
+ * Replaces: AgentActs, Action Catalog entries
  */
 export interface TaskTemplate {
   id: string;                    // Template ID (e.g. "SayMessage", "GetData", "callBackend")
-  label: string;                 // Display label (multilingual key)
-  description: string;           // Description (multilingual key)
+  label: string;                 // Display label
+  description: string;           // Description
   icon: string;                  // Icon name (e.g. "MessageCircle", "HelpCircle")
   color: string;                 // UI color (e.g. "text-blue-500")
 
@@ -26,7 +26,7 @@ export interface TaskTemplate {
   };
 
   // ValueSchema: Defines the structure of Task.value and which editor to use
-  valueSchema: {
+  valueSchema: {                 // Defines Task.value structure
     editor: 'message' | 'ddt' | 'problem' | 'backend' | 'simple';  // Which editor to open
     keys: {                        // Valid keys in Task.value
       [key: string]: {
@@ -42,6 +42,21 @@ export interface TaskTemplate {
       };
     };
   };
+
+  scope?: 'global' | 'industry' | 'client';  // Scope del template
+  industry?: string;             // Industry specifico (se scope='industry')
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+/**
+ * TaskHeuristic: Pattern-based rules for task type detection
+ * Replaces: act_type_patterns
+ */
+export interface TaskHeuristic {
+  type: 'MESSAGE' | 'REQUEST_DATA' | 'PROBLEM' | 'BACKEND_CALL' | 'AI_AGENT' | 'PROBLEM_SPEC_DIRECT' | 'PROBLEM_REASON' | 'SUMMARY' | 'NEGOTIATION';
+  patterns: string[];             // Array di regex patterns
+  language: string;               // 'IT', 'EN', 'PT', etc.
 }
 
 /**

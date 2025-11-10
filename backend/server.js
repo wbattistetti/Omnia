@@ -53,22 +53,22 @@ let templateCache = null;
 let cacheLoaded = false;
 
 // -----------------------------
-// Act Type Patterns Cache Management
+// Task Heuristics Cache Management
 // -----------------------------
-let actTypePatternsCache = null;
-let actTypePatternsCacheLoaded = false;
+let taskHeuristicsCache = null;
+let taskHeuristicsCacheLoaded = false;
 
-async function loadActTypePatternsFromDB() {
-  if (actTypePatternsCacheLoaded) {
-    return actTypePatternsCache;
+async function loadTaskHeuristicsFromDB() {
+  if (taskHeuristicsCacheLoaded) {
+    return taskHeuristicsCache;
   }
 
   try {
-    console.log('[ACT_TYPE_PATTERNS_CACHE] Caricando pattern dal database Factory...');
+    console.log('[TASK_HEURISTICS_CACHE] Caricando pattern dal database Factory...');
     const client = new MongoClient(uri);
     await client.connect();
     const db = client.db(dbFactory);
-    const collection = db.collection('act_type_patterns');
+    const collection = db.collection('task_heuristics');
 
     const patterns = await collection.find({}).toArray();
     await client.close();
@@ -103,13 +103,13 @@ async function loadActTypePatternsFromDB() {
       }
     });
 
-    actTypePatternsCache = rulesByLang;
-    actTypePatternsCacheLoaded = true;
-    console.log(`[ACT_TYPE_PATTERNS_CACHE] Caricati pattern per lingue: ${Object.keys(rulesByLang).join(', ')}`);
-    return actTypePatternsCache;
+    taskHeuristicsCache = rulesByLang;
+    taskHeuristicsCacheLoaded = true;
+    console.log(`[TASK_HEURISTICS_CACHE] Caricati pattern per lingue: ${Object.keys(rulesByLang).join(', ')}`);
+    return taskHeuristicsCache;
 
   } catch (error) {
-    console.error('[ACT_TYPE_PATTERNS_CACHE] Errore nel caricamento:', error);
+    console.error('[TASK_HEURISTICS_CACHE] Errore nel caricamento:', error);
     return {};
   }
 }
@@ -526,53 +526,217 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       { upsert: true }
     );
 
-    // 4) Clona atti dalla factory
+    // 4) Clona task_templates dalla factory al progetto
     const factoryDb = client.db(dbFactory);
-    const actsColl = factoryDb.collection('AgentActs');
-    // scope filtering best-effort (i doc potrebbero non avere scope/industry)
-    let query = {};
+    const templatesColl = factoryDb.collection('task_templates');
+
+    // Scope filtering: global + industry-specific
+    let templatesQuery = {};
     if (industry) {
-      // se presenti metadati scope/industry nel futuro
-      query = { $or: [{ scope: 'global' }, { scope: 'industry', industry }] };
-    }
-    let acts = await actsColl.find(query).toArray();
-    // Fallback: se il filtro scope/industry non produce risultati, copia tutti gli atti
-    if (!acts || acts.length === 0) {
-      acts = await actsColl.find({}).toArray();
+      templatesQuery = { $or: [{ scope: 'global' }, { scope: 'industry', industry }] };
+    } else {
+      templatesQuery = { scope: 'global' };
     }
 
-    const mapped = (acts || []).map((act) => ({
-      _id: act._id || act.id,
-      name: act.label || act.name || 'Unnamed',
-      description: act.description || '',
-      category: act.category || 'Uncategorized',
-      mode: deriveModeFromDoc(act),
-      shortLabel: act.shortLabel || null,
-      data: act.data || {},
-      ddtSnapshot: act.ddt || null,
-      origin: 'factory',
-      originId: act._id || act.id,
-      originVersion: act.updatedAt || null,
-      sourceHash: null,
-      createdAt: now,
-      updatedAt: now
-    }));
-
-    let inserted = 0;
-    if (mapped.length > 0) {
-      const result = await projDb.collection('project_acts').insertMany(mapped, { ordered: false });
-      inserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
+    let templates = await templatesColl.find(templatesQuery).toArray();
+    // Fallback: se il filtro non produce risultati, copia tutti i template globali
+    if (!templates || templates.length === 0) {
+      templates = await templatesColl.find({ scope: 'global' }).toArray();
     }
 
-    // 5) Collezioni vuote necessarie
-    await projDb.collection('act_instances').createIndex({ baseActId: 1, updatedAt: -1 }).catch(() => { });
-    await projDb.collection('flow').createIndex({ updatedAt: -1 }).catch(() => { });
+    let templatesInserted = 0;
+    if (templates && templates.length > 0) {
+      // Copy templates from Factory to Project DB
+      // Each template must have an 'id' field (used as _id in Project DB)
+      const mappedTemplates = templates
+        .filter(t => t.id || t._id) // Only copy templates with valid ID
+        .map(t => {
+          const doc = { ...t };
+          const templateId = doc.id || doc._id; // Use id field or _id as fallback
+          delete doc._id; // Remove MongoDB _id, will use id as _id
+          doc._id = templateId; // Set _id to template id
+          if (!doc.id) {
+            doc.id = templateId; // Ensure id field exists
+          }
+          doc.createdAt = now;
+          doc.updatedAt = now;
+          return doc;
+        });
 
-    logInfo('Projects.bootstrap', { projectId, dbName, insertedActs: inserted });
-    res.json({ ok: true, projectId, dbName, counts: { project_acts: inserted } });
+      if (mappedTemplates.length > 0) {
+        try {
+          const result = await projDb.collection('task_templates').insertMany(mappedTemplates, { ordered: false });
+          templatesInserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
+        } catch (insertError) {
+          console.error('[Bootstrap] Error inserting task_templates:', insertError);
+          // Continue even if insert fails (collection might already exist or have duplicates)
+          templatesInserted = 0;
+        }
+      }
+    }
+
+    // 5) Clona task_heuristics dalla factory al progetto
+    const heuristicsColl = factoryDb.collection('task_heuristics');
+    const heuristics = await heuristicsColl.find({}).toArray();
+
+    let heuristicsInserted = 0;
+    if (heuristics && heuristics.length > 0) {
+      // Remove _id from MongoDB document (will be auto-generated)
+      const mappedHeuristics = heuristics.map(h => {
+        const doc = { ...h };
+        delete doc._id; // Remove MongoDB _id, let MongoDB generate new one
+        doc.createdAt = now;
+        doc.updatedAt = now;
+        return doc;
+      });
+
+      try {
+        const result = await projDb.collection('task_heuristics').insertMany(mappedHeuristics, { ordered: false });
+        heuristicsInserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
+      } catch (insertError) {
+        console.error('[Bootstrap] Error inserting task_heuristics:', insertError);
+        // Continue even if insert fails (collection might already exist)
+        heuristicsInserted = 0;
+      }
+    }
+
+    // 6) Collezioni vuote necessarie
+    await projDb.collection('tasks').createIndex({ updatedAt: -1 }).catch(() => { });
+    await projDb.collection('flow_nodes').createIndex({ updatedAt: -1 }).catch(() => { });
+    await projDb.collection('flow_edges').createIndex({ updatedAt: -1 }).catch(() => { });
+
+    logInfo('Projects.bootstrap', {
+      projectId,
+      dbName,
+      templatesInserted,
+      heuristicsInserted
+    });
+    res.json({
+      ok: true,
+      projectId,
+      dbName,
+      counts: {
+        task_templates: templatesInserted,
+        task_heuristics: heuristicsInserted
+      }
+    });
   } catch (e) {
     logError('Projects.bootstrap', e);
     res.status(500).json({ ok: false, error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoints: Task Templates per progetto
+// -----------------------------
+// GET /api/projects/:pid/task-templates - Load project templates
+app.get('/api/projects/:pid/task-templates', async (req, res) => {
+  const projectId = req.params.pid;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const coll = projDb.collection('task_templates');
+    const templates = await coll.find({}).toArray();
+    logInfo('TaskTemplates.get', { projectId, count: templates.length });
+    res.json({ items: templates });
+  } catch (e) {
+    logError('TaskTemplates.get', e, { projectId });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// POST /api/projects/:pid/task-templates - Create/update template in project
+app.post('/api/projects/:pid/task-templates', async (req, res) => {
+  const projectId = req.params.pid;
+  const payload = req.body || {};
+  if (!payload.id || !payload.label || !payload.valueSchema) {
+    return res.status(400).json({ error: 'id, label, and valueSchema are required' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const coll = projDb.collection('task_templates');
+    const now = new Date();
+    const doc = {
+      _id: payload.id,
+      id: payload.id,
+      label: payload.label,
+      description: payload.description || '',
+      icon: payload.icon || 'Circle',
+      color: payload.color || 'text-gray-500',
+      signature: payload.signature || undefined,
+      valueSchema: payload.valueSchema,
+      scope: payload.scope || 'client',
+      industry: payload.industry || undefined,
+      updatedAt: now
+    };
+    await coll.updateOne(
+      { _id: doc._id },
+      { $set: doc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+    const saved = await coll.findOne({ _id: doc._id });
+    logInfo('TaskTemplates.post', { projectId, id: doc._id });
+    res.json(saved);
+  } catch (e) {
+    logError('TaskTemplates.post', e, { projectId, id: payload?.id });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoints: Task Heuristics per progetto
+// -----------------------------
+// GET /api/projects/:pid/task-heuristics - Load project heuristics
+app.get('/api/projects/:pid/task-heuristics', async (req, res) => {
+  const projectId = req.params.pid;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const coll = projDb.collection('task_heuristics');
+    const heuristics = await coll.find({}).toArray();
+
+    // Group by language (same format as Factory endpoint)
+    const rulesByLang = {};
+    heuristics.forEach(h => {
+      const lang = h.language || 'IT';
+      if (!rulesByLang[lang]) {
+        rulesByLang[lang] = {
+          AI_AGENT: [],
+          MESSAGE: [],
+          REQUEST_DATA: [],
+          PROBLEM_SPEC_DIRECT: [],
+          PROBLEM_REASON: [],
+          PROBLEM: null,
+          SUMMARY: [],
+          BACKEND_CALL: [],
+          NEGOTIATION: []
+        };
+      }
+      const type = h.type;
+      if (h.patterns && Array.isArray(h.patterns)) {
+        if (type === 'PROBLEM' && h.patterns.length > 0) {
+          rulesByLang[lang].PROBLEM = h.patterns[0];
+        } else if (rulesByLang[lang][type]) {
+          rulesByLang[lang][type] = h.patterns;
+        }
+      }
+    });
+
+    logInfo('TaskHeuristics.get', { projectId, languages: Object.keys(rulesByLang) });
+    res.json(rulesByLang);
+  } catch (e) {
+    logError('TaskHeuristics.get', e, { projectId });
+    res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
   }
@@ -1146,6 +1310,183 @@ app.get('/api/projects/:pid/instances', async (req, res) => {
       error: String(e),
       stack: e?.stack?.substring(0, 300)
     });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoints: Tasks (new model)
+// -----------------------------
+
+// GET /api/projects/:pid/tasks - Load all tasks
+app.get('/api/projects/:pid/tasks', async (req, res) => {
+  const projectId = req.params.pid;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const coll = projDb.collection('tasks');
+    const items = await coll.find({ projectId }).sort({ updatedAt: -1 }).toArray();
+    logInfo('Tasks.get', { projectId, count: items.length });
+    res.json({ count: items.length, items });
+  } catch (e) {
+    logError('Tasks.get', e, { projectId });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// POST /api/projects/:pid/tasks - Create or update task (upsert)
+app.post('/api/projects/:pid/tasks', async (req, res) => {
+  const projectId = req.params.pid;
+  const payload = req.body || {};
+  if (!payload.id || !payload.action) {
+    return res.status(400).json({ error: 'id_and_action_required' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const now = new Date();
+    const task = {
+      projectId,
+      id: payload.id,
+      action: payload.action,
+      value: payload.value || {},
+      updatedAt: now
+    };
+
+    // Upsert: create if not exists, update if exists
+    const result = await projDb.collection('tasks').updateOne(
+      { projectId, id: payload.id },
+      {
+        $set: task,
+        $setOnInsert: { createdAt: now }
+      },
+      { upsert: true }
+    );
+
+    const saved = await projDb.collection('tasks').findOne({ projectId, id: payload.id });
+    logInfo('Tasks.post', {
+      projectId,
+      taskId: payload.id,
+      action: payload.action,
+      upserted: result.upsertedCount > 0,
+      modified: result.modifiedCount > 0
+    });
+    res.json(saved);
+  } catch (e) {
+    logError('Tasks.post', e, { projectId, taskId: payload?.id });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// PUT /api/projects/:pid/tasks/:taskId - Update task
+app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
+  const projectId = req.params.pid;
+  const taskId = req.params.taskId;
+  const payload = req.body || {};
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+
+    // Find by id field (not _id)
+    const existing = await projDb.collection('tasks').findOne({ projectId, id: taskId });
+    if (!existing) {
+      return res.status(404).json({ error: 'task_not_found' });
+    }
+
+    const update = { updatedAt: new Date() };
+    if (payload.action !== undefined) update.action = payload.action;
+    if (payload.value !== undefined) update.value = payload.value;
+
+    await projDb.collection('tasks').updateOne(
+      { projectId, id: taskId },
+      { $set: update }
+    );
+
+    const updated = await projDb.collection('tasks').findOne({ projectId, id: taskId });
+    logInfo('Tasks.put', { projectId, taskId, updatedFields: Object.keys(update) });
+    res.json(updated);
+  } catch (e) {
+    logError('Tasks.put', e, { projectId, taskId });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// DELETE /api/projects/:pid/tasks/:taskId - Delete task
+app.delete('/api/projects/:pid/tasks/:taskId', async (req, res) => {
+  const projectId = req.params.pid;
+  const taskId = req.params.taskId;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const result = await projDb.collection('tasks').deleteOne({ projectId, id: taskId });
+    logInfo('Tasks.delete', { projectId, taskId, deleted: result.deletedCount > 0 });
+    res.json({ deleted: result.deletedCount > 0 });
+  } catch (e) {
+    logError('Tasks.delete', e, { projectId, taskId });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// POST /api/projects/:pid/tasks/bulk - Bulk save tasks
+app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
+  const projectId = req.params.pid;
+  const payload = req.body || {};
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  if (!items.length) return res.json({ ok: true, inserted: 0, updated: 0 });
+
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const coll = projDb.collection('tasks');
+    const now = new Date();
+
+    let inserted = 0;
+    let updated = 0;
+
+    for (const item of items) {
+      if (!item.id || !item.action) continue;
+
+      const task = {
+        projectId,
+        id: item.id,
+        action: item.action,
+        value: item.value || {},
+        updatedAt: now
+      };
+
+      const existing = await coll.findOne({ projectId, id: item.id });
+      if (existing) {
+        await coll.updateOne(
+          { projectId, id: item.id },
+          { $set: task }
+        );
+        updated++;
+      } else {
+        task.createdAt = now;
+        await coll.insertOne(task);
+        inserted++;
+      }
+    }
+
+    logInfo('Tasks.bulk', { projectId, inserted, updated, total: items.length });
+    res.json({ ok: true, inserted, updated });
+  } catch (e) {
+    logError('Tasks.bulk', e, { projectId, itemsCount: items.length });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -1832,21 +2173,209 @@ app.post('/api/factory/industries', async (req, res) => {
 // Type Templates Endpoints
 // -----------------------------
 // -----------------------------
-// Endpoint: Act Type Patterns (per euristica classificazione)
+// Endpoint: Task Heuristics (per euristica classificazione)
 // -----------------------------
-app.get('/api/factory/act-type-patterns', async (req, res) => {
+app.get('/api/factory/task-heuristics', async (req, res) => {
   try {
-    const patterns = await loadActTypePatternsFromDB();
+    const patterns = await loadTaskHeuristicsFromDB();
 
-    logInfo('ActTypePatterns.get', {
+    logInfo('TaskHeuristics.get', {
       patternsCount: Object.keys(patterns).reduce((sum, lang) => sum + Object.keys(patterns[lang] || {}).length, 0),
       languages: Object.keys(patterns)
     });
 
     res.json(patterns);
   } catch (e) {
-    logError('ActTypePatterns.get', e);
+    logError('TaskHeuristics.get', e);
     res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// POST /api/factory/task-heuristics - Save heuristics
+app.post('/api/factory/task-heuristics', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('task_heuristics');
+
+    const payload = req.body || {};
+    const { type, patterns, language } = payload;
+
+    if (!type || !Array.isArray(patterns) || !language) {
+      return res.status(400).json({ error: 'type, patterns (array), and language are required' });
+    }
+
+    const now = new Date();
+    const doc = {
+      type,
+      patterns,
+      language,
+      updatedAt: now
+    };
+
+    // Upsert based on type and language
+    await coll.updateOne(
+      { type, language },
+      { $set: doc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+
+    // Invalidate cache
+    taskHeuristicsCacheLoaded = false;
+    taskHeuristicsCache = null;
+
+    const saved = await coll.findOne({ type, language });
+    logInfo('TaskHeuristics.post', { type, language, patternsCount: patterns.length });
+    res.json(saved);
+  } catch (e) {
+    logError('TaskHeuristics.post', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Factory: Task Templates Endpoints
+// -----------------------------
+// GET /api/factory/task-templates - List all templates
+app.get('/api/factory/task-templates', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('task_templates');
+
+    const { industry, scope } = req.query;
+
+    // Build query based on scope filtering
+    const query = {};
+    if (scope && industry) {
+      query.$or = [
+        { scope: 'global' },
+        { scope: 'industry', industry }
+      ];
+    }
+
+    const templates = await coll.find(query).toArray();
+    logInfo('TaskTemplates.get', { count: templates.length, industry, scope });
+    res.json(templates);
+  } catch (e) {
+    logError('TaskTemplates.get', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// POST /api/factory/task-templates - Create template
+app.post('/api/factory/task-templates', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('task_templates');
+
+    const payload = req.body || {};
+    if (!payload.id || !payload.label || !payload.valueSchema) {
+      return res.status(400).json({ error: 'id, label, and valueSchema are required' });
+    }
+
+    const now = new Date();
+    const doc = {
+      _id: payload.id,
+      id: payload.id,
+      label: payload.label,
+      description: payload.description || '',
+      icon: payload.icon || 'Circle',
+      color: payload.color || 'text-gray-500',
+      signature: payload.signature || undefined,
+      valueSchema: payload.valueSchema,
+      scope: payload.scope || 'global',
+      industry: payload.industry || undefined,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await coll.updateOne(
+      { _id: doc._id },
+      { $set: doc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+
+    const saved = await coll.findOne({ _id: doc._id });
+    logInfo('TaskTemplates.post', { id: doc._id, label: doc.label });
+    res.json(saved);
+  } catch (e) {
+    logError('TaskTemplates.post', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// PUT /api/factory/task-templates/:id - Update template
+app.put('/api/factory/task-templates/:id', async (req, res) => {
+  const id = req.params.id;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('task_templates');
+
+    const payload = req.body || {};
+    const now = new Date();
+
+    const updateDoc = {
+      ...payload,
+      updatedAt: now
+    };
+    delete updateDoc._id; // Don't update _id
+    delete updateDoc.createdAt; // Don't update createdAt
+
+    await coll.updateOne(
+      { _id: id },
+      { $set: updateDoc },
+      { upsert: false }
+    );
+
+    const saved = await coll.findOne({ _id: id });
+    if (!saved) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    logInfo('TaskTemplates.put', { id });
+    res.json(saved);
+  } catch (e) {
+    logError('TaskTemplates.put', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// DELETE /api/factory/task-templates/:id - Delete template
+app.delete('/api/factory/task-templates/:id', async (req, res) => {
+  const id = req.params.id;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('task_templates');
+
+    const result = await coll.deleteOne({ _id: id });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    logInfo('TaskTemplates.delete', { id });
+    res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (e) {
+    logError('TaskTemplates.delete', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
   }
 });
 
@@ -2506,11 +3035,11 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
   }
 });
 
-// Preload act type patterns cache at startup
-loadActTypePatternsFromDB().then(() => {
-  console.log('[SERVER] Act type patterns cache preloaded');
+// Preload task heuristics cache at startup
+loadTaskHeuristicsFromDB().then(() => {
+  console.log('[SERVER] Task heuristics cache preloaded');
 }).catch(err => {
-  console.warn('[SERVER] Failed to preload act type patterns cache:', err.message);
+  console.warn('[SERVER] Failed to preload task heuristics cache:', err.message);
 });
 
 app.listen(3100, () => {

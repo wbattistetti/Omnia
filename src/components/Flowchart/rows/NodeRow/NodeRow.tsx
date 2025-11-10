@@ -968,8 +968,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           timestamp: Date.now()
         });
 
-        // FASE 4: TaskRepository already handles InstanceRepository synchronization
-        // No need to import InstanceRepository directly
+        // TaskRepository handles all task operations
 
         // Try to find the template act to get intents
         let initialIntents: any[] = [];

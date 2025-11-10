@@ -124,7 +124,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       const d = (e && e.detail) || {};
       const instanceId = d.instanceId;
 
-      // FASE 2: Read message text from Task (TaskRepository sincronizza con InstanceRepository)
+      // Read message text from Task
       let template = '';
       if (instanceId) {
         const { taskRepository } = require('../services/TaskRepository');
