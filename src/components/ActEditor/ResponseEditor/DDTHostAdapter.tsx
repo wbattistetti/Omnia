@@ -1,7 +1,7 @@
 import React from 'react';
 import type { EditorProps } from '../EditorHost/types';
 import ResponseEditor from './index';
-import { instanceRepository } from '../../../services/InstanceRepository';
+import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 
 export default function DDTHostAdapter({ act, onClose }: EditorProps) {
@@ -11,31 +11,63 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   const instanceKey = React.useMemo(() => act.instanceId || act.id, [act.instanceId, act.id]);
 
 
-  // 1. Cerca DDT nell'istanza, crea l'istanza se non esiste
+  // FASE 3: Cerca DDT nel Task, crea il Task se non esiste
   // USO useMemo sincrono per evitare che il primo render mostri DDT vuoto
-  // getInstance() è O(1) Map lookup, quindi veloce e sicuro durante il render
+  // getTask() è O(1) Map lookup, quindi veloce e sicuro durante il render
+  // FIX: Aggiungiamo un refresh trigger per forzare il ricalcolo quando necessario
+  const [refreshTrigger, setRefreshTrigger] = React.useState(0);
   const existingDDT = React.useMemo(() => {
-    let instance = instanceRepository.getInstance(instanceKey);
+    let task = taskRepository.getTask(instanceKey);
 
-    if (!instance) {
-      instance = instanceRepository.createInstanceWithId(instanceKey, act.id, []);
+    if (!task) {
+      const actId = act.id || '';
+      // Map actId to action (e.g., 'DataRequest' -> 'GetData')
+      const action = actId === 'DataRequest' ? 'GetData' : (actId === 'Message' ? 'SayMessage' : actId);
+      task = taskRepository.createTask(action, undefined, instanceKey);
     }
 
-    return instance?.ddt || null;
-  }, [instanceKey, act.id]); // Dipendenze: solo instanceKey e act.id
+    const ddt = task?.value?.ddt || null;
+    console.log('[DDTHostAdapter][existingDDT][useMemo]', {
+      instanceKey,
+      hasTask: !!task,
+      hasDDT: !!ddt,
+      ddtId: ddt?.id,
+      firstMainKind: ddt?.mainData?.[0]?.kind,
+      stepsKeys: ddt?.mainData?.[0]?.steps ? Object.keys(ddt.mainData[0].steps) : [],
+      refreshTrigger
+    });
+    return ddt;
+  }, [instanceKey, act.id, refreshTrigger]); // Aggiunto refreshTrigger per forzare ricalcolo
 
   // 2. STATE per mantenere il DDT corrente (aggiornato dopo salvataggio)
-  // Questo risolve il problema: useMemo non ricalcola quando l'istanza viene aggiornata
+  // Questo risolve il problema: useMemo non ricalcola quando il Task viene aggiornato
   const [currentDDT, setCurrentDDT] = React.useState<any>(() => {
-    // Inizializza dall'istanza se esiste, altrimenti placeholder
-    const instance = instanceRepository.getInstance(instanceKey);
-    const instanceDDT = instance?.ddt;
+    // FASE 3: Inizializza dal Task se esiste, altrimenti placeholder
+    const task = taskRepository.getTask(instanceKey);
+    const instanceDDT = task?.value?.ddt;
+
+    // DEBUG: Log dettagliato per verificare se il DDT viene caricato correttamente
+    if (instanceDDT && act.type === 'ProblemClassification') {
+      console.log('[DDTHostAdapter][INIT][DEBUG] DDT loaded for ProblemClassification', {
+        instanceKey,
+        ddtId: instanceDDT.id,
+        firstMainKind: instanceDDT.mainData?.[0]?.kind,
+        hasSteps: !!instanceDDT.mainData?.[0]?.steps,
+        stepsKeys: instanceDDT.mainData?.[0]?.steps ? Object.keys(instanceDDT.mainData[0].steps) : [],
+        stepsContent: instanceDDT.mainData?.[0]?.steps || {},
+        // Verifica struttura dettagliata
+        startStep: instanceDDT.mainData?.[0]?.steps?.start,
+        noInputStep: instanceDDT.mainData?.[0]?.steps?.noInput,
+        noMatchStep: instanceDDT.mainData?.[0]?.steps?.noMatch,
+        confirmationStep: instanceDDT.mainData?.[0]?.steps?.confirmation
+      });
+    }
 
     console.log('[DDTHostAdapter][INIT]', {
       instanceKey,
       actId: act.id,
       actType: act.type,
-      hasInstance: !!instance,
+      hasTask: !!task,
       hasInstanceDDT: !!instanceDDT,
       instanceDDTId: instanceDDT?.id,
       firstMainKind: instanceDDT?.mainData?.[0]?.kind,
@@ -72,14 +104,15 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
           }]
         };
 
-        // ✅ Se l'istanza esiste ma ha DDT con kind sbagliato, correggilo
-        if (instance && instanceDDT && !hasCorrectKind) {
+        // ✅ Se il Task esiste ma ha DDT con kind sbagliato, correggilo
+        if (task && instanceDDT && !hasCorrectKind) {
           console.log('[DDTHostAdapter] Correcting DDT with wrong kind for ProblemClassification', {
             instanceId: instanceKey,
             oldKind: firstMain?.kind,
             newKind: 'intent'
           });
-          instanceRepository.updateDDT(instanceKey, newDDT, currentProjectId || undefined);
+          // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+          taskRepository.updateTaskValue(instanceKey, { ddt: newDDT }, currentProjectId || undefined);
         }
 
         return newDDT;
@@ -114,23 +147,38 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   React.useEffect(() => {
     // ✅ Se esiste existingDDT, usalo SEMPRE (è quello salvato dall'utente)
     if (existingDDT) {
-      // Solo se currentDDT è ancora un placeholder (non è stato ancora caricato)
+      // FIX: Aggiorna sempre se existingDDT è diverso da currentDDT (non solo se è placeholder)
+      // Questo risolve il problema quando si riapre l'editor: existingDDT viene ricaricato dal Task
       const currentIsPlaceholder = currentDDT.id?.startsWith('temp_ddt_');
-      if (currentIsPlaceholder) {
+      const ddtHasChanged = JSON.stringify(currentDDT) !== JSON.stringify(existingDDT);
+
+      if (currentIsPlaceholder || ddtHasChanged) {
+        console.log('[DDTHostAdapter][useEffect] Updating currentDDT from existingDDT', {
+          instanceKey,
+          currentIsPlaceholder,
+          ddtHasChanged,
+          existingDDTId: existingDDT?.id,
+          currentDDTId: currentDDT?.id,
+          hasSteps: existingDDT?.mainData?.[0]?.steps ? Object.keys(existingDDT.mainData[0].steps).length : 0,
+          stepsKeys: existingDDT?.mainData?.[0]?.steps ? Object.keys(existingDDT.mainData[0].steps) : []
+        });
         setCurrentDDT(existingDDT);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingDDT]); // currentDDT intenzionalmente non incluso: controlliamo solo quando existingDDT cambia
 
-  // 3. Quando completi il wizard, salva nell'istanza E aggiorna lo state
+  // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
   const handleComplete = React.useCallback((finalDDT: any) => {
-    // Salva il DDT nell'istanza
-    instanceRepository.updateDDT(instanceKey, finalDDT, currentProjectId || undefined);
+    // FASE 3: Salva il DDT nel Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceKey, { ddt: finalDDT }, currentProjectId || undefined);
 
     // CRITICO: Aggiorna immediatamente currentDDT per aggiornare il prop ddt
     // Questo evita che useDDTInitialization sincronizzi localDDT con il placeholder vuoto
     setCurrentDDT(finalDDT);
+
+    // FIX: Forza il ricalcolo di existingDDT per sincronizzare
+    setRefreshTrigger(prev => prev + 1);
   }, [instanceKey, currentProjectId]);
 
 

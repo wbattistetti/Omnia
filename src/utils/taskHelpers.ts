@@ -1,6 +1,6 @@
 import type { NodeRowData } from '../types/project';
 import { taskRepository } from '../services/TaskRepository';
-import { instanceRepository } from '../services/InstanceRepository';
+// FASE 4: InstanceRepository import removed - TaskRepository handles synchronization internally
 import { generateId } from './idGenerator';
 
 /**
@@ -102,21 +102,8 @@ export function createRowWithTask(
     projectId
   );
 
-  // Also create InstanceRepository entry for backward compatibility (same ID)
-  // This ensures existing code that uses InstanceRepository continues to work
-  if (!instanceRepository.getInstance(finalRowId)) {
-    instanceRepository.createInstance(
-      action, // actId
-      [],     // initialIntents
-      finalRowId, // instanceId (same as taskId)
-      projectId
-    );
-
-    // If it's a Message, update the message text
-    if (action === 'Message' && initialText) {
-      instanceRepository.updateMessage(finalRowId, { text: initialText });
-    }
-  }
+  // FASE 4: TaskRepository.createTask already creates InstanceRepository entry internally
+  // No need to create it separately - TaskRepository handles synchronization
 
   // Return row with taskId set
   const newRow: NodeRowData = {
@@ -155,14 +142,8 @@ export function updateRowTaskAction(
   // Update Task's action
   taskRepository.updateTask(taskId, { action: newAction }, projectId);
 
-  // Also update InstanceRepository for backward compatibility
-  const instance = instanceRepository.getInstance(taskId);
-  if (instance) {
-    instanceRepository.updateInstance(taskId, { actId: newAction });
-  } else {
-    // If instance doesn't exist, create it
-    instanceRepository.createInstance(newAction, [], taskId, projectId);
-  }
+  // FASE 4: TaskRepository.updateTask already updates InstanceRepository internally
+  // No need to update it separately - TaskRepository handles synchronization
 
   console.log('[updateRowTaskAction] Updated row Task action', {
     rowId: row.id,

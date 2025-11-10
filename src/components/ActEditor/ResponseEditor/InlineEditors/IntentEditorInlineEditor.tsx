@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import EmbeddingEditorShell, { EmbeddingEditorShellRef } from '../../../../features/intent-editor/EmbeddingEditorShell';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
 import { useIntentStore } from '../../../../features/intent-editor/state/intentStore';
-import { instanceRepository } from '../../../../services/InstanceRepository';
+import { taskRepository } from '../../../../services/TaskRepository';
 import type { ProblemIntent } from '../../../../types/project';
 import { Brain, Loader2 } from 'lucide-react';
 
@@ -15,7 +15,7 @@ interface IntentEditorInlineEditorProps {
   act?: { id: string; type: string; label?: string; instanceId?: string };
 }
 
-// Convert ProblemIntent[] from instanceRepository to useIntentStore format
+// FASE 3: Convert ProblemIntent[] from Task to useIntentStore format
 function toEditorState(intents: ProblemIntent[] = []) {
   return intents.map((pi: ProblemIntent) => ({
     id: pi.id,
@@ -49,19 +49,19 @@ export default function IntentEditorInlineEditor({
   const editorRef = useRef<EmbeddingEditorShellRef>(null);
   const [trainState, setTrainState] = useState({ training: false, modelReady: false, canTrain: false });
 
-  // Sync intents from instanceRepository to useIntentStore when editor opens
+  // FASE 3: Sync intents from Task to useIntentStore when editor opens
   useEffect(() => {
     if (!act) return;
 
     const instanceId = (act as any)?.instanceId || act.id;
-    const instance = instanceRepository.getInstance(instanceId);
+    const task = taskRepository.getTask(instanceId);
 
-    if (instance?.problemIntents) {
+    if (task?.value?.intents) {
       // Convert ProblemIntent[] to useIntentStore format
-      const intents = toEditorState(instance.problemIntents);
+      const intents = toEditorState(task.value.intents);
       useIntentStore.setState({ intents });
 
-      console.log('[IntentEditorInlineEditor][SYNC] Synced intents from instanceRepository to useIntentStore', {
+      console.log('[IntentEditorInlineEditor][SYNC] Synced intents from Task to useIntentStore', {
         instanceId,
         intentsCount: intents.length,
         intents: intents.map(it => ({ id: it.id, name: it.name, curatedCount: it.variants.curated.length, hardNegCount: it.variants.hardNeg.length }))
@@ -69,7 +69,7 @@ export default function IntentEditorInlineEditor({
     }
   }, [act?.id, act?.instanceId]);
 
-  // Subscribe to useIntentStore changes and sync back to instanceRepository
+  // FASE 3: Subscribe to useIntentStore changes and sync back to Task
   useEffect(() => {
     if (!act) return;
 
@@ -92,14 +92,15 @@ export default function IntentEditorInlineEditor({
             }
           }));
 
-          instanceRepository.updateIntents(instanceId, problemIntents);
+          // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+          taskRepository.updateTaskValue(instanceId, { intents: problemIntents });
 
-          console.log('[IntentEditorInlineEditor][SYNC_TO_INSTANCE] Synced intents from useIntentStore to instanceRepository', {
+          console.log('[IntentEditorInlineEditor][SYNC_TO_TASK] Synced intents from useIntentStore to Task', {
             instanceId,
             intentsCount: problemIntents.length
           });
         } catch (err) {
-          console.error('[IntentEditorInlineEditor][SYNC_TO_INSTANCE][ERROR]', err);
+          console.error('[IntentEditorInlineEditor][SYNC_TO_TASK][ERROR]', err);
         }
       }, 300); // Debounce di 300ms
     });

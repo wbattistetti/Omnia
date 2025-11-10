@@ -77,9 +77,13 @@ class TaskRepository {
         value.ddt = instance.ddt;
       }
     } else if (action === 'ClassifyProblem' || action === 'ProblemClassification') {
-      // ClassifyProblem: value.intents
+      // ClassifyProblem: value.intents AND value.ddt (messages are stored in DDT)
       if (instance.problemIntents && instance.problemIntents.length > 0) {
         value.intents = instance.problemIntents;
+      }
+      // FIX: Include DDT for ProblemClassification (messages are stored in DDT.steps)
+      if (instance.ddt) {
+        value.ddt = instance.ddt;
       }
     } else if (action === 'callBackend' || action === 'BackendCall') {
       // BackendCall: value.config (placeholder, will be populated from instance data)

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ItemListEditor from '../../../../components/common/ItemListEditor';
 import type { ListItem } from '../../../../features/intent-editor/ui/common/ListGrid';
-import { instanceRepository } from '../../../../services/InstanceRepository';
+import { taskRepository } from '../../../../services/TaskRepository';
 import { GitBranch } from 'lucide-react';
 import type { ProblemIntent } from '../../../../types/project';
 import PhrasesDropdown from './PhrasesDropdown';
@@ -20,7 +20,7 @@ export interface IntentListEditorProps {
 /**
  * Common SSOT component for editing intent list in ResponseEditor
  * Used when act.type === 'ProblemClassification' and kind === 'intent'
- * Manages intents in instanceRepository and syncs with useIntentStore for training
+ * FASE 3: Manages intents in Task and syncs with useIntentStore for training
  */
 export default function IntentListEditor({
   instanceId,
@@ -33,15 +33,15 @@ export default function IntentListEditor({
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; intentName: string } | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Get current instance - force refresh when refreshTrigger changes
-  const instance = useMemo(() => {
-    return instanceRepository.getInstance(instanceId);
+  // FASE 3: Get current Task - force refresh when refreshTrigger changes
+  const task = useMemo(() => {
+    return taskRepository.getTask(instanceId);
   }, [instanceId, refreshTrigger]);
 
-  // Get current intents from instance
+  // FASE 3: Get current intents from Task
   const intents = useMemo(() => {
-    return (instance?.problemIntents || []) as ProblemIntent[];
-  }, [instance?.problemIntents]);
+    return (task?.value?.intents || []) as ProblemIntent[];
+  }, [task?.value?.intents]);
 
   // Listen for instance updates from instanceRepository
   useEffect(() => {
@@ -88,7 +88,8 @@ export default function IntentListEditor({
     };
 
     const updatedIntents = [...intents, newIntent];
-    instanceRepository.updateIntents(instanceId, updatedIntents);
+    // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
 
     return newIntent.id;
@@ -100,13 +101,15 @@ export default function IntentListEditor({
         ? { ...intent, name: newLabel.trim() }
         : intent
     );
-    instanceRepository.updateIntents(instanceId, updatedIntents);
+    // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
   };
 
   const handleDelete = (id: string) => {
     const updatedIntents = intents.filter(intent => intent.id !== id && intent.name !== id);
-    instanceRepository.updateIntents(instanceId, updatedIntents);
+    // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
   };
 
@@ -123,7 +126,8 @@ export default function IntentListEditor({
     }));
 
     const updatedIntents = [...intents, ...newIntents];
-    instanceRepository.updateIntents(instanceId, updatedIntents);
+    // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
   };
 
@@ -237,7 +241,8 @@ export default function IntentListEditor({
 
           // Sync with instanceRepository
           const updatedStoreIntents = useIntentStore.getState().intents || [];
-          const updatedIntents = (instance?.problemIntents || []).map(pi => {
+          // FASE 3: Get intents from Task
+          const updatedIntents = (task?.value?.intents || []).map(pi => {
             if (pi.id === intent.id || pi.name === intent.name) {
               const storeIntent = updatedStoreIntents.find(i => i.id === intent.id);
               if (storeIntent) {
@@ -253,7 +258,8 @@ export default function IntentListEditor({
             }
             return pi;
           });
-          instanceRepository.updateIntents(instanceId, updatedIntents);
+          // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
 
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (err) {
@@ -304,7 +310,8 @@ export default function IntentListEditor({
           }
           return i;
         });
-        instanceRepository.updateIntents(instanceId, updatedIntents);
+        // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
         onIntentChange?.(updatedIntents);
         alert(`Importate ${values.length} frasi per l'intento "${intent.name}"`);
       }
@@ -320,7 +327,8 @@ export default function IntentListEditor({
           ]
         }
       }));
-      instanceRepository.updateIntents(instanceId, updatedIntents);
+      // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
       onIntentChange?.(updatedIntents);
       alert(`Importate ${values.length} frasi per tutti gli ${intents.length} intenti`);
     }
@@ -355,7 +363,8 @@ export default function IntentListEditor({
             }
             return i;
           });
-          instanceRepository.updateIntents(instanceId, updatedIntents);
+          // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
           onIntentChange?.(updatedIntents);
           alert(`Importate ${values.length} frasi per l'intento "${intent.name}"`);
         }
@@ -371,7 +380,8 @@ export default function IntentListEditor({
             ]
           }
         }));
-        instanceRepository.updateIntents(instanceId, updatedIntents);
+        // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
         onIntentChange?.(updatedIntents);
         alert(`Importate ${values.length} frasi per tutti gli ${intents.length} intenti`);
       }
@@ -392,7 +402,8 @@ export default function IntentListEditor({
         ? { ...intent, threshold: intent.threshold === undefined || intent.threshold < 0 ? 0.6 : -1 }
         : intent
     );
-    instanceRepository.updateIntents(instanceId, updatedIntents);
+    // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
   };
 

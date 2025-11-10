@@ -28,7 +28,7 @@ import { inferActType, heuristicToInternal } from '../../../../nlp/actType';
 import { modeToType, typeToMode } from '../../../../utils/normalizers';
 import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
-import { instanceRepository } from '../../../../services/InstanceRepository';
+import { taskRepository } from '../../../../services/TaskRepository';
 import { getTaskIdFromRow, updateRowTaskAction, createRowWithTask } from '../../../../utils/taskHelpers';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
@@ -340,29 +340,28 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           rowMode: (row as any)?.mode
         });
 
-        // Assicurati che l'istanza esista in memoria prima di salvare
-        // Se non esiste, creala (questo può succedere se la riga è stata creata senza intellisense)
-        const instance = instanceRepository.getInstance(instanceId);
+        // FASE 4: Assicurati che il Task esista in memoria prima di salvare
+        // Se non esiste, crealo (questo può succedere se la riga è stata creata senza intellisense)
+        const task = taskRepository.getTask(instanceId);
         console.log('[Message][SAVE][MEMORY_CHECK]', {
           instanceId,
-          instanceExists: !!instance,
-          instanceMessage: instance?.message?.text || 'N/A'
+          taskExists: !!task,
+          taskMessage: task?.value?.text || 'N/A'
         });
 
-        if (!instance) {
+        if (!task) {
           // Crea l'istanza in memoria se non esiste
           console.log('[Message][SAVE][CREATE_IN_MEMORY]', { instanceId, baseActId });
           const projectId = getProjectId?.() || undefined;
 
-          // Migration: Create Task if row doesn't have taskId
+          // FASE 4: Create Task if row doesn't have taskId
           if (!row.taskId) {
             // Create Task for this row
-            const task = createRowWithTask(instanceId, baseActId, label, projectId);
+            const newTask = createRowWithTask(instanceId, baseActId, label, projectId);
             // Update row to include taskId (will be persisted via onUpdate)
-            (row as any).taskId = task.taskId;
+            (row as any).taskId = newTask.taskId;
           } else {
             // Row already has Task, update it
-            const { taskRepository } = await import('../../../../services/TaskRepository');
             taskRepository.updateTaskValue(row.taskId, { text: label }, projectId);
           }
 
@@ -372,25 +371,24 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             messageText: label.substring(0, 50)
           });
         } else {
-          // Aggiorna il messaggio nell'istanza esistente
+          // FASE 4: Aggiorna il messaggio nel Task esistente
           console.log('[Message][SAVE][UPDATE_IN_MEMORY]', {
             instanceId,
-            oldText: instance.message?.text?.substring(0, 50) || 'N/A',
+            oldText: task.value?.text?.substring(0, 50) || 'N/A',
             newText: label.substring(0, 50)
           });
 
-          // Migration: Update Task (TaskRepository internally updates InstanceRepository)
+          // FASE 4: Update Task (TaskRepository internally updates InstanceRepository)
           const taskId = getTaskIdFromRow(row);
-          const { taskRepository } = await import('../../../../services/TaskRepository');
           taskRepository.updateTaskValue(taskId, { text: label }, getProjectId?.() || undefined);
         }
 
-        // Verifica dopo l'aggiornamento
-        const instanceAfter = instanceRepository.getInstance(instanceId);
+        // FASE 4: Verifica dopo l'aggiornamento
+        const taskAfter = taskRepository.getTask(instanceId);
         console.log('[Message][SAVE][MEMORY_AFTER_UPDATE]', {
           instanceId,
-          instanceExists: !!instanceAfter,
-          messageText: instanceAfter?.message?.text?.substring(0, 50) || 'N/A'
+          taskExists: !!taskAfter,
+          messageText: taskAfter?.value?.text?.substring(0, 50) || 'N/A'
         });
 
         // Passa mode e baseActId per permettere la creazione corretta se l'istanza non esiste nel DB
@@ -931,9 +929,16 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     try {
       const itemCategoryType = (item as any)?.categoryType;
       const itemType = (item as any)?.type;
-      // Get row type from instance repository (since we removed it from NodeRowData)
-      const rowInstance = instanceRepository.getInstance(row.id);
-      const rowType = rowInstance?.actId;
+      // FASE 4: Get row type from Task (since we removed it from NodeRowData)
+      const rowTask = taskRepository.getTask(row.id);
+      // Map action back to actId (reverse mapping)
+      const actionToActId: Record<string, string> = {
+        'SayMessage': 'Message',
+        'GetData': 'DataRequest',
+        'ClassifyProblem': 'ProblemClassification',
+        'callBackend': 'BackendCall'
+      };
+      const rowType = rowTask?.action ? (actionToActId[rowTask.action] || rowTask.action) : undefined;
 
       const isProblemClassification = itemCategoryType === 'agentActs' &&
         (itemType === 'ProblemClassification' || rowType === 'ProblemClassification');
@@ -963,8 +968,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           timestamp: Date.now()
         });
 
-        // Import InstanceRepository
-        const { instanceRepository } = await import('../../../../services/InstanceRepository');
+        // FASE 4: TaskRepository already handles InstanceRepository synchronization
+        // No need to import InstanceRepository directly
 
         // Try to find the template act to get intents
         let initialIntents: any[] = [];
@@ -988,9 +993,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         if (!row.taskId) {
           // Create Task for this row (dual mode)
           const task = createRowWithTask(instanceId, actIdToUse, row.text || '', projectId);
-          // Update Task with intents if ProblemClassification
+          // FASE 4: Update Task with intents if ProblemClassification
           if (initialIntents.length > 0) {
-            const { taskRepository } = await import('../../../../services/TaskRepository');
             taskRepository.updateTaskValue(task.id, { intents: initialIntents }, projectId);
           }
           (row as any).taskId = task.id;
@@ -1277,7 +1281,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     Icon = null;
   }
 
-  // ✅ Listen for instance updates to force re-render and update icon color
+  // FASE 4: Listen for instance updates to force re-render and update icon color
+  // Note: TaskRepository doesn't emit events yet, but InstanceRepository still does
+  // This listener is kept for backward compatibility during migration
   const [instanceUpdateTrigger, setInstanceUpdateTrigger] = useState(0);
   const instanceId = (row as any)?.instanceId || row.id;
 
@@ -1290,6 +1296,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       }
     };
 
+    // FASE 4: Keep listener for backward compatibility (InstanceRepository still emits events)
     window.addEventListener('instanceRepository:updated', handleInstanceUpdate as EventListener);
 
     return () => {

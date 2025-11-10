@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import IntentListEditor from './IntentListEditor';
-import { instanceRepository } from '../../../../services/InstanceRepository';
+import { taskRepository } from '../../../../services/TaskRepository';
 
 interface IntentListEditorWrapperProps {
   act: { id: string; type: string; label?: string; instanceId?: string };
@@ -14,9 +14,9 @@ export default function IntentListEditorWrapper({
   const instanceId = (act as any)?.instanceId || act.id;
   const [selectedIntentId, setSelectedIntentId] = useState<string | null>(null);
 
-  // Get current instance to react to changes
-  const instance = useMemo(() => {
-    return instanceRepository.getInstance(instanceId);
+  // FASE 3: Get current Task to react to changes
+  const task = useMemo(() => {
+    return taskRepository.getTask(instanceId);
   }, [instanceId]);
 
   const handleSelect = (intentId: string | null) => {
@@ -32,7 +32,7 @@ export default function IntentListEditorWrapper({
         selectedIntentId={selectedIntentId}
         onIntentSelect={handleSelect}
         onIntentChange={(intents) => {
-          // Intent changes are automatically saved to instanceRepository
+          // FASE 3: Intent changes are automatically saved to Task (TaskRepository syncs with InstanceRepository automatically)
           console.log('[ResponseEditor][IntentListEditor] Intents changed:', {
             instanceId,
             intentsCount: intents.length

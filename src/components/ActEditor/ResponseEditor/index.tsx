@@ -3,7 +3,7 @@ import { info } from '../../../utils/logger';
 import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
 import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
-import { instanceRepository } from '../../../services/InstanceRepository';
+import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import Sidebar from './Sidebar';
 import StepsStrip from './StepsStrip';
@@ -41,7 +41,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     mainDataLength: ddt?.mainData?.length,
     firstMainKind: ddt?.mainData?.[0]?.kind,
     hasIntentMessages: ddt ? hasIntentMessages(ddt) : false,
-    steps: ddt?.mainData?.[0]?.steps ? Object.keys(ddt.mainData[0].steps) : []
+    steps: ddt?.mainData?.[0]?.steps ? Object.keys(ddt.mainData[0].steps) : [],
+    stepsContent: ddt?.mainData?.[0]?.steps || {},
+    // DEBUG: Log dettagliato per capire perché hasIntentMessages ritorna false
+    debugSteps: ddt?.mainData?.[0]?.steps ? Object.entries(ddt.mainData[0].steps).map(([key, step]: [string, any]) => ({
+      stepKey: key,
+      hasEscalations: !!step?.escalations,
+      escalationsCount: step?.escalations?.length || 0,
+      firstEscalation: step?.escalations?.[0] || null
+    })) : []
   });
 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -134,7 +142,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
           projectId: currentProjectId
         });
 
-        const saved = instanceRepository.updateDDT(key, localDDT, currentProjectId || undefined);
+        // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+        const saved = taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
 
         console.log('[ResponseEditor][handleEditorClose] Instance save result', {
           key,
@@ -586,13 +595,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                     hasMessages: hasIntentMessages(updatedDDT)
                   });
 
-                  const saved = instanceRepository.updateDDT(key, updatedDDT, currentProjectId || undefined);
+                  // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+                  const saved = taskRepository.updateTaskValue(key, { ddt: updatedDDT }, currentProjectId || undefined);
 
                   console.log('[ResponseEditor][IntentMessagesBuilder][onComplete] Instance save result', {
                     key,
                     saved,
                     ddtId: updatedDDT?.id
                   });
+
+                  // ✅ FIX: Notifica il parent (DDTHostAdapter) che il DDT è stato aggiornato
+                  // Questo assicura che currentDDT in DDTHostAdapter venga aggiornato immediatamente
+                  onWizardComplete?.(updatedDDT);
                 }
 
                 try {

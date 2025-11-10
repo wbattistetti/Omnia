@@ -1,5 +1,5 @@
 import React from 'react';
-import { instanceRepository } from '../../../services/InstanceRepository';
+import { taskRepository } from '../../../services/TaskRepository';
 
 export interface NonInteractiveResponse {
   template: string;
@@ -43,10 +43,10 @@ export default function NonInteractiveResponseEditor({ value, onChange, onClose,
   const vars = React.useMemo(() => extractTemplateVars(template), [template]);
   const [samples, setSamples] = React.useState<Record<string, string>>(() => ({ ...(value?.samples || {}) }));
 
-  // Update instanceRepository when template changes
+  // FASE 3: Update Task when template changes (TaskRepository syncs with InstanceRepository automatically)
   React.useEffect(() => {
     if (instanceId && template !== undefined) {
-      instanceRepository.updateMessage(instanceId, { text: template });
+      taskRepository.updateTaskValue(instanceId, { text: template });
     }
   }, [template, instanceId]);
 

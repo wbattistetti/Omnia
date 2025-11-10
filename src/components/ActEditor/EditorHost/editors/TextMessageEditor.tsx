@@ -2,31 +2,84 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { EditorProps } from '../../EditorHost/types';
 import EditorHeader from '../../../common/EditorHeader';
 import { getAgentActVisualsByType } from '../../../Flowchart/utils/actVisuals';
-import { instanceRepository } from '../../../../services/InstanceRepository';
+import { taskRepository } from '../../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../../context/ProjectDataContext';
 
 export default function TextMessageEditor({ act, onClose }: EditorProps) {
   const instanceId = act.instanceId || act.id;
   const pdUpdate = useProjectDataUpdate();
 
-  // Read initial text from instance (create if doesn't exist, like DDTHostAdapter)
+  // FASE 3: Read initial text from Task (create if doesn't exist, like DDTHostAdapter)
   // Use useState initializer function to compute once on mount only
   const [text, setText] = useState(() => {
     if (!instanceId) return '';
-    let instance = instanceRepository.getInstance(instanceId);
-    if (!instance) {
+    let task = taskRepository.getTask(instanceId);
+    if (!task) {
       const actId = act.id || '';
-      instance = instanceRepository.createInstanceWithId(instanceId, actId, []);
+      // Map actId to action (e.g., 'Message' -> 'SayMessage')
+      const action = actId === 'Message' ? 'SayMessage' : actId;
+      const projectId = pdUpdate?.getCurrentProjectId() || undefined;
+      task = taskRepository.createTask(action, undefined, instanceId, projectId);
     }
-    return instance?.message?.text || '';
+    return task?.value?.text || '';
   });
 
-  // Update instanceRepository when text changes
+  // FIX: Reload text from Task when instanceId changes or when Task is updated
+  useEffect(() => {
+    if (!instanceId) return;
+
+    // Check if Task exists and has different text (only on mount or instanceId change)
+    const task = taskRepository.getTask(instanceId);
+    if (task?.value?.text !== undefined) {
+      setText(prevText => {
+        if (prevText !== task.value.text) {
+          console.log('[TextMessageEditor] Reloading text from Task', {
+            instanceId,
+            oldText: prevText.substring(0, 50),
+            newText: task.value.text.substring(0, 50)
+          });
+          return task.value.text;
+        }
+        return prevText;
+      });
+    }
+
+    // Listen for instance updates (backward compatibility during migration)
+    const handleInstanceUpdate = (event: CustomEvent) => {
+      const { instanceId: updatedInstanceId } = event.detail || {};
+      if (updatedInstanceId === instanceId) {
+        // Task was updated, reload text
+        const updatedTask = taskRepository.getTask(instanceId);
+        if (updatedTask?.value?.text !== undefined) {
+          setText(prevText => {
+            if (prevText !== updatedTask.value.text) {
+              console.log('[TextMessageEditor] Task updated, reloading text', {
+                instanceId,
+                newText: updatedTask.value.text.substring(0, 50)
+              });
+              return updatedTask.value.text;
+            }
+            return prevText;
+          });
+        }
+      }
+    };
+
+    window.addEventListener('instanceRepository:updated', handleInstanceUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('instanceRepository:updated', handleInstanceUpdate as EventListener);
+    };
+  }, [instanceId]); // Only reload when instanceId changes
+
+  // FASE 3: Update Task when text changes (TaskRepository syncs with InstanceRepository automatically)
   useEffect(() => {
     if (instanceId && text !== undefined) {
-      instanceRepository.updateMessage(instanceId, { text });
+      // FIX: Pass projectId to save to database immediately
+      const projectId = pdUpdate?.getCurrentProjectId() || undefined;
+      taskRepository.updateTaskValue(instanceId, { text }, projectId);
     }
-  }, [text, instanceId]);
+  }, [text, instanceId, pdUpdate]);
 
   // Save to database on close
   const handleClose = async () => {
