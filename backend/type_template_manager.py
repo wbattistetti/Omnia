@@ -19,46 +19,69 @@ _TEMPLATES_LOADED = False
 # MongoDB connection (stessa del server.js)
 MONGO_URI = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db'
 
-def load_templates() -> Dict[str, Any]:
-    """Carica templates dal database Factory."""
+def load_templates(project_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Carica templates dal database Factory e opzionalmente da Project.
+
+    Args:
+        project_id: Optional project ID to load project-specific templates
+
+    Returns:
+        Dictionary of templates {name: template}, with project templates overriding factory ones
+    """
     global _TEMPLATES, _TEMPLATES_LOADED
 
-    if _TEMPLATES_LOADED:
-        return _TEMPLATES
-
-    try:
-        print("[TemplateManager] Caricando template dal database Factory...")
-        client = MongoClient(MONGO_URI)
-        db = client['factory']
-        collection = db['type_templates']
-
-        templates = list(collection.find({}))
-        client.close()
-
-        # Converti in dizionario per compatibilità
-        _TEMPLATES = {}
-        for template in templates:
-            if '_id' in template:
-                del template['_id']
-            _TEMPLATES[template['name']] = template
-
-        _TEMPLATES_LOADED = True
-        print(f"[TemplateManager] Caricati {len(_TEMPLATES)} template dal database Factory")
-        return _TEMPLATES
-
-    except Exception as e:
-        print(f"[TemplateManager] ERROR loading templates from database: {e}")
-        # Fallback: prova a caricare dal file JSON
+    # Always load factory templates
+    if not _TEMPLATES_LOADED:
         try:
-            template_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'type_templates.json')
-            with open(template_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                _TEMPLATES = data.get('templates', {})
-                print(f"[TemplateManager] Fallback: Loaded {len(_TEMPLATES)} templates from {template_path}")
-                return _TEMPLATES
-        except Exception as e2:
-            print(f"[TemplateManager] ERROR loading templates from file: {e2}")
-            return {}
+            print("[TemplateManager] Caricando template dal database Factory...")
+            client = MongoClient(MONGO_URI)
+            db = client['factory']
+            collection = db['type_templates']
+
+            templates = list(collection.find({}))
+            client.close()
+
+            # Converti in dizionario per compatibilità
+            _TEMPLATES = {}
+            for template in templates:
+                if '_id' in template:
+                    del template['_id']
+                _TEMPLATES[template['name']] = template
+
+            _TEMPLATES_LOADED = True
+            print(f"[TemplateManager] Caricati {len(_TEMPLATES)} template dal database Factory")
+        except Exception as e:
+            print(f"[TemplateManager] ERROR loading templates from database: {e}")
+            _TEMPLATES = {}
+
+    # Load project-specific templates if project_id provided
+    if project_id:
+        try:
+            print(f"[TemplateManager] Caricando template dal progetto {project_id}...")
+            client = MongoClient(MONGO_URI)
+            db = client[f'project_{project_id}']
+            collection = db['type_templates']
+
+            project_templates = list(collection.find({}))
+            client.close()
+
+            # Merge project templates (override factory ones)
+            project_count = 0
+            for template in project_templates:
+                if '_id' in template:
+                    del template['_id']
+                template_name = template.get('name')
+                if template_name:
+                    _TEMPLATES[template_name] = template
+                    project_count += 1
+
+            if project_count > 0:
+                print(f"[TemplateManager] Caricati {project_count} template dal progetto {project_id}")
+        except Exception as e:
+            print(f"[TemplateManager] WARNING: Could not load project templates: {e}")
+
+    return _TEMPLATES
 
 def get_available_types() -> list:
     """Ritorna lista dei tipi disponibili."""

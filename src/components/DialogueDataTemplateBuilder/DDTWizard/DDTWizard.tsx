@@ -15,6 +15,7 @@ import { assembleFinalDDT } from './assembleFinal';
 import { Hourglass, Bell } from 'lucide-react';
 import { useAIProvider } from '../../../context/AIProviderContext';
 import { debug, error } from '../../../utils/logger';
+import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // 🚀 NEW: Interface for field processing state
@@ -190,7 +191,134 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     autoMappingService.initializeTemplates();
   }, []);
 
+  // Get current project ID from context
+  const { getCurrentProjectId } = useProjectDataUpdate();
+  const currentProjectId = getCurrentProjectId();
+
   const [step, setStep] = useState<string>(startOnStructure ? 'structure' : 'input');
+  const [saving, setSaving] = useState<'factory' | 'project' | null>(null);
+
+  // Schema editing state (from detect schema)
+  const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialDDT?.label || '');
+  const [schemaMains, setSchemaMains] = useState<SchemaNode[]>(() => {
+    if (initialDDT?.mainData && Array.isArray(initialDDT.mainData)) {
+      return (initialDDT.mainData as any[]).map((m: any) => ({
+        label: m.label,
+        type: m.type,
+        icon: m.icon,
+        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label, type: s.type, icon: s.icon, constraints: s.constraints })) : [],
+        constraints: m.constraints
+      })) as SchemaNode[];
+    }
+    return [];
+  });
+
+  // Check if DDT is composite (has multiple mainData or is explicitly composite)
+  const isCompositeDDT = useMemo(() => {
+    return schemaMains.length > 1 ||
+           (schemaMains.length === 1 && schemaMains[0]?.subData && schemaMains[0].subData.length > 0);
+  }, [schemaMains]);
+
+  // Save template to Factory (global)
+  const handleSaveToFactory = async () => {
+    if (!schemaRootLabel || schemaMains.length === 0) {
+      alert('Please complete the DDT structure before saving');
+      return;
+    }
+
+    setSaving('factory');
+    try {
+      const templateData = {
+        name: schemaRootLabel.toLowerCase().replace(/\s+/g, '_'),
+        label: schemaRootLabel,
+        type: isCompositeDDT ? 'composite' : 'atomic',
+        icon: 'Folder',
+        mainData: schemaMains.map(main => ({
+          templateRef: main.type,
+          label: main.label,
+          type: main.type,
+          icon: main.icon,
+          subData: main.subData || []
+        })),
+        synonyms: [], // Can be extended later
+        constraints: [],
+        validation: {},
+        metadata: {}
+      };
+
+      const response = await fetch('/api/factory/type-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save: ${response.statusText}`);
+      }
+
+      const saved = await response.json();
+      console.log('[DDTWizard] Saved to Factory:', saved);
+      alert('Template saved to Factory successfully!');
+    } catch (error: any) {
+      console.error('[DDTWizard] Error saving to Factory:', error);
+      alert(`Error saving to Factory: ${error.message}`);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Save template to Project (project-specific)
+  const handleSaveToProject = async () => {
+    if (!currentProjectId) {
+      alert('No project selected. Please open a project first.');
+      return;
+    }
+
+    if (!schemaRootLabel || schemaMains.length === 0) {
+      alert('Please complete the DDT structure before saving');
+      return;
+    }
+
+    setSaving('project');
+    try {
+      const templateData = {
+        name: schemaRootLabel.toLowerCase().replace(/\s+/g, '_'),
+        label: schemaRootLabel,
+        type: isCompositeDDT ? 'composite' : 'atomic',
+        icon: 'Folder',
+        mainData: schemaMains.map(main => ({
+          templateRef: main.type,
+          label: main.label,
+          type: main.type,
+          icon: main.icon,
+          subData: main.subData || []
+        })),
+        synonyms: [], // Can be extended later
+        constraints: [],
+        validation: {},
+        metadata: {}
+      };
+
+      const response = await fetch(`/api/projects/${currentProjectId}/type-templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save: ${response.statusText}`);
+      }
+
+      const saved = await response.json();
+      console.log('[DDTWizard] Saved to Project:', saved);
+      alert('Template saved to Project successfully!');
+    } catch (error: any) {
+      console.error('[DDTWizard] Error saving to Project:', error);
+      alert(`Error saving to Project: ${error.message}`);
+    } finally {
+      setSaving(null);
+    }
+  };
 
   // Auto-mapping function for manually added fields
   const autoMapFieldStructure = async (fieldLabel: string, fieldIndex: number) => {
@@ -245,15 +373,21 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [dataNode] = useState<DataNode | null>(() => ({ name: initialDDT?.label || '' }));
   const [closed, setClosed] = useState(false);
 
-  // Auto-detect function for real-time AI analysis
+  // Auto-detect function for real-time heuristic matching
   const handleAutoDetect = React.useCallback(async (text: string) => {
-    if (step === 'pipeline' || closed || !text.trim()) return;
+    console.log('[AUTO_DETECT][START]', { text, step, closed, textLength: text.trim().length });
 
-    debug('DDT_WIZARD', 'Starting auto-detection', { text, step, closed, textLength: text.trim().length });
+    if (step === 'pipeline' || closed || !text.trim() || text.trim().length < 3) {
+      console.log('[AUTO_DETECT][SKIP]', { reason: step === 'pipeline' ? 'pipeline' : closed ? 'closed' : !text.trim() ? 'empty' : 'too_short' });
+      return;
+    }
+
+    console.log('[AUTO_DETECT][CALL] Starting heuristic detection', { text, step, closed, textLength: text.trim().length });
 
     try {
+      // ✅ Use /step2-with-provider (Node.js) which now has heuristics integrated
       const urlPrimary = `/step2-with-provider`;
-      debug('DDT_WIZARD', 'Making API call', { url: urlPrimary });
+      console.log('[AUTO_DETECT][FETCH] Calling /step2-with-provider', { url: urlPrimary, body: { userDesc: text.trim(), provider: selectedProvider.toLowerCase(), model: selectedModel } });
 
       const response = await fetch(urlPrimary, {
         method: 'POST',
@@ -261,45 +395,124 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         body: JSON.stringify({ userDesc: text.trim(), provider: selectedProvider.toLowerCase(), model: selectedModel }),
       });
 
-      debug('DDT_WIZARD', 'API response received', { status: response.status, ok: response.ok, statusText: response.statusText });
+      console.log('[AUTO_DETECT][RESPONSE] Received', { status: response.status, ok: response.ok, statusText: response.statusText });
 
       if (!response.ok) {
-        error('DDT_WIZARD', 'API call failed', { status: response.status });
+        console.log('[AUTO_DETECT][ERROR] Response not OK', { status: response.status, statusText: response.statusText });
+        // If heuristic fails, silently return (user can click "Invia" for AI)
         return;
       }
 
       const result = await response.json();
-      debug('DDT_WIZARD', 'Parsed result', result);
+      console.log('[AUTO_DETECT][PARSE] Parsed result', { hasAi: !!result.ai, hasSchema: !!(result.ai || result).schema, resultKeys: Object.keys(result) });
 
       const ai = result.ai || result;
-      debug('DDT_WIZARD', 'AI data', { action: ai.action, label: ai.label, mainsCount: ai.mains?.length || 0 });
+      console.log('[AUTO_DETECT][AI] AI object', {
+        hasSchema: !!ai.schema,
+        hasMainData: !!(ai.schema && Array.isArray(ai.schema.mainData)),
+        mainDataLength: ai.schema?.mainData?.length || 0,
+        label: ai.schema?.label,
+        icon: ai.icon
+      });
 
-      // If AI suggests a specific template, show preview
-      if (ai.action === 'use_existing' || ai.action === 'compose') {
-        debug('DDT_WIZARD', 'Template detected', { template_source: ai.template_source, composed_from: ai.composed_from });
-        // You could show a preview tooltip here
+      // ✅ Check if heuristic match was found (has schema.mainData structure)
+      if (ai.schema && Array.isArray(ai.schema.mainData) && ai.schema.mainData.length > 0) {
+        console.log('[AUTO_DETECT][HEURISTIC_MATCH] ✅ Match found!', {
+          label: ai.schema.label,
+          mainsCount: ai.schema.mainData.length,
+          mains: ai.schema.mainData.map((m: any) => ({ label: m.label, type: m.type, subDataCount: m.subData?.length || 0 }))
+        });
+
+        // Process heuristic result immediately (same logic as handleDetectType)
+        const schema = ai.schema;
+        const root = schema.label || 'Data';
+        console.log('[AUTO_DETECT][PROCESS] Processing schema', { root, mainsCount: schema.mainData.length });
+
+        const mains0: SchemaNode[] = (schema.mainData || []).map((m: any) => {
+          const label = m.label || m.name || 'Field';
+          let type = m.type;
+          if (!type || type === 'object') {
+            const l = String(label).toLowerCase();
+            if (/phone|telephone|tel|cellulare|mobile/.test(l)) type = 'phone' as any;
+          }
+          return {
+            label,
+            type,
+            icon: m.icon,
+            constraints: [],
+            subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+              label: s.label || s.name || 'Field',
+              type: s.type,
+              icon: s.icon,
+              constraints: []
+            })) : [],
+          } as any;
+        });
+
+        console.log('[AUTO_DETECT][MAINS0] Mapped mains', { count: mains0.length, mains: mains0.map(m => ({ label: m.label, type: m.type, subDataCount: m.subData?.length || 0 })) });
+
+        setDetectTypeIcon(ai.icon || null);
+        console.log('[AUTO_DETECT][ICON] Set icon', { icon: ai.icon });
+
+        // Enrich constraints and show structure immediately
+        console.log('[AUTO_DETECT][ENRICH] Starting enrichConstraints', { root, mainsCount: mains0.length });
+        const enrichedRes = await enrichConstraintsFor(root, mains0);
+        console.log('[AUTO_DETECT][ENRICH] Enrichment done', {
+          hasLabel: !!(enrichedRes as any)?.label,
+          hasMains: !!(enrichedRes as any)?.mains,
+          mainsCount: (enrichedRes as any)?.mains?.length || 0
+        });
+
+        const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
+        let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
+
+        console.log('[AUTO_DETECT][FINAL] Before inference', { root: finalRoot, mainsCount: finalMains.length });
+
+        // Fallback: infer subData from text if missing
+        try {
+          const inferred = inferSubDataFromText(text);
+          console.log('[AUTO_DETECT][INFER] Inferred subData', { inferredCount: inferred.length, inferred });
+          if (Array.isArray(finalMains) && finalMains.length > 0 && (!finalMains[0].subData || finalMains[0].subData.length === 0) && inferred.length > 0) {
+            finalMains = [{ ...finalMains[0], subData: inferred }];
+            console.log('[AUTO_DETECT][INFER] Applied inferred subData', { finalMainsCount: finalMains.length });
+          }
+        } catch (err) {
+          console.log('[AUTO_DETECT][INFER] Inference failed', { error: err });
+        }
+
+        console.log('[AUTO_DETECT][SET_STATE] Setting state', {
+          root: finalRoot,
+          mainsCount: finalMains.length,
+          mains: finalMains.map((m: any) => ({ label: m.label, type: m.type, subDataCount: m.subData?.length || 0 }))
+        });
+
+        setSchemaRootLabel(finalRoot);
+        setSchemaMains(finalMains);
+        setShowRight(true); // ✅ Show right panel
+        console.log('[AUTO_DETECT][UI] Setting showRight=true, step=structure', { showRight: true, step: 'structure' });
+        setStep('structure'); // ✅ Show structure immediately, skip loading
+        console.log('[AUTO_DETECT][SUCCESS] ✅ Structure shown!', { root: finalRoot, mains: finalMains.length });
+        try { dlog('[DDT][UI][AUTO] step → structure (heuristic)', { root: finalRoot, mains: finalMains.length }); } catch { }
+        return;
       }
 
+      // No heuristic match found - user will need to click "Invia" for AI
+      console.log('[AUTO_DETECT][NO_MATCH] No heuristic match found', {
+        hasSchema: !!ai.schema,
+        hasMainData: !!(ai.schema && Array.isArray(ai.schema.mainData)),
+        mainDataLength: ai.schema?.mainData?.length || 0
+      });
+      debug('DDT_WIZARD', 'No heuristic match, AI will be called on submit');
+
     } catch (error) {
-      error('DDT_WIZARD', 'Auto-detect error', error);
+      // Silently fail - user can still use "Invia" button for AI
+      console.error('[AUTO_DETECT][ERROR] Exception caught', { error, message: (error as any)?.message, stack: (error as any)?.stack });
+      debug('DDT_WIZARD', 'Auto-detect error (non-blocking)', error);
     }
-  }, [step, closed, selectedProvider]);
+  }, [step, closed, selectedProvider, selectedModel]);
   // removed unused refs
 
-  // Schema editing state (from detect schema)
-  const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialDDT?.label || '');
-  const [schemaMains, setSchemaMains] = useState<SchemaNode[]>(() => {
-    if (initialDDT?.mainData && Array.isArray(initialDDT.mainData)) {
-      return (initialDDT.mainData as any[]).map((m: any) => ({
-        label: m.label,
-        type: m.type,
-        icon: m.icon,
-        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label, type: s.type, icon: s.icon, constraints: s.constraints })) : [],
-        constraints: m.constraints
-      })) as any;
-    }
-    return [];
-  });
+  // Schema editing state is already declared above (moved to fix initialization order)
   // removed local artifacts/editor state; we now rely on onComplete to open editor via sidebar
   const [isProcessing, setIsProcessing] = useState(false);
   // 🚀 REPLACED: progressByPath con TaskCounter
@@ -911,6 +1124,43 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               </div>
               {step === 'structure' && (
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                  {/* Save buttons - only show for composite DDTs */}
+                  {isCompositeDDT && (
+                    <>
+                      <button
+                        onClick={handleSaveToFactory}
+                        disabled={saving !== null}
+                        style={{
+                          background: saving === 'factory' ? '#64748b' : '#3b82f6',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 8,
+                          padding: '8px 14px',
+                          fontWeight: 600,
+                          cursor: saving !== null ? 'not-allowed' : 'pointer',
+                          opacity: saving !== null ? 0.6 : 1
+                        }}
+                      >
+                        {saving === 'factory' ? 'Saving...' : 'Save in Factory'}
+                      </button>
+                      <button
+                        onClick={handleSaveToProject}
+                        disabled={saving !== null || !currentProjectId}
+                        style={{
+                          background: saving === 'project' ? '#64748b' : '#8b5cf6',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 8,
+                          padding: '8px 14px',
+                          fontWeight: 600,
+                          cursor: (saving !== null || !currentProjectId) ? 'not-allowed' : 'pointer',
+                          opacity: (saving !== null || !currentProjectId) ? 0.6 : 1
+                        }}
+                      >
+                        {saving === 'project' ? 'Saving...' : 'Save in Project'}
+                      </button>
+                    </>
+                  )}
                   <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
                   <button
                     onClick={() => {

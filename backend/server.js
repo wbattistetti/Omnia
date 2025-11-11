@@ -2389,6 +2389,111 @@ app.get('/api/factory/type-templates', async (req, res) => {
   }
 });
 
+// POST /api/factory/type-templates - Save type template in Factory
+app.post('/api/factory/type-templates', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('type_templates');
+
+    const payload = req.body || {};
+    if (!payload.name) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const now = new Date();
+    const doc = {
+      name: payload.name,
+      label: payload.label || payload.name,
+      type: payload.type || 'atomic',
+      icon: payload.icon || 'FileText',
+      subData: payload.subData || [],
+      mainData: payload.mainData || [],
+      synonyms: payload.synonyms || [],
+      constraints: payload.constraints || [],
+      validation: payload.validation || {},
+      metadata: payload.metadata || {},
+      updatedAt: now
+    };
+
+    // Upsert by name
+    await coll.updateOne(
+      { name: doc.name },
+      { $set: doc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+
+    // Invalidate cache - reload templates on next request
+    cacheLoaded = false;
+
+    const saved = await coll.findOne({ name: doc.name });
+    if (saved && saved._id) {
+      delete saved._id;
+    }
+    logInfo('TypeTemplates.post', { name: doc.name, type: doc.type });
+    res.json(saved);
+  } catch (e) {
+    logError('TypeTemplates.post', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// POST /api/projects/:pid/type-templates - Save type template in Project
+app.post('/api/projects/:pid/type-templates', async (req, res) => {
+  const projectId = req.params.pid;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const coll = projDb.collection('type_templates');
+
+    const payload = req.body || {};
+    if (!payload.name) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const now = new Date();
+    const doc = {
+      name: payload.name,
+      label: payload.label || payload.name,
+      type: payload.type || 'atomic',
+      icon: payload.icon || 'FileText',
+      subData: payload.subData || [],
+      mainData: payload.mainData || [],
+      synonyms: payload.synonyms || [],
+      constraints: payload.constraints || [],
+      validation: payload.validation || {},
+      metadata: payload.metadata || {},
+      updatedAt: now
+    };
+
+    // Upsert by name
+    await coll.updateOne(
+      { name: doc.name },
+      { $set: doc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+
+    // Invalidate cache - reload templates on next request
+    cacheLoaded = false;
+
+    const saved = await coll.findOne({ name: doc.name });
+    if (saved && saved._id) {
+      delete saved._id;
+    }
+    logInfo('TypeTemplates.post', { projectId, name: doc.name, type: doc.type });
+    res.json(saved);
+  } catch (e) {
+    logError('TypeTemplates.post', e, { projectId, name: payload?.name });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
 app.post('/api/factory/reload-templates', async (req, res) => {
   try {
     cacheLoaded = false;
@@ -2846,6 +2951,9 @@ app.post('/api/analyze-field', async (req, res) => {
   }
 });
 
+// ✅ HEURISTIC MATCHING
+const { findBestTemplateMatch, buildHeuristicResponse, extractMentionedFields } = require('./template_heuristics');
+
 // Provider selection endpoint
 app.post('/step2-with-provider', async (req, res) => {
   try {
@@ -2855,12 +2963,60 @@ app.post('/step2-with-provider', async (req, res) => {
     console.log('[STEP2] Parsed userDesc:', userDesc);
     console.log('[STEP2] Parsed provider:', provider);
     console.log('[STEP2] Parsed model:', model);
-    console.log('[STEP2] Using Template Intelligence Service');
 
     // Load templates from database
     const templates = await loadTemplatesFromDB();
     console.log('[STEP2] Using', Object.keys(templates).length, 'templates from Factory DB cache');
 
+    // ✅ HEURISTIC MATCHING: Try deterministic matching before AI
+    try {
+      console.log('[STEP2][HEURISTIC] Starting heuristic matching', {
+        userDesc,
+        templatesCount: Object.keys(templates).length,
+        templateNames: Object.keys(templates).slice(0, 10)
+      });
+
+      const heuristicResult = findBestTemplateMatch(userDesc, templates);
+
+      console.log('[STEP2][HEURISTIC] Match result:', {
+        hasResult: !!heuristicResult,
+        result: heuristicResult ? {
+          templateName: heuristicResult.template?.name,
+          score: heuristicResult.score,
+          reason: heuristicResult.reason,
+          templateType: heuristicResult.template?.type,
+          hasSubData: !!heuristicResult.template?.subData,
+          subDataCount: heuristicResult.template?.subData?.length || 0
+        } : null
+      });
+
+      if (heuristicResult) {
+        const { template, score, reason } = heuristicResult;
+        console.log(`[STEP2][HEURISTIC] ✅ Match found: ${template.name || 'unknown'} (score: ${score}, reason: ${reason})`);
+        console.log('[STEP2][HEURISTIC] Template structure:', JSON.stringify(template, null, 2));
+
+        // Extract mentioned fields for response building
+        const mentionedFields = extractMentionedFields(userDesc, templates);
+        console.log('[STEP2][HEURISTIC] Mentioned fields:', mentionedFields);
+
+        // Build response from matched template
+        const heuristicResponse = buildHeuristicResponse(template, mentionedFields, templates, 'it');
+
+        console.log('[STEP2][HEURISTIC] Response built:', JSON.stringify(heuristicResponse, null, 2));
+
+        return res.json({
+          ai: heuristicResponse
+        });
+      } else {
+        console.log('[STEP2][HEURISTIC] No heuristic match found, falling back to AI');
+      }
+    } catch (heuristicError) {
+      console.error('[STEP2][HEURISTIC] Heuristic matching failed, falling back to AI:', heuristicError);
+      console.error('[STEP2][HEURISTIC] Error stack:', heuristicError.stack);
+    }
+
+    // Fallback to AI if no heuristic match
+    console.log('[STEP2] Using Template Intelligence Service (AI fallback)');
     const analysis = await analyzeUserRequestWithAI(userDesc, templates, provider, model);
 
     console.log('[STEP2] AI Analysis:', analysis.action, '- User requested', `"${userDesc}"`, '...');

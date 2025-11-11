@@ -1282,18 +1282,40 @@ def step2(user_desc: Any = Body(...)):
             text = str(user_desc or "").strip()
 
         # Load templates
-        load_templates()
+        templates_dict = load_templates()
         available_types = get_available_types()
 
         # Check AI key availability
         if not (GROQ_KEY or OPENAI_KEY):
             raise HTTPException(status_code=500, detail="missing_ai_key")
 
-        # ✅ NEW APPROACH: AI only detects types, templates provide structure
+        # ✅ NEW APPROACH: Try heuristic matching first, then AI fallback
         types_list = '|'.join(available_types)
 
         print(f"[step2] Available types from templates: {types_list}")
         print(f"[step2] Target language: {target_lang}")
+
+        # ✅ HEURISTIC MATCHING: Try deterministic matching before AI
+        if not current_schema:  # Only for new schemas, not refinements
+            try:
+                from backend.template_heuristics import find_best_template_match, build_heuristic_response
+            except ImportError:
+                from template_heuristics import find_best_template_match, build_heuristic_response
+
+            heuristic_result = find_best_template_match(text, templates_dict)
+
+            if heuristic_result:
+                matched_template, score, reason = heuristic_result
+                print(f"[step2][HEURISTIC] Match found: {matched_template.get('name')} (score: {score}, reason: {reason})")
+
+                # Extract mentioned fields for response building
+                from backend.template_heuristics import extract_mentioned_fields
+                mentioned_fields = extract_mentioned_fields(text, templates_dict)
+
+                # Build response from matched template
+                heuristic_response = build_heuristic_response(matched_template, mentioned_fields, templates_dict, target_lang)
+
+                return {"ai": heuristic_response}
 
         # If refining existing schema, keep old behavior
         if current_schema and isinstance(current_schema, dict) and (current_schema.get('mainData') or current_schema.get('mains')):
@@ -1439,13 +1461,52 @@ Rules:
 
                 if template:
                     # Use template structure
-                    main_entry = {
-                        'label': template.get('label', field_concept),
-                        'type': template.get('type', field_type),
-                        'icon': template.get('icon', 'FileText'),
-                        'subData': template.get('subData', [])
-                    }
-                    print(f"[step2] Using template for {field_type}: {main_entry['label']}")
+                    # For composite templates, resolve mainData references
+                    if template.get('type') == 'composite':
+                        main_data = template.get('mainData', [])
+                        resolved_main_data = []
+                        for main_item in main_data:
+                            template_ref = main_item.get('templateRef')
+                            if template_ref:
+                                # Resolve referenced template
+                                ref_template = templates_dict.get(template_ref)
+                                if ref_template:
+                                    resolved_main_data.append({
+                                        'label': ref_template.get('label', template_ref),
+                                        'type': ref_template.get('type', template_ref),
+                                        'icon': ref_template.get('icon', 'FileText'),
+                                        'subData': ref_template.get('subData', [])
+                                    })
+                                else:
+                                    # Fallback to main_item if ref not found
+                                    resolved_main_data.append({
+                                        'label': main_item.get('label', template_ref),
+                                        'type': template_ref,
+                                        'icon': main_item.get('icon', 'FileText'),
+                                        'subData': main_item.get('subData', [])
+                                    })
+                            else:
+                                # Direct mainData entry
+                                resolved_main_data.append({
+                                    'label': main_item.get('label', 'Data'),
+                                    'type': main_item.get('type', 'generic'),
+                                    'icon': main_item.get('icon', 'FileText'),
+                                    'subData': main_item.get('subData', [])
+                                })
+
+                        # Add all resolved mainData entries
+                        main_data_list.extend(resolved_main_data)
+                        print(f"[step2] Using composite template for {field_type}: {len(resolved_main_data)} mainData entries")
+                    else:
+                        # Atomic template
+                        main_entry = {
+                            'label': template.get('label', field_concept),
+                            'type': template.get('type', field_type),
+                            'icon': template.get('icon', 'FileText'),
+                            'subData': template.get('subData', [])
+                        }
+                        main_data_list.append(main_entry)
+                        print(f"[step2] Using template for {field_type}: {main_entry['label']}")
                 else:
                     # Fallback: create basic entry
                     main_entry = {
@@ -1455,8 +1516,7 @@ Rules:
                         'subData': []
                     }
                     print(f"[step2] No template found for {field_type}, using fallback")
-
-                main_data_list.append(main_entry)
+                    main_data_list.append(main_entry)
 
             # Build final response
             response = {

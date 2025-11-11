@@ -23,20 +23,15 @@ const WizardInputStep: React.FC<Props> = ({
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const autoDetectTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  // Auto-detect function
+  // Auto-detect function - NO DEBOUNCE, called only on mount or explicit trigger
   const handleAutoDetect = React.useCallback((text: string) => {
     const trimmed = text.trim();
+    console.log('[WIZARD_INPUT][AUTO_DETECT] Called', { text, trimmed, trimmedLength: trimmed.length, hasOnAutoDetect: !!onAutoDetect });
     if (trimmed.length >= 3 && onAutoDetect) {
-      // Clear existing timer
-      if (autoDetectTimerRef.current) {
-        clearTimeout(autoDetectTimerRef.current);
-      }
-
-      // Set new timer for auto-detection (debounce 1.5 seconds)
-      autoDetectTimerRef.current = setTimeout(() => {
-        console.log('[AUTO_DETECT] Triggering auto-detection for:', trimmed);
-        onAutoDetect(trimmed);
-      }, 1500);
+      console.log('[WIZARD_INPUT][AUTO_DETECT] Calling onAutoDetect immediately (no debounce)', { trimmed });
+      onAutoDetect(trimmed);
+    } else {
+      console.log('[WIZARD_INPUT][AUTO_DETECT] Skipped', { reason: trimmed.length < 3 ? 'too_short' : !onAutoDetect ? 'no_callback' : 'unknown' });
     }
   }, [onAutoDetect]);
 
@@ -49,10 +44,15 @@ const WizardInputStep: React.FC<Props> = ({
     };
   }, []);
   React.useEffect(() => {
-    try { console.log('[DDT][WizardInputStep][mount]'); } catch { }
+    console.log('[DDT][WizardInputStep][mount]', {
+      hasOnAutoDetect: !!onAutoDetect,
+      userDesc,
+      userDescLength: userDesc?.length || 0,
+      dataNodeName: dataNode?.name
+    });
     const handler = (e: any) => {
       const text = e?.detail?.text || '';
-      try { console.log('[DDT][WizardInputStep][prefill received]', text); } catch { }
+      console.log('[DDT][WizardInputStep][prefill received]', text);
       try { setUserDesc(text); } catch { }
       if (textareaRef.current) {
         textareaRef.current.value = text;
@@ -61,18 +61,47 @@ const WizardInputStep: React.FC<Props> = ({
     document.addEventListener('ddtWizard:prefillDesc', handler as any);
     return () => {
       document.removeEventListener('ddtWizard:prefillDesc', handler as any);
-      try { console.log('[DDT][WizardInputStep][unmount]'); } catch { }
+      console.log('[DDT][WizardInputStep][unmount]');
     };
-  }, [setUserDesc]);
+  }, [setUserDesc, onAutoDetect, userDesc, dataNode?.name]);
 
   // If empty, initialize the textarea with the act label (repeat header title inside textbox)
   React.useEffect(() => {
     const initial = (dataNode?.name || '').trim();
     if (!userDesc || userDesc.trim().length === 0) {
+      console.log('[WIZARD_INPUT][INIT] Setting initial value', { initial });
       try { setUserDesc(initial); } catch { }
       if (textareaRef.current) { textareaRef.current.value = initial; }
     }
   }, [dataNode?.name]);
+
+  // ✅ Trigger auto-detect when userDesc becomes non-empty for the first time
+  const hasAutoDetectedRef = React.useRef<string>('');
+  React.useEffect(() => {
+    const trimmed = (userDesc || '').trim();
+
+    console.log('[WIZARD_INPUT][MOUNT_CHECK] Checking if should auto-detect', {
+      userDesc,
+      trimmed,
+      trimmedLength: trimmed.length,
+      hasOnAutoDetect: !!onAutoDetect,
+      hasAutoDetected: hasAutoDetectedRef.current,
+      shouldTrigger: trimmed.length >= 3 && onAutoDetect && trimmed !== hasAutoDetectedRef.current
+    });
+
+    // Only trigger if text is long enough, callback exists, and we haven't already processed this text
+    if (trimmed.length >= 3 && onAutoDetect && trimmed !== hasAutoDetectedRef.current) {
+      console.log('[WIZARD_INPUT][MOUNT_CHECK] ✅ Triggering auto-detect (no debounce)', { trimmed });
+      hasAutoDetectedRef.current = trimmed;
+
+      // Small delay just to ensure component is fully mounted and state is stable
+      const timer = setTimeout(() => {
+        console.log('[WIZARD_INPUT][MOUNT_CHECK] Timer fired, calling onAutoDetect', { trimmed });
+        onAutoDetect(trimmed);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [userDesc, onAutoDetect]); // Run when userDesc or onAutoDetect changes
 
   return (
     <div
@@ -127,9 +156,9 @@ const WizardInputStep: React.FC<Props> = ({
         value={userDesc}
         onChange={e => {
           const newValue = e.target.value;
-          console.log('[WIZARD_INPUT] 🔤 Text changed:', newValue);
+          console.log('[WIZARD_INPUT] 🔤 Text changed:', { newValue, length: newValue.length, trimmedLength: newValue.trim().length });
           setUserDesc(newValue);
-          handleAutoDetect(newValue); // Trigger auto-detection
+          // NO auto-detect on typing - only on mount or "Invia" button
         }}
         placeholder={dataNode?.name || ''}
         rows={2}
