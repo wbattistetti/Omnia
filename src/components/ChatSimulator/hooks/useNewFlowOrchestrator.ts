@@ -69,6 +69,10 @@ export function useNewFlowOrchestrator({
   // Track pending user input for DDT navigation
   const [pendingInputResolve, setPendingInputResolve] = useState<((event: any) => void) | null>(null);
   const [currentNodeForInput, setCurrentNodeForInput] = useState<any>(null);
+  const [isRetrieving, setIsRetrieving] = useState(false); // Track if retrieve is in progress
+
+  // Ref to expose onUserInputProcessed callback to DDEBubbleChat
+  const onUserInputProcessedRef = React.useRef<((input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch') => void) | null>(null);
 
   // Execute task callback
   const handleTaskExecute = useCallback(async (task: any) => {
@@ -79,16 +83,36 @@ export function useNewFlowOrchestrator({
       hasOnDDTStart: !!onDDTStart
     });
     const result = await executeTask(task, {
-      onMessage: (text) => {
-        console.log('[useNewFlowOrchestrator][handleTaskExecute] onMessage called', { text, taskId: task.id });
+      onMessage: (text: string, stepType?: string, escalationNumber?: number) => {
+        console.log('[useNewFlowOrchestrator][handleTaskExecute] onMessage called', {
+          text,
+          taskId: task.id,
+          stepType,
+          escalationNumber
+        });
         if (onMessage) {
-          onMessage({
-            id: task.id, // Use task GUID directly - no need to generate new ID
-            text,
-            stepType: 'message',
-            timestamp: new Date()
+          // Import getStepColor dynamically
+          import('../chatSimulatorUtils').then(({ getStepColor }) => {
+            onMessage({
+              id: task.id, // Use task GUID directly - no need to generate new ID
+              text,
+              stepType: stepType || 'message',
+              escalationNumber,
+              timestamp: new Date(),
+              color: stepType ? getStepColor(stepType) : undefined
+            });
+            console.log('[useNewFlowOrchestrator][handleTaskExecute] Message sent to onMessage callback');
+          }).catch((error) => {
+            console.error('[useNewFlowOrchestrator][handleTaskExecute] Error importing getStepColor', error);
+            // Fallback: send message without color
+            onMessage({
+              id: task.id,
+              text,
+              stepType: stepType || 'message',
+              escalationNumber,
+              timestamp: new Date()
+            });
           });
-          console.log('[useNewFlowOrchestrator][handleTaskExecute] Message sent to onMessage callback');
         } else {
           console.warn('[useNewFlowOrchestrator][handleTaskExecute] onMessage callback not provided');
         }
@@ -125,6 +149,10 @@ export function useNewFlowOrchestrator({
           hasDDTParam: !!ddtParam,
           source: ddtParam ? 'parameter' : (currentDDTInClosure ? 'closure' : (currentDDTRef.current ? 'ref' : 'state'))
         });
+
+        // Reset isRetrieving when waiting for new input (retrieve completed)
+        setIsRetrieving(false);
+
         // Wait for user input - return promise that resolves when user provides input
         return new Promise((resolve) => {
           console.log('[useNewFlowOrchestrator] Setting up pending input resolve', { nodeId });
@@ -176,6 +204,15 @@ export function useNewFlowOrchestrator({
           // Input will be provided via handleUserInput
           // Return raw input as 'match' event - will be processed in retrieve()
         });
+      },
+      onUserInputProcessed: (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch') => {
+        // This callback is called from ddtRetrieve after processing input
+        // We'll expose it via a ref so DDEBubbleChat can listen to it
+        console.log('[useNewFlowOrchestrator] User input processed', { input, matchStatus });
+        // Store in a ref that DDEBubbleChat can access
+        if (onUserInputProcessedRef.current) {
+          onUserInputProcessedRef.current(input, matchStatus);
+        }
       },
       onProcessInput: async (input: string, node: any) => {
         console.log('[useNewFlowOrchestrator] Processing input', {
@@ -235,6 +272,15 @@ export function useNewFlowOrchestrator({
             return { status: 'match' as const, value: extractionResult.value };
           } else if (extractionResult.status === 'ask-more') {
             return { status: 'partialMatch' as const, value: extractionResult.value };
+          } else if (extractionResult.status === 'reject') {
+            // Regex matched but validation failed - treat as noMatch
+            console.log('[useNewFlowOrchestrator] Input rejected - returning noMatch', {
+              input,
+              status: extractionResult.status,
+              reasons: (extractionResult as any).reasons,
+              fieldName
+            });
+            return { status: 'noMatch' as const };
           } else {
             console.log('[useNewFlowOrchestrator] Input did not match - returning noMatch', {
               input,
@@ -293,6 +339,8 @@ export function useNewFlowOrchestrator({
     activeContext: null, // TODO: Track active context if needed
     variableStore: engine.executionState?.variableStore || {},
     error: null, // TODO: Track errors
+    isRetrieving, // Expose isRetrieving state
+    onUserInputProcessedRef, // Expose ref for DDEBubbleChat to set callback
 
     // Actions
     start: engine.start,
@@ -353,6 +401,9 @@ export function useNewFlowOrchestrator({
       });
       // Handle user input for DDT navigation
       if (pendingInputResolve) {
+        // Set isRetrieving to true when processing starts
+        setIsRetrieving(true);
+
         // Return raw input as 'match' event - will be processed in retrieve() using onProcessInput
         // This allows retrieve() to process the input and determine if it's actually match/noMatch
         console.log('[useNewFlowOrchestrator] Resolving pending input', { input });

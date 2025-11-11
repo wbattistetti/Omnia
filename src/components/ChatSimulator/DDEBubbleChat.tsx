@@ -57,6 +57,10 @@ export default function DDEBubbleChat({
     return propEdges || [];
   }, [mode, propEdges]);
 
+  // Track last user input message ID for updating matchStatus
+  const lastUserMessageIdRef = React.useRef<string | null>(null);
+  const lastUserInputRef = React.useRef<string | null>(null);
+
   const orchestrator = useNewFlowOrchestrator({
     nodes: getCurrentNodes(),
     edges: getCurrentEdges(),
@@ -77,6 +81,7 @@ export default function DDEBubbleChat({
             type: 'bot',
             text: message.text,
             stepType: message.stepType || 'message',
+            escalationNumber: message.escalationNumber,
             color: getStepColor(message.stepType || 'message')
           }];
         });
@@ -93,6 +98,27 @@ export default function DDEBubbleChat({
       // Engine will automatically continue
     }
   });
+
+  // Set up callback to update user message matchStatus
+  React.useEffect(() => {
+    if (orchestrator.onUserInputProcessedRef) {
+      orchestrator.onUserInputProcessedRef.current = (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch') => {
+        // Update the last user message matchStatus
+        if (lastUserMessageIdRef.current && lastUserInputRef.current === input) {
+          setMessages((prev) => prev.map((msg) =>
+            msg.id === lastUserMessageIdRef.current && msg.type === 'user'
+              ? { ...msg, matchStatus }
+              : msg
+          ));
+        }
+      };
+    }
+    return () => {
+      if (orchestrator.onUserInputProcessedRef) {
+        orchestrator.onUserInputProcessedRef.current = null;
+      }
+    };
+  }, [orchestrator.onUserInputProcessedRef]);
 
   // Determine current DDT: from orchestrator in flow mode, from prop in single-ddt mode
   const currentDDT = React.useMemo(() => {
@@ -289,8 +315,9 @@ export default function DDEBubbleChat({
 
           return null;
         })}
-        {/* Input field DOPO tutti i messaggi - show when DDT is active OR task is WaitingUserInput */}
-        {(currentDDT || (mode === 'flow' && orchestrator.currentTask?.state === 'WaitingUserInput')) && (
+        {/* Input field DOPO tutti i messaggi - show when DDT is active AND retrieve is NOT in progress */}
+        {(currentDDT || (mode === 'flow' && orchestrator.currentTask?.state === 'WaitingUserInput')) &&
+         !orchestrator.isRetrieving && (
           <div className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3">
             <input
               type="text"
@@ -310,11 +337,14 @@ export default function DDEBubbleChat({
                   // In flow mode, always use new DDT navigator (handleUserInput)
                   if (mode === 'flow' && (currentDDT || orchestrator.currentTask?.state === 'WaitingUserInput')) {
                     // Add user message to chat
+                    const userMessageId = `msg-${Date.now()}-${Math.random()}`;
+                    lastUserMessageIdRef.current = userMessageId;
+                    lastUserInputRef.current = v;
                     setMessages((prev) => [...prev, {
-                      id: `msg-${Date.now()}-${Math.random()}`,
+                      id: userMessageId,
                       type: 'user',
                       text: v,
-                      matchStatus: 'match'
+                      matchStatus: undefined // Will be updated after processing
                     }]);
 
                     // Send input to DDT navigator (async, no await needed)

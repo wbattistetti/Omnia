@@ -169,11 +169,48 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [showBackendBuilder, setShowBackendBuilder] = useState(false);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
+  const [debuggerWidth, setDebuggerWidth] = useState(380); // Larghezza dinamica invece di fissa
+  const [isResizing, setIsResizing] = useState(false);
   const [conditionEditorOpen, setConditionEditorOpen] = useState(false);
   const [conditionVars, setConditionVars] = useState<Record<string, any>>({});
   const [conditionScript, setConditionScript] = useState<string>('');
   const [conditionVarsTree, setConditionVarsTree] = useState<any[]>([]);
   const [conditionLabel, setConditionLabel] = useState<string>('Condition');
+
+  // Handler per il resize del pannello di debug
+  const handleResizeStart = React.useCallback((e: React.MouseEvent) => {
+    setIsResizing(true);
+    e.preventDefault();
+  }, []);
+
+  const handleResize = React.useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+
+    const container = document.getElementById('flow-canvas-host');
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const newWidth = rect.right - e.clientX;
+
+    // Limiti: minimo 200px, massimo 800px
+    const clampedWidth = Math.max(200, Math.min(800, newWidth));
+    setDebuggerWidth(clampedWidth);
+  }, [isResizing]);
+
+  const handleResizeEnd = React.useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResize);
+      document.addEventListener('mouseup', handleResizeEnd);
+      return () => {
+        document.removeEventListener('mousemove', handleResize);
+        document.removeEventListener('mouseup', handleResizeEnd);
+      };
+    }
+  }, [isResizing, handleResize, handleResizeEnd]);
 
   // Listen to Sidebar wrench
   React.useEffect(() => {
@@ -711,7 +748,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 
             {/* Canvas */}
             <div className="flex-1 flex flex-col min-w-0">
-              <div id="flow-canvas-host" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? '1fr 380px' : '1fr', position: 'relative' }}>
+              <div id="flow-canvas-host" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? `1fr ${debuggerWidth}px` : '1fr', position: 'relative' }}>
               {showBackendBuilder ? (
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
@@ -774,28 +811,66 @@ export const AppContent: React.FC<AppContentProps> = ({
                 </div>
               )}
               {showGlobalDebugger && (
-                <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                  <DDEBubbleChat
-                    mode="flow"
-                    // nodes and edges are read directly from window.__flowNodes in flow mode
-                  />
-                  <ConditionEditor
-                    open={conditionEditorOpen}
-                    onClose={() => setConditionEditorOpen(false)}
-                    variables={conditionVars}
-                    initialScript={conditionScript}
-                    variablesTree={conditionVarsTree}
-                    label={conditionLabel}
-                    dockWithinParent={true}
-                    onRename={(next) => {
-                      setConditionLabel(next);
-                      try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
+                <>
+                  {/* Resizer verticale */}
+                  <div
+                    onMouseDown={handleResizeStart}
+                    style={{
+                      position: 'absolute',
+                      left: `calc(100% - ${debuggerWidth}px - 4px)`,
+                      top: 0,
+                      bottom: 0,
+                      width: '8px',
+                      cursor: 'col-resize',
+                      backgroundColor: isResizing ? '#3b82f6' : 'transparent',
+                      zIndex: 10,
+                      userSelect: 'none'
                     }}
-                    onSave={(script) => {
-                      try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
+                    onMouseEnter={(e) => {
+                      if (!isResizing) {
+                        (e.currentTarget as HTMLElement).style.backgroundColor = '#e5e7eb';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isResizing) {
+                        (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                      }
                     }}
                   />
-                </div>
+
+                  {/* Pannello di debug con scrollbar */}
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      height: '100%',
+                      overflowY: 'auto', // Scrollbar verticale
+                      overflowX: 'hidden',
+                      borderLeft: '1px solid #e5e7eb'
+                    }}
+                  >
+                    <DDEBubbleChat
+                      mode="flow"
+                      // nodes and edges are read directly from window.__flowNodes in flow mode
+                    />
+                    <ConditionEditor
+                      open={conditionEditorOpen}
+                      onClose={() => setConditionEditorOpen(false)}
+                      variables={conditionVars}
+                      initialScript={conditionScript}
+                      variablesTree={conditionVarsTree}
+                      label={conditionLabel}
+                      dockWithinParent={true}
+                      onRename={(next) => {
+                        setConditionLabel(next);
+                        try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
+                      }}
+                      onSave={(script) => {
+                        try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
+                      }}
+                    />
+                  </div>
+                </>
               )}
               </div>
               {/* Act Editor - parte del layout normale, riduce lo spazio del canvas sopra */}

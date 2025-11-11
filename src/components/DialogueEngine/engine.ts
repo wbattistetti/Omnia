@@ -97,8 +97,15 @@ export class DialogueEngine {
         action: nextTask.action,
         state: nextTask.state
       });
+      const taskStateBefore = nextTask.state;
       await this.executeTask(nextTask);
-      console.log('[DialogueEngine][runLoop] Task executed, state after:', nextTask.state);
+      const taskStateAfter = nextTask.state;
+      console.log('[DialogueEngine][runLoop] Task executed', {
+        taskId: nextTask.id,
+        stateBefore: taskStateBefore,
+        stateAfter: taskStateAfter,
+        isSameReference: nextTask === this.result.tasks.find(t => t.id === nextTask.id)
+      });
       // Wait until task is executed (loop continues automatically)
     }
     console.log('[DialogueEngine][runLoop] Loop ended, isRunning:', this.isRunning);

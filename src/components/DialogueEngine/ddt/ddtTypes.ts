@@ -26,9 +26,10 @@ export interface RetrieveResult {
 }
 
 export interface DDTNavigatorCallbacks {
-  onMessage?: (text: string) => void;
+  onMessage?: (text: string, stepType?: string, escalationNumber?: number) => void;
   onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<RetrieveEvent>;
   onProcessInput?: (input: string, node: any) => Promise<{ status: 'match' | 'noMatch' | 'noInput' | 'partialMatch'; value?: any }>;
+  onUserInputProcessed?: (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch') => void;
   translations?: Record<string, string>; // Translations for resolving action text
 }
 

@@ -99,7 +99,9 @@ export function getEscalationRecovery(
  */
 export async function executeStep(
   stepOrEscalation: any,
-  callbacks: DDTNavigatorCallbacks
+  callbacks: DDTNavigatorCallbacks,
+  stepType?: string,
+  escalationNumber?: number
 ): Promise<void> {
   console.log('[ddtSteps][executeStep] Starting', {
     hasStep: !!stepOrEscalation,
@@ -118,7 +120,7 @@ export async function executeStep(
     const actions = Array.isArray(stepOrEscalation.actions) ? stepOrEscalation.actions : [stepOrEscalation.actions];
 
     for (const action of actions) {
-      await executeAction(action, callbacks);
+      await executeAction(action, callbacks, stepType, escalationNumber);
     }
     return;
   }
@@ -148,7 +150,7 @@ export async function executeStep(
       console.log('[ddtSteps][executeStep] Actions', { count: actions.length });
 
       for (const action of actions) {
-        await executeAction(action, callbacks);
+        await executeAction(action, callbacks, stepType, escalationNumber);
       }
     } else {
       console.warn('[ddtSteps][executeStep] First escalation has no actions');
@@ -163,7 +165,9 @@ export async function executeStep(
  */
 async function executeAction(
   action: any,
-  callbacks: DDTNavigatorCallbacks
+  callbacks: DDTNavigatorCallbacks,
+  stepType?: string,
+  escalationNumber?: number
 ): Promise<void> {
   console.log('[ddtSteps][executeAction] Processing action', {
     actionId: action?.actionId,
@@ -185,8 +189,8 @@ async function executeAction(
     });
 
     if (text && callbacks.onMessage) {
-      console.log('[ddtSteps][executeAction] Calling onMessage', { text });
-      callbacks.onMessage(text);
+      console.log('[ddtSteps][executeAction] Calling onMessage', { text, stepType, escalationNumber });
+      callbacks.onMessage(text, stepType, escalationNumber);
       console.log('[ddtSteps][executeAction] onMessage called');
     } else {
       console.warn('[ddtSteps][executeAction] Cannot send message', {
@@ -206,7 +210,7 @@ async function executeAction(
         value: textParam?.value
       });
       if (textParam && textParam.value && callbacks.onMessage) {
-        callbacks.onMessage(textParam.value);
+        callbacks.onMessage(textParam.value, stepType, escalationNumber);
       }
     }
   }

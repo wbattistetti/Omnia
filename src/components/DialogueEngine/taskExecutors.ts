@@ -71,7 +71,7 @@ export async function executeTask(
     onDDTStart?: (ddt: AssembledDDT) => void;
     onBackendCall?: (config: any) => Promise<any>;
     onProblemClassify?: (intents: any[], ddt: AssembledDDT) => Promise<any>;
-    onGetRetrieveEvent?: (nodeId: string) => Promise<any>;
+    onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<any>;
     onProcessInput?: (input: string, node: any) => Promise<{ status: 'match' | 'noMatch' | 'noInput' | 'partialMatch'; value?: any }>;
   }
 ): Promise<TaskExecutionResult> {
@@ -93,7 +93,17 @@ export async function executeTask(
     switch (normalizedAction) {
       case 'SayMessage':
       case 'Message':
-        return await executeSayMessage(task, callbacks);
+        console.log('[TaskExecutor][executeTask] Calling executeSayMessage', {
+          taskId: task.id,
+          taskStateBefore: task.state
+        });
+        const result = await executeSayMessage(task, callbacks);
+        console.log('[TaskExecutor][executeTask] executeSayMessage returned', {
+          taskId: task.id,
+          taskStateAfter: task.state,
+          resultSuccess: result.success
+        });
+        return result;
 
       case 'GetData':
         return await executeGetData(task, {
@@ -134,6 +144,13 @@ async function executeSayMessage(
   task: CompiledTask,
   callbacks: { onMessage?: (text: string) => void }
 ): Promise<TaskExecutionResult> {
+  console.log('[TaskExecutor][executeSayMessage] Starting', {
+    taskId: task.id,
+    taskState: task.state,
+    hasValue: !!task.value,
+    hasText: !!task.value?.text
+  });
+
   // Get text from task.value.text
   const text = task.value?.text || '';
 
@@ -146,9 +163,44 @@ async function executeSayMessage(
   }
 
   // Show message
+  console.log('[TaskExecutor][executeSayMessage] About to call onMessage', {
+    taskId: task.id,
+    hasOnMessage: !!callbacks.onMessage,
+    textLength: text.length
+  });
+
   if (callbacks.onMessage) {
-    callbacks.onMessage(text);
+    try {
+      console.log('[TaskExecutor][executeSayMessage] Calling onMessage callback', {
+        taskId: task.id,
+        textLength: text.length
+      });
+      callbacks.onMessage(text);
+      console.log('[TaskExecutor][executeSayMessage] onMessage callback completed', {
+        taskId: task.id,
+        taskState: task.state
+      });
+    } catch (error) {
+      console.error('[TaskExecutor][executeSayMessage] Error in onMessage callback', {
+        taskId: task.id,
+        error: error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined
+      });
+      // Don't throw - continue execution and mark task as Executed anyway
+      // The error is in the UI callback, not in the task execution itself
+      console.warn('[TaskExecutor][executeSayMessage] Continuing despite onMessage error');
+    }
+  } else {
+    console.log('[TaskExecutor][executeSayMessage] No onMessage callback provided');
   }
+
+  console.log('[TaskExecutor][executeSayMessage] After onMessage call', {
+    taskId: task.id,
+    taskState: task.state,
+    taskStateDirect: task.state,
+    taskStateCheck: task.state === 'Executed' ? 'YES' : 'NO'
+  });
 
   // Check if this message is inside a GetData or ClassifyProblem row recovery
   // If so, mark as interactive (WaitingUserInput) instead of Executed
@@ -156,19 +208,44 @@ async function executeSayMessage(
   const isInteractiveRow = parentRowAction === 'GetData' || parentRowAction === 'ClassifyProblem';
   const isRecoveryAction = task.source?.type === 'ddt-recovery-action';
 
+  console.log('[TaskExecutor][executeSayMessage] Checking task source', {
+    taskId: task.id,
+    hasSource: !!task.source,
+    sourceType: task.source?.type,
+    parentRowAction,
+    isInteractiveRow,
+    isRecoveryAction
+  });
+
   if (isInteractiveRow && isRecoveryAction) {
     // Message inside GetData/ClassifyProblem row recovery is interactive
     task.state = 'WaitingUserInput';
     console.log('[TaskExecutor][executeSayMessage] Message marked as interactive', {
       taskId: task.id,
       parentRowAction,
-      isRecoveryAction
+      isRecoveryAction,
+      taskState: task.state
     });
   } else {
     // Regular message: mark as Executed
     // TODO: If task has duration (e.g., audio), wait for completion
     task.state = 'Executed';
+    console.log('[TaskExecutor][executeSayMessage] Message marked as Executed', {
+      taskId: task.id,
+      taskState: task.state,
+      isInteractiveRow,
+      isRecoveryAction,
+      taskStateDirect: task.state,
+      taskObject: { id: task.id, state: task.state }
+    });
   }
+
+  // Double-check state before returning
+  console.log('[TaskExecutor][executeSayMessage] Final check before return', {
+    taskId: task.id,
+    finalState: task.state,
+    taskStateProperty: task.state
+  });
 
   return {
     success: true,
@@ -186,7 +263,7 @@ async function executeGetData(
   callbacks: {
     onMessage?: (text: string) => void;
     onDDTStart?: (ddt: AssembledDDT) => void;
-    onGetRetrieveEvent?: (nodeId: string) => Promise<any>;
+    onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<any>;
     onProcessInput?: (input: string, node: any) => Promise<any>;
   }
 ): Promise<TaskExecutionResult> {
@@ -293,14 +370,13 @@ async function executeGetData(
   // Use hierarchical DDT navigation
   try {
     const { executeGetDataHierarchical } = await import('./ddt');
-    const ddtTypes = await import('./ddt/ddtTypes');
 
     // Initialize DDT state
-    const ddtState: ddtTypes.DDTState = {
-      memory: {},
-      noMatchCounters: {},
-      noInputCounters: {},
-      notConfirmedCounters: {}
+    const ddtState = {
+      memory: {} as Record<string, { value: any; confirmed: boolean }>,
+      noMatchCounters: {} as Record<string, number>,
+      noInputCounters: {} as Record<string, number>,
+      notConfirmedCounters: {} as Record<string, number>
     };
 
     // Mark as WaitingUserInput (will be updated during navigation)
@@ -429,7 +505,7 @@ async function executeBackendCall(
  */
 async function executeAIAgent(
   task: CompiledTask,
-  callbacks: { onMessage?: (text: string) => void }
+  _callbacks: { onMessage?: (text: string) => void }
 ): Promise<TaskExecutionResult> {
   // AI Agent execution would go here
   // For now, just return success

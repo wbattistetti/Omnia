@@ -45,7 +45,7 @@ export async function retrieve(
   });
 
   if (startStep) {
-    await executeStep(startStep, callbacks);
+    await executeStep(startStep, callbacks, 'start', 1);
     console.log('[DDTRetrieve] Start step executed');
   } else {
     console.warn('[DDTRetrieve] No start step found for node', nodeId);
@@ -80,6 +80,12 @@ export async function retrieve(
       });
 
       // Update event based on processing result
+      // Notify callback about user input processing result
+      if (callbacks.onUserInputProcessed) {
+        const matchStatus = processResult.status === 'partialMatch' ? 'match' : processResult.status;
+        callbacks.onUserInputProcessed(rawInput, matchStatus as 'match' | 'noMatch' | 'partialMatch');
+      }
+
       if (processResult.status === 'match') {
         event = { type: 'match' as const, value: processResult.value };
       } else if (processResult.status === 'noMatch') {
@@ -129,7 +135,7 @@ export async function retrieve(
           console.log('[DDTRetrieve] No recovery found, using Normal step as fallback');
           const normalStep = getStep(node, 'Normal') || getStep(node, 'start');
           if (normalStep) {
-            await executeStep(normalStep, callbacks);
+            await executeStep(normalStep, callbacks, 'start', 1);
             console.log('[DDTRetrieve] Normal step executed as fallback, continuing loop');
             break;
           } else {
@@ -159,7 +165,7 @@ export async function retrieve(
           level: noMatchCounter,
           hasOnMessage: !!callbacks.onMessage
         });
-        await executeStep(noMatchRecovery, callbacks);
+        await executeStep(noMatchRecovery, callbacks, 'noMatch', noMatchCounter);
         console.log('[DDTRetrieve] NoMatch recovery executed, continuing loop');
         break;
 
@@ -184,7 +190,7 @@ export async function retrieve(
           ));
         }
 
-        await executeStep(noInputRecovery, callbacks);
+        await executeStep(noInputRecovery, callbacks, 'noInput', noInputCounter);
         break;
 
       case 'match':
@@ -198,7 +204,7 @@ export async function retrieve(
 
         if (confirmStep) {
           // Execute confirmation step
-          await executeStep(confirmStep, callbacks);
+          await executeStep(confirmStep, callbacks, 'confirmation', 1);
 
           // Wait for confirmation event
           const confirmEvent = await getRetrieveEvent(nodeId, callbacks.onGetRetrieveEvent, node);
@@ -212,7 +218,7 @@ export async function retrieve(
               : null;
 
             if (notConfirmedRecovery) {
-              await executeStep(notConfirmedRecovery, callbacks);
+              await executeStep(notConfirmedRecovery, callbacks, 'notConfirmed', notConfirmedCounter);
               // Continue loop to re-ask
               continue;
             } else {
@@ -226,7 +232,7 @@ export async function retrieve(
             // Execute success step if exists
             const successStep = getStep(node, 'Success');
             if (successStep) {
-              await executeStep(successStep, callbacks);
+              await executeStep(successStep, callbacks, 'success', 1);
             }
 
             return { success: true, value: event.value };
@@ -235,12 +241,12 @@ export async function retrieve(
           // No confirmation: save and exit directly
           const successStep = getStep(node, 'Success');
           if (successStep) {
-            await executeStep(successStep, callbacks);
+            await executeStep(successStep, callbacks, 'success', 1);
           }
 
           return { success: true, value: event.value };
         }
-        break;
+        // Note: break is not needed here - both branches above return
 
       case 'exit':
         return handleExitAction(event.exitAction);
