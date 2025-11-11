@@ -10,8 +10,14 @@ export interface ExtractionContext {
     subSlots?: any[];
     kind?: string;
     label?: string;
+    nlpProfile?: {
+      waitingEsc1?: string;
+      waitingEsc2?: string;
+      regex?: string;
+    };
   };
   regex?: string;
+  onWaitingMessage?: (message: string) => void;
 }
 
 /**
@@ -531,6 +537,11 @@ export async function extractField<T>(
   let llmResult = null;
 
   // NER extraction
+  if (context?.onWaitingMessage && context?.node?.nlpProfile?.waitingEsc1) {
+    // Mostra messaggio waiting NER
+    context.onWaitingMessage(context.node.nlpProfile.waitingEsc1);
+  }
+
   try {
     const ner = await nerExtract<T>(field, text);
     for (const c of ner.candidates || []) {
@@ -544,6 +555,11 @@ export async function extractField<T>(
   }
 
   // LLM extraction
+  if (context?.onWaitingMessage && context?.node?.nlpProfile?.waitingEsc2) {
+    // Mostra messaggio waiting LLM
+    context.onWaitingMessage(context.node.nlpProfile.waitingEsc2);
+  }
+
   try {
     const llmResponse = await fetch('/api/nlp/llm-extract', {
       method: 'POST',

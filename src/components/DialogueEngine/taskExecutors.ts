@@ -71,6 +71,8 @@ export async function executeTask(
     onDDTStart?: (ddt: AssembledDDT) => void;
     onBackendCall?: (config: any) => Promise<any>;
     onProblemClassify?: (intents: any[], ddt: AssembledDDT) => Promise<any>;
+    onGetRetrieveEvent?: (nodeId: string) => Promise<any>;
+    onProcessInput?: (input: string, node: any) => Promise<{ status: 'match' | 'noMatch' | 'noInput' | 'partialMatch'; value?: any }>;
   }
 ): Promise<TaskExecutionResult> {
   console.log('[TaskExecutor][executeTask] Starting', {
@@ -96,7 +98,9 @@ export async function executeTask(
       case 'GetData':
         return await executeGetData(task, {
           onMessage: callbacks.onMessage,
-          onDDTStart: callbacks.onDDTStart
+          onDDTStart: callbacks.onDDTStart,
+          onGetRetrieveEvent: callbacks.onGetRetrieveEvent,
+          onProcessInput: callbacks.onProcessInput
         });
 
       case 'ClassifyProblem':
@@ -173,16 +177,17 @@ async function executeSayMessage(
 }
 
 /**
- * Execute GetData task (starts DDT)
- * GetData tasks can have both text (message to show) and ddt (DDT to open)
- * Marks task as WaitingUserInput (suspensive condition)
- * If task has no text, extracts initial message from DDT (step "start")
+ * Execute GetData task using hierarchical DDT navigation
+ * Uses native hierarchical navigation instead of flat task structure
+ * Marks task as WaitingUserInput during retrieval, Executed when complete
  */
 async function executeGetData(
   task: CompiledTask,
   callbacks: {
     onMessage?: (text: string) => void;
     onDDTStart?: (ddt: AssembledDDT) => void;
+    onGetRetrieveEvent?: (nodeId: string) => Promise<any>;
+    onProcessInput?: (input: string, node: any) => Promise<any>;
   }
 ): Promise<TaskExecutionResult> {
   console.log('[TaskExecutor][executeGetData] Starting', {
@@ -247,6 +252,21 @@ async function executeGetData(
     console.log('[TaskExecutor][executeGetData] No message to show (no text in task.value and could not extract from DDT)');
   }
 
+  // Log DDT structure for debugging
+  if (ddt) {
+    console.log('[TaskExecutor][executeGetData] DDT structure', {
+      ddtId: ddt.id,
+      ddtLabel: ddt.label,
+      ddtKeys: Object.keys(ddt),
+      hasMainData: !!ddt.mainData,
+      mainDataType: typeof ddt.mainData,
+      isMainDataArray: Array.isArray(ddt.mainData),
+      hasNodes: !!(ddt as any).nodes,
+      nodesCount: (ddt as any).nodes?.length || 0,
+      mainDataValue: ddt.mainData ? (Array.isArray(ddt.mainData) ? ddt.mainData[0] : ddt.mainData) : null
+    });
+  }
+
   if (!ddt) {
     console.error('[TaskExecutor][executeGetData] GetData task missing DDT', {
       taskId: task.id,
@@ -270,18 +290,76 @@ async function executeGetData(
     console.warn('[TaskExecutor][executeGetData] DDT callback is not provided');
   }
 
-  // Mark as WaitingUserInput (suspensive condition - engine will stop)
-  task.state = 'WaitingUserInput';
-  console.log('[TaskExecutor][executeGetData] Task marked as WaitingUserInput', {
-    taskId: task.id,
-    state: task.state
-  });
+  // Use hierarchical DDT navigation
+  try {
+    const { executeGetDataHierarchical } = await import('./ddt');
+    const ddtTypes = await import('./ddt/ddtTypes');
 
-  return {
-    success: true,
-    ddt,
-    retrievalState: 'empty' // DDT starts in empty state
-  };
+    // Initialize DDT state
+    const ddtState: ddtTypes.DDTState = {
+      memory: {},
+      noMatchCounters: {},
+      noInputCounters: {},
+      notConfirmedCounters: {}
+    };
+
+    // Mark as WaitingUserInput (will be updated during navigation)
+    task.state = 'WaitingUserInput';
+
+    // Execute hierarchical navigation
+    // Pass DDT to callbacks so they can access it
+    const ddtCallbacks = {
+      onMessage: callbacks.onMessage,
+      onGetRetrieveEvent: callbacks.onGetRetrieveEvent ?
+        (nodeId: string, ddtParam?: AssembledDDT) => callbacks.onGetRetrieveEvent!(nodeId, ddtParam || ddt) :
+        undefined,
+      onProcessInput: callbacks.onProcessInput,
+      translations: (ddt as any).translations || {} // Pass DDT translations
+    };
+
+    const result = await executeGetDataHierarchical(
+      ddt,
+      ddtState,
+      ddtCallbacks
+    );
+
+    if (result.exit) {
+      // Exit action triggered
+      return {
+        success: false,
+        error: new Error('DDT execution exited'),
+        retrievalState: 'empty'
+      };
+    }
+
+    if (result.success) {
+      // All mainData completed - mark as Executed
+      task.state = 'Executed';
+      return {
+        success: true,
+        variables: ddtState.memory,
+        retrievalState: 'saturated',
+        ddt
+      };
+    }
+
+    // Error during navigation
+    return {
+      success: false,
+      error: result.error || new Error('DDT navigation failed'),
+      retrievalState: 'empty'
+    };
+
+  } catch (error) {
+    console.error('[TaskExecutor][executeGetData] Error in hierarchical navigation', error);
+    // Fallback to old behavior if new navigation fails
+    task.state = 'WaitingUserInput';
+    return {
+      success: true,
+      ddt,
+      retrievalState: 'empty'
+    };
+  }
 }
 
 /**
