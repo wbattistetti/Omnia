@@ -213,19 +213,34 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
 
     // Minimal base messages (ensure ResponseEditor displays steps)
     const baseSteps = (isSub ? ['start', 'noInput', 'noMatch'] : ['start', 'noInput', 'noMatch', 'confirmation', 'notConfirmed', 'success']);
+
+    // Check if node has stepPrompts from template match
+    const nodeStepPrompts = (node as any).stepPrompts || null;
+
     for (const stepKey of baseSteps) {
-      const defaultKey = `runtime.${ddtId}.${path}.${stepKey}.text`;
-      // Prefer AI-provided key if present (ai.0). We already pushed translations for it above.
-      const ai0Key = `runtime.${ddtId}.${path}.${stepKey}.ai.0`;
-      const chosenKey = translations[ai0Key] ? ai0Key : defaultKey;
-      if (chosenKey === defaultKey && !translations[defaultKey]) {
-        pushTranslation(translations, defaultKey, `${node.label} · ${stepKey}`);
+      let chosenKey: string;
+
+      // Priority 1: Use stepPrompts from template if available
+      if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey].keys) && nodeStepPrompts[stepKey].keys.length > 0) {
+        // Use the first prompt key from template
+        chosenKey = nodeStepPrompts[stepKey].keys[0];
+        console.log('[assembleFinalDDT] Using stepPrompts key', { path, stepKey, chosenKey, fromTemplate: true });
+      } else {
+        // Fallback: Use AI-provided key or default
+        const defaultKey = `runtime.${ddtId}.${path}.${stepKey}.text`;
+        // Prefer AI-provided key if present (ai.0). We already pushed translations for it above.
+        const ai0Key = `runtime.${ddtId}.${path}.${stepKey}.ai.0`;
+        chosenKey = translations[ai0Key] ? ai0Key : defaultKey;
+        if (chosenKey === defaultKey && !translations[defaultKey]) {
+          pushTranslation(translations, defaultKey, `${node.label} · ${stepKey}`);
+        }
+        // Debug to understand which key is used
+        try {
+          // eslint-disable-next-line no-console
+          console.log('[assembleFinalDDT] step', path, stepKey, 'key', chosenKey, 'hasAI', Boolean(translations[ai0Key]));
+        } catch {}
       }
-      // Debug to understand which key is used
-      try {
-        // eslint-disable-next-line no-console
-        console.log('[assembleFinalDDT] step', path, stepKey, 'key', chosenKey, 'hasAI', Boolean(translations[ai0Key]));
-      } catch {}
+
       assembled.messages[stepKey] = { textKey: chosenKey };
       const isAsk = ['text', 'email', 'number', 'date'].includes((node.type || '').toString());
       const baseAction = {
@@ -233,11 +248,31 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         actionInstanceId: `a_${uuidv4()}`,
         parameters: [{ parameterId: 'text', value: chosenKey }]
       };
-      const numEsc = stepKey === 'notConfirmed' ? 2 : (counts[stepKey] || 1);
-      const escalations = Array.from({ length: numEsc }).map(() => ({
-        escalationId: `e_${uuidv4()}`,
-        actions: [baseAction]
-      }));
+
+      // If using stepPrompts, use the number of prompts as escalations
+      let numEsc: number;
+      if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey].keys)) {
+        numEsc = nodeStepPrompts[stepKey].keys.length;
+      } else {
+        numEsc = stepKey === 'notConfirmed' ? 2 : (counts[stepKey] || 1);
+      }
+
+      // Create escalations, using stepPrompts keys if available
+      const escalations = Array.from({ length: numEsc }).map((_, escIdx) => {
+        let actionKey = chosenKey;
+        // If using stepPrompts and there are multiple prompts, use the corresponding one
+        if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey].keys) && nodeStepPrompts[stepKey].keys[escIdx]) {
+          actionKey = nodeStepPrompts[stepKey].keys[escIdx];
+        }
+        return {
+          escalationId: `e_${uuidv4()}`,
+          actions: [{
+            ...baseAction,
+            parameters: [{ parameterId: 'text', value: actionKey }]
+          }]
+        };
+      });
+
       assembled.steps[stepKey] = {
         type: stepKey,
         escalations
@@ -250,10 +285,10 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
   // Normalize kinds/subs deterministically so extractors work out of the box
   try {
     console.log('[assembleFinalDDT][START]', { rootLabel, mainsCount: mains.length, mainLabels: mains.map(m => m.label) });
-    
+
     const normalizedMains = normalizeDDTMainNodes(mains as any);
     console.log('[assembleFinalDDT][NORMALIZED]', { count: normalizedMains?.length || 0, labels: (normalizedMains || []).map((m: any) => m.label) });
-    
+
     const assembledMains = (normalizedMains || []).map((m, idx) => {
       console.log(`[assembleFinalDDT][ASSEMBLING] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '| subData:', (m.subData || []).length);
       try {
@@ -265,7 +300,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         throw err;
       }
     });
-    
+
     console.log('[assembleFinalDDT][COMPLETE]', { mainsCount: assembledMains.length, translationsCount: Object.keys(translations).length });
 
     const result = {
@@ -275,7 +310,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
       translations: { en: translations },
       v2Draft: getAllV2Draft(),
     };
-    
+
     console.log('[assembleFinalDDT][RESULT]', { id: result.id, label: result.label, mainsCount: result.mainData.length });
     return result;
   } catch (err) {

@@ -773,6 +773,17 @@ export async function getDataDialogueTranslations() {
   return res.json();
 }
 
+export async function getTemplateTranslations(keys: string[]): Promise<Record<string, { en: string; it: string; pt: string }>> {
+  if (!keys || keys.length === 0) return {};
+  const res = await fetch('/api/factory/template-translations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keys })
+  });
+  if (!res.ok) throw new Error('Errore nel recupero di Template Translations');
+  return res.json();
+}
+
 export async function saveDataDialogueTranslations(payload: Record<string, string>) {
   const res = await fetch('/api/factory/data-dialogue-translations', {
     method: 'POST',

@@ -252,7 +252,9 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
           type: refTemplate.type || templateRef,
           icon: refTemplate.icon || 'FileText',
           subData: refTemplate.subData || [],
-          required: isMentioned
+          required: isMentioned,
+          // Include stepPrompts from referenced template
+          stepPrompts: refTemplate.stepPrompts || null
         });
       } else {
         // Direct mainData entry
@@ -261,7 +263,9 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
           type: templateRef || mainItem.type || 'generic',
           icon: mainItem.icon || 'FileText',
           subData: mainItem.subData || [],
-          required: isMentioned
+          required: isMentioned,
+          // Include stepPrompts from mainItem if present
+          stepPrompts: mainItem.stepPrompts || null
         });
       }
     }
@@ -271,7 +275,9 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
       icon: template.icon || 'Folder',
       schema: {
         label: template.label || 'Data',
-        mainData: mainDataList
+        mainData: mainDataList,
+        // Include stepPrompts from composite template if present
+        stepPrompts: template.stepPrompts || null
       }
     };
   } else {
@@ -285,8 +291,12 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
           label: template.label || 'Data',
           type: template.type || template.name || 'generic',
           icon: template.icon || 'FileText',
-          subData: template.subData || []
-        }]
+          subData: template.subData || [],
+          // Include stepPrompts from atomic template
+          stepPrompts: template.stepPrompts || null
+        }],
+        // Include stepPrompts at schema level too for consistency
+        stepPrompts: template.stepPrompts || null
       }
     };
   }

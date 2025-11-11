@@ -14,7 +14,19 @@ export default function ResizableActEditorHost({ act, onClose }: { act: ActMeta;
   });
 
   return (
-    <div className="relative" style={{ ...style, minHeight: 320, zIndex: 20, background: '#0b1220', display: 'flex', flexDirection: 'column' }}>
+    <div
+      className="relative"
+      data-response-editor="true"
+      style={{
+        ...style,
+        minHeight: 320,
+        zIndex: 2000,
+        background: '#0b1220',
+        display: 'flex',
+        flexDirection: 'column',
+        pointerEvents: 'auto'
+      }}
+    >
       <ResizeHandle
         direction="vertical"
         position="top"

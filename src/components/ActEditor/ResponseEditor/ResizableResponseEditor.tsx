@@ -28,7 +28,16 @@ const ResizableResponseEditor: React.FC<ResizableResponseEditorProps> = ({
   return (
     <div
       className="relative"
-      style={{ ...style, minHeight: 360, zIndex: 20, background: '#0b1220', display: 'flex', flexDirection: 'column' }}
+      data-response-editor="true"
+      style={{
+        ...style,
+        minHeight: 360,
+        zIndex: 2000,
+        background: '#0b1220',
+        display: 'flex',
+        flexDirection: 'column',
+        pointerEvents: 'auto'
+      }}
     >
       <ResizeHandle
         direction="vertical"
@@ -52,4 +61,4 @@ const ResizableResponseEditor: React.FC<ResizableResponseEditorProps> = ({
   );
 };
 
-export default ResizableResponseEditor; 
+export default ResizableResponseEditor;

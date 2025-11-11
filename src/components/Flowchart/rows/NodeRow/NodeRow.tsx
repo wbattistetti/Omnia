@@ -1093,6 +1093,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
     // close when moving far from row, toolbar and menu (proximity buffer)
     const onMoveCloseIfFar = (e: MouseEvent) => {
+      // ✅ Verifica se il mouse è sopra il Response Editor - ignora l'evento
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+      if (el?.closest?.('[data-response-editor]')) {
+        return; // Non chiudere il picker se il mouse è sopra il Response Editor
+      }
+
       const pt = { x: e.clientX, y: e.clientY };
       const rowRect = nodeContainerRef.current?.getBoundingClientRect() || null;
       const tbRect = overlayRef.current ? overlayRef.current.getBoundingClientRect() : (iconPos ? getToolbarRect(iconPos.left, iconPos.top, labelRef.current, 180) : null);
@@ -1310,6 +1316,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Editor host context (for opening the right editor per ActType) - host is always present
   const actEditorCtx = useActEditor();
+
 
   // Icon già determinata sopra
 

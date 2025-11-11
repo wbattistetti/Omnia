@@ -2022,6 +2022,45 @@ app.get('/api/factory/data-dialogue-translations', async (req, res) => {
   }
 });
 
+// Template translations (from stepPrompts)
+app.post('/api/factory/template-translations', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    const { keys } = req.body; // Array of translation keys (e.g., ['template.phone.start.prompt1', ...])
+
+    if (!Array.isArray(keys) || keys.length === 0) {
+      return res.json({});
+    }
+
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('Translations');
+
+    // Fetch translations for the provided keys
+    const docs = await coll.find({ _id: { $in: keys } }).toArray();
+    const merged = {};
+
+    for (const doc of docs) {
+      if (doc && doc._id) {
+        // Each doc has structure: { _id: 'template.phone.start.prompt1', en: '...', it: '...', pt: '...' }
+        merged[doc._id] = {
+          en: doc.en || '',
+          it: doc.it || '',
+          pt: doc.pt || ''
+        };
+      }
+    }
+
+    console.log('[TEMPLATE_TRANSLATIONS] Loaded', Object.keys(merged).length, 'translations for', keys.length, 'keys');
+    res.json(merged);
+  } catch (err) {
+    console.error('[TEMPLATE_TRANSLATIONS] Error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
 app.post('/api/factory/data-dialogue-translations', async (req, res) => {
   const payload = req.body || {};
   if (typeof payload !== 'object' || Array.isArray(payload)) {
@@ -3021,6 +3060,21 @@ app.post('/step2-with-provider', async (req, res) => {
 
     console.log('[STEP2] AI Analysis:', analysis.action, '- User requested', `"${userDesc}"`, '...');
     console.log('[STEP2] AI Response generated:', JSON.stringify(analysis, null, 2));
+
+    // If AI found a template match (use_existing), include stepPrompts from the matched template
+    if (analysis.action === 'use_existing' && analysis.template_source) {
+      const matchedTemplate = templates[analysis.template_source];
+      if (matchedTemplate && matchedTemplate.stepPrompts) {
+        console.log('[STEP2][AI_MATCH] Including stepPrompts from matched template:', analysis.template_source);
+        // Add stepPrompts to schema level and mainData level
+        if (analysis.schema) {
+          analysis.schema.stepPrompts = matchedTemplate.stepPrompts;
+          if (analysis.schema.mainData && analysis.schema.mainData.length > 0) {
+            analysis.schema.mainData[0].stepPrompts = matchedTemplate.stepPrompts;
+          }
+        }
+      }
+    }
 
     res.json({
       ai: {

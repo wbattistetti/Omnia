@@ -247,12 +247,13 @@ export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
     }
 
     // Check if Task exists for this row (by row.id)
-    // Rule: row.id === task.id, so task MUST exist in memory
+    // Rule: row.id === task.id
+    // If task doesn't exist yet, return row without taskId - task will be created later when user clicks the gear icon
     const task = taskRepository.getTask(row.id);
     if (!task) {
-      // Task must exist - do not create it automatically
-      // This is an error condition: task should have been loaded from database
-      throw new Error(`[enrichRowsWithTaskId] Task not found for row ${row.id}. Task must exist in memory (loaded from database or created explicitly).`);
+      // Task doesn't exist yet - it will be created when user clicks the gear icon
+      // Return row without taskId - task will be created later with same ID as row.id
+      return row;
     }
 
     // Row has a corresponding Task, add taskId

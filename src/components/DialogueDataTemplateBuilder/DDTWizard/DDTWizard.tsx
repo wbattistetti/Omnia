@@ -16,6 +16,7 @@ import { Hourglass, Bell } from 'lucide-react';
 import { useAIProvider } from '../../../context/AIProviderContext';
 import { debug, error } from '../../../utils/logger';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
+import { getTemplateTranslations } from '../../../services/ProjectDataService';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // 🚀 NEW: Interface for field processing state
@@ -446,6 +447,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               icon: s.icon,
               constraints: []
             })) : [],
+            // Include stepPrompts from template match if present
+            stepPrompts: m.stepPrompts || schema.stepPrompts || null
           } as any;
         });
 
@@ -1162,23 +1165,103 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                     </>
                   )}
                   <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
-                  <button
-                    onClick={() => {
-                      try { dlog('[DDT][UI] step → pipeline'); } catch { }
-                      // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
-                      setShowRight(true);
-                      // reset progress state to avoid stale 100%
-                      setTaskProgress({});
-                      setRootProgress(0);
-                      setPartialResults({}); // Reset parallel processing results
-                      // Apri il primo main data
-                      setSelectedIdx(0);
-                      setStep('pipeline');
-                    }}
-                    style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Build Messages
-                  </button>
+                  {/* Show "OK" button if stepPrompts are present, "Build Messages" otherwise */}
+                  {schemaMains.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0) ? (
+                    <button
+                      onClick={async () => {
+                        try {
+                          dlog('[DDT][UI] step → complete with stepPrompts');
+                        } catch { }
+
+                        // Assemble final DDT with stepPrompts
+                        try {
+                          // Extract all translation keys from stepPrompts
+                          const translationKeys: string[] = [];
+                          schemaMains.forEach((m: any) => {
+                            if (m.stepPrompts && typeof m.stepPrompts === 'object') {
+                              Object.values(m.stepPrompts).forEach((stepPrompt: any) => {
+                                if (stepPrompt && Array.isArray(stepPrompt.keys)) {
+                                  translationKeys.push(...stepPrompt.keys);
+                                }
+                              });
+                            }
+                          });
+
+                          console.log('[DDT][Wizard][stepPrompts] Extracted translation keys:', translationKeys);
+
+                          // Load translations from database
+                          let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
+                          if (translationKeys.length > 0) {
+                            try {
+                              templateTranslations = await getTemplateTranslations(translationKeys);
+                              console.log('[DDT][Wizard][stepPrompts] Loaded', Object.keys(templateTranslations).length, 'translations');
+                            } catch (err) {
+                              console.error('[DDT][Wizard][stepPrompts] Failed to load template translations:', err);
+                            }
+                          }
+
+                          const emptyStore = buildArtifactStore([]);
+                          const finalDDT = assembleFinalDDT(
+                            schemaRootLabel || 'Data',
+                            schemaMains,
+                            emptyStore,
+                            { escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 } }
+                          );
+
+                          // Merge template translations into final DDT translations
+                          if (finalDDT.translations && Object.keys(templateTranslations).length > 0) {
+                            // Convert template translations format to DDT translations format
+                            // DDT format: { en: { key: value } } (base format), but we can extend it
+                            if (!finalDDT.translations.en) finalDDT.translations.en = {};
+
+                            // Add it and pt if not present
+                            if (!(finalDDT.translations as any).it) (finalDDT.translations as any).it = {};
+                            if (!(finalDDT.translations as any).pt) (finalDDT.translations as any).pt = {};
+
+                            Object.entries(templateTranslations).forEach(([key, value]) => {
+                              if (value.en) finalDDT.translations.en[key] = value.en;
+                              if (value.it) (finalDDT.translations as any).it[key] = value.it;
+                              if (value.pt) (finalDDT.translations as any).pt[key] = value.pt;
+                            });
+                          }
+
+                          console.log('[DDT][Wizard][stepPrompts] Assembled DDT with stepPrompts:', {
+                            ddtId: finalDDT.id,
+                            mainsCount: finalDDT.mainData?.length || 0,
+                            hasTranslations: !!finalDDT.translations,
+                            templateTranslationsCount: Object.keys(templateTranslations).length
+                          });
+
+                          // Call onComplete to open Response Editor
+                          handleClose(finalDDT, finalDDT.translations || {});
+                        } catch (err) {
+                          console.error('[DDT][Wizard][stepPrompts] Failed to assemble DDT:', err);
+                          error('DDT_WIZARD', 'Failed to assemble DDT with stepPrompts', err);
+                        }
+                      }}
+                      style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      OK
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        try { dlog('[DDT][UI] step → pipeline'); } catch { }
+                        // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
+                        setShowRight(true);
+                        // reset progress state to avoid stale 100%
+                        setTaskProgress({});
+                        setRootProgress(0);
+                        setPartialResults({}); // Reset parallel processing results
+                        // Apri il primo main data
+                        setSelectedIdx(0);
+                        setStep('pipeline');
+                      }}
+                      style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Build Messages
+                    </button>
+                  )}
                 </div>
               )}
             </div>

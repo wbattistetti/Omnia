@@ -23,7 +23,19 @@ const ResizableNonInteractiveEditor: React.FC<ResizableNonInteractiveEditorProps
   });
 
   return (
-    <div className="relative" style={{ ...style, minHeight: 200, zIndex: 20, background: '#0b1220', display: 'flex', flexDirection: 'column' }}>
+    <div
+      className="relative"
+      data-response-editor="true"
+      style={{
+        ...style,
+        minHeight: 200,
+        zIndex: 2000,
+        background: '#0b1220',
+        display: 'flex',
+        flexDirection: 'column',
+        pointerEvents: 'auto'
+      }}
+    >
       <ResizeHandle
         direction="vertical"
         position="top"

@@ -362,6 +362,18 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
         if (!el) return;
 
+        // ✅ Verifica se il mouse è sopra il Response Editor o altri pannelli docked
+        const isOverResponseEditor = el?.closest?.('[data-response-editor]') ||
+                                     el?.closest?.('.response-editor-container') ||
+                                     el?.closest?.('[data-dockable-panel]');
+        if (isOverResponseEditor) {
+          // Se il mouse è sopra il Response Editor, nascondi immediatamente la toolbar
+          if (!selected) {
+            setIsHoveredNode(false);
+          }
+          return;
+        }
+
         // Verifica se il mouse è sul canvas (react-flow__pane ma non sui nodi)
         const isCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
         const isOverToolbar = toolbarElementRef.current?.contains(el);
@@ -453,6 +465,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           onMouseLeave={(e) => {
             // ✅ Usa elementFromPoint invece di relatedTarget (più affidabile con createPortal)
             const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+
+            // ✅ Verifica se il mouse è sopra il Response Editor - nascondi immediatamente
+            const isOverResponseEditor = el?.closest?.('[data-response-editor]');
+            if (isOverResponseEditor) {
+              setIsHoveredNode(false);
+              return;
+            }
 
             // Verifica se il mouse è ancora sul nodo o sulla toolbar
             const isOverNode = el && (nodeContainerRef.current?.contains(el) || wrapperRef.current?.contains(el));
@@ -611,6 +630,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         onMouseLeave={(e) => {
           // ✅ Usa elementFromPoint invece di relatedTarget (più affidabile)
           const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+
+          // ✅ Verifica se il mouse è sopra il Response Editor - nascondi immediatamente
+          const isOverResponseEditor = el?.closest?.('[data-response-editor]');
+          if (isOverResponseEditor) {
+            setIsHoveredNode(false);
+            return;
+          }
 
           // Verifica dove è effettivamente il mouse
           const isOverToolbar = el && toolbarElementRef.current?.contains(el);

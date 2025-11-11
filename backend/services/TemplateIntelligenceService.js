@@ -357,8 +357,12 @@ Create hierarchical structure ONLY when the request implies logical grouping:
               description: `This field contains ${template.label.toLowerCase()} information`,
               examples: this.generateTestExamples(template.type, template.validation)
             },
-            example: this.generateExampleValue(template.type)
-          }]
+            example: this.generateExampleValue(template.type),
+            // Include stepPrompts from matched template
+            stepPrompts: template.stepPrompts || null
+          }],
+          // Include stepPrompts at schema level too
+          stepPrompts: template.stepPrompts || null
         }
       }
     };
