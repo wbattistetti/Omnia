@@ -126,7 +126,7 @@ const WizardInputStep: React.FC<Props> = ({
         flexWrap: 'wrap' // Responsive: wrap su riga successiva se necessario
       }}>
         <div className={combinedClass} style={{ fontWeight: 500, color: '#cbd5e1', flex: '1 1 auto' }}>
-          Describe in detail the data or information the virtual agent must ask to the user:
+          Describe in detail the data the virtual agent must ask to the user, specify all the pieces of data you need to retrieve:
         </div>
 
         {/* Provider Selector + Bell - Allineati a destra */}

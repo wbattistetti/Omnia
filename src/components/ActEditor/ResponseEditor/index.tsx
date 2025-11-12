@@ -205,9 +205,19 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     }
 
     const empty = isDDTEmpty(localDDT);
+    console.log('[RESPONSE_EDITOR][useEffect] DDT state check', {
+      empty,
+      wizardOwnsData: wizardOwnsDataRef.current,
+      hasLocalDDT: !!localDDT,
+      mainsCount: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0,
+      mainDataType: typeof localDDT?.mainData,
+      isArray: Array.isArray(localDDT?.mainData),
+      firstMainSteps: localDDT?.mainData?.[0]?.steps ? Object.keys(localDDT.mainData[0].steps) : []
+    });
 
     if (empty && !wizardOwnsDataRef.current) {
       // DDT is empty → open wizard and take ownership
+      console.log('[RESPONSE_EDITOR][useEffect] Opening wizard (DDT empty)');
       setShowWizard(true);
       wizardOwnsDataRef.current = true;
       try {
@@ -215,9 +225,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
       } catch { }
     } else if (!empty && wizardOwnsDataRef.current) {
       // DDT is complete and wizard had ownership → close wizard and release ownership
-      // Removed verbose log
+      console.log('[RESPONSE_EDITOR][useEffect] Closing wizard (DDT filled)', {
+        mainsCount: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0
+      });
       setShowWizard(false);
-      wizardOwnsDataRef.current = false;
+      // Don't release ownership immediately - let the onComplete handler do it after a delay
+      // wizardOwnsDataRef.current = false;
           try {
             info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
           } catch { }
@@ -463,34 +476,77 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
             <DDTWizard
               initialDDT={localDDT}
               onCancel={onClose || (() => { })}
-              onComplete={(finalDDT) => {
+              onComplete={(finalDDT, messages) => {
+                console.log('[WIZARD_FLOW] ResponseEditor: onComplete called', {
+                  hasFinalDDT: !!finalDDT,
+                  ddtId: finalDDT?.id,
+                  mainsCount: Array.isArray(finalDDT?.mainData) ? finalDDT.mainData.length : 0,
+                  hasMainData: !!finalDDT?.mainData,
+                  firstMainSteps: finalDDT?.mainData?.[0]?.steps ? Object.keys(finalDDT.mainData[0].steps) : [],
+                  hasMessages: !!messages
+                });
+
+                if (!finalDDT) {
+                  console.error('[WIZARD_FLOW] ResponseEditor: onComplete called with null/undefined finalDDT');
+                  return;
+                }
+
                 const coerced = coercePhoneKind(finalDDT);
+                console.log('[WIZARD_FLOW] ResponseEditor: DDT coerced', {
+                  ddtId: coerced?.id,
+                  mainsCount: Array.isArray(coerced?.mainData) ? coerced.mainData.length : 0,
+                  isEmpty: isDDTEmpty(coerced)
+                });
 
                 // Set flag to prevent auto-reopen
                 wizardOwnsDataRef.current = true;
 
                 // Update local DDT state first (ALWAYS do this)
                 setLocalDDT(coerced);
+                console.log('[WIZARD_FLOW] ResponseEditor: localDDT updated');
+
                 try {
                   replaceSelectedDDT(coerced);
+                  console.log('[WIZARD_FLOW] ResponseEditor: replaceSelectedDDT called');
                 } catch (err) {
                   console.error('[WIZARD_FLOW] ResponseEditor: replaceSelectedDDT FAILED', err);
                 }
 
-                // Release ownership after a brief delay
-                setTimeout(() => {
-                  wizardOwnsDataRef.current = false;
-                }, 100);
-
                 // Close wizard and reset UI to show StepEditor (ALWAYS do this)
-                setShowWizard(false);
-                setRightMode('actions'); // Force show ActionList
-                setSelectedStepKey('start'); // Start with first step
+                // Use flushSync to ensure state updates are applied synchronously
+                React.startTransition(() => {
+                  setShowWizard(false);
+                  console.log('[WIZARD_FLOW] ResponseEditor: wizard closed');
+
+                  setRightMode('actions'); // Force show ActionList
+                  setSelectedStepKey('start'); // Start with first step
+                });
+
+                // Release ownership after a delay to allow useEffect to see the new DDT
+                // But ensure the DDT is valid first
+                setTimeout(() => {
+                  const isEmpty = isDDTEmpty(coerced);
+                  console.log('[WIZARD_FLOW] ResponseEditor: Checking DDT after delay', {
+                    isEmpty,
+                    mainsCount: Array.isArray(coerced?.mainData) ? coerced.mainData.length : 0,
+                    hasSteps: coerced?.mainData?.[0]?.steps ? Object.keys(coerced.mainData[0].steps).length > 0 : false
+                  });
+
+                  if (!isEmpty) {
+                    wizardOwnsDataRef.current = false;
+                    console.log('[WIZARD_FLOW] ResponseEditor: wizard ownership released (DDT valid)');
+                  } else {
+                    console.warn('[WIZARD_FLOW] ResponseEditor: DDT still empty after delay, keeping wizard ownership');
+                    // Keep wizard open if DDT is still empty
+                    setShowWizard(true);
+                  }
+                }, 300);
 
                 // If parent provided onWizardComplete, notify it after updating UI
                 // (but don't close the overlay - let user see the editor)
                 if (onWizardComplete) {
                   onWizardComplete(coerced);
+                  console.log('[WIZARD_FLOW] ResponseEditor: onWizardComplete callback called');
                 }
               }}
               startOnStructure={false}

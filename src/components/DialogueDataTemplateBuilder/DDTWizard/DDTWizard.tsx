@@ -199,6 +199,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [step, setStep] = useState<string>(startOnStructure ? 'structure' : 'input');
   const [saving, setSaving] = useState<'factory' | 'project' | null>(null);
 
+  // Heuristic match confirmation state
+  const [pendingHeuristicMatch, setPendingHeuristicMatch] = useState<{
+    schema: any;
+    icon: string | null;
+    mains0: SchemaNode[];
+    root: string;
+  } | null>(null);
+
   // Schema editing state (from detect schema)
   const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialDDT?.label || '');
   const [schemaMains, setSchemaMains] = useState<SchemaNode[]>(() => {
@@ -424,10 +432,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           mains: ai.schema.mainData.map((m: any) => ({ label: m.label, type: m.type, subDataCount: m.subData?.length || 0 }))
         });
 
-        // Process heuristic result immediately (same logic as handleDetectType)
+        // Instead of processing immediately, save the match and show confirmation
         const schema = ai.schema;
         const root = schema.label || 'Data';
-        console.log('[AUTO_DETECT][PROCESS] Processing schema', { root, mainsCount: schema.mainData.length });
+        console.log('[AUTO_DETECT][PROCESS] Preparing match for confirmation', { root, mainsCount: schema.mainData.length });
 
         const mains0: SchemaNode[] = (schema.mainData || []).map((m: any) => {
           const label = m.label || m.name || 'Field';
@@ -452,50 +460,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           } as any;
         });
 
-        console.log('[AUTO_DETECT][MAINS0] Mapped mains', { count: mains0.length, mains: mains0.map(m => ({ label: m.label, type: m.type, subDataCount: m.subData?.length || 0 })) });
-
+        // Save match for confirmation and immediately set schema to show structure
+        setPendingHeuristicMatch({ schema, icon: ai.icon || null, mains0, root });
+        setSchemaRootLabel(root);
+        setSchemaMains(mains0);
         setDetectTypeIcon(ai.icon || null);
-        console.log('[AUTO_DETECT][ICON] Set icon', { icon: ai.icon });
-
-        // Enrich constraints and show structure immediately
-        console.log('[AUTO_DETECT][ENRICH] Starting enrichConstraints', { root, mainsCount: mains0.length });
-        const enrichedRes = await enrichConstraintsFor(root, mains0);
-        console.log('[AUTO_DETECT][ENRICH] Enrichment done', {
-          hasLabel: !!(enrichedRes as any)?.label,
-          hasMains: !!(enrichedRes as any)?.mains,
-          mainsCount: (enrichedRes as any)?.mains?.length || 0
-        });
-
-        const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
-        let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
-
-        console.log('[AUTO_DETECT][FINAL] Before inference', { root: finalRoot, mainsCount: finalMains.length });
-
-        // Fallback: infer subData from text if missing
-        try {
-          const inferred = inferSubDataFromText(text);
-          console.log('[AUTO_DETECT][INFER] Inferred subData', { inferredCount: inferred.length, inferred });
-          if (Array.isArray(finalMains) && finalMains.length > 0 && (!finalMains[0].subData || finalMains[0].subData.length === 0) && inferred.length > 0) {
-            finalMains = [{ ...finalMains[0], subData: inferred }];
-            console.log('[AUTO_DETECT][INFER] Applied inferred subData', { finalMainsCount: finalMains.length });
-          }
-        } catch (err) {
-          console.log('[AUTO_DETECT][INFER] Inference failed', { error: err });
-        }
-
-        console.log('[AUTO_DETECT][SET_STATE] Setting state', {
-          root: finalRoot,
-          mainsCount: finalMains.length,
-          mains: finalMains.map((m: any) => ({ label: m.label, type: m.type, subDataCount: m.subData?.length || 0 }))
-        });
-
-        setSchemaRootLabel(finalRoot);
-        setSchemaMains(finalMains);
-        setShowRight(true); // ✅ Show right panel
-        console.log('[AUTO_DETECT][UI] Setting showRight=true, step=structure', { showRight: true, step: 'structure' });
-        setStep('structure'); // ✅ Show structure immediately, skip loading
-        console.log('[AUTO_DETECT][SUCCESS] ✅ Structure shown!', { root: finalRoot, mains: finalMains.length });
-        try { dlog('[DDT][UI][AUTO] step → structure (heuristic)', { root: finalRoot, mains: finalMains.length }); } catch { }
+        setShowRight(true); // Show right panel for confirmation
+        setStep('heuristic-confirm'); // Show confirmation step with structure
+        console.log('[AUTO_DETECT][CONFIRM] Match saved, showing confirmation with structure', { root, mainsCount: mains0.length });
         return;
       }
 
@@ -985,7 +957,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           const mainConstraints = Array.isArray(em?.constraints) ? dedupe(em!.constraints) : [];
           // Dedupe per i sub
           nextSub = nextSub.map(s => ({ ...s, constraints: dedupe((s as any).constraints) }));
-          return { ...existing, constraints: mainConstraints, subData: nextSub };
+          // CRITICAL: Preserve stepPrompts if they exist
+          const preservedStepPrompts = (existing as any).stepPrompts || null;
+          return { ...existing, constraints: mainConstraints, subData: nextSub, ...(preservedStepPrompts ? { stepPrompts: preservedStepPrompts } : {}) };
         });
         return { label: ((enriched as any).label || rootLabelIn) as string, mains: nextMains };
       }
@@ -1065,10 +1039,23 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const rightHasContent = Boolean(
     showRight && (
       step === 'loading' ||
+      step === 'heuristic-confirm' ||
       (step === 'structure' && Array.isArray(schemaMains) && schemaMains.length > 0) ||
       step === 'pipeline' || step === 'error' || step === 'support'
     )
   );
+
+  // Debug: Log rightHasContent state
+  React.useEffect(() => {
+    console.log('[DDT][Wizard][rightHasContent]', {
+      rightHasContent,
+      showRight,
+      step,
+      hasSchemaMains: Array.isArray(schemaMains) && schemaMains.length > 0,
+      schemaMainsCount: Array.isArray(schemaMains) ? schemaMains.length : 0,
+      pendingHeuristicMatch: !!pendingHeuristicMatch
+    });
+  }, [rightHasContent, showRight, step, schemaMains, pendingHeuristicMatch]);
   const pipelineHeadless = true; // run pipeline headlessly; show progress under structure
   const renderTogglePanel = step !== 'pipeline';
   try { dlog('[DDT][UI] render', { step, showRight, rightHasContent, pipelineHeadless, renderTogglePanel }); } catch { }
@@ -1082,7 +1069,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         height: '100%',
       }}
     >
-      <div style={{ overflow: 'auto', padding: '0 8px' }}>
+      {/* Hide input step if heuristic match is pending (will show after "No") */}
+      <div style={{
+        overflow: 'auto',
+        padding: '0 8px',
+        display: pendingHeuristicMatch ? 'none' : 'block'
+      }}>
         <WizardInputStep
           userDesc={userDesc}
           setUserDesc={setUserDesc}
@@ -1096,6 +1088,223 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       {rightHasContent && (
         <div style={{ overflow: 'auto', borderLeft: '1px solid #1f2340', padding: 12 }}>
           {step === 'loading' && <WizardLoadingStep />}
+
+          {step === 'heuristic-confirm' && pendingHeuristicMatch && (() => {
+            // Process match immediately to show structure
+            const { schema, icon, mains0, root } = pendingHeuristicMatch;
+
+            // Use current schemaMains if already set, otherwise use pending match
+            const displayMains = schemaMains.length > 0 ? schemaMains : mains0;
+            const displayRoot = schemaRootLabel || root;
+
+            return (
+              <div style={{ padding: 4 }}>
+                {/* Confirmation header */}
+                <div style={{
+                  padding: 16,
+                  background: '#1e293b',
+                  borderRadius: 8,
+                  marginBottom: 12,
+                  border: '1px solid #334155'
+                }}>
+                  <p style={{ color: '#e2e8f0', marginBottom: 12, fontSize: 16, fontWeight: 500 }}>
+                    I guess you want to retrieve this below is that correct?
+                  </p>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <button
+                      onClick={async () => {
+                        console.log('[DDT][Wizard][heuristicMatch] User confirmed, processing match');
+
+                        const { schema, icon, mains0, root } = pendingHeuristicMatch;
+                        setPendingHeuristicMatch(null);
+                        setDetectTypeIcon(icon);
+
+                        // Check if stepPrompts are present
+                        const hasStepPrompts = mains0.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0);
+                        console.log('[DDT][Wizard][heuristicMatch] Checking stepPrompts', { hasStepPrompts, mainsCount: mains0.length });
+
+                        if (hasStepPrompts) {
+                          // If stepPrompts are present, go directly to Response Editor
+                          console.log('[DDT][Wizard][heuristicMatch] stepPrompts found, going directly to Response Editor');
+
+                          try {
+                            // Extract all translation keys from stepPrompts
+                            const translationKeys: string[] = [];
+                            mains0.forEach((m: any) => {
+                              if (m.stepPrompts && typeof m.stepPrompts === 'object') {
+                                Object.values(m.stepPrompts).forEach((stepPrompt: any) => {
+                                  if (stepPrompt && Array.isArray(stepPrompt.keys)) {
+                                    translationKeys.push(...stepPrompt.keys);
+                                  }
+                                });
+                              }
+                            });
+
+                            console.log('[DDT][Wizard][heuristicMatch] Extracted translation keys:', translationKeys);
+
+                            // Load translations from database
+                            let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
+                            if (translationKeys.length > 0) {
+                              try {
+                                templateTranslations = await getTemplateTranslations(translationKeys);
+                                console.log('[DDT][Wizard][heuristicMatch] Loaded', Object.keys(templateTranslations).length, 'translations');
+                              } catch (err) {
+                                console.error('[DDT][Wizard][heuristicMatch] Failed to load template translations:', err);
+                              }
+                            }
+
+                            // Set schema for assembly
+                            setSchemaRootLabel(root);
+                            setSchemaMains(mains0);
+
+                            const emptyStore = buildArtifactStore([]);
+                            const finalDDT = assembleFinalDDT(
+                              root || 'Data',
+                              mains0,
+                              emptyStore,
+                              { escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 } }
+                            );
+
+                            // Merge template translations into final DDT translations
+                            if (finalDDT.translations && Object.keys(templateTranslations).length > 0) {
+                              if (!finalDDT.translations.en) finalDDT.translations.en = {};
+                              if (!(finalDDT.translations as any).it) (finalDDT.translations as any).it = {};
+                              if (!(finalDDT.translations as any).pt) (finalDDT.translations as any).pt = {};
+
+                              Object.entries(templateTranslations).forEach(([key, value]) => {
+                                if (value.en) finalDDT.translations.en[key] = value.en;
+                                if (value.it) (finalDDT.translations as any).it[key] = value.it;
+                                if (value.pt) (finalDDT.translations as any).pt[key] = value.pt;
+                              });
+                            }
+
+                            console.log('[DDT][Wizard][heuristicMatch] Assembled DDT with stepPrompts:', {
+                              ddtId: finalDDT.id,
+                              mainsCount: finalDDT.mainData?.length || 0,
+                              hasTranslations: !!finalDDT.translations,
+                              templateTranslationsCount: Object.keys(templateTranslations).length
+                            });
+
+                            // Verify DDT structure before passing to Response Editor
+                            if (!finalDDT.mainData || finalDDT.mainData.length === 0) {
+                              console.error('[DDT][Wizard][heuristicMatch] ERROR: DDT has no mainData!', finalDDT);
+                              error('DDT_WIZARD', 'DDT has no mainData after assembly', new Error('DDT has no mainData'));
+                              return;
+                            }
+
+                            if (!finalDDT.mainData[0].steps || Object.keys(finalDDT.mainData[0].steps).length === 0) {
+                              console.error('[DDT][Wizard][heuristicMatch] ERROR: DDT mainData has no steps!', {
+                                ddtId: finalDDT.id,
+                                mainData: finalDDT.mainData[0]
+                              });
+                              error('DDT_WIZARD', 'DDT mainData has no steps after assembly', new Error('DDT mainData has no steps'));
+                              return;
+                            }
+
+                            console.log('[DDT][Wizard][heuristicMatch] ✅ DDT structure verified, calling handleClose');
+
+                            // Call onComplete to open Response Editor directly
+                            handleClose(finalDDT, finalDDT.translations || {});
+                          } catch (err) {
+                            console.error('[DDT][Wizard][heuristicMatch] Failed to assemble DDT:', err);
+                            error('DDT_WIZARD', 'Failed to assemble DDT with stepPrompts', err);
+                          }
+                        } else {
+                          // No stepPrompts: enrich constraints and show structure step
+                          console.log('[DDT][Wizard][heuristicMatch] No stepPrompts, enriching constraints and showing structure');
+
+                          // Enrich constraints
+                          console.log('[DDT][Wizard][heuristicMatch] Starting enrichConstraints', { root, mainsCount: mains0.length });
+                          const enrichedRes = await enrichConstraintsFor(root, mains0);
+                          console.log('[DDT][Wizard][heuristicMatch] Enrichment done', {
+                            hasLabel: !!(enrichedRes as any)?.label,
+                            hasMains: !!(enrichedRes as any)?.mains,
+                            mainsCount: (enrichedRes as any)?.mains?.length || 0
+                          });
+
+                          const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
+                          let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
+
+                          // Fallback: infer subData from text if missing
+                          try {
+                            const inferred = inferSubDataFromText(userDesc);
+                            console.log('[DDT][Wizard][heuristicMatch] Inferred subData', { inferredCount: inferred.length, inferred });
+                            if (Array.isArray(finalMains) && finalMains.length > 0 && (!finalMains[0].subData || finalMains[0].subData.length === 0) && inferred.length > 0) {
+                              finalMains = [{ ...finalMains[0], subData: inferred }];
+                              console.log('[DDT][Wizard][heuristicMatch] Applied inferred subData', { finalMainsCount: finalMains.length });
+                            }
+                          } catch (err) {
+                            console.log('[DDT][Wizard][heuristicMatch] Inference failed', { error: err });
+                          }
+
+                          setSchemaRootLabel(finalRoot);
+                          setSchemaMains(finalMains);
+                          setStep('structure'); // Show structure step
+                          console.log('[DDT][Wizard][heuristicMatch] step → structure (confirmed)', {
+                            root: finalRoot,
+                            mainsCount: finalMains.length
+                          });
+                          try { dlog('[DDT][UI][AUTO] step → structure (heuristic confirmed)', { root: finalRoot, mains: finalMains.length }); } catch { }
+                        }
+                      }}
+                      style={{
+                        background: '#22c55e',
+                        color: '#0b1220',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '10px 20px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        fontSize: 14
+                      }}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => {
+                        console.log('[DDT][Wizard][heuristicMatch] User rejected, showing input step');
+                        setPendingHeuristicMatch(null);
+                        setShowRight(false); // Hide right panel
+                        setStep('input'); // Show input step
+                      }}
+                      style={{
+                        background: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '10px 20px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        fontSize: 14
+                      }}
+                    >
+                      No
+                    </button>
+                  </div>
+                </div>
+
+                {/* Show MainDataCollection (same as structure step) */}
+                <div tabIndex={0} style={{ outline: 'none' }}>
+                  <MainDataCollection
+                    rootLabel={displayRoot}
+                    mains={displayMains}
+                    onChangeMains={setSchemaMains}
+                    onAddMain={handleAddMain}
+                    progressByPath={{ ...taskProgress, __root__: rootProgress }}
+                    fieldProcessingStates={fieldProcessingStates}
+                    selectedIdx={selectedIdx}
+                    onSelect={setSelectedIdx}
+                    autoEditIndex={autoEditIndex}
+                    onChangeEvent={handleChangeEvent}
+                    onAutoMap={autoMapFieldStructure}
+                    onRetryField={handleRetryField}
+                    onCreateManually={handleCreateManually}
+                  />
+                </div>
+              </div>
+            );
+          })()}
 
           {step === 'error' && (
             <WizardErrorStep
@@ -1165,8 +1374,28 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                     </>
                   )}
                   <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
-                  {/* Show "OK" button if stepPrompts are present, "Build Messages" otherwise */}
-                  {schemaMains.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0) ? (
+                  {/* Only show "Build Messages" if no stepPrompts are present (new DDT structure) */}
+                  {!schemaMains.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0) && (
+                    <button
+                      onClick={() => {
+                        try { dlog('[DDT][UI] step → pipeline'); } catch { }
+                        // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
+                        setShowRight(true);
+                        // reset progress state to avoid stale 100%
+                        setTaskProgress({});
+                        setRootProgress(0);
+                        setPartialResults({}); // Reset parallel processing results
+                        // Apri il primo main data
+                        setSelectedIdx(0);
+                        setStep('pipeline');
+                      }}
+                      style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Build Messages
+                    </button>
+                  )}
+                  {/* If stepPrompts are present, automatically proceed to Response Editor when user clicks any action */}
+                  {schemaMains.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0) && (
                     <button
                       onClick={async () => {
                         try {
@@ -1210,11 +1439,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                           // Merge template translations into final DDT translations
                           if (finalDDT.translations && Object.keys(templateTranslations).length > 0) {
-                            // Convert template translations format to DDT translations format
-                            // DDT format: { en: { key: value } } (base format), but we can extend it
                             if (!finalDDT.translations.en) finalDDT.translations.en = {};
-
-                            // Add it and pt if not present
                             if (!(finalDDT.translations as any).it) (finalDDT.translations as any).it = {};
                             if (!(finalDDT.translations as any).pt) (finalDDT.translations as any).pt = {};
 
@@ -1229,8 +1454,29 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             ddtId: finalDDT.id,
                             mainsCount: finalDDT.mainData?.length || 0,
                             hasTranslations: !!finalDDT.translations,
-                            templateTranslationsCount: Object.keys(templateTranslations).length
+                            templateTranslationsCount: Object.keys(templateTranslations).length,
+                            translationsKeys: Object.keys(finalDDT.translations?.en || {}).length,
+                            firstMainSteps: finalDDT.mainData?.[0]?.steps ? Object.keys(finalDDT.mainData[0].steps) : [],
+                            firstMainMessages: finalDDT.mainData?.[0]?.messages ? Object.keys(finalDDT.mainData[0].messages) : []
                           });
+
+                          // Verify DDT structure before passing to Response Editor
+                          if (!finalDDT.mainData || finalDDT.mainData.length === 0) {
+                            console.error('[DDT][Wizard][stepPrompts] ERROR: DDT has no mainData!', finalDDT);
+                            error('DDT_WIZARD', 'DDT has no mainData after assembly', new Error('DDT has no mainData'));
+                            return;
+                          }
+
+                          if (!finalDDT.mainData[0].steps || Object.keys(finalDDT.mainData[0].steps).length === 0) {
+                            console.error('[DDT][Wizard][stepPrompts] ERROR: DDT mainData has no steps!', {
+                              ddtId: finalDDT.id,
+                              mainData: finalDDT.mainData[0]
+                            });
+                            error('DDT_WIZARD', 'DDT mainData has no steps after assembly', new Error('DDT mainData has no steps'));
+                            return;
+                          }
+
+                          console.log('[DDT][Wizard][stepPrompts] ✅ DDT structure verified, calling handleClose');
 
                           // Call onComplete to open Response Editor
                           handleClose(finalDDT, finalDDT.translations || {});
@@ -1241,25 +1487,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       }}
                       style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      OK
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        try { dlog('[DDT][UI] step → pipeline'); } catch { }
-                        // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
-                        setShowRight(true);
-                        // reset progress state to avoid stale 100%
-                        setTaskProgress({});
-                        setRootProgress(0);
-                        setPartialResults({}); // Reset parallel processing results
-                        // Apri il primo main data
-                        setSelectedIdx(0);
-                        setStep('pipeline');
-                      }}
-                      style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      Build Messages
+                      Continue
                     </button>
                   )}
                 </div>
