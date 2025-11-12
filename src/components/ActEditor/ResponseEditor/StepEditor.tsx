@@ -25,18 +25,129 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   // Always log to diagnose message display issues
   const shape = Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none');
   const keys = node?.steps && !Array.isArray(node.steps) ? Object.keys(node.steps) : (Array.isArray(node?.steps) ? (node.steps as any[]).map((g: any) => g?.type) : []);
-  // Removed verbose log
+
+  console.log('[STEP_EDITOR][buildModel] Building model', {
+    stepKey,
+    shape,
+    availableSteps: keys,
+    translationsCount: Object.keys(translations).length,
+    sampleTranslationKeys: Object.keys(translations).slice(0, 5)
+  });
+
   // Case A: steps as object { start: { escalations: [...] } }
   if (node?.steps && !Array.isArray(node.steps) && node.steps[stepKey] && Array.isArray(node.steps[stepKey].escalations)) {
     const escs = node.steps[stepKey].escalations as any[];
-    // Removed verbose log
-    return escs.map((esc) => ({
-      actions: (esc.actions || []).map((a: any) => {
+
+    // ✅ CRITICAL: Log per sub-data start
+    if (stepKey === 'start' && node.label && node.label !== node.label?.toUpperCase()) {
+      console.log('🔴 [CRITICAL] STEP_EDITOR - SUB-DATA START', {
+        nodeLabel: node.label,
+        stepKey,
+        hasSteps: !!node.steps,
+        hasStepKey: !!(node.steps && node.steps[stepKey]),
+        escalationsCount: escs.length,
+        escalations: escs.map((esc, idx) => ({
+          idx,
+          hasActions: !!(esc.actions && Array.isArray(esc.actions)),
+          actionsCount: esc.actions ? esc.actions.length : 0,
+          firstAction: esc.actions?.[0] ? {
+            actionId: esc.actions[0].actionId,
+            hasParameters: !!(esc.actions[0].parameters && Array.isArray(esc.actions[0].parameters)),
+            textKey: esc.actions[0].parameters?.find((p: any) => p.parameterId === 'text')?.value,
+            hasText: !!(esc.actions[0].text && esc.actions[0].text.length > 0),
+            text: esc.actions[0].text
+          } : null
+        })),
+        fullStep: node.steps[stepKey]
+      });
+    }
+
+    console.log('[STEP_EDITOR][buildModel] Case A: steps as object', {
+      stepKey,
+      escalationsCount: escs.length
+    });
+
+    return escs.map((esc, escIdx) => ({
+      actions: (esc.actions || []).map((a: any, actionIdx: number) => {
         const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
         const textKey = p?.value;
-        const text = (typeof a.text === 'string' && a.text.length > 0)
+        const hasDirectText = typeof a.text === 'string' && a.text.length > 0;
+        const translationValue = typeof textKey === 'string' ? translations[textKey] : undefined;
+        const text = hasDirectText
           ? a.text
-          : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
+          : (typeof textKey === 'string' ? (translationValue || textKey) : undefined);
+
+        // 🔍 DEBUG: Verifica tutte le chiavi runtime che iniziano con lo stesso prefisso
+        const runtimeKeysWithSamePrefix = textKey ? Object.keys(translations).filter(k => {
+          if (!k.startsWith('runtime.')) return false;
+          const textKeyParts = textKey.split('.');
+          const kParts = k.split('.');
+          // Confronta i primi 3 segmenti (runtime, ddtId, guid)
+          return textKeyParts.length >= 3 && kParts.length >= 3 &&
+                 textKeyParts[0] === kParts[0] &&
+                 textKeyParts[1] === kParts[1];
+        }).slice(0, 5) : [];
+
+        // 🔍 DEBUG: Verifica se la traduzione è in inglese o portoghese
+        const translationIsEnglish = translationValue ? (
+          translationValue.toLowerCase().includes('time?') ||
+          translationValue.toLowerCase().includes('what time') ||
+          translationValue.toLowerCase() === 'time?'
+        ) : false;
+        const translationIsPortuguese = translationValue ? (
+          translationValue.toLowerCase().includes('hora') ||
+          translationValue.toLowerCase().includes('horário') ||
+          translationValue.toLowerCase().includes('que horas')
+        ) : false;
+
+        console.log('[STEP_EDITOR][buildModel] 🔍 ACTION RESOLVED - FULL DEBUG', {
+          escIdx,
+          actionIdx,
+          stepKey,
+          textKey,
+          hasDirectText,
+          hasTranslation: !!translationValue,
+          translationValue: translationValue ? translationValue.substring(0, 50) : undefined,
+          translationIsEnglish,
+          translationIsPortuguese,
+          finalText: text ? text.substring(0, 50) : undefined,
+          translationKeyExists: textKey ? textKey in translations : false,
+          // 🔍 VERIFICA tutte le chiavi runtime con lo stesso prefisso
+          runtimeKeysWithSamePrefix: runtimeKeysWithSamePrefix.map(k => ({ key: k, value: translations[k]?.substring(0, 30) })),
+          // 🔍 VERIFICA il valore esatto della traduzione
+          exactTranslation: textKey ? translations[textKey] : undefined,
+          // 🔍 VERIFICA se ci sono chiavi del template che potrebbero corrispondere
+          templateKeys: textKey ? Object.keys(translations).filter(k => k.startsWith('template.') && (k.includes(textKey.split('.').pop() || '') || textKey.includes(k.split('.').pop() || ''))).slice(0, 5) : [],
+          // 🔍 VERIFICA tutte le chiavi che contengono parti del textKey
+          matchingKeys: textKey ? {
+            exact: textKey in translations ? translations[textKey] : undefined,
+            partial: Object.keys(translations).filter(k => k.includes(textKey.split('.').slice(-2).join('.'))).slice(0, 5).map(k => ({ key: k, value: translations[k] }))
+          } : null,
+          // 🔍 VERIFICA tutte le chiavi runtime per questo step
+          allRuntimeKeysForStep: Object.keys(translations).filter(k => k.startsWith('runtime.') && k.includes(stepKey)).slice(0, 10),
+          // 🔍 VERIFICA tutte le chiavi che iniziano con runtime.Time_
+          allTimeRuntimeKeys: Object.keys(translations).filter(k => k.startsWith('runtime.') && k.includes('Time_')).slice(0, 10),
+          // 🔍 VERIFICA tutte le traduzioni per le chiavi runtime.Time_
+          timeRuntimeTranslations: Object.entries(translations)
+            .filter(([k]) => k.startsWith('runtime.') && k.includes('Time_'))
+            .slice(0, 5)
+            .map(([k, v]) => ({ key: k, value: String(v).substring(0, 50) })),
+          // 🔍 VERIFICA se la chiave specifica esiste e il suo valore
+          keyLookup: textKey ? {
+            exists: textKey in translations,
+            value: translations[textKey],
+            valueLength: translations[textKey] ? String(translations[textKey]).length : 0,
+            valuePreview: translations[textKey] ? String(translations[textKey]).substring(0, 50) : undefined
+          } : null,
+          // 🔍 VERIFICA tutte le chiavi che contengono parti del textKey
+          allKeysContainingParts: textKey ? {
+            containsRuntime: Object.keys(translations).filter(k => k.includes('runtime.')).length,
+            containsTime: Object.keys(translations).filter(k => k.includes('Time_')).length,
+            containsStart: Object.keys(translations).filter(k => k.includes('start')).length,
+            exactMatch: Object.keys(translations).filter(k => k === textKey).length
+          } : null
+        });
+
         return { actionId: a.actionId, text, textKey, color: a.color };
       })
     }));
@@ -74,8 +185,17 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
   const msg = node?.messages?.[stepKey];
   if (msg && typeof msg.textKey === 'string') {
     const textKey = msg.textKey;
-    const text = translations[textKey] || textKey;
-    // Removed verbose log
+    const translationValue = translations[textKey];
+    const text = translationValue || textKey;
+
+    console.log('[STEP_EDITOR][buildModel] Fallback from messages', {
+      stepKey,
+      textKey,
+      hasTranslation: !!translationValue,
+      translationValue: translationValue ? translationValue.substring(0, 50) : undefined,
+      finalText: text ? text.substring(0, 50) : undefined
+    });
+
     return [
       { actions: [{ actionId: 'sayMessage', text, textKey }] }
     ];

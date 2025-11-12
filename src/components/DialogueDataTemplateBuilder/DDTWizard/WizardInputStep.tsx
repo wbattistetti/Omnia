@@ -1,6 +1,7 @@
 import React from 'react';
 import { Calendar, Bell } from 'lucide-react';
 import { useFontContext } from '../../../context/FontContext';
+import { getAllDialogueTemplates } from '../../../services/ProjectDataService';
 
 interface Props {
   userDesc: string;
@@ -9,6 +10,7 @@ interface Props {
   onCancel: () => void;
   dataNode?: { name?: string; subData?: string[] };
   onAutoDetect?: (userDesc: string) => void; // Nuovo prop per auto-rilevamento
+  onTemplateSelect?: (template: any) => void; // Callback quando viene selezionato un template
 }
 
 const WizardInputStep: React.FC<Props> = ({
@@ -17,11 +19,50 @@ const WizardInputStep: React.FC<Props> = ({
   onNext,
   onCancel,
   dataNode,
-  onAutoDetect
+  onAutoDetect,
+  onTemplateSelect
 }) => {
   const { combinedClass } = useFontContext();
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const autoDetectTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const [templates, setTemplates] = React.useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('');
+  const [loadingTemplates, setLoadingTemplates] = React.useState(false);
+
+  // Load templates on mount
+  React.useEffect(() => {
+    const loadTemplates = async () => {
+      setLoadingTemplates(true);
+      try {
+        const allTemplates = await getAllDialogueTemplates();
+        setTemplates(Array.isArray(allTemplates) ? allTemplates : []);
+        console.log('[WIZARD_INPUT] Loaded templates:', Array.isArray(allTemplates) ? allTemplates.length : 0);
+      } catch (err) {
+        console.error('[WIZARD_INPUT] Failed to load templates:', err);
+        setTemplates([]);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+    loadTemplates();
+  }, []);
+
+  // Handle template selection
+  const handleTemplateChange = React.useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const templateId = e.target.value;
+    setSelectedTemplateId(templateId);
+
+    if (templateId && onTemplateSelect) {
+      const selectedTemplate = templates.find(t => (t._id || t.id) === templateId);
+      if (selectedTemplate) {
+        console.log('[WIZARD_INPUT] Template selected:', selectedTemplate.label);
+        onTemplateSelect(selectedTemplate);
+      }
+    } else if (!templateId) {
+      // Reset selection
+      setSelectedTemplateId('');
+    }
+  }, [templates, onTemplateSelect]);
 
   // Auto-detect function - NO DEBOUNCE, called only on mount or explicit trigger
   const handleAutoDetect = React.useCallback((text: string) => {
@@ -149,6 +190,60 @@ const WizardInputStep: React.FC<Props> = ({
             <span>Ring when completed</span>
           </div>
         </div>
+      </div>
+
+      {/* Template Selection Combobox */}
+      <div style={{ marginBottom: 16 }}>
+        <label className={combinedClass} style={{
+          display: 'block',
+          marginBottom: 8,
+          color: '#cbd5e1',
+          fontWeight: 500,
+          fontSize: 14
+        }}>
+          Scegli il tipo di dato
+        </label>
+        <select
+          value={selectedTemplateId}
+          onChange={handleTemplateChange}
+          disabled={loadingTemplates}
+          className={combinedClass}
+          style={{
+            width: '100%',
+            padding: '10px 16px',
+            borderRadius: 8,
+            border: '1px solid #4b5563',
+            background: '#111827',
+            color: '#fff',
+            outline: 'none',
+            cursor: loadingTemplates ? 'not-allowed' : 'pointer',
+            opacity: loadingTemplates ? 0.6 : 1,
+            fontSize: 14,
+            boxSizing: 'border-box'
+          }}
+        >
+          <option value="">combo box con i template disponibili</option>
+          {templates.map((template) => {
+            const id = template._id || template.id;
+            const label = template.label || template.name || 'Unnamed Template';
+            return (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            );
+          })}
+        </select>
+      </div>
+
+      {/* Separator */}
+      <div style={{
+        textAlign: 'center',
+        marginBottom: 16,
+        color: '#9ca3af',
+        fontSize: 14,
+        fontWeight: 500
+      }}>
+        oppure
       </div>
 
       <textarea

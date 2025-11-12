@@ -206,8 +206,27 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
       assembled.constraints.push(constraintObj);
     }
 
-    // SubData
+    // ✅ CRITICAL: Check sub-data stepPrompts before processing
+
     for (const s of node.subData || []) {
+      const subHasStepPrompts = !!(s as any).stepPrompts && typeof (s as any).stepPrompts === 'object' && Object.keys((s as any).stepPrompts).length > 0;
+
+      if (!subHasStepPrompts) {
+        console.error('🔴 [CRITICAL] ASSEMBLE - SUB-DATA MISSING STEPPROMPTS', {
+          parent: node.label,
+          sub: s.label,
+          subKeys: Object.keys(s),
+          hasProp: 'stepPrompts' in s,
+          value: (s as any).stepPrompts
+        });
+      } else {
+        console.log('✅ [CRITICAL] ASSEMBLE - SUB-DATA HAS STEPPROMPTS', {
+          parent: node.label,
+          sub: s.label,
+          keys: Object.keys((s as any).stepPrompts)
+        });
+      }
+
       assembled.subData.push(assembleNode(s, [...nodePath, s.label]));
     }
 
@@ -217,14 +236,45 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     // Check if node has stepPrompts from template match
     const nodeStepPrompts = (node as any).stepPrompts || null;
 
+    // ✅ CRITICAL: Log for sub-data nodes
+    if (isSub) {
+      if (!nodeStepPrompts) {
+        console.error('🔴 [CRITICAL] ASSEMBLE NODE - SUB-DATA NODE MISSING STEPPROMPTS', {
+          path,
+          label: node.label,
+          nodeKeys: Object.keys(node),
+          hasProp: 'stepPrompts' in node
+        });
+      } else {
+        console.log('✅ [CRITICAL] ASSEMBLE NODE - SUB-DATA NODE HAS STEPPROMPTS', {
+          path,
+          label: node.label,
+          keys: Object.keys(nodeStepPrompts)
+        });
+      }
+    }
+
     for (const stepKey of baseSteps) {
       let chosenKey: string;
+      let templateKeyForTranslation: string | null = null; // Store template key to load translations later
 
       // Priority 1: Use stepPrompts from template if available
-      if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey].keys) && nodeStepPrompts[stepKey].keys.length > 0) {
-        // Use the first prompt key from template
-        chosenKey = nodeStepPrompts[stepKey].keys[0];
-        console.log('[assembleFinalDDT] Using stepPrompts key', { path, stepKey, chosenKey, fromTemplate: true });
+      // stepPrompts structure: { start: ['template.time.start.prompt1'], noMatch: [...], ... }
+      // nodeStepPrompts[stepKey] is already an array of keys, not an object with .keys property
+      if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey]) && nodeStepPrompts[stepKey].length > 0) {
+        // Store the template key to load translations later
+        templateKeyForTranslation = nodeStepPrompts[stepKey][0];
+        // Create a unique runtime key with GUID for this instance
+        chosenKey = `runtime.${ddtId}.${uuidv4()}.text`;
+        console.log('[assembleFinalDDT] Using stepPrompts key', {
+          path,
+          stepKey,
+          templateKey: templateKeyForTranslation,
+          runtimeKey: chosenKey,
+          fromTemplate: true,
+          isTemplateKey: templateKeyForTranslation.startsWith('template.'),
+          allKeys: nodeStepPrompts[stepKey]
+        });
       } else {
         // Fallback: Use AI-provided key or default
         const defaultKey = `runtime.${ddtId}.${path}.${stepKey}.text`;
@@ -241,37 +291,85 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         } catch {}
       }
 
-      assembled.messages[stepKey] = { textKey: chosenKey };
       const isAsk = ['text', 'email', 'number', 'date'].includes((node.type || '').toString());
-      const baseAction = {
-        actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
-        actionInstanceId: `a_${uuidv4()}`,
-        parameters: [{ parameterId: 'text', value: chosenKey }]
-      };
 
       // If using stepPrompts, use the number of prompts as escalations
       let numEsc: number;
-      if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey].keys)) {
-        numEsc = nodeStepPrompts[stepKey].keys.length;
+      // nodeStepPrompts[stepKey] is already an array of keys
+      if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey])) {
+        numEsc = nodeStepPrompts[stepKey].length;
       } else {
         numEsc = stepKey === 'notConfirmed' ? 2 : (counts[stepKey] || 1);
       }
 
-      // Create escalations, using stepPrompts keys if available
+      // Create escalations first - ALL escalations get unique runtime keys with GUID (including the first one)
       const escalations = Array.from({ length: numEsc }).map((_, escIdx) => {
-        let actionKey = chosenKey;
+        let actionKey: string;
+        let templateKeyForEsc: string | null = null;
+
         // If using stepPrompts and there are multiple prompts, use the corresponding one
-        if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey].keys) && nodeStepPrompts[stepKey].keys[escIdx]) {
-          actionKey = nodeStepPrompts[stepKey].keys[escIdx];
+        // nodeStepPrompts[stepKey] is already an array of keys
+        if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey]) && nodeStepPrompts[stepKey][escIdx]) {
+          templateKeyForEsc = nodeStepPrompts[stepKey][escIdx];
+          // ALWAYS create unique runtime key with GUID for ALL escalations (including escIdx === 0)
+          actionKey = `runtime.${ddtId}.${uuidv4()}.text`;
+        } else {
+          // Fallback: create unique runtime key even without stepPrompts
+          actionKey = `runtime.${ddtId}.${uuidv4()}.text`;
         }
-        return {
+
+        const baseAction = {
+          actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
+          actionInstanceId: `a_${uuidv4()}`,
+          parameters: [{ parameterId: 'text', value: actionKey }]
+        };
+
+        const escalation = {
           escalationId: `e_${uuidv4()}`,
           actions: [{
             ...baseAction,
             parameters: [{ parameterId: 'text', value: actionKey }]
           }]
         };
+
+        // Store template key mapping for later translation copying (for ALL escalations)
+        if (templateKeyForEsc) {
+          (escalation as any).__templateKey = templateKeyForEsc;
+        }
+
+        return escalation;
       });
+
+      // The main message uses the first escalation's key
+      if (escalations.length > 0 && escalations[0].actions?.[0]?.parameters?.[0]?.value) {
+        const firstEscalationKey = escalations[0].actions[0].parameters[0].value;
+        const firstEscalationTemplateKey = (escalations[0] as any).__templateKey;
+        assembled.messages[stepKey] = { textKey: firstEscalationKey };
+        // Also store template key if present in first escalation
+        if (firstEscalationTemplateKey) {
+          (assembled.messages[stepKey] as any).__templateKey = firstEscalationTemplateKey;
+        }
+        console.log('[assembleFinalDDT] Main message key set from first escalation', {
+          path,
+          stepKey,
+          firstEscalationKey,
+          firstEscalationTemplateKey,
+          escalationActionKey: escalations[0].actions[0].parameters[0].value,
+          keysMatch: firstEscalationKey === escalations[0].actions[0].parameters[0].value
+        });
+      } else {
+        // Fallback: use chosenKey if no escalations (should not happen)
+        assembled.messages[stepKey] = { textKey: chosenKey };
+        if (templateKeyForTranslation) {
+          (assembled.messages[stepKey] as any).__templateKey = templateKeyForTranslation;
+        }
+        console.log('[assembleFinalDDT] Main message key set from chosenKey (fallback)', {
+          path,
+          stepKey,
+          chosenKey,
+          templateKeyForTranslation
+        });
+      }
 
       assembled.steps[stepKey] = {
         type: stepKey,
@@ -303,11 +401,17 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
 
     console.log('[assembleFinalDDT][COMPLETE]', { mainsCount: assembledMains.length, translationsCount: Object.keys(translations).length });
 
+    // Initialize translations structure with all locales (en, it, pt)
+    // This ensures the structure is correct even if template translations haven't been loaded yet
     const result = {
       id: ddtId,
       label: rootLabel || 'Data',
       mainData: assembledMains,
-      translations: { en: translations },
+      translations: {
+        en: translations,
+        it: {},
+        pt: {}
+      },
       v2Draft: getAllV2Draft(),
     };
 

@@ -247,22 +247,46 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
       // Resolve referenced template if exists
       if (templateRef && templatesDict[templateRef]) {
         const refTemplate = templatesDict[templateRef];
+        // Deep copy subData to preserve stepPrompts on each item
+        const subDataWithPrompts = (refTemplate.subData || []).map(sub => {
+          const hasStepPrompts = !!(sub.stepPrompts && typeof sub.stepPrompts === 'object' && Object.keys(sub.stepPrompts).length > 0);
+          if (hasStepPrompts) {
+            console.log(`[HEURISTIC][buildResponse] ✅ Preserving sub-data stepPrompts for ${sub.label || 'unknown'} in ${templateRef}`);
+          }
+          return {
+            ...sub,
+            // Preserve stepPrompts if present
+            stepPrompts: sub.stepPrompts || undefined
+          };
+        });
         mainDataList.push({
           label: refTemplate.label || templateRef,
           type: refTemplate.type || templateRef,
           icon: refTemplate.icon || 'FileText',
-          subData: refTemplate.subData || [],
+          subData: subDataWithPrompts,
           required: isMentioned,
           // Include stepPrompts from referenced template
           stepPrompts: refTemplate.stepPrompts || null
         });
       } else {
         // Direct mainData entry
+        // Deep copy subData to preserve stepPrompts on each item
+        const subDataWithPrompts = (mainItem.subData || []).map(sub => {
+          const hasStepPrompts = !!(sub.stepPrompts && typeof sub.stepPrompts === 'object' && Object.keys(sub.stepPrompts).length > 0);
+          if (hasStepPrompts) {
+            console.log(`[HEURISTIC][buildResponse] ✅ Preserving sub-data stepPrompts for ${sub.label || 'unknown'} in direct mainData entry`);
+          }
+          return {
+            ...sub,
+            // Preserve stepPrompts if present
+            stepPrompts: sub.stepPrompts || undefined
+          };
+        });
         mainDataList.push({
           label: mainItem.label || templateRef || 'Data',
           type: templateRef || mainItem.type || 'generic',
           icon: mainItem.icon || 'FileText',
-          subData: mainItem.subData || [],
+          subData: subDataWithPrompts,
           required: isMentioned,
           // Include stepPrompts from mainItem if present
           stepPrompts: mainItem.stepPrompts || null
@@ -282,6 +306,18 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
     };
   } else {
     // For atomic, return single mainData entry
+    // Deep copy subData to preserve stepPrompts on each item
+    const subDataWithPrompts = (template.subData || []).map(sub => {
+      const hasStepPrompts = !!(sub.stepPrompts && typeof sub.stepPrompts === 'object' && Object.keys(sub.stepPrompts).length > 0);
+      if (hasStepPrompts) {
+        console.log(`[HEURISTIC][buildResponse] ✅ Preserving sub-data stepPrompts for ${sub.label || 'unknown'} in atomic template ${template.label || template.name || 'unknown'}`);
+      }
+      return {
+        ...sub,
+        // Preserve stepPrompts if present
+        stepPrompts: sub.stepPrompts || undefined
+      };
+    });
     return {
       type: 'object',
       icon: template.icon || 'FileText',
@@ -291,7 +327,7 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
           label: template.label || 'Data',
           type: template.type || template.name || 'generic',
           icon: template.icon || 'FileText',
-          subData: template.subData || [],
+          subData: subDataWithPrompts,
           // Include stepPrompts from atomic template
           stepPrompts: template.stepPrompts || null
         }],

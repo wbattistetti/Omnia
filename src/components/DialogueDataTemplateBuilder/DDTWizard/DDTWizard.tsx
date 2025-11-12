@@ -207,6 +207,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     root: string;
   } | null>(null);
 
+  // Show input alongside confirmation when user clicks "No"
+  const [showInputAlongsideConfirm, setShowInputAlongsideConfirm] = useState(false);
+
   // Schema editing state (from detect schema)
   const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialDDT?.label || '');
   const [schemaMains, setSchemaMains] = useState<SchemaNode[]>(() => {
@@ -444,17 +447,41 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             const l = String(label).toLowerCase();
             if (/phone|telephone|tel|cellulare|mobile/.test(l)) type = 'phone' as any;
           }
+
+          // ✅ CRITICAL: Process sub-data and preserve stepPrompts
+          const processedSubData = Array.isArray(m.subData) ? m.subData.map((s: any) => {
+            const hasStepPrompts = !!(s.stepPrompts && typeof s.stepPrompts === 'object' && Object.keys(s.stepPrompts).length > 0);
+
+            if (hasStepPrompts) {
+              console.log('✅ [CRITICAL] AUTO_DETECT - SUB-DATA HAS STEPPROMPTS', {
+                main: label,
+                sub: s.label,
+                keys: Object.keys(s.stepPrompts)
+              });
+            } else {
+              console.error('🔴 [CRITICAL] AUTO_DETECT - SUB-DATA MISSING STEPPROMPTS', {
+                main: label,
+                sub: s.label,
+                subKeys: Object.keys(s),
+                hasProp: 'stepPrompts' in s
+              });
+            }
+
+            return {
+              label: s.label || s.name || 'Field',
+              type: s.type,
+              icon: s.icon,
+              constraints: [],
+              stepPrompts: s.stepPrompts || undefined
+            };
+          }) : [];
+
           return {
             label,
             type,
             icon: m.icon,
             constraints: [],
-            subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
-              label: s.label || s.name || 'Field',
-              type: s.type,
-              icon: s.icon,
-              constraints: []
-            })) : [],
+            subData: processedSubData,
             // Include stepPrompts from template match if present
             stepPrompts: m.stepPrompts || schema.stepPrompts || null
           } as any;
@@ -462,6 +489,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
         // Save match for confirmation and immediately set schema to show structure
         setPendingHeuristicMatch({ schema, icon: ai.icon || null, mains0, root });
+        setShowInputAlongsideConfirm(false); // Reset when new match is found
         setSchemaRootLabel(root);
         setSchemaMains(mains0);
         setDetectTypeIcon(ai.icon || null);
@@ -934,13 +962,59 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         const nextMains = mainsIn.map((existing) => {
           const em = enrichedMap.get(norm(existing.label));
           let nextSub = existing.subData || [];
+
+          console.log('[DDT][Constraints][enrich] 🔍 PROCESSING MAIN FOR CONSTRAINTS', {
+            mainLabel: existing.label,
+            hasStepPrompts: !!(existing as any).stepPrompts,
+            subDataCount: nextSub.length,
+            subDataItems: nextSub.map((s: any) => ({
+              label: s.label,
+              hasStepPrompts: !!(s as any).stepPrompts,
+              stepPrompts: (s as any).stepPrompts
+            }))
+          });
+
           if (em && Array.isArray(em.subData) && nextSub.length > 0) {
             const subMap = new Map<string, any>();
             for (const s of em.subData) subMap.set(norm(s.label), s);
             nextSub = nextSub.map((sub) => {
               const es = subMap.get(norm(sub.label));
-              // usa SOLO i constraints restituiti dall'AI; niente fallback locali
-              return { ...sub, constraints: Array.isArray(es?.constraints) ? es.constraints : [] };
+
+              console.log('[DDT][Constraints][enrich] 🔍 PROCESSING SUB DATA FOR CONSTRAINTS', {
+                mainLabel: existing.label,
+                subLabel: sub.label,
+                hasExistingStepPrompts: !!(sub as any).stepPrompts,
+                existingStepPrompts: (sub as any).stepPrompts,
+                hasEnrichedConstraints: Array.isArray(es?.constraints),
+                enrichedConstraintsCount: Array.isArray(es?.constraints) ? es.constraints.length : 0
+              });
+
+              // Preserva stepPrompts se presenti, aggiungi solo i constraints dall'AI
+              const preservedStepPrompts = (sub as any).stepPrompts || undefined;
+              const result = {
+                ...sub,
+                constraints: Array.isArray(es?.constraints) ? es.constraints : [],
+                ...(preservedStepPrompts ? { stepPrompts: preservedStepPrompts } : {})
+              };
+
+              console.log('[DDT][Constraints][enrich] ✅ SUB DATA RESULT', {
+                mainLabel: existing.label,
+                subLabel: sub.label,
+                hasStepPrompts: !!(result as any).stepPrompts,
+                stepPrompts: (result as any).stepPrompts,
+                constraintsCount: Array.isArray(result.constraints) ? result.constraints.length : 0
+              });
+
+              return result;
+            });
+          } else {
+            // Anche se non ci sono enriched subData, preserva i stepPrompts esistenti
+            nextSub = nextSub.map((sub) => {
+              const preservedStepPrompts = (sub as any).stepPrompts || undefined;
+              return {
+                ...sub,
+                ...(preservedStepPrompts ? { stepPrompts: preservedStepPrompts } : {})
+              };
             });
           }
           // Dedupe helper
@@ -1060,20 +1134,74 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const renderTogglePanel = step !== 'pipeline';
   try { dlog('[DDT][UI] render', { step, showRight, rightHasContent, pipelineHeadless, renderTogglePanel }); } catch { }
 
+  // Handle manual template selection
+  const handleTemplateSelect = React.useCallback((template: any) => {
+    console.log('[DDT][Wizard][templateSelect] Template selected manually:', template.label);
+
+    // Convert template to heuristic match format
+    const root = template.label || 'Data';
+    const mainData = template.mainData || [];
+
+    const mains0: SchemaNode[] = mainData.map((m: any) => {
+      const label = m.label || m.name || 'Field';
+      let type = m.type;
+      if (!type || type === 'object') {
+        const l = String(label).toLowerCase();
+        if (/phone|telephone|tel|cellulare|mobile/.test(l)) type = 'phone' as any;
+      }
+      return {
+        label,
+        type,
+        icon: m.icon,
+        constraints: m.constraints || [],
+        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+          label: s.label || s.name || 'Field',
+          type: s.type,
+          icon: s.icon,
+          constraints: s.constraints || []
+        })) : [],
+        // Include stepPrompts from template if present
+        stepPrompts: m.stepPrompts || template.stepPrompts || null
+      } as any;
+    });
+
+    // Create a fake schema for consistency
+    const schema = {
+      label: root,
+      mainData: mains0
+    };
+
+    // Process as if it were a heuristic match
+    setPendingHeuristicMatch({ schema, icon: template.icon || null, mains0, root });
+    setShowInputAlongsideConfirm(false);
+    setSchemaRootLabel(root);
+    setSchemaMains(mains0);
+    setDetectTypeIcon(template.icon || null);
+    setShowRight(true);
+    setStep('heuristic-confirm');
+    console.log('[DDT][Wizard][templateSelect] Template processed, showing confirmation', { root, mainsCount: mains0.length });
+  }, []);
+
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: rightHasContent ? 'minmax(420px,520px) 1fr' : '1fr',
+        gridTemplateColumns: showInputAlongsideConfirm
+          ? 'minmax(420px,520px) minmax(420px,520px) 1fr'
+          : rightHasContent
+            ? 'minmax(420px,520px) 1fr'
+            : '1fr',
         gap: 12,
         height: '100%',
       }}
     >
-      {/* Hide input step if heuristic match is pending (will show after "No") */}
+      {/* Show WizardInputStep if:
+          - NO pendingHeuristicMatch (no heuristic found)
+          - OR showInputAlongsideConfirm is true (user clicked "No") */}
       <div style={{
         overflow: 'auto',
         padding: '0 8px',
-        display: pendingHeuristicMatch ? 'none' : 'block'
+        display: (pendingHeuristicMatch && !showInputAlongsideConfirm) ? 'none' : 'block'
       }}>
         <WizardInputStep
           userDesc={userDesc}
@@ -1082,18 +1210,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           onCancel={handleClose}
           dataNode={stableDataNode || undefined}
           onAutoDetect={handleAutoDetect}
+          onTemplateSelect={handleTemplateSelect}
         />
       </div>
 
-      {rightHasContent && (
+      {/* Confirmation panel - show if pendingHeuristicMatch exists */}
+      {pendingHeuristicMatch && (
         <div style={{ overflow: 'auto', borderLeft: '1px solid #1f2340', padding: 12 }}>
-          {step === 'loading' && <WizardLoadingStep />}
-
           {step === 'heuristic-confirm' && pendingHeuristicMatch && (() => {
-            // Process match immediately to show structure
             const { schema, icon, mains0, root } = pendingHeuristicMatch;
-
-            // Use current schemaMains if already set, otherwise use pending match
             const displayMains = schemaMains.length > 0 ? schemaMains : mains0;
             const displayRoot = schemaRootLabel || root;
 
@@ -1118,6 +1243,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                         const { schema, icon, mains0, root } = pendingHeuristicMatch;
                         setPendingHeuristicMatch(null);
+                        setShowInputAlongsideConfirm(false); // Reset when confirming
                         setDetectTypeIcon(icon);
 
                         // Check if stepPrompts are present
@@ -1130,25 +1256,98 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                           try {
                             // Extract all translation keys from stepPrompts
+                            // stepPrompts structure: { start: ['template.time.start.prompt1'], noMatch: [...], ... }
                             const translationKeys: string[] = [];
+
+                            // ✅ CRITICAL: Check if sub-data have stepPrompts BEFORE processing
+                            console.log('🔴 [CRITICAL] SUB-DATA STEPPROMPTS CHECK', {
+                              mainsCount: mains0.length,
+                              mains: mains0.map((m: any) => ({
+                                label: m.label,
+                                subDataCount: (m.subData || []).length,
+                                subData: (m.subData || []).map((s: any) => ({
+                                  label: s.label,
+                                  HAS_STEPPROMPTS: !!(s as any).stepPrompts,
+                                  stepPromptsKeys: (s as any).stepPrompts ? Object.keys((s as any).stepPrompts) : [],
+                                  stepPrompts: (s as any).stepPrompts
+                                }))
+                              }))
+                            });
+
                             mains0.forEach((m: any) => {
+
+                              // Process main data stepPrompts
                               if (m.stepPrompts && typeof m.stepPrompts === 'object') {
-                                Object.values(m.stepPrompts).forEach((stepPrompt: any) => {
-                                  if (stepPrompt && Array.isArray(stepPrompt.keys)) {
-                                    translationKeys.push(...stepPrompt.keys);
+                                Object.entries(m.stepPrompts).forEach(([stepKey, stepPromptKeys]: [string, any]) => {
+                                  // stepPromptKeys is already an array of keys, not an object with .keys property
+                                  if (Array.isArray(stepPromptKeys) && stepPromptKeys.length > 0) {
+                                    console.log('[DDT][Wizard][heuristicMatch] Found stepPrompts for step', {
+                                      mainLabel: m.label,
+                                      stepKey,
+                                      keys: stepPromptKeys,
+                                      allAreTemplateKeys: stepPromptKeys.every((k: string) => k.startsWith('template.'))
+                                    });
+                                    translationKeys.push(...stepPromptKeys);
+                                  }
+                                });
+                              }
+
+                              // Process sub data stepPrompts
+                              if (m.subData && Array.isArray(m.subData) && m.subData.length > 0) {
+                                m.subData.forEach((sub: any, subIdx: number) => {
+                                  const hasSubStepPrompts = !!(sub as any).stepPrompts && typeof (sub as any).stepPrompts === 'object' && Object.keys((sub as any).stepPrompts).length > 0;
+
+                                  if (hasSubStepPrompts) {
+                                    Object.entries((sub as any).stepPrompts).forEach(([stepKey, stepPromptKeys]: [string, any]) => {
+                                      if (Array.isArray(stepPromptKeys) && stepPromptKeys.length > 0) {
+                                        stepPromptKeys.forEach((key: string) => {
+                                          if (key.startsWith('template.')) {
+                                            translationKeys.push(key);
+                                          }
+                                        });
+                                      }
+                                    });
+                                  } else {
+                                    console.error('🔴 [CRITICAL] SUB-DATA MISSING STEPPROMPTS', {
+                                      mainLabel: m.label,
+                                      subLabel: sub.label,
+                                      subKeys: Object.keys(sub),
+                                      hasStepPromptsProp: 'stepPrompts' in sub
+                                    });
                                   }
                                 });
                               }
                             });
 
-                            console.log('[DDT][Wizard][heuristicMatch] Extracted translation keys:', translationKeys);
+                            console.log('[DDT][Wizard][heuristicMatch] Extracted translation keys:', {
+                              totalKeys: translationKeys.length,
+                              uniqueKeys: [...new Set(translationKeys)].length,
+                              keys: translationKeys,
+                              templateKeys: translationKeys.filter(k => k.startsWith('template.')),
+                              nonTemplateKeys: translationKeys.filter(k => !k.startsWith('template.'))
+                            });
 
                             // Load translations from database
                             let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
                             if (translationKeys.length > 0) {
                               try {
-                                templateTranslations = await getTemplateTranslations(translationKeys);
-                                console.log('[DDT][Wizard][heuristicMatch] Loaded', Object.keys(templateTranslations).length, 'translations');
+                                const uniqueKeys = [...new Set(translationKeys)];
+                                console.log('[DDT][Wizard][heuristicMatch] Loading translations for', uniqueKeys.length, 'unique keys');
+                                templateTranslations = await getTemplateTranslations(uniqueKeys);
+                                console.log('[DDT][Wizard][heuristicMatch] Loaded translations', {
+                                  requestedKeys: uniqueKeys.length,
+                                  loadedKeys: Object.keys(templateTranslations).length,
+                                  loadedKeysList: Object.keys(templateTranslations),
+                                  sampleTranslations: Object.entries(templateTranslations).slice(0, 3).map(([k, v]) => ({
+                                    key: k,
+                                    hasEn: !!v.en,
+                                    hasIt: !!v.it,
+                                    hasPt: !!v.pt,
+                                    enValue: v.en ? v.en.substring(0, 30) : undefined,
+                                    itValue: v.it ? v.it.substring(0, 30) : undefined,
+                                    ptValue: v.pt ? v.pt.substring(0, 30) : undefined
+                                  }))
+                                });
                               } catch (err) {
                                 console.error('[DDT][Wizard][heuristicMatch] Failed to load template translations:', err);
                               }
@@ -1158,6 +1357,18 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             setSchemaRootLabel(root);
                             setSchemaMains(mains0);
 
+                            // ✅ CRITICAL: Verify sub-data stepPrompts are present BEFORE assembly
+                            console.log('🔴 [CRITICAL] BEFORE ASSEMBLY - SUB-DATA STEPPROMPTS', {
+                              mains: mains0.map((m: any) => ({
+                                label: m.label,
+                                subData: (m.subData || []).map((s: any) => ({
+                                  label: s.label,
+                                  HAS_STEPPROMPTS: !!(s as any).stepPrompts,
+                                  stepPrompts: (s as any).stepPrompts
+                                }))
+                              }))
+                            });
+
                             const emptyStore = buildArtifactStore([]);
                             const finalDDT = assembleFinalDDT(
                               root || 'Data',
@@ -1166,16 +1377,333 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                               { escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 } }
                             );
 
-                            // Merge template translations into final DDT translations
+                            // Map template keys to runtime keys and copy translations
                             if (finalDDT.translations && Object.keys(templateTranslations).length > 0) {
                               if (!finalDDT.translations.en) finalDDT.translations.en = {};
                               if (!(finalDDT.translations as any).it) (finalDDT.translations as any).it = {};
                               if (!(finalDDT.translations as any).pt) (finalDDT.translations as any).pt = {};
 
-                              Object.entries(templateTranslations).forEach(([key, value]) => {
-                                if (value.en) finalDDT.translations.en[key] = value.en;
-                                if (value.it) (finalDDT.translations as any).it[key] = value.it;
-                                if (value.pt) (finalDDT.translations as any).pt[key] = value.pt;
+                              // Map template keys to runtime keys by iterating through the DDT structure
+                              const templateKeyToRuntimeKey = new Map<string, string>();
+
+                              // Extract mapping from mainData structure
+                              finalDDT.mainData?.forEach((main: any) => {
+                                // Map messages (start, noMatch, etc.)
+                                if (main.messages) {
+                                  Object.entries(main.messages).forEach(([stepKey, msg]: [string, any]) => {
+                                    const runtimeKey = msg.textKey;
+                                    const templateKey = (msg as any).__templateKey;
+                                    console.log('[DDT][Wizard][heuristicMatch] Mapping message', {
+                                      stepKey,
+                                      runtimeKey,
+                                      templateKey,
+                                      hasTemplateKey: !!templateKey
+                                    });
+                                    if (templateKey && runtimeKey) {
+                                      templateKeyToRuntimeKey.set(templateKey, runtimeKey);
+                                    }
+                                  });
+                                }
+
+                                // Map escalations
+                                if (main.steps) {
+                                  Object.entries(main.steps).forEach(([stepKey, step]: [string, any]) => {
+                                    if (step.escalations) {
+                                      step.escalations.forEach((esc: any, escIdx: number) => {
+                                        const escActionKey = esc.actions?.[0]?.parameters?.[0]?.value;
+                                        const templateKey = (esc as any).__templateKey;
+                                        console.log('[DDT][Wizard][heuristicMatch] Mapping escalation', {
+                                          stepKey,
+                                          escIdx,
+                                          escActionKey,
+                                          templateKey,
+                                          hasTemplateKey: !!templateKey
+                                        });
+                                        if (templateKey && escActionKey) {
+                                          templateKeyToRuntimeKey.set(templateKey, escActionKey);
+                                        }
+                                      });
+                                    }
+                                  });
+                                }
+
+                                // Also check subData recursively
+                                if (main.subData && Array.isArray(main.subData)) {
+                                  console.log('[DDT][Wizard][heuristicMatch] 🔍 MAPPING SUB DATA FOR MAIN', {
+                                    mainLabel: main.label,
+                                    subDataCount: main.subData.length
+                                  });
+
+                                  const processSubData = (subDataArray: any[], level: number = 0) => {
+                                    subDataArray.forEach((sub: any, subIdx: number) => {
+                                      console.log('[DDT][Wizard][heuristicMatch] 🔍 MAPPING SUB DATA ITEM', {
+                                        mainLabel: main.label,
+                                        subIndex: subIdx,
+                                        subLabel: sub.label,
+                                        level,
+                                        hasMessages: !!sub.messages,
+                                        hasSteps: !!sub.steps,
+                                        messagesCount: sub.messages ? Object.keys(sub.messages).length : 0,
+                                        stepsCount: sub.steps ? Object.keys(sub.steps).length : 0
+                                      });
+
+                                      if (sub.messages) {
+                                        Object.entries(sub.messages).forEach(([stepKey, msg]: [string, any]) => {
+                                          const runtimeKey = msg.textKey;
+                                          const templateKey = (msg as any).__templateKey;
+                                          console.log('[DDT][Wizard][heuristicMatch] 🔍 MAPPING SUB DATA MESSAGE', {
+                                            mainLabel: main.label,
+                                            subLabel: sub.label,
+                                            stepKey,
+                                            runtimeKey,
+                                            templateKey,
+                                            hasTemplateKey: !!templateKey
+                                          });
+                                          if (templateKey && runtimeKey) {
+                                            templateKeyToRuntimeKey.set(templateKey, runtimeKey);
+                                            console.log('[DDT][Wizard][heuristicMatch] ✅ MAPPED SUB DATA MESSAGE', {
+                                              templateKey,
+                                              runtimeKey,
+                                              mainLabel: main.label,
+                                              subLabel: sub.label,
+                                              stepKey
+                                            });
+                                          } else {
+                                            console.warn('[DDT][Wizard][heuristicMatch] ⚠️ SUB DATA MESSAGE MISSING TEMPLATE KEY', {
+                                              mainLabel: main.label,
+                                              subLabel: sub.label,
+                                              stepKey,
+                                              runtimeKey,
+                                              hasTemplateKey: !!templateKey
+                                            });
+                                          }
+                                        });
+                                      }
+                                      if (sub.steps) {
+                                        Object.entries(sub.steps).forEach(([stepKey, step]: [string, any]) => {
+                                          if (step.escalations) {
+                                            step.escalations.forEach((esc: any, escIdx: number) => {
+                                              const escActionKey = esc.actions?.[0]?.parameters?.[0]?.value;
+                                              const templateKey = (esc as any).__templateKey;
+                                              console.log('[DDT][Wizard][heuristicMatch] 🔍 MAPPING SUB DATA ESCALATION', {
+                                                mainLabel: main.label,
+                                                subLabel: sub.label,
+                                                stepKey,
+                                                escIdx,
+                                                escActionKey,
+                                                templateKey,
+                                                hasTemplateKey: !!templateKey
+                                              });
+                                              if (templateKey && escActionKey) {
+                                                templateKeyToRuntimeKey.set(templateKey, escActionKey);
+                                                console.log('[DDT][Wizard][heuristicMatch] ✅ MAPPED SUB DATA ESCALATION', {
+                                                  templateKey,
+                                                  runtimeKey: escActionKey,
+                                                  mainLabel: main.label,
+                                                  subLabel: sub.label,
+                                                  stepKey,
+                                                  escIdx
+                                                });
+                                              } else {
+                                                console.warn('[DDT][Wizard][heuristicMatch] ⚠️ SUB DATA ESCALATION MISSING TEMPLATE KEY', {
+                                                  mainLabel: main.label,
+                                                  subLabel: sub.label,
+                                                  stepKey,
+                                                  escIdx,
+                                                  escActionKey,
+                                                  hasTemplateKey: !!templateKey
+                                                });
+                                              }
+                                            });
+                                          }
+                                        });
+                                      }
+                                      if (sub.subData && Array.isArray(sub.subData)) {
+                                        processSubData(sub.subData, level + 1);
+                                      }
+                                    });
+                                  };
+                                  processSubData(main.subData, 0);
+                                } else {
+                                  console.log('[DDT][Wizard][heuristicMatch] ⚠️ MAIN DATA HAS NO SUB DATA', {
+                                    mainLabel: main.label,
+                                    hasSubData: !!(main.subData && Array.isArray(main.subData)),
+                                    subDataCount: main.subData ? (Array.isArray(main.subData) ? main.subData.length : 0) : 0
+                                  });
+                                }
+                              });
+
+                              // Copy translations from template keys to runtime keys
+                              let mergedCount = 0;
+                              const mappingDetails: Array<{ templateKey: string; runtimeKey: string; hasPt: boolean; ptValue: string }> = [];
+                              console.log('[DDT][Wizard][heuristicMatch] 🔍 START COPYING TRANSLATIONS', {
+                                totalMappings: templateKeyToRuntimeKey.size,
+                                templateTranslationsKeys: Object.keys(templateTranslations),
+                                finalDDTTranslationsStructure: {
+                                  hasEn: !!finalDDT.translations.en,
+                                  hasIt: !!(finalDDT.translations as any).it,
+                                  hasPt: !!(finalDDT.translations as any).pt
+                                }
+                              });
+
+                              templateKeyToRuntimeKey.forEach((runtimeKey, templateKey) => {
+                                const templateTranslation = templateTranslations[templateKey];
+                                console.log('[DDT][Wizard][heuristicMatch] 🔍 COPYING TRANSLATION', {
+                                  templateKey,
+                                  runtimeKey,
+                                  hasTemplateTranslation: !!templateTranslation,
+                                  templateTranslationStructure: templateTranslation ? {
+                                    hasEn: !!templateTranslation.en,
+                                    hasIt: !!templateTranslation.it,
+                                    hasPt: !!templateTranslation.pt,
+                                    enValue: templateTranslation.en?.substring(0, 30),
+                                    itValue: templateTranslation.it?.substring(0, 30),
+                                    ptValue: templateTranslation.pt?.substring(0, 30)
+                                  } : null
+                                });
+
+                                if (templateTranslation) {
+                                  if (templateTranslation.en) {
+                                    finalDDT.translations.en[runtimeKey] = templateTranslation.en;
+                                    mergedCount++;
+                                    console.log('[DDT][Wizard][heuristicMatch] ✅ COPIED EN', {
+                                      runtimeKey,
+                                      value: templateTranslation.en.substring(0, 30),
+                                      nowInEn: !!finalDDT.translations.en[runtimeKey]
+                                    });
+                                  }
+                                  if (templateTranslation.it) {
+                                    (finalDDT.translations as any).it[runtimeKey] = templateTranslation.it;
+                                    mergedCount++;
+                                    console.log('[DDT][Wizard][heuristicMatch] ✅ COPIED IT', {
+                                      runtimeKey,
+                                      value: templateTranslation.it.substring(0, 30),
+                                      nowInIt: !!(finalDDT.translations as any).it[runtimeKey]
+                                    });
+                                  }
+                                  if (templateTranslation.pt) {
+                                    (finalDDT.translations as any).pt[runtimeKey] = templateTranslation.pt;
+                                    mergedCount++;
+                                    console.log('[DDT][Wizard][heuristicMatch] ✅ COPIED PT', {
+                                      runtimeKey,
+                                      value: templateTranslation.pt.substring(0, 30),
+                                      nowInPt: !!(finalDDT.translations as any).pt[runtimeKey],
+                                      verifiedValue: (finalDDT.translations as any).pt[runtimeKey]?.substring(0, 30)
+                                    });
+                                    mappingDetails.push({
+                                      templateKey,
+                                      runtimeKey,
+                                      hasPt: true,
+                                      ptValue: templateTranslation.pt.substring(0, 50)
+                                    });
+                                  } else {
+                                    console.warn('[DDT][Wizard][heuristicMatch] ⚠️ NO PT TRANSLATION', {
+                                      templateKey,
+                                      runtimeKey,
+                                      hasEn: !!templateTranslation.en,
+                                      hasIt: !!templateTranslation.it
+                                    });
+                                    mappingDetails.push({
+                                      templateKey,
+                                      runtimeKey,
+                                      hasPt: false,
+                                      ptValue: ''
+                                    });
+                                  }
+                                } else {
+                                  console.warn('[DDT][Wizard][heuristicMatch] ⚠️ NO TEMPLATE TRANSLATION FOUND', {
+                                    templateKey,
+                                    runtimeKey,
+                                    availableTemplateKeys: Object.keys(templateTranslations)
+                                  });
+                                }
+                              });
+
+                              console.log('[DDT][Wizard][heuristicMatch] Translation mapping details', {
+                                totalMappings: templateKeyToRuntimeKey.size,
+                                mappingsWithPt: mappingDetails.filter(m => m.hasPt).length,
+                                sampleMappings: mappingDetails.slice(0, 5),
+                                allMappings: mappingDetails.map(m => ({
+                                  templateKey: m.templateKey,
+                                  runtimeKey: m.runtimeKey,
+                                  hasPt: m.hasPt,
+                                  ptValue: m.ptValue
+                                }))
+                              });
+
+                              // 🔍 DEBUG: Verifica che le traduzioni siano state copiate correttamente
+                              const sampleRuntimeKey = mappingDetails[0]?.runtimeKey;
+                              if (sampleRuntimeKey) {
+                                console.log('[DDT][Wizard][heuristicMatch] Sample translation check', {
+                                  runtimeKey: sampleRuntimeKey,
+                                  hasInEn: !!finalDDT.translations.en[sampleRuntimeKey],
+                                  hasInIt: !!(finalDDT.translations as any).it[sampleRuntimeKey],
+                                  hasInPt: !!(finalDDT.translations as any).pt[sampleRuntimeKey],
+                                  enValue: finalDDT.translations.en[sampleRuntimeKey]?.substring(0, 50),
+                                  itValue: (finalDDT.translations as any).it[sampleRuntimeKey]?.substring(0, 50),
+                                  ptValue: (finalDDT.translations as any).pt[sampleRuntimeKey]?.substring(0, 50)
+                                });
+                              }
+
+                              // Clean up __templateKey metadata after copying translations
+                              finalDDT.mainData?.forEach((main: any) => {
+                                if (main.messages) {
+                                  Object.values(main.messages).forEach((msg: any) => {
+                                    delete (msg as any).__templateKey;
+                                  });
+                                }
+                                if (main.steps) {
+                                  Object.values(main.steps).forEach((step: any) => {
+                                    if (step.escalations) {
+                                      step.escalations.forEach((esc: any) => {
+                                        delete (esc as any).__templateKey;
+                                      });
+                                    }
+                                  });
+                                }
+                                // Clean up subData recursively
+                                if (main.subData && Array.isArray(main.subData)) {
+                                  const cleanSubData = (subDataArray: any[]) => {
+                                    subDataArray.forEach((sub: any) => {
+                                      if (sub.messages) {
+                                        Object.values(sub.messages).forEach((msg: any) => {
+                                          delete (msg as any).__templateKey;
+                                        });
+                                      }
+                                      if (sub.steps) {
+                                        Object.values(sub.steps).forEach((step: any) => {
+                                          if (step.escalations) {
+                                            step.escalations.forEach((esc: any) => {
+                                              delete (esc as any).__templateKey;
+                                            });
+                                          }
+                                        });
+                                      }
+                                      if (sub.subData && Array.isArray(sub.subData)) {
+                                        cleanSubData(sub.subData);
+                                      }
+                                    });
+                                  };
+                                  cleanSubData(main.subData);
+                                }
+                              });
+
+                              console.log('[DDT][Wizard][heuristicMatch] Copied template translations to runtime keys', {
+                                templateKeysCount: templateKeyToRuntimeKey.size,
+                                mergedEntries: mergedCount,
+                                enKeys: Object.keys(finalDDT.translations.en).filter(k => k.startsWith('runtime.')).length,
+                                itKeys: Object.keys((finalDDT.translations as any).it).filter(k => k.startsWith('runtime.')).length,
+                                ptKeys: Object.keys((finalDDT.translations as any).pt).filter(k => k.startsWith('runtime.')).length,
+                                samplePtKeys: Object.keys((finalDDT.translations as any).pt).filter(k => k.startsWith('runtime.')).slice(0, 5),
+                                samplePtValues: Object.entries((finalDDT.translations as any).pt)
+                                  .filter(([k]) => k.startsWith('runtime.'))
+                                  .slice(0, 3)
+                                  .map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) }))
+                              });
+                            } else {
+                              console.warn('[DDT][Wizard][heuristicMatch] No template translations to merge', {
+                                hasFinalDDTTranslations: !!finalDDT.translations,
+                                templateTranslationsCount: Object.keys(templateTranslations).length
                               });
                             }
 
@@ -1183,7 +1711,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                               ddtId: finalDDT.id,
                               mainsCount: finalDDT.mainData?.length || 0,
                               hasTranslations: !!finalDDT.translations,
-                              templateTranslationsCount: Object.keys(templateTranslations).length
+                              templateTranslationsCount: Object.keys(templateTranslations).length,
+                              translationsStructure: finalDDT.translations ? {
+                                hasEn: !!finalDDT.translations.en,
+                                hasIt: !!(finalDDT.translations as any).it,
+                                hasPt: !!(finalDDT.translations as any).pt,
+                                enKeys: finalDDT.translations.en ? Object.keys(finalDDT.translations.en).length : 0,
+                                itKeys: (finalDDT.translations as any).it ? Object.keys((finalDDT.translations as any).it).length : 0,
+                                ptKeys: (finalDDT.translations as any).pt ? Object.keys((finalDDT.translations as any).pt).length : 0
+                              } : null
                             });
 
                             // Verify DDT structure before passing to Response Editor
@@ -1263,10 +1799,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                     </button>
                     <button
                       onClick={() => {
-                        console.log('[DDT][Wizard][heuristicMatch] User rejected, showing input step');
-                        setPendingHeuristicMatch(null);
-                        setShowRight(false); // Hide right panel
-                        setStep('input'); // Show input step
+                        console.log('[DDT][Wizard][heuristicMatch] User rejected, showing input alongside');
+                        setShowInputAlongsideConfirm(true); // Show input alongside, DON'T hide confirmation
+                        // DON'T remove pendingHeuristicMatch, DON'T hide right panel
                       }}
                       style={{
                         background: '#ef4444',
@@ -1305,6 +1840,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* Right panel for other steps (NOT heuristic-confirm) */}
+      {rightHasContent && step !== 'heuristic-confirm' && (
+        <div style={{ overflow: 'auto', borderLeft: '1px solid #1f2340', padding: 12 }}>
+          {step === 'loading' && <WizardLoadingStep />}
 
           {step === 'error' && (
             <WizardErrorStep
@@ -1455,7 +1997,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             mainsCount: finalDDT.mainData?.length || 0,
                             hasTranslations: !!finalDDT.translations,
                             templateTranslationsCount: Object.keys(templateTranslations).length,
-                            translationsKeys: Object.keys(finalDDT.translations?.en || {}).length,
+                            translationsStructure: finalDDT.translations ? {
+                              hasEn: !!finalDDT.translations.en,
+                              hasIt: !!(finalDDT.translations as any).it,
+                              hasPt: !!(finalDDT.translations as any).pt,
+                              enKeys: finalDDT.translations.en ? Object.keys(finalDDT.translations.en).length : 0,
+                              itKeys: (finalDDT.translations as any).it ? Object.keys((finalDDT.translations as any).it).length : 0,
+                              ptKeys: (finalDDT.translations as any).pt ? Object.keys((finalDDT.translations as any).pt).length : 0
+                            } : null,
                             firstMainSteps: finalDDT.mainData?.[0]?.steps ? Object.keys(finalDDT.mainData[0].steps) : [],
                             firstMainMessages: finalDDT.mainData?.[0]?.messages ? Object.keys(finalDDT.mainData[0].messages) : []
                           });

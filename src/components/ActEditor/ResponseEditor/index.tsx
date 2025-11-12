@@ -79,26 +79,169 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     try { localStorage.setItem('debug.responseEditor', '1'); } catch { }
     try { localStorage.setItem('debug.reopen', '1'); } catch { }
   }, []);
-  const [localTranslations, setLocalTranslations] = useState<any>({ ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) });
+  // Get project language from localStorage (set when project is created/loaded)
+  const projectLocale = useMemo<'en' | 'it' | 'pt'>(() => {
+    try {
+      const saved = localStorage.getItem('project.lang');
+      console.log('[RESPONSE_EDITOR][LOCALE] Reading project language from localStorage:', saved);
+      if (saved === 'en' || saved === 'it' || saved === 'pt') {
+        console.log('[RESPONSE_EDITOR][LOCALE] ✅ Using project locale:', saved);
+        return saved;
+      }
+    } catch (err) {
+      console.error('[RESPONSE_EDITOR][LOCALE] Error reading locale:', err);
+    }
+    console.log('[RESPONSE_EDITOR][LOCALE] ⚠️ Using default locale: it');
+    return 'it'; // Default to Italian
+  }, []);
+
+  // Get translations for project locale
+  const getTranslationsForLocale = (locale: 'en' | 'it' | 'pt', ddtTranslations: any) => {
+    console.log('[RESPONSE_EDITOR][TRANSLATIONS] getTranslationsForLocale called', {
+      locale,
+      hasDDTTranslations: !!ddtTranslations,
+      ddtTranslationsType: typeof ddtTranslations,
+      ddtTranslationsKeys: ddtTranslations ? Object.keys(ddtTranslations) : [],
+      ddtTranslationsStructure: ddtTranslations ? {
+        hasEn: !!ddtTranslations.en,
+        hasIt: !!ddtTranslations.it,
+        hasPt: !!ddtTranslations.pt,
+        enKeys: ddtTranslations.en ? Object.keys(ddtTranslations.en).length : 0,
+        itKeys: ddtTranslations.it ? Object.keys(ddtTranslations.it).length : 0,
+        ptKeys: ddtTranslations.pt ? Object.keys(ddtTranslations.pt).length : 0,
+        directKeys: typeof ddtTranslations === 'object' && !ddtTranslations.en && !ddtTranslations.it && !ddtTranslations.pt ? Object.keys(ddtTranslations).length : 0,
+        isDirectStructure: typeof ddtTranslations === 'object' && !ddtTranslations.en && !ddtTranslations.it && !ddtTranslations.pt,
+        sampleDirectKeys: (typeof ddtTranslations === 'object' && !ddtTranslations.en && !ddtTranslations.it && !ddtTranslations.pt) ? Object.keys(ddtTranslations).slice(0, 5) : []
+      } : null,
+      // 🔍 ESPANDI per vedere la struttura completa
+      fullDDTTranslations: ddtTranslations ? JSON.stringify(ddtTranslations).substring(0, 1000) : null,
+      // 🔍 VERIFICA se en ha traduzioni del template
+      enTemplateKeys: ddtTranslations?.en ? Object.keys(ddtTranslations.en).filter(k => k.startsWith('template.')).slice(0, 10) : [],
+      // 🔍 VERIFICA i valori delle traduzioni en del template
+      enTemplateValues: ddtTranslations?.en ? Object.entries(ddtTranslations.en)
+        .filter(([k]) => k.startsWith('template.'))
+        .slice(0, 5)
+        .map(([k, v]) => ({ key: k, value: String(v) })) : []
+    });
+
+    if (!ddtTranslations) {
+      console.log('[RESPONSE_EDITOR][TRANSLATIONS] No DDT translations, returning mergedBase only');
+      return mergedBase;
+    }
+
+    // Structure: ddt.translations = { en: {...}, it: {...}, pt: {...} }
+    const localeTranslations = ddtTranslations[locale] || ddtTranslations.en || ddtTranslations;
+
+    console.log('[RESPONSE_EDITOR][TRANSLATIONS] 🔍 LOCALE SELECTION', {
+      requestedLocale: locale,
+      hasRequestedLocale: !!ddtTranslations[locale],
+      hasEn: !!ddtTranslations.en,
+      hasIt: !!ddtTranslations.it,
+      hasPt: !!ddtTranslations.pt,
+      selectedLocaleTranslations: localeTranslations ? {
+        keysCount: Object.keys(localeTranslations).length,
+        sampleKeys: Object.keys(localeTranslations).slice(0, 5),
+        runtimeKeysCount: Object.keys(localeTranslations).filter(k => k.startsWith('runtime.')).length,
+        templateKeysCount: Object.keys(localeTranslations).filter(k => k.startsWith('template.')).length,
+        sampleRuntimeKeys: Object.keys(localeTranslations).filter(k => k.startsWith('runtime.')).slice(0, 3),
+        sampleRuntimeValues: Object.entries(localeTranslations)
+          .filter(([k]) => k.startsWith('runtime.'))
+          .slice(0, 3)
+          .map(([k, v]) => ({ key: k, value: String(v).substring(0, 50) }))
+      } : null
+    });
+
+    // 🔍 DEBUG: Verifica le chiavi runtime specifiche per questo DDT
+    const runtimeKeysForThisDDT = localeTranslations ? Object.keys(localeTranslations).filter(k =>
+      k.startsWith('runtime.') && k.includes('Time_')
+    ).slice(0, 10) : [];
+
+    console.log('[RESPONSE_EDITOR][TRANSLATIONS] Selected translations', {
+      locale,
+      requestedLocale: locale,
+      hasRequestedLocale: !!ddtTranslations[locale],
+      hasEn: !!ddtTranslations.en,
+      hasIt: !!ddtTranslations.it,
+      hasPt: !!ddtTranslations.pt,
+      usingLocale: ddtTranslations[locale] ? locale : (ddtTranslations.en ? 'en' : 'direct'),
+      localeTranslationsKeys: localeTranslations ? Object.keys(localeTranslations).length : 0,
+      sampleKeys: localeTranslations ? Object.keys(localeTranslations).slice(0, 5) : [],
+      sampleTranslations: localeTranslations ? Object.entries(localeTranslations).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) })) : [],
+      // 🔍 VERIFICA le chiavi runtime per questo DDT
+      runtimeKeysForThisDDT: runtimeKeysForThisDDT,
+      runtimeTranslationsForThisDDT: runtimeKeysForThisDDT.map(k => ({
+        key: k,
+        value: localeTranslations ? String(localeTranslations[k] || '').substring(0, 50) : ''
+      })),
+      // 🔍 ESPANDI per vedere tutte le chiavi caricate
+      allTranslationKeys: localeTranslations ? Object.keys(localeTranslations) : [],
+      // 🔍 VERIFICA se ci sono chiavi del template
+      templateKeys: localeTranslations ? Object.keys(localeTranslations).filter(k => k.startsWith('template.')).slice(0, 10) : [],
+      // 🔍 VERIFICA i valori delle traduzioni del template
+      templateTranslations: localeTranslations ? Object.entries(localeTranslations)
+        .filter(([k]) => k.startsWith('template.'))
+        .slice(0, 5)
+        .map(([k, v]) => ({ key: k, value: String(v) })) : []
+    });
+
+    const result = { ...mergedBase, ...localeTranslations };
+    console.log('[RESPONSE_EDITOR][TRANSLATIONS] Final merged translations', {
+      mergedBaseKeys: Object.keys(mergedBase).length,
+      localeTranslationsKeys: localeTranslations ? Object.keys(localeTranslations).length : 0,
+      finalKeys: Object.keys(result).length,
+      sampleFinalKeys: Object.keys(result).slice(0, 5),
+      // 🔍 VERIFICA se le chiavi del DDT sono presenti nel risultato finale
+      ddtKeysInResult: localeTranslations ? Object.keys(localeTranslations).filter(k => k.includes('template.') || k.includes('runtime.')).slice(0, 10) : [],
+      // 🔍 VERIFICA i valori delle chiavi runtime (quelle usate dai messaggi)
+      runtimeKeys: localeTranslations ? Object.entries(localeTranslations)
+        .filter(([k]) => k.includes('runtime.'))
+        .slice(0, 5)
+        .map(([k, v]) => ({ key: k, value: String(v) })) : []
+    });
+
+    return result;
+  };
+
+  const [localTranslations, setLocalTranslations] = useState<any>(() => {
+    const initial = getTranslationsForLocale(projectLocale, ddt?.translations);
+    console.log('[RESPONSE_EDITOR][TRANSLATIONS] Initial state', {
+      projectLocale,
+      initialKeys: Object.keys(initial).length
+    });
+    return initial;
+  });
 
   // Synchronize translations when DDT changes
   useEffect(() => {
-    const nextTranslations = { ...mergedBase, ...((ddt?.translations && (ddt.translations.en || ddt.translations)) || {}) };
+    console.log('[RESPONSE_EDITOR][TRANSLATIONS] useEffect triggered', {
+      projectLocale,
+      hasDDT: !!ddt,
+      hasDDTTranslations: !!ddt?.translations,
+      localDDTId: localDDT?.id,
+      localDDT_id: localDDT?._id
+    });
+
+    const nextTranslations = getTranslationsForLocale(projectLocale, ddt?.translations);
     setLocalTranslations((prev: any) => {
       const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
+      console.log('[RESPONSE_EDITOR][TRANSLATIONS] Updating translations', {
+        same,
+        prevKeys: Object.keys(prev).length,
+        nextKeys: Object.keys(nextTranslations).length
+      });
       return same ? prev : nextTranslations;
     });
     try {
       const counts = {
         ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
         data: dataDialogueTranslations ? Object.keys(dataDialogueTranslations).length : 0,
-        ddt: ddt?.translations?.en ? Object.keys(ddt.translations.en).length : (ddt?.translations ? Object.keys(ddt.translations).length : 0),
+        ddt: ddt?.translations?.[projectLocale] ? Object.keys(ddt.translations[projectLocale]).length : (ddt?.translations?.en ? Object.keys(ddt.translations.en).length : (ddt?.translations ? Object.keys(ddt.translations).length : 0)),
         merged: localTranslations ? Object.keys(localTranslations).length : 0,
       };
       // Removed verbose logs - gated by localStorage
     } catch { }
     // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
-  }, [ddt, mergedBase, localDDT?.id, localDDT?._id]);
+  }, [ddt, mergedBase, localDDT?.id, localDDT?._id, projectLocale]);
 
   // FIX: Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
   React.useEffect(() => {
@@ -259,6 +402,32 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     }
     const subList = getSubDataList(main);
     const sub = subList[selectedSubIndex] || main;
+
+    // ✅ CRITICAL: Log sub-data structure to verify messages.start
+    console.log('🔴 [CRITICAL] SELECTED SUB-DATA NODE', {
+      mainLabel: main.label,
+      subLabel: sub.label,
+      subListLength: subList.length,
+      selectedSubIndex,
+      subFromList: subList[selectedSubIndex] ? {
+        label: subList[selectedSubIndex].label,
+        hasSteps: !!subList[selectedSubIndex].steps,
+        stepsKeys: subList[selectedSubIndex].steps ? Object.keys(subList[selectedSubIndex].steps) : []
+      } : null,
+      subReturned: {
+        label: sub.label,
+        isMain: sub === main,
+        hasMessages: !!sub.messages,
+        messagesKeys: sub.messages ? Object.keys(sub.messages) : [],
+        hasMessagesStart: !!(sub.messages && sub.messages.start),
+        messagesStart: sub.messages?.start,
+        hasSteps: !!sub.steps,
+        stepsKeys: sub.steps ? Object.keys(sub.steps) : [],
+        hasStepsStart: !!(sub.steps && sub.steps.start),
+        stepsStart: sub.steps?.start
+      },
+      fullSub: sub
+    });
 
     // DEBUG: Log per verificare la struttura del sub
     const areStepsSameAsMain = main?.steps === sub?.steps;
@@ -513,14 +682,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                 }
 
                 // Close wizard and reset UI to show StepEditor (ALWAYS do this)
-                // Use flushSync to ensure state updates are applied synchronously
-                React.startTransition(() => {
-                  setShowWizard(false);
-                  console.log('[WIZARD_FLOW] ResponseEditor: wizard closed');
+                setShowWizard(false);
+                console.log('[WIZARD_FLOW] ResponseEditor: wizard closed');
 
-                  setRightMode('actions'); // Force show ActionList
-                  setSelectedStepKey('start'); // Start with first step
-                });
+                setRightMode('actions'); // Force show ActionList
+                setSelectedStepKey('start'); // Start with first step
 
                 // Release ownership after a delay to allow useEffect to see the new DDT
                 // But ensure the DDT is valid first
@@ -795,7 +961,24 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                             />
                           </div>
                         ) : (
-                          <StepEditor
+                          <>
+                            {selectedSubIndex != null && selectedStepKey === 'start' && (() => {
+                              // ✅ CRITICAL: Log what we're passing to StepEditor
+                              console.log('🔴 [CRITICAL] PASSING TO STEPEDITOR', {
+                                selectedSubIndex,
+                                selectedStepKey,
+                                nodeLabel: selectedNode?.label,
+                                nodeHasSteps: !!selectedNode?.steps,
+                                nodeStepsKeys: selectedNode?.steps ? Object.keys(selectedNode.steps) : [],
+                                nodeHasStepsStart: !!(selectedNode?.steps && selectedNode.steps.start),
+                                nodeHasMessages: !!selectedNode?.messages,
+                                nodeMessagesKeys: selectedNode?.messages ? Object.keys(selectedNode.messages) : [],
+                                nodeHasMessagesStart: !!(selectedNode?.messages && selectedNode.messages.start),
+                                fullNode: selectedNode
+                              });
+                              return null;
+                            })()}
+                            <StepEditor
                             node={selectedNode}
                             stepKey={selectedStepKey}
                             translations={localTranslations}
@@ -818,6 +1001,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                               return next;
                             })}
                           />
+                          </>
                         )}
                       </div>
                     </div>
