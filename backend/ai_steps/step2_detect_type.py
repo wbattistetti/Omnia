@@ -30,17 +30,23 @@ def load_templates_from_db():
         print("[TEMPLATE_CACHE] Caricando template dal database Factory...")
         client = MongoClient(MONGO_URI)
         db = client['factory']
-        collection = db['type_templates']
+        # Template di dati DDT sono in Task_Templates, non Task_Types
+        collection = db['Task_Templates']
 
         templates = list(collection.find({}))
         client.close()
 
         # Converti in dizionario per accesso rapido
+        # Filtra solo template di dati (hanno 'name'), escludi task types (hanno 'type' ma non 'name')
         _template_cache = {}
         for template in templates:
             if '_id' in template:
                 del template['_id']
-            _template_cache[template['name']] = template
+            # Solo template di dati hanno 'name' (date, phone, ecc.)
+            # Task types (Message, DataRequest, Action) hanno 'type' ma non 'name'
+            template_name = template.get('name')
+            if template_name:
+                _template_cache[template_name] = template
 
         _cache_loaded = True
         print(f"[TEMPLATE_CACHE] Caricati {len(_template_cache)} template dal database")

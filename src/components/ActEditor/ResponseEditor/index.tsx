@@ -211,36 +211,167 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     return initial;
   });
 
-  // Synchronize translations when DDT changes
-  useEffect(() => {
-    console.log('[RESPONSE_EDITOR][TRANSLATIONS] useEffect triggered', {
-      projectLocale,
-      hasDDT: !!ddt,
-      hasDDTTranslations: !!ddt?.translations,
-      localDDTId: localDDT?.id,
-      localDDT_id: localDDT?._id
+  // Extract all GUIDs from DDT structure
+  const extractGUIDsFromDDT = (ddt: any): string[] => {
+    const guids = new Set<string>();
+    const guidSources: Array<{ guid: string; source: string }> = [];
+
+    if (!ddt?.mainData) {
+      console.log('[DEBUG][EXTRACT_GUIDS] No mainData in DDT');
+      return [];
+    }
+
+    const processNode = (node: any, nodeLabel?: string) => {
+      // Extract from messages
+      if (node.messages) {
+        Object.entries(node.messages).forEach(([stepKey, msg]: [string, any]) => {
+          if (msg?.textKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.textKey)) {
+            guids.add(msg.textKey);
+            guidSources.push({ guid: msg.textKey, source: `message.${stepKey}${nodeLabel ? ` (${nodeLabel})` : ''}` });
+          }
+        });
+      }
+
+      // Extract from escalations
+      if (node.steps) {
+        Object.entries(node.steps).forEach(([stepKey, step]: [string, any]) => {
+          if (step.escalations) {
+            step.escalations.forEach((esc: any, escIdx: number) => {
+              if (esc.actions) {
+                esc.actions.forEach((action: any, actionIdx: number) => {
+                  const actionInstanceId = action.actionInstanceId;
+                  if (actionInstanceId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actionInstanceId)) {
+                    guids.add(actionInstanceId);
+                    guidSources.push({ guid: actionInstanceId, source: `action.${stepKey}.esc${escIdx}.act${actionIdx}${nodeLabel ? ` (${nodeLabel})` : ''}` });
+                  }
+                  const textParam = action.parameters?.find((p: any) => p.parameterId === 'text');
+                  if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
+                    guids.add(textParam.value);
+                    guidSources.push({ guid: textParam.value, source: `param.${stepKey}.esc${escIdx}.act${actionIdx}${nodeLabel ? ` (${nodeLabel})` : ''}` });
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
+
+      // Recursively process subData
+      if (node.subData && Array.isArray(node.subData)) {
+        node.subData.forEach((sub: any) => processNode(sub, sub.label || node.label));
+      }
+    };
+
+    ddt.mainData.forEach((main: any) => processNode(main, main.label));
+
+    const result = Array.from(guids);
+    console.log('[DEBUG][EXTRACT_GUIDS] Extracted GUIDs from DDT', {
+      totalGuids: result.length,
+      guids: result,
+      sources: guidSources
     });
 
+    return result;
+  };
+
+  // Load translations from project Translations collection
+  useEffect(() => {
+    if (!currentProjectId || !localDDT) {
+      console.log('[DEBUG][LOAD_TRANSLATIONS] Skipping - no projectId or DDT', { currentProjectId: !!currentProjectId, hasDDT: !!localDDT });
+      return;
+    }
+
+    const guids = extractGUIDsFromDDT(localDDT);
+    if (guids.length === 0) {
+      console.log('[DEBUG][LOAD_TRANSLATIONS] No GUIDs found in DDT');
+      return;
+    }
+
+    console.log('[DEBUG][LOAD_TRANSLATIONS] Starting load', {
+      projectId: currentProjectId,
+      guidsCount: guids.length,
+      projectLocale,
+      sampleGuids: guids.slice(0, 3)
+    });
+
+    (async () => {
+      try {
+        const { loadProjectTranslations } = await import('../../../services/ProjectDataService');
+        const projectTranslations = await loadProjectTranslations(currentProjectId, guids);
+
+        console.log('[DEBUG][LOAD_TRANSLATIONS] API response', {
+          requestedGuids: guids.length,
+          receivedTranslations: Object.keys(projectTranslations).length,
+          receivedGuids: Object.keys(projectTranslations),
+          sampleTranslation: Object.entries(projectTranslations).slice(0, 1).map(([guid, t]) => ({
+            guid,
+            en: t.en?.substring(0, 30),
+            it: t.it?.substring(0, 30),
+            pt: t.pt?.substring(0, 30)
+          }))
+        });
+
+        if (Object.keys(projectTranslations).length > 0) {
+          // Merge with existing translations
+          setLocalTranslations((prev: any) => {
+            const merged = { ...prev };
+            const added: string[] = [];
+            const skipped: string[] = [];
+
+            // Add project translations for current locale
+            Object.entries(projectTranslations).forEach(([guid, translations]) => {
+              const localeText = translations[projectLocale] || translations.en || translations.it || translations.pt || '';
+              if (localeText) {
+                merged[guid] = localeText;
+                added.push(guid);
+              } else {
+                skipped.push(guid);
+              }
+            });
+
+            console.log('[DEBUG][LOAD_TRANSLATIONS] Merged into localTranslations', {
+              prevKeysCount: Object.keys(prev).length,
+              mergedKeysCount: Object.keys(merged).length,
+              addedCount: added.length,
+              addedGuids: added,
+              skippedCount: skipped.length,
+              skippedGuids: skipped,
+              sampleMerged: Object.entries(merged).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) }))
+            });
+
+            return merged;
+          });
+        } else {
+          console.warn('[DEBUG][LOAD_TRANSLATIONS] No translations found in project DB for GUIDs', { guids });
+        }
+      } catch (err) {
+        console.error('[DEBUG][LOAD_TRANSLATIONS] Error loading translations', err);
+      }
+    })();
+  }, [currentProjectId, localDDT?.id, localDDT?._id, projectLocale]);
+
+  // Synchronize translations when DDT changes
+  useEffect(() => {
     const nextTranslations = getTranslationsForLocale(projectLocale, ddt?.translations);
+
+    console.log('[DEBUG][SYNC_TRANSLATIONS] Syncing from DDT', {
+      projectLocale,
+      hasDDTTranslations: !!ddt?.translations,
+      ddtTranslationsKeys: ddt?.translations?.[projectLocale] ? Object.keys(ddt.translations[projectLocale]).length : 0,
+      nextTranslationsKeys: Object.keys(nextTranslations).length,
+      sampleNextKeys: Object.keys(nextTranslations).slice(0, 5)
+    });
+
     setLocalTranslations((prev: any) => {
       const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
-      console.log('[RESPONSE_EDITOR][TRANSLATIONS] Updating translations', {
-        same,
-        prevKeys: Object.keys(prev).length,
-        nextKeys: Object.keys(nextTranslations).length
-      });
+      if (!same) {
+        console.log('[DEBUG][SYNC_TRANSLATIONS] Updating localTranslations', {
+          prevKeysCount: Object.keys(prev).length,
+          nextKeysCount: Object.keys(nextTranslations).length
+        });
+      }
       return same ? prev : nextTranslations;
     });
-    try {
-      const counts = {
-        ide: ideTranslations ? Object.keys(ideTranslations).length : 0,
-        data: dataDialogueTranslations ? Object.keys(dataDialogueTranslations).length : 0,
-        ddt: ddt?.translations?.[projectLocale] ? Object.keys(ddt.translations[projectLocale]).length : (ddt?.translations?.en ? Object.keys(ddt.translations.en).length : (ddt?.translations ? Object.keys(ddt.translations).length : 0)),
-        merged: localTranslations ? Object.keys(localTranslations).length : 0,
-      };
-      // Removed verbose logs - gated by localStorage
-    } catch { }
-    // include localDDT in deps to compare ids; avoid resetting selection for same DDT updates
   }, [ddt, mergedBase, localDDT?.id, localDDT?._id, projectLocale]);
 
   // FIX: Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
@@ -978,7 +1109,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                               });
                               return null;
                             })()}
-                            <StepEditor
+                          <StepEditor
                             node={selectedNode}
                             stepKey={selectedStepKey}
                             translations={localTranslations}

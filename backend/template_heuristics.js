@@ -22,59 +22,98 @@ function extractMentionedFields(text, templates) {
 
   console.log('[HEURISTIC][extractMentionedFields] Starting', { text, textLower, templatesCount: Object.keys(templates).length });
 
-  // Build synonym map and check matches
+  // Build pattern/synonym map and check matches
   for (const [templateName, template] of Object.entries(templates)) {
-    const synonymsRaw = template.synonyms || [];
     const label = (template.label || '').toLowerCase();
     const templateNameLower = templateName.toLowerCase();
+    let matched = false;
 
-    // ✅ Support multilingual synonyms: {it: [...], en: [...], pt: [...]} or simple array
-    let allSynonyms = [];
-    if (Array.isArray(synonymsRaw)) {
-      // Legacy format: simple array
-      allSynonyms = [...synonymsRaw];
-    } else if (typeof synonymsRaw === 'object' && synonymsRaw !== null) {
-      // New format: multilingual object
-      const supportedLangs = ['it', 'en', 'pt', 'IT', 'EN', 'PT'];
-      for (const lang of supportedLangs) {
-        if (Array.isArray(synonymsRaw[lang])) {
-          allSynonyms.push(...synonymsRaw[lang]);
+    // PRIORITY 1: Use patterns if available (same structure as Task_Types)
+    const patterns = template.patterns;
+    if (patterns && typeof patterns === 'object' && !Array.isArray(patterns)) {
+      // Try target language first, then fallback to other languages
+      const targetLang = 'IT'; // Could be passed as parameter
+      const langPatterns = patterns[targetLang] || patterns.IT || patterns.EN || patterns.PT;
+
+      if (Array.isArray(langPatterns)) {
+        for (const patternStr of langPatterns) {
+          try {
+            // Pattern is already a regex string with word boundaries
+            const pattern = new RegExp(patternStr, 'i');
+            if (pattern.test(textLower)) {
+              console.log('[HEURISTIC][extractMentionedFields] ✅ Pattern match found', {
+                templateName,
+                pattern: patternStr,
+                textLower
+              });
+              if (!seen.has(templateName)) {
+                seen.add(templateName);
+                mentioned.push(templateName);
+              }
+              matched = true;
+              break;
+            }
+          } catch (e) {
+            // Invalid regex, skip
+            console.warn('[HEURISTIC][extractMentionedFields] Invalid pattern regex', { templateName, pattern: patternStr, error: e.message });
+            continue;
+          }
         }
       }
     }
 
-    // Add template name and label as fallback synonyms
-    allSynonyms = [...allSynonyms, templateNameLower, label].filter(s => s);
+    // PRIORITY 2: Fallback to synonyms (backward compatibility)
+    if (!matched) {
+      const synonymsRaw = template.synonyms || [];
 
-    console.log('[HEURISTIC][extractMentionedFields] Checking template', {
-      templateName,
-      synonymsRaw,
-      synonymsType: Array.isArray(synonymsRaw) ? 'array' : typeof synonymsRaw,
-      allSynonyms,
-      label
-    });
-
-    for (const synonym of allSynonyms) {
-      const synonymLower = String(synonym).toLowerCase().trim();
-      if (!synonymLower) continue;
-
-      // Use word boundaries for exact matching
-      const pattern = new RegExp(`\\b${synonymLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-      const matches = pattern.test(textLower);
-
-      if (matches) {
-        console.log('[HEURISTIC][extractMentionedFields] ✅ Match found', {
-          templateName,
-          synonym,
-          synonymLower,
-          pattern: pattern.toString(),
-          textLower
-        });
-        if (!seen.has(templateName)) {
-          seen.add(templateName);
-          mentioned.push(templateName);
+      // ✅ Support multilingual synonyms: {it: [...], en: [...], pt: [...]} or simple array
+      let allSynonyms = [];
+      if (Array.isArray(synonymsRaw)) {
+        // Legacy format: simple array
+        allSynonyms = [...synonymsRaw];
+      } else if (typeof synonymsRaw === 'object' && synonymsRaw !== null) {
+        // New format: multilingual object
+        const supportedLangs = ['it', 'en', 'pt', 'IT', 'EN', 'PT'];
+        for (const lang of supportedLangs) {
+          if (Array.isArray(synonymsRaw[lang])) {
+            allSynonyms.push(...synonymsRaw[lang]);
+          }
         }
-        break; // Found match for this template, move to next
+      }
+
+      // Add template name and label as fallback synonyms
+      allSynonyms = [...allSynonyms, templateNameLower, label].filter(s => s);
+
+      console.log('[HEURISTIC][extractMentionedFields] Checking template (synonyms fallback)', {
+        templateName,
+        synonymsRaw,
+        synonymsType: Array.isArray(synonymsRaw) ? 'array' : typeof synonymsRaw,
+        allSynonyms,
+        label
+      });
+
+      for (const synonym of allSynonyms) {
+        const synonymLower = String(synonym).toLowerCase().trim();
+        if (!synonymLower) continue;
+
+        // Use word boundaries for exact matching
+        const pattern = new RegExp(`\\b${synonymLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        const matches = pattern.test(textLower);
+
+        if (matches) {
+          console.log('[HEURISTIC][extractMentionedFields] ✅ Synonym match found', {
+            templateName,
+            synonym,
+            synonymLower,
+            pattern: pattern.toString(),
+            textLower
+          });
+          if (!seen.has(templateName)) {
+            seen.add(templateName);
+            mentioned.push(templateName);
+          }
+          break; // Found match for this template, move to next
+        }
       }
     }
   }

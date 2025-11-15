@@ -37,12 +37,36 @@ function AppInner() {
   // Tasks are loaded when a project is opened (in AppContent.tsx)
 
   React.useEffect(() => {
-    fetch('/data/actionsCatalog.json')
-      .then(res => res.json())
-      .then(data => { setActionsCatalog(data); try { (window as any).__actionsCatalog = data; } catch { } })
+    // Load actions from Task_Templates with taskType='Action' instead of static JSON
+    fetch('/api/factory/task-templates?taskType=Action')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(templates => {
+        // Convert Task_Templates format to actionsCatalog format for backward compatibility
+        const actionsCatalog = templates.map((template: any) => ({
+          id: template.id || template._id,
+          label: template.label || '',
+          description: template.description || '',
+          icon: template.icon || 'Circle',
+          color: template.color || 'text-gray-500',
+          params: template.structure || template.params || {}
+        }));
+        setActionsCatalog(actionsCatalog);
+        try { (window as any).__actionsCatalog = actionsCatalog; } catch { }
+        console.log('[App] Loaded', actionsCatalog.length, 'actions from Task_Templates');
+      })
       .catch(err => {
-        setActionsCatalog([]);
-        console.error('[App][ERROR] fetch actionsCatalog', err);
+        console.warn('[App] Failed to load actions from Task_Templates, falling back to actionsCatalog.json', err);
+        // Fallback to static JSON if database fails
+        fetch('/data/actionsCatalog.json')
+          .then(res => res.json())
+          .then(data => { setActionsCatalog(data); try { (window as any).__actionsCatalog = data; } catch { } })
+          .catch(fallbackErr => {
+            setActionsCatalog([]);
+            console.error('[App][ERROR] fetch actionsCatalog fallback', fallbackErr);
+          });
       });
   }, [setActionsCatalog]);
 

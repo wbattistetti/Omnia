@@ -1325,34 +1325,35 @@ const newTemplates = {
 
 async function migrateNewTemplates() {
   const client = new MongoClient(uri);
-  
+
   try {
     console.log('🔗 Connecting to MongoDB...');
     await client.connect();
     console.log('✅ Connected successfully');
-    
+
     const db = client.db('factory');
-    const collection = db.collection('type_templates');
-    
+    // Template di dati DDT sono in Task_Templates, non type_templates
+    const collection = db.collection('Task_Templates');
+
     console.log('🗑️ Clearing existing templates...');
     await collection.deleteMany({});
     console.log('✅ Existing templates cleared');
-    
+
     console.log('📝 Inserting new hierarchical templates...');
     const templatesArray = Object.values(newTemplates);
     const result = await collection.insertMany(templatesArray);
-    
+
     console.log(`✅ Successfully inserted ${result.insertedCount} templates`);
-    
+
     // Verify insertion
     const count = await collection.countDocuments();
     console.log(`📊 Total templates in database: ${count}`);
-    
+
     // List all template names
     const templateNames = await collection.find({}, { projection: { name: 1, type: 1 } }).toArray();
     console.log('📋 Template names:');
     templateNames.forEach(t => console.log(`  - ${t.name} (${t.type})`));
-    
+
   } catch (error) {
     console.error('❌ Migration failed:', error);
   } finally {

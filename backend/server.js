@@ -64,48 +64,88 @@ async function loadTaskHeuristicsFromDB() {
   }
 
   try {
-    console.log('[TASK_HEURISTICS_CACHE] Caricando pattern dal database Factory...');
+    console.log('[TASK_HEURISTICS_CACHE] Caricando pattern da Task_Types...');
     const client = new MongoClient(uri);
     await client.connect();
     const db = client.db(dbFactory);
-    const collection = db.collection('task_heuristics');
+    // Pattern sono ora in Task_Types, non più in task_heuristics
+    const collection = db.collection('Task_Types');
 
-    const patterns = await collection.find({}).toArray();
+    const taskTypes = await collection.find({ patterns: { $exists: true, $ne: null } }).toArray();
     await client.close();
+
+    // Mapping da Task_Types._id a HeuristicType (per compatibilità con frontend)
+    const typeMapping = {
+      'AIAgent': 'AI_AGENT',
+      'Message': 'MESSAGE',
+      'DataRequest': 'REQUEST_DATA',
+      'ProblemClassification': 'PROBLEM_SPEC_DIRECT', // Usa PROBLEM_SPEC_DIRECT come default
+      'Summary': 'SUMMARY',
+      'BackendCall': 'BACKEND_CALL',
+      'Negotiation': 'NEGOTIATION'
+    };
 
     // Raggruppa per lingua
     const rulesByLang = {};
 
-    patterns.forEach(p => {
-      const lang = p.language || 'IT';
-      if (!rulesByLang[lang]) {
-        rulesByLang[lang] = {
-          AI_AGENT: [],
-          MESSAGE: [],
-          REQUEST_DATA: [],
-          PROBLEM_SPEC_DIRECT: [],
-          PROBLEM_REASON: [],
-          PROBLEM: null,
-          SUMMARY: [],
-          BACKEND_CALL: [],
-          NEGOTIATION: []
-        };
+    taskTypes.forEach(taskType => {
+      const taskTypeId = taskType._id;
+      const heuristicType = typeMapping[taskTypeId];
+
+      if (!heuristicType || !taskType.patterns) {
+        return; // Skip se non c'è mapping o non ci sono pattern
       }
 
-      const type = p.type;
-      if (p.patterns && Array.isArray(p.patterns)) {
-        // Salva pattern come stringhe (frontend le convertirà in RegExp)
-        if (type === 'PROBLEM' && p.patterns.length > 0) {
-          rulesByLang[lang].PROBLEM = p.patterns[0]; // PROBLEM è una singola regex
-        } else if (rulesByLang[lang][type]) {
-          rulesByLang[lang][type] = p.patterns;
+      // I pattern in Task_Types sono strutturati come: { IT: [...], EN: [...], PT: [...] }
+      Object.keys(taskType.patterns).forEach(lang => {
+        const langUpper = lang.toUpperCase();
+
+        if (!rulesByLang[langUpper]) {
+          rulesByLang[langUpper] = {
+            AI_AGENT: [],
+            MESSAGE: [],
+            REQUEST_DATA: [],
+            PROBLEM_SPEC_DIRECT: [],
+            PROBLEM_REASON: [],
+            PROBLEM: null,
+            SUMMARY: [],
+            BACKEND_CALL: [],
+            NEGOTIATION: []
+          };
         }
+
+        const patterns = taskType.patterns[lang];
+        if (Array.isArray(patterns) && patterns.length > 0) {
+          // PROBLEM è una singola regex, gli altri sono array
+          if (heuristicType === 'PROBLEM') {
+            rulesByLang[langUpper].PROBLEM = patterns[0];
+          } else if (rulesByLang[langUpper][heuristicType]) {
+            // Aggiungi i pattern all'array esistente
+            rulesByLang[langUpper][heuristicType].push(...patterns);
+          }
+        }
+      });
+
+      // Gestione speciale per ProblemClassification: può mappare a PROBLEM_SPEC_DIRECT, PROBLEM_REASON, o PROBLEM
+      if (taskTypeId === 'ProblemClassification' && taskType.patterns) {
+        Object.keys(taskType.patterns).forEach(lang => {
+          const langUpper = lang.toUpperCase();
+          const patterns = taskType.patterns[lang];
+
+          if (Array.isArray(patterns) && patterns.length > 0) {
+            // Se ci sono pattern specifici per PROBLEM, usali
+            // Altrimenti usa PROBLEM_SPEC_DIRECT come default
+            if (!rulesByLang[langUpper].PROBLEM_SPEC_DIRECT || rulesByLang[langUpper].PROBLEM_SPEC_DIRECT.length === 0) {
+              rulesByLang[langUpper].PROBLEM_SPEC_DIRECT = [...patterns];
+            }
+          }
+        });
       }
     });
 
     taskHeuristicsCache = rulesByLang;
     taskHeuristicsCacheLoaded = true;
-    console.log(`[TASK_HEURISTICS_CACHE] Caricati pattern per lingue: ${Object.keys(rulesByLang).join(', ')}`);
+    console.log(`[TASK_HEURISTICS_CACHE] Caricati pattern da Task_Types per lingue: ${Object.keys(rulesByLang).join(', ')}`);
     return taskHeuristicsCache;
 
   } catch (error) {
@@ -124,7 +164,7 @@ async function loadTemplatesFromDB() {
     const client = new MongoClient(uri);
     await client.connect();
     const db = client.db('factory');
-    const collection = db.collection('type_templates');
+    const collection = db.collection('Task_Types');
 
     const templates = await collection.find({}).toArray();
     await client.close();
@@ -526,9 +566,9 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       { upsert: true }
     );
 
-    // 4) Clona task_templates dalla factory al progetto
+    // 4) Clona Task_Templates dalla factory al progetto
     const factoryDb = client.db(dbFactory);
-    const templatesColl = factoryDb.collection('task_templates');
+    const templatesColl = factoryDb.collection('Task_Templates');
 
     // Scope filtering: global + industry-specific
     let templatesQuery = {};
@@ -565,7 +605,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
 
       if (mappedTemplates.length > 0) {
         try {
-          const result = await projDb.collection('task_templates').insertMany(mappedTemplates, { ordered: false });
+          const result = await projDb.collection('Task_Templates').insertMany(mappedTemplates, { ordered: false });
           templatesInserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
         } catch (insertError) {
           console.error('[Bootstrap] Error inserting task_templates:', insertError);
@@ -638,7 +678,7 @@ app.get('/api/projects/:pid/task-templates', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('task_templates');
+    const coll = projDb.collection('Task_Templates');
     const templates = await coll.find({}).toArray();
     logInfo('TaskTemplates.get', { projectId, count: templates.length });
     res.json({ items: templates });
@@ -661,7 +701,7 @@ app.post('/api/projects/:pid/task-templates', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('task_templates');
+    const coll = projDb.collection('Task_Templates');
     const now = new Date();
     const doc = {
       _id: payload.id,
@@ -696,43 +736,76 @@ app.post('/api/projects/:pid/task-templates', async (req, res) => {
 // Endpoints: Task Heuristics per progetto
 // -----------------------------
 // GET /api/projects/:pid/task-heuristics - Load project heuristics
+// Ora carica da Task_Types del progetto (o factory come fallback)
 app.get('/api/projects/:pid/task-heuristics', async (req, res) => {
   const projectId = req.params.pid;
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('task_heuristics');
-    const heuristics = await coll.find({}).toArray();
+    // Pattern sono ora in Task_Types, non più in task_heuristics
+    const coll = projDb.collection('Task_Types');
+    const taskTypes = await coll.find({ patterns: { $exists: true, $ne: null } }).toArray();
+
+    // Se il progetto non ha Task_Types con pattern, usa quelli di factory
+    if (taskTypes.length === 0) {
+      console.log(`[TaskHeuristics] Project ${projectId} has no Task_Types with patterns, using factory patterns`);
+      const factoryPatterns = await loadTaskHeuristicsFromDB();
+      logInfo('TaskHeuristics.get', { projectId, source: 'factory', languages: Object.keys(factoryPatterns) });
+      return res.json(factoryPatterns);
+    }
+
+    // Mapping da Task_Types._id a HeuristicType (per compatibilità con frontend)
+    const typeMapping = {
+      'AIAgent': 'AI_AGENT',
+      'Message': 'MESSAGE',
+      'DataRequest': 'REQUEST_DATA',
+      'ProblemClassification': 'PROBLEM_SPEC_DIRECT',
+      'Summary': 'SUMMARY',
+      'BackendCall': 'BACKEND_CALL',
+      'Negotiation': 'NEGOTIATION'
+    };
 
     // Group by language (same format as Factory endpoint)
     const rulesByLang = {};
-    heuristics.forEach(h => {
-      const lang = h.language || 'IT';
-      if (!rulesByLang[lang]) {
-        rulesByLang[lang] = {
-          AI_AGENT: [],
-          MESSAGE: [],
-          REQUEST_DATA: [],
-          PROBLEM_SPEC_DIRECT: [],
-          PROBLEM_REASON: [],
-          PROBLEM: null,
-          SUMMARY: [],
-          BACKEND_CALL: [],
-          NEGOTIATION: []
-        };
+    taskTypes.forEach(taskType => {
+      const taskTypeId = taskType._id;
+      const heuristicType = typeMapping[taskTypeId];
+
+      if (!heuristicType || !taskType.patterns) {
+        return;
       }
-      const type = h.type;
-      if (h.patterns && Array.isArray(h.patterns)) {
-        if (type === 'PROBLEM' && h.patterns.length > 0) {
-          rulesByLang[lang].PROBLEM = h.patterns[0];
-        } else if (rulesByLang[lang][type]) {
-          rulesByLang[lang][type] = h.patterns;
+
+      // I pattern in Task_Types sono strutturati come: { IT: [...], EN: [...], PT: [...] }
+      Object.keys(taskType.patterns).forEach(lang => {
+        const langUpper = lang.toUpperCase();
+
+        if (!rulesByLang[langUpper]) {
+          rulesByLang[langUpper] = {
+            AI_AGENT: [],
+            MESSAGE: [],
+            REQUEST_DATA: [],
+            PROBLEM_SPEC_DIRECT: [],
+            PROBLEM_REASON: [],
+            PROBLEM: null,
+            SUMMARY: [],
+            BACKEND_CALL: [],
+            NEGOTIATION: []
+          };
         }
-      }
+
+        const patterns = taskType.patterns[lang];
+        if (Array.isArray(patterns) && patterns.length > 0) {
+          if (heuristicType === 'PROBLEM') {
+            rulesByLang[langUpper].PROBLEM = patterns[0];
+          } else if (rulesByLang[langUpper][heuristicType]) {
+            rulesByLang[langUpper][heuristicType].push(...patterns);
+          }
+        }
+      });
     });
 
-    logInfo('TaskHeuristics.get', { projectId, languages: Object.keys(rulesByLang) });
+    logInfo('TaskHeuristics.get', { projectId, source: 'project', languages: Object.keys(rulesByLang) });
     res.json(rulesByLang);
   } catch (e) {
     logError('TaskHeuristics.get', e, { projectId });
@@ -1952,8 +2025,18 @@ app.get('/api/factory/actions', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const actions = await db.collection('Actions').find({}).toArray();
-    res.json(actions);
+    // Actions sono ora in Task_Templates con taskType='Action', non più in Actions
+    const actions = await db.collection('Task_Templates').find({ taskType: 'Action' }).toArray();
+    // Convert to old format for backward compatibility
+    const formattedActions = actions.map(action => ({
+      id: action.id?.replace('-template', '') || action._id?.replace('-template', ''),
+      label: action.label || '',
+      description: action.description || '',
+      icon: action.icon || 'Circle',
+      color: action.color || 'text-gray-500',
+      params: action.structure || action.params || {}
+    }));
+    res.json(formattedActions);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
   } finally {
@@ -1966,7 +2049,8 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const ddt = await db.collection('DataDialogueTemplates').find({}).toArray();
+    // Load data templates from Task_Templates (those with 'name' field)
+    const ddt = await db.collection('Task_Templates').find({ name: { $exists: true, $ne: null } }).toArray();
     try { console.log('>>> LOAD /api/factory/dialogue-templates count =', Array.isArray(ddt) ? ddt.length : 0); } catch { }
     res.json(ddt);
   } catch (err) {
@@ -2091,14 +2175,34 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    // 1. Cancella tutti i DDT esistenti
-    await db.collection('DataDialogueTemplates').deleteMany({});
-    // 2. Inserisci i nuovi DDT ricevuti dal client, solo se ce ne sono
-    const newDDTs = req.body;
-    if (Array.isArray(newDDTs) && newDDTs.length > 0) {
-      await db.collection('DataDialogueTemplates').insertMany(newDDTs);
+    const coll = db.collection('Task_Templates');
+    const now = new Date();
+
+    // Handle single template or array of templates
+    const templates = Array.isArray(req.body) ? req.body : [req.body];
+
+    for (const template of templates) {
+      if (!template.name) {
+        continue; // Skip templates without name
+      }
+
+      // Upsert by name
+      await coll.updateOne(
+        { name: template.name },
+        {
+          $set: {
+            ...template,
+            updatedAt: now
+          },
+          $setOnInsert: {
+            createdAt: now
+          }
+        },
+        { upsert: true }
+      );
     }
-    res.json({ success: true });
+
+    res.json({ success: true, count: templates.length });
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
   } finally {
@@ -2112,13 +2216,16 @@ app.delete('/api/factory/dialogue-templates/:id', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
+    const coll = db.collection('Task_Templates');
+    // Delete by name or _id
     let filter;
     if (/^[a-fA-F0-9]{24}$/.test(id)) {
       filter = { _id: new ObjectId(id) };
     } else {
-      filter = { _id: id };
+      // Try by name first, then by _id
+      filter = { $or: [{ name: id }, { _id: id }] };
     }
-    const result = await db.collection('DataDialogueTemplates').deleteOne(filter);
+    const result = await coll.deleteOne(filter);
     if (result.deletedCount === 1) {
       res.json({ success: true });
     } else {
@@ -2231,12 +2338,14 @@ app.get('/api/factory/task-heuristics', async (req, res) => {
 });
 
 // POST /api/factory/task-heuristics - Save heuristics
+// Ora salva i pattern in Task_Types invece di task_heuristics
 app.post('/api/factory/task-heuristics', async (req, res) => {
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('task_heuristics');
+    // Pattern sono ora in Task_Types, non più in task_heuristics
+    const coll = db.collection('Task_Types');
 
     const payload = req.body || {};
     const { type, patterns, language } = payload;
@@ -2245,27 +2354,59 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
       return res.status(400).json({ error: 'type, patterns (array), and language are required' });
     }
 
-    const now = new Date();
-    const doc = {
-      type,
-      patterns,
-      language,
-      updatedAt: now
+    // Mapping da HeuristicType a Task_Types._id
+    const typeMapping = {
+      'AI_AGENT': 'AIAgent',
+      'MESSAGE': 'Message',
+      'REQUEST_DATA': 'DataRequest',
+      'PROBLEM_SPEC_DIRECT': 'ProblemClassification',
+      'PROBLEM_REASON': 'ProblemClassification',
+      'PROBLEM': 'ProblemClassification',
+      'SUMMARY': 'Summary',
+      'BACKEND_CALL': 'BackendCall',
+      'NEGOTIATION': 'Negotiation'
     };
 
-    // Upsert based on type and language
-    await coll.updateOne(
-      { type, language },
-      { $set: doc, $setOnInsert: { createdAt: now } },
-      { upsert: true }
+    const taskTypeId = typeMapping[type];
+    if (!taskTypeId) {
+      return res.status(400).json({ error: `Unknown heuristic type: ${type}` });
+    }
+
+    const langUpper = language.toUpperCase();
+    const now = new Date();
+
+    // Carica il Task_Types esistente per preservare i pattern di altre lingue
+    const existing = await coll.findOne({ _id: taskTypeId });
+    const existingPatterns = existing?.patterns || {};
+
+    // Aggiorna solo la lingua specificata
+    const updatedPatterns = {
+      ...existingPatterns,
+      [langUpper]: patterns
+    };
+
+    // Aggiorna Task_Types
+    const result = await coll.updateOne(
+      { _id: taskTypeId },
+      {
+        $set: {
+          patterns: updatedPatterns,
+          updatedAt: now
+        }
+      },
+      { upsert: false } // Non creare se non esiste
     );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: `Task_Types._id '${taskTypeId}' not found` });
+    }
 
     // Invalidate cache
     taskHeuristicsCacheLoaded = false;
     taskHeuristicsCache = null;
 
-    const saved = await coll.findOne({ type, language });
-    logInfo('TaskHeuristics.post', { type, language, patternsCount: patterns.length });
+    const saved = await coll.findOne({ _id: taskTypeId });
+    logInfo('TaskHeuristics.post', { type, taskTypeId, language: langUpper, patternsCount: patterns.length });
     res.json(saved);
   } catch (e) {
     logError('TaskHeuristics.post', e);
@@ -2284,11 +2425,12 @@ app.get('/api/factory/task-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('task_templates');
+    // Task templates sono in Task_Templates, non task_templates
+    const coll = db.collection('Task_Templates');
 
-    const { industry, scope } = req.query;
+    const { industry, scope, taskType } = req.query;
 
-    // Build query based on scope filtering
+    // Build query based on scope filtering and taskType
     const query = {};
     if (scope && industry) {
       query.$or = [
@@ -2296,9 +2438,13 @@ app.get('/api/factory/task-templates', async (req, res) => {
         { scope: 'industry', industry }
       ];
     }
+    // Filter by taskType if provided (e.g., 'Action' for actions palette)
+    if (taskType) {
+      query.taskType = taskType;
+    }
 
     const templates = await coll.find(query).toArray();
-    logInfo('TaskTemplates.get', { count: templates.length, industry, scope });
+    logInfo('TaskTemplates.get', { count: templates.length, industry, scope, taskType });
     res.json(templates);
   } catch (e) {
     logError('TaskTemplates.get', e);
@@ -2314,7 +2460,7 @@ app.post('/api/factory/task-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('task_templates');
+    const coll = db.collection('Task_Templates');
 
     const payload = req.body || {};
     if (!payload.id || !payload.label || !payload.valueSchema) {
@@ -2361,7 +2507,7 @@ app.put('/api/factory/task-templates/:id', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('task_templates');
+    const coll = db.collection('Task_Templates');
 
     const payload = req.body || {};
     const now = new Date();
@@ -2401,7 +2547,7 @@ app.delete('/api/factory/task-templates/:id', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('task_templates');
+    const coll = db.collection('Task_Templates');
 
     const result = await coll.deleteOne({ _id: id });
     if (result.deletedCount === 0) {
@@ -2434,7 +2580,7 @@ app.post('/api/factory/type-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('type_templates');
+    const coll = db.collection('Task_Types');
 
     const payload = req.body || {};
     if (!payload.name) {
@@ -2487,7 +2633,7 @@ app.post('/api/projects/:pid/type-templates', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('type_templates');
+    const coll = projDb.collection('Task_Types');
 
     const payload = req.body || {};
     if (!payload.name) {

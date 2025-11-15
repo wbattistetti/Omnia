@@ -57,64 +57,72 @@ class TemplateIntelligenceService:
     def __init__(self):
         self._template_cache = None
         self._cache_loaded = False
-    
+
     def _load_templates_from_db(self) -> Dict[str, Any]:
         """Carica tutti i template dal database Factory"""
         if self._cache_loaded:
             return self._template_cache
-        
+
         try:
             print("[TemplateIntelligence] Caricando template dal database Factory...")
             client = MongoClient(MONGO_URI)
             db = client['factory']
-            collection = db['type_templates']
-            
+            # Template di dati DDT sono in Task_Templates, non Task_Types
+            collection = db['Task_Templates']
+
             templates = list(collection.find({}))
             client.close()
-            
+
             # Converti in dizionario per accesso rapido
+            # Filtra solo template di dati (hanno 'name'), escludi task types (hanno 'type' ma non 'name')
             self._template_cache = {}
             for template in templates:
                 if '_id' in template:
                     del template['_id']
-                self._template_cache[template['name']] = template
-            
+                # Solo template di dati hanno 'name' (date, phone, ecc.)
+                # Task types (Message, DataRequest, Action) hanno 'type' ma non 'name'
+                template_name = template.get('name')
+                if template_name:
+                    self._template_cache[template_name] = template
+
             self._cache_loaded = True
             print(f"[TemplateIntelligence] Caricati {len(self._template_cache)} template dal database")
             return self._template_cache
-            
+
         except Exception as e:
             print(f"[TemplateIntelligence] Errore nel caricamento: {e}")
             return {}
-    
+
     def analyze_user_request(self, user_desc: str) -> TemplateAnalysis:
         """
         Analizza la richiesta dell'utente e determina la strategia migliore
         """
         print(f"[TemplateIntelligence] Analizzando richiesta: '{user_desc}'")
-        
+
         # Carica template disponibili
         templates = self._load_templates_from_db()
-        
+
         # Analisi base della richiesta
         intent = self._extract_intent(user_desc)
         complexity = self._assess_complexity(user_desc)
         category = self._categorize_request(user_desc)
-        
+
         # Trova match esistenti
-        matches = self._find_exact_matches(user_desc, templates)
-        
+        # Determine target language (default: IT)
+        target_lang = 'IT'  # Could be extracted from user_desc or passed as parameter
+        matches = self._find_exact_matches(user_desc, templates, target_lang)
+
         # Trova composizioni possibili
         compositions = self._find_compositions(user_desc, templates)
-        
+
         # Determina azione raccomandata
         action, reasoning = self._determine_action(matches, compositions, user_desc)
-        
+
         # Crea proposte se necessario
         proposals = []
         if action == TemplateAction.CREATE_NEW:
             proposals = self._create_template_proposals(user_desc, templates)
-        
+
         return TemplateAnalysis(
             intent=intent,
             complexity=complexity,
@@ -125,11 +133,11 @@ class TemplateIntelligenceService:
             proposals=proposals,
             reasoning=reasoning
         )
-    
+
     def _extract_intent(self, user_desc: str) -> str:
         """Estrae l'intento principale dalla richiesta"""
         user_lower = user_desc.lower()
-        
+
         # Mappatura intenti comuni
         intent_mapping = {
             'dati personali': 'personal_data',
@@ -142,32 +150,32 @@ class TemplateIntelligenceService:
             'veicolo': 'vehicle_info',
             'documento': 'document_info'
         }
-        
+
         for key, intent in intent_mapping.items():
             if key in user_lower:
                 return intent
-        
+
         return 'custom_data'
-    
+
     def _assess_complexity(self, user_desc: str) -> str:
         """Valuta la complessità della richiesta"""
         user_lower = user_desc.lower()
-        
+
         # Indicatori di complessità
         simple_indicators = ['data', 'età', 'nome', 'email', 'telefono']
         complex_indicators = ['dati personali', 'profilo completo', 'informazioni complete', 'tutto']
-        
+
         if any(indicator in user_lower for indicator in complex_indicators):
             return 'complex'
         elif any(indicator in user_lower for indicator in simple_indicators):
             return 'simple'
         else:
             return 'moderate'
-    
+
     def _categorize_request(self, user_desc: str) -> str:
         """Categorizza la richiesta"""
         user_lower = user_desc.lower()
-        
+
         if any(word in user_lower for word in ['personale', 'utente', 'profilo', 'nome', 'età']):
             return 'personal'
         elif any(word in user_lower for word in ['contatto', 'telefono', 'email', 'indirizzo']):
@@ -176,46 +184,71 @@ class TemplateIntelligenceService:
             return 'business'
         else:
             return 'other'
-    
-    def _find_exact_matches(self, user_desc: str, templates: Dict[str, Any]) -> List[TemplateMatch]:
-        """Trova template che corrispondono esattamente alla richiesta"""
+
+    def _find_exact_matches(self, user_desc: str, templates: Dict[str, Any], target_lang: str = 'IT') -> List[TemplateMatch]:
+        """Trova template che corrispondono esattamente alla richiesta usando patterns (o fallback a mapping hardcoded)"""
+        import re
         matches = []
         user_lower = user_desc.lower()
-        
-        # Mappatura richieste -> template
-        request_mapping = {
-            'data di nascita': 'date',
-            'data nascita': 'date',
-            'età': 'date',
-            'nome': 'name',
-            'nome completo': 'name',
-            'nominativo': 'name',
-            'email': 'email',
-            'telefono': 'phone',
-            'telefono': 'phone',
-            'indirizzo': 'address',
-            'codice fiscale': 'taxCode',
-            'iban': 'iban',
-            'partita iva': 'vatNumber'
-        }
-        
-        for request_key, template_name in request_mapping.items():
-            if request_key in user_lower and template_name in templates:
-                template = templates[template_name]
-                matches.append(TemplateMatch(
-                    template_name=template_name,
-                    confidence=0.95,
-                    reason=f"Match esatto per '{request_key}'",
-                    template_data=template
-                ))
-        
+        target_lang_upper = target_lang.upper()
+
+        # PRIORITY 1: Use patterns from templates (same structure as Task_Types)
+        for template_name, template in templates.items():
+            patterns = template.get('patterns')
+            if patterns and isinstance(patterns, dict):
+                # Try target language first, then fallback to other languages
+                lang_patterns = patterns.get(target_lang_upper) or patterns.get('IT') or patterns.get('EN') or patterns.get('PT')
+
+                if lang_patterns and isinstance(lang_patterns, list):
+                    for pattern_str in lang_patterns:
+                        try:
+                            # Pattern is already a regex string with word boundaries
+                            if re.search(pattern_str, user_lower, re.IGNORECASE):
+                                matches.append(TemplateMatch(
+                                    template_name=template_name,
+                                    confidence=0.95,
+                                    reason=f"Pattern match: '{pattern_str}'",
+                                    template_data=template
+                                ))
+                                break  # Found match, move to next template
+                        except re.error:
+                            # Invalid regex, skip
+                            continue
+
+        # PRIORITY 2: Fallback to hardcoded mapping (backward compatibility)
+        if not matches:
+            request_mapping = {
+                'data di nascita': 'date',
+                'data nascita': 'date',
+                'età': 'date',
+                'nome': 'name',
+                'nome completo': 'name',
+                'nominativo': 'name',
+                'email': 'email',
+                'telefono': 'phone',
+                'indirizzo': 'address',
+                'codice fiscale': 'taxCode',
+                'iban': 'iban',
+                'partita iva': 'vatNumber'
+            }
+
+            for request_key, template_name in request_mapping.items():
+                if request_key in user_lower and template_name in templates:
+                    template = templates[template_name]
+                    matches.append(TemplateMatch(
+                        template_name=template_name,
+                        confidence=0.95,
+                        reason=f"Match esatto per '{request_key}'",
+                        template_data=template
+                    ))
+
         return matches
-    
+
     def _find_compositions(self, user_desc: str, templates: Dict[str, Any]) -> List[TemplateComposition]:
         """Trova composizioni possibili di template esistenti"""
         compositions = []
         user_lower = user_desc.lower()
-        
+
         # Composizioni predefinite
         composition_patterns = {
             'dati personali': ['name', 'date', 'address', 'phone', 'email'],
@@ -224,7 +257,7 @@ class TemplateIntelligenceService:
             'contatto completo': ['name', 'phone', 'email', 'address'],
             'informazioni contatto': ['name', 'phone', 'email', 'address']
         }
-        
+
         for pattern, components in composition_patterns.items():
             if pattern in user_lower:
                 # Verifica che tutti i componenti esistano
@@ -238,13 +271,13 @@ class TemplateIntelligenceService:
                         reason=f"Composizione di template esistenti per '{pattern}'",
                         composed_template=composed_template
                     ))
-        
+
         return compositions
-    
+
     def _compose_templates(self, component_names: List[str], templates: Dict[str, Any]) -> Dict[str, Any]:
         """Compone template esistenti in un nuovo template aggregato"""
         subData = []
-        
+
         for comp_name in component_names:
             if comp_name in templates:
                 template = templates[comp_name]
@@ -254,14 +287,14 @@ class TemplateIntelligenceService:
                     'icon': template.get('icon', 'FileText'),
                     'subData': template.get('subData', [])
                 })
-        
+
         return {
             'label': 'Composed Data',
             'type': 'composed',
             'icon': 'Folder',
             'subData': subData
         }
-    
+
     def _determine_action(self, matches: List[TemplateMatch], compositions: List[TemplateComposition], user_desc: str) -> tuple:
         """Determina l'azione raccomandata"""
         if matches:
@@ -270,14 +303,14 @@ class TemplateIntelligenceService:
             return TemplateAction.COMPOSE, f"Possibile comporre {len(compositions)} template da template esistenti"
         else:
             return TemplateAction.CREATE_NEW, "Nessun template esistente adatto, necessario creare nuovo template"
-    
+
     def _create_template_proposals(self, user_desc: str, templates: Dict[str, Any]) -> List[TemplateProposal]:
         """Crea proposte per nuovi template"""
         proposals = []
-        
+
         # Analizza la richiesta per capire cosa creare
         user_lower = user_desc.lower()
-        
+
         # Proposte basate su pattern comuni
         if 'veicolo' in user_lower or 'auto' in user_lower or 'macchina' in user_lower:
             proposals.append(TemplateProposal(
@@ -329,7 +362,7 @@ class TemplateIntelligenceService:
                 ],
                 reason='Template per dati del veicolo non esistente'
             ))
-        
+
         return proposals
 
 # Istanza globale del servizio

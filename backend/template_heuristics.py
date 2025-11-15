@@ -1,20 +1,21 @@
 """
 Template Heuristics Module
 Deterministic pattern matching for DDT template selection.
-Uses synonyms and field matching to select templates without AI.
+Uses patterns (or synonyms as fallback) and field matching to select templates without AI.
 """
 
 import re
 from typing import Dict, List, Optional, Tuple, Any
 
 
-def extract_mentioned_fields(text: str, templates: Dict[str, Any]) -> List[str]:
+def extract_mentioned_fields(text: str, templates: Dict[str, Any], target_lang: str = 'IT') -> List[str]:
     """
-    Extracts template names mentioned in the description using synonyms.
+    Extracts template names mentioned in the description using patterns (or synonyms as fallback).
 
     Args:
         text: User description (e.g., "chiedi nome e telefono")
         templates: Dictionary of available templates {name: template}
+        target_lang: Target language for pattern matching (default: 'IT')
 
     Returns:
         List of template names that were mentioned (e.g., ["name", "phone"])
@@ -24,24 +25,54 @@ def extract_mentioned_fields(text: str, templates: Dict[str, Any]) -> List[str]:
 
     text_lower = text.lower().strip()
     mentioned = []
+    target_lang_upper = target_lang.upper()
 
-    # Build synonym map: synonym -> template_name
-    synonym_map: Dict[str, str] = {}
     for template_name, template in templates.items():
-        synonyms = template.get('synonyms', [])
-        if not synonyms:
-            # Fallback: use template name and label as synonyms
-            label = template.get('label', '').lower()
-            synonyms = [template_name.lower(), label]
+        matched = False
 
-        for synonym in synonyms:
-            synonym_lower = synonym.lower().strip()
-            if synonym_lower:
-                # Use word boundaries for exact matching
-                pattern = r'\b' + re.escape(synonym_lower) + r'\b'
-                if re.search(pattern, text_lower):
-                    if template_name not in mentioned:
-                        mentioned.append(template_name)
+        # PRIORITY 1: Use patterns if available (same structure as Task_Types)
+        patterns = template.get('patterns')
+        if patterns and isinstance(patterns, dict):
+            # Try target language first, then fallback to other languages
+            lang_patterns = patterns.get(target_lang_upper) or patterns.get('IT') or patterns.get('EN') or patterns.get('PT')
+
+            if lang_patterns and isinstance(lang_patterns, list):
+                for pattern_str in lang_patterns:
+                    try:
+                        # Pattern is already a regex string with word boundaries
+                        if re.search(pattern_str, text_lower, re.IGNORECASE):
+                            if template_name not in mentioned:
+                                mentioned.append(template_name)
+                            matched = True
+                            break
+                    except re.error:
+                        # Invalid regex, skip
+                        continue
+
+        # PRIORITY 2: Fallback to synonyms (backward compatibility)
+        if not matched:
+            synonyms = template.get('synonyms', [])
+            if not synonyms:
+                # Fallback: use template name and label as synonyms
+                label = template.get('label', '').lower()
+                synonyms = [template_name.lower(), label]
+
+            # Handle multilingual synonyms object
+            if isinstance(synonyms, dict):
+                lang_synonyms = synonyms.get(target_lang_upper) or synonyms.get('IT') or synonyms.get('EN') or synonyms.get('PT')
+                if lang_synonyms:
+                    synonyms = lang_synonyms if isinstance(lang_synonyms, list) else []
+
+            for synonym in synonyms:
+                synonym_lower = str(synonym).lower().strip()
+                if synonym_lower:
+                    # Use word boundaries for exact matching
+                    pattern = r'\b' + re.escape(synonym_lower) + r'\b'
+                    if re.search(pattern, text_lower):
+                        if template_name not in mentioned:
+                            mentioned.append(template_name)
+                        matched = True
+                        break
 
     return mentioned
 
@@ -109,7 +140,8 @@ def score_template(template: Dict[str, Any], mentioned_fields: List[str]) -> int
 def find_best_template_match(
     text: str,
     templates: Dict[str, Any],
-    mentioned_fields: Optional[List[str]] = None
+    mentioned_fields: Optional[List[str]] = None,
+    target_lang: str = 'IT'
 ) -> Optional[Tuple[Dict[str, Any], int, str]]:
     """
     Finds the best template match using heuristic scoring.
@@ -122,6 +154,7 @@ def find_best_template_match(
         text: User description
         templates: Dictionary of available templates
         mentioned_fields: Pre-extracted mentioned fields (optional)
+        target_lang: Target language for pattern matching (default: 'IT')
 
     Returns:
         Tuple of (best_template, score, reason) or None if no match
@@ -131,7 +164,7 @@ def find_best_template_match(
 
     # Extract mentioned fields if not provided
     if mentioned_fields is None:
-        mentioned_fields = extract_mentioned_fields(text, templates)
+        mentioned_fields = extract_mentioned_fields(text, templates, target_lang)
 
     if not mentioned_fields:
         return None
@@ -257,4 +290,3 @@ def build_heuristic_response(
                 }]
             }
         }
-

@@ -77,76 +77,31 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
           ? a.text
           : (typeof textKey === 'string' ? (translationValue || textKey) : undefined);
 
-        // 🔍 DEBUG: Verifica tutte le chiavi runtime che iniziano con lo stesso prefisso
-        const runtimeKeysWithSamePrefix = textKey ? Object.keys(translations).filter(k => {
-          if (!k.startsWith('runtime.')) return false;
-          const textKeyParts = textKey.split('.');
-          const kParts = k.split('.');
-          // Confronta i primi 3 segmenti (runtime, ddtId, guid)
-          return textKeyParts.length >= 3 && kParts.length >= 3 &&
-                 textKeyParts[0] === kParts[0] &&
-                 textKeyParts[1] === kParts[1];
-        }).slice(0, 5) : [];
-
-        // 🔍 DEBUG: Verifica se la traduzione è in inglese o portoghese
-        const translationIsEnglish = translationValue ? (
-          translationValue.toLowerCase().includes('time?') ||
-          translationValue.toLowerCase().includes('what time') ||
-          translationValue.toLowerCase() === 'time?'
-        ) : false;
-        const translationIsPortuguese = translationValue ? (
-          translationValue.toLowerCase().includes('hora') ||
-          translationValue.toLowerCase().includes('horário') ||
-          translationValue.toLowerCase().includes('que horas')
-        ) : false;
-
-        console.log('[STEP_EDITOR][buildModel] 🔍 ACTION RESOLVED - FULL DEBUG', {
-          escIdx,
-          actionIdx,
-          stepKey,
-          textKey,
-          hasDirectText,
-          hasTranslation: !!translationValue,
-          translationValue: translationValue ? translationValue.substring(0, 50) : undefined,
-          translationIsEnglish,
-          translationIsPortuguese,
-          finalText: text ? text.substring(0, 50) : undefined,
-          translationKeyExists: textKey ? textKey in translations : false,
-          // 🔍 VERIFICA tutte le chiavi runtime con lo stesso prefisso
-          runtimeKeysWithSamePrefix: runtimeKeysWithSamePrefix.map(k => ({ key: k, value: translations[k]?.substring(0, 30) })),
-          // 🔍 VERIFICA il valore esatto della traduzione
-          exactTranslation: textKey ? translations[textKey] : undefined,
-          // 🔍 VERIFICA se ci sono chiavi del template che potrebbero corrispondere
-          templateKeys: textKey ? Object.keys(translations).filter(k => k.startsWith('template.') && (k.includes(textKey.split('.').pop() || '') || textKey.includes(k.split('.').pop() || ''))).slice(0, 5) : [],
-          // 🔍 VERIFICA tutte le chiavi che contengono parti del textKey
-          matchingKeys: textKey ? {
-            exact: textKey in translations ? translations[textKey] : undefined,
-            partial: Object.keys(translations).filter(k => k.includes(textKey.split('.').slice(-2).join('.'))).slice(0, 5).map(k => ({ key: k, value: translations[k] }))
-          } : null,
-          // 🔍 VERIFICA tutte le chiavi runtime per questo step
-          allRuntimeKeysForStep: Object.keys(translations).filter(k => k.startsWith('runtime.') && k.includes(stepKey)).slice(0, 10),
-          // 🔍 VERIFICA tutte le chiavi che iniziano con runtime.Time_
-          allTimeRuntimeKeys: Object.keys(translations).filter(k => k.startsWith('runtime.') && k.includes('Time_')).slice(0, 10),
-          // 🔍 VERIFICA tutte le traduzioni per le chiavi runtime.Time_
-          timeRuntimeTranslations: Object.entries(translations)
-            .filter(([k]) => k.startsWith('runtime.') && k.includes('Time_'))
-            .slice(0, 5)
-            .map(([k, v]) => ({ key: k, value: String(v).substring(0, 50) })),
-          // 🔍 VERIFICA se la chiave specifica esiste e il suo valore
-          keyLookup: textKey ? {
-            exists: textKey in translations,
-            value: translations[textKey],
-            valueLength: translations[textKey] ? String(translations[textKey]).length : 0,
-            valuePreview: translations[textKey] ? String(translations[textKey]).substring(0, 50) : undefined
-          } : null,
-          // 🔍 VERIFICA tutte le chiavi che contengono parti del textKey
-          allKeysContainingParts: textKey ? {
-            containsRuntime: Object.keys(translations).filter(k => k.includes('runtime.')).length,
-            containsTime: Object.keys(translations).filter(k => k.includes('Time_')).length,
-            containsStart: Object.keys(translations).filter(k => k.includes('start')).length,
-            exactMatch: Object.keys(translations).filter(k => k === textKey).length
-          } : null
-        });
+        // DEBUG: Log specifico quando non trova la translation
+        if (textKey && !translationValue && !hasDirectText) {
+          const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
+          console.warn('[DEBUG][STEP_EDITOR] ❌ Translation NOT FOUND', {
+            stepKey,
+            escIdx,
+            actionIdx,
+            textKey,
+            isGuid,
+            actionInstanceId: a.actionInstanceId,
+            hasActionText: hasDirectText,
+            translationsDictKeysCount: Object.keys(translations).length,
+            textKeyInDict: textKey in translations,
+            sampleDictKeys: Object.keys(translations).slice(0, 10),
+            matchingGuidsInDict: isGuid ? Object.keys(translations).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).slice(0, 5) : [],
+            finalText: text
+          });
+        } else if (textKey && translationValue) {
+          console.log('[DEBUG][STEP_EDITOR] ✅ Translation FOUND', {
+            stepKey,
+            textKey,
+            translationValue: translationValue.substring(0, 50),
+            finalText: text?.substring(0, 50)
+          });
+        }
 
         return { actionId: a.actionId, text, textKey, color: a.color };
       })

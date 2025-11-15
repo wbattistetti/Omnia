@@ -46,7 +46,7 @@ type AssembleOptions = {
 
 export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): AssembledDDT {
   const ddtId = `${rootLabel || 'DDT'}_${uuidv4()}`;
-  const translations: Translations = {};
+  const translations: Translations = { en: {}, it: {}, pt: {} };
   // Limit AI-driven re-asks to max 2
   const defaultEscalations = { noMatch: 2, noInput: 2, confirmation: 2 } as Record<string, number>;
   const counts = { ...defaultEscalations, ...(options?.escalationCounts || {}) } as Record<string, number>;
@@ -131,7 +131,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
                 actions: [
                   {
                     actionId: 'sayMessage',
-                    actionInstanceId: `a_${uuidv4()}`,
+                    actionInstanceId: uuidv4(),
                     parameters: [{ parameterId: 'text', value: r1Key }]
                   }
                 ]
@@ -146,7 +146,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
                 actions: [
                   {
                     actionId: 'sayMessage',
-                    actionInstanceId: `a_${uuidv4()}`,
+                    actionInstanceId: uuidv4(),
                     parameters: [{ parameterId: 'text', value: r2Key }]
                   }
                 ]
@@ -171,7 +171,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
               actions: [
                 {
                   actionId: 'sayMessage',
-                  actionInstanceId: `a_${uuidv4()}`,
+                    actionInstanceId: uuidv4(),
                   parameters: [{ parameterId: 'text', value: r1Key }]
                 }
               ]
@@ -186,7 +186,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
               actions: [
                 {
                   actionId: 'sayMessage',
-                  actionInstanceId: `a_${uuidv4()}`,
+                    actionInstanceId: uuidv4(),
                   parameters: [{ parameterId: 'text', value: r2Key }]
                 }
               ]
@@ -227,7 +227,12 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         });
       }
 
-      assembled.subData.push(assembleNode(s, [...nodePath, s.label]));
+      // ✅ CRITICAL: Preserve stepPrompts when assembling subData
+      const subNodeWithStepPrompts = {
+        ...s,
+        stepPrompts: (s as any).stepPrompts || undefined
+      };
+      assembled.subData.push(assembleNode(subNodeWithStepPrompts, [...nodePath, s.label]));
     }
 
     // Minimal base messages (ensure ResponseEditor displays steps)
@@ -304,31 +309,28 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
 
       // Create escalations first - ALL escalations get unique runtime keys with GUID (including the first one)
       const escalations = Array.from({ length: numEsc }).map((_, escIdx) => {
-        let actionKey: string;
         let templateKeyForEsc: string | null = null;
 
         // If using stepPrompts and there are multiple prompts, use the corresponding one
         // nodeStepPrompts[stepKey] is already an array of keys
         if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey]) && nodeStepPrompts[stepKey][escIdx]) {
           templateKeyForEsc = nodeStepPrompts[stepKey][escIdx];
-          // ALWAYS create unique runtime key with GUID for ALL escalations (including escIdx === 0)
-          actionKey = `runtime.${ddtId}.${uuidv4()}.text`;
-        } else {
-          // Fallback: create unique runtime key even without stepPrompts
-          actionKey = `runtime.${ddtId}.${uuidv4()}.text`;
         }
+
+        // Use actionInstanceId as the unique GUID for both the action and the translation key
+        const actionInstanceId = uuidv4();
 
         const baseAction = {
           actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
-          actionInstanceId: `a_${uuidv4()}`,
-          parameters: [{ parameterId: 'text', value: actionKey }]
+          actionInstanceId: actionInstanceId,
+          parameters: [{ parameterId: 'text', value: actionInstanceId }]
         };
 
         const escalation = {
           escalationId: `e_${uuidv4()}`,
           actions: [{
             ...baseAction,
-            parameters: [{ parameterId: 'text', value: actionKey }]
+            parameters: [{ parameterId: 'text', value: actionInstanceId }]
           }]
         };
 
@@ -340,11 +342,11 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         return escalation;
       });
 
-      // The main message uses the first escalation's key
-      if (escalations.length > 0 && escalations[0].actions?.[0]?.parameters?.[0]?.value) {
-        const firstEscalationKey = escalations[0].actions[0].parameters[0].value;
+      // The main message uses the first escalation's actionInstanceId
+      if (escalations.length > 0 && escalations[0].actions?.[0]?.actionInstanceId) {
+        const firstEscalationActionInstanceId = escalations[0].actions[0].actionInstanceId;
         const firstEscalationTemplateKey = (escalations[0] as any).__templateKey;
-        assembled.messages[stepKey] = { textKey: firstEscalationKey };
+        assembled.messages[stepKey] = { textKey: firstEscalationActionInstanceId };
         // Also store template key if present in first escalation
         if (firstEscalationTemplateKey) {
           (assembled.messages[stepKey] as any).__templateKey = firstEscalationTemplateKey;
@@ -352,10 +354,10 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         console.log('[assembleFinalDDT] Main message key set from first escalation', {
           path,
           stepKey,
-          firstEscalationKey,
+          firstEscalationActionInstanceId,
           firstEscalationTemplateKey,
-          escalationActionKey: escalations[0].actions[0].parameters[0].value,
-          keysMatch: firstEscalationKey === escalations[0].actions[0].parameters[0].value
+          escalationActionInstanceId: escalations[0].actions[0].actionInstanceId,
+          keysMatch: firstEscalationActionInstanceId === escalations[0].actions[0].actionInstanceId
         });
       } else {
         // Fallback: use chosenKey if no escalations (should not happen)

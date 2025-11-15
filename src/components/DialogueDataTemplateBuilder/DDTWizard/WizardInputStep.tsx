@@ -1,7 +1,8 @@
 import React from 'react';
-import { Calendar, Bell } from 'lucide-react';
+import { Calendar, Bell, ChevronDown } from 'lucide-react';
 import { useFontContext } from '../../../context/FontContext';
 import { getAllDialogueTemplates } from '../../../services/ProjectDataService';
+import IconRenderer from './components/IconRenderer';
 
 interface Props {
   userDesc: string;
@@ -28,17 +29,40 @@ const WizardInputStep: React.FC<Props> = ({
   const [templates, setTemplates] = React.useState<any[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('');
   const [loadingTemplates, setLoadingTemplates] = React.useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  // Load templates on mount
+  // Load templates on mount and sort alphabetically
   React.useEffect(() => {
     const loadTemplates = async () => {
       setLoadingTemplates(true);
       try {
         const allTemplates = await getAllDialogueTemplates();
-        setTemplates(Array.isArray(allTemplates) ? allTemplates : []);
-        console.log('[WIZARD_INPUT] Loaded templates:', Array.isArray(allTemplates) ? allTemplates.length : 0);
+        console.log('[WIZARD_INPUT][LOAD] Raw templates from API:', allTemplates);
+
+        // Sort templates alphabetically by label
+        const sorted = Array.isArray(allTemplates)
+          ? [...allTemplates].sort((a, b) => {
+              const labelA = (a.label || a.name || '').toLowerCase();
+              const labelB = (b.label || b.name || '').toLowerCase();
+              return labelA.localeCompare(labelB);
+            })
+          : [];
+
+        console.log('[WIZARD_INPUT][LOAD] Sorted templates:', sorted.map(t => ({
+          id: t._id || t.id || t.name,
+          label: t.label || t.name,
+          hasPatterns: !!t.patterns,
+          patternsKeys: t.patterns ? Object.keys(t.patterns) : [],
+          patternsIT: t.patterns?.IT,
+          patternsEN: t.patterns?.EN,
+          patternsPT: t.patterns?.PT
+        })));
+
+        setTemplates(sorted);
+        console.log('[WIZARD_INPUT][LOAD] Loaded templates:', sorted.length);
       } catch (err) {
-        console.error('[WIZARD_INPUT] Failed to load templates:', err);
+        console.error('[WIZARD_INPUT][LOAD] Failed to load templates:', err);
         setTemplates([]);
       } finally {
         setLoadingTemplates(false);
@@ -47,13 +71,129 @@ const WizardInputStep: React.FC<Props> = ({
     loadTemplates();
   }, []);
 
+  // Auto-select template based on node label using patterns
+  React.useEffect(() => {
+    console.log('[WIZARD_INPUT][PATTERN_MATCH] Starting pattern matching', {
+      templatesCount: templates.length,
+      dataNodeName: dataNode?.name,
+      hasDataNode: !!dataNode
+    });
+
+    if (templates.length === 0) {
+      console.log('[WIZARD_INPUT][PATTERN_MATCH] No templates loaded, skipping');
+      return;
+    }
+
+    if (!dataNode?.name) {
+      console.log('[WIZARD_INPUT][PATTERN_MATCH] No dataNode.name, skipping');
+      return;
+    }
+
+    const nodeLabel = dataNode.name.toLowerCase().trim();
+    if (!nodeLabel) {
+      console.log('[WIZARD_INPUT][PATTERN_MATCH] Empty nodeLabel after trim, skipping');
+      return;
+    }
+
+    console.log('[WIZARD_INPUT][PATTERN_MATCH] Node label to match:', nodeLabel);
+    console.log('[WIZARD_INPUT][PATTERN_MATCH] Available templates:', templates.map(t => ({
+      id: t._id || t.id || t.name,
+      label: t.label || t.name,
+      hasPatterns: !!t.patterns,
+      patterns: t.patterns
+    })));
+
+    // Try to match node label with template patterns
+    for (const template of templates) {
+      const templateId = template._id || template.id || template.name;
+      const templateLabel = template.label || template.name || 'Unknown';
+
+      console.log(`[WIZARD_INPUT][PATTERN_MATCH] Testing template: ${templateLabel} (${templateId})`);
+
+      const patterns = template.patterns;
+      if (!patterns || typeof patterns !== 'object') {
+        console.log(`[WIZARD_INPUT][PATTERN_MATCH] Template ${templateLabel} has no patterns or invalid patterns object:`, patterns);
+        continue;
+      }
+
+      console.log(`[WIZARD_INPUT][PATTERN_MATCH] Template ${templateLabel} patterns object:`, patterns);
+
+      // Try IT first (default), then EN, PT
+      const langPatterns = patterns.IT || patterns.EN || patterns.PT;
+      if (!Array.isArray(langPatterns)) {
+        console.log(`[WIZARD_INPUT][PATTERN_MATCH] Template ${templateLabel} has no valid langPatterns array:`, langPatterns);
+        continue;
+      }
+
+      console.log(`[WIZARD_INPUT][PATTERN_MATCH] Template ${templateLabel} langPatterns (${langPatterns.length} patterns):`, langPatterns);
+
+      // Test each pattern regex
+      for (let i = 0; i < langPatterns.length; i++) {
+        const patternStr = langPatterns[i];
+        console.log(`[WIZARD_INPUT][PATTERN_MATCH] Testing pattern ${i + 1}/${langPatterns.length} for ${templateLabel}:`, patternStr);
+
+        try {
+          const regex = new RegExp(patternStr, 'i');
+          const testResult = regex.test(nodeLabel);
+          console.log(`[WIZARD_INPUT][PATTERN_MATCH] Pattern "${patternStr}" test result:`, testResult, {
+            pattern: patternStr,
+            nodeLabel: nodeLabel,
+            match: testResult
+          });
+
+          if (testResult) {
+            console.log('[WIZARD_INPUT][PATTERN_MATCH] ✅ MATCH FOUND!', {
+              nodeLabel,
+              templateLabel,
+              templateId,
+              pattern: patternStr
+            });
+
+            setSelectedTemplateId(templateId);
+            // Optionally auto-select the template
+            if (onTemplateSelect) {
+              console.log('[WIZARD_INPUT][PATTERN_MATCH] Calling onTemplateSelect with:', template);
+              onTemplateSelect(template);
+            }
+            return; // Found match, stop searching
+          }
+        } catch (e) {
+          // Invalid regex, skip
+          console.warn(`[WIZARD_INPUT][PATTERN_MATCH] Invalid pattern regex for ${templateLabel}:`, patternStr, e);
+          continue;
+        }
+      }
+
+      console.log(`[WIZARD_INPUT][PATTERN_MATCH] No match found for template ${templateLabel}`);
+    }
+
+    console.log('[WIZARD_INPUT][PATTERN_MATCH] ❌ No template pattern match found for:', nodeLabel);
+  }, [templates, dataNode?.name, onTemplateSelect]);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
   // Handle template selection
-  const handleTemplateChange = React.useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const templateId = e.target.value;
+  const handleTemplateSelect = React.useCallback((templateId: string) => {
     setSelectedTemplateId(templateId);
+    setIsDropdownOpen(false);
 
     if (templateId && onTemplateSelect) {
-      const selectedTemplate = templates.find(t => (t._id || t.id) === templateId);
+      const selectedTemplate = templates.find(t => (t._id || t.id || t.name) === templateId);
       if (selectedTemplate) {
         console.log('[WIZARD_INPUT] Template selected:', selectedTemplate.label);
         onTemplateSelect(selectedTemplate);
@@ -203,36 +343,131 @@ const WizardInputStep: React.FC<Props> = ({
         }}>
           Scegli il tipo di dato
         </label>
-        <select
-          value={selectedTemplateId}
-          onChange={handleTemplateChange}
-          disabled={loadingTemplates}
-          className={combinedClass}
-          style={{
-            width: '100%',
-            padding: '10px 16px',
-            borderRadius: 8,
-            border: '1px solid #4b5563',
-            background: '#111827',
-            color: '#fff',
-            outline: 'none',
-            cursor: loadingTemplates ? 'not-allowed' : 'pointer',
-            opacity: loadingTemplates ? 0.6 : 1,
-            fontSize: 14,
-            boxSizing: 'border-box'
-          }}
-        >
-          <option value="">combo box con i template disponibili</option>
-          {templates.map((template) => {
-            const id = template._id || template.id;
-            const label = template.label || template.name || 'Unnamed Template';
-            return (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            );
-          })}
-        </select>
+        <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
+          {/* Custom dropdown button */}
+          <button
+            type="button"
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            disabled={loadingTemplates}
+            className={combinedClass}
+            style={{
+              width: '100%',
+              padding: '10px 16px',
+              borderRadius: 8,
+              border: '1px solid #4b5563',
+              background: '#111827',
+              color: '#fff',
+              outline: 'none',
+              cursor: loadingTemplates ? 'not-allowed' : 'pointer',
+              opacity: loadingTemplates ? 0.6 : 1,
+              fontSize: 14,
+              boxSizing: 'border-box',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+              {selectedTemplateId ? (() => {
+                const selected = templates.find(t => (t._id || t.id || t.name) === selectedTemplateId);
+                if (selected) {
+                  const icon = selected.icon || 'FileText';
+                  const label = selected.label || selected.name || 'Unnamed Template';
+                  return (
+                    <>
+                      <IconRenderer name={icon} size={16} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                    </>
+                  );
+                }
+                return <span style={{ color: '#9ca3af' }}>combo box con i template disponibili</span>;
+              })() : (
+                <span style={{ color: '#9ca3af' }}>combo box con i template disponibili</span>
+              )}
+            </div>
+            <ChevronDown
+              size={16}
+              style={{
+                transform: isDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s',
+                flexShrink: 0
+              }}
+            />
+          </button>
+
+          {/* Dropdown menu */}
+          {isDropdownOpen && !loadingTemplates && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                marginTop: '4px',
+                borderRadius: 8,
+                border: '1px solid #4b5563',
+                background: '#111827',
+                maxHeight: '300px',
+                overflowY: 'auto',
+                zIndex: 1000,
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
+              }}
+            >
+              {templates.length === 0 ? (
+                <div style={{ padding: '12px 16px', color: '#9ca3af', fontSize: 14 }}>
+                  Nessun template disponibile
+                </div>
+              ) : (
+                templates.map((template) => {
+                  const id = template._id || template.id || template.name;
+                  const label = template.label || template.name || 'Unnamed Template';
+                  const icon = template.icon || 'FileText';
+                  const isSelected = selectedTemplateId === id;
+
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => handleTemplateSelect(id)}
+                      className={combinedClass}
+                      style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        border: 'none',
+                        background: isSelected ? '#1f2937' : 'transparent',
+                        color: '#fff',
+                        fontSize: 14,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        textAlign: 'left',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.background = '#1f2937';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.background = 'transparent';
+                        }
+                      }}
+                    >
+                      <IconRenderer name={icon} size={16} />
+                      <span style={{ flex: 1 }}>{label}</span>
+                      {isSelected && (
+                        <span style={{ color: '#22c55e', fontSize: 12 }}>✓</span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Separator */}

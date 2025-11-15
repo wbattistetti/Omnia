@@ -784,6 +784,33 @@ export async function getTemplateTranslations(keys: string[]): Promise<Record<st
   return res.json();
 }
 
+export async function saveProjectTranslations(
+  projectId: string,
+  translations: Array<{ guid: string; language: string; text: string; type?: string }>
+): Promise<{ success: boolean; count: number }> {
+  const res = await fetch(`/api/projects/${projectId}/translations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ translations })
+  });
+  if (!res.ok) throw new Error('Errore nel salvataggio di Project Translations');
+  return res.json();
+}
+
+export async function loadProjectTranslations(
+  projectId: string,
+  guids: string[]
+): Promise<Record<string, { en: string; it: string; pt: string }>> {
+  if (!guids || guids.length === 0) return {};
+  const res = await fetch(`/api/projects/${projectId}/translations/load`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ guids })
+  });
+  if (!res.ok) throw new Error('Errore nel caricamento di Project Translations');
+  return res.json();
+}
+
 export async function saveDataDialogueTranslations(payload: Record<string, string>) {
   const res = await fetch('/api/factory/data-dialogue-translations', {
     method: 'POST',
