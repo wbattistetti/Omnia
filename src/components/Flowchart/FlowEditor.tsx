@@ -889,6 +889,56 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [nodes.length, setCursorTooltip]);
 
+  // ✅ Helper per verificare se c'è una riga in editing
+  const checkIfRowEditing = useCallback(() => {
+    const activeElement = document.activeElement;
+    const isTextInputFocused = activeElement?.tagName === 'TEXTAREA' ||
+                               activeElement?.tagName === 'INPUT';
+
+    // ✅ Escludi l'input dell'intellisense standalone (non è una riga in editing)
+    const isIntellisenseInput = activeElement?.closest('.intellisense-menu-standalone') !== null ||
+                                activeElement?.closest('.intellisense-standalone-wrapper') !== null;
+
+    // ✅ Verifica se c'è un textarea/input con focus che NON è dell'intellisense
+    const focusedTextarea = document.querySelector('textarea:focus');
+    const focusedInput = document.querySelector('input:focus');
+    const isFocusedTextareaIntellisense = focusedTextarea?.closest('.intellisense-menu-standalone') !== null ||
+                                         focusedTextarea?.closest('.intellisense-standalone-wrapper') !== null;
+    const isFocusedInputIntellisense = focusedInput?.closest('.intellisense-menu-standalone') !== null ||
+                                      focusedInput?.closest('.intellisense-standalone-wrapper') !== null;
+
+    // ✅ C'è una riga in editing se:
+    // 1. C'è un textarea/input con focus che NON è dell'intellisense
+    // 2. C'è un elemento con data-row-id (riga in editing)
+    const hasRowInEditing = document.querySelector('[data-row-id]') !== null;
+
+    return (isTextInputFocused && !isIntellisenseInput) ||
+           (focusedTextarea !== null && !isFocusedTextareaIntellisense) ||
+           (focusedInput !== null && !isFocusedInputIntellisense) ||
+           hasRowInEditing;
+  }, []);
+
+  // ✅ Nascondi tooltip quando una riga entra in editing (focus/blur)
+  useEffect(() => {
+    const onFocus = () => {
+      if (checkIfRowEditing()) {
+        setCursorTooltip(null);
+      }
+    };
+
+    const onBlur = () => {
+      // Non fare nulla su blur, il mousemove controllerà
+    };
+
+    document.addEventListener('focusin', onFocus, true);
+    document.addEventListener('focusout', onBlur, true);
+
+    return () => {
+      document.removeEventListener('focusin', onFocus, true);
+      document.removeEventListener('focusout', onBlur, true);
+    };
+  }, [checkIfRowEditing, setCursorTooltip]);
+
   // Inserter hover: custom cursor + label
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -901,7 +951,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       // Disabilita anche se c'è un elemento trascinato fisso
       const isDraggedElement = document.querySelector('[key*="dragged-"]');
 
-      if (isInserter && !isDraggingRow && !isDraggedElement) {
+      // ✅ Verifica se c'è una riga in editing
+      const isRowEditing = checkIfRowEditing();
+
+      if (isInserter && !isDraggingRow && !isDraggedElement && !isRowEditing) {
         setCursorTooltip('Click to insert here...', e.clientX, e.clientY);
       } else {
         // Hide only if this effect showed the message
@@ -913,7 +966,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     };
     window.addEventListener('mousemove', onMove, { passive: true });
     return () => window.removeEventListener('mousemove', onMove as any);
-  }, [setCursorTooltip]);
+  }, [setCursorTooltip, checkIfRowEditing]);
 
   // Inizializza la viewport a zoom 1 solo al primissimo mount
   const initializedRef = useRef(false);

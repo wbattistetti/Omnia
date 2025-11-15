@@ -128,7 +128,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       const rect = referenceElement.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
       const viewportWidth = window.innerWidth;
-      const menuWidth = 320;
+      // ✅ Non serve menuWidth fisso - CSS gestisce l'autosize con fit-content
 
       // ✅ Calcola altezza item dinamicamente basata sul font size
       const fontSizeNum = parseFloat(fontSizes.nodeRow) || 14;
@@ -140,14 +140,11 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       const paddingBottom = fontSizeNum * 0.3; // Padding bottom del menu
       const headerHeight = totalItems > 0 ? fontSizeNum * 0.3 : 0; // Header se ci sono risultati
 
-      // ✅ Calcola altezza desiderata basata sul numero REALE di risultati
+      // ✅ Calcola altezza desiderata basata sul numero REALE di risultati (SENZA limite maxMenuHeight)
       const desiredHeight = totalItems === 0 && query.trim()
         ? 140 // Altezza per messaggio + pulsanti quando non ci sono risultati
         : totalItems > 0
-          ? Math.min(
-              paddingTop + headerHeight + (itemHeight * totalItems) + paddingBottom,
-              defaultLayoutConfig.maxMenuHeight
-            )
+          ? paddingTop + headerHeight + (itemHeight * totalItems) + paddingBottom
           : 0;
 
       // Calcola spazio disponibile sopra e sotto
@@ -155,54 +152,57 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       const spaceAbove = rect.top - 10; // 10px di margine
 
       let top;
-      let maxHeight;
+      let actualHeight; // ✅ Altezza effettiva da usare
 
-      // ✅ Logica migliorata: controlla PRIMA se c'è spazio sotto per il numero reale di risultati
+      // ✅ Se c'è spazio sufficiente sotto per tutte le voci, usa quello spazio (espandi)
       if (spaceBelow >= desiredHeight) {
-        // C'è spazio sotto sufficiente → Posiziona sotto
+        // C'è spazio sotto sufficiente → Posiziona sotto e mostra tutte le voci
         top = rect.bottom + 5;
-        maxHeight = Math.min(desiredHeight, spaceBelow - 5);
+        actualHeight = desiredHeight; // ✅ Usa l'altezza desiderata (tutte le voci)
       } else if (spaceAbove >= desiredHeight) {
         // Non c'è spazio sotto ma c'è sopra sufficiente → Posiziona sopra
-        maxHeight = Math.min(desiredHeight, spaceAbove - 5);
-        top = rect.top - maxHeight - 5;
+        actualHeight = desiredHeight;
+        top = rect.top - actualHeight - 5;
       } else {
-        // ✅ Non c'è spazio sufficiente né sopra né sotto → Usa lo spazio più grande disponibile
+        // ✅ Non c'è spazio sufficiente → Usa lo spazio disponibile e mostra scrollbar
         if (spaceBelow >= spaceAbove) {
-          // Più spazio sotto → Posiziona sotto (anche se non è sufficiente)
           top = rect.bottom + 5;
-          maxHeight = Math.min(desiredHeight, spaceBelow - 5);
+          actualHeight = spaceBelow - 5;
         } else {
-          // Più spazio sopra → Posiziona sopra (anche se non è sufficiente)
-          maxHeight = Math.min(desiredHeight, spaceAbove - 5);
-          top = rect.top - maxHeight - 5;
+          actualHeight = spaceAbove - 5;
+          top = rect.top - actualHeight - 5;
         }
       }
 
       // Assicurati che il menu non vada mai fuori dalla viewport
-      top = Math.max(10, Math.min(top, viewportHeight - maxHeight - 10));
+      top = Math.max(10, Math.min(top, viewportHeight - actualHeight - 10));
 
       let left = rect.left;
-
-      // Aggiusta se il menu esce dallo schermo orizzontalmente
-      if (left + menuWidth > viewportWidth) {
-        left = viewportWidth - menuWidth - 10;
-      }
-
-      const finalHeight = Math.min(maxHeight, desiredHeight);
 
       const style: any = {
         position: 'fixed',
         top: `${top}px`,
         left: `${left}px`,
-        width: `${menuWidth}px`,
-        maxHeight: `${maxHeight}px`,
-        zIndex: 9999
+        width: 'fit-content', // ✅ CSS si adatta automaticamente al contenuto
+        minWidth: '200px',    // ✅ Larghezza minima
+        maxWidth: '450px',    // ✅ Larghezza massima
+        height: `${actualHeight}px`, // ✅ Usa altezza effettiva
+        zIndex: 9999,
+        background: '#ffffff',
+        border: '1px solid #e5e7eb',
+        borderRadius: '8px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
       };
+
+      // ✅ Mostra scrollbar SOLO se l'altezza effettiva è minore dell'altezza desiderata
       if (totalItems > 0) {
-        style.minHeight = `${finalHeight}px`;
-        style.height = totalItems <= 2 ? `${finalHeight}px` : undefined;
-        style.overflowY = totalItems <= 2 ? 'visible' : 'auto';
+        if (actualHeight < desiredHeight) {
+          // Non c'è spazio per tutte le voci → mostra scrollbar
+          style.overflowY = 'auto';
+        } else {
+          // C'è spazio per tutte le voci → nessuna scrollbar
+          style.overflowY = 'hidden';
+        }
       } else {
         // Nessun risultato: lascia che l'altezza si adatti al contenuto (no rettangolo vuoto)
         style.overflowY = 'visible';
@@ -229,7 +229,28 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       window.removeEventListener('scroll', updatePosition, true);
       try { ro && ro.disconnect(); } catch { }
     };
-  }, [isOpen, referenceElement, totalItems, query, fontSizes.nodeRow]); // ✅ Aggiunto fontSizes.nodeRow alle dipendenze
+  }, [isOpen, referenceElement, totalItems, query, fontSizes.nodeRow]); // ✅ Rimosso calculatedWidth - CSS gestisce tutto
+
+  // ✅ Aggiusta posizione orizzontale se il menu esce dallo schermo (dopo che CSS ha calcolato la larghezza)
+  useEffect(() => {
+    if (!isOpen || !menuRef.current) return;
+
+    const adjustHorizontalPosition = () => {
+      if (!menuRef.current) return;
+      const menuRect = menuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+
+      if (menuRect.right > viewportWidth) {
+        const newLeft = viewportWidth - menuRect.width - 10;
+        setMenuStyle((prev: any) => ({ ...prev, left: `${newLeft}px` }));
+      }
+    };
+
+    // Usa requestAnimationFrame per avere la larghezza reale dopo il render
+    requestAnimationFrame(() => {
+      requestAnimationFrame(adjustHorizontalPosition);
+    });
+  }, [isOpen, menuStyle, totalItems, query]);
 
   // Handle click outside
   useEffect(() => {
@@ -607,7 +628,20 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   // ✅ Log rimossi per evitare spam
   const noResults = totalItems === 0;
 
-  // If no results, still render the shell to avoid blink/hide issues during updates
+  // ✅ Se non ci sono risultati E non ci sono pulsanti di creazione, non mostrare il menu (solo per caso inline)
+  // ✅ Per il caso standalone (edge), mostra sempre perché c'è la textbox
+  if (mode !== 'standalone' && noResults) {
+    // Controlla se ci sono pulsanti di creazione da mostrare
+    const isForNodes = filterCategoryTypes?.includes('agentActs') || filterCategoryTypes?.includes('backendActions');
+    const hasCreateButtons = allowCreatePicker && query.trim() && (
+      (isForNodes) || // Per nodi mostra sempre i pulsanti se c'è query
+      (!isForNodes && (onCreateNew || onCreateAgentAct || onCreateBackendCall || onCreateTask)) // Per condizioni mostra se ci sono callback
+    );
+
+    if (!hasCreateButtons) {
+      return null; // ✅ Non mostrare rettangolo vuoto
+    }
+  }
 
   // ✅ RENDER DIFFERENTE PER I DUE CASI
   return (

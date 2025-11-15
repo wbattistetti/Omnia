@@ -239,8 +239,10 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                 width: 'auto',
                 minWidth: '420px', // ✅ Larghezza minima iniziale
                 zIndex: 99999,
-                background: 'transparent',
-                border: 'none',
+                background: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
                 padding: '12px'
             }}
             onClick={handleWrapperClick}

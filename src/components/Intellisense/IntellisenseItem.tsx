@@ -70,7 +70,9 @@ export const IntellisenseItem: React.FC<IntellisenseItemProps> = ({
       `}
       style={{
         padding: `${paddingV}px ${paddingH}px`,
-        background: isSelected ? undefined : (item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined)
+        background: isSelected ? undefined : (item.bgColor || item.uiColor || (item.categoryType && SIDEBAR_TYPE_COLORS[item.categoryType]?.light) || undefined),
+        width: 'max-content', // ✅ Ogni item ha la sua larghezza naturale
+        minWidth: '100%',     // ✅ Almeno quanto il parent
       }}
       onClick={onClick}
       onMouseEnter={() => {

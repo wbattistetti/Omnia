@@ -60,6 +60,8 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   const [showCategorySelector, setShowCategorySelector] = useState<'global' | 'industry' | false>(false);
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  // ✅ Rimuoviamo l'autosize complesso - usiamo una larghezza fissa ragionevole
+  const menuWidth = layoutConfig.maxMenuWidth || 320;
 
   // Aggiungi uno stato per distinguere tra selezione da tastiera e da mouse
   const lastInputType = useRef<'keyboard' | 'mouse'>('keyboard');
@@ -217,6 +219,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
     onItemHover(index);
   };
 
+
   if (allResults.length === 0) {
     // Solo pulsanti: per i nodi mostra i tipi di Agent Act; per condizioni usa il flusso esistente
     const isForNodes = filterCategoryTypes.includes('agentActs') || filterCategoryTypes.includes('backendActions');
@@ -270,11 +273,12 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   return (
     <div
       ref={containerRef}
-      className={'overflow-auto'}
       onScroll={handleScroll}
       style={{
-        maxHeight: layoutConfig.maxMenuHeight,
-        maxWidth: layoutConfig.maxMenuWidth,
+        height: '100%', // ✅ Usa 100% dell'altezza del parent
+        width: 'max-content', // ✅ Il contenitore si adatta al contenuto più largo
+        minWidth: '100%',     // ✅ Almeno quanto il parent
+        overflowY: 'inherit', // ✅ Eredita overflow dal parent (gestito da IntellisenseMenu)
       }}
     >
       {allResults.map((item, index) => (

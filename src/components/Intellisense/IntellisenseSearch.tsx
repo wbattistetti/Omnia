@@ -71,13 +71,21 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
   // Usa tutti gli item se non passati (fallback per compatibilità)
   const allItems = items || (fuseInstance ? (fuseInstance as any)._docs : []);
 
-  // Token della query separati da spazi; richiede almeno 2 caratteri per evitare rumore
-  const tokens = raw
+  // Token della query separati da spazi
+  // Includiamo tutti i token, anche quelli di 1 carattere, per evitare match errati
+  // Es: "chiedi X" non deve matchare "chiedi data visita" se "X" non matcha
+  const allTokens = raw
     .toLowerCase()
     .split(/\s+/)
     .map(t => t.trim())
-    .filter(t => t.length >= 2);
-  if (tokens.length === 0) return [];
+    .filter(t => t.length >= 1);
+
+  if (allTokens.length === 0) return [];
+
+  // Filtriamo solo i token di lunghezza >= 2 per la ricerca normale
+  // Ma se ci sono token filtrati, dobbiamo verificare che TUTTI i token matchano
+  const tokens = allTokens.filter(t => t.length >= 2);
+  const shortTokens = allTokens.filter(t => t.length === 1);
 
   // Normalizzazione: minuscole, rimozione accenti, compattazione spazi/underscore/trattini
   const normalize = (s: string) =>
@@ -109,18 +117,34 @@ export function performFuzzySearch(query: string, items?: IntellisenseItem[]): I
   const results = allItems
     .map((item: IntellisenseItem) => {
       const words = tokenizeFields(item);
-      const ok = tokens.every(tok => words.some(w => w.startsWith(tok)));
+      const normalizedText = words.join(' ');
+
+      // Verifica che TUTTI i token (inclusi quelli di 1 carattere) matchano
+      // Token lunghi: devono essere all'inizio di una parola
+      // Token corti: devono essere all'inizio di una parola o essere una parola completa
+      const allTokensMatch = allTokens.every(tok => {
+        if (tok.length >= 2) {
+          // Token lungo: deve essere all'inizio di una parola
+          return words.some(w => w.startsWith(tok));
+        } else {
+          // Token corto (1 carattere): deve essere all'inizio di una parola o essere una parola completa
+          return words.some(w => w === tok || w.startsWith(tok));
+        }
+      });
+
       try {
         if (localStorage.getItem('debug.intellisense') === '1') {
           console.log('[Intellisense][matchDbg]', {
             label: item.label,
             words,
+            allTokens,
             tokens,
-            ok
+            shortTokens,
+            allTokensMatch
           });
         }
       } catch { }
-      return ok ? ({ item, score: 0 } as IntellisenseResult) : null;
+      return allTokensMatch ? ({ item, score: 0 } as IntellisenseResult) : null;
     })
     .filter(Boolean) as IntellisenseResult[];
 
