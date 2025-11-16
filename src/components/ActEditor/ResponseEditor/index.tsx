@@ -30,6 +30,8 @@ import { useDDTInitialization } from './hooks/useDDTInitialization';
 import { useResponseEditorToolbar } from './ResponseEditorToolbar';
 import IntentListEditorWrapper from './components/IntentListEditorWrapper';
 import { FontProvider, useFontContext } from '../../../context/FontContext';
+import { useAIProvider } from '../../../context/AIProviderContext';
+import { DialogueTemplateService } from '../../../services/DialogueTemplateService';
 
 function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
 
@@ -38,8 +40,13 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   // Font centralizzato dal Context
   const { combinedClass } = useFontContext();
+  // ✅ AI Provider per inferenza pre-wizard
+  const { provider: selectedProvider, model: selectedModel } = useAIProvider();
   const rootRef = useRef<HTMLDivElement>(null);
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
+  const [isInferring, setIsInferring] = React.useState(false);
+  const [inferenceResult, setInferenceResult] = React.useState<any>(null);
+  const inferenceAttemptedRef = React.useRef<string | null>(null); // Track which act.label we've already tried
 
   const { ideTranslations, dataDialogueTranslations, replaceSelectedDDT } = useDDTManager();
   const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
@@ -470,36 +477,408 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
   });
 
   useEffect(() => {
+    console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ════════════════════════════════════════');
+    console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] 🎯 Starting wizard logic check', {
+      timestamp: new Date().toISOString(),
+      hasAct: !!act,
+      actLabel: act?.label,
+      actType: act?.type,
+      actId: act?.id
+    });
+
     // ✅ Se kind === "intent" non deve mostrare il wizard
     const firstMain = mainList[0];
     if (firstMain?.kind === 'intent') {
+      console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ⏭️ Skipping wizard (kind === "intent")');
       setShowWizard(false);
       wizardOwnsDataRef.current = false;
       return;
     }
 
     const empty = isDDTEmpty(localDDT);
-    console.log('[RESPONSE_EDITOR][useEffect] DDT state check', {
+    console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] 📊 DDT state check', {
       empty,
       wizardOwnsData: wizardOwnsDataRef.current,
       hasLocalDDT: !!localDDT,
       mainsCount: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0,
       mainDataType: typeof localDDT?.mainData,
       isArray: Array.isArray(localDDT?.mainData),
-      firstMainSteps: localDDT?.mainData?.[0]?.steps ? Object.keys(localDDT.mainData[0].steps) : []
+      firstMainSteps: localDDT?.mainData?.[0]?.steps ? Object.keys(localDDT.mainData[0].steps) : [],
+      localDDTId: localDDT?.id,
+      localDDTLabel: localDDT?.label
     });
 
-    if (empty && !wizardOwnsDataRef.current) {
-      // DDT is empty → open wizard and take ownership
-      console.log('[RESPONSE_EDITOR][useEffect] Opening wizard (DDT empty)');
-      setShowWizard(true);
-      wizardOwnsDataRef.current = true;
-      try {
-        info('RESPONSE_EDITOR', 'Wizard ON (DDT empty)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
-      } catch { }
+    // ✅ IMPORTANTE: Non aprire wizard se l'inferenza è in corso
+    if (empty && !wizardOwnsDataRef.current && !isInferring) {
+      // ✅ Se c'è act.label, fai inferenza PRIMA di aprire il wizard
+      const actLabel = act?.label?.trim();
+      const shouldInfer = actLabel && actLabel.length >= 3 && inferenceAttemptedRef.current !== actLabel;
+
+      console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] 📊 Controllo inferenza pre-wizard', {
+        hasActLabel: !!actLabel,
+        actLabel,
+        actLabelLength: actLabel?.length || 0,
+        shouldInfer,
+        isInferring,
+        hasInferenceResult: !!inferenceResult,
+        alreadyAttempted: inferenceAttemptedRef.current
+      });
+
+      // ✅ PRIMA: Se è in corso l'inferenza, aspetta (NON aprire il wizard ancora)
+      if (isInferring) {
+        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ⏳ Aspettando inferenza... (non aprire wizard ancora)', {
+          actLabel,
+          timestamp: new Date().toISOString()
+        });
+        // Non fare nulla, aspetta che l'inferenza finisca
+        return; // ✅ IMPORTANTE: esci dall'useEffect, non continuare
+      }
+
+      // ✅ SECONDO: Se abbiamo già un risultato, apri il wizard direttamente
+      if (inferenceResult) {
+        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ✅ Aprendo wizard con risultato inferenza già disponibile', {
+          hasInferenceResult: !!inferenceResult,
+          timestamp: new Date().toISOString()
+        });
+        setShowWizard(true);
+        wizardOwnsDataRef.current = true;
+        try {
+          info('RESPONSE_EDITOR', 'Wizard ON (inference result available)', { mains: Array.isArray(inferenceResult?.ai?.schema?.mainData) ? inferenceResult.ai.schema.mainData.length : 0 });
+        } catch { }
+        return;
+      }
+
+      // ✅ TERZO: Se deve inferire E non sta già inferendo E non abbiamo ancora risultato, avvia inferenza
+      if (shouldInfer && !inferenceResult) {
+        // ✅ Fai inferenza PRIMA di aprire il wizard
+        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] 🚀 Avviando inferenza PRIMA di aprire wizard', {
+          actLabel,
+          timestamp: new Date().toISOString()
+        });
+        setIsInferring(true);
+        inferenceAttemptedRef.current = actLabel;
+
+        // ✅ Funzione per matching locale (istantaneo, usa cache precaricata)
+        const tryLocalPatternMatch = (text: string): any | null => {
+          const localMatchStartTime = performance.now();
+          try {
+            console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 Tentativo matching locale (cache)...', { text });
+            // ✅ Usa cache precaricata (istantaneo, no fetch!)
+            const templates = DialogueTemplateService.getAllTemplates();
+            if (templates.length === 0) {
+              console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ⚠️ Cache non ancora caricata, skip matching locale');
+              return null;
+            }
+            const textLower = text.toLowerCase().trim();
+
+            // ✅ Cerca match con pattern tra TUTTI i template (appiattiti, non importa atomico/composito)
+            for (const template of templates) {
+              const patterns = template.patterns;
+              if (!patterns || typeof patterns !== 'object') continue;
+
+              // Prova IT, EN, PT
+              const langPatterns = patterns.IT || patterns.EN || patterns.PT;
+              if (!Array.isArray(langPatterns)) continue;
+
+              for (const patternStr of langPatterns) {
+                try {
+                  const regex = new RegExp(patternStr, 'i');
+                  if (regex.test(textLower)) {
+                    const localMatchElapsed = performance.now() - localMatchStartTime;
+                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅✅✅ MATCH LOCALE TROVATO!', {
+                      templateLabel: template.label || template.name,
+                      templateId: template._id || template.id,
+                      pattern: patternStr,
+                      elapsedMs: Math.round(localMatchElapsed),
+                      timestamp: new Date().toISOString()
+                    });
+
+                    // ✅ FASE 2: Costruisci istanza DDT dal template
+                    // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
+                    // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
+                    // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
+                    // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
+                    const subDataIds = template.subDataIds || [];
+
+                    let mainData: any[] = [];
+
+                    if (subDataIds.length > 0) {
+                      // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
+                      console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 📦 Template composito, creando istanze per sottodati', {
+                        subDataIds,
+                        count: subDataIds.length
+                      });
+
+                      // ✅ PRIMA: Costruisci array di subData instances
+                      // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
+                      const subDataInstances: any[] = [];
+
+                      for (const subId of subDataIds) {
+                        // ✅ Cerca template per ID (può essere _id, id, name, o label)
+                        console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 Cercando template sottodato per ID:', {
+                          subId,
+                          subIdType: typeof subId,
+                          cacheSize: DialogueTemplateService.getAllTemplates().length,
+                          sampleIds: DialogueTemplateService.getAllTemplates().slice(0, 3).map(t => ({
+                            _id: t._id,
+                            _idType: typeof t._id,
+                            id: t.id,
+                            name: t.name,
+                            label: t.label
+                          }))
+                        });
+                        const subTemplate = DialogueTemplateService.getTemplate(subId);
+                        if (subTemplate) {
+                          // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
+                          // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
+                          const filteredStepPrompts: any = {};
+                          if (subTemplate.stepPrompts) {
+                            if (subTemplate.stepPrompts.start) {
+                              filteredStepPrompts.start = subTemplate.stepPrompts.start;
+                            }
+                            if (subTemplate.stepPrompts.noInput) {
+                              filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
+                            }
+                            if (subTemplate.stepPrompts.noMatch) {
+                              filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
+                            }
+                            // ❌ Ignoriamo: confirmation, notConfirmed, success
+                          }
+
+                          // ✅ Usa la label del template trovato (non l'ID!)
+                          subDataInstances.push({
+                            label: subTemplate.label || subTemplate.name || 'Sub',
+                            type: subTemplate.type,
+                            icon: subTemplate.icon || 'FileText',
+                            stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : undefined,
+                            constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+                            examples: subTemplate.examples || [],
+                            subData: []
+                          });
+                          console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅ Creata istanza sottodato', {
+                            subId, // ID usato per cercare
+                            label: subTemplate.label, // Label trovata nel template
+                            hasStepPrompts: Object.keys(filteredStepPrompts).length > 0,
+                            filteredSteps: Object.keys(filteredStepPrompts)
+                          });
+                        } else {
+                          console.warn('[RESPONSE_EDITOR][LOCAL_MATCH] ⚠️ Template sottodato non trovato per ID', { subId });
+                        }
+                      }
+
+                      // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
+                      // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+                      console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 DEBUG subDataInstances costruite:', {
+                        count: subDataInstances.length,
+                        subDataInstances: subDataInstances.map(s => ({
+                          label: s.label,
+                          type: s.type,
+                          icon: s.icon,
+                          hasStepPrompts: !!s.stepPrompts,
+                          stepPromptsKeys: s.stepPrompts ? Object.keys(s.stepPrompts) : []
+                        }))
+                      });
+
+                      const mainInstance = {
+                        label: template.label || template.name || 'Data',
+                        type: template.type,
+                        icon: template.icon || 'Calendar',
+                        stepPrompts: template.stepPrompts || undefined, // ✅ Tutti e 6 i tipi per main
+                        constraints: template.dataContracts || template.constraints || [],
+                        examples: template.examples || [],
+                        subData: subDataInstances // ✅ Sottodati QUI dentro subData[], non in mainData[]
+                      };
+                      mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
+
+                      console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 DEBUG mainInstance costruito:', {
+                        label: mainInstance.label,
+                        subDataCount: mainInstance.subData.length,
+                        subDataLabels: mainInstance.subData.map(s => s.label),
+                        fullMainInstance: JSON.parse(JSON.stringify(mainInstance))
+                      });
+                    } else {
+                      // ✅ Template semplice: crea istanza dal template root
+                      console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 📄 Template semplice, creando istanza root');
+                      const mainInstance = {
+                        label: template.label || template.name || 'Data',
+                        type: template.type,
+                        icon: template.icon || 'Calendar',
+                        stepPrompts: template.stepPrompts || undefined,
+                        constraints: template.dataContracts || template.constraints || [],
+                        examples: template.examples || [],
+                        subData: []
+                      };
+                      mainData.push(mainInstance);
+                    }
+
+                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅ Istanza DDT costruita', {
+                      templateLabel: template.label || template.name,
+                      mainDataCount: mainData.length,
+                      mainDataWithStepPrompts: mainData.map((m: any) => ({
+                        label: m.label,
+                        hasStepPrompts: !!m.stepPrompts,
+                        stepPrompts: m.stepPrompts,
+                        subDataCount: m.subData?.length || 0,
+                        subDataLabels: m.subData?.map((s: any) => s.label) || []
+                      }))
+                    });
+
+                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 DEBUG mainData COMPLETO:', {
+                      mainData: JSON.parse(JSON.stringify(mainData)),
+                      mainDataStructure: mainData.map((m: any) => ({
+                        label: m.label,
+                        subData: m.subData?.map((s: any) => ({
+                          label: s.label,
+                          type: s.type,
+                          icon: s.icon
+                        })) || []
+                      }))
+                    });
+
+                    return {
+                      ai: {
+                        schema: {
+                          label: template.label || template.name || 'Data',
+                          mainData: mainData,
+                          // Include stepPrompts a livello schema se presente
+                          stepPrompts: template.stepPrompts || undefined
+                        },
+                        icon: template.icon || 'Calendar'
+                      }
+                    };
+                  }
+                } catch (e) {
+                  // Pattern invalido, skip
+                  continue;
+                }
+              }
+            }
+
+            const localMatchElapsed = performance.now() - localMatchStartTime;
+            console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ❌ Nessun match locale trovato', {
+              elapsedMs: Math.round(localMatchElapsed),
+              templatesChecked: templates.length
+            });
+            return null;
+          } catch (error) {
+            console.error('[RESPONSE_EDITOR][LOCAL_MATCH] ❌ Errore nel matching locale:', error);
+            return null;
+          }
+        };
+
+        // Chiama l'inferenza
+        const performInference = async () => {
+          const inferenceStartTime = performance.now();
+          try {
+            // ✅ PRIMA: Prova matching locale (istantaneo, sincrono, usa cache)
+            const localMatch = tryLocalPatternMatch(actLabel);
+            if (localMatch) {
+              const totalElapsed = performance.now() - inferenceStartTime;
+              console.log('[RESPONSE_EDITOR][INFERENCE] ✅✅✅ Inferenza LOCALE completata!', {
+                hasAi: !!localMatch.ai,
+                hasSchema: !!(localMatch.ai?.schema),
+                hasMainData: !!(localMatch.ai?.schema?.mainData && Array.isArray(localMatch.ai.schema.mainData)),
+                mainDataLength: localMatch.ai?.schema?.mainData?.length || 0,
+                totalElapsedMs: Math.round(totalElapsed),
+                timestamp: new Date().toISOString()
+              });
+              // ✅ FIX: Setta risultato E apri wizard DIRETTAMENTE (non aspettare useEffect)
+              setInferenceResult(localMatch);
+              setIsInferring(false);
+              setShowWizard(true);
+              wizardOwnsDataRef.current = true;
+              console.log('[RESPONSE_EDITOR][INFERENCE] ✅ Wizard aperto direttamente dopo match locale');
+              return; // ✅ Match locale trovato, non chiamare API
+            }
+
+            // ✅ SECONDO: Se non c'è match locale, chiama API
+            console.log('[RESPONSE_EDITOR][INFERENCE] 📡 Nessun match locale, chiamando API...', {
+              userDesc: actLabel,
+              provider: selectedProvider.toLowerCase(),
+              model: selectedModel,
+              timestamp: new Date().toISOString()
+            });
+
+            const response = await fetch('/step2-with-provider', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userDesc: actLabel,
+                provider: selectedProvider.toLowerCase(),
+                model: selectedModel
+              }),
+            });
+
+            const inferenceElapsed = performance.now() - inferenceStartTime;
+            console.log('[RESPONSE_EDITOR][INFERENCE] 📥 Risposta API ricevuta', {
+              status: response.status,
+              ok: response.ok,
+              elapsedMs: Math.round(inferenceElapsed),
+              timestamp: new Date().toISOString()
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              const totalElapsed = performance.now() - inferenceStartTime;
+              console.log('[RESPONSE_EDITOR][INFERENCE] ✅✅✅ Inferenza API completata!', {
+                hasAi: !!result.ai,
+                hasSchema: !!(result.ai?.schema),
+                hasMainData: !!(result.ai?.schema?.mainData && Array.isArray(result.ai.schema.mainData)),
+                mainDataLength: result.ai?.schema?.mainData?.length || 0,
+                totalElapsedMs: Math.round(totalElapsed),
+                timestamp: new Date().toISOString()
+              });
+              // ✅ FIX: Setta risultato E apri wizard DIRETTAMENTE (non aspettare useEffect)
+              setInferenceResult(result);
+              setShowWizard(true);
+              wizardOwnsDataRef.current = true;
+              console.log('[RESPONSE_EDITOR][INFERENCE] ✅ Wizard aperto direttamente dopo API');
+            } else {
+              console.warn('[RESPONSE_EDITOR][INFERENCE] ⚠️ Risposta non OK', {
+                status: response.status,
+                statusText: response.statusText
+              });
+            }
+          } catch (error) {
+            const inferenceElapsed = performance.now() - inferenceStartTime;
+            console.error('[RESPONSE_EDITOR][INFERENCE] ❌ Errore nell\'inferenza', {
+              error,
+              elapsedMs: Math.round(inferenceElapsed),
+              timestamp: new Date().toISOString()
+            });
+          } finally {
+            setIsInferring(false);
+          }
+        };
+
+        performInference();
+        return; // ✅ NON aprire il wizard ancora, aspetta il risultato
+      }
+
+      // ✅ QUARTO: Se non era necessaria l'inferenza (testo troppo corto o già tentato), apri il wizard
+      if (!shouldInfer) {
+        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ✅ Aprendo wizard (nessuna inferenza necessaria)', {
+          hasInferenceResult: !!inferenceResult,
+          shouldInfer,
+          alreadyAttempted: inferenceAttemptedRef.current,
+          reason: 'nessuna inferenza necessaria'
+        });
+        setShowWizard(true);
+        wizardOwnsDataRef.current = true;
+        try {
+          info('RESPONSE_EDITOR', 'Wizard ON (DDT empty, no inference needed)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
+        } catch { }
+      } else {
+        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ⏸️ Aspettando inferenza o risultato...', {
+          hasInferenceResult: !!inferenceResult,
+          shouldInfer,
+          isInferring,
+          alreadyAttempted: inferenceAttemptedRef.current
+        });
+      }
     } else if (!empty && wizardOwnsDataRef.current) {
       // DDT is complete and wizard had ownership → close wizard and release ownership
-      console.log('[RESPONSE_EDITOR][useEffect] Closing wizard (DDT filled)', {
+      console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ✅ Chiudendo wizard (DDT riempito)', {
         mainsCount: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0
       });
       setShowWizard(false);
@@ -509,7 +888,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
             info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
           } catch { }
         }
-      }, [localDDT, mainList]); // ✅ Usa mainList invece di actType
+    console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ════════════════════════════════════════');
+      }, [localDDT, mainList, act, isInferring, inferenceResult, selectedProvider, selectedModel]); // ✅ Aggiunte dipendenze per inferenza
 
   // Nodo selezionato: root se selectedRoot, altrimenti main/sub in base agli indici
   const selectedNode = useMemo(() => {
@@ -770,11 +1150,47 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
               </div>
             </div>
           </div>
+        ) : isInferring ? (
+          /* Mostra loading durante inferenza pre-wizard */
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e2e8f0' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '18px', marginBottom: '16px' }}>🔮 Inferenza in corso...</div>
+              <div style={{ fontSize: '14px', color: '#94a3b8' }}>Analizzando "{act?.label}" per pre-compilare il wizard...</div>
+            </div>
+          </div>
         ) : showWizard ? (
           /* Full-screen wizard without RightPanel */
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <DDTWizard
-              initialDDT={localDDT}
+          /* ✅ FIX: Non montare wizard se dovrebbe avere inferenceResult ma non ce l'ha ancora */
+          (() => {
+            // Se abbiamo act.label e dovremmo aver fatto inferenza, aspetta inferenceResult
+            const actLabel = act?.label?.trim();
+            const shouldHaveInference = actLabel && actLabel.length >= 3;
+
+            if (shouldHaveInference && !inferenceResult) {
+              console.log('[RESPONSE_EDITOR][WIZARD] ⏳ Aspettando inferenceResult prima di montare wizard', {
+                actLabel,
+                hasInferenceResult: !!inferenceResult
+              });
+              return (
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e2e8f0' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '18px', marginBottom: '16px' }}>🔮 Preparazione wizard...</div>
+                    <div style={{ fontSize: '14px', color: '#94a3b8' }}>Caricamento risultato inferenza...</div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                <DDTWizard
+                  initialDDT={inferenceResult?.ai?.schema ? {
+                    // ✅ Pre-compila con il risultato dell'inferenza
+                    id: localDDT?.id || `temp_ddt_${act?.id}`,
+                    label: inferenceResult.ai.schema.label || act?.label || 'Data',
+                    mainData: inferenceResult.ai.schema.mainData || [],
+                    _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento
+                  } : localDDT}
               onCancel={onClose || (() => { })}
               onComplete={(finalDDT, messages) => {
                 console.log('[WIZARD_FLOW] ResponseEditor: onComplete called', {
@@ -847,8 +1263,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                 }
               }}
               startOnStructure={false}
-            />
-          </div>
+                />
+              </div>
+            );
+          })()
         ) : needsIntentMessages ? (
           /* Build Messages UI for ProblemClassification without messages */
           <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>

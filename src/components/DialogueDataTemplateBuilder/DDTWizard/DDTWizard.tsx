@@ -17,6 +17,7 @@ import { useAIProvider } from '../../../context/AIProviderContext';
 import { debug, error } from '../../../utils/logger';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { getTemplateTranslations } from '../../../services/ProjectDataService';
+import { DialogueTemplateService } from '../../../services/DialogueTemplateService';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // 🚀 NEW: Interface for field processing state
@@ -196,16 +197,43 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const { getCurrentProjectId } = useProjectDataUpdate();
   const currentProjectId = getCurrentProjectId();
 
-  const [step, setStep] = useState<string>(startOnStructure ? 'structure' : 'input');
+  const [step, setStep] = useState<string>(() => {
+    if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.mainData?.length > 0) {
+      return 'heuristic-confirm';
+    }
+    return startOnStructure ? 'structure' : 'input';
+  });
   const [saving, setSaving] = useState<'factory' | 'project' | null>(null);
 
-  // Heuristic match confirmation state
   const [pendingHeuristicMatch, setPendingHeuristicMatch] = useState<{
     schema: any;
     icon: string | null;
     mains0: SchemaNode[];
     root: string;
-  } | null>(null);
+  } | null>(() => {
+    if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.mainData?.length > 0) {
+      const mains = (initialDDT.mainData as any[]).map((m: any) => ({
+        label: m.label,
+        type: m.type,
+        icon: m.icon,
+        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+          label: s.label,
+          type: s.type,
+          icon: s.icon,
+          constraints: s.constraints
+        })) : [],
+        constraints: m.constraints
+      }));
+
+      return {
+        schema: initialDDT._inferenceResult.ai.schema,
+        icon: initialDDT._inferenceResult.ai.icon || null,
+        mains0: mains,
+        root: initialDDT.label || 'Data'
+      };
+    }
+    return null;
+  });
 
   // Show input alongside confirmation when user clicks "No"
   const [showInputAlongsideConfirm, setShowInputAlongsideConfirm] = useState(false);
@@ -213,14 +241,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Schema editing state (from detect schema)
   const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialDDT?.label || '');
   const [schemaMains, setSchemaMains] = useState<SchemaNode[]>(() => {
-    if (initialDDT?.mainData && Array.isArray(initialDDT.mainData)) {
-      return (initialDDT.mainData as any[]).map((m: any) => ({
+    if (initialDDT?.mainData && Array.isArray(initialDDT.mainData) && initialDDT.mainData.length > 0) {
+      const mains = (initialDDT.mainData as any[]).map((m: any) => ({
         label: m.label,
         type: m.type,
         icon: m.icon,
         subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label, type: s.type, icon: s.icon, constraints: s.constraints })) : [],
         constraints: m.constraints
       })) as SchemaNode[];
+      return mains;
     }
     return [];
   });
@@ -380,26 +409,47 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [userDesc, setUserDesc] = useState('');
   // Use global AI provider and model from context
   const { provider: selectedProvider, model: selectedModel } = useAIProvider();
-  const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(null);
+  const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(() => initialDDT?._inferenceResult?.ai?.icon || null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dataNode] = useState<DataNode | null>(() => ({ name: initialDDT?.label || '' }));
   const [closed, setClosed] = useState(false);
 
   // Auto-detect function for real-time heuristic matching
   const handleAutoDetect = React.useCallback(async (text: string) => {
-    console.log('[AUTO_DETECT][START]', { text, step, closed, textLength: text.trim().length });
+    const startTime = performance.now();
+    console.log('[AUTO_DETECT][START] ════════════════════════════════════════');
+    console.log('[AUTO_DETECT][START] 🎯 Auto-detect chiamato', {
+      text,
+      step,
+      closed,
+      textLength: text.trim().length,
+      timestamp: new Date().toISOString()
+    });
 
     if (step === 'pipeline' || closed || !text.trim() || text.trim().length < 3) {
-      console.log('[AUTO_DETECT][SKIP]', { reason: step === 'pipeline' ? 'pipeline' : closed ? 'closed' : !text.trim() ? 'empty' : 'too_short' });
+      const reason = step === 'pipeline' ? 'pipeline' : closed ? 'closed' : !text.trim() ? 'empty' : 'too_short';
+      console.log('[AUTO_DETECT][SKIP] ⏭️ Saltando auto-detect', { reason });
+      console.log('[AUTO_DETECT][START] ════════════════════════════════════════');
       return;
     }
 
-    console.log('[AUTO_DETECT][CALL] Starting heuristic detection', { text, step, closed, textLength: text.trim().length });
+    console.log('[AUTO_DETECT][CALL] 🚀 Starting heuristic detection', {
+      text,
+      step,
+      closed,
+      textLength: text.trim().length,
+      timestamp: new Date().toISOString()
+    });
 
     try {
       // ✅ Use /step2-with-provider (Node.js) which now has heuristics integrated
       const urlPrimary = `/step2-with-provider`;
-      console.log('[AUTO_DETECT][FETCH] Calling /step2-with-provider', { url: urlPrimary, body: { userDesc: text.trim(), provider: selectedProvider.toLowerCase(), model: selectedModel } });
+      const fetchStartTime = performance.now();
+      console.log('[AUTO_DETECT][FETCH] 📡 Chiamando API', {
+        url: urlPrimary,
+        body: { userDesc: text.trim(), provider: selectedProvider.toLowerCase(), model: selectedModel },
+        timestamp: new Date().toISOString()
+      });
 
       const response = await fetch(urlPrimary, {
         method: 'POST',
@@ -407,7 +457,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         body: JSON.stringify({ userDesc: text.trim(), provider: selectedProvider.toLowerCase(), model: selectedModel }),
       });
 
-      console.log('[AUTO_DETECT][RESPONSE] Received', { status: response.status, ok: response.ok, statusText: response.statusText });
+      const fetchElapsed = performance.now() - fetchStartTime;
+      console.log('[AUTO_DETECT][RESPONSE] 📥 Risposta ricevuta', {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText,
+        elapsedMs: Math.round(fetchElapsed),
+        timestamp: new Date().toISOString()
+      });
 
       if (!response.ok) {
         console.log('[AUTO_DETECT][ERROR] Response not OK', { status: response.status, statusText: response.statusText });
@@ -415,30 +472,55 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         return;
       }
 
+      const parseStartTime = performance.now();
       const result = await response.json();
-      console.log('[AUTO_DETECT][PARSE] Parsed result', { hasAi: !!result.ai, hasSchema: !!(result.ai || result).schema, resultKeys: Object.keys(result) });
+      const parseElapsed = performance.now() - parseStartTime;
+      const totalElapsed = performance.now() - startTime;
+      console.log('[AUTO_DETECT][PARSE] 📋 Risultato parsato', {
+        hasAi: !!result.ai,
+        hasSchema: !!(result.ai || result).schema,
+        resultKeys: Object.keys(result),
+        parseElapsedMs: Math.round(parseElapsed),
+        totalElapsedMs: Math.round(totalElapsed)
+      });
 
       const ai = result.ai || result;
-      console.log('[AUTO_DETECT][AI] AI object', {
+      console.log('[AUTO_DETECT][AI] 🤖 AI object analizzato', {
         hasSchema: !!ai.schema,
         hasMainData: !!(ai.schema && Array.isArray(ai.schema.mainData)),
         mainDataLength: ai.schema?.mainData?.length || 0,
         label: ai.schema?.label,
-        icon: ai.icon
+        icon: ai.icon,
+        timestamp: new Date().toISOString()
       });
 
       // ✅ Check if heuristic match was found (has schema.mainData structure)
       if (ai.schema && Array.isArray(ai.schema.mainData) && ai.schema.mainData.length > 0) {
-        console.log('[AUTO_DETECT][HEURISTIC_MATCH] ✅ Match found!', {
+        console.log('[AUTO_DETECT][HEURISTIC_MATCH] ✅✅✅ MATCH TROVATO!', {
           label: ai.schema.label,
           mainsCount: ai.schema.mainData.length,
-          mains: ai.schema.mainData.map((m: any) => ({ label: m.label, type: m.type, subDataCount: m.subData?.length || 0 }))
+          mains: ai.schema.mainData.map((m: any) => ({ label: m.label, type: m.type, subDataCount: m.subData?.length || 0 })),
+          totalElapsedMs: Math.round(totalElapsed),
+          timestamp: new Date().toISOString()
         });
 
         // Instead of processing immediately, save the match and show confirmation
         const schema = ai.schema;
         const root = schema.label || 'Data';
         console.log('[AUTO_DETECT][PROCESS] Preparing match for confirmation', { root, mainsCount: schema.mainData.length });
+
+        // ✅ DEBUG: Log schema.mainData per vedere se stepPrompts arrivano dall'API
+        console.log('🔵 [AUTO_DETECT][MAINS0] Schema.mainData prima del map', {
+          mainDataLength: schema.mainData?.length || 0,
+          mainData: schema.mainData?.map((m: any) => ({
+            label: m.label,
+            hasStepPrompts: !!m.stepPrompts,
+            stepPrompts: m.stepPrompts,
+            allKeys: Object.keys(m)
+          })) || [],
+          schemaHasStepPrompts: !!schema.stepPrompts,
+          schemaStepPrompts: schema.stepPrompts
+        });
 
         const mains0: SchemaNode[] = (schema.mainData || []).map((m: any) => {
           const label = m.label || m.name || 'Field';
@@ -476,6 +558,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             };
           }) : [];
 
+          const finalStepPrompts = m.stepPrompts || schema.stepPrompts || null;
+          console.log('🔵 [AUTO_DETECT][MAINS0] Main', label, {
+            hasMStepPrompts: !!m.stepPrompts,
+            mStepPrompts: m.stepPrompts,
+            hasSchemaStepPrompts: !!schema.stepPrompts,
+            schemaStepPrompts: schema.stepPrompts,
+            finalStepPrompts: finalStepPrompts
+          });
+
           return {
             label,
             type,
@@ -483,7 +574,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             constraints: [],
             subData: processedSubData,
             // Include stepPrompts from template match if present
-            stepPrompts: m.stepPrompts || schema.stepPrompts || null
+            stepPrompts: finalStepPrompts
           } as any;
         });
 
@@ -495,21 +586,40 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         setDetectTypeIcon(ai.icon || null);
         setShowRight(true); // Show right panel for confirmation
         setStep('heuristic-confirm'); // Show confirmation step with structure
-        console.log('[AUTO_DETECT][CONFIRM] Match saved, showing confirmation with structure', { root, mainsCount: mains0.length });
+        const totalElapsed = performance.now() - startTime;
+        console.log('[AUTO_DETECT][CONFIRM] ✅ Match salvato, mostrando conferma', {
+          root,
+          mainsCount: mains0.length,
+          totalElapsedMs: Math.round(totalElapsed),
+          timestamp: new Date().toISOString()
+        });
+        console.log('[AUTO_DETECT][START] ════════════════════════════════════════');
         return;
       }
 
       // No heuristic match found - user will need to click "Invia" for AI
-      console.log('[AUTO_DETECT][NO_MATCH] No heuristic match found', {
+      // totalElapsed già calcolato sopra
+      console.log('[AUTO_DETECT][NO_MATCH] ❌ Nessun match euristico trovato', {
         hasSchema: !!ai.schema,
         hasMainData: !!(ai.schema && Array.isArray(ai.schema.mainData)),
-        mainDataLength: ai.schema?.mainData?.length || 0
+        mainDataLength: ai.schema?.mainData?.length || 0,
+        totalElapsedMs: Math.round(totalElapsed),
+        timestamp: new Date().toISOString()
       });
+      console.log('[AUTO_DETECT][START] ════════════════════════════════════════');
       debug('DDT_WIZARD', 'No heuristic match, AI will be called on submit');
 
     } catch (error) {
       // Silently fail - user can still use "Invia" button for AI
-      console.error('[AUTO_DETECT][ERROR] Exception caught', { error, message: (error as any)?.message, stack: (error as any)?.stack });
+      const errorElapsed = performance.now() - startTime;
+      console.error('[AUTO_DETECT][ERROR] ❌❌❌ ERRORE!', {
+        error,
+        message: (error as any)?.message,
+        stack: (error as any)?.stack,
+        totalElapsedMs: Math.round(errorElapsed),
+        timestamp: new Date().toISOString()
+      });
+      console.log('[AUTO_DETECT][START] ════════════════════════════════════════');
       debug('DDT_WIZARD', 'Auto-detect error (non-blocking)', error);
     }
   }, [step, closed, selectedProvider, selectedModel]);
@@ -707,8 +817,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     };
   }, []);
 
-  // Two-panel layout: show results panel at right after user clicks Continue on the left
-  const [showRight, setShowRight] = useState<boolean>(startOnStructure ? true : false);
+  const [showRight, setShowRight] = useState<boolean>(() => {
+    if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.mainData?.length > 0) return true;
+    return startOnStructure ? true : false;
+  });
 
   // Auto-collapse/expand: quando un main data raggiunge 100%, passa automaticamente al successivo
   useEffect(() => {
@@ -753,6 +865,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       }
     }
   }, [partialResults, schemaMains.length]);
+
+  // ✅ FIX: Memoizza mainDataNodes per evitare re-creazione ad ogni render
+  const mainDataNodes = React.useMemo(() => {
+    return schemaMains.map((mainItem) => ({
+      name: (mainItem as any)?.label || 'Data',
+      label: (mainItem as any)?.label || 'Data',
+      type: (mainItem as any)?.type,
+      icon: (mainItem as any)?.icon,
+      subData: ((mainItem as any)?.subData || []) as any[],
+    }));
+  }, [schemaMains]);
 
   // DataNode stabile per pipeline (evita rilanci causati da oggetti inline)
   const pipelineDataNode = React.useMemo(() => {
@@ -1140,40 +1263,173 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     console.log('[DDT][Wizard][templateSelect] Full template structure:', {
       label: template.label,
       name: template.name,
-      hasMainData: !!template.mainData,
-      mainDataLength: template.mainData?.length || 0,
-      mainData: template.mainData,
-      hasSubData: !!template.subData,
-      subDataLength: template.subData?.length || 0,
-      subData: template.subData,
-      dataType: template.dataType,
+      hasSubDataIds: !!template.subDataIds,
+      subDataIdsLength: template.subDataIds?.length || 0,
+      subDataIds: template.subDataIds,
+      hasStepPrompts: !!template.stepPrompts,
       type: template.type,
       icon: template.icon,
       allKeys: Object.keys(template)
     });
 
-    // Convert template to heuristic match format
+    // ✅ NUOVA STRUTTURA: Costruisci istanza DDT dal template usando subDataIds
+    // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
+    // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
+    // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
+    // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
     const root = template.label || 'Data';
-    let mainData = template.mainData || [];
+    const subDataIds = template.subDataIds || [];
+    let mainData: any[] = [];
 
-    console.log('[DDT][Wizard][templateSelect] Extracted mainData (before processing):', {
+    if (subDataIds.length > 0) {
+      // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
+      console.log('[DDT][Wizard][templateSelect] 📦 Template composito, creando istanze per sottodati', {
+        subDataIds,
+        count: subDataIds.length
+      });
+
+      // ✅ PRIMA: Costruisci array di subData instances
+      // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
+      const subDataInstances: any[] = [];
+      const allTemplates = DialogueTemplateService.getAllTemplates();
+
+      for (const subId of subDataIds) {
+        // ✅ Cerca template per ID (può essere _id, id, name, o label)
+        // Normalizza l'ID cercato (potrebbe essere ObjectId come stringa)
+        const normalizedId = String(subId).trim();
+
+        console.log('[DDT][Wizard][templateSelect] 🔍 Cercando template sottodato per ID:', {
+          subId: normalizedId,
+          subIdType: typeof subId,
+          cacheSize: allTemplates.length,
+          sampleIds: allTemplates.slice(0, 3).map((t: any) => ({
+            _id: t._id ? String(t._id) : null,
+            _idType: typeof t._id,
+            id: t.id,
+            name: t.name,
+            label: t.label
+          }))
+        });
+
+        const subTemplate = allTemplates.find((t: any) => {
+          // Confronta _id (potrebbe essere ObjectId o stringa)
+          if (t._id) {
+            const tId = String(t._id).trim();
+            if (tId === normalizedId) return true;
+            // Se entrambi sono ObjectId-like (24 caratteri hex), confronta senza case
+            if (tId.length === 24 && normalizedId.length === 24 && /^[0-9a-fA-F]{24}$/i.test(tId) && /^[0-9a-fA-F]{24}$/i.test(normalizedId)) {
+              if (tId.toLowerCase() === normalizedId.toLowerCase()) return true;
+            }
+          }
+          // Confronta altri campi
+          if (t.id && String(t.id).trim() === normalizedId) return true;
+          if (t.name && String(t.name).trim() === normalizedId) return true;
+          if (t.label && String(t.label).trim() === normalizedId) return true;
+          return false;
+        });
+
+        if (subTemplate) {
+          // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
+          // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
+          const filteredStepPrompts: any = {};
+          if (subTemplate.stepPrompts) {
+            if (subTemplate.stepPrompts.start) {
+              filteredStepPrompts.start = subTemplate.stepPrompts.start;
+            }
+            if (subTemplate.stepPrompts.noInput) {
+              filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
+            }
+            if (subTemplate.stepPrompts.noMatch) {
+              filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
+            }
+            // ❌ Ignoriamo: confirmation, notConfirmed, success
+          }
+
+          // ✅ Usa la label del template trovato (non l'ID!)
+          subDataInstances.push({
+            label: subTemplate.label || subTemplate.name || 'Sub',
+            type: subTemplate.type || subTemplate.name || 'generic',
+            icon: subTemplate.icon || 'FileText',
+            stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
+            constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+            examples: subTemplate.examples || [],
+            subData: []
+          });
+          console.log('[DDT][Wizard][templateSelect] ✅ Caricato template sottodato', {
+            subId, // ID usato per cercare
+            label: subTemplate.label, // Label trovata nel template
+            hasStepPrompts: Object.keys(filteredStepPrompts).length > 0,
+            filteredSteps: Object.keys(filteredStepPrompts)
+          });
+        } else {
+          console.warn('[DDT][Wizard][templateSelect] ⚠️ Template sottodato non trovato per ID', { subId });
+          // Fallback: crea placeholder senza stepPrompts
+          subDataInstances.push({
+            label: subId,
+            type: 'generic',
+            icon: 'FileText',
+            stepPrompts: null,
+            constraints: [],
+            examples: [],
+            subData: []
+          });
+        }
+      }
+
+      // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
+      // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+      console.log('[DDT][Wizard][templateSelect] 🔍 DEBUG subDataInstances costruite:', {
+        count: subDataInstances.length,
+        subDataInstances: subDataInstances.map(s => ({
+          label: s.label,
+          type: s.type,
+          icon: s.icon,
+          hasStepPrompts: !!s.stepPrompts,
+          stepPromptsKeys: s.stepPrompts ? Object.keys(s.stepPrompts) : []
+        }))
+      });
+
+      const mainInstance = {
+        label: template.label || template.name || 'Data',
+        type: template.type,
+        icon: template.icon || 'Calendar',
+        stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
+        constraints: template.dataContracts || template.constraints || [],
+        examples: template.examples || [],
+        subData: subDataInstances // ✅ Sottodati QUI dentro subData[], non in mainData[]
+      };
+      mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
+
+      console.log('[DDT][Wizard][templateSelect] 🔍 DEBUG mainInstance costruito:', {
+        label: mainInstance.label,
+        subDataCount: mainInstance.subData.length,
+        subDataLabels: mainInstance.subData.map(s => s.label),
+        fullMainInstance: JSON.parse(JSON.stringify(mainInstance))
+      });
+    } else {
+      // ✅ Template semplice: crea istanza dal template root
+      console.log('[DDT][Wizard][templateSelect] 📄 Template semplice, creando istanza root');
+      mainData.push({
+        label: template.label || template.name || 'Data',
+        type: template.type,
+        icon: template.icon || 'FileText',
+        stepPrompts: template.stepPrompts || null,
+        constraints: template.dataContracts || template.constraints || [],
+        examples: template.examples || [],
+        subData: []
+      });
+    }
+
+    console.log('[DDT][Wizard][templateSelect] Built mainData from template:', {
       root,
       mainDataLength: mainData.length,
-      mainData
+      mainData: JSON.parse(JSON.stringify(mainData)),
+      mainDataStructure: mainData.map((m: any) => ({
+        label: m.label,
+        subDataCount: m.subData?.length || 0,
+        subDataLabels: m.subData?.map((s: any) => s.label) || []
+      }))
     });
-
-    // Se mainData è vuoto ma c'è subData a livello root, crea un mainData da subData
-    if (mainData.length === 0 && Array.isArray(template.subData) && template.subData.length > 0) {
-      console.log('[DDT][Wizard][templateSelect] No mainData found, using root subData as mainData');
-      // Crea un mainData wrapper con il subData
-      mainData = [{
-        label: template.label || 'Date',
-        type: template.dataType || template.type || 'date',
-        icon: template.icon || 'Calendar',
-        subData: template.subData
-      }];
-      console.log('[DDT][Wizard][templateSelect] Created mainData from subData:', mainData);
-    }
 
     const mains0: SchemaNode[] = mainData.map((m: any) => {
       const label = m.label || m.name || 'Field';
@@ -1187,13 +1443,25 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         type,
         icon: m.icon,
         constraints: m.constraints || [],
-        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
-          label: s.label || s.name || 'Field',
-          type: s.type,
-          icon: s.icon,
-          constraints: s.constraints || []
-        })) : [],
-        // Include stepPrompts from template if present
+        // ✅ Preserva subData con i loro stepPrompts filtrati
+        subData: Array.isArray(m.subData) ? (() => {
+          const mappedSubData = m.subData.map((s: any) => ({
+            label: s.label || s.name || 'Field',
+            type: s.type,
+            icon: s.icon,
+            constraints: s.constraints || [],
+            // ✅ Preserva stepPrompts filtrati (solo start, noInput, noMatch) per sottodati
+            stepPrompts: s.stepPrompts || null
+          }));
+          console.log('[DDT][Wizard][templateSelect] 🔍 DEBUG mappatura subData per', m.label, ':', {
+            originalSubDataCount: m.subData?.length || 0,
+            mappedSubDataCount: mappedSubData.length,
+            mappedSubDataLabels: mappedSubData.map(s => s.label),
+            mappedSubData: JSON.parse(JSON.stringify(mappedSubData))
+          });
+          return mappedSubData;
+        })() : [],
+        // ✅ Include stepPrompts completi (tutti e 6 i tipi) per main
         stepPrompts: m.stepPrompts || template.stepPrompts || null
       } as any;
     });
@@ -1234,33 +1502,40 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     <div
       style={{
         display: 'grid',
+        // ✅ FIX: Adatta layout in base a cosa è visibile
         gridTemplateColumns: showInputAlongsideConfirm
-          ? 'minmax(420px,520px) minmax(420px,520px) 1fr'
-          : rightHasContent
-            ? 'minmax(420px,520px) 1fr'
-            : '1fr',
+          ? 'minmax(420px,520px) minmax(420px,520px) 1fr' // Input + Confirm + Right panel
+          : (!pendingHeuristicMatch && rightHasContent)
+            ? 'minmax(420px,520px) 1fr' // Solo Input + Right panel
+            : (pendingHeuristicMatch && !rightHasContent)
+              ? '1fr' // Solo Confirm (full width)
+              : rightHasContent
+                ? 'minmax(420px,520px) 1fr' // Confirm + Right panel
+                : '1fr', // Solo Input (fallback)
         gap: 12,
         height: '100%',
       }}
     >
-      {/* Show WizardInputStep if:
-          - NO pendingHeuristicMatch (no heuristic found)
-          - OR showInputAlongsideConfirm is true (user clicked "No") */}
-      <div style={{
-        overflow: 'auto',
-        padding: '0 8px',
-        display: (pendingHeuristicMatch && !showInputAlongsideConfirm) ? 'none' : 'block'
-      }}>
-        <WizardInputStep
-          userDesc={userDesc}
-          setUserDesc={setUserDesc}
-          onNext={handleDetectType}
-          onCancel={handleClose}
-          dataNode={stableDataNode || undefined}
-          onAutoDetect={handleAutoDetect}
-          onTemplateSelect={handleTemplateSelect}
-        />
-      </div>
+      {/* ✅ FIX: Monta WizardInputStep SOLO negli step corretti */}
+      {/* Show WizardInputStep ONLY when:
+          - step is 'input' (initial step)
+          - OR (step is 'heuristic-confirm' AND showInputAlongsideConfirm is true - user clicked "No") */}
+      {(step === 'input' || (step === 'heuristic-confirm' && showInputAlongsideConfirm)) && (
+        <div style={{
+          overflow: 'auto',
+          padding: '0 8px'
+        }}>
+          <WizardInputStep
+            userDesc={userDesc}
+            setUserDesc={setUserDesc}
+            onNext={handleDetectType}
+            onCancel={handleClose}
+            dataNode={stableDataNode || undefined}
+            onAutoDetect={initialDDT?._inferenceResult ? undefined : handleAutoDetect}
+            onTemplateSelect={handleTemplateSelect}
+          />
+        </div>
+      )}
 
       {/* Confirmation panel - show if pendingHeuristicMatch exists */}
       {pendingHeuristicMatch && (
@@ -1270,33 +1545,117 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             const displayMains = schemaMains.length > 0 ? schemaMains : mains0;
             const displayRoot = schemaRootLabel || root;
 
+            console.log('[DDT][Wizard][heuristic-confirm] 🔍 DEBUG visualizzazione:', {
+              pendingHeuristicMatchMains0: JSON.parse(JSON.stringify(mains0)),
+              schemaMains: JSON.parse(JSON.stringify(schemaMains)),
+              displayMains: JSON.parse(JSON.stringify(displayMains)),
+              displayMainsStructure: displayMains.map((m: any) => ({
+                label: m.label,
+                subDataCount: m.subData?.length || 0,
+                subDataLabels: m.subData?.map((s: any) => s.label) || [],
+                hasSubData: !!m.subData && Array.isArray(m.subData) && m.subData.length > 0
+              }))
+            });
+
             return (
-              <div style={{ padding: 4 }}>
-                {/* Confirmation header */}
+              <div style={{ padding: 16 }}>
+                {/* Pannello principale con bordino arrotondato */}
                 <div style={{
-                  padding: 16,
-                  background: '#1e293b',
-                  borderRadius: 8,
-                  marginBottom: 12,
-                  border: '1px solid #334155'
+                  border: '1px solid #334155',
+                  borderRadius: 12,
+                  padding: 20,
+                  background: '#1e293b'
                 }}>
-                  <p style={{ color: '#e2e8f0', marginBottom: 12, fontSize: 16, fontWeight: 500 }}>
-                    I guess you want to retrieve this below is that correct?
+                  {/* Header semplificato */}
+                  <p style={{
+                    color: '#e2e8f0',
+                    marginBottom: 16,
+                    fontSize: 16,
+                    fontWeight: 500
+                  }}>
+                    I guess you want to retrieve this kind of data:
                   </p>
 
-                  <div style={{ display: 'flex', gap: 12 }}>
+                  {/* Struttura dati con bordino arrotondato */}
+                  <div style={{
+                    border: '1px solid #475569',
+                    borderRadius: 8,
+                    padding: 16,
+                    marginBottom: 16,
+                    background: '#0f172a'
+                  }}>
+                    <MainDataCollection
+                      rootLabel={displayRoot}
+                      mains={displayMains}
+                      onChangeMains={setSchemaMains}
+                      onAddMain={handleAddMain}
+                      progressByPath={{ ...taskProgress, __root__: rootProgress }}
+                      fieldProcessingStates={fieldProcessingStates}
+                      selectedIdx={selectedIdx}
+                      onSelect={setSelectedIdx}
+                      autoEditIndex={autoEditIndex}
+                      onChangeEvent={handleChangeEvent}
+                      onAutoMap={autoMapFieldStructure}
+                      onRetryField={handleRetryField}
+                      onCreateManually={handleCreateManually}
+                    />
+                  </div>
+
+                  {/* Bottoni in basso a destra */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: 12
+                  }}>
                     <button
                       onClick={async () => {
-                        console.log('[DDT][Wizard][heuristicMatch] User confirmed, processing match');
+                        console.log('🔵 [YES_BUTTON] Click ricevuto');
 
                         const { schema, icon, mains0, root } = pendingHeuristicMatch;
                         setPendingHeuristicMatch(null);
-                        setShowInputAlongsideConfirm(false); // Reset when confirming
+                        setShowInputAlongsideConfirm(false);
                         setDetectTypeIcon(icon);
 
-                        // Check if stepPrompts are present
-                        const hasStepPrompts = mains0.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0);
-                        console.log('[DDT][Wizard][heuristicMatch] Checking stepPrompts', { hasStepPrompts, mainsCount: mains0.length });
+                        // ✅ DEBUG: Log stepPrompts structure per capire perché hasStepPrompts è false
+                        const debugMains0 = mains0.map((m: any) => ({
+                          label: m.label,
+                          hasStepPrompts: !!m.stepPrompts,
+                          stepPromptsType: typeof m.stepPrompts,
+                          stepPromptsValue: m.stepPrompts,
+                          stepPromptsKeys: m.stepPrompts ? Object.keys(m.stepPrompts) : [],
+                          allKeys: Object.keys(m),
+                          subData: (m.subData || []).map((s: any) => ({
+                            label: s.label,
+                            hasStepPrompts: !!(s as any).stepPrompts,
+                            stepPromptsType: typeof (s as any).stepPrompts,
+                            stepPromptsValue: (s as any).stepPrompts,
+                            stepPromptsKeys: (s as any).stepPrompts ? Object.keys((s as any).stepPrompts) : [],
+                            allKeys: Object.keys(s)
+                          }))
+                        }));
+                        console.log('🔵 [YES_BUTTON] DEBUG mains0 stepPrompts', JSON.stringify(debugMains0, null, 2));
+                        console.log('🔵 [YES_BUTTON] DEBUG schema', {
+                          schemaHasStepPrompts: !!(schema && schema.stepPrompts),
+                          schemaStepPrompts: schema?.stepPrompts,
+                          schemaKeys: schema ? Object.keys(schema) : []
+                        });
+
+                        // ✅ FIX: Controlla stepPrompts sia a livello mainData che schema
+                        const hasMainStepPrompts = mains0.some((m: any) => m.stepPrompts && typeof m.stepPrompts === 'object' && Object.keys(m.stepPrompts).length > 0);
+                        const hasSubDataStepPrompts = mains0.some((m: any) =>
+                          m.subData && Array.isArray(m.subData) && m.subData.some((s: any) =>
+                            s.stepPrompts && typeof s.stepPrompts === 'object' && Object.keys(s.stepPrompts).length > 0
+                          )
+                        );
+                        const hasSchemaStepPrompts = !!(schema && schema.stepPrompts && typeof schema.stepPrompts === 'object' && Object.keys(schema.stepPrompts).length > 0);
+                        const hasStepPrompts = hasMainStepPrompts || hasSubDataStepPrompts || hasSchemaStepPrompts;
+
+                        console.log('🔵 [YES_BUTTON] hasStepPrompts check:', {
+                          hasMainStepPrompts,
+                          hasSubDataStepPrompts,
+                          hasSchemaStepPrompts,
+                          hasStepPrompts
+                        });
 
                         if (hasStepPrompts) {
                           // If stepPrompts are present, go directly to Response Editor
@@ -1936,17 +2295,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             error('DDT_WIZARD', 'Failed to assemble DDT with stepPrompts', err);
                           }
                         } else {
-                          // No stepPrompts: enrich constraints and show structure step
-                          console.log('[DDT][Wizard][heuristicMatch] No stepPrompts, enriching constraints and showing structure');
+                          console.log('🔵 [YES_BUTTON] No stepPrompts, andando a pipeline');
 
-                          // Enrich constraints
-                          console.log('[DDT][Wizard][heuristicMatch] Starting enrichConstraints', { root, mainsCount: mains0.length });
                           const enrichedRes = await enrichConstraintsFor(root, mains0);
-                          console.log('[DDT][Wizard][heuristicMatch] Enrichment done', {
-                            hasLabel: !!(enrichedRes as any)?.label,
-                            hasMains: !!(enrichedRes as any)?.mains,
-                            mainsCount: (enrichedRes as any)?.mains?.length || 0
-                          });
 
                           const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
                           let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
@@ -1965,12 +2316,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                           setSchemaRootLabel(finalRoot);
                           setSchemaMains(finalMains);
-                          setStep('structure'); // Show structure step
-                          console.log('[DDT][Wizard][heuristicMatch] step → structure (confirmed)', {
-                            root: finalRoot,
-                            mainsCount: finalMains.length
-                          });
-                          try { dlog('[DDT][UI][AUTO] step → structure (heuristic confirmed)', { root: finalRoot, mains: finalMains.length }); } catch { }
+                          setShowRight(true);
+                          setTaskProgress({});
+                          setRootProgress(0);
+                          setPartialResults({});
+                          setSelectedIdx(0);
+
+                          console.log('🔵 [YES_BUTTON] Settando step=pipeline, mains=', finalMains.length);
+                          setStep('pipeline');
                         }
                       }}
                       style={{
@@ -2006,25 +2359,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       No
                     </button>
                   </div>
-                </div>
-
-                {/* Show MainDataCollection (same as structure step) */}
-                <div tabIndex={0} style={{ outline: 'none' }}>
-                  <MainDataCollection
-                    rootLabel={displayRoot}
-                    mains={displayMains}
-                    onChangeMains={setSchemaMains}
-                    onAddMain={handleAddMain}
-                    progressByPath={{ ...taskProgress, __root__: rootProgress }}
-                    fieldProcessingStates={fieldProcessingStates}
-                    selectedIdx={selectedIdx}
-                    onSelect={setSelectedIdx}
-                    autoEditIndex={autoEditIndex}
-                    onChangeEvent={handleChangeEvent}
-                    onAutoMap={autoMapFieldStructure}
-                    onRetryField={handleRetryField}
-                    onCreateManually={handleCreateManually}
-                  />
                 </div>
               </div>
             );
@@ -2233,25 +2567,22 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             </div>
           )}
 
-          {step === 'pipeline' && (
-            <div style={{ position: 'relative' }}>
-              {schemaMains.map((mainItem, mainIdx) => {
-                const mainDataNode = {
-                  name: (mainItem as any)?.label || 'Data',
-                  label: (mainItem as any)?.label || 'Data',  // ← ADD: label for DDT assembly
-                  type: (mainItem as any)?.type,
-                  icon: (mainItem as any)?.icon,              // ← ADD: icon for proper display
-                  subData: ((mainItem as any)?.subData || []) as any[],
-                };
+          {step === 'pipeline' && (() => {
+            console.log('🟢 [PIPELINE] Rendering pipeline, schemaMains.length =', schemaMains.length);
+            return (
+              <div style={{ position: 'relative' }}>
+                {mainDataNodes.map((mainDataNode, mainIdx) => {
+                  const mainItem = schemaMains[mainIdx];
+                  console.log('🟢 [PIPELINE] Rendering WizardPipelineStep', mainIdx, 'label=', mainDataNode.label, 'visible=', mainIdx === selectedIdx);
 
-                return (
-                  <div
-                    key={`pipeline-${mainIdx}-${mainItem.label}`}
-                    style={{
-                      display: mainIdx === selectedIdx ? 'block' : 'none'
-                    }}
-                  >
-                    <WizardPipelineStep
+                  return (
+                    <div
+                      key={`pipeline-${mainIdx}-${mainDataNode.label}`}
+                      style={{
+                        display: mainIdx === selectedIdx ? 'block' : 'none'
+                      }}
+                    >
+                      <WizardPipelineStep
                       headless={pipelineHeadless}
                       dataNode={mainDataNode}
                       detectTypeIcon={(mainItem as any)?.icon || detectTypeIcon}
@@ -2349,7 +2680,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                 );
               })}
             </div>
-          )}
+          );
+          })()}
 
           {/* Contenuto “normale” del pannello destro (solo quando non in pipeline) */}
           {(() => { try { dlog('[DDT][UI] render TogglePanel?', { render: renderTogglePanel }); } catch { }; return null; })()}

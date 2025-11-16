@@ -237,8 +237,7 @@ async function resolveTemplateRefsWithLevels(subData, templates) {
   return await resolveTemplateRefs(subData, templates, 0);
 }
 
-// Carica template all'avvio del server
-loadTemplatesFromDB().catch(console.error);
+// Template cache verrà precaricata da preloadAllServerCaches()
 
 // ✅ ENTERPRISE AI SERVICES INITIALIZATION
 const aiProviderService = new AIProviderService();
@@ -2049,8 +2048,8 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    // Load data templates from Task_Templates (those with 'name' field)
-    const ddt = await db.collection('Task_Templates').find({ name: { $exists: true, $ne: null } }).toArray();
+    // ✅ Load data templates from Task_Templates (filter by type: 'data' instead of obsolete 'name' field)
+    const ddt = await db.collection('Task_Templates').find({ type: 'data' }).toArray();
     try { console.log('>>> LOAD /api/factory/dialogue-templates count =', Array.isArray(ddt) ? ddt.length : 0); } catch { }
     res.json(ddt);
   } catch (err) {
@@ -2957,41 +2956,94 @@ async function useExistingTemplate(templateName, templates, userDesc) {
     throw new Error(`Template ${templateName} not found`);
   }
 
-  // Risolvi subData con supporto 3 livelli
-  const resolvedSubData = await resolveTemplateRefsWithLevels(template.subData || [], templates);
+  // ✅ NUOVA STRUTTURA: Usa subDataIds invece di subData
+  // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
+  // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
+  // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
+  // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
+  const subDataIds = template.subDataIds || [];
+  const mainDataList = [];
 
-  // Migliora con validazione e esempi
-  const enhancedSubData = resolvedSubData.map(item => ({
-    ...item,
-    validation: {
-      ...item.validation,
-      description: generateValidationDescription(item.type, item.validation),
-      examples: generateTestExamples(item.type, item.validation)
+  if (subDataIds.length > 0) {
+    // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
+    // ✅ PRIMA: Costruisci array di subData instances
+    // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
+    const subDataInstances = [];
+
+    for (const subId of subDataIds) {
+      // ✅ Cerca template per ID (può essere _id, id, name, o label)
+      const subTemplate = templates[subId] ||
+                         Object.values(templates).find((t) =>
+                           t._id === subId || t.id === subId || t.name === subId || t.label === subId
+                         );
+
+      if (subTemplate) {
+        // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
+        // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
+        const filteredStepPrompts = {};
+        if (subTemplate.stepPrompts) {
+          if (subTemplate.stepPrompts.start) {
+            filteredStepPrompts.start = subTemplate.stepPrompts.start;
+          }
+          if (subTemplate.stepPrompts.noInput) {
+            filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
+          }
+          if (subTemplate.stepPrompts.noMatch) {
+            filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
+          }
+          // ❌ Ignoriamo: confirmation, notConfirmed, success
+        }
+
+        // ✅ Usa la label del template trovato (non l'ID!)
+        subDataInstances.push({
+          label: subTemplate.label || subTemplate.name || 'Sub',
+          type: subTemplate.type || subTemplate.name || 'generic',
+          icon: subTemplate.icon || 'FileText',
+          stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
+          constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+          examples: subTemplate.examples || [],
+          subData: []
+        });
+      }
     }
-  }));
+
+    // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
+    // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+    mainDataList.push({
+      label: template.label,
+      type: template.type,
+      icon: template.icon,
+      stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
+      constraints: template.dataContracts || template.constraints || [],
+      examples: template.examples || [],
+      subData: subDataInstances // ✅ Sottodati QUI dentro subData[], non in mainData[]
+    }); // ✅ UN SOLO elemento in mainDataList
+  } else {
+    // ✅ Template semplice: crea istanza dal template root
+    mainDataList.push({
+      label: template.label,
+      type: template.type,
+      icon: template.icon,
+      stepPrompts: template.stepPrompts || null,
+      constraints: template.dataContracts || template.constraints || [],
+      examples: template.examples || [],
+      subData: []
+    });
+  }
 
   return {
     ai: {
       action: 'use_existing',
       template_source: templateName,
       auditing_state: 'AI_generated',
-      reason: `Used existing "${templateName}" template with enhanced validation`,
+      reason: `Used existing "${templateName}" template`,
       label: template.label,
       type: template.type,
       icon: template.icon,
       schema: {
         label: template.label,
-        mainData: [{
-          label: template.label,
-          type: template.type,
-          icon: template.icon,
-          subData: enhancedSubData,
-          validation: {
-            description: `This field contains ${template.label.toLowerCase()} information`,
-            examples: generateTestExamples(template.type, template.validation)
-          },
-          example: generateExampleValue(template.type)
-        }]
+        mainData: mainDataList,
+        stepPrompts: template.stepPrompts || null
       }
     }
   };
@@ -3187,7 +3239,18 @@ app.post('/step2-with-provider', async (req, res) => {
         // Build response from matched template
         const heuristicResponse = buildHeuristicResponse(template, mentionedFields, templates, 'it');
 
+        // ✅ DEBUG: Log stepPrompts nella risposta
         console.log('[STEP2][HEURISTIC] Response built:', JSON.stringify(heuristicResponse, null, 2));
+        console.log('[STEP2][HEURISTIC] DEBUG stepPrompts check:', {
+          schemaHasStepPrompts: !!(heuristicResponse.schema?.stepPrompts),
+          schemaStepPrompts: heuristicResponse.schema?.stepPrompts,
+          mainDataHasStepPrompts: heuristicResponse.schema?.mainData?.some(m => m.stepPrompts),
+          mainDataStepPrompts: heuristicResponse.schema?.mainData?.map(m => ({
+            label: m.label,
+            hasStepPrompts: !!m.stepPrompts,
+            stepPrompts: m.stepPrompts
+          }))
+        });
 
         return res.json({
           ai: heuristicResponse
@@ -3391,12 +3454,22 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
   }
 });
 
-// Preload task heuristics cache at startup
-loadTaskHeuristicsFromDB().then(() => {
-  console.log('[SERVER] Task heuristics cache preloaded');
-}).catch(err => {
-  console.warn('[SERVER] Failed to preload task heuristics cache:', err.message);
-});
+// ✅ Funzione per precaricare tutte le cache del server
+async function preloadAllServerCaches() {
+  console.log('[SERVER] 🚀 Precaricando tutte le cache del server...');
+  try {
+    await Promise.all([
+      loadTemplatesFromDB(),
+      loadTaskHeuristicsFromDB()
+    ]);
+    console.log('[SERVER] ✅ Tutte le cache del server precaricate - inferenza ora istantanea!');
+  } catch (err) {
+    console.warn('[SERVER] ⚠️ Errore nel precaricamento cache (non critico):', err.message);
+  }
+}
+
+// ✅ Precarica tutte le cache all'avvio del server
+preloadAllServerCaches();
 
 app.listen(3100, () => {
   console.log('Backend API pronta su http://localhost:3100');

@@ -754,7 +754,12 @@ export async function getAllDialogueTemplates() {
   if (!res.ok) throw new Error('Errore nel recupero dei DataDialogueTemplates');
   const data = await res.json();
   try {
-    const snap = Array.isArray(data) ? data.map((d: any) => ({ label: d?.label, mains: (d?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) })) : [];
+    // ✅ NUOVA STRUTTURA: Usa subDataIds invece di mainData
+    const snap = Array.isArray(data) ? data.map((d: any) => ({
+      label: d?.label,
+      subDataIds: d?.subDataIds || [],
+      hasStepPrompts: !!d?.stepPrompts
+    })) : [];
     // RIMOSSO: console.log che causava loop infinito
   } catch { }
   return data;

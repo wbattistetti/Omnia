@@ -248,41 +248,100 @@ const WizardInputStep: React.FC<Props> = ({
 
   // If empty, initialize the textarea with the act label (repeat header title inside textbox)
   React.useEffect(() => {
+    console.log('[WIZARD_INPUT][INIT] ════════════════════════════════════════');
+    console.log('[WIZARD_INPUT][INIT] 🎯 Inizializzazione textarea', {
+      timestamp: new Date().toISOString(),
+      dataNodeName: dataNode?.name,
+      currentUserDesc: userDesc,
+      userDescLength: userDesc?.length || 0
+    });
+
     const initial = (dataNode?.name || '').trim();
     if (!userDesc || userDesc.trim().length === 0) {
-      console.log('[WIZARD_INPUT][INIT] Setting initial value', { initial });
-      try { setUserDesc(initial); } catch { }
-      if (textareaRef.current) { textareaRef.current.value = initial; }
+      console.log('[WIZARD_INPUT][INIT] ✅ Impostando valore iniziale', {
+        initial,
+        initialLength: initial.length,
+        willTriggerAutoDetect: initial.length >= 3
+      });
+      try {
+        setUserDesc(initial);
+        console.log('[WIZARD_INPUT][INIT] ✅ setUserDesc chiamato');
+      } catch (err) {
+        console.error('[WIZARD_INPUT][INIT] ❌ Errore in setUserDesc:', err);
+      }
+      if (textareaRef.current) {
+        textareaRef.current.value = initial;
+        console.log('[WIZARD_INPUT][INIT] ✅ textareaRef.value impostato');
+      } else {
+        console.warn('[WIZARD_INPUT][INIT] ⚠️ textareaRef.current è null!');
+      }
+    } else {
+      console.log('[WIZARD_INPUT][INIT] ⏭️ Saltando inizializzazione (userDesc già presente)', {
+        userDesc,
+        userDescLength: userDesc.length
+      });
     }
-  }, [dataNode?.name]);
+    console.log('[WIZARD_INPUT][INIT] ════════════════════════════════════════');
+  }, [dataNode?.name, userDesc]);
 
   // ✅ Trigger auto-detect when userDesc becomes non-empty for the first time
+  // ⚠️ IMPORTANTE: NON triggerare se onAutoDetect è undefined (c'è già un risultato di inferenza)
   const hasAutoDetectedRef = React.useRef<string>('');
   React.useEffect(() => {
-    const trimmed = (userDesc || '').trim();
-
-    console.log('[WIZARD_INPUT][MOUNT_CHECK] Checking if should auto-detect', {
+    console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ════════════════════════════════════════');
+    console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] 🎯 Checking if should auto-detect', {
+      timestamp: new Date().toISOString(),
       userDesc,
-      trimmed,
-      trimmedLength: trimmed.length,
+      trimmed: (userDesc || '').trim(),
+      trimmedLength: (userDesc || '').trim().length,
       hasOnAutoDetect: !!onAutoDetect,
       hasAutoDetected: hasAutoDetectedRef.current,
-      shouldTrigger: trimmed.length >= 3 && onAutoDetect && trimmed !== hasAutoDetectedRef.current
+      dataNodeName: dataNode?.name,
+      skipReason: !onAutoDetect ? 'inference result already available' : 'none'
+    });
+
+    const trimmed = (userDesc || '').trim();
+    // ✅ NON triggerare se onAutoDetect è undefined (significa che c'è già un risultato di inferenza)
+    const shouldTrigger = trimmed.length >= 3 && onAutoDetect && trimmed !== hasAutoDetectedRef.current;
+
+    console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] 📊 Conditions check', {
+      trimmedLengthOk: trimmed.length >= 3,
+      hasOnAutoDetect: !!onAutoDetect,
+      notAlreadyDetected: trimmed !== hasAutoDetectedRef.current,
+      shouldTrigger
     });
 
     // Only trigger if text is long enough, callback exists, and we haven't already processed this text
-    if (trimmed.length >= 3 && onAutoDetect && trimmed !== hasAutoDetectedRef.current) {
-      console.log('[WIZARD_INPUT][MOUNT_CHECK] ✅ Triggering auto-detect (no debounce)', { trimmed });
+    if (shouldTrigger) {
+      console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ✅ TRIGGERING auto-detect!', {
+        trimmed,
+        timestamp: new Date().toISOString(),
+        delay: '100ms (component mount delay)'
+      });
       hasAutoDetectedRef.current = trimmed;
 
       // Small delay just to ensure component is fully mounted and state is stable
       const timer = setTimeout(() => {
-        console.log('[WIZARD_INPUT][MOUNT_CHECK] Timer fired, calling onAutoDetect', { trimmed });
+        console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ⏰ Timer fired, calling onAutoDetect NOW', {
+          trimmed,
+          timestamp: new Date().toISOString(),
+          elapsed: '100ms after mount'
+        });
         onAutoDetect(trimmed);
       }, 100);
-      return () => clearTimeout(timer);
+      return () => {
+        console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] 🧹 Cleanup: clearing timer');
+        clearTimeout(timer);
+      };
+    } else {
+      console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ⏭️ NOT triggering auto-detect', {
+        reason: !trimmed.length || trimmed.length < 3 ? 'text too short' :
+                !onAutoDetect ? 'no callback' :
+                trimmed === hasAutoDetectedRef.current ? 'already detected' : 'unknown'
+      });
     }
-  }, [userDesc, onAutoDetect]); // Run when userDesc or onAutoDetect changes
+    console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ════════════════════════════════════════');
+  }, [userDesc, onAutoDetect, dataNode?.name]); // Run when userDesc or onAutoDetect changes
 
   return (
     <div

@@ -1,12 +1,53 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 
 /**
+ * Helper: deep clone avoiding circular references and DOM elements
+ */
+function safeDeepClone(obj: any, visited = new WeakSet()): any {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (visited.has(obj)) return null; // Circular reference detected
+  if (obj instanceof Date) return new Date(obj);
+  if (obj instanceof RegExp) return new RegExp(obj);
+  // Skip DOM elements, events, and React Fiber nodes
+  if (obj instanceof HTMLElement || obj instanceof Event || obj instanceof Node ||
+      (typeof obj === 'object' && obj.constructor && obj.constructor.name === 'FiberNode')) {
+    return null;
+  }
+
+  visited.add(obj);
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => safeDeepClone(item, visited));
+  }
+
+  const clone: any = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      // Skip React internal properties
+      if (key.startsWith('__react') || key.startsWith('__Fiber') || key === 'stateNode') {
+        continue;
+      }
+      try {
+        clone[key] = safeDeepClone(obj[key], visited);
+      } catch {
+        // Skip properties that can't be cloned
+        continue;
+      }
+    }
+  }
+
+  return clone;
+}
+
+/**
  * Helper: enforce phone kind by label when missing/mis-set
  */
 function coercePhoneKind(src: any) {
   if (!src) return src;
-  const clone = JSON.parse(JSON.stringify(src));
   try {
+    const clone = safeDeepClone(src);
+    if (!clone) return src; // If clone failed, return original
+
     const mains = Array.isArray(clone?.mainData) ? clone.mainData : [];
     for (const m of mains) {
       const label = String(m?.label || '').toLowerCase();
@@ -17,8 +58,11 @@ function coercePhoneKind(src: any) {
         }
       }
     }
-  } catch { }
-  return clone;
+    return clone;
+  } catch (err) {
+    console.warn('[coercePhoneKind] Failed to clone, returning original:', err);
+    return src; // Return original if cloning fails
+  }
 }
 
 /**

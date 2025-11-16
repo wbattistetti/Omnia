@@ -134,21 +134,20 @@ function scoreAtomicTemplate(template, mentionedFields) {
 }
 
 /**
- * Scores a composite template based on how many mainData fields are mentioned.
+ * Scores a composite template based on how many subDataIds are mentioned.
  * @param {Object} template - Composite template dictionary
  * @param {string[]} mentionedFields - List of template names mentioned in description
- * @returns {number} Score: Number of mainData fields that match mentionedFields
+ * @returns {number} Score: Number of subDataIds that match mentionedFields
  */
 function scoreCompositeTemplate(template, mentionedFields) {
-  const mainData = template.mainData || [];
-  if (!mainData.length) {
+  const subDataIds = template.subDataIds || [];
+  if (!subDataIds.length) {
     return 0;
   }
 
   let score = 0;
-  for (const mainItem of mainData) {
-    const templateRef = mainItem.templateRef || mainItem.type;
-    if (templateRef && mentionedFields.includes(templateRef)) {
+  for (const subId of subDataIds) {
+    if (mentionedFields.includes(subId)) {
       score += 1;
     }
   }
@@ -157,15 +156,16 @@ function scoreCompositeTemplate(template, mentionedFields) {
 }
 
 /**
- * Calculates score for a template (atomic or composite).
+ * Calculates score for a template (simple or composite).
  * @param {Object} template - Template dictionary
  * @param {string[]} mentionedFields - List of template names mentioned in description
  * @returns {number} Score: Number of matched fields
  */
 function scoreTemplate(template, mentionedFields) {
-  const templateType = template.type || 'atomic';
+  const subDataIds = template.subDataIds || [];
 
-  if (templateType === 'composite') {
+  // ✅ Template composito se ha subDataIds
+  if (subDataIds.length > 0) {
     return scoreCompositeTemplate(template, mentionedFields);
   } else {
     return scoreAtomicTemplate(template, mentionedFields);
@@ -205,27 +205,14 @@ function findBestTemplateMatch(text, templates, mentionedFields = null) {
   let bestScore = 0;
   let bestReason = '';
 
-  // First pass: look for composite templates that contain ALL mentioned fields
+  // First pass: look for composite templates (subDataIds.length > 0) that contain ALL mentioned fields
   for (const [templateName, template] of Object.entries(templates)) {
-    const templateType = template.type || 'atomic';
+    const subDataIds = template.subDataIds || [];
 
-    if (templateType === 'composite') {
-      const mainData = template.mainData || [];
-      if (!mainData.length) {
-        continue;
-      }
-
-      // Extract template references from mainData
-      const mainDataRefs = [];
-      for (const mainItem of mainData) {
-        const ref = mainItem.templateRef || mainItem.type;
-        if (ref) {
-          mainDataRefs.push(ref);
-        }
-      }
-
+    // ✅ Template composito se ha subDataIds
+    if (subDataIds.length > 0) {
       // Check if composite contains all mentioned fields
-      const containsAll = mentionedFields.every(field => mainDataRefs.includes(field));
+      const containsAll = mentionedFields.every(field => subDataIds.includes(field));
       if (containsAll) {
         const score = mentionedFields.length;
         if (score > bestScore) {
@@ -244,11 +231,11 @@ function findBestTemplateMatch(text, templates, mentionedFields = null) {
       if (score > bestScore) {
         bestTemplate = template;
         bestScore = score;
-        const templateType = template.type || 'atomic';
-        if (templateType === 'composite') {
+        const subDataIds = template.subDataIds || [];
+        if (subDataIds.length > 0) {
           bestReason = `Composite template matches ${score} fields`;
         } else {
-          bestReason = `Atomic template matches ${score} field(s)`;
+          bestReason = `Simple template matches ${score} field(s)`;
         }
       }
     }
@@ -272,109 +259,118 @@ function findBestTemplateMatch(text, templates, mentionedFields = null) {
  * @returns {Object} Response structure compatible with step2 format
  */
 function buildHeuristicResponse(template, mentionedFields, templatesDict, targetLang = 'it') {
-  const templateType = template.type || 'atomic';
+  // ✅ NUOVA STRUTTURA: Usa subDataIds invece di mainData
+  const subDataIds = template.subDataIds || [];
+  const mainDataList = [];
 
-  if (templateType === 'composite') {
-    // For composite, resolve mainData references
-    const mainDataList = [];
-    const mainData = template.mainData || [];
+  if (subDataIds.length > 0) {
+    // ✅ Template composito: crea istanza principale + istanze per ogni sottodato referenziato
+    console.log('[HEURISTIC][buildResponse] 📦 Template composito, creando istanze per sottodati', {
+      templateLabel: template.label || template.name,
+      subDataIds,
+      count: subDataIds.length
+    });
 
-    for (const mainItem of mainData) {
-      const templateRef = mainItem.templateRef || mainItem.type;
-      const isMentioned = templateRef ? mentionedFields.includes(templateRef) : false;
+    // ✅ PRIMA: Costruisci array di subData instances
+    // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
+    // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
+    // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
+    // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
+    // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
+    const subDataInstances = [];
 
-      // Resolve referenced template if exists
-      if (templateRef && templatesDict[templateRef]) {
-        const refTemplate = templatesDict[templateRef];
-        // Deep copy subData to preserve stepPrompts on each item
-        const subDataWithPrompts = (refTemplate.subData || []).map(sub => {
-          const hasStepPrompts = !!(sub.stepPrompts && typeof sub.stepPrompts === 'object' && Object.keys(sub.stepPrompts).length > 0);
-          if (hasStepPrompts) {
-            console.log(`[HEURISTIC][buildResponse] ✅ Preserving sub-data stepPrompts for ${sub.label || 'unknown'} in ${templateRef}`);
+    for (const subId of subDataIds) {
+      // ✅ Cerca template per ID (può essere _id, id, name, o label)
+      const subTemplate = templatesDict[subId] ||
+                         Object.values(templatesDict).find((t) =>
+                           t._id === subId || t.id === subId || t.name === subId || t.label === subId
+                         );
+
+      if (subTemplate) {
+        const isMentioned = mentionedFields.includes(subId) ||
+                           mentionedFields.includes(subTemplate.name) ||
+                           mentionedFields.includes(subTemplate.label);
+
+        // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
+        // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
+        const filteredStepPrompts = {};
+        if (subTemplate.stepPrompts) {
+          if (subTemplate.stepPrompts.start) {
+            filteredStepPrompts.start = subTemplate.stepPrompts.start;
           }
-          return {
-            ...sub,
-            // Preserve stepPrompts if present
-            stepPrompts: sub.stepPrompts || undefined
-          };
-        });
-        mainDataList.push({
-          label: refTemplate.label || templateRef,
-          type: refTemplate.type || templateRef,
-          icon: refTemplate.icon || 'FileText',
-          subData: subDataWithPrompts,
-          required: isMentioned,
-          // Include stepPrompts from referenced template
-          stepPrompts: refTemplate.stepPrompts || null
+          if (subTemplate.stepPrompts.noInput) {
+            filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
+          }
+          if (subTemplate.stepPrompts.noMatch) {
+            filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
+          }
+          // ❌ Ignoriamo: confirmation, notConfirmed, success
+        }
+
+        // ✅ Usa la label del template trovato (non l'ID!)
+        const subInstance = {
+          label: subTemplate.label || subTemplate.name || 'Sub',
+          type: subTemplate.type || subTemplate.name || 'generic',
+          icon: subTemplate.icon || 'FileText',
+          stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
+          constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+          examples: subTemplate.examples || [],
+          subData: [],
+          required: isMentioned
+        };
+        subDataInstances.push(subInstance);
+        console.log('[HEURISTIC][buildResponse] ✅ Creata istanza sottodato', {
+          subId, // ID usato per cercare
+          label: subInstance.label, // Label trovata nel template
+          hasStepPrompts: Object.keys(filteredStepPrompts).length > 0,
+          filteredSteps: Object.keys(filteredStepPrompts)
         });
       } else {
-        // Direct mainData entry
-        // Deep copy subData to preserve stepPrompts on each item
-        const subDataWithPrompts = (mainItem.subData || []).map(sub => {
-          const hasStepPrompts = !!(sub.stepPrompts && typeof sub.stepPrompts === 'object' && Object.keys(sub.stepPrompts).length > 0);
-          if (hasStepPrompts) {
-            console.log(`[HEURISTIC][buildResponse] ✅ Preserving sub-data stepPrompts for ${sub.label || 'unknown'} in direct mainData entry`);
-          }
-          return {
-            ...sub,
-            // Preserve stepPrompts if present
-            stepPrompts: sub.stepPrompts || undefined
-          };
-        });
-        mainDataList.push({
-          label: mainItem.label || templateRef || 'Data',
-          type: templateRef || mainItem.type || 'generic',
-          icon: mainItem.icon || 'FileText',
-          subData: subDataWithPrompts,
-          required: isMentioned,
-          // Include stepPrompts from mainItem if present
-          stepPrompts: mainItem.stepPrompts || null
-        });
+        console.warn('[HEURISTIC][buildResponse] ⚠️ Template sottodato non trovato per ID', { subId });
       }
     }
 
-    return {
-      type: 'object',
-      icon: template.icon || 'Folder',
-      schema: {
-        label: template.label || 'Data',
-        mainData: mainDataList,
-        // Include stepPrompts from composite template if present
-        stepPrompts: template.stepPrompts || null
-      }
+    // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
+    // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+    const mainInstance = {
+      label: template.label || template.name || 'Data',
+      type: template.type || template.name || 'generic',
+      icon: template.icon || 'Calendar',
+      stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
+      constraints: template.dataContracts || template.constraints || [],
+      examples: template.examples || [],
+      subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in mainDataList[]
+      required: true
     };
+    mainDataList.push(mainInstance); // ✅ UN SOLO elemento in mainDataList
   } else {
-    // For atomic, return single mainData entry
-    // Deep copy subData to preserve stepPrompts on each item
-    const subDataWithPrompts = (template.subData || []).map(sub => {
-      const hasStepPrompts = !!(sub.stepPrompts && typeof sub.stepPrompts === 'object' && Object.keys(sub.stepPrompts).length > 0);
-      if (hasStepPrompts) {
-        console.log(`[HEURISTIC][buildResponse] ✅ Preserving sub-data stepPrompts for ${sub.label || 'unknown'} in atomic template ${template.label || template.name || 'unknown'}`);
-      }
-      return {
-        ...sub,
-        // Preserve stepPrompts if present
-        stepPrompts: sub.stepPrompts || undefined
-      };
+    // ✅ Template semplice: crea istanza dal template root
+    console.log('[HEURISTIC][buildResponse] 📄 Template semplice, creando istanza root', {
+      templateLabel: template.label || template.name
     });
-    return {
-      type: 'object',
+    const mainInstance = {
+      label: template.label || template.name || 'Data',
+      type: template.type || template.name || 'generic',
       icon: template.icon || 'FileText',
-      schema: {
-        label: template.label || 'Data',
-        mainData: [{
-          label: template.label || 'Data',
-          type: template.type || template.name || 'generic',
-          icon: template.icon || 'FileText',
-          subData: subDataWithPrompts,
-          // Include stepPrompts from atomic template
-          stepPrompts: template.stepPrompts || null
-        }],
-        // Include stepPrompts at schema level too for consistency
-        stepPrompts: template.stepPrompts || null
-      }
+      stepPrompts: template.stepPrompts || null,
+      constraints: template.dataContracts || template.constraints || [],
+      examples: template.examples || [],
+      subData: [],
+      required: true
     };
+    mainDataList.push(mainInstance);
   }
+
+  return {
+    type: 'object',
+    icon: template.icon || 'FileText',
+    schema: {
+      label: template.label || 'Data',
+      mainData: mainDataList,
+      // Include stepPrompts a livello schema se presente
+      stepPrompts: template.stepPrompts || null
+    }
+  };
 }
 
 module.exports = {

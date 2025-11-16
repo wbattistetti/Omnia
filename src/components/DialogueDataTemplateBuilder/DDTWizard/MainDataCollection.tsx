@@ -55,20 +55,8 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
   // const showRootLabel = mains.length > 1;
   return (
     <div style={{ background: '#0f172a', borderRadius: 12, padding: 16, color: '#e2e8f0', marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        {/* 📍 "Create a dialogue for" + Percentuale inline */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div className={combinedClass} style={{ fontWeight: 700 }}>Create a dialogue for</div>
-          {/* Mostra percentuale solo se presente */}
-          {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
-            const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
-            return (
-              <span className={combinedClass} style={{ color: '#93c5fd', fontWeight: 600 }}>
-                {percentage}%
-              </span>
-            );
-          })()}
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 12 }}>
+        {/* Pulsante Add data più piccolo e in alto */}
         <button
           onClick={onAddMain}
           title="Add data"
@@ -76,16 +64,17 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 8,
+            gap: 4,
             background: 'transparent',
             border: '1px solid #7c3aed',
             color: '#7c3aed',
-            padding: '6px 10px',
+            padding: '4px 8px',
             borderRadius: 999,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontSize: 12
           }}
         >
-          <Plus size={16} />
+          <Plus size={12} />
           <span>Add data</span>
         </button>
       </div>

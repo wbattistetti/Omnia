@@ -116,15 +116,37 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     alreadyStartedRef.current = false;
   }, [dataNode]);
 
+  // ✅ FIX: Avvia pipeline solo al mount iniziale (una volta sola)
+  const mountTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (mountTriggeredRef.current) return;
+    if (hadErrorRef.current) return;
+
+    const { currentStepIndex, stepError, stepLoading, stepResults } = orchestrator.state;
+
+    // ✅ Solo al mount iniziale: currentStepIndex === 0 e nessun risultato
+    if (currentStepIndex === 0 && stepResults.length === 0 && !stepError && !stepLoading) {
+      console.log('🟢 [PIPELINE] Auto-starting pipeline (mount)');
+      mountTriggeredRef.current = true;
+      alreadyStartedRef.current = true;
+      orchestrator.runNextStep().finally(() => { alreadyStartedRef.current = false; });
+    }
+  }, []); // ✅ Solo al mount
+
+  // ✅ Gestisci avanzamento step quando currentStepIndex cambia (dopo il mount)
   useEffect(() => {
     if (hadErrorRef.current) return;
-    if (orchestrator.state.stepError || orchestrator.state.stepLoading) return;
     if (alreadyStartedRef.current) return;
-    alreadyStartedRef.current = true;
-    Promise.resolve()
-      .then(() => orchestrator.runNextStep())
-      .finally(() => { alreadyStartedRef.current = false; });
-    // not depending on dataNode to avoid retriggers on renders
+    if (!mountTriggeredRef.current) return; // ✅ Non partire finché non è stato fatto il mount
+
+    const { currentStepIndex, stepError, stepLoading, stepResults } = orchestrator.state;
+
+    // ✅ Solo per step successivi (currentStepIndex > 0), dopo che il mount è stato fatto
+    if (currentStepIndex > 0 && !stepError && !stepLoading && stepResults.length > 0) {
+      console.log('🟢 [PIPELINE] Continuing to step', currentStepIndex);
+      alreadyStartedRef.current = true;
+      orchestrator.runNextStep().finally(() => { alreadyStartedRef.current = false; });
+    }
   }, [orchestrator.state.currentStepIndex, orchestrator.state.stepError, orchestrator.state.stepLoading]);
 
   useEffect(() => {
