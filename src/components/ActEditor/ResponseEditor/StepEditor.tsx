@@ -82,6 +82,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
           const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
           console.warn('[DEBUG][STEP_EDITOR] ❌ Translation NOT FOUND', {
             stepKey,
+            nodeLabel: node?.label,
             escIdx,
             actionIdx,
             textKey,
@@ -90,16 +91,12 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
             hasActionText: hasDirectText,
             translationsDictKeysCount: Object.keys(translations).length,
             textKeyInDict: textKey in translations,
-            sampleDictKeys: Object.keys(translations).slice(0, 10),
+            sampleDictKeys: Object.keys(translations).slice(0, 5),
             matchingGuidsInDict: isGuid ? Object.keys(translations).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).slice(0, 5) : [],
-            finalText: text
-          });
-        } else if (textKey && translationValue) {
-          console.log('[DEBUG][STEP_EDITOR] ✅ Translation FOUND', {
-            stepKey,
-            textKey,
-            translationValue: translationValue.substring(0, 50),
-            finalText: text?.substring(0, 50)
+            finalText: text,
+            // Mostra se il GUID è presente nei stepPrompts del node
+            nodeStepPrompts: node?.stepPrompts ? Object.keys(node.stepPrompts) : null,
+            nodeHasStepPrompts: !!node?.stepPrompts
           });
         }
 

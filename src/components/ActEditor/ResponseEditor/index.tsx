@@ -294,11 +294,13 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
       return;
     }
 
-    console.log('[DEBUG][LOAD_TRANSLATIONS] Starting load', {
+    console.log('[DEBUG][LOAD_TRANSLATIONS] 🔍 Starting load', {
       projectId: currentProjectId,
       guidsCount: guids.length,
+      uniqueGuids: [...new Set(guids)].length,
       projectLocale,
-      sampleGuids: guids.slice(0, 3)
+      sampleGuids: [...new Set(guids)].slice(0, 5),
+      allGuids: [...new Set(guids)]
     });
 
     (async () => {
@@ -306,15 +308,22 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
         const { loadProjectTranslations } = await import('../../../services/ProjectDataService');
         const projectTranslations = await loadProjectTranslations(currentProjectId, guids);
 
-        console.log('[DEBUG][LOAD_TRANSLATIONS] API response', {
-          requestedGuids: guids.length,
-          receivedTranslations: Object.keys(projectTranslations).length,
-          receivedGuids: Object.keys(projectTranslations),
-          sampleTranslation: Object.entries(projectTranslations).slice(0, 1).map(([guid, t]) => ({
+        const requestedUniqueGuids = [...new Set(guids)];
+        const receivedGuids = Object.keys(projectTranslations);
+        const missingGuids = requestedUniqueGuids.filter(g => !receivedGuids.includes(g));
+
+        console.log('[DEBUG][LOAD_TRANSLATIONS] 📥 API response', {
+          requestedGuids: requestedUniqueGuids.length,
+          receivedTranslations: receivedGuids.length,
+          missingGuids: missingGuids.length,
+          missingGuidsList: missingGuids,
+          receivedGuids: receivedGuids,
+          sampleTranslation: Object.entries(projectTranslations).slice(0, 2).map(([guid, t]) => ({
             guid,
-            en: t.en?.substring(0, 30),
-            it: t.it?.substring(0, 30),
-            pt: t.pt?.substring(0, 30)
+            en: t.en?.substring(0, 50),
+            it: t.it?.substring(0, 50),
+            pt: t.pt?.substring(0, 50),
+            currentLocale: t[projectLocale]?.substring(0, 50)
           }))
         });
 
@@ -615,18 +624,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
 
                       for (const subId of subDataIds) {
                         // ✅ Cerca template per ID (può essere _id, id, name, o label)
-                        console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 Cercando template sottodato per ID:', {
-                          subId,
-                          subIdType: typeof subId,
-                          cacheSize: DialogueTemplateService.getAllTemplates().length,
-                          sampleIds: DialogueTemplateService.getAllTemplates().slice(0, 3).map(t => ({
-                            _id: t._id,
-                            _idType: typeof t._id,
-                            id: t.id,
-                            name: t.name,
-                            label: t.label
-                          }))
-                        });
                         const subTemplate = DialogueTemplateService.getTemplate(subId);
                         if (subTemplate) {
                           // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
@@ -655,12 +652,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                             examples: subTemplate.examples || [],
                             subData: []
                           });
-                          console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅ Creata istanza sottodato', {
-                            subId, // ID usato per cercare
-                            label: subTemplate.label, // Label trovata nel template
-                            hasStepPrompts: Object.keys(filteredStepPrompts).length > 0,
-                            filteredSteps: Object.keys(filteredStepPrompts)
-                          });
                         } else {
                           console.warn('[RESPONSE_EDITOR][LOCAL_MATCH] ⚠️ Template sottodato non trovato per ID', { subId });
                         }
@@ -668,17 +659,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
 
                       // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
                       // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
-                      console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 DEBUG subDataInstances costruite:', {
-                        count: subDataInstances.length,
-                        subDataInstances: subDataInstances.map(s => ({
-                          label: s.label,
-                          type: s.type,
-                          icon: s.icon,
-                          hasStepPrompts: !!s.stepPrompts,
-                          stepPromptsKeys: s.stepPrompts ? Object.keys(s.stepPrompts) : []
-                        }))
-                      });
-
                       const mainInstance = {
                         label: template.label || template.name || 'Data',
                         type: template.type,
@@ -689,13 +669,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                         subData: subDataInstances // ✅ Sottodati QUI dentro subData[], non in mainData[]
                       };
                       mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
-
-                      console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 DEBUG mainInstance costruito:', {
-                        label: mainInstance.label,
-                        subDataCount: mainInstance.subData.length,
-                        subDataLabels: mainInstance.subData.map(s => s.label),
-                        fullMainInstance: JSON.parse(JSON.stringify(mainInstance))
-                      });
                     } else {
                       // ✅ Template semplice: crea istanza dal template root
                       console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 📄 Template semplice, creando istanza root');
@@ -711,26 +684,55 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                       mainData.push(mainInstance);
                     }
 
-                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅ Istanza DDT costruita', {
+                    // ✅ Estrai tutti i GUID dai stepPrompts per il caricamento traduzioni
+                    const allGuids: string[] = [];
+                    mainData.forEach((m: any) => {
+                      if (m.stepPrompts) {
+                        Object.values(m.stepPrompts).forEach((guids: any) => {
+                          if (Array.isArray(guids)) {
+                            guids.forEach((guid: string) => {
+                              if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+                                allGuids.push(guid);
+                              }
+                            });
+                          }
+                        });
+                      }
+                      if (m.subData) {
+                        m.subData.forEach((s: any) => {
+                          if (s.stepPrompts) {
+                            Object.values(s.stepPrompts).forEach((guids: any) => {
+                              if (Array.isArray(guids)) {
+                                guids.forEach((guid: string) => {
+                                  if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+                                    allGuids.push(guid);
+                                  }
+                                });
+                              }
+                            });
+                          }
+                        });
+                      }
+                    });
+
+                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 GUID estratti dai stepPrompts:', {
+                      totalGuids: allGuids.length,
+                      uniqueGuids: [...new Set(allGuids)].length,
+                      guids: [...new Set(allGuids)]
+                    });
+
+                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅ Istanza DDT costruita con stepPrompts:', {
                       templateLabel: template.label || template.name,
                       mainDataCount: mainData.length,
                       mainDataWithStepPrompts: mainData.map((m: any) => ({
                         label: m.label,
                         hasStepPrompts: !!m.stepPrompts,
-                        stepPrompts: m.stepPrompts,
+                        stepPromptsKeys: m.stepPrompts ? Object.keys(m.stepPrompts) : [],
                         subDataCount: m.subData?.length || 0,
-                        subDataLabels: m.subData?.map((s: any) => s.label) || []
-                      }))
-                    });
-
-                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 DEBUG mainData COMPLETO:', {
-                      mainData: JSON.parse(JSON.stringify(mainData)),
-                      mainDataStructure: mainData.map((m: any) => ({
-                        label: m.label,
-                        subData: m.subData?.map((s: any) => ({
+                        subDataWithStepPrompts: m.subData?.map((s: any) => ({
                           label: s.label,
-                          type: s.type,
-                          icon: s.icon
+                          hasStepPrompts: !!s.stepPrompts,
+                          stepPromptsKeys: s.stepPrompts ? Object.keys(s.stepPrompts) : []
                         })) || []
                       }))
                     });

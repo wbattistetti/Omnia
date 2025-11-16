@@ -42,6 +42,8 @@ function extractBasePromptKeys(stepPayload: any): Record<string, string> {
 
 type AssembleOptions = {
   escalationCounts?: Partial<Record<'noMatch' | 'noInput' | 'confirmation', number>>;
+  templateTranslations?: Record<string, { en: string; it: string; pt: string }>; // Translations from template GUIDs
+  projectLocale?: 'en' | 'it' | 'pt'; // Project language
 };
 
 export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): AssembledDDT {
@@ -50,6 +52,17 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
   // Limit AI-driven re-asks to max 2
   const defaultEscalations = { noMatch: 2, noInput: 2, confirmation: 2 } as Record<string, number>;
   const counts = { ...defaultEscalations, ...(options?.escalationCounts || {}) } as Record<string, number>;
+
+  // Get project locale (default to 'pt' if not provided)
+  const projectLocale = options?.projectLocale || (() => {
+    try {
+      return (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
+    } catch {
+      return 'pt';
+    }
+  })();
+
+  const templateTranslations = options?.templateTranslations || {};
 
   const assembleNode = (node: SchemaNode, nodePath: string[]): any => {
     const nodeId = uuidv4();
@@ -317,8 +330,33 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
           templateKeyForEsc = nodeStepPrompts[stepKey][escIdx];
         }
 
-        // Use actionInstanceId as the unique GUID for both the action and the translation key
+        // ✅ Generate new runtime GUID for instance (always generate new, even if template key exists)
         const actionInstanceId = uuidv4();
+
+        // ✅ If we have a template key, copy translation from template to new runtime GUID
+        if (templateKeyForEsc && templateTranslations[templateKeyForEsc]) {
+          const templateTranslation = templateTranslations[templateKeyForEsc];
+          // Copy translation for project locale only
+          const templateText = templateTranslation[projectLocale] || templateTranslation.en || templateTranslation.it || templateTranslation.pt || '';
+
+          if (templateText) {
+            // Add translation to DDT translations with new runtime GUID
+            // Structure: translations[projectLocale][actionInstanceId] = templateText
+            if (!translations[projectLocale]) {
+              translations[projectLocale] = {};
+            }
+            translations[projectLocale][actionInstanceId] = templateText;
+
+            console.log('[assembleFinalDDT] Copied translation from template', {
+              path,
+              stepKey,
+              templateGuid: templateKeyForEsc,
+              runtimeGuid: actionInstanceId,
+              locale: projectLocale,
+              text: templateText.substring(0, 50)
+            });
+          }
+        }
 
         const baseAction = {
           actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
@@ -334,7 +372,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
           }]
         };
 
-        // Store template key mapping for later translation copying (for ALL escalations)
+        // Store template key mapping for reference (not used for translation lookup)
         if (templateKeyForEsc) {
           (escalation as any).__templateKey = templateKeyForEsc;
         }
@@ -401,18 +439,27 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
       }
     });
 
-    console.log('[assembleFinalDDT][COMPLETE]', { mainsCount: assembledMains.length, translationsCount: Object.keys(translations).length });
+    console.log('[assembleFinalDDT][COMPLETE]', {
+      mainsCount: assembledMains.length,
+      translationsCount: Object.keys(translations).length,
+      projectLocale,
+      translationsByLocale: {
+        en: Object.keys(translations.en || {}).length,
+        it: Object.keys(translations.it || {}).length,
+        pt: Object.keys(translations.pt || {}).length
+      }
+    });
 
     // Initialize translations structure with all locales (en, it, pt)
-    // This ensures the structure is correct even if template translations haven't been loaded yet
+    // Project locale translations are populated, others are empty (will be saved to DB on explicit save)
     const result = {
       id: ddtId,
       label: rootLabel || 'Data',
       mainData: assembledMains,
       translations: {
-        en: translations,
-        it: {},
-        pt: {}
+        en: translations.en || {},
+        it: translations.it || {},
+        pt: translations.pt || {}
       },
       v2Draft: getAllV2Draft(),
     };

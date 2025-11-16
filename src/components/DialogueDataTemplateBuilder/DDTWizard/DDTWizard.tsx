@@ -216,13 +216,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         label: m.label,
         type: m.type,
         icon: m.icon,
+        constraints: m.constraints || [],
+        // ✅ Preserva stepPrompts per main
+        stepPrompts: m.stepPrompts || null,
         subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
           label: s.label,
           type: s.type,
           icon: s.icon,
-          constraints: s.constraints
-        })) : [],
-        constraints: m.constraints
+          constraints: s.constraints || [],
+          // ✅ Preserva stepPrompts per subData (solo start, noInput, noMatch)
+          stepPrompts: s.stepPrompts || null
+        })) : []
       }));
 
       return {
@@ -246,8 +250,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         label: m.label,
         type: m.type,
         icon: m.icon,
-        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({ label: s.label, type: s.type, icon: s.icon, constraints: s.constraints })) : [],
-        constraints: m.constraints
+        constraints: m.constraints || [],
+        // ✅ Preserva stepPrompts per main
+        stepPrompts: m.stepPrompts || null,
+        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+          label: s.label,
+          type: s.type,
+          icon: s.icon,
+          constraints: s.constraints || [],
+          // ✅ Preserva stepPrompts per subData (solo start, noInput, noMatch)
+          stepPrompts: s.stepPrompts || null
+        })) : []
       })) as SchemaNode[];
       return mains;
     }
@@ -1298,19 +1311,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         // Normalizza l'ID cercato (potrebbe essere ObjectId come stringa)
         const normalizedId = String(subId).trim();
 
-        console.log('[DDT][Wizard][templateSelect] 🔍 Cercando template sottodato per ID:', {
-          subId: normalizedId,
-          subIdType: typeof subId,
-          cacheSize: allTemplates.length,
-          sampleIds: allTemplates.slice(0, 3).map((t: any) => ({
-            _id: t._id ? String(t._id) : null,
-            _idType: typeof t._id,
-            id: t.id,
-            name: t.name,
-            label: t.label
-          }))
-        });
-
         const subTemplate = allTemplates.find((t: any) => {
           // Confronta _id (potrebbe essere ObjectId o stringa)
           if (t._id) {
@@ -1355,12 +1355,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             examples: subTemplate.examples || [],
             subData: []
           });
-          console.log('[DDT][Wizard][templateSelect] ✅ Caricato template sottodato', {
-            subId, // ID usato per cercare
-            label: subTemplate.label, // Label trovata nel template
-            hasStepPrompts: Object.keys(filteredStepPrompts).length > 0,
-            filteredSteps: Object.keys(filteredStepPrompts)
-          });
         } else {
           console.warn('[DDT][Wizard][templateSelect] ⚠️ Template sottodato non trovato per ID', { subId });
           // Fallback: crea placeholder senza stepPrompts
@@ -1378,17 +1372,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
       // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
       // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
-      console.log('[DDT][Wizard][templateSelect] 🔍 DEBUG subDataInstances costruite:', {
-        count: subDataInstances.length,
-        subDataInstances: subDataInstances.map(s => ({
-          label: s.label,
-          type: s.type,
-          icon: s.icon,
-          hasStepPrompts: !!s.stepPrompts,
-          stepPromptsKeys: s.stepPrompts ? Object.keys(s.stepPrompts) : []
-        }))
-      });
-
       const mainInstance = {
         label: template.label || template.name || 'Data',
         type: template.type,
@@ -1399,13 +1382,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         subData: subDataInstances // ✅ Sottodati QUI dentro subData[], non in mainData[]
       };
       mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
-
-      console.log('[DDT][Wizard][templateSelect] 🔍 DEBUG mainInstance costruito:', {
-        label: mainInstance.label,
-        subDataCount: mainInstance.subData.length,
-        subDataLabels: mainInstance.subData.map(s => s.label),
-        fullMainInstance: JSON.parse(JSON.stringify(mainInstance))
-      });
     } else {
       // ✅ Template semplice: crea istanza dal template root
       console.log('[DDT][Wizard][templateSelect] 📄 Template semplice, creando istanza root');
@@ -1420,17 +1396,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       });
     }
 
-    console.log('[DDT][Wizard][templateSelect] Built mainData from template:', {
-      root,
-      mainDataLength: mainData.length,
-      mainData: JSON.parse(JSON.stringify(mainData)),
-      mainDataStructure: mainData.map((m: any) => ({
-        label: m.label,
-        subDataCount: m.subData?.length || 0,
-        subDataLabels: m.subData?.map((s: any) => s.label) || []
-      }))
-    });
-
     const mains0: SchemaNode[] = mainData.map((m: any) => {
       const label = m.label || m.name || 'Field';
       let type = m.type;
@@ -1444,23 +1409,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         icon: m.icon,
         constraints: m.constraints || [],
         // ✅ Preserva subData con i loro stepPrompts filtrati
-        subData: Array.isArray(m.subData) ? (() => {
-          const mappedSubData = m.subData.map((s: any) => ({
-            label: s.label || s.name || 'Field',
-            type: s.type,
-            icon: s.icon,
-            constraints: s.constraints || [],
-            // ✅ Preserva stepPrompts filtrati (solo start, noInput, noMatch) per sottodati
-            stepPrompts: s.stepPrompts || null
-          }));
-          console.log('[DDT][Wizard][templateSelect] 🔍 DEBUG mappatura subData per', m.label, ':', {
-            originalSubDataCount: m.subData?.length || 0,
-            mappedSubDataCount: mappedSubData.length,
-            mappedSubDataLabels: mappedSubData.map(s => s.label),
-            mappedSubData: JSON.parse(JSON.stringify(mappedSubData))
-          });
-          return mappedSubData;
-        })() : [],
+        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+          label: s.label || s.name || 'Field',
+          type: s.type,
+          icon: s.icon,
+          constraints: s.constraints || [],
+          // ✅ Preserva stepPrompts filtrati (solo start, noInput, noMatch) per sottodati
+          stepPrompts: s.stepPrompts || null
+        })) : [],
         // ✅ Include stepPrompts completi (tutti e 6 i tipi) per main
         stepPrompts: m.stepPrompts || template.stepPrompts || null
       } as any;
@@ -1478,7 +1434,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         label: m.label,
         type: m.type,
         icon: m.icon,
-        subDataCount: m.subData?.length || 0
+        subDataCount: m.subData?.length || 0,
+        hasStepPrompts: !!(m as any).stepPrompts,
+        stepPromptsKeys: (m as any).stepPrompts ? Object.keys((m as any).stepPrompts) : [],
+        subDataWithStepPrompts: (m.subData || []).map((s: any) => ({
+          label: s.label,
+          hasStepPrompts: !!s.stepPrompts,
+          stepPromptsKeys: s.stepPrompts ? Object.keys(s.stepPrompts) : []
+        }))
       }))
     });
 
@@ -1545,16 +1508,41 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             const displayMains = schemaMains.length > 0 ? schemaMains : mains0;
             const displayRoot = schemaRootLabel || root;
 
-            console.log('[DDT][Wizard][heuristic-confirm] 🔍 DEBUG visualizzazione:', {
-              pendingHeuristicMatchMains0: JSON.parse(JSON.stringify(mains0)),
-              schemaMains: JSON.parse(JSON.stringify(schemaMains)),
-              displayMains: JSON.parse(JSON.stringify(displayMains)),
-              displayMainsStructure: displayMains.map((m: any) => ({
-                label: m.label,
-                subDataCount: m.subData?.length || 0,
-                subDataLabels: m.subData?.map((s: any) => s.label) || [],
-                hasSubData: !!m.subData && Array.isArray(m.subData) && m.subData.length > 0
-              }))
+            // ✅ Estrai GUID dai stepPrompts per debug traduzioni
+            const allGuidsFromMains: string[] = [];
+            displayMains.forEach((m: any) => {
+              if (m.stepPrompts) {
+                Object.values(m.stepPrompts).forEach((guids: any) => {
+                  if (Array.isArray(guids)) {
+                    guids.forEach((guid: string) => {
+                      if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+                        allGuidsFromMains.push(guid);
+                      }
+                    });
+                  }
+                });
+              }
+              if (m.subData) {
+                m.subData.forEach((s: any) => {
+                  if (s.stepPrompts) {
+                    Object.values(s.stepPrompts).forEach((guids: any) => {
+                      if (Array.isArray(guids)) {
+                        guids.forEach((guid: string) => {
+                          if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+                            allGuidsFromMains.push(guid);
+                          }
+                        });
+                      }
+                    });
+                  }
+                });
+              }
+            });
+
+            console.log('[DDT][Wizard][heuristic-confirm] 🔍 GUID estratti dai stepPrompts:', {
+              totalGuids: allGuidsFromMains.length,
+              uniqueGuids: [...new Set(allGuidsFromMains)].length,
+              guids: [...new Set(allGuidsFromMains)]
             });
 
             return (
@@ -1804,315 +1792,65 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             });
 
                             const emptyStore = buildArtifactStore([]);
+                            const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
                             const finalDDT = assembleFinalDDT(
                               root || 'Data',
                               mains0,
                               emptyStore,
-                              { escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 } }
+                              {
+                                escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
+                                templateTranslations: templateTranslations,
+                                projectLocale: projectLang
+                              }
                             );
 
-                            // Map template GUIDs to instance GUIDs and copy translations
-                            if (finalDDT.translations && Object.keys(templateTranslations).length > 0) {
-                              if (!finalDDT.translations.en) finalDDT.translations.en = {};
-                              if (!(finalDDT.translations as any).it) (finalDDT.translations as any).it = {};
-                              if (!(finalDDT.translations as any).pt) (finalDDT.translations as any).pt = {};
+                            // ✅ Translations are already created during assembly in assembleFinal.ts
+                            // They are stored in finalDDT.translations[projectLocale] with runtime GUIDs as keys
+                            // Now we need to save them to the project database
+                            const projectTranslationsToSave: Array<{ guid: string; language: string; text: string; type: string }> = [];
 
-                              // Map template GUIDs to instance GUIDs (actionInstanceId) by iterating through the DDT structure
-                              const templateGuidToInstanceGuid = new Map<string, string>();
-
-                              // Extract mapping from mainData structure
-                              finalDDT.mainData?.forEach((main: any) => {
-                                // Map messages (start, noMatch, etc.)
-                                if (main.messages) {
-                                  Object.entries(main.messages).forEach(([stepKey, msg]: [string, any]) => {
-                                    const instanceGuid = msg.textKey; // actionInstanceId
-                                    const templateGuid = (msg as any).__templateKey; // Now contains GUID, not template key
-                                    console.log('[DDT][Wizard][heuristicMatch] Mapping message', {
-                                      stepKey,
-                                      instanceGuid,
-                                      templateGuid,
-                                      hasTemplateGuid: !!templateGuid
-                                    });
-                                    if (templateGuid && instanceGuid) {
-                                      templateGuidToInstanceGuid.set(templateGuid, instanceGuid);
-                                    }
-                                  });
-                                }
-
-                                // Map escalations
-                                if (main.steps) {
-                                  Object.entries(main.steps).forEach(([stepKey, step]: [string, any]) => {
-                                    if (step.escalations) {
-                                      step.escalations.forEach((esc: any, escIdx: number) => {
-                                        const actionInstanceId = esc.actions?.[0]?.actionInstanceId;
-                                        const templateGuid = (esc as any).__templateKey; // Now contains GUID
-                                        console.log('[DDT][Wizard][heuristicMatch] Mapping escalation', {
-                                          stepKey,
-                                          escIdx,
-                                          actionInstanceId,
-                                          templateGuid,
-                                          hasTemplateGuid: !!templateGuid
-                                        });
-                                        if (templateGuid && actionInstanceId) {
-                                          templateGuidToInstanceGuid.set(templateGuid, actionInstanceId);
-                                        }
-                                      });
-                                    }
-                                  });
-                                }
-
-                                // Also check subData recursively
-                                if (main.subData && Array.isArray(main.subData)) {
-                                  console.log('[DDT][Wizard][heuristicMatch] 🔍 MAPPING SUB DATA FOR MAIN', {
-                                    mainLabel: main.label,
-                                    subDataCount: main.subData.length
-                                  });
-
-                                  const processSubData = (subDataArray: any[], level: number = 0) => {
-                                    subDataArray.forEach((sub: any, subIdx: number) => {
-                                      console.log('[DDT][Wizard][heuristicMatch] 🔍 MAPPING SUB DATA ITEM', {
-                                        mainLabel: main.label,
-                                        subIndex: subIdx,
-                                        subLabel: sub.label,
-                                        level,
-                                        hasMessages: !!sub.messages,
-                                        hasSteps: !!sub.steps,
-                                        messagesCount: sub.messages ? Object.keys(sub.messages).length : 0,
-                                        stepsCount: sub.steps ? Object.keys(sub.steps).length : 0
-                                      });
-
-                                      if (sub.messages) {
-                                        console.log('[DDT][Wizard][heuristicMatch] 🔍 SUB DATA HAS MESSAGES', {
-                                          mainLabel: main.label,
-                                          subLabel: sub.label,
-                                          messagesKeys: Object.keys(sub.messages),
-                                          messages: sub.messages
-                                        });
-                                        Object.entries(sub.messages).forEach(([stepKey, msg]: [string, any]) => {
-                                          const instanceGuid = msg.textKey; // actionInstanceId
-                                          const templateGuid = (msg as any).__templateKey; // Now contains GUID
-                                          console.log('[DDT][Wizard][heuristicMatch] 🔍 MAPPING SUB DATA MESSAGE', {
-                                            mainLabel: main.label,
-                                            subLabel: sub.label,
-                                            stepKey,
-                                            instanceGuid,
-                                            templateGuid,
-                                            hasTemplateGuid: !!templateGuid,
-                                            msgFull: JSON.stringify(msg).substring(0, 200)
-                                          });
-                                          if (templateGuid && instanceGuid) {
-                                            templateGuidToInstanceGuid.set(templateGuid, instanceGuid);
-                                            console.log('[DDT][Wizard][heuristicMatch] ✅ MAPPED SUB DATA MESSAGE', {
-                                              templateGuid,
-                                              instanceGuid,
-                                              mainLabel: main.label,
-                                              subLabel: sub.label,
-                                              stepKey
-                                            });
-                                          } else {
-                                            console.warn('[DDT][Wizard][heuristicMatch] ⚠️ SUB DATA MESSAGE MISSING TEMPLATE GUID', {
-                                              mainLabel: main.label,
-                                              subLabel: sub.label,
-                                              stepKey,
-                                              instanceGuid,
-                                              hasTemplateGuid: !!templateGuid,
-                                              msgKeys: Object.keys(msg || {}),
-                                              msgValue: msg
-                                            });
-                                          }
-                                        });
-                                      } else {
-                                        console.warn('[DDT][Wizard][heuristicMatch] ⚠️ SUB DATA HAS NO MESSAGES', {
-                                          mainLabel: main.label,
-                                          subLabel: sub.label,
-                                          subKeys: Object.keys(sub),
-                                          hasSteps: !!sub.steps,
-                                          stepsKeys: sub.steps ? Object.keys(sub.steps) : []
-                                        });
-                                      }
-                                      if (sub.steps) {
-                                        Object.entries(sub.steps).forEach(([stepKey, step]: [string, any]) => {
-                                          if (step.escalations) {
-                                            step.escalations.forEach((esc: any, escIdx: number) => {
-                                              const actionInstanceId = esc.actions?.[0]?.actionInstanceId;
-                                              const templateGuid = (esc as any).__templateKey; // Now contains GUID
-                                              console.log('[DDT][Wizard][heuristicMatch] 🔍 MAPPING SUB DATA ESCALATION', {
-                                                mainLabel: main.label,
-                                                subLabel: sub.label,
-                                                stepKey,
-                                                escIdx,
-                                                actionInstanceId,
-                                                templateGuid,
-                                                hasTemplateGuid: !!templateGuid
-                                              });
-                                              if (templateGuid && actionInstanceId) {
-                                                templateGuidToInstanceGuid.set(templateGuid, actionInstanceId);
-                                                console.log('[DDT][Wizard][heuristicMatch] ✅ MAPPED SUB DATA ESCALATION', {
-                                                  templateGuid,
-                                                  instanceGuid: actionInstanceId,
-                                                  mainLabel: main.label,
-                                                  subLabel: sub.label,
-                                                  stepKey,
-                                                  escIdx
-                                                });
-                                              } else {
-                                                console.warn('[DDT][Wizard][heuristicMatch] ⚠️ SUB DATA ESCALATION MISSING TEMPLATE GUID', {
-                                                  mainLabel: main.label,
-                                                  subLabel: sub.label,
-                                                  stepKey,
-                                                  escIdx,
-                                                  hasTemplateGuid: !!templateGuid
-                                                });
-                                              }
-                                            });
-                                          }
-                                        });
-                                      }
-                                      if (sub.subData && Array.isArray(sub.subData)) {
-                                        processSubData(sub.subData, level + 1);
-                                      }
-                                    });
-                                  };
-                                  processSubData(main.subData, 0);
-                                } else {
-                                  console.log('[DDT][Wizard][heuristicMatch] ⚠️ MAIN DATA HAS NO SUB DATA', {
-                                    mainLabel: main.label,
-                                    hasSubData: !!(main.subData && Array.isArray(main.subData)),
-                                    subDataCount: main.subData ? (Array.isArray(main.subData) ? main.subData.length : 0) : 0
+                            // Extract translations from finalDDT.translations[projectLocale] and prepare for saving
+                            if (finalDDT.translations && finalDDT.translations[projectLang]) {
+                              Object.entries(finalDDT.translations[projectLang]).forEach(([guid, text]) => {
+                                if (typeof text === 'string' && text.trim()) {
+                                  projectTranslationsToSave.push({
+                                    guid: guid,
+                                    language: projectLang,
+                                    text: text,
+                                    type: 'Instance' // Mark as instance translation (not template)
                                   });
                                 }
                               });
 
-                              // Copy translations from template GUIDs to instance GUIDs
-                              // Also prepare translations for saving to project Translations collection
-                              let mergedCount = 0;
-                              const projectTranslationsToSave: Array<{ guid: string; language: string; text: string; type: string }> = [];
-                              const mappingDetails: Array<{ templateGuid: string; instanceGuid: string; hasPt: boolean; ptValue: string }> = [];
-                              console.log('[DDT][Wizard][heuristicMatch] 🔍 START COPYING TRANSLATIONS', {
-                                totalMappings: templateGuidToInstanceGuid.size,
-                                templateTranslationsGuids: Object.keys(templateTranslations),
-                                finalDDTTranslationsStructure: {
-                                  hasEn: !!finalDDT.translations.en,
-                                  hasIt: !!(finalDDT.translations as any).it,
-                                  hasPt: !!(finalDDT.translations as any).pt
-                                }
+                              console.log('[DDT][Wizard][heuristicMatch] Prepared translations for saving', {
+                                projectLang,
+                                translationsCount: projectTranslationsToSave.length,
+                                sampleGuids: projectTranslationsToSave.slice(0, 5).map(t => t.guid)
                               });
+                            }
 
-                              templateGuidToInstanceGuid.forEach((instanceGuid, templateGuid) => {
-                                const templateTranslation = templateTranslations[templateGuid];
-                                console.log('[DDT][Wizard][heuristicMatch] 🔍 COPYING TRANSLATION', {
-                                  templateGuid,
-                                  instanceGuid,
-                                  hasTemplateTranslation: !!templateTranslation,
-                                  templateTranslationStructure: templateTranslation ? {
-                                    hasEn: !!templateTranslation.en,
-                                    hasIt: !!templateTranslation.it,
-                                    hasPt: !!templateTranslation.pt,
-                                    enValue: templateTranslation.en?.substring(0, 30),
-                                    itValue: templateTranslation.it?.substring(0, 30),
-                                    ptValue: templateTranslation.pt?.substring(0, 30)
-                                  } : null
-                                });
-
-                                if (templateTranslation) {
-                                  // Copy to ddt.translations (for retrocompatibility)
-                                  if (templateTranslation.en) {
-                                    finalDDT.translations.en[instanceGuid] = templateTranslation.en;
-                                    mergedCount++;
-                                    projectTranslationsToSave.push({
-                                      guid: instanceGuid,
-                                      language: 'en',
-                                      text: templateTranslation.en,
-                                      type: 'DDT'
-                                    });
-                                    console.log('[DDT][Wizard][heuristicMatch] ✅ COPIED EN', {
-                                      instanceGuid,
-                                      value: templateTranslation.en.substring(0, 30),
-                                      nowInEn: !!finalDDT.translations.en[instanceGuid]
-                                    });
-                                  }
-                                  if (templateTranslation.it) {
-                                    (finalDDT.translations as any).it[instanceGuid] = templateTranslation.it;
-                                    mergedCount++;
-                                    projectTranslationsToSave.push({
-                                      guid: instanceGuid,
-                                      language: 'it',
-                                      text: templateTranslation.it,
-                                      type: 'DDT'
-                                    });
-                                    console.log('[DDT][Wizard][heuristicMatch] ✅ COPIED IT', {
-                                      instanceGuid,
-                                      value: templateTranslation.it.substring(0, 30),
-                                      nowInIt: !!(finalDDT.translations as any).it[instanceGuid]
-                                    });
-                                  }
-                                  if (templateTranslation.pt) {
-                                    (finalDDT.translations as any).pt[instanceGuid] = templateTranslation.pt;
-                                    mergedCount++;
-                                    projectTranslationsToSave.push({
-                                      guid: instanceGuid,
-                                      language: 'pt',
-                                      text: templateTranslation.pt,
-                                      type: 'DDT'
-                                    });
-                                    console.log('[DDT][Wizard][heuristicMatch] ✅ COPIED PT', {
-                                      instanceGuid,
-                                      value: templateTranslation.pt.substring(0, 30),
-                                      nowInPt: !!(finalDDT.translations as any).pt[instanceGuid],
-                                      verifiedValue: (finalDDT.translations as any).pt[instanceGuid]?.substring(0, 30)
-                                    });
-                                    mappingDetails.push({
-                                      templateGuid,
-                                      instanceGuid,
-                                      hasPt: true,
-                                      ptValue: templateTranslation.pt.substring(0, 50)
-                                    });
-                                  } else {
-                                    console.warn('[DDT][Wizard][heuristicMatch] ⚠️ NO PT TRANSLATION', {
-                                      templateGuid,
-                                      instanceGuid,
-                                      hasEn: !!templateTranslation.en,
-                                      hasIt: !!templateTranslation.it
-                                    });
-                                    mappingDetails.push({
-                                      templateGuid,
-                                      instanceGuid,
-                                      hasPt: false,
-                                      ptValue: ''
-                                    });
-                                  }
-                                } else {
-                                  console.warn('[DDT][Wizard][heuristicMatch] ⚠️ NO TEMPLATE TRANSLATION FOUND', {
-                                    templateGuid,
-                                    instanceGuid,
-                                    availableTemplateGuids: Object.keys(templateTranslations)
-                                  });
-                                }
-                              });
-
-                              // Save translations to project Translations collection
-                              if (currentProjectId && projectTranslationsToSave.length > 0) {
-                                try {
-                                  const { saveProjectTranslations } = await import('../../../services/ProjectDataService');
-                                  await saveProjectTranslations(currentProjectId, projectTranslationsToSave);
-                                  console.log('[DDT][Wizard][heuristicMatch] ✅ Saved', projectTranslationsToSave.length, 'translations to project Translations collection');
-                                } catch (err) {
-                                  console.error('[DDT][Wizard][heuristicMatch] Failed to save project translations:', err);
-                                  // Continue even if save fails - translations are in ddt.translations
-                                }
-                              } else {
-                                console.warn('[DDT][Wizard][heuristicMatch] ⚠️ Cannot save project translations:', {
-                                  hasProjectId: !!currentProjectId,
-                                  translationsCount: projectTranslationsToSave.length
-                                });
+                            // Save translations to project Translations collection
+                            if (currentProjectId && projectTranslationsToSave.length > 0) {
+                              try {
+                                const { saveProjectTranslations } = await import('../../../services/ProjectDataService');
+                                await saveProjectTranslations(currentProjectId, projectTranslationsToSave);
+                                console.log('[DDT][Wizard][heuristicMatch] ✅ Saved', projectTranslationsToSave.length, 'translations to project Translations collection');
+                              } catch (err) {
+                                console.error('[DDT][Wizard][heuristicMatch] Failed to save project translations:', err);
+                                // Continue even if save fails - translations are in ddt.translations
                               }
+                            } else {
+                              console.warn('[DDT][Wizard][heuristicMatch] ⚠️ Cannot save project translations:', {
+                                hasProjectId: !!currentProjectId,
+                                translationsCount: projectTranslationsToSave.length
+                              });
+                            }
 
-                              // ✅ IMPORTANT: Set action.text directly in each action for immediate display
-                              // This ensures the chat simulator can display text even if translation lookup fails
-                              const projectLang = localStorage.getItem('project.lang') || 'pt';
-                              console.log('[DDT][Wizard][heuristicMatch] Setting action.text directly', { projectLang });
+                            // ✅ IMPORTANT: Set action.text directly in each action for immediate display
+                            // This ensures the chat simulator can display text even if translation lookup fails
+                            console.log('[DDT][Wizard][heuristicMatch] Setting action.text directly', { projectLang });
 
-                              finalDDT.mainData?.forEach((main: any) => {
+                            finalDDT.mainData?.forEach((main: any) => {
                                 // Set text in main escalations
                                 if (main.steps) {
                                   Object.values(main.steps).forEach((step: any) => {
@@ -2163,97 +1901,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 }
                               });
 
-                              console.log('[DDT][Wizard][heuristicMatch] Translation mapping details', {
-                                totalMappings: templateGuidToInstanceGuid.size,
-                                mappingsWithPt: mappingDetails.filter(m => m.hasPt).length,
-                                sampleMappings: mappingDetails.slice(0, 5),
-                                allMappings: mappingDetails.map(m => ({
-                                  templateGuid: m.templateGuid,
-                                  instanceGuid: m.instanceGuid,
-                                  hasPt: m.hasPt,
-                                  ptValue: m.ptValue
-                                })),
-                                projectTranslationsSaved: projectTranslationsToSave.length
-                              });
-
-                              // 🔍 DEBUG: Verifica che le traduzioni siano state copiate correttamente
-                              const sampleInstanceGuid = mappingDetails[0]?.instanceGuid;
-                              if (sampleInstanceGuid) {
-                                console.log('[DDT][Wizard][heuristicMatch] Sample translation check', {
-                                  instanceGuid: sampleInstanceGuid,
-                                  hasInEn: !!finalDDT.translations.en[sampleInstanceGuid],
-                                  hasInIt: !!(finalDDT.translations as any).it[sampleInstanceGuid],
-                                  hasInPt: !!(finalDDT.translations as any).pt[sampleInstanceGuid],
-                                  enValue: finalDDT.translations.en[sampleInstanceGuid]?.substring(0, 50),
-                                  itValue: (finalDDT.translations as any).it[sampleInstanceGuid]?.substring(0, 50),
-                                  ptValue: (finalDDT.translations as any).pt[sampleInstanceGuid]?.substring(0, 50)
-                                });
-                              }
-
-                              // Clean up __templateKey metadata after copying translations
-                              finalDDT.mainData?.forEach((main: any) => {
-                                if (main.messages) {
-                                  Object.values(main.messages).forEach((msg: any) => {
-                                    delete (msg as any).__templateKey;
-                                  });
-                                }
-                                if (main.steps) {
-                                  Object.values(main.steps).forEach((step: any) => {
-                                    if (step.escalations) {
-                                      step.escalations.forEach((esc: any) => {
-                                        delete (esc as any).__templateKey;
-                                      });
-                                    }
-                                  });
-                                }
-                                // Clean up subData recursively
-                                if (main.subData && Array.isArray(main.subData)) {
-                                  const cleanSubData = (subDataArray: any[]) => {
-                                    subDataArray.forEach((sub: any) => {
-                                      if (sub.messages) {
-                                        Object.values(sub.messages).forEach((msg: any) => {
-                                          delete (msg as any).__templateKey;
-                                        });
-                                      }
-                                      if (sub.steps) {
-                                        Object.values(sub.steps).forEach((step: any) => {
-                                          if (step.escalations) {
-                                            step.escalations.forEach((esc: any) => {
-                                              delete (esc as any).__templateKey;
-                                            });
-                                          }
-                                        });
-                                      }
-                                      if (sub.subData && Array.isArray(sub.subData)) {
-                                        cleanSubData(sub.subData);
-                                      }
-                                    });
-                                  };
-                                  cleanSubData(main.subData);
-                                }
-                              });
-
-                              console.log('[DDT][Wizard][heuristicMatch] Copied template translations to instance GUIDs', {
-                                templateGuidsCount: templateGuidToInstanceGuid.size,
-                                mergedEntries: mergedCount,
+                              console.log('[DDT][Wizard][heuristicMatch] Translations prepared and saved', {
                                 projectTranslationsSaved: projectTranslationsToSave.length,
-                                enGuids: Object.keys(finalDDT.translations.en).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
-                                itGuids: Object.keys((finalDDT.translations as any).it).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
-                                ptGuids: Object.keys((finalDDT.translations as any).pt).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
-                                samplePtGuids: Object.keys((finalDDT.translations as any).pt).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).slice(0, 5),
-                                samplePtValues: Object.entries((finalDDT.translations as any).pt)
+                                enGuids: Object.keys(finalDDT.translations.en || {}).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
+                                itGuids: Object.keys((finalDDT.translations as any).it || {}).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
+                                ptGuids: Object.keys((finalDDT.translations as any).pt || {}).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
+                                samplePtGuids: Object.keys((finalDDT.translations as any).pt || {}).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).slice(0, 5),
+                                samplePtValues: Object.entries((finalDDT.translations as any).pt || {})
                                   .filter(([k]) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k))
                                   .slice(0, 3)
                                   .map(([k, v]) => ({ guid: k, value: String(v).substring(0, 30) }))
                               });
-                            } else {
-                              console.warn('[DEBUG][WIZARD] No template translations to merge', {
-                                hasFinalDDTTranslations: !!finalDDT.translations,
-                                templateTranslationsCount: Object.keys(templateTranslations).length,
-                                translationGuidsExtracted: translationGuids.length,
-                                uniqueTranslationGuids: [...new Set(translationGuids)].length
-                              });
-                            }
 
                             console.log('[DDT][Wizard][heuristicMatch] Assembled DDT with stepPrompts:', {
                               ddtId: finalDDT.id,
@@ -2495,25 +2153,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           }
 
                           const emptyStore = buildArtifactStore([]);
+                          const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
                           const finalDDT = assembleFinalDDT(
                             schemaRootLabel || 'Data',
                             schemaMains,
                             emptyStore,
-                            { escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 } }
+                            {
+                              escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
+                              templateTranslations: templateTranslations,
+                              projectLocale: projectLang
+                            }
                           );
-
-                          // Merge template translations into final DDT translations
-                          if (finalDDT.translations && Object.keys(templateTranslations).length > 0) {
-                            if (!finalDDT.translations.en) finalDDT.translations.en = {};
-                            if (!(finalDDT.translations as any).it) (finalDDT.translations as any).it = {};
-                            if (!(finalDDT.translations as any).pt) (finalDDT.translations as any).pt = {};
-
-                            Object.entries(templateTranslations).forEach(([key, value]) => {
-                              if (value.en) finalDDT.translations.en[key] = value.en;
-                              if (value.it) (finalDDT.translations as any).it[key] = value.it;
-                              if (value.pt) (finalDDT.translations as any).pt[key] = value.pt;
-                            });
-                          }
 
                           console.log('[DDT][Wizard][stepPrompts] Assembled DDT with stepPrompts:', {
                             ddtId: finalDDT.id,

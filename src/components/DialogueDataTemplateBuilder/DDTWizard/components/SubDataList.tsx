@@ -61,21 +61,7 @@ export default function SubDataList({
   onRetryField,
   onCreateManually,
 }: SubDataListProps) {
-  console.log('[SubDataList] 🔍 DEBUG ricevuto node:', {
-    nodeLabel: node.label,
-    hasSubData: !!node.subData,
-    isArray: Array.isArray(node.subData),
-    subDataLength: node.subData?.length || 0,
-    subData: node.subData ? JSON.parse(JSON.stringify(node.subData)) : null,
-    fullNode: JSON.parse(JSON.stringify(node))
-  });
-
   if (!Array.isArray(node.subData) || node.subData.length === 0) {
-    console.warn('[SubDataList] ⚠️ Nessun subData trovato per node:', node.label, {
-      hasSubData: !!node.subData,
-      isArray: Array.isArray(node.subData),
-      subDataValue: node.subData
-    });
     return <div style={{ opacity: 0.8, fontStyle: 'italic', marginTop: 6 }}>No sub fields yet.</div>;
   }
 

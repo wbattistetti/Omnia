@@ -2109,7 +2109,7 @@ app.get('/api/factory/data-dialogue-translations', async (req, res) => {
 app.post('/api/factory/template-translations', async (req, res) => {
   const client = new MongoClient(uri);
   try {
-    const { keys } = req.body; // Array of translation keys (e.g., ['template.phone.start.prompt1', ...])
+    const { keys } = req.body; // Array of translation keys (GUIDs or old-style keys)
 
     if (!Array.isArray(keys) || keys.length === 0) {
       return res.json({});
@@ -2119,18 +2119,57 @@ app.post('/api/factory/template-translations', async (req, res) => {
     const db = client.db(dbFactory);
     const coll = db.collection('Translations');
 
-    // Fetch translations for the provided keys
-    const docs = await coll.find({ _id: { $in: keys } }).toArray();
+    // Check if keys are GUIDs (new format) or old-style keys
+    const isGuid = (key) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
+    const guidKeys = keys.filter(isGuid);
+    const oldKeys = keys.filter(k => !isGuid(k));
+
+    console.log('[TEMPLATE_TRANSLATIONS] Request:', {
+      totalKeys: keys.length,
+      guidKeys: guidKeys.length,
+      oldKeys: oldKeys.length,
+      sampleGuids: guidKeys.slice(0, 3),
+      sampleOldKeys: oldKeys.slice(0, 3)
+    });
+
     const merged = {};
 
-    for (const doc of docs) {
-      if (doc && doc._id) {
-        // Each doc has structure: { _id: 'template.phone.start.prompt1', en: '...', it: '...', pt: '...' }
-        merged[doc._id] = {
-          en: doc.en || '',
-          it: doc.it || '',
-          pt: doc.pt || ''
-        };
+    // Query for GUIDs (new format): guid field, type = 'Template'
+    if (guidKeys.length > 0) {
+      const guidDocs = await coll.find({
+        guid: { $in: guidKeys },
+        type: 'Template'
+      }).toArray();
+
+      console.log('[TEMPLATE_TRANSLATIONS] Found', guidDocs.length, 'translations for GUIDs');
+
+      // Group by guid and language, then merge into { guid: { en, it, pt } }
+      for (const doc of guidDocs) {
+        if (doc.guid && doc.language && doc.text !== undefined) {
+          if (!merged[doc.guid]) {
+            merged[doc.guid] = { en: '', it: '', pt: '' };
+          }
+          if (doc.language === 'en' || doc.language === 'it' || doc.language === 'pt') {
+            merged[doc.guid][doc.language] = doc.text || '';
+          }
+        }
+      }
+    }
+
+    // Query for old-style keys (backward compatibility): _id field
+    if (oldKeys.length > 0) {
+      const oldDocs = await coll.find({ _id: { $in: oldKeys } }).toArray();
+      console.log('[TEMPLATE_TRANSLATIONS] Found', oldDocs.length, 'translations for old keys');
+
+      for (const doc of oldDocs) {
+        if (doc && doc._id) {
+          // Each doc has structure: { _id: 'template.phone.start.prompt1', en: '...', it: '...', pt: '...' }
+          merged[doc._id] = {
+            en: doc.en || '',
+            it: doc.it || '',
+            pt: doc.pt || ''
+          };
+        }
       }
     }
 
@@ -2158,6 +2197,121 @@ app.post('/api/factory/data-dialogue-translations', async (req, res) => {
     await coll.insertOne({ data: payload, updatedAt: new Date() });
     res.json({ success: true, count: Object.keys(payload).length });
   } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
+// Load project translations by GUIDs
+app.post('/api/projects/:pid/translations/load', async (req, res) => {
+  const projectId = req.params.pid;
+  const { guids } = req.body || {};
+
+  if (!Array.isArray(guids) || guids.length === 0) {
+    return res.json({});
+  }
+
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+
+    console.log(`[PROJECT_TRANSLATIONS] Request for project ${projectId}, ${guids.length} GUIDs`);
+    console.log(`[PROJECT_TRANSLATIONS] Sample GUIDs:`, guids.slice(0, 5));
+
+    // Try project database first
+    const projDb = await getProjectDb(client, projectId);
+    const projColl = projDb.collection('Translations');
+
+    // Query: guid in guids AND type = 'Template' (projectId can be anything or null)
+    const projectQuery = {
+      guid: { $in: guids },
+      type: 'Template'
+    };
+    console.log(`[PROJECT_TRANSLATIONS] Project query:`, JSON.stringify(projectQuery));
+
+    const projectTranslations = await projColl.find(projectQuery).toArray();
+    console.log(`[PROJECT_TRANSLATIONS] Found ${projectTranslations.length} translations in project DB`);
+    if (projectTranslations.length > 0) {
+      console.log(`[PROJECT_TRANSLATIONS] Sample project translation:`, {
+        guid: projectTranslations[0].guid,
+        language: projectTranslations[0].language,
+        text: projectTranslations[0].text?.substring(0, 50),
+        projectId: projectTranslations[0].projectId
+      });
+    }
+
+    // Also check factory database as fallback
+    const factoryDb = client.db(dbFactory);
+    const factoryColl = factoryDb.collection('Translations');
+
+    // Query: guid in guids AND type = 'Template' AND (projectId = null OR projectId doesn't exist)
+    const factoryQuery = {
+      guid: { $in: guids },
+      type: 'Template',
+      $or: [
+        { projectId: null },
+        { projectId: { $exists: false } }
+      ]
+    };
+    console.log(`[PROJECT_TRANSLATIONS] Factory query:`, JSON.stringify(factoryQuery));
+
+    const factoryTranslations = await factoryColl.find(factoryQuery).toArray();
+    console.log(`[PROJECT_TRANSLATIONS] Found ${factoryTranslations.length} translations in factory DB`);
+    if (factoryTranslations.length > 0) {
+      console.log(`[PROJECT_TRANSLATIONS] Sample factory translation:`, {
+        guid: factoryTranslations[0].guid,
+        language: factoryTranslations[0].language,
+        text: factoryTranslations[0].text?.substring(0, 50),
+        projectId: factoryTranslations[0].projectId
+      });
+    }
+
+    // Debug: check if any translations exist for these GUIDs (without type filter)
+    const allFactoryTranslations = await factoryColl.find({ guid: { $in: guids } }).limit(5).toArray();
+    console.log(`[PROJECT_TRANSLATIONS] DEBUG: Found ${allFactoryTranslations.length} total translations in factory (any type) for sample GUIDs`);
+    if (allFactoryTranslations.length > 0) {
+      console.log(`[PROJECT_TRANSLATIONS] DEBUG: Sample translation structure:`, {
+        guid: allFactoryTranslations[0].guid,
+        type: allFactoryTranslations[0].type,
+        language: allFactoryTranslations[0].language,
+        hasText: !!allFactoryTranslations[0].text,
+        keys: Object.keys(allFactoryTranslations[0])
+      });
+    }
+
+    // Merge: project translations override factory ones
+    // Structure: { guid: { en: '...', it: '...', pt: '...' } }
+    const merged = {};
+
+    // First add factory translations (group by guid and language)
+    factoryTranslations.forEach((doc) => {
+      if (doc.guid && doc.language && doc.text !== undefined) {
+        if (!merged[doc.guid]) {
+          merged[doc.guid] = { en: '', it: '', pt: '' };
+        }
+        if (doc.language === 'en' || doc.language === 'it' || doc.language === 'pt') {
+          merged[doc.guid][doc.language] = doc.text || '';
+        }
+      }
+    });
+
+    // Then override with project translations
+    projectTranslations.forEach((doc) => {
+      if (doc.guid && doc.language && doc.text !== undefined) {
+        if (!merged[doc.guid]) {
+          merged[doc.guid] = { en: '', it: '', pt: '' };
+        }
+        if (doc.language === 'en' || doc.language === 'it' || doc.language === 'pt') {
+          merged[doc.guid][doc.language] = doc.text || '';
+        }
+      }
+    });
+
+    console.log(`[PROJECT_TRANSLATIONS] Loaded ${Object.keys(merged).length} translations for ${guids.length} GUIDs (project docs: ${projectTranslations.length}, factory docs: ${factoryTranslations.length})`);
+    res.json(merged);
+  } catch (err) {
+    console.error('[PROJECT_TRANSLATIONS] Error:', err);
     res.status(500).json({ error: err.message, stack: err.stack });
   } finally {
     await client.close();
