@@ -201,32 +201,102 @@ export function resolveAsk(
   legacyNode?: any,
   legacySub?: any
 ): { text: string; key?: string } {
+  console.log('[resolveAsk] called', {
+    hasNode: !!node,
+    nodeId: node?.id,
+    nodeLabel: node?.label,
+    hasSub: !!sub,
+    subId: sub?.id,
+    subLabel: sub?.label,
+    hasLegacyNode: !!legacyNode,
+    legacyNodeLabel: legacyNode?.label,
+    hasLegacySub: !!legacySub,
+    legacySubLabel: legacySub?.label,
+    translationsKeys: translations ? Object.keys(translations).length : 0,
+    legacyDictKeys: legacyDict ? Object.keys(legacyDict).length : 0
+  });
+
   // Try legacy deref first (exact same as legacy simulator)
   if (legacyNode) {
-    const actions = getEscalationActions(legacySub || legacyNode, 'start', 1);
+    const targetNode = legacySub || legacyNode;
+    console.log('[resolveAsk] Trying legacy node', {
+      targetNodeLabel: targetNode?.label,
+      hasSteps: !!targetNode?.steps,
+      stepsKeys: targetNode?.steps ? Object.keys(targetNode.steps) : [],
+      hasStart: !!targetNode?.steps?.start
+    });
+
+    const actions = getEscalationActions(targetNode, 'start', 1);
+
+    console.log('[resolveAsk] Legacy actions found', {
+      actionsCount: actions.length,
+      actions: actions.map((a: any) => ({
+        actionId: a.actionId,
+        actionInstanceId: a.actionInstanceId,
+        hasText: !!a.text,
+        hasParameters: !!a.parameters,
+        textParam: a.parameters?.find((p: any) => (p.parameterId === 'text' || p.key === 'text'))
+      }))
+    });
+
     for (const a of actions) {
-      const txt = resolveActionText(a, legacyDict || {});
+      const mergedDict = { ...(legacyDict || {}), ...(translations || {}) };
+      console.log('[resolveAsk] Resolving action text', {
+        actionId: a.actionId,
+        actionInstanceId: a.actionInstanceId,
+        mergedDictKeys: Object.keys(mergedDict).length,
+        sampleMergedKeys: Object.keys(mergedDict).slice(0, 5)
+      });
+
+      const txt = resolveActionText(a, mergedDict);
+
+      console.log('[resolveAsk] Action text resolved', {
+        actionId: a.actionId,
+        text: txt,
+        textLength: txt?.length,
+        found: !!txt
+      });
+
       if (txt) {
-        // eslint-disable-next-line no-console
-        return { text: txt, key: a?.parameters?.[0]?.value };
+        const textKey = a?.parameters?.[0]?.value;
+        console.log('[resolveAsk] ✅ Returning from legacy', { text: txt.substring(0, 50), key: textKey });
+        return { text: txt, key: textKey };
       }
     }
+
+    console.warn('[resolveAsk] ❌ No text found from legacy actions');
   }
+
   // Merge translations with legacyDict to ensure all configured prompts are available
   const mergedTranslations = { ...(legacyDict || {}), ...(translations || {}) };
+
+  console.log('[resolveAsk] Trying V2 steps', {
+    hasSub: !!sub,
+    subSteps: sub?.steps,
+    subAskBase: sub?.steps?.ask?.base,
+    hasNode: !!node,
+    nodeSteps: node?.steps,
+    nodeAskBase: node?.steps?.ask?.base,
+    mergedTranslationsKeys: Object.keys(mergedTranslations).length
+  });
+
   if (sub) {
     const key = sub?.steps?.ask?.base;
     // Use translations directly like StepEditor does: translations[key] || key
     const text = typeof key === 'string' ? (mergedTranslations[key] || key) : '';
+    console.log('[resolveAsk] Sub result', { key, text, textLength: text?.length, found: !!text && text !== key });
     return { text, key };
   }
   if (node) {
     const key = node?.steps?.ask?.base;
     // Use translations directly like StepEditor does: translations[key] || key
     const text = typeof key === 'string' ? (mergedTranslations[key] || key) : '';
+    console.log('[resolveAsk] Node result', { key, text, textLength: text?.length, found: !!text && text !== key });
     return { text, key };
   }
+
   // No fallback hardcoded - return empty if no key found
+  console.warn('[resolveAsk] ❌ No node/sub found, returning empty');
   return { text: '', key: undefined };
 }
 

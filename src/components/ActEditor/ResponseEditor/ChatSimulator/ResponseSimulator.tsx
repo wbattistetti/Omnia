@@ -51,6 +51,13 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
 
   useEffect(() => {
     // Rebuild engine only when DDT or translations change. Preserve chat on sidebar selection changes.
+    console.log('[ResponseSimulator] Rebuilding engine', {
+      hasDDT: !!ddt,
+      hasTranslations: !!translations,
+      translationsType: typeof translations,
+      translationsKeys: translations && typeof translations === 'object' ? Object.keys(translations).length : 0,
+      sampleTranslations: translations && typeof translations === 'object' ? Object.entries(translations).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) })) : []
+    });
     setEngine(new ResponseFlowEngine(ddt, translations, selectedNode));
     setFlowState(null);
   }, [ddt, translations]);
@@ -69,20 +76,60 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
   }, [flowState?.messages]);
 
   const handleStart = () => {
+    console.log('[ResponseSimulator] handleStart called', {
+      hasEngine: !!engine,
+      hasDDT: !!ddt,
+      hasTranslations: !!translations,
+      translationsKeys: translations && typeof translations === 'object' ? Object.keys(translations).length : 0
+    });
+
     const initialState = engine.start();
+
+    console.log('[ResponseSimulator] handleStart - initialState received', {
+      messagesCount: initialState.messages.length,
+      firstMessage: initialState.messages[0],
+      firstMessageText: initialState.messages[0]?.text,
+      firstMessageId: initialState.messages[0]?.id,
+      waitingForInput: initialState.waitingForInput,
+      currentStep: initialState.currentStep
+    });
+
     setFlowState(initialState);
+
     // Ensure input is focused when the first prompt appears
     logFocus('handleStart');
     setTimeout(() => ensureFocus(), 0);
   };
 
   const handleReset = () => {
+    console.log('[ResponseSimulator] handleReset called', {
+      currentFlowState: flowState,
+      hasMessages: flowState?.messages?.length || 0,
+      messages: flowState?.messages
+    });
     setFlowState(null);
+    console.log('[ResponseSimulator] handleReset - flowState set to null');
   };
 
   const handleUserInput = (input: string) => {
-    if (!flowState) return;
+    if (!flowState) {
+      console.warn('[ResponseSimulator] handleUserInput called but flowState is null');
+      return;
+    }
+    console.log('[ResponseSimulator] Processing user input', {
+      input,
+      currentStep: flowState.currentStep,
+      waitingForInput: flowState.waitingForInput,
+      plannerIndex: flowState.plannerIndex
+    });
     const newState = engine.processUserInput(flowState, input);
+    console.log('[ResponseSimulator] New state after processing', {
+      currentStep: newState.currentStep,
+      waitingForInput: newState.waitingForInput,
+      messagesCount: newState.messages.length,
+      completed: newState.completed,
+      plannerIndex: newState.plannerIndex
+    });
     setFlowState(newState);
     // Keep focus ready for the next prompt
     logFocus('afterSend');
@@ -133,23 +180,37 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
               <Bug size={12} />
               Debug
             </button>
-            {!flowState ? (
-              <button
-                onClick={handleStart}
-                className={`flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors ${combinedClass}`}
-              >
-                <Play size={14} />
-                Start
-              </button>
-            ) : (
-              <button
-                onClick={handleReset}
-                className={`flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors ${combinedClass}`}
-              >
-                <RotateCcw size={14} />
-                Reset
-              </button>
-            )}
+            {(() => {
+              const showStart = !flowState;
+              console.log('[ResponseSimulator] Rendering buttons', {
+                flowState: flowState ? 'exists' : 'null',
+                showStart,
+                messagesCount: flowState?.messages?.length || 0,
+                flowStateDetails: flowState ? {
+                  currentStep: flowState.currentStep,
+                  waitingForInput: flowState.waitingForInput,
+                  completed: flowState.completed,
+                  messages: flowState.messages
+                } : null
+              });
+              return showStart ? (
+                <button
+                  onClick={handleStart}
+                  className={`flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors ${combinedClass}`}
+                >
+                  <Play size={14} />
+                  Start
+                </button>
+              ) : (
+                <button
+                  onClick={handleReset}
+                  className={`flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors ${combinedClass}`}
+                >
+                  <RotateCcw size={14} />
+                  Reset
+                </button>
+              );
+            })()}
           </div>
         </div>
         {flowState && (
@@ -176,34 +237,65 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {!flowState ? (
-          <div className={`text-center text-gray-500 mt-8 ${combinedClass}`}>
-            <Play size={48} className="mx-auto mb-4 text-gray-300" />
-            <p className={`font-medium ${combinedClass}`}>Ready to test dialogue flow</p>
-            <p className={`mt-2 text-gray-400 ${combinedClass}`}>Press Start to begin simulation</p>
-          </div>
-        ) : (
-          <>
-            {flowState.messages.map((message) => (
-              <div key={message.id}>
-                <div className={`flex ${message.type === 'bot' ? 'justify-start' : 'justify-end'} mb-3`}>
-                  <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.type === 'bot' ? getStepColor(message.stepType) : 'bg-purple-600 text-white'}`} style={{ minHeight: '40px' }}>
-                    <div className="flex items-start gap-2">
-                      {message.type === 'bot' && <Bot size={16} className="mt-1 flex-shrink-0" />}
-                      <div className="flex-1">
-                        <p className={combinedClass}>{message.text || '[NO TEXT]'}</p>
-                        {message.stepType && (
-                          <span className={`opacity-70 font-mono mt-1 block ${combinedClass}`}>{message.stepType}{message.escalationLevel && message.escalationLevel > 1 && ` #${message.escalationLevel}`}</span>
-                        )}
+        {(() => {
+          console.log('[ResponseSimulator] Rendering messages area', {
+            hasFlowState: !!flowState,
+            flowStateType: flowState ? typeof flowState : 'null',
+            messagesCount: flowState?.messages?.length || 0,
+            messages: flowState?.messages?.map((m: any) => ({
+              id: m.id,
+              type: m.type,
+              text: m.text,
+              textLength: m.text?.length,
+              stepType: m.stepType
+            })) || []
+          });
+
+          if (!flowState) {
+            return (
+              <div className={`text-center text-gray-500 mt-8 ${combinedClass}`}>
+                <Play size={48} className="mx-auto mb-4 text-gray-300" />
+                <p className={`font-medium ${combinedClass}`}>Ready to test dialogue flow</p>
+                <p className={`mt-2 text-gray-400 ${combinedClass}`}>Press Start to begin simulation</p>
+              </div>
+            );
+          }
+
+          return (
+            <>
+              {flowState.messages.map((message, idx) => {
+                if (idx === 0) {
+                  console.log('[ResponseSimulator] Rendering first message', {
+                    id: message.id,
+                    type: message.type,
+                    text: message.text,
+                    textLength: message.text?.length,
+                    stepType: message.stepType,
+                    hasText: !!message.text
+                  });
+                }
+                return (
+                  <div key={message.id}>
+                    <div className={`flex ${message.type === 'bot' ? 'justify-start' : 'justify-end'} mb-3`}>
+                      <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.type === 'bot' ? getStepColor(message.stepType) : 'bg-purple-600 text-white'}`} style={{ minHeight: '40px' }}>
+                        <div className="flex items-start gap-2">
+                          {message.type === 'bot' && <Bot size={16} className="mt-1 flex-shrink-0" />}
+                          <div className="flex-1">
+                            <p className={combinedClass}>{message.text || '[NO TEXT]'}</p>
+                            {message.stepType && (
+                              <span className={`opacity-70 font-mono mt-1 block ${combinedClass}`}>{message.stepType}{message.escalationLevel && message.escalationLevel > 1 && ` #${message.escalationLevel}`}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </>
-        )}
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </>
+          );
+        })()}
       </div>
 
       {/* Input Area */}
@@ -226,9 +318,11 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
               }}
               ref={inputRef}
               onFocus={() => logFocus('input-onFocus')}
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter') {
+                  e.preventDefault();
                   const input = e.currentTarget.value;
+                  console.log('[ResponseSimulator] Enter pressed', { input, hasFlowState: !!flowState, waitingForInput: flowState?.waitingForInput });
                   handleUserInput(input);
                   e.currentTarget.value = '';
                 }

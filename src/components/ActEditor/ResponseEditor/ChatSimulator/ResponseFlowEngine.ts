@@ -18,7 +18,16 @@ export class ResponseFlowEngine {
   private plan: Array<{ mainIndex: number; subIndex: number | null; label: string; expectedKind: ExpectedKind }>; // flat collection plan
   constructor(private ddt: any, translations: any = {}, private selectedNode?: any) {
     this.dict = extractTranslations(ddt, translations);
-    console.log('[FlowEngine] init', { hasDDT: !!ddt, hasNode: !!selectedNode, dictKeys: Object.keys(this.dict).length });
+    console.log('[FlowEngine] init', {
+      hasDDT: !!ddt,
+      hasNode: !!selectedNode,
+      dictKeys: Object.keys(this.dict).length,
+      translationsType: typeof translations,
+      translationsIsObject: translations && typeof translations === 'object',
+      translationsKeys: translations && typeof translations === 'object' ? Object.keys(translations).length : 0,
+      sampleDictKeys: Object.keys(this.dict).slice(0, 5),
+      sampleDictValues: Object.entries(this.dict).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) }))
+    });
     this.plan = this.buildPlan(ddt);
     console.log('[FlowEngine] plan built', this.plan);
   }
@@ -44,17 +53,37 @@ export class ResponseFlowEngine {
   }
 
   processUserInput(state: FlowState, userInput: string): FlowState {
+    console.log('[FlowEngine] processUserInput called', {
+      userInput,
+      currentStep: state.currentStep,
+      plannerIndex: state.plannerIndex,
+      planLength: this.plan.length,
+      dictKeys: Object.keys(this.dict).length
+    });
+
     const messages = [...state.messages];
     if (userInput.trim()) messages.push({ id: this.nextId(), type: 'user', text: userInput, timestamp: new Date() });
 
-    if (userInput === '') return this.replyAndStay('noInput', state, messages);
-    if (userInput.toLowerCase() === 'xxxx') return this.replyAndStay('noMatch', state, messages);
+    if (userInput === '') {
+      console.log('[FlowEngine] Empty input -> noInput');
+      return this.replyAndStay('noInput', state, messages);
+    }
+    if (userInput.toLowerCase() === 'xxxx') {
+      console.log('[FlowEngine] "xxxx" input -> noMatch');
+      return this.replyAndStay('noMatch', state, messages);
+    }
 
     // Determine current target in plan
     const currentTarget = this.plan[state.plannerIndex || 0];
     const expected = currentTarget?.expectedKind || 'generic';
     const isValid = validateByKind(expected, userInput);
-    console.log('[FlowEngine] input validation', { expected, isValid, userInput });
+    console.log('[FlowEngine] input validation', {
+      expected,
+      isValid,
+      userInput,
+      currentTarget: currentTarget?.label,
+      planIndex: state.plannerIndex
+    });
 
     if (state.currentStep === 'start' || state.currentStep === 'noInput' || state.currentStep === 'noMatch') {
       const conf = (this.getStepLeadText('confirmation', 1, state.plannerIndex || 0) || 'Is this correct: {input}?').replace('{input}', userInput);
@@ -88,20 +117,79 @@ export class ResponseFlowEngine {
   }
 
   private getStepLeadText(stepType: string, level: number, plannerIndex: number): string | undefined {
+    console.log('[FlowEngine] getStepLeadText called', {
+      stepType,
+      level,
+      plannerIndex,
+      planLength: this.plan.length,
+      dictKeysCount: Object.keys(this.dict).length,
+      sampleDictKeys: Object.keys(this.dict).slice(0, 5)
+    });
+
     // Determine node for current plan index; fallback to selectedNode or root
     let node: any = undefined;
     if (this.plan.length > 0) {
       node = this.getNodeForPlanIndex(plannerIndex);
+      console.log('[FlowEngine] getStepLeadText - node from plan', {
+        plannerIndex,
+        planItem: this.plan[plannerIndex],
+        hasNode: !!node,
+        nodeLabel: node?.label
+      });
     }
     node = node || this.selectedNode || this.ddt?.mainData || this.ddt;
+
+    console.log('[FlowEngine] getStepLeadText - final node', {
+      hasNode: !!node,
+      nodeLabel: node?.label,
+      nodeType: node?.type,
+      hasSteps: !!node?.steps,
+      stepsKeys: node?.steps ? Object.keys(node.steps) : [],
+      selectedNodeLabel: this.selectedNode?.label,
+      hasMainData: !!this.ddt?.mainData,
+      mainDataLength: Array.isArray(this.ddt?.mainData) ? this.ddt.mainData.length : 0
+    });
+
     const actions = getEscalationActions(node, stepType, level);
-    console.log('[FlowEngine] resolve text', { stepType, level, hasNode: !!node, actions: actions?.length });
+
+    console.log('[FlowEngine] getStepLeadText - actions found', {
+      stepType,
+      level,
+      actionsCount: actions?.length,
+      actions: actions?.map((a: any) => ({
+        actionId: a.actionId,
+        actionInstanceId: a.actionInstanceId,
+        hasText: !!a.text,
+        textValue: a.text,
+        hasParameters: !!a.parameters,
+        parametersCount: a.parameters?.length || 0,
+        textParam: a.parameters?.find((p: any) => (p.parameterId === 'text' || p.key === 'text')),
+        allParams: a.parameters
+      })) || []
+    });
+
     for (const act of actions) {
       const text = resolveActionText(act, this.dict);
-      console.log('[FlowEngine] action', { actionId: act?.actionId, text });
-      if (text) return text;
+      console.log('[FlowEngine] getStepLeadText - action resolved', {
+        actionId: act?.actionId,
+        actionInstanceId: act?.actionInstanceId,
+        text,
+        textLength: text?.length,
+        found: !!text
+      });
+      if (text) {
+        console.log('[FlowEngine] getStepLeadText - ✅ Returning text', { text: text.substring(0, 50) });
+        return text;
+      }
     }
-    console.warn('[FlowEngine] fallback default for', stepType, level);
+
+    console.warn('[FlowEngine] getStepLeadText - ❌ No text found, returning undefined', {
+      stepType,
+      level,
+      plannerIndex,
+      actionsCount: actions?.length,
+      dictKeysCount: Object.keys(this.dict).length
+    });
     return undefined;
   }
 

@@ -32,12 +32,16 @@ import IntentListEditorWrapper from './components/IntentListEditorWrapper';
 import { FontProvider, useFontContext } from '../../../context/FontContext';
 import { useAIProvider } from '../../../context/AIProviderContext';
 import { DialogueTemplateService } from '../../../services/DialogueTemplateService';
+import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 
 function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
+
+  // ✅ Get translations from global table (filtered by project locale)
+  const { translations: globalTranslations, getTranslation } = useProjectTranslations();
   // Font centralizzato dal Context
   const { combinedClass } = useFontContext();
   // ✅ AI Provider per inferenza pre-wizard
@@ -209,13 +213,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     return result;
   };
 
-  const [localTranslations, setLocalTranslations] = useState<any>(() => {
-    const initial = getTranslationsForLocale(projectLocale, ddt?.translations);
-    console.log('[RESPONSE_EDITOR][TRANSLATIONS] Initial state', {
+  // ✅ localTranslations now comes from global table (filtered by project locale)
+  // ❌ REMOVED: ddt?.translations - translations are now in global table only
+  const [localTranslations, setLocalTranslations] = useState<Record<string, string>>(() => {
+    // Start with empty - will be populated from global table
+    console.log('[RESPONSE_EDITOR][TRANSLATIONS] Initial state from global table', {
       projectLocale,
-      initialKeys: Object.keys(initial).length
+      globalTranslationsCount: Object.keys(globalTranslations).length
     });
-    return initial;
+    return {};
   });
 
   // Extract all GUIDs from DDT structure
@@ -281,114 +287,53 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     return result;
   };
 
-  // Load translations from project Translations collection
+  // ✅ Update localTranslations from global table when globalTranslations or DDT changes
+  // ❌ REMOVED: Loading from database - translations are now in global table only
   useEffect(() => {
-    if (!currentProjectId || !localDDT) {
-      console.log('[DEBUG][LOAD_TRANSLATIONS] Skipping - no projectId or DDT', { currentProjectId: !!currentProjectId, hasDDT: !!localDDT });
+    if (!localDDT) {
+      console.log('[DEBUG][LOAD_TRANSLATIONS] Skipping - no DDT');
+      setLocalTranslations({});
       return;
     }
 
     const guids = extractGUIDsFromDDT(localDDT);
     if (guids.length === 0) {
       console.log('[DEBUG][LOAD_TRANSLATIONS] No GUIDs found in DDT');
+      setLocalTranslations({});
       return;
     }
 
-    console.log('[DEBUG][LOAD_TRANSLATIONS] 🔍 Starting load', {
-      projectId: currentProjectId,
-      guidsCount: guids.length,
+    // ✅ Extract translations from global table (already filtered by project locale)
+    const translationsFromGlobal: Record<string, string> = {};
+    const foundGuids: string[] = [];
+    const missingGuids: string[] = [];
+
+    guids.forEach(guid => {
+      const translation = globalTranslations[guid];
+      if (translation) {
+        translationsFromGlobal[guid] = translation;
+        foundGuids.push(guid);
+      } else {
+        missingGuids.push(guid);
+      }
+    });
+
+    console.log('[DEBUG][LOAD_TRANSLATIONS] ✅ Loaded from global table', {
+      requestedGuids: guids.length,
       uniqueGuids: [...new Set(guids)].length,
+      foundTranslations: foundGuids.length,
+      missingGuids: missingGuids.length,
       projectLocale,
-      sampleGuids: [...new Set(guids)].slice(0, 5),
-      allGuids: [...new Set(guids)]
+      sampleFound: foundGuids.slice(0, 5),
+      sampleMissing: missingGuids.slice(0, 5),
+      globalTableSize: Object.keys(globalTranslations).length
     });
 
-    (async () => {
-      try {
-        const { loadProjectTranslations } = await import('../../../services/ProjectDataService');
-        const projectTranslations = await loadProjectTranslations(currentProjectId, guids);
+    setLocalTranslations(translationsFromGlobal);
+  }, [globalTranslations, localDDT?.id, localDDT?._id, projectLocale]);
 
-        const requestedUniqueGuids = [...new Set(guids)];
-        const receivedGuids = Object.keys(projectTranslations);
-        const missingGuids = requestedUniqueGuids.filter(g => !receivedGuids.includes(g));
-
-        console.log('[DEBUG][LOAD_TRANSLATIONS] 📥 API response', {
-          requestedGuids: requestedUniqueGuids.length,
-          receivedTranslations: receivedGuids.length,
-          missingGuids: missingGuids.length,
-          missingGuidsList: missingGuids,
-          receivedGuids: receivedGuids,
-          sampleTranslation: Object.entries(projectTranslations).slice(0, 2).map(([guid, t]) => ({
-            guid,
-            en: t.en?.substring(0, 50),
-            it: t.it?.substring(0, 50),
-            pt: t.pt?.substring(0, 50),
-            currentLocale: t[projectLocale]?.substring(0, 50)
-          }))
-        });
-
-        if (Object.keys(projectTranslations).length > 0) {
-          // Merge with existing translations
-          setLocalTranslations((prev: any) => {
-            const merged = { ...prev };
-            const added: string[] = [];
-            const skipped: string[] = [];
-
-            // Add project translations for current locale
-            Object.entries(projectTranslations).forEach(([guid, translations]) => {
-              const localeText = translations[projectLocale] || translations.en || translations.it || translations.pt || '';
-              if (localeText) {
-                merged[guid] = localeText;
-                added.push(guid);
-              } else {
-                skipped.push(guid);
-              }
-            });
-
-            console.log('[DEBUG][LOAD_TRANSLATIONS] Merged into localTranslations', {
-              prevKeysCount: Object.keys(prev).length,
-              mergedKeysCount: Object.keys(merged).length,
-              addedCount: added.length,
-              addedGuids: added,
-              skippedCount: skipped.length,
-              skippedGuids: skipped,
-              sampleMerged: Object.entries(merged).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) }))
-            });
-
-            return merged;
-          });
-        } else {
-          console.warn('[DEBUG][LOAD_TRANSLATIONS] No translations found in project DB for GUIDs', { guids });
-        }
-      } catch (err) {
-        console.error('[DEBUG][LOAD_TRANSLATIONS] Error loading translations', err);
-      }
-    })();
-  }, [currentProjectId, localDDT?.id, localDDT?._id, projectLocale]);
-
-  // Synchronize translations when DDT changes
-  useEffect(() => {
-    const nextTranslations = getTranslationsForLocale(projectLocale, ddt?.translations);
-
-    console.log('[DEBUG][SYNC_TRANSLATIONS] Syncing from DDT', {
-      projectLocale,
-      hasDDTTranslations: !!ddt?.translations,
-      ddtTranslationsKeys: ddt?.translations?.[projectLocale] ? Object.keys(ddt.translations[projectLocale]).length : 0,
-      nextTranslationsKeys: Object.keys(nextTranslations).length,
-      sampleNextKeys: Object.keys(nextTranslations).slice(0, 5)
-    });
-
-    setLocalTranslations((prev: any) => {
-      const same = JSON.stringify(prev) === JSON.stringify(nextTranslations);
-      if (!same) {
-        console.log('[DEBUG][SYNC_TRANSLATIONS] Updating localTranslations', {
-          prevKeysCount: Object.keys(prev).length,
-          nextKeysCount: Object.keys(nextTranslations).length
-        });
-      }
-      return same ? prev : nextTranslations;
-    });
-  }, [ddt, mergedBase, localDDT?.id, localDDT?._id, projectLocale]);
+  // ❌ REMOVED: Sync from ddt.translations - translations are now in global table only
+  // Translations are updated via the effect above that watches globalTranslations
 
   // FIX: Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
   React.useEffect(() => {
@@ -1568,6 +1513,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                     ddt={localDDT}
                     translations={localTranslations}
                     selectedNode={selectedNode}
+                    // DEBUG: Log when passing translations to ResponseSimulator
+                    // eslint-disable-next-line react-hooks/exhaustive-deps
+                    {...(() => {
+                      console.log('[ResponseEditor] Passing translations to ResponseSimulator', {
+                        localTranslationsKeys: Object.keys(localTranslations).length,
+                        sampleKeys: Object.keys(localTranslations).slice(0, 5),
+                        sampleValues: Object.entries(localTranslations).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) }))
+                      });
+                      return {};
+                    })()}
                     onUpdateDDT={(updater) => {
                       setLocalDDT((prev: any) => {
                         const updated = updater(prev);

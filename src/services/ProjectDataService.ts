@@ -816,6 +816,16 @@ export async function loadProjectTranslations(
   return res.json();
 }
 
+// Load ALL project translations (for project opening)
+export async function loadAllProjectTranslations(
+  projectId: string,
+  locale: string = 'pt'
+): Promise<Record<string, string>> {
+  const res = await fetch(`/api/projects/${projectId}/translations/all?locale=${locale}`);
+  if (!res.ok) throw new Error('Errore nel recupero di tutte le Project Translations');
+  return res.json();
+}
+
 export async function saveDataDialogueTranslations(payload: Record<string, string>) {
   const res = await fetch('/api/factory/data-dialogue-translations', {
     method: 'POST',

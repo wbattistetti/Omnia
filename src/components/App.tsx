@@ -10,6 +10,7 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DDTProvider } from '../context/DDTContext';
 import { DDTManagerProvider } from '../context/DDTManagerContext';
+import { ProjectTranslationsProvider } from '../context/ProjectTranslationsContext';
 import { ThemeProvider } from '../theme/components/ThemeProvider';
 import { ActEditorProvider } from './ActEditor/EditorHost/ActEditorContext';
 import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
@@ -233,8 +234,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <ProjectDataProvider>
-        <AIProviderProvider>
-          <ActionsCatalogProvider>
+        <ProjectTranslationsProvider>
+          <AIProviderProvider>
+            <ActionsCatalogProvider>
             <DndProvider backend={HTML5Backend}>
               <SpeechRecognitionProvider>
                 <DDTProvider>
@@ -250,6 +252,7 @@ export default function App() {
             </DndProvider>
           </ActionsCatalogProvider>
         </AIProviderProvider>
+        </ProjectTranslationsProvider>
       </ProjectDataProvider>
     </ThemeProvider>
   );

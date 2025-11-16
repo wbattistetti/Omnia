@@ -8,7 +8,7 @@ export interface AssembledDDT {
   id: string;
   label: string;
   mainData: any[];
-  translations: { en: Record<string, string> };
+  // ❌ REMOVED: translations - translations are now stored in global ProjectTranslationsContext
   v2Draft?: any;
 }
 
@@ -44,6 +44,7 @@ type AssembleOptions = {
   escalationCounts?: Partial<Record<'noMatch' | 'noInput' | 'confirmation', number>>;
   templateTranslations?: Record<string, { en: string; it: string; pt: string }>; // Translations from template GUIDs
   projectLocale?: 'en' | 'it' | 'pt'; // Project language
+  addTranslations?: (translations: Record<string, string>) => void; // ✅ Callback to add translations to global table
 };
 
 export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): AssembledDDT {
@@ -63,6 +64,10 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
   })();
 
   const templateTranslations = options?.templateTranslations || {};
+  const addTranslations = options?.addTranslations; // ✅ Callback to add translations to global table
+
+  // ✅ Collect translations for project locale only (flat dictionary: { guid: text })
+  const projectTranslations: Record<string, string> = {};
 
   const assembleNode = (node: SchemaNode, nodePath: string[]): any => {
     const nodeId = uuidv4();
@@ -340,12 +345,8 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
           const templateText = templateTranslation[projectLocale] || templateTranslation.en || templateTranslation.it || templateTranslation.pt || '';
 
           if (templateText) {
-            // Add translation to DDT translations with new runtime GUID
-            // Structure: translations[projectLocale][actionInstanceId] = templateText
-            if (!translations[projectLocale]) {
-              translations[projectLocale] = {};
-            }
-            translations[projectLocale][actionInstanceId] = templateText;
+            // ✅ Add translation to projectTranslations (flat dictionary for project locale only)
+            projectTranslations[actionInstanceId] = templateText;
 
             console.log('[assembleFinalDDT] Copied translation from template', {
               path,
@@ -441,26 +442,24 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
 
     console.log('[assembleFinalDDT][COMPLETE]', {
       mainsCount: assembledMains.length,
-      translationsCount: Object.keys(translations).length,
-      projectLocale,
-      translationsByLocale: {
-        en: Object.keys(translations.en || {}).length,
-        it: Object.keys(translations.it || {}).length,
-        pt: Object.keys(translations.pt || {}).length
-      }
+      projectTranslationsCount: Object.keys(projectTranslations).length,
+      projectLocale
     });
 
-    // Initialize translations structure with all locales (en, it, pt)
-    // Project locale translations are populated, others are empty (will be saved to DB on explicit save)
-    const result = {
+    // ✅ Add translations to global table (in memory only, not saved to DB yet)
+    if (addTranslations && Object.keys(projectTranslations).length > 0) {
+      addTranslations(projectTranslations);
+      console.log('[assembleFinalDDT] ✅ Added translations to global table', {
+        count: Object.keys(projectTranslations).length,
+        sampleGuids: Object.keys(projectTranslations).slice(0, 5)
+      });
+    }
+
+    // ❌ REMOVED: translations from result - translations are now in global ProjectTranslationsContext
+    const result: AssembledDDT = {
       id: ddtId,
       label: rootLabel || 'Data',
       mainData: assembledMains,
-      translations: {
-        en: translations.en || {},
-        it: translations.it || {},
-        pt: translations.pt || {}
-      },
       v2Draft: getAllV2Draft(),
     };
 

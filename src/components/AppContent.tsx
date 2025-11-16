@@ -650,6 +650,22 @@ export const AppContent: React.FC<AppContentProps> = ({
                     detail: { projectId: pid }
                   }));
 
+                  // FASE 1.5: Salva tutte le traduzioni del progetto (save esplicito)
+                  if (pid) {
+                    try {
+                      // Access ProjectTranslationsContext via window to call saveAllTranslations
+                      const translationsContext = (window as any).__projectTranslationsContext;
+                      if (translationsContext?.saveAllTranslations) {
+                        console.log('[SaveProject] Calling saveAllTranslations explicitly');
+                        await translationsContext.saveAllTranslations();
+                      } else {
+                        console.warn('[SaveProject] ProjectTranslationsContext not available on window');
+                      }
+                    } catch (e) {
+                      console.error('[SaveProject] Error saving translations explicitly:', e);
+                    }
+                  }
+
                   // FASE 2: Salva tutte le Tasks da TaskRepository (gestisce tutto)
                   if (pid) {
                     try {

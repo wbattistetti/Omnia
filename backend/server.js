@@ -2318,6 +2318,144 @@ app.post('/api/projects/:pid/translations/load', async (req, res) => {
   }
 });
 
+// Load ALL project translations (for project opening)
+app.get('/api/projects/:pid/translations/all', async (req, res) => {
+  const projectId = req.params.pid;
+  const { locale } = req.query || {};
+  const projectLocale = locale || 'pt'; // Default to 'pt' if not specified
+
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+
+    console.log(`[PROJECT_TRANSLATIONS_ALL] Loading all translations for project ${projectId}, locale: ${projectLocale}`);
+
+    // Try project database first
+    const projDb = await getProjectDb(client, projectId);
+    const projColl = projDb.collection('Translations');
+
+    // Query: type = 'Instance' OR type = 'Template' (project-specific translations)
+    const projectQuery = {
+      $or: [
+        { type: 'Instance' },
+        { type: 'Template' }
+      ],
+      language: projectLocale
+    };
+    console.log(`[PROJECT_TRANSLATIONS_ALL] Project query:`, JSON.stringify(projectQuery));
+
+    const projectTranslations = await projColl.find(projectQuery).toArray();
+    console.log(`[PROJECT_TRANSLATIONS_ALL] Found ${projectTranslations.length} translations in project DB`);
+
+    // Also check factory database for template translations (fallback)
+    const factoryDb = client.db(dbFactory);
+    const factoryColl = factoryDb.collection('Translations');
+
+    // Query: type = 'Template' AND (projectId = null OR projectId doesn't exist) AND language = projectLocale
+    const factoryQuery = {
+      type: 'Template',
+      language: projectLocale,
+      $or: [
+        { projectId: null },
+        { projectId: { $exists: false } }
+      ]
+    };
+    console.log(`[PROJECT_TRANSLATIONS_ALL] Factory query:`, JSON.stringify(factoryQuery));
+
+    const factoryTranslations = await factoryColl.find(factoryQuery).toArray();
+    console.log(`[PROJECT_TRANSLATIONS_ALL] Found ${factoryTranslations.length} translations in factory DB`);
+
+    // Build flat dictionary: { guid: text } where text is for project locale only
+    const merged = {};
+
+    // First add factory translations (template defaults)
+    factoryTranslations.forEach((doc) => {
+      if (doc.guid && doc.text !== undefined) {
+        merged[doc.guid] = doc.text || '';
+      }
+    });
+
+    // Then override with project translations (instance-specific or project overrides)
+    projectTranslations.forEach((doc) => {
+      if (doc.guid && doc.text !== undefined) {
+        merged[doc.guid] = doc.text || '';
+      }
+    });
+
+    console.log(`[PROJECT_TRANSLATIONS_ALL] Loaded ${Object.keys(merged).length} translations (project: ${projectTranslations.length}, factory: ${factoryTranslations.length})`);
+    res.json(merged);
+  } catch (err) {
+    console.error('[PROJECT_TRANSLATIONS_ALL] Error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
+// Save project translations (explicit save)
+app.post('/api/projects/:pid/translations', async (req, res) => {
+  const projectId = req.params.pid;
+  const { translations } = req.body || {};
+
+  if (!Array.isArray(translations) || translations.length === 0) {
+    return res.json({ success: true, count: 0 });
+  }
+
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+
+    console.log(`[PROJECT_TRANSLATIONS_SAVE] Saving ${translations.length} translations for project ${projectId}`);
+
+    // Get project database
+    const projDb = await getProjectDb(client, projectId);
+    const projColl = projDb.collection('Translations');
+
+    let savedCount = 0;
+    const now = new Date();
+
+    // Upsert each translation
+    for (const trans of translations) {
+      if (!trans.guid || !trans.language || trans.text === undefined) {
+        console.warn(`[PROJECT_TRANSLATIONS_SAVE] Skipping invalid translation:`, trans);
+        continue;
+      }
+
+      const filter = {
+        guid: trans.guid,
+        language: trans.language,
+        type: trans.type || 'Instance'
+      };
+
+      const update = {
+        $set: {
+          guid: trans.guid,
+          language: trans.language,
+          text: trans.text,
+          type: trans.type || 'Instance',
+          updatedAt: now
+        },
+        $setOnInsert: {
+          createdAt: now
+        }
+      };
+
+      const result = await projColl.updateOne(filter, update, { upsert: true });
+      if (result.upsertedCount > 0 || result.modifiedCount > 0) {
+        savedCount++;
+      }
+    }
+
+    console.log(`[PROJECT_TRANSLATIONS_SAVE] ✅ Saved ${savedCount} translations for project ${projectId}`);
+    res.json({ success: true, count: savedCount });
+  } catch (err) {
+    console.error('[PROJECT_TRANSLATIONS_SAVE] Error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    await client.close();
+  }
+});
+
 // --- DDT Wizard (mock) ---
 // Minimal mock for detect-type to avoid relying on FastAPI during dev
 // (removed) /api/ddt/step2 mock — using FastAPI /step2

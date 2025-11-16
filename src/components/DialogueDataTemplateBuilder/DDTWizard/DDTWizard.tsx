@@ -16,6 +16,7 @@ import { Hourglass, Bell } from 'lucide-react';
 import { useAIProvider } from '../../../context/AIProviderContext';
 import { debug, error } from '../../../utils/logger';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
+import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 import { getTemplateTranslations } from '../../../services/ProjectDataService';
 import { DialogueTemplateService } from '../../../services/DialogueTemplateService';
 // ResponseEditor will be opened by sidebar after onComplete
@@ -196,6 +197,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Get current project ID from context
   const { getCurrentProjectId } = useProjectDataUpdate();
   const currentProjectId = getCurrentProjectId();
+
+  // ✅ Get global translations context
+  const { addTranslations: addTranslationsToGlobal } = useProjectTranslations();
 
   const [step, setStep] = useState<string>(() => {
     if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.mainData?.length > 0) {
@@ -1793,6 +1797,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                             const emptyStore = buildArtifactStore([]);
                             const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
+                            // ✅ assembleFinalDDT now adds translations to global table via addTranslations callback
+                            // Translations are NOT stored in finalDDT.translations anymore
+                            // Translations will be saved to database only on explicit save
                             const finalDDT = assembleFinalDDT(
                               root || 'Data',
                               mains0,
@@ -1800,132 +1807,18 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                               {
                                 escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
                                 templateTranslations: templateTranslations,
-                                projectLocale: projectLang
+                                projectLocale: projectLang,
+                                addTranslations: addTranslationsToGlobal // ✅ Add translations to global table
                               }
                             );
 
-                            // ✅ Translations are already created during assembly in assembleFinal.ts
-                            // They are stored in finalDDT.translations[projectLocale] with runtime GUIDs as keys
-                            // Now we need to save them to the project database
-                            const projectTranslationsToSave: Array<{ guid: string; language: string; text: string; type: string }> = [];
-
-                            // Extract translations from finalDDT.translations[projectLocale] and prepare for saving
-                            if (finalDDT.translations && finalDDT.translations[projectLang]) {
-                              Object.entries(finalDDT.translations[projectLang]).forEach(([guid, text]) => {
-                                if (typeof text === 'string' && text.trim()) {
-                                  projectTranslationsToSave.push({
-                                    guid: guid,
-                                    language: projectLang,
-                                    text: text,
-                                    type: 'Instance' // Mark as instance translation (not template)
-                                  });
-                                }
-                              });
-
-                              console.log('[DDT][Wizard][heuristicMatch] Prepared translations for saving', {
-                                projectLang,
-                                translationsCount: projectTranslationsToSave.length,
-                                sampleGuids: projectTranslationsToSave.slice(0, 5).map(t => t.guid)
-                              });
-                            }
-
-                            // Save translations to project Translations collection
-                            if (currentProjectId && projectTranslationsToSave.length > 0) {
-                              try {
-                                const { saveProjectTranslations } = await import('../../../services/ProjectDataService');
-                                await saveProjectTranslations(currentProjectId, projectTranslationsToSave);
-                                console.log('[DDT][Wizard][heuristicMatch] ✅ Saved', projectTranslationsToSave.length, 'translations to project Translations collection');
-                              } catch (err) {
-                                console.error('[DDT][Wizard][heuristicMatch] Failed to save project translations:', err);
-                                // Continue even if save fails - translations are in ddt.translations
-                              }
-                            } else {
-                              console.warn('[DDT][Wizard][heuristicMatch] ⚠️ Cannot save project translations:', {
-                                hasProjectId: !!currentProjectId,
-                                translationsCount: projectTranslationsToSave.length
-                              });
-                            }
-
-                            // ✅ IMPORTANT: Set action.text directly in each action for immediate display
-                            // This ensures the chat simulator can display text even if translation lookup fails
-                            console.log('[DDT][Wizard][heuristicMatch] Setting action.text directly', { projectLang });
-
-                            finalDDT.mainData?.forEach((main: any) => {
-                                // Set text in main escalations
-                                if (main.steps) {
-                                  Object.values(main.steps).forEach((step: any) => {
-                                    if (step.escalations) {
-                                      step.escalations.forEach((esc: any) => {
-                                        if (esc.actions && esc.actions[0]) {
-                                          const actionInstanceId = esc.actions[0].actionInstanceId;
-                                          const text = (finalDDT.translations as any)[projectLang]?.[actionInstanceId] ||
-                                                     finalDDT.translations.en[actionInstanceId];
-                                          if (text) {
-                                            esc.actions[0].text = text;
-                                            console.log('[DDT][Wizard][heuristicMatch] ✅ Set action.text', {
-                                              actionInstanceId,
-                                              text: text.substring(0, 50)
-                                            });
-                                          }
-                                        }
-                                      });
-                                    }
-                                  });
-                                }
-
-                                // Set text in subData escalations
-                                if (main.subData && Array.isArray(main.subData)) {
-                                  main.subData.forEach((sub: any) => {
-                                    if (sub.steps) {
-                                      Object.values(sub.steps).forEach((step: any) => {
-                                        if (step.escalations) {
-                                          step.escalations.forEach((esc: any) => {
-                                            if (esc.actions && esc.actions[0]) {
-                                              const actionInstanceId = esc.actions[0].actionInstanceId;
-                                              const text = (finalDDT.translations as any)[projectLang]?.[actionInstanceId] ||
-                                                         finalDDT.translations.en[actionInstanceId];
-                                              if (text) {
-                                                esc.actions[0].text = text;
-                                                console.log('[DDT][Wizard][heuristicMatch] ✅ Set subData action.text', {
-                                                  subLabel: sub.label,
-                                                  actionInstanceId,
-                                                  text: text.substring(0, 50)
-                                                });
-                                              }
-                                            }
-                                          });
-                                        }
-                                      });
-                                    }
-                                  });
-                                }
-                              });
-
-                              console.log('[DDT][Wizard][heuristicMatch] Translations prepared and saved', {
-                                projectTranslationsSaved: projectTranslationsToSave.length,
-                                enGuids: Object.keys(finalDDT.translations.en || {}).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
-                                itGuids: Object.keys((finalDDT.translations as any).it || {}).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
-                                ptGuids: Object.keys((finalDDT.translations as any).pt || {}).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).length,
-                                samplePtGuids: Object.keys((finalDDT.translations as any).pt || {}).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).slice(0, 5),
-                                samplePtValues: Object.entries((finalDDT.translations as any).pt || {})
-                                  .filter(([k]) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k))
-                                  .slice(0, 3)
-                                  .map(([k, v]) => ({ guid: k, value: String(v).substring(0, 30) }))
-                              });
-
-                            console.log('[DDT][Wizard][heuristicMatch] Assembled DDT with stepPrompts:', {
+                            // ✅ Translations are now in global table, not in finalDDT.translations
+                            // action.text will be resolved from global table when needed (in Chat Simulator, etc.)
+                            console.log('[DDT][Wizard][heuristicMatch] ✅ DDT assembled, translations in global table', {
                               ddtId: finalDDT.id,
+                              label: finalDDT.label,
                               mainsCount: finalDDT.mainData?.length || 0,
-                              hasTranslations: !!finalDDT.translations,
-                              templateTranslationsCount: Object.keys(templateTranslations).length,
-                              translationsStructure: finalDDT.translations ? {
-                                hasEn: !!finalDDT.translations.en,
-                                hasIt: !!(finalDDT.translations as any).it,
-                                hasPt: !!(finalDDT.translations as any).pt,
-                                enKeys: finalDDT.translations.en ? Object.keys(finalDDT.translations.en).length : 0,
-                                itKeys: (finalDDT.translations as any).it ? Object.keys((finalDDT.translations as any).it).length : 0,
-                                ptKeys: (finalDDT.translations as any).pt ? Object.keys((finalDDT.translations as any).pt).length : 0
-                              } : null
+                              templateTranslationsCount: Object.keys(templateTranslations).length
                             });
 
                             // Verify DDT structure before passing to Response Editor
@@ -1947,7 +1840,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             console.log('[DDT][Wizard][heuristicMatch] ✅ DDT structure verified, calling handleClose');
 
                             // Call onComplete to open Response Editor directly
-                            handleClose(finalDDT, finalDDT.translations || {});
+                            // ❌ REMOVED: finalDDT.translations - translations are now in global table
+                            handleClose(finalDDT, {});
                           } catch (err) {
                             console.error('[DDT][Wizard][heuristicMatch] Failed to assemble DDT:', err);
                             error('DDT_WIZARD', 'Failed to assemble DDT with stepPrompts', err);
@@ -2154,6 +2048,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                           const emptyStore = buildArtifactStore([]);
                           const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
+                          // ✅ assembleFinalDDT now adds translations to global table via addTranslations callback
                           const finalDDT = assembleFinalDDT(
                             schemaRootLabel || 'Data',
                             schemaMains,
@@ -2161,23 +2056,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             {
                               escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
                               templateTranslations: templateTranslations,
-                              projectLocale: projectLang
+                              projectLocale: projectLang,
+                              addTranslations: addTranslationsToGlobal // ✅ Add translations to global table
                             }
                           );
 
-                          console.log('[DDT][Wizard][stepPrompts] Assembled DDT with stepPrompts:', {
+                          console.log('[DDT][Wizard][stepPrompts] ✅ DDT assembled, translations added to global table', {
                             ddtId: finalDDT.id,
+                            label: finalDDT.label,
                             mainsCount: finalDDT.mainData?.length || 0,
-                            hasTranslations: !!finalDDT.translations,
                             templateTranslationsCount: Object.keys(templateTranslations).length,
-                            translationsStructure: finalDDT.translations ? {
-                              hasEn: !!finalDDT.translations.en,
-                              hasIt: !!(finalDDT.translations as any).it,
-                              hasPt: !!(finalDDT.translations as any).pt,
-                              enKeys: finalDDT.translations.en ? Object.keys(finalDDT.translations.en).length : 0,
-                              itKeys: (finalDDT.translations as any).it ? Object.keys((finalDDT.translations as any).it).length : 0,
-                              ptKeys: (finalDDT.translations as any).pt ? Object.keys((finalDDT.translations as any).pt).length : 0
-                            } : null,
                             firstMainSteps: finalDDT.mainData?.[0]?.steps ? Object.keys(finalDDT.mainData[0].steps) : [],
                             firstMainMessages: finalDDT.mainData?.[0]?.messages ? Object.keys(finalDDT.mainData[0].messages) : []
                           });
@@ -2201,7 +2089,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           console.log('[DDT][Wizard][stepPrompts] ✅ DDT structure verified, calling handleClose');
 
                           // Call onComplete to open Response Editor
-                          handleClose(finalDDT, finalDDT.translations || {});
+                          // ❌ REMOVED: finalDDT.translations - translations are now in global table
+                          handleClose(finalDDT, {});
                         } catch (err) {
                           console.error('[DDT][Wizard][stepPrompts] Failed to assemble DDT:', err);
                           error('DDT_WIZARD', 'Failed to assemble DDT with stepPrompts', err);
@@ -2313,9 +2202,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                               }
 
                               // Store in ref instead of calling handleClose directly
+                              // ❌ REMOVED: finalDDT.translations - translations are now in global table
                               pendingCloseRef.current = {
                                 ddt: finalDDT,
-                                translations: finalDDT.translations || {}
+                                translations: {} // Translations are in global table, not in DDT
                               };
                             } catch (err) {
                               console.error('[DDT][Wizard][parallel] Failed to assemble final DDT:', err);

@@ -86,14 +86,43 @@ export default function DDEBubbleChat({
 
   React.useEffect(() => {
     // On mount or reset, show initial ask
+    console.log('[DDEBubbleChat] useEffect - showing initial ask', {
+      messagesCount: messages.length,
+      stateMode: state.mode,
+      hasState: !!state,
+      hasCurrentDDT: !!currentDDT,
+      translationsKeys: translations ? Object.keys(translations).length : 0,
+      legacyDictKeys: legacyDict ? Object.keys(legacyDict).length : 0
+    });
+
     const key = getPositionKey(state);
     const main = getMain(state);
+
+    console.log('[DDEBubbleChat] useEffect - node resolution', {
+      key,
+      hasMain: !!main,
+      mainId: main?.id,
+      mainLabel: main?.label,
+      statePlan: state?.plan ? Object.keys(state.plan.byId || {}).length : 0
+    });
+
     // Find legacy nodes
     const legacyMain = Array.isArray((currentDDT as any)?.mainData)
       ? (currentDDT as any)?.mainData[0]
       : (currentDDT as any)?.mainData;
     const legacySub = undefined;
-    if (!main) return;
+
+    console.log('[DDEBubbleChat] useEffect - legacy nodes', {
+      hasLegacyMain: !!legacyMain,
+      legacyMainLabel: legacyMain?.label,
+      legacyMainSteps: legacyMain?.steps ? Object.keys(legacyMain.steps) : [],
+      legacyMainHasStart: !!legacyMain?.steps?.start
+    });
+
+    if (!main) {
+      console.warn('[DDEBubbleChat] useEffect - no main node, returning');
+      return;
+    }
     // If we are collecting a main but it is already saturated (all subs present), auto-advance to confirmation
     if (state.mode === 'CollectingMain' && main && Array.isArray((main as any).subs) && (main as any).subs.length > 0) {
       const allPresent = (main as any).subs.every((sid: string) => {
@@ -141,9 +170,37 @@ export default function DDEBubbleChat({
       }
 
       // No introduction, show first main ask
+      console.log('[DDEBubbleChat] useEffect - calling resolveAsk', {
+        hasMain: !!main,
+        hasLegacyMain: !!legacyMain,
+        translationsKeys: translations ? Object.keys(translations).length : 0,
+        legacyDictKeys: legacyDict ? Object.keys(legacyDict).length : 0
+      });
+
       const { text, key } = resolveAsk(main, undefined, translations, legacyDict, legacyMain, legacySub);
-      setMessages([{ id: 'init', type: 'bot', text, stepType: 'ask', textKey: key, color: getStepColor('ask') }]);
-      lastKeyRef.current = key || 'ask.base';
+
+      console.log('[DDEBubbleChat] useEffect - resolveAsk result', {
+        text,
+        textLength: text?.length,
+        key,
+        hasText: !!text && text.length > 0
+      });
+
+      if (text && text.length > 0) {
+        setMessages([{ id: 'init', type: 'bot', text, stepType: 'ask', textKey: key, color: getStepColor('ask') }]);
+        lastKeyRef.current = key || 'ask.base';
+        console.log('[DDEBubbleChat] useEffect - ✅ Message set', {
+          text: text.substring(0, 50),
+          key
+        });
+      } else {
+        console.warn('[DDEBubbleChat] useEffect - ❌ No text from resolveAsk, message NOT set', {
+          text,
+          key,
+          mainId: main?.id,
+          mainLabel: main?.label
+        });
+      }
       return;
     }
     // Debug: log when entering ConfirmingMain
