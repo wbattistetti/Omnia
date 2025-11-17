@@ -163,16 +163,40 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
             <ActionList />
           </div>
         )}
-        {mode === 'chat' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
-              <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
-            </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <DDEBubbleChat currentDDT={ddt} translations={translations} onUpdateDDT={onUpdateDDT} />
-            </div>
-          </div>
-        )}
+        {(() => {
+          console.log('[RightPanel] Rendering mode check', {
+            mode,
+            isChat: mode === 'chat',
+            hasDDT: !!ddt,
+            ddtId: ddt?.id,
+            ddtLabel: ddt?.label,
+            translationsKeys: translations ? Object.keys(translations).length : 0,
+            sampleTranslations: translations ? Object.entries(translations).slice(0, 3).map(([k, v]) => ({
+              guid: k.substring(0, 20) + '...',
+              text: String(v).substring(0, 30) + '...'
+            })) : []
+          });
+
+          if (mode === 'chat') {
+            console.log('[RightPanel] ✅ Rendering DDEBubbleChat', {
+              hasDDT: !!ddt,
+              translationsKeys: translations ? Object.keys(translations).length : 0
+            });
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                  <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
+                </div>
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <DDEBubbleChat currentDDT={ddt} translations={translations} onUpdateDDT={onUpdateDDT} />
+                </div>
+              </div>
+            );
+          }
+
+          return null;
+        })()}
         {mode === 'validator' && <ValidatorView node={selectedNode} />}
         {mode === 'testset' && <TestsetView node={selectedNode} />}
         {mode === 'styles' && <StylesView />}

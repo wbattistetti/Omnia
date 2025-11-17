@@ -3,7 +3,6 @@
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ObjectId } = require('mongodb');
-const { runExtractor } = require('./extractionRegistry');
 
 // ✅ ENTERPRISE AI SERVICES
 const AIProviderService = require('./services/AIProviderService');
@@ -3672,7 +3671,8 @@ app.post('/api/extractors/run', async (req, res) => {
   const { kind, text, locale } = req.body || {};
   if (!kind || typeof text !== 'string') return res.status(400).json({ ok: false, error: 'kind_and_text_required' });
   try {
-    const out = await runExtractor(String(kind), String(text), locale || 'it');
+    // TODO: Implement extraction logic or use external service
+    const out = { value: text, confidence: 0, matched: false };
     res.json(out);
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });

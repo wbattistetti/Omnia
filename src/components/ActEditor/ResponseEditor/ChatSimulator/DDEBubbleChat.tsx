@@ -33,11 +33,31 @@ export default function DDEBubbleChat({
   translations?: Record<string, string>;
   onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
 }) {
+  console.log('🔵🔵🔵 [DDEBubbleChat] FUNCTION CALLED 🔵🔵🔵');
+  console.log('[DDEBubbleChat] Component mounted/updated', {
+    hasCurrentDDT: !!currentDDT,
+    currentDDTId: currentDDT?.id,
+    currentDDTLabel: currentDDT?.label,
+    translationsKeys: translations ? Object.keys(translations).length : 0,
+    translationsType: typeof translations,
+    sampleTranslations: translations ? Object.entries(translations).slice(0, 3).map(([k, v]) => ({
+      guid: k.substring(0, 20) + '...',
+      text: String(v).substring(0, 30) + '...'
+    })) : []
+  });
+
   const { combinedClass, fontSize } = useFontContext();
   const template: DDTTemplateV2 = React.useMemo(() => adaptCurrentToV2(currentDDT), [currentDDT]);
   // Enable simulator debug logs only when explicitly toggled
   const debugEnabled = (() => { try { return localStorage.getItem('debug.chatSimulator') === '1'; } catch { return false; } })();
   const { state, send, reset, setConfig } = useDDTSimulator(template, { typingIndicatorMs: 0, debug: debugEnabled });
+
+  console.log('[DDEBubbleChat] Simulator state initialized', {
+    stateMode: state?.mode,
+    statePlan: state?.plan ? Object.keys(state.plan.byId || {}).length : 0,
+    stateCurrentIndex: state?.currentIndex,
+    stateCurrentSubId: state?.currentSubId
+  });
 
   // Message ID generator with counter to ensure uniqueness
   const messageIdCounter = React.useRef(0);
@@ -53,7 +73,18 @@ export default function DDEBubbleChat({
   const [noInputCounts, setNoInputCounts] = React.useState<Record<string, number>>({});
   // Track no-match escalation counts per (mainIdx|subId|mode)
   const [noMatchCounts, setNoMatchCounts] = React.useState<Record<string, number>>({});
-  const legacyDict = React.useMemo(() => extractTranslations(currentDDT as any, translations), [currentDDT, translations]);
+  const legacyDict = React.useMemo(() => {
+    const extracted = extractTranslations(currentDDT as any, translations);
+    console.log('[DDEBubbleChat] legacyDict extracted', {
+      extractedKeys: Object.keys(extracted).length,
+      translationsKeys: translations ? Object.keys(translations).length : 0,
+      sampleExtracted: Object.entries(extracted).slice(0, 3).map(([k, v]) => ({
+        guid: k.substring(0, 20) + '...',
+        text: String(v).substring(0, 30) + '...'
+      }))
+    });
+    return extracted;
+  }, [currentDDT, translations]);
 
   // 🆕 Track sent text to clear input when it appears as a message
   const sentTextRef = React.useRef<string>('');
@@ -84,15 +115,22 @@ export default function DDEBubbleChat({
     `${s.mode}|${s.currentIndex}|${s.currentSubId || 'main'}`
   ), []);
 
+  // Show initial message on mount (only once)
   React.useEffect(() => {
-    // On mount or reset, show initial ask
-    console.log('[DDEBubbleChat] useEffect - showing initial ask', {
+    console.log('[DDEBubbleChat] ════════════════════════════════════════');
+    console.log('[DDEBubbleChat] useEffect - MOUNT - showing initial ask', {
       messagesCount: messages.length,
-      stateMode: state.mode,
+      stateMode: state?.mode,
       hasState: !!state,
       hasCurrentDDT: !!currentDDT,
+      currentDDTId: currentDDT?.id,
+      currentDDTLabel: currentDDT?.label,
       translationsKeys: translations ? Object.keys(translations).length : 0,
-      legacyDictKeys: legacyDict ? Object.keys(legacyDict).length : 0
+      legacyDictKeys: legacyDict ? Object.keys(legacyDict).length : 0,
+      sampleTranslations: translations ? Object.entries(translations).slice(0, 3).map(([k, v]) => ({
+        guid: k.substring(0, 20) + '...',
+        text: String(v).substring(0, 30) + '...'
+      })) : []
     });
 
     const key = getPositionKey(state);
@@ -203,6 +241,18 @@ export default function DDEBubbleChat({
       }
       return;
     }
+  }, [state, messages, currentDDT, translations, legacyDict, getPositionKey]);
+
+  // Handle state changes (after initial mount)
+  React.useEffect(() => {
+    // Skip if no messages yet (initial message handled by mount effect above)
+    if (messages.length === 0) {
+      return;
+    }
+
+    const key = getPositionKey(state);
+    const main = getMain(state);
+
     // Debug: log when entering ConfirmingMain
     if (state.mode === 'ConfirmingMain') {
       console.log('[DDEBubbleChat][ConfirmingMain][CHECK]', {
@@ -354,6 +404,14 @@ export default function DDEBubbleChat({
   });
 
   // handleSend function moved to useMessageHandling hook (see hooks/useMessageHandling.ts)
+
+  console.log('[DDEBubbleChat] Rendering component', {
+    messagesCount: messages.length,
+    stateMode: state?.mode,
+    hasTranslations: !!translations,
+    translationsKeys: translations ? Object.keys(translations).length : 0,
+    legacyDictKeys: Object.keys(legacyDict).length
+  });
 
   return (
     <div className={`h-full flex flex-col bg-white ${combinedClass}`}>
