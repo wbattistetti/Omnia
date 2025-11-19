@@ -3,6 +3,7 @@ import type { EditorProps } from '../EditorHost/types';
 import ResponseEditor from './index';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
+import { flowchartVariablesService } from '../../../services/FlowchartVariablesService';
 
 export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -163,9 +164,45 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   }, [existingDDT]); // currentDDT intenzionalmente non incluso: controlliamo solo quando existingDDT cambia
 
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
-  const handleComplete = React.useCallback((finalDDT: any) => {
+  const handleComplete = React.useCallback(async (finalDDT: any) => {
     // FASE 3: Salva il DDT nel Task (TaskRepository syncs with InstanceRepository automatically)
     taskRepository.updateTaskValue(instanceKey, { ddt: finalDDT }, currentProjectId || undefined);
+
+    // ✅ NEW: Extract variables from DDT structure
+    try {
+      if (currentProjectId && finalDDT) {
+        await flowchartVariablesService.init(currentProjectId);
+
+        // Get row text from task (this is the label of the row)
+        const task = taskRepository.getTask(instanceKey);
+        const rowText = task?.value?.text || act.name || act.label || 'Task';
+
+        // Extract variables from DDT using row text and DDT labels
+        const varNames = await flowchartVariablesService.extractVariablesFromDDT(
+          finalDDT,
+          instanceKey, // taskId
+          instanceKey, // rowId (same as taskId)
+          rowText, // Row text (e.g., "chiedi data di nascita")
+          undefined // nodeId (not available here)
+        );
+
+        console.log('[DDTHostAdapter] Extracted variables from DDT', {
+          taskId: instanceKey,
+          rowText,
+          varCount: varNames.length,
+          varNames: varNames.slice(0, 10) // Log first 10
+        });
+
+        // Emit event to refresh ConditionEditor variables
+        try {
+          document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', {
+            bubbles: true
+          }));
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('[DDTHostAdapter] Failed to extract variables from DDT', e);
+    }
 
     // CRITICO: Aggiorna immediatamente currentDDT per aggiornare il prop ddt
     // Questo evita che useDDTInitialization sincronizzi localDDT con il placeholder vuoto
@@ -173,7 +210,7 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
     // FIX: Forza il ricalcolo di existingDDT per sincronizzare
     setRefreshTrigger(prev => prev + 1);
-  }, [instanceKey, currentProjectId]);
+  }, [instanceKey, currentProjectId, act.name, act.label]);
 
 
   return (

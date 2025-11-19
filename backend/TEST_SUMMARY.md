@@ -102,3 +102,4 @@ Nel contract dell'istanza (puoi loggarlo), la regex NON deve contenere `${MONTHS
 - Nessun fallback: se manca qualcosa, lancia errore esplicito
 
 
+

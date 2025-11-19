@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
 import { typeToMode } from '../../../../../utils/normalizers';
 import { createRowWithTask, getTaskIdFromRow, updateRowData } from '../../../../../utils/taskHelpers';
+import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
 
 interface UseNodeRowManagementProps {
     nodeId: string;
@@ -229,12 +230,34 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     }, [nodeRows, isEmpty, nodeId, appendEmptyRow, normalizedData]);
 
     // Gestione eliminazione riga
-    const handleDeleteRow = useCallback((rowId: string) => {
+    const handleDeleteRow = useCallback(async (rowId: string) => {
         const updatedRows = nodeRows.filter(row => row.id !== rowId);
         setNodeRows(updatedRows);
         // ✅ Aggiorna isEmpty: se tutte le righe sono vuote dopo la cancellazione, torna isEmpty=true
         setIsEmpty(computeIsEmpty(updatedRows));
         normalizedData.onUpdate?.({ rows: updatedRows });
+
+        // ✅ NEW: Delete variables when row is deleted
+        try {
+            let projectId: string | undefined = undefined;
+            try {
+                projectId = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined);
+            } catch {}
+
+            if (projectId) {
+                await flowchartVariablesService.init(projectId);
+                await flowchartVariablesService.deleteMappingsByRowId(rowId);
+
+                // Emit event to refresh ConditionEditor variables
+                try {
+                    document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', {
+                        bubbles: true
+                    }));
+                } catch {}
+            }
+        } catch (e) {
+            console.warn('[useNodeRowManagement] Failed to delete variables', e);
+        }
 
         if (updatedRows.length === 0 && normalizedData.isTemporary) {
             normalizedData.onDelete?.();

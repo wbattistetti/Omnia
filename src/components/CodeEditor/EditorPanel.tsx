@@ -6,6 +6,7 @@ import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js';
 import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js';
 import { useFontContext } from '../../context/FontContext';
+import { VariablesTreeMenu } from './VariablesTreeMenu';
 
 const TEMPLATE = `// Describe below, in detail, when the condition should be TRUE.
 // You can write pseudo-code or a plain natural-language description.
@@ -38,7 +39,7 @@ interface EditorPanelProps {
   useTemplate?: boolean; // Whether to inject template for empty code (default: true for conditions)
 }
 
-export default function EditorPanel({ code, onChange, fontSize: propFontSize, varKeys = [], language = 'javascript', customLanguage, useTemplate = true }: EditorPanelProps) {
+const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>(({ code, onChange, fontSize: propFontSize, varKeys = [], language = 'javascript', customLanguage, useTemplate = true }, ref) => {
   // Use font from Context if available, otherwise fallback to prop
   let fontSize: number;
   try {
@@ -65,6 +66,64 @@ export default function EditorPanel({ code, onChange, fontSize: propFontSize, va
   // Store refs to editor and monaco for useEffect
   const editorRef = React.useRef<any>(null);
   const monacoRef = React.useRef<any>(null);
+
+  // Expose format method via ref
+  React.useImperativeHandle(ref, () => ({
+    format: () => {
+      try {
+        const editor = editorRef.current;
+        const monaco = monacoRef.current;
+        if (!editor || !monaco) {
+          console.warn('[EditorPanel] Format failed: editor or monaco not ready');
+          return;
+        }
+        const model = editor.getModel();
+        if (!model) {
+          console.warn('[EditorPanel] Format failed: model not ready');
+          return;
+        }
+        // Use Monaco's format document action (most reliable)
+        const formatAction = editor.getAction('editor.action.formatDocument');
+        if (formatAction && formatAction.isSupported()) {
+          formatAction.run();
+        } else {
+          // Fallback: try async formatting using Monaco's formatting provider
+          const language = model.getLanguageId();
+          if (language === 'javascript' || language === 'typescript') {
+            // Monaco's formatting is async, so we need to use the provider
+            const provider = monaco.languages.getDocumentFormattingEditProvider(language);
+            if (provider) {
+              Promise.resolve(provider.provideDocumentFormattingEdits(
+                model,
+                { insertSpaces: true, tabSize: 2 },
+                { insertSpaces: true, tabSize: 2 }
+              )).then((edits) => {
+                if (edits && edits.length > 0) {
+                  editor.executeEdits('format', edits);
+                }
+              }).catch((e) => {
+                console.warn('[EditorPanel] Async format failed:', e);
+              });
+            } else {
+              // Last resort: retry action after delay
+              setTimeout(() => {
+                try {
+                  const retryAction = editor.getAction('editor.action.formatDocument');
+                  if (retryAction) retryAction.run();
+                } catch {}
+              }, 100);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[EditorPanel] Format failed:', e);
+      }
+    }
+  }), []);
+
+  // ✅ State for variables tree menu
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [menuPosition, setMenuPosition] = React.useState({ x: 0, y: 0 });
 
   // CRITICAL: Pre-register custom language BEFORE MonacoEditor renders
   // This ensures the tokenizer is available when Monaco loads the initial content
@@ -242,8 +301,16 @@ export default function EditorPanel({ code, onChange, fontSize: propFontSize, va
           contextmenu: false,
           folding: true,
           showFoldingControls: 'always',
-          quickSuggestions: { other: true, comments: true, strings: true },
-          suggestOnTriggerCharacters: true,
+          quickSuggestions: false, // ✅ Disabilita suggerimenti automatici predefiniti
+          suggestOnTriggerCharacters: true, // ✅ Mantieni solo i nostri trigger characters per variabili OMNIA
+          // ✅ Disabilita i suggerimenti predefiniti di JavaScript/TypeScript
+          wordBasedSuggestions: false,
+          wordBasedSuggestionsOnlySameLanguage: false,
+          // Formatting options
+          formatOnPaste: false,
+          formatOnType: false,
+          tabSize: 2,
+          insertSpaces: true,
         }}
         editorDidMount={(editor: any, monaco: any) => {
           // Store refs for useEffect
@@ -260,6 +327,7 @@ export default function EditorPanel({ code, onChange, fontSize: propFontSize, va
                 document.head.appendChild(style);
               }
             } catch {}
+
 
             // Register custom language FIRST, before anything else
             console.log('[EditorPanel] 🔍 editorDidMount called', {
@@ -512,22 +580,53 @@ export default function EditorPanel({ code, onChange, fontSize: propFontSize, va
                   try {
                     const keys: string[] = Array.from(new Set((varKeys || []).filter(Boolean)));
                     const word = model.getWordUntilPosition(position);
-                    const range = { startLineNumber: position.lineNumber, startColumn: word.startColumn, endLineNumber: position.lineNumber, endColumn: word.endColumn };
-                    const capped = (keys || []).slice(0, 200);
-                    const suggestions = capped.map((k: string) => ({
-                      label: `vars["${k}"]`, kind: monaco.languages.CompletionItemKind.Variable,
-                      insertText: `vars["${k}"]`, detail: 'OMNIA Variable', range
-                    }));
-                    const out = suggestions.length ? suggestions : buildFallback(range);
-                    return { suggestions: out };
-                  } catch {
-                    try {
-                      const word = model.getWordUntilPosition(position);
-                      const range = { startLineNumber: position.lineNumber, startColumn: word.startColumn, endLineNumber: position.lineNumber, endColumn: word.endColumn };
-                      return { suggestions: buildFallback(range) };
-                    } catch {
+
+                    // ✅ Extract partial text after vars[" to filter variables
+                    const lineText = model.getLineContent(position.lineNumber);
+                    const textUntilPosition = lineText.substring(0, position.column - 1);
+
+                    // Check if we're inside vars["..."]
+                    const varsPattern = /vars\s*\[\s*["']([^"']*)$/;
+                    const match = textUntilPosition.match(varsPattern);
+
+                    // ✅ SOLO se siamo dentro vars["..."] mostriamo le variabili OMNIA
+                    if (!match) {
+                      // Non siamo dentro vars["..."], disabilita i suggerimenti predefiniti di Monaco
                       return { suggestions: [] };
                     }
+
+                    // Siamo dentro vars["..."], filtra le variabili
+                    let filteredKeys = keys;
+                    const partialText = match[1].toLowerCase();
+                    if (partialText.length > 0) {
+                      filteredKeys = keys.filter(k =>
+                        k.toLowerCase().startsWith(partialText)
+                      );
+                    }
+
+                    const range = {
+                      startLineNumber: position.lineNumber,
+                      startColumn: word.startColumn,
+                      endLineNumber: position.lineNumber,
+                      endColumn: word.endColumn
+                    };
+
+                    const capped = filteredKeys.slice(0, 200);
+                    const suggestions = capped.map((k: string) => ({
+                      label: `vars["${k}"]`,
+                      kind: monaco.languages.CompletionItemKind.Variable,
+                      insertText: `vars["${k}"]`,
+                      detail: 'OMNIA Variable',
+                      range,
+                      // ✅ Add filterText to help Monaco's built-in filtering
+                      filterText: k
+                    }));
+
+                    // ✅ Mostra SOLO le variabili OMNIA, nessun fallback
+                    return { suggestions };
+                  } catch {
+                    // ✅ In caso di errore, non mostrare nulla (disabilita suggerimenti predefiniti)
+                    return { suggestions: [] };
                   }
                 }
               });
@@ -535,219 +634,106 @@ export default function EditorPanel({ code, onChange, fontSize: propFontSize, va
               (window as any).__omniaVarCompletionDispTS = registerFor('typescript');
             }
 
-            // Custom fallback menu (always works, single instance) - only for JavaScript/TypeScript
-            // Skip context menu for custom languages (like regex)
-            let menu: HTMLDivElement | null = null;
-            let createdMenu = false;
+            // ✅ Custom variables tree menu - only for JavaScript/TypeScript
             if (!customLanguage && (language === 'javascript' || language === 'typescript')) {
-              menu = document.getElementById('omnia-var-menu') as HTMLDivElement | null;
-              createdMenu = !menu;
-              if (!menu) {
-                menu = document.createElement('div');
-                menu.id = 'omnia-var-menu';
-                menu.style.position = 'fixed';
-                menu.style.zIndex = '100000';
-                menu.style.background = '#0f172a';
-                menu.style.border = '1px solid #334155';
-                menu.style.borderRadius = '8px';
-                menu.style.padding = '6px';
-                menu.style.minWidth = '260px';
-                menu.style.maxHeight = '300px';
-                menu.style.overflowY = 'auto';
-                menu.style.boxShadow = '0 8px 28px rgba(2,6,23,0.5)';
-                menu.style.display = 'none';
-                // Use a smaller font than the editor by at least 3px (editor default ~13px)
-                menu.style.fontSize = '10px';
-                document.body.appendChild(menu);
-              }
-
-              const closeMenu = () => { if (menu) { menu.style.display = 'none'; menu.innerHTML = ''; } };
-              const openMenu = (x: number, y: number) => {
-                if (!menu) return;
-              try { menu.innerHTML = ''; } catch {}
-              const keys = Array.from(new Set((varKeys || []).filter(Boolean)));
-
-              // Header
-              const header = document.createElement('div');
-              header.textContent = 'Variables';
-              header.style.color = '#93c5fd'; header.style.fontWeight = '700'; header.style.margin = '4px 6px 6px 6px';
-              menu.appendChild(header);
-
-              // Search box
-              const searchWrap = document.createElement('div');
-              searchWrap.style.padding = '0 6px 6px 6px';
-              const search = document.createElement('input');
-              search.type = 'text';
-              search.placeholder = 'Filter variables (type to search)';
-              search.style.width = '100%';
-              search.style.padding = '6px 8px';
-              search.style.border = '1px solid #334155';
-              search.style.borderRadius = '6px';
-              search.style.background = 'transparent';
-              search.style.color = '#e5e7eb';
-              searchWrap.appendChild(search);
-              menu.appendChild(searchWrap);
-
-              // Container for results
-              const list = document.createElement('div');
-              list.style.padding = '4px 4px 8px 4px';
-              menu.appendChild(list);
-
-              const insertKey = (k: string) => {
-                    try {
-                      const pos = editor.getPosition();
-                      const text = `vars["${k}"]`;
-                      editor.executeEdits('omnia-var-insert', [{ range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column), text }]);
-                      editor.focus();
-                    } catch {}
-                    closeMenu();
-                  };
-
-              const makeRow = (label: string, depth: number, isLeaf: boolean, fullKey?: string) => {
-                const row = document.createElement('div');
-                row.style.display = 'flex';
-                row.style.alignItems = 'center';
-                row.style.gap = '6px';
-                row.style.padding = '6px 8px';
-                row.style.borderRadius = '6px';
-                row.style.color = '#e5e7eb';
-                row.style.cursor = 'pointer';
-                row.style.marginLeft = `${depth * 12}px`;
-                row.style.userSelect = 'none';
-                row.onmouseenter = () => { row.style.background = 'rgba(56,189,248,0.10)'; };
-                row.onmouseleave = () => { row.style.background = 'transparent'; };
-                const chevron = document.createElement('span');
-                chevron.textContent = isLeaf ? '' : '▶';
-                chevron.style.width = '12px';
-                chevron.style.opacity = isLeaf ? '0' : '0.8';
-                row.appendChild(chevron);
-                const text = document.createElement('span');
-                text.textContent = label;
-                row.appendChild(text);
-                if (isLeaf && fullKey) {
-                  const insert = () => insertKey(fullKey);
-                  row.onclick = insert;
-                  row.ondblclick = insert;
-                }
-                return row;
-              };
-
-              // Build tree from dot keys
-              type Node = { name: string; children: Record<string, Node>; full?: string };
-              const root: Node = { name: '', children: {} };
-              keys.forEach(k => {
-                const parts = String(k).split('.');
-                let cur = root;
-                parts.forEach((p, i) => {
-                  cur.children[p] = cur.children[p] || { name: p, children: {} };
-                  cur = cur.children[p];
-                  if (i === parts.length - 1) cur.full = k;
-                });
-              });
-
-              // Expand state
-              const expanded = new Set<string>();
-
-              const renderTree = (filter: string) => {
-                list.innerHTML = '';
-                const f = (filter || '').toLowerCase();
-
-                const walk = (node: Node, path: string[], depth: number) => {
-                  const key = path.join('.');
-                  const isLeaf = !!node.full;
-                  const label = node.name;
-                  const visible = f ? (node.full ? node.full.toLowerCase().includes(f) : key.toLowerCase().includes(f)) : true;
-
-                  if (path.length > 0 && visible) {
-                    const row = makeRow(label, depth, isLeaf, node.full);
-                    if (!isLeaf) {
-                      const k = key;
-                      const chevron = row.firstChild as HTMLSpanElement;
-                      const isOpen = expanded.has(k);
-                      chevron.style.transform = isOpen ? 'rotate(90deg)' : 'rotate(0deg)';
-                      row.onclick = () => { if (!isLeaf) { if (expanded.has(k)) expanded.delete(k); else expanded.add(k); renderTree(search.value); } };
-                    }
-                    list.appendChild(row);
-                  }
-                  const isOpen = expanded.has(key) || f.length > 0; // force-open during filtering
-                  if (!isLeaf && isOpen) {
-                    Object.values(node.children).forEach((child) => walk(child, path.concat(child.name), depth + 1));
-                  }
-                };
-
-                Object.values(root.children).forEach((n) => walk(n, [n.name], 0));
-                if (!list.childNodes.length) {
-                  const empty = document.createElement('div');
-                  empty.textContent = 'No variables match the filter';
-                  empty.style.color = '#64748b'; empty.style.padding = '6px 8px';
-                  list.appendChild(empty);
-                }
-              };
-
-              // Initial render
-              renderTree('');
-              search.oninput = () => renderTree(search.value || '');
-
-              // Position and show (anchor menu bottom to click line by default; flip if needed)
-              const padding = 8;
-              const viewportW = window.innerWidth || document.documentElement.clientWidth || 1280;
-              const viewportH = window.innerHeight || document.documentElement.clientHeight || 800;
-              // Prepare for measurement
-              menu.style.left = `${x}px`;
-              menu.style.top = `${y}px`;
-              menu.style.visibility = 'hidden';
-              menu.style.display = 'block';
-              requestAnimationFrame(() => {
-                try {
-                  const rect = menu.getBoundingClientRect();
-                  const spaceAbove = y - padding;
-                  const spaceBelow = viewportH - y - padding;
-                  // Default position: above the click line (bottom anchored to the line)
-                  let top = y - rect.height - padding;
-                  let left = x;
-                  // If not enough room above, show below and cap max height
-                  if (top < padding && spaceBelow > spaceAbove) {
-                    const maxH = Math.max(160, Math.min(420, Math.floor(spaceBelow)));
-                    menu.style.maxHeight = `${maxH}px`;
-                    top = Math.min(viewportH - maxH - padding, y + padding);
-                  }
-                  // Clamp horizontally
-                  if (left + rect.width > viewportW - padding) left = Math.max(padding, viewportW - rect.width - padding);
-                  if (left < padding) left = padding;
-                  if (top < padding) top = padding;
-                  menu.style.left = `${left}px`;
-                  menu.style.top = `${top}px`;
-                } catch {}
-                menu.style.visibility = 'visible';
-              });
-              };
-
               const dom = editor.getDomNode();
               let onCtx: any;
               let onMouseUp: any;
-              let onDocKey: any;
-              let onDocClick: any;
-              if (dom && menu) {
-                onCtx = (e: any) => { try { e.preventDefault(); e.stopPropagation(); } catch {}; try { editor.focus(); } catch {}; openMenu(e.clientX, e.clientY); return false; };
-                onMouseUp = (e: MouseEvent) => { if (e.button === 2) { try { e.preventDefault(); e.stopPropagation(); } catch {}; openMenu(e.clientX, e.clientY); } };
-                onDocKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeMenu(); };
-                // Close only when clicking outside the menu
-                onDocClick = (ev: MouseEvent) => {
+
+              if (dom) {
+                // ✅ Open menu on right-click
+                onCtx = (e: any) => {
+                  console.log('🔍 [EditorPanel] Right-click detected!', { clientX: e.clientX, clientY: e.clientY });
                   try {
-                    const target = ev.target as Node;
-                    if (menu && !menu.contains(target)) {
-                      if (menu.style.display === 'block') closeMenu();
+                    e.preventDefault();
+                    e.stopPropagation();
+                    editor.focus();
+                    const pos = editor.getPosition();
+                    const coords = editor.getScrolledVisiblePosition(pos);
+                    console.log('🔍 [EditorPanel] Right-click position:', { pos, coords });
+                    if (coords) {
+                      setMenuPosition({ x: e.clientX, y: e.clientY });
+                      setMenuOpen(true);
+                      console.log('🔍 [EditorPanel] Menu opened via right-click!');
                     }
-                  } catch { closeMenu(); }
+                  } catch (err) {
+                    console.error('🔍 [EditorPanel] Error in right-click handler:', err);
+                  }
+                  return false;
                 };
-                // Prevent inside clicks from bubbling to document (so expanding tree won't close the menu)
-                try { menu.addEventListener('mousedown', (ev) => { ev.stopPropagation(); }); } catch {}
-                try { menu.addEventListener('click', (ev) => { ev.stopPropagation(); }); } catch {}
+
+                // ✅ Open menu on right mouse button
+                onMouseUp = (e: MouseEvent) => {
+                  if (e.button === 2) {
+                    console.log('🔍 [EditorPanel] Right mouse button up detected!', { clientX: e.clientX, clientY: e.clientY });
+                    try {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setMenuPosition({ x: e.clientX, y: e.clientY });
+                      setMenuOpen(true);
+                      console.log('🔍 [EditorPanel] Menu opened via right mouse button!');
+                    } catch (err) {
+                      console.error('🔍 [EditorPanel] Error in mouseup handler:', err);
+                    }
+                  }
+                };
+
+                // ✅ Open menu when typing '[' (trigger for variables)
+                editor.onKeyDown((e: any) => {
+                  console.log('🔍 [EditorPanel] Key pressed:', { keyCode: e.keyCode, key: e.browserEvent?.key, monacoKeyCode: monaco.KeyCode.BracketLeft });
+                  if (e.keyCode === monaco.KeyCode.BracketLeft) {
+                    console.log('🔍 [EditorPanel] BracketLeft detected!');
+                    // Check if we're inside vars["..."] context
+                    const pos = editor.getPosition();
+                    const model = editor.getModel();
+                    console.log('🔍 [EditorPanel] Position and model:', { pos, hasModel: !!model });
+                    if (pos && model) {
+                      const lineText = model.getLineContent(pos.lineNumber);
+                      const textUntilPosition = lineText.substring(0, pos.column - 1);
+                      console.log('🔍 [EditorPanel] Line text:', { lineText, textUntilPosition });
+                      const varsPattern = /vars\s*\[\s*["']([^"']*)$/;
+                      const match = textUntilPosition.match(varsPattern);
+                      console.log('🔍 [EditorPanel] Pattern match:', match);
+
+                      if (match) {
+                        console.log('🔍 [EditorPanel] Match found! Opening menu...');
+                        // We're inside vars["..."], open menu
+                        setTimeout(() => {
+                          const coords = editor.getScrolledVisiblePosition(pos);
+                          console.log('🔍 [EditorPanel] Coordinates:', coords);
+                          if (coords) {
+                            const domNode = editor.getDomNode();
+                            if (domNode) {
+                              const rect = domNode.getBoundingClientRect();
+                              const newPos = {
+                                x: rect.left + coords.left,
+                                y: rect.top + coords.top + 20 // Position below cursor
+                              };
+                              console.log('🔍 [EditorPanel] Setting menu position:', newPos);
+                              setMenuPosition(newPos);
+                              setMenuOpen(true);
+                              console.log('🔍 [EditorPanel] Menu opened!');
+                            }
+                          }
+                        }, 100); // Small delay to let Monaco process the '[' character
+                      } else {
+                        console.log('🔍 [EditorPanel] No match - not inside vars["..."]');
+                      }
+                    }
+                  }
+                });
+
                 dom.addEventListener('contextmenu', onCtx, { capture: true } as any);
                 dom.addEventListener('mouseup', onMouseUp as any, { capture: true });
-                document.addEventListener('keydown', onDocKey as any);
-                document.addEventListener('click', onDocClick as any, { capture: true } as any);
               }
+
+              // ✅ Cleanup on dispose
+              editor.onDidDispose(() => {
+                if (dom) {
+                  try { dom.removeEventListener('contextmenu', onCtx as any, { capture: true } as any); } catch {}
+                  try { dom.removeEventListener('mouseup', onMouseUp as any, { capture: true } as any); } catch {}
+                }
+              });
             }
 
             // (template guard already installed above)
@@ -758,26 +744,46 @@ export default function EditorPanel({ code, onChange, fontSize: propFontSize, va
                 try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch {}
                 try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch {}
               }
-              // Use editor's DOM node instead of the captured 'dom' variable
-              const editorDom = editor.getDomNode();
-              if (editorDom && menu) {
-                try { editorDom.removeEventListener('contextmenu', onCtx as any, { capture: true } as any); } catch {}
-                try { editorDom.removeEventListener('mouseup', onMouseUp as any, { capture: true } as any); } catch {}
-              }
-              if (menu) {
-                try { document.removeEventListener('keydown', onDocKey as any); } catch {}
-                try { document.removeEventListener('click', onDocClick as any, { capture: true } as any); } catch {}
-                // keep single menu instance for other editors; don't remove if not created by this mount
-                try { if (createdMenu && menu && menu.parentElement) menu.parentElement.removeChild(menu); } catch {}
-              }
             });
           } catch {}
         }}
         height="100%"
       />
+      {/* ✅ Variables Tree Menu */}
+      {(() => {
+        const shouldRender = !customLanguage && (language === 'javascript' || language === 'typescript') && editorRef.current && monacoRef.current;
+        // console.log('🔍 [EditorPanel] Should render menu?', {
+        //   shouldRender,
+        //   customLanguage,
+        //   language,
+        //   hasEditor: !!editorRef.current,
+        //   hasMonaco: !!monacoRef.current,
+        //   menuOpen,
+        //   varKeysCount: varKeys?.length
+        // });
+
+        if (shouldRender) {
+          return (
+            <VariablesTreeMenu
+              isOpen={menuOpen}
+              position={menuPosition}
+              variables={varKeys}
+              editor={editorRef.current}
+              monaco={monacoRef.current}
+              onClose={() => {
+                console.log('🔍 [EditorPanel] Closing menu');
+                setMenuOpen(false);
+              }}
+            />
+          );
+        }
+        return null;
+      })()}
     </div>
   );
-}
+});
+
+export default EditorPanel;
 
 
 

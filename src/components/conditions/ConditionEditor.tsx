@@ -2,7 +2,7 @@ import React from 'react';
 import { getDDTIcon as getDDTIconFromRE } from '../ActEditor/ResponseEditor/ddtUtils';
 import { generateConditionWithAI, suggestConditionCases, normalizePseudoCode, repairCondition } from '../../services/ai/groq';
 import ConditionTester, { CaseRow } from './ConditionTester';
-import CodeEditor from '../CodeEditor/CodeEditor';
+import CodeEditor, { CodeEditorRef } from '../CodeEditor/CodeEditor';
 import * as monacoNS from 'monaco-editor';
 import { setMonacoMarkers, clearMonacoMarkers } from '../../utils/monacoMarkers';
 import { X, Pencil, Check, Code2, FlaskConical, ListChecks, Loader2 } from 'lucide-react';
@@ -50,7 +50,8 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     '// Now - vars["Agent asks for user\'s name.DateOfBirth"] > 18 years',
     ''
   ].join('\n');
-  const [script, setScript] = React.useState(initialScript || '');
+  // ✅ Inizializza con DEFAULT_CODE se initialScript è vuoto, così il pulsante appare subito
+  const [script, setScript] = React.useState(initialScript && initialScript.trim() ? initialScript : DEFAULT_CODE);
   const [busy, setBusy] = React.useState(false);
   const [aiQuestion, setAiQuestion] = React.useState<string>('');
   // describe/chat removed
@@ -59,6 +60,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   const [hasCreated, setHasCreated] = React.useState<boolean>(false);
   const monacoEditorRef = React.useRef<any>(null);
   const monacoInstanceRef = React.useRef<typeof monacoNS | null>(null);
+  const codeEditorRef = React.useRef<CodeEditorRef>(null);
   React.useEffect(() => { try { monacoInstanceRef.current = (window as any).monaco || null; } catch {} }, []);
   const [runtimeErrorMsg, setRuntimeErrorMsg] = React.useState<string | null>(null);
   // clarification answer input will be handled inline; no separate state
@@ -525,6 +527,14 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         setLastAcceptedScript(candidate);
         setShowTester(true);
         setAiQuestion('');
+        // Format after modify
+        setTimeout(() => {
+          try {
+            codeEditorRef.current?.format();
+          } catch (e) {
+            console.warn('[ConditionEditor] Format failed:', e);
+          }
+        }, 300);
         return;
       }
     } catch (e) {
@@ -592,33 +602,51 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
           provider: (window as any).__AI_PROVIDER || undefined,
           label: parsed.label || titleValue
         });
+        console.log('🔍 [Normalize][res]', norm);
         const candidate = (norm as any)?.script;
+        console.log('🔍 [Normalize][script]', { hasScript: !!candidate, scriptPreview: candidate?.substring(0, 100) });
         if (candidate && typeof candidate === 'string' && candidate.trim()) {
+          console.log('✅ [Normalize] SUCCESS - setting script');
           setScript(candidate);
           setShowCode(true);
           setHasCreated(true);
           setLastAcceptedScript(candidate);
           setShowTester(true);
           setAiQuestion('');
+          // Format after normalize
+          setTimeout(() => {
+            try {
+              codeEditorRef.current?.format();
+            } catch (e) {
+              console.warn('[ConditionEditor] Format failed:', e);
+            }
+          }, 300);
           return; // success path
         }
-      } catch {}
+        console.log('⚠️ [Normalize] No valid script, trying fallback');
+      } catch (e) {
+        console.log('❌ [Normalize] Error:', e);
+      }
 
       // 2) Fallback to previous condition generator
       const varsForAI = (selectedVars && selectedVars.length > 0) ? selectedVars : variablesFlatWithPreference;
       const varsList = (varsForAI || []).map(v => `- ${v}`).join('\n');
       const guidance = `${nlText}\n\nConstraints:\n- Use EXACTLY these variable keys when reading input; do not invent or rename keys.\n${varsList}\n- Access variables strictly as vars["<key>"] (no dot access).\n- Return a boolean (predicate).\n\nPlease return well-formatted JavaScript for function main(ctx) with detailed inline comments explaining each step and rationale. Use clear variable names, add section headers, and ensure readability (one statement per line).`;
       const out = await generateConditionWithAI(guidance, varsForAI);
+      console.log('🔍 [Generate][res]', out);
       const aiLabel = (out as any)?.label as string | undefined;
       const aiScript = (out as any)?.script as string | undefined;
       const question = (out as any)?.question as string | undefined;
+      console.log('🔍 [Generate][parsed]', { label: aiLabel, scriptPreview: aiScript?.substring(0, 100), question });
       if (question && !aiScript) {
+        console.log('⚠️ [Generate] AI asked a question:', question);
         setAiQuestion(question);
         return;
       }
       setAiQuestion('');
       if (!titleValue || titleValue === 'Condition') setTitleValue(aiLabel || 'Nuova condizione');
       let nextScript = aiScript || 'try { return false; } catch { return false; }';
+      console.log('🔍 [Generate][nextScript]', { length: nextScript.length, preview: nextScript.substring(0, 100) });
       // Post-fix common alias mistakes (e.g., Act.DOB) by rewriting to the selected Date key when unique
       try {
         const all = varsForAI || [];
@@ -642,9 +670,16 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       setLastAcceptedScript(nextScript);
       // Open tester to the right as requested
       setShowTester(true);
-      // Format after AI generates
-      setTimeout(() => { try { monacoEditorRef.current?.getAction('editor.action.formatDocument')?.run(); } catch {} }, 50);
-      // Ask backend to suggest example true/false cases
+      // Format after AI generates - wait longer for Monaco to be ready
+      setTimeout(() => {
+        try {
+          codeEditorRef.current?.format();
+        } catch (e) {
+          console.warn('[ConditionEditor] Format failed:', e);
+        }
+      }, 300);
+      // Ask backend to suggest example true/false cases (now handled by CodeEditor's suggestTestCases)
+      // But we still call it here for backward compatibility and to populate testRows immediately
       try {
         const cases = await suggestConditionCases(nlText, varsForAI);
         const rows: CaseRow[] = [];
@@ -903,24 +938,28 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
               style={{ cursor: 'col-resize', width: 4, margin: '0 2px', background: 'rgba(148,163,184,0.25)', borderRadius: 2 }}
             />
           )}
-          {/* Generate button moved to toolbar; no extra column here */}
-          {/* Code panel with its own toolbar aligned to top */}
+          {/* Code panel - CodeEditor with toolbar */}
           {showCode && (
           <div style={{ height: '100%', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0b1220', display: 'grid', gridTemplateRows: 'auto 1fr' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: '1px solid #334155' }}>
+              {/* Generate button - uses CodeEditor logic via onGenerateClick */}
               {(() => {
                 const isScaffold = normalizeCode(script) === normalizeCode(DEFAULT_CODE);
                 const isEmpty = normalizeCode(script).length === 0;
-                const isBase = isEmpty || isScaffold;
-                const canCreate = !hasCreated && !isBase;
+                // ✅ Mostra sempre il pulsante se c'è testo (non vuoto, anche se è lo scaffold)
+                const scriptTrimmed = String(script || '').trim();
+                const hasText = scriptTrimmed.length > 0; // ✅ Qualsiasi testo, anche commenti
+                const canCreate = hasText && !hasCreated; // ✅ Mostra se c'è testo e non è stato ancora generato
                 const canModify = hasCreated && String(script || '') !== String(lastAcceptedScript || '');
                 const showMain = hasFailures || canCreate || canModify;
+
                 if (!showMain) return null;
                 const label = hasFailures ? 'Fix code' : (canModify ? 'Modify code' : 'Create code');
                 const busyLabel = hasFailures ? 'Fixing code...' : (canModify ? 'Modifying code...' : 'Creating code...');
                 const titleText = hasFailures ? 'Fix code using your classified failures' : (canModify ? 'Modify the code based on your edits' : 'Generate code from your description');
+
                 return (
-              <button
+                  <button
                     title={titleText}
                     onClick={async () => {
                       if (hasFailures) {
@@ -935,6 +974,14 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                             resetTesterVisualsRef.current?.();
                             setTesterAllPass(null);
                             setHasFailures(false);
+                            // Format after repair
+                            setTimeout(() => {
+                              try {
+                                codeEditorRef.current?.format();
+                              } catch (e) {
+                                console.warn('[ConditionEditor] Format failed:', e);
+                              }
+                            }, 300);
                           } else {
                             const err = (resp as any)?.error || 'repair_failed';
                             setAiQuestion('Repair failed: ' + String(err));
@@ -946,7 +993,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                       if (canModify) { await modify(); return; }
                       if (canCreate) { await generate(); return; }
                     }}
-                disabled={busy}
+                    disabled={busy}
                     style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: busy ? 'rgba(148,163,184,0.10)' : 'transparent', color: busy ? '#b45309' : '#e5e7eb', fontWeight: 700, minWidth: 160, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
                     {busy ? (
@@ -995,6 +1042,14 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                             if (resp?.script && typeof resp.script === 'string') {
                               setScript(resp.script);
                               resetTesterVisuals();
+                              // Format after repair
+                              setTimeout(() => {
+                                try {
+                                  codeEditorRef.current?.format();
+                                } catch (e) {
+                                  console.warn('[ConditionEditor] Format failed:', e);
+                                }
+                              }, 100);
                             }
                           } catch {}
                         }}
@@ -1006,6 +1061,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
               )}
             </div>
             <CodeEditor
+              ref={codeEditorRef}
               initialCode={script}
               initialMode={'predicate'}
               fontPx={fontPx}
@@ -1035,13 +1091,104 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                   } catch {
                     return '--- a/code\n+++ b/code\n';
                   }
+                },
+                suggestTestCases: async ({ code, mode, variables, nl }) => {
+                  try {
+                    const nlText = nl || serializeCE();
+                    const cases = await suggestConditionCases(nlText, variables);
+                    return cases;
+                  } catch {
+                    return {};
+                  }
                 }
               }}
               tests={{
                 run: async () => ({ pass: 0, fail: 0, blocked: 0, ms: 0, results: [] })
               }}
-              onPatchApplied={({ code }) => setScript(code)}
+              onPatchApplied={({ code }) => {
+                setScript(code);
+                // After applying patch, also suggest test cases if in predicate mode
+                if (code && variablesUsedInScript.length > 0) {
+                  // This will be handled by CodeEditor's generate() if called via onGenerateClick
+                  // But we can also trigger it here if needed
+                }
+              }}
               layout="compact"
+              showGenerateButton={false}
+              onGenerateClick={async () => {
+                // Use CodeEditor's ai.codeEditToPatch to generate diff instead of setting script directly
+                // This will show the DiffPanel in CodeEditor
+                setBusy(true);
+                try {
+                  if (hasFailures) {
+                    const failures = getFailuresRef.current?.() || [];
+                    const resp = await repairCondition(script, failures, variablesForTester, (window as any).__AI_PROVIDER || undefined);
+                    if (resp?.script && typeof resp.script === 'string') {
+                      // Generate diff for repair
+                      const diff = await (async () => {
+                        const a = script.replace(/\r/g, '');
+                        const b = resp.script.replace(/\r/g, '');
+                        if (a === b) return '--- a/code\n+++ b/code\n';
+                        return `--- a/code\n+++ b/code\n@@ -1,1 +1,1 @@\n-${a}\n+${b}`;
+                      })();
+                      // Trigger diff in CodeEditor by calling onPatchApplied with the diff
+                      // Actually, we need to expose a way to set diff in CodeEditor
+                      // For now, set script directly and CodeEditor will sync
+                      setScript(resp.script);
+                      setLastAcceptedScript(resp.script);
+                      resetTesterVisuals();
+                      resetTesterVisualsRef.current?.();
+                      setTesterAllPass(null);
+                      setHasFailures(false);
+                      // Format after repair
+                      setTimeout(() => {
+                        try {
+                          codeEditorRef.current?.format();
+                        } catch (e) {
+                          console.warn('[ConditionEditor] Format failed:', e);
+                        }
+                      }, 100);
+                    } else {
+                      const err = (resp as any)?.error || 'repair_failed';
+                      setAiQuestion('Repair failed: ' + String(err));
+                    }
+                    return;
+                  }
+
+                  const isScaffold = normalizeCode(script) === normalizeCode(DEFAULT_CODE);
+                  const isEmpty = normalizeCode(script).length === 0;
+                  const hasText = !isEmpty && normalizeCode(script).trim().length > 0;
+                  const canCreate = hasText && !hasCreated;
+                  const canModify = hasCreated && String(script || '') !== String(lastAcceptedScript || '');
+
+                  // Call generate/modify directly (they will set script, CodeEditor will sync via initialCode prop)
+                  if (canModify) {
+                    await modify();
+                  } else if (canCreate) {
+                    await generate();
+                  }
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              onTestCasesSuggested={(cases) => {
+                // Convert TestCase[] to CaseRow[]
+                const rows: CaseRow[] = cases.map(tc => ({
+                  id: tc.id,
+                  label: tc.expectedBoolean === true ? 'true' : 'false',
+                  vars: tc.values as Record<string, any>
+                }));
+                if (rows.length) {
+                  setTestRows(rows);
+                  // Set hints from test cases
+                  const trueCase = cases.find(c => c.expectedBoolean === true);
+                  const falseCase = cases.find(c => c.expectedBoolean === false);
+                  setTesterHints({
+                    hintTrue: trueCase?.hint,
+                    hintFalse: falseCase?.hint
+                  });
+                }
+              }}
             />
           </div>
           )}

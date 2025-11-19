@@ -38,6 +38,7 @@ import { useDDTContext } from '../context/DDTContext';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from './Sidebar/sidebarTheme';
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
 // TaskRepository automatically syncs with InstanceRepository for backward compatibility
+import { flowchartVariablesService } from '../services/FlowchartVariablesService';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -288,13 +289,34 @@ export const AppContent: React.FC<AppContentProps> = ({
       return acts;
     };
 
-    const handler = (e: any) => {
+    // ✅ NEW: Build flowchart variables
+    const buildFlowchartVars = async (): Promise<Record<string, any>> => {
+      const vars: Record<string, any> = {};
+      try {
+        const projectId = pdUpdate?.getCurrentProjectId();
+        if (projectId) {
+          await flowchartVariablesService.init(projectId);
+          const varNames = flowchartVariablesService.getAllReadableNames();
+          varNames.forEach(name => {
+            vars[name] = ''; // Empty value, just for autocomplete
+          });
+        }
+      } catch {}
+      return vars;
+    };
+
+    const handler = async (e: any) => {
       const d = (e && e.detail) || {};
       const provided = d.variables || {};
       const hasProvided = provided && Object.keys(provided).length > 0;
       const staticVars = buildStaticVars();
+      const flowchartVars = await buildFlowchartVars(); // ✅ NEW
       const varsTree = buildVarsTree();
-      const finalVars = hasProvided ? provided : staticVars;
+
+      // Merge static vars with flowchart vars
+      const allVars = { ...staticVars, ...flowchartVars }; // ✅ NEW
+
+      const finalVars = hasProvided ? provided : allVars;
       setConditionVars(finalVars);
       setConditionVarsTree((d as any).variablesTree || varsTree);
       setConditionScript(d.script || '');
@@ -302,8 +324,22 @@ export const AppContent: React.FC<AppContentProps> = ({
       setConditionEditorOpen(true);
     };
     document.addEventListener('conditionEditor:open', handler as any);
-    return () => document.removeEventListener('conditionEditor:open', handler as any);
-  }, [projectData]);
+
+    // ✅ NEW: Listen for flowchart variables updates
+    const varsUpdateHandler = async () => {
+      if (conditionEditorOpen) {
+        const flowchartVars = await buildFlowchartVars();
+        const staticVars = buildStaticVars();
+        setConditionVars({ ...staticVars, ...flowchartVars });
+      }
+    };
+    document.addEventListener('flowchart:variablesUpdated', varsUpdateHandler as any);
+
+    return () => {
+      document.removeEventListener('conditionEditor:open', handler as any);
+      document.removeEventListener('flowchart:variablesUpdated', varsUpdateHandler as any);
+    };
+  }, [projectData, pdUpdate, conditionEditorOpen]);
 
   // Stato per gestione progetti
   const [recentProjects, setRecentProjects] = useState<any[]>([]);

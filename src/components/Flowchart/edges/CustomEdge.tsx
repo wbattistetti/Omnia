@@ -51,6 +51,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const [screenPoint, setScreenPoint] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const label = props.data?.label || props.label;
   const [midPoint, setMidPoint] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // ✅ Ref per timeout di nascondimento toolbar
+  const hideToolbarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const toolbarRef = useRef<HTMLSpanElement>(null);
 
   const reactFlowInstance = useReactFlow();
   const [zoom, setZoom] = useState(1);
@@ -239,6 +242,27 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       }
     }
   }, [edgePath, label]);
+
+  // ✅ Cleanup timeout quando il componente viene smontato
+  useEffect(() => {
+    return () => {
+      if (hideToolbarTimeoutRef.current) {
+        clearTimeout(hideToolbarTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // ✅ Traccia le coordinate del mouse per verificare se è sulla toolbar (fallback per createPortal)
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      (window as any).__lastMouseX = e.clientX;
+      (window as any).__lastMouseY = e.clientY;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
 
   // Aggiorna la posizione della label anche su zoom/pan/drag
   useEffect(() => {
@@ -472,8 +496,47 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       {label && createPortal(
         <div
           title={props.data?.isElse ? 'Else: ramo di fallback quando le altre condizioni sono false' : undefined}
-          onMouseEnter={() => setLabelHovered(true)}
-          onMouseLeave={() => setLabelHovered(false)}
+          onMouseEnter={() => {
+            // ✅ Cancella eventuali timeout in corso
+            if (hideToolbarTimeoutRef.current) {
+              clearTimeout(hideToolbarTimeoutRef.current);
+              hideToolbarTimeoutRef.current = null;
+            }
+            setLabelHovered(true);
+          }}
+          onMouseLeave={(e) => {
+            // ✅ Verifica se il mouse sta andando verso la toolbar
+            const relatedTarget = e.relatedTarget as HTMLElement;
+            const isGoingToToolbar = relatedTarget && (
+              toolbarRef.current?.contains(relatedTarget) ||
+              captionRef.current?.contains(relatedTarget)
+            );
+
+            // Se il mouse sta andando verso la toolbar, non nascondere
+            if (isGoingToToolbar) {
+              return;
+            }
+
+            // ✅ Avvia timeout per nascondere la toolbar (dà tempo di raggiungere la toolbar)
+            if (hideToolbarTimeoutRef.current) {
+              clearTimeout(hideToolbarTimeoutRef.current);
+            }
+            hideToolbarTimeoutRef.current = setTimeout(() => {
+              // ✅ Verifica se il mouse è ancora sulla toolbar usando le coordinate (fallback per createPortal)
+              const el = document.elementFromPoint(
+                (window as any).__lastMouseX || 0,
+                (window as any).__lastMouseY || 0
+              ) as HTMLElement;
+              const isOverToolbar = el && (
+                toolbarRef.current?.contains(el) ||
+                captionRef.current?.contains(el)
+              );
+              if (!isOverToolbar) {
+                setLabelHovered(false);
+              }
+              hideToolbarTimeoutRef.current = null;
+            }, 200); // 200ms di tolleranza
+          }}
           style={{
             position: 'absolute',
             left: screenPoint.x,
@@ -503,17 +566,32 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             const sizes = calculateFontBasedSizes(fontSizes.edgeCaption);
 
             return (
-              <span style={{
-                position: 'absolute', // ✅ Posizionamento assoluto rispetto alla label
-                left: '100%', // ✅ A destra della label
-                marginLeft: '6px', // ✅ Gap tra label e toolbar
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 2,
-                top: '50%', // ✅ Centrato verticalmente
-                transform: 'translateY(-50%)', // ✅ Centrato verticalmente
-                whiteSpace: 'nowrap' // ✅ Evita wrapping
-              }}>
+              <span
+                ref={toolbarRef}
+                onMouseEnter={() => {
+                  // ✅ Cancella eventuali timeout in corso quando il mouse entra nella toolbar
+                  if (hideToolbarTimeoutRef.current) {
+                    clearTimeout(hideToolbarTimeoutRef.current);
+                    hideToolbarTimeoutRef.current = null;
+                  }
+                  setLabelHovered(true);
+                }}
+                onMouseLeave={() => {
+                  // ✅ Nascondi immediatamente quando il mouse lascia anche la toolbar
+                  setLabelHovered(false);
+                }}
+                style={{
+                  position: 'absolute', // ✅ Posizionamento assoluto rispetto alla label
+                  left: '100%', // ✅ A destra della label
+                  marginLeft: '6px', // ✅ Gap tra label e toolbar
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  top: '50%', // ✅ Centrato verticalmente
+                  transform: 'translateY(-50%)', // ✅ Centrato verticalmente
+                  whiteSpace: 'nowrap' // ✅ Evita wrapping
+                }}
+              >
                 <button
                   style={{
                     background: 'none',
