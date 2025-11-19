@@ -33,6 +33,7 @@ import { FontProvider, useFontContext } from '../../../context/FontContext';
 import { useAIProvider } from '../../../context/AIProviderContext';
 import { DialogueTemplateService } from '../../../services/DialogueTemplateService';
 import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
+import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 
 function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
 
@@ -213,124 +214,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     return result;
   };
 
-  // ✅ localTranslations now comes from global table (filtered by project locale)
-  // ❌ REMOVED: ddt?.translations - translations are now in global table only
-  const [localTranslations, setLocalTranslations] = useState<Record<string, string>>(() => {
-    // Start with empty - will be populated from global table
-    console.log('[RESPONSE_EDITOR][TRANSLATIONS] Initial state from global table', {
-      projectLocale,
-      globalTranslationsCount: Object.keys(globalTranslations).length
-    });
-    return {};
-  });
-
-  // Extract all GUIDs from DDT structure
-  const extractGUIDsFromDDT = (ddt: any): string[] => {
-    const guids = new Set<string>();
-    const guidSources: Array<{ guid: string; source: string }> = [];
-
-    if (!ddt?.mainData) {
-      console.log('[DEBUG][EXTRACT_GUIDS] No mainData in DDT');
-      return [];
-    }
-
-    const processNode = (node: any, nodeLabel?: string) => {
-      // Extract from messages
-      if (node.messages) {
-        Object.entries(node.messages).forEach(([stepKey, msg]: [string, any]) => {
-          if (msg?.textKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.textKey)) {
-            guids.add(msg.textKey);
-            guidSources.push({ guid: msg.textKey, source: `message.${stepKey}${nodeLabel ? ` (${nodeLabel})` : ''}` });
-          }
-        });
-      }
-
-      // Extract from escalations
-      if (node.steps) {
-        Object.entries(node.steps).forEach(([stepKey, step]: [string, any]) => {
-          if (step.escalations) {
-            step.escalations.forEach((esc: any, escIdx: number) => {
-              if (esc.actions) {
-                esc.actions.forEach((action: any, actionIdx: number) => {
-                  const actionInstanceId = action.actionInstanceId;
-                  if (actionInstanceId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actionInstanceId)) {
-                    guids.add(actionInstanceId);
-                    guidSources.push({ guid: actionInstanceId, source: `action.${stepKey}.esc${escIdx}.act${actionIdx}${nodeLabel ? ` (${nodeLabel})` : ''}` });
-                  }
-                  const textParam = action.parameters?.find((p: any) => p.parameterId === 'text');
-                  if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
-                    guids.add(textParam.value);
-                    guidSources.push({ guid: textParam.value, source: `param.${stepKey}.esc${escIdx}.act${actionIdx}${nodeLabel ? ` (${nodeLabel})` : ''}` });
-                  }
-                });
-              }
-            });
-          }
-        });
-      }
-
-      // Recursively process subData
-      if (node.subData && Array.isArray(node.subData)) {
-        node.subData.forEach((sub: any) => processNode(sub, sub.label || node.label));
-      }
-    };
-
-    ddt.mainData.forEach((main: any) => processNode(main, main.label));
-
-    const result = Array.from(guids);
-    console.log('[DEBUG][EXTRACT_GUIDS] Extracted GUIDs from DDT', {
-      totalGuids: result.length,
-      guids: result,
-      sources: guidSources
-    });
-
-    return result;
-  };
-
-  // ✅ Update localTranslations from global table when globalTranslations or DDT changes
-  // ❌ REMOVED: Loading from database - translations are now in global table only
-  useEffect(() => {
-    if (!localDDT) {
-      console.log('[DEBUG][LOAD_TRANSLATIONS] Skipping - no DDT');
-      setLocalTranslations({});
-      return;
-    }
-
-    const guids = extractGUIDsFromDDT(localDDT);
-    if (guids.length === 0) {
-      console.log('[DEBUG][LOAD_TRANSLATIONS] No GUIDs found in DDT');
-      setLocalTranslations({});
-      return;
-    }
-
-    // ✅ Extract translations from global table (already filtered by project locale)
-    const translationsFromGlobal: Record<string, string> = {};
-    const foundGuids: string[] = [];
-    const missingGuids: string[] = [];
-
-    guids.forEach(guid => {
-      const translation = globalTranslations[guid];
-      if (translation) {
-        translationsFromGlobal[guid] = translation;
-        foundGuids.push(guid);
-      } else {
-        missingGuids.push(guid);
-      }
-    });
-
-    console.log('[DEBUG][LOAD_TRANSLATIONS] ✅ Loaded from global table', {
-      requestedGuids: guids.length,
-      uniqueGuids: [...new Set(guids)].length,
-      foundTranslations: foundGuids.length,
-      missingGuids: missingGuids.length,
-      projectLocale,
-      sampleFound: foundGuids.slice(0, 5),
-      sampleMissing: missingGuids.slice(0, 5),
-      globalTableSize: Object.keys(globalTranslations).length
-    });
-
-    setLocalTranslations(translationsFromGlobal);
-  }, [globalTranslations, localDDT?.id, localDDT?._id, projectLocale]);
+  // ✅ Load translations from global table using shared hook
+  const localTranslations = useDDTTranslations(localDDT);
 
   // ❌ REMOVED: Sync from ddt.translations - translations are now in global table only
   // Translations are updated via the effect above that watches globalTranslations

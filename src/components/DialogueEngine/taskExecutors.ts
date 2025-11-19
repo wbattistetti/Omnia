@@ -73,6 +73,7 @@ export async function executeTask(
     onProblemClassify?: (intents: any[], ddt: AssembledDDT) => Promise<any>;
     onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<any>;
     onProcessInput?: (input: string, node: any) => Promise<{ status: 'match' | 'noMatch' | 'noInput' | 'partialMatch'; value?: any }>;
+    translations?: Record<string, string>; // ✅ Translations from global table
   }
 ): Promise<TaskExecutionResult> {
   console.log('[TaskExecutor][executeTask] Starting', {
@@ -106,11 +107,24 @@ export async function executeTask(
         return result;
 
       case 'GetData':
+        // 🔍 DEBUG: Log translations being passed to executeGetData
+        console.log('[TaskExecutor][executeTask] 🔍 Passing translations to executeGetData', {
+          hasTranslations: !!callbacks.translations,
+          translationsCount: callbacks.translations ? Object.keys(callbacks.translations).length : 0,
+          sampleTranslationKeys: callbacks.translations ? Object.keys(callbacks.translations).slice(0, 5) : [],
+          sampleTranslations: callbacks.translations ? Object.entries(callbacks.translations).slice(0, 3).map(([k, v]) => ({
+            key: k,
+            value: String(v).substring(0, 50)
+          })) : [],
+          taskId: task.id,
+          taskAction: task.action
+        });
         return await executeGetData(task, {
           onMessage: callbacks.onMessage,
           onDDTStart: callbacks.onDDTStart,
           onGetRetrieveEvent: callbacks.onGetRetrieveEvent,
-          onProcessInput: callbacks.onProcessInput
+          onProcessInput: callbacks.onProcessInput,
+          translations: callbacks.translations // ✅ Pass translations from callbacks
         });
 
       case 'ClassifyProblem':
@@ -265,6 +279,7 @@ async function executeGetData(
     onDDTStart?: (ddt: AssembledDDT) => void;
     onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<any>;
     onProcessInput?: (input: string, node: any) => Promise<any>;
+    translations?: Record<string, string>; // ✅ Translations from global table
   }
 ): Promise<TaskExecutionResult> {
   console.log('[TaskExecutor][executeGetData] Starting', {
@@ -279,55 +294,11 @@ async function executeGetData(
   });
 
   const ddt = task.value?.ddt;
-  let text = task.value?.text;
 
-  // If task has no text, try to extract initial message from DDT (step "start")
-  if (!text && ddt) {
-    console.log('[TaskExecutor][executeGetData] Task has no text, extracting from DDT');
-    try {
-      // Import resolveAsk dynamically to avoid circular dependencies
-      const { resolveAsk } = await import('../ChatSimulator/messageResolvers');
-
-      // Get main data from DDT
-      const mainData = Array.isArray(ddt.mainData) ? ddt.mainData[0] : ddt.mainData;
-      if (mainData) {
-        // Try to get legacy node structure for resolveAsk
-        const legacyMain = (ddt as any).legacyMain || mainData;
-
-        // Resolve initial message from DDT (step "start")
-        const resolved = resolveAsk(undefined, undefined, undefined, undefined, legacyMain, undefined);
-        if (resolved.text) {
-          text = resolved.text;
-          console.log('[TaskExecutor][executeGetData] Extracted message from DDT', {
-            text: text.substring(0, 100),
-            stepType: resolved.stepType
-          });
-        } else {
-          console.warn('[TaskExecutor][executeGetData] Could not extract message from DDT', {
-            hasMainData: !!mainData,
-            mainDataKind: mainData.kind,
-            hasSteps: !!mainData.steps,
-            stepsKeys: mainData.steps ? Object.keys(mainData.steps) : []
-          });
-        }
-      }
-    } catch (error) {
-      console.error('[TaskExecutor][executeGetData] Error extracting message from DDT', error);
-    }
-  }
-
-  // If we have text (from task.value or extracted from DDT), show message first
-  if (text) {
-    console.log('[TaskExecutor][executeGetData] Showing message', { text: text.substring(0, 100) });
-    if (callbacks.onMessage) {
-      callbacks.onMessage(text);
-      console.log('[TaskExecutor][executeGetData] Message callback called');
-    } else {
-      console.warn('[TaskExecutor][executeGetData] Task has text but onMessage callback is not provided');
-    }
-  } else {
-    console.log('[TaskExecutor][executeGetData] No message to show (no text in task.value and could not extract from DDT)');
-  }
+  // ❌ REMOVED: Don't extract or show initial message here
+  // The DDT navigator will handle the "start" step and show the message correctly
+  // This was causing duplicate messages (GUID first, then translated)
+  // The DDT navigator executes the step "start" which already shows the message
 
   // Log DDT structure for debugging
   if (ddt) {
@@ -384,14 +355,31 @@ async function executeGetData(
 
     // Execute hierarchical navigation
     // Pass DDT to callbacks so they can access it
+    // ✅ Use translations from callbacks (loaded from global table) instead of ddt.translations
     const ddtCallbacks = {
       onMessage: callbacks.onMessage,
       onGetRetrieveEvent: callbacks.onGetRetrieveEvent ?
         (nodeId: string, ddtParam?: AssembledDDT) => callbacks.onGetRetrieveEvent!(nodeId, ddtParam || ddt) :
         undefined,
       onProcessInput: callbacks.onProcessInput,
-      translations: (ddt as any).translations || {} // Pass DDT translations
+      translations: callbacks.translations || {} // ✅ Use translations from callbacks (global table)
     };
+
+    // 🔍 DEBUG: Log translations being passed to DDT navigator
+    console.log('[TaskExecutor][executeGetData] Passing translations to DDT navigator', {
+      hasTranslations: !!callbacks.translations,
+      translationsCount: callbacks.translations ? Object.keys(callbacks.translations).length : 0,
+      ddtCallbacksTranslationsCount: ddtCallbacks.translations ? Object.keys(ddtCallbacks.translations).length : 0,
+      sampleTranslationKeys: callbacks.translations ? Object.keys(callbacks.translations).slice(0, 5) : [],
+      sampleTranslations: callbacks.translations ? Object.entries(callbacks.translations).slice(0, 3).map(([k, v]) => ({
+        key: k,
+        value: String(v).substring(0, 50)
+      })) : [],
+      ddtId: ddt.id,
+      ddtLabel: ddt.label,
+      // Compare with ddt.translations (should be empty)
+      ddtTranslationsCount: (ddt as any).translations ? Object.keys((ddt as any).translations).length : 0
+    });
 
     const result = await executeGetDataHierarchical(
       ddt,

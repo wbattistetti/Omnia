@@ -124,8 +124,27 @@ export class DialogueEngine {
       // Evaluate condition
       const conditionMet = evaluateCondition(task.condition, this.state);
       if (conditionMet) {
-        console.log(`[DialogueEngine] Found executable task: ${task.id} (action: ${task.action})`);
+        console.log(`[DialogueEngine] ✅ Found executable task: ${task.id} (action: ${task.action})`, {
+          taskId: task.id,
+          action: task.action,
+          condition: task.condition,
+          executedTaskIds: Array.from(this.state.executedTaskIds)
+        });
         return task;
+      } else {
+        // 🔍 DEBUG: Log why condition is not met
+        if (task.condition?.type === 'TaskState') {
+          const prevTaskExecuted = this.state.executedTaskIds.has(task.condition.taskId);
+          console.log(`[DialogueEngine] ⏸️ Task ${task.id} condition not met`, {
+            taskId: task.id,
+            action: task.action,
+            conditionType: task.condition.type,
+            requiredTaskId: task.condition.taskId,
+            requiredState: task.condition.state,
+            prevTaskExecuted,
+            executedTaskIds: Array.from(this.state.executedTaskIds)
+          });
+        }
       }
     }
 
@@ -167,9 +186,17 @@ export class DialogueEngine {
       // If executed, add to executed set
       if (task.state === 'Executed') {
         this.state.executedTaskIds.add(task.id);
-        console.log('[DialogueEngine][executeTask] Task marked as Executed, added to executedTaskIds');
+        console.log('[DialogueEngine][executeTask] ✅ Task marked as Executed, added to executedTaskIds', {
+          taskId: task.id,
+          action: task.action,
+          executedTaskIds: Array.from(this.state.executedTaskIds),
+          executedCount: this.state.executedTaskIds.size
+        });
       } else if (task.state === 'WaitingUserInput') {
-        console.log('[DialogueEngine][executeTask] Task marked as WaitingUserInput (suspensive condition)');
+        console.log('[DialogueEngine][executeTask] ⏸️ Task marked as WaitingUserInput (suspensive condition)', {
+          taskId: task.id,
+          action: task.action
+        });
       }
 
       // Update state based on result

@@ -180,12 +180,35 @@ async function executeAction(
   try {
     const { resolveActionText } = await import('../../ChatSimulator/DDTAdapter');
     const translations = callbacks.translations || {};
+
+    // 🔍 DEBUG: Log translations received
+    console.log('[ddtSteps][executeAction] 🔍 Translations received', {
+      hasTranslations: !!callbacks.translations,
+      translationsCount: Object.keys(translations).length,
+      sampleTranslationKeys: Object.keys(translations).slice(0, 5),
+      sampleTranslations: Object.entries(translations).slice(0, 3).map(([k, v]) => ({
+        key: k,
+        value: String(v).substring(0, 50)
+      })),
+      actionInstanceId: action?.actionInstanceId,
+      textParamValue: action?.parameters?.find((p: any) => p.parameterId === 'text')?.value,
+      allActionParameters: action?.parameters?.map((p: any) => ({
+        parameterId: p.parameterId,
+        key: p.key,
+        value: p.value,
+        valueType: typeof p.value
+      })) || []
+    });
+
     const text = resolveActionText(action, translations);
     console.log('[ddtSteps][executeAction] Resolved text', {
       hasText: !!text,
       textLength: text?.length || 0,
       textPreview: text?.substring(0, 50),
-      hasOnMessage: !!callbacks.onMessage
+      hasOnMessage: !!callbacks.onMessage,
+      // 🔍 DEBUG: Show if text was found or not
+      textFound: !!text,
+      textSource: text ? 'translation' : 'not-found'
     });
 
     if (text && callbacks.onMessage) {

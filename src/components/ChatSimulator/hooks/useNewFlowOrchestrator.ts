@@ -1,6 +1,6 @@
 // New Flow Orchestrator: Wrapper around new compiler + engine
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { Node, Edge } from 'reactflow';
 import type { NodeData, EdgeData } from '../../Flowchart/types/flowTypes';
 import { useDialogueEngine } from '../../DialogueEngine';
@@ -8,6 +8,9 @@ import { executeTask } from '../../DialogueEngine/taskExecutors';
 import { taskRepository } from '../../../services/TaskRepository';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type { PlayedMessage } from './flowRowPlayer';
+import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
+import { extractGUIDsFromDDT } from '../../../utils/ddtUtils';
+import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 
 interface UseNewFlowOrchestratorProps {
   nodes: Node<NodeData>[];
@@ -60,8 +63,82 @@ export function useNewFlowOrchestrator({
   // Track current DDT
   const [currentDDTState, setCurrentDDTState] = useState<AssembledDDT | null>(null);
 
+  // ✅ Get global translations from context
+  const { translations: globalTranslations } = useProjectTranslations();
+
+  // ✅ Load translations for current DDT from global table (for state tracking)
+  const ddtTranslations = useDDTTranslations(currentDDTState);
+
+  // Helper function to load translations from a DDT (can be called in callbacks, not a hook)
+  const loadTranslationsFromDDT = useCallback((ddt: AssembledDDT | null | undefined): Record<string, string> => {
+    if (!ddt) {
+      return {};
+    }
+
+    const guids = extractGUIDsFromDDT(ddt);
+    if (guids.length === 0) {
+      return {};
+    }
+
+    const translationsFromGlobal: Record<string, string> = {};
+    const foundGuids: string[] = [];
+    const missingGuids: string[] = [];
+
+    guids.forEach(guid => {
+      const translation = globalTranslations[guid];
+      if (translation) {
+        translationsFromGlobal[guid] = translation;
+        foundGuids.push(guid);
+      } else {
+        missingGuids.push(guid);
+      }
+    });
+
+    console.log('[useNewFlowOrchestrator][loadTranslationsFromDDT] 🔍 Loaded translations from DDT', {
+      ddtId: ddt.id,
+      ddtLabel: ddt.label,
+      requestedGuids: guids.length,
+      foundTranslations: foundGuids.length,
+      missingGuids: missingGuids.length,
+      sampleKeys: Object.keys(translationsFromGlobal).slice(0, 5),
+      sampleTranslations: Object.entries(translationsFromGlobal).slice(0, 3).map(([k, v]) => ({
+        key: k,
+        value: String(v).substring(0, 50)
+      }))
+    });
+
+    return translationsFromGlobal;
+  }, [globalTranslations]);
+
+  // 🔍 DEBUG: Log translations loading
+  useEffect(() => {
+    console.log('[useNewFlowOrchestrator][TRANSLATIONS] Translations loaded', {
+      hasDDT: !!currentDDTState,
+      ddtId: currentDDTState?.id,
+      ddtLabel: currentDDTState?.label,
+      translationsCount: Object.keys(ddtTranslations).length,
+      sampleTranslations: Object.entries(ddtTranslations).slice(0, 5).map(([k, v]) => ({
+        key: k,
+        value: String(v).substring(0, 50)
+      })),
+      allTranslationKeys: Object.keys(ddtTranslations)
+    });
+  }, [currentDDTState, ddtTranslations]);
+
   // Use ref to store current DDT for async callbacks (avoids stale closure)
   const currentDDTRef = React.useRef<AssembledDDT | null>(null);
+
+  // Use ref to store translations for async callbacks
+  const translationsRef = React.useRef<Record<string, string>>({});
+
+  // Update translations ref when translations change
+  useEffect(() => {
+    translationsRef.current = ddtTranslations;
+    console.log('[useNewFlowOrchestrator][TRANSLATIONS] Updated translationsRef', {
+      translationsCount: Object.keys(ddtTranslations).length,
+      sampleKeys: Object.keys(ddtTranslations).slice(0, 5)
+    });
+  }, [ddtTranslations]);
 
   // Store DDT in closure for onGetRetrieveEvent callback
   let currentDDTInClosure: AssembledDDT | null = null;
@@ -76,11 +153,26 @@ export function useNewFlowOrchestrator({
 
   // Execute task callback
   const handleTaskExecute = useCallback(async (task: any) => {
+    // 🔍 Extract DDT from task and load translations immediately (don't wait for state update)
+    const taskDDT = task.value?.ddt;
+    const taskTranslations = loadTranslationsFromDDT(taskDDT);
+
     console.log('[useNewFlowOrchestrator][handleTaskExecute] Starting', {
       taskId: task.id,
       action: task.action,
       hasOnMessage: !!onMessage,
-      hasOnDDTStart: !!onDDTStart
+      hasOnDDTStart: !!onDDTStart,
+      hasTaskDDT: !!taskDDT,
+      taskDDTId: taskDDT?.id,
+      taskDDTLabel: taskDDT?.label,
+      // 🔍 DEBUG: Log translations loaded from task DDT
+      hasTranslations: Object.keys(taskTranslations).length > 0,
+      translationsCount: Object.keys(taskTranslations).length,
+      sampleTranslationKeys: Object.keys(taskTranslations).slice(0, 5),
+      sampleTranslations: Object.entries(taskTranslations).slice(0, 3).map(([k, v]) => ({
+        key: k,
+        value: String(v).substring(0, 50)
+      }))
     });
     const result = await executeTask(task, {
       onMessage: (text: string, stepType?: string, escalationNumber?: number) => {
@@ -293,11 +385,13 @@ export function useNewFlowOrchestrator({
           console.error('[useNewFlowOrchestrator] Error processing input', error);
           return { status: 'noMatch' as const };
         }
-      }
+      },
+      // ✅ Pass translations loaded directly from task DDT (not from state)
+      translations: taskTranslations
     });
 
     return result;
-  }, [onMessage, onDDTStart]);
+  }, [onMessage, onDDTStart, loadTranslationsFromDDT]);
 
   // Track DDT state when GetData task is executed
   const handleTaskExecuteWithDDT = useCallback(async (task: any) => {
