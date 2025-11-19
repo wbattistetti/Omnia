@@ -496,17 +496,29 @@ def repair_condition(body: dict = Body(...)):
     except Exception:
         failures_json = "[]"
 
+    # Extract notes from failures and include them in the prompt
+    notes_text = ""
+    if failures:
+        notes_list = []
+        for f in failures:
+            note = f.get("note") or ""
+            if note and note.strip():
+                notes_list.append(f"- {note.strip()}")
+        if notes_list:
+            notes_text = "\n\nUser notes explaining expected behavior:\n" + "\n".join(notes_list) + "\n"
+
     user = {
         "role": "user",
         "content": (
             "Current code (buggy):\n\n" + script + "\n\n" +
-            "Observed failures (input -> expected -> got) [JSON list]:\n" + failures_json + "\n\n" +
+            "Observed failures (input -> expected -> got) [JSON list]:\n" + failures_json + notes_text + "\n\n" +
             "Hard rules to apply while fixing:\n"
             "- Keep CONDITION.inputs exactly as-is.\n"
             "- Use parseDate helper as described (dd/mm/yyyy, yyyy-mm-dd, Date, timestamp in ms, ISO-only fallback).\n"
             "- Age check is age >= 18 (UTC).\n"
-            "- No local date getters; Date.parse only after ISO regex test.\n\n"
-            "Task:\nFix the module so that all the above cases pass and the rules are respected.\n"
+            "- No local date getters; Date.parse only after ISO regex test.\n"
+            "- CRITICAL: Values from ctx[\"key\"] may be strings (from HTML inputs). ALWAYS convert with Number(ctx[\"key\"]) and check Number.isFinite(...) before numeric comparisons.\n\n"
+            "Task:\nFix the module so that all the above cases pass, the user notes are respected, and the rules are followed.\n"
             "Output only the corrected JavaScript module."
         )
     }

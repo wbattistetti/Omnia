@@ -41,14 +41,26 @@ export async function retrieve(
   console.log('[DDTRetrieve] Start step', {
     found: !!startStep,
     stepType: startStep?.type,
-    hasEscalations: !!startStep?.escalations
+    hasEscalations: !!startStep?.escalations,
+    escalationsCount: startStep?.escalations ? (Array.isArray(startStep.escalations) ? startStep.escalations.length : 1) : 0,
+    nodeId,
+    nodeLabel: node?.label || node?.name,
+    nodeSteps: node.steps ? (Array.isArray(node.steps) ? node.steps.map((s: any) => s.type) : Object.keys(node.steps)) : [],
+    hasOnMessage: !!callbacks.onMessage,
+    hasTranslations: !!callbacks.translations,
+    translationsCount: callbacks.translations ? Object.keys(callbacks.translations).length : 0
   });
 
   if (startStep) {
+    console.log('[DDTRetrieve] ═══════════════════════════════════════════════');
+    console.log('[DDTRetrieve] EXECUTING START STEP - This should show initial message');
+    console.log('[DDTRetrieve] ═══════════════════════════════════════════════');
     await executeStep(startStep, callbacks, 'start', 1);
-    console.log('[DDTRetrieve] Start step executed');
+    console.log('[DDTRetrieve] ═══════════════════════════════════════════════');
+    console.log('[DDTRetrieve] START STEP EXECUTED - Initial message should have been shown');
+    console.log('[DDTRetrieve] ═══════════════════════════════════════════════');
   } else {
-    console.warn('[DDTRetrieve] No start step found for node', nodeId);
+    console.warn('[DDTRetrieve] ❌ No start step found for node', nodeId);
   }
 
   // 2. Main loop: wait for events and handle escalation
@@ -203,8 +215,8 @@ export async function retrieve(
         const confirmStep = getStep(node, 'confirmation') || getStep(node, 'Confirm');
 
         if (confirmStep) {
-          // Execute confirmation step
-          await executeStep(confirmStep, callbacks, 'confirmation', 1);
+          // Execute confirmation step - pass matchValue to replace {input} placeholder
+          await executeStep(confirmStep, callbacks, 'confirmation', 1, matchValue);
 
           // Wait for confirmation event
           const confirmEvent = await getRetrieveEvent(nodeId, callbacks.onGetRetrieveEvent, node);

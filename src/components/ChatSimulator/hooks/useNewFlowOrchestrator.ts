@@ -176,11 +176,16 @@ export function useNewFlowOrchestrator({
     });
     const result = await executeTask(task, {
       onMessage: (text: string, stepType?: string, escalationNumber?: number) => {
+        console.log('[useNewFlowOrchestrator][handleTaskExecute] ═══════════════════════════════════════');
+        console.log('[useNewFlowOrchestrator][handleTaskExecute] 🔔 onMessage CALLBACK RECEIVED FROM DDT');
+        console.log('[useNewFlowOrchestrator][handleTaskExecute] ═══════════════════════════════════════');
         console.log('[useNewFlowOrchestrator][handleTaskExecute] onMessage called', {
-          text,
+          text: text?.substring(0, 100),
+          fullText: text,
           taskId: task.id,
           stepType,
-          escalationNumber
+          escalationNumber,
+          hasOnMessageParent: !!onMessage
         });
         if (onMessage) {
           // Import getStepColor dynamically

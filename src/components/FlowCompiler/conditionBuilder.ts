@@ -20,8 +20,10 @@ export function buildFirstRowCondition(
     return { type: 'Always' };
   }
 
-  // Build conditions for each parent
-  const parentConditions: Condition[] = [];
+  // Build conditions for each incoming link
+  // Each link condition is: (Parent.Executed ∧ Link.Condition)
+  // Final condition is: OR of all link conditions
+  const linkConditions: Condition[] = [];
 
   for (const edge of incomingEdges) {
     const parentNode = nodes.find(n => n.id === edge.source);
@@ -34,34 +36,50 @@ export function buildFirstRowCondition(
     const lastRow = rows[rows.length - 1];
     const lastTaskId = lastRow.taskId || lastRow.id; // Fallback to row.id if no taskId
 
-    // Condition: last task of parent must be executed
-    const taskCondition: Condition = {
-      type: 'TaskState',
-      taskId: lastTaskId,
-      state: 'Executed'
-    };
+    // Build condition for this link: (Parent.Executed ∧ Link.Condition)
+    const linkConditionParts: Condition[] = [
+      {
+        type: 'TaskState',
+        taskId: lastTaskId,
+        state: 'Executed'
+      }
+    ];
 
-    parentConditions.push(taskCondition);
-
-    // If edge has condition, add it
+    // If edge has condition, add it (AND with parent executed)
     if (edge.data?.condition) {
-      parentConditions.push({
+      linkConditionParts.push({
         type: 'EdgeCondition',
         edgeId: edge.id,
         condition: edge.data.condition
       });
     }
+
+    // If link has both parts, combine with AND; otherwise use single condition
+    const linkCondition: Condition = linkConditionParts.length === 1
+      ? linkConditionParts[0]
+      : {
+          type: 'And',
+          conditions: linkConditionParts
+        };
+
+    linkConditions.push(linkCondition);
   }
 
-  // If only one parent, return single condition
-  if (parentConditions.length === 1) {
-    return parentConditions[0];
+  // If no links, return null (should not happen as entry node is handled above)
+  if (linkConditions.length === 0) {
+    return null;
   }
 
-  // Multiple parents: all must be satisfied
+  // If only one link, return its condition directly
+  if (linkConditions.length === 1) {
+    return linkConditions[0];
+  }
+
+  // Multiple links: OR of all link conditions
+  // Formula: (Parent1.Executed ∧ Link1.Condition) OR (Parent2.Executed ∧ Link2.Condition) OR ...
   return {
-    type: 'And',
-    conditions: parentConditions
+    type: 'Or',
+    conditions: linkConditions
   };
 }
 

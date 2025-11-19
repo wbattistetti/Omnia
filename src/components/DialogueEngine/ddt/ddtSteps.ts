@@ -101,7 +101,8 @@ export async function executeStep(
   stepOrEscalation: any,
   callbacks: DDTNavigatorCallbacks,
   stepType?: string,
-  escalationNumber?: number
+  escalationNumber?: number,
+  inputValue?: any // Value to replace {input} placeholder
 ): Promise<void> {
   console.log('[ddtSteps][executeStep] Starting', {
     hasStep: !!stepOrEscalation,
@@ -120,7 +121,7 @@ export async function executeStep(
     const actions = Array.isArray(stepOrEscalation.actions) ? stepOrEscalation.actions : [stepOrEscalation.actions];
 
     for (const action of actions) {
-      await executeAction(action, callbacks, stepType, escalationNumber);
+      await executeAction(action, callbacks, stepType, escalationNumber, inputValue);
     }
     return;
   }
@@ -150,7 +151,7 @@ export async function executeStep(
       console.log('[ddtSteps][executeStep] Actions', { count: actions.length });
 
       for (const action of actions) {
-        await executeAction(action, callbacks, stepType, escalationNumber);
+        await executeAction(action, callbacks, stepType, escalationNumber, inputValue);
       }
     } else {
       console.warn('[ddtSteps][executeStep] First escalation has no actions');
@@ -167,7 +168,8 @@ async function executeAction(
   action: any,
   callbacks: DDTNavigatorCallbacks,
   stepType?: string,
-  escalationNumber?: number
+  escalationNumber?: number,
+  inputValue?: any // Value to replace {input} placeholder
 ): Promise<void> {
   console.log('[ddtSteps][executeAction] Processing action', {
     actionId: action?.actionId,
@@ -200,25 +202,48 @@ async function executeAction(
       })) || []
     });
 
-    const text = resolveActionText(action, translations);
+    let text = resolveActionText(action, translations);
+
+    // Replace {input} placeholder with actual input value if provided
+    if (text && inputValue !== undefined && inputValue !== null) {
+      // Format input value for display
+      const inputDisplay = typeof inputValue === 'object'
+        ? JSON.stringify(inputValue)
+        : String(inputValue);
+      text = text.replace(/{input}/g, inputDisplay);
+      console.log('[ddtSteps][executeAction] 🔄 Replaced {input} placeholder', {
+        originalText: resolveActionText(action, translations),
+        replacedText: text,
+        inputValue: inputDisplay
+      });
+    }
+
+    console.log('[ddtSteps][executeAction] ═════════════════════════════════');
+    console.log('[ddtSteps][executeAction] 🔍 RESOLVED TEXT FOR MESSAGE');
+    console.log('[ddtSteps][executeAction] ═════════════════════════════════');
     console.log('[ddtSteps][executeAction] Resolved text', {
       hasText: !!text,
       textLength: text?.length || 0,
-      textPreview: text?.substring(0, 50),
+      textPreview: text?.substring(0, 100),
+      fullText: text,
       hasOnMessage: !!callbacks.onMessage,
-      // 🔍 DEBUG: Show if text was found or not
       textFound: !!text,
-      textSource: text ? 'translation' : 'not-found'
+      textSource: text ? 'translation' : 'not-found',
+      stepType,
+      escalationNumber,
+      hasInputValue: inputValue !== undefined,
+      inputValue
     });
 
     if (text && callbacks.onMessage) {
-      console.log('[ddtSteps][executeAction] Calling onMessage', { text, stepType, escalationNumber });
+      console.log('[ddtSteps][executeAction] ✅ CALLING onMessage CALLBACK');
       callbacks.onMessage(text, stepType, escalationNumber);
-      console.log('[ddtSteps][executeAction] onMessage called');
+      console.log('[ddtSteps][executeAction] ✅ onMessage callback COMPLETED');
     } else {
-      console.warn('[ddtSteps][executeAction] Cannot send message', {
+      console.error('[ddtSteps][executeAction] ❌ CANNOT SEND MESSAGE', {
         hasText: !!text,
-        hasOnMessage: !!callbacks.onMessage
+        hasOnMessage: !!callbacks.onMessage,
+        reason: !text ? 'No text resolved' : 'No onMessage callback'
       });
     }
   } catch (error) {

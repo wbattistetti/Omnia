@@ -106,11 +106,28 @@ export default function DDEBubbleChat({
         nodes,
         edges,
         onMessage: (message: any) => {
+          console.log('[DDEBubbleChat] ═══════════════════════════════════════════════════════');
+          console.log('[DDEBubbleChat] 📨 MESSAGE RECEIVED FROM FLOW ORCHESTRATOR');
+          console.log('[DDEBubbleChat] ═══════════════════════════════════════════════════════');
+          console.log('[DDEBubbleChat] onMessage received', {
+            messageText: message.text?.substring(0, 100),
+            fullText: message.text,
+            messageId: message.id,
+            stepType: message.stepType,
+            escalationNumber: message.escalationNumber
+          });
           const uniqueId = message.id ? `${message.id}-${Date.now()}-${Math.random()}` : `msg-${Date.now()}-${Math.random()}`;
           flushSync(() => {
             setMessages((prev) => {
               const existingIndex = prev.findIndex(m => m.text === message.text && m.type === 'bot');
-              if (existingIndex >= 0) return prev;
+              if (existingIndex >= 0) {
+                console.log('[DDEBubbleChat] ⚠️ Message already exists, skipping', { text: message.text });
+                return prev;
+              }
+              console.log('[DDEBubbleChat] ✅ Adding message to state', {
+                messageCount: prev.length + 1,
+                text: message.text?.substring(0, 50)
+              });
               return [...prev, {
                 id: uniqueId,
                 type: 'bot',
@@ -121,6 +138,7 @@ export default function DDEBubbleChat({
               }];
             });
           });
+          console.log('[DDEBubbleChat] ✅ Message added successfully');
         },
         onDDTStart: (ddt: any) => {
           if (onUpdateDDTRef.current) {

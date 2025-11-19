@@ -123,7 +123,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     setTesterHints({});
     setTestRows([]);
     setHasFailures(false);
-    try { getFailuresRef.current = () => []; hasFailuresRef.current = () => false; resetTesterVisualsRef.current = () => {}; } catch {}
+    try { getFailuresRef.current = () => []; hasFailuresRef.current = () => false; resetTesterVisualsRef.current = () => {}; markNotesAsUsedRef.current = () => {}; } catch {}
     // Reset script to template or provided initialScript when opening a new condition
     const base = (initialScript && initialScript.trim()) ? initialScript : DEFAULT_CODE;
     setScript(base);
@@ -475,6 +475,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   const getFailuresRef = React.useRef<() => Array<any>>(() => []);
   const hasFailuresRef = React.useRef<() => boolean>(() => false);
   const resetTesterVisualsRef = React.useRef<() => void>(() => {});
+  const markNotesAsUsedRef = React.useRef<() => void>(() => {});
   const resetTesterVisuals = React.useCallback(() => {
     setTesterAllPass(null);
     // Clear any previous not-passed comments by resetting test rows labels only
@@ -1014,50 +1015,12 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                 style={{ border: '1px solid', borderColor: showVariablesPanel ? '#38bdf8' : '#334155', borderRadius: 6, padding: '6px 10px', background: showVariablesPanel ? 'rgba(56,189,248,0.15)' : 'transparent', color: showVariablesPanel ? '#e5e7eb' : '#cbd5e1', fontWeight: showVariablesPanel ? 700 : 500 }}
               ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><ListChecks className="w-4 h-4" /> {showVariablesPanel ? 'Hide variables' : 'Show variables'}</span></button>
               {hasCreated && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: 4, border: showTester ? '1px solid #38bdf8' : 'none', borderRadius: 8 }}>
-              <button
-                title="Open/close the test panel"
-                aria-pressed={showTester}
-                onClick={() => setShowTester(v => !v)}
-                style={{ border: '1px solid', borderColor: showTester ? '#38bdf8' : '#334155', borderRadius: 6, padding: '6px 10px', background: showTester ? 'rgba(56,189,248,0.15)' : 'transparent', color: showTester ? '#e5e7eb' : '#cbd5e1', fontWeight: showTester ? 700 : 500 }}
-              ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><FlaskConical className="w-4 h-4" /> Test Code</span></button>
-                  {showTester && (
-                    <>
-                      <button
-                        title="Add test value"
-                        onClick={() => { try { handleAddTestLine.current?.(); } catch {} }}
-                        style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: 'transparent', color: '#e5e7eb' }}
-                      >Add test value</button>
-                      <button
-                        title="Run tests"
-                        onClick={async () => { try { setBusy(true); await Promise.resolve(testerRunRef.current?.()); } finally { setBusy(false); } }}
-                        style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: testerAllPass == null ? 'transparent' : (testerAllPass ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)'), color: testerAllPass == null ? '#e5e7eb' : (testerAllPass ? '#22c55e' : '#ef4444'), fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                      >{busy ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Running...</span></>) : 'Run'}</button>
-                      <button
-                        title="Repair code using observed failures"
-                        onClick={async () => {
-                          try {
-                            const failures = (testRows || []).map(r => ({ input: r.vars, expected: r.label === 'true', got: null, note: '' }));
-                            const resp = await repairCondition(script, failures, variablesForTester, (window as any).__AI_PROVIDER || undefined);
-                            if (resp?.script && typeof resp.script === 'string') {
-                              setScript(resp.script);
-                              resetTesterVisuals();
-                              // Format after repair
-                              setTimeout(() => {
-                                try {
-                                  codeEditorRef.current?.format();
-                                } catch (e) {
-                                  console.warn('[ConditionEditor] Format failed:', e);
-                                }
-                              }, 100);
-                            }
-                          } catch {}
-                        }}
-                        style={{ border: '1px solid #334155', borderRadius: 6, padding: '6px 10px', background: 'transparent', color: '#e5e7eb' }}
-                      >Repair</button>
-                    </>
-                  )}
-                </div>
+                <button
+                  title="Open/close the test panel"
+                  aria-pressed={showTester}
+                  onClick={() => setShowTester(v => !v)}
+                  style={{ border: '1px solid', borderColor: showTester ? '#38bdf8' : '#334155', borderRadius: 6, padding: '6px 10px', background: showTester ? 'rgba(56,189,248,0.15)' : 'transparent', color: showTester ? '#e5e7eb' : '#cbd5e1', fontWeight: showTester ? 700 : 500 }}
+                ><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><FlaskConical className="w-4 h-4" /> Test Code</span></button>
               )}
             </div>
             <CodeEditor
@@ -1138,6 +1101,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                       setLastAcceptedScript(resp.script);
                       resetTesterVisuals();
                       resetTesterVisualsRef.current?.();
+                      markNotesAsUsedRef.current?.(); // Mark notes as used after successful repair
                       setTesterAllPass(null);
                       setHasFailures(false);
                       // Format after repair
@@ -1221,7 +1185,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                 hintFalse={testerHints.hintFalse}
                 title={titleValue}
                 registerRun={(fn) => { testerRunRef.current = fn; }}
-                registerControls={(api) => { handleAddTestLine.current = api.addRow; testerRunRef.current = api.run; getFailuresRef.current = api.getFailures; hasFailuresRef.current = api.hasFailures; resetTesterVisualsRef.current = api.resetVisuals; }}
+                registerControls={(api) => { handleAddTestLine.current = api.addRow; testerRunRef.current = api.run; getFailuresRef.current = api.getFailures; hasFailuresRef.current = api.hasFailures; resetTesterVisualsRef.current = api.resetVisuals; markNotesAsUsedRef.current = api.markNotesAsUsed; }}
                 onRunResult={(pass) => setTesterAllPass(pass)}
               onFailuresChange={(flag) => setHasFailures(flag)}
               onRuntimeError={(payload) => {

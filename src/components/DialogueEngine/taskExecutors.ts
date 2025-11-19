@@ -338,89 +338,218 @@ async function executeGetData(
     console.warn('[TaskExecutor][executeGetData] DDT callback is not provided');
   }
 
-  // Use hierarchical DDT navigation
+  // Use DialogueDataEngine (same as ResponseEditor chat simulator)
   try {
-    const { executeGetDataHierarchical } = await import('./ddt');
+    // Import DialogueDataEngine modules
+    const { adaptCurrentToV2 } = await import('../DialogueDataEngine/model/adapters/currentToV2');
+    const { initEngine, advance } = await import('../DialogueDataEngine/engine');
+    const { getMain, getSub } = await import('../ActEditor/ResponseEditor/ChatSimulator/messageResolvers');
+    const { resolveAsk, resolveConfirm, resolveSuccess } = await import('../ActEditor/ResponseEditor/ChatSimulator/messageResolvers');
+    const { getEscalationActions } = await import('../ActEditor/ResponseEditor/ChatSimulator/DDTAdapter');
+    const { resolveActionText } = await import('../ActEditor/ResponseEditor/ChatSimulator/DDTAdapter');
 
-    // Initialize DDT state
-    const ddtState = {
-      memory: {} as Record<string, { value: any; confirmed: boolean }>,
-      noMatchCounters: {} as Record<string, number>,
-      noInputCounters: {} as Record<string, number>,
-      notConfirmedCounters: {} as Record<string, number>
-    };
+    // Get project language for adaptation
+    let projectLanguage: string;
+    try {
+      const lang = localStorage.getItem('project.lang');
+      if (!lang) throw new Error('project.lang not found');
+      projectLanguage = lang;
+    } catch (err) {
+      console.error('[TaskExecutor][executeGetData] Failed to get project language:', err);
+      projectLanguage = 'it'; // Fallback
+    }
 
-    // Mark as WaitingUserInput (will be updated during navigation)
-    task.state = 'WaitingUserInput';
-
-    // Execute hierarchical navigation
-    // Pass DDT to callbacks so they can access it
-    // ✅ Use translations from callbacks (loaded from global table) instead of ddt.translations
-    const ddtCallbacks = {
-      onMessage: callbacks.onMessage,
-      onGetRetrieveEvent: callbacks.onGetRetrieveEvent ?
-        (nodeId: string, ddtParam?: AssembledDDT) => callbacks.onGetRetrieveEvent!(nodeId, ddtParam || ddt) :
-        undefined,
-      onProcessInput: callbacks.onProcessInput,
-      translations: callbacks.translations || {} // ✅ Use translations from callbacks (global table)
-    };
-
-    // 🔍 DEBUG: Log translations being passed to DDT navigator
-    console.log('[TaskExecutor][executeGetData] Passing translations to DDT navigator', {
-      hasTranslations: !!callbacks.translations,
-      translationsCount: callbacks.translations ? Object.keys(callbacks.translations).length : 0,
-      ddtCallbacksTranslationsCount: ddtCallbacks.translations ? Object.keys(ddtCallbacks.translations).length : 0,
-      sampleTranslationKeys: callbacks.translations ? Object.keys(callbacks.translations).slice(0, 5) : [],
-      sampleTranslations: callbacks.translations ? Object.entries(callbacks.translations).slice(0, 3).map(([k, v]) => ({
-        key: k,
-        value: String(v).substring(0, 50)
-      })) : [],
-      ddtId: ddt.id,
-      ddtLabel: ddt.label,
-      // Compare with ddt.translations (should be empty)
-      ddtTranslationsCount: (ddt as any).translations ? Object.keys((ddt as any).translations).length : 0
+    // Adapt DDT to V2 format
+    const template = await adaptCurrentToV2(ddt, projectLanguage);
+    console.log('[TaskExecutor][executeGetData] DDT adapted to V2', {
+      templateNodesCount: template.nodes.length,
+      templateId: template.id
     });
 
-    const result = await executeGetDataHierarchical(
-      ddt,
-      ddtState,
-      ddtCallbacks
-    );
+    // Initialize engine state
+    let engineState = initEngine(template);
 
-    if (result.exit) {
-      // Exit action triggered
-      return {
-        success: false,
-        error: new Error('DDT execution exited'),
-        retrievalState: 'empty'
-      };
-    }
+    // Mark as WaitingUserInput
+    task.state = 'WaitingUserInput';
 
-    if (result.success) {
-      // All mainData completed - mark as Executed
-      task.state = 'Executed';
-      return {
-        success: true,
-        variables: ddtState.memory,
-        retrievalState: 'saturated',
-        ddt
-      };
-    }
+    // Helper to show messages based on engine state
+    const showMessageFromState = (state: any) => {
+      const main = getMain(state);
+      const sub = getSub(state);
+      const mainNodeState = main ? state.nodeStates[main.id] : undefined;
+      const step = mainNodeState?.step || 'Start';
+      const counter = mainNodeState?.counters || { noMatch: 0, noInput: 0, confirmation: 0, notConfirmed: 0 };
 
-    // Error during navigation
-    return {
-      success: false,
-      error: result.error || new Error('DDT navigation failed'),
-      retrievalState: 'empty'
+      // Get legacy node for message resolution
+      const legacyMain = Array.isArray((ddt as any)?.mainData)
+        ? (ddt as any).mainData[0]
+        : (ddt as any)?.mainData;
+      const legacySub = sub && legacyMain?.subData
+        ? legacyMain.subData.find((s: any) => (s?.id === sub.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase()))
+        : undefined;
+
+      const mergedTranslations = callbacks.translations || {};
+      const legacyDict = {}; // Empty legacy dict, use only translations
+
+      let messageText: string | undefined;
+      let escalationLevel: number | undefined;
+
+      if (state.mode === 'CollectingMain' || state.mode === 'CollectingSub') {
+        if (step === 'NoMatch') {
+          // Show escalation for noMatch
+          escalationLevel = Math.min(3, counter.noMatch);
+          if (legacyMain || legacySub) {
+            const targetNode = legacySub || legacyMain;
+            const actions = getEscalationActions(targetNode, 'noMatch', escalationLevel);
+            if (actions.length > 0) {
+              messageText = resolveActionText(actions[0], mergedTranslations);
+            }
+          }
+          if (!messageText && main) {
+            const reask = (sub || main)?.steps?.ask?.reaskNoMatch || [];
+            const key = reask[Math.min(escalationLevel - 1, reask.length - 1)] || reask[0];
+            messageText = key ? (mergedTranslations[key] || key) : '';
+          }
+        } else if (step === 'NoInput') {
+          // Show escalation for noInput
+          escalationLevel = Math.min(3, counter.noInput);
+          if (legacyMain || legacySub) {
+            const targetNode = legacySub || legacyMain;
+            const actions = getEscalationActions(targetNode, 'noInput', escalationLevel);
+            if (actions.length > 0) {
+              messageText = resolveActionText(actions[0], mergedTranslations);
+            }
+          }
+          if (!messageText && main) {
+            const reask = (sub || main)?.steps?.ask?.reaskNoInput || [];
+            const key = reask[Math.min(escalationLevel - 1, reask.length - 1)] || reask[0];
+            messageText = key ? (mergedTranslations[key] || key) : '';
+          }
+        } else {
+          // Show normal ask
+          const { text } = resolveAsk(main, sub, mergedTranslations, legacyDict, legacyMain, legacySub);
+          messageText = text;
+        }
+      } else if (state.mode === 'ConfirmingMain') {
+        if (step === 'NotConfirmed') {
+          // Show notConfirmed escalation
+          escalationLevel = Math.min(3, counter.notConfirmed);
+          if (legacyMain) {
+            const actions = getEscalationActions(legacyMain, 'confirmation', escalationLevel);
+            if (actions.length > 0) {
+              messageText = resolveActionText(actions[0], mergedTranslations);
+            }
+          }
+          if (!messageText && main) {
+            const reask = main?.steps?.confirm?.noMatch || [];
+            const key = reask[Math.min(escalationLevel - 1, reask.length - 1)] || reask[0];
+            messageText = key ? (mergedTranslations[key] || key) : '';
+          }
+        } else {
+          // Show confirmation
+          const { text } = resolveConfirm(state, main, legacyDict, legacyMain, mergedTranslations);
+          messageText = text;
+        }
+      } else if (state.mode === 'SuccessMain') {
+        // Show success
+        const { text } = resolveSuccess(main, mergedTranslations, legacyDict, legacyMain);
+        messageText = text;
+      }
+
+      if (messageText && callbacks.onMessage) {
+        callbacks.onMessage(messageText, step.toLowerCase(), escalationLevel);
+      }
     };
 
+    // Show initial message
+    showMessageFromState(engineState);
+
+    // Main loop: wait for user input and process
+    while (true) {
+      const main = getMain(engineState);
+      if (!main) {
+        // All done
+        task.state = 'Executed';
+        const variables: Record<string, any> = {};
+        Object.entries(engineState.memory).forEach(([key, mem]: [string, any]) => {
+          if (mem.confirmed) {
+            variables[key] = mem.value;
+          }
+        });
+        return {
+          success: true,
+          variables,
+          retrievalState: 'saturated',
+          ddt
+        };
+      }
+
+      // Wait for user input
+      if (!callbacks.onGetRetrieveEvent) {
+        return {
+          success: false,
+          error: new Error('onGetRetrieveEvent callback not provided'),
+          retrievalState: 'empty'
+        };
+      }
+
+      const userInput = await callbacks.onGetRetrieveEvent(main.id, ddt);
+
+      if (userInput === null || userInput === undefined) {
+        // No input - will be handled by advance() as empty string
+        engineState = advance(engineState, '');
+      } else if (typeof userInput === 'string') {
+        // Process input if callback provided
+        let extractedVars: Record<string, any> | undefined;
+        if (callbacks.onProcessInput) {
+          const processResult = await callbacks.onProcessInput(userInput, main);
+          if (processResult.status === 'match' && processResult.value) {
+            extractedVars = { value: processResult.value };
+          } else if (processResult.status === 'partialMatch' && processResult.value) {
+            extractedVars = processResult.value;
+          }
+        }
+        engineState = advance(engineState, userInput, extractedVars);
+      } else {
+        // Event object
+        if (userInput.type === 'exit') {
+          return {
+            success: false,
+            error: new Error('DDT execution exited'),
+            retrievalState: 'empty'
+          };
+        }
+        const inputStr = userInput.type === 'match' ? String(userInput.value || '') : '';
+        engineState = advance(engineState, inputStr);
+      }
+
+      // Show messages from new state
+      showMessageFromState(engineState);
+
+      // Check if completed
+      if (engineState.mode === 'Completed') {
+        task.state = 'Executed';
+        const variables: Record<string, any> = {};
+        Object.entries(engineState.memory).forEach(([key, mem]: [string, any]) => {
+          if (mem.confirmed) {
+            variables[key] = mem.value;
+          }
+        });
+        return {
+          success: true,
+          variables,
+          retrievalState: 'saturated',
+          ddt
+        };
+      }
+    }
+
   } catch (error) {
-    console.error('[TaskExecutor][executeGetData] Error in hierarchical navigation', error);
-    // Fallback to old behavior if new navigation fails
+    console.error('[TaskExecutor][executeGetData] Error in DialogueDataEngine', error);
     task.state = 'WaitingUserInput';
     return {
-      success: true,
-      ddt,
+      success: false,
+      error: error instanceof Error ? error : new Error('DDT execution failed'),
       retrievalState: 'empty'
     };
   }
