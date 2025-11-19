@@ -12,6 +12,7 @@ export interface Message {
   warningMessage?: string;
   errorMessage?: string;
   color?: string;
+  grammarMissing?: boolean; // Flag per indicare che manca la grammatica NLP
 }
 
 interface UserMessageProps {
@@ -107,6 +108,13 @@ const UserMessage: React.FC<UserMessageProps> = ({
         <div className="flex items-center gap-2 text-xs text-red-700 flex-shrink-0 whitespace-nowrap">
           <AlertCircle size={12} className="flex-shrink-0 text-red-600" />
           <span>{message.errorMessage}</span>
+        </div>
+      )}
+      {/* Grammar missing badge - piccolo payoff a lato del bubble */}
+      {message.grammarMissing && (
+        <div className="flex items-center gap-1 text-xs text-orange-600 flex-shrink-0 whitespace-nowrap">
+          <AlertTriangle size={10} className="flex-shrink-0" />
+          <span className="font-medium">Grammar missing!</span>
         </div>
       )}
     </div>

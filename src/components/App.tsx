@@ -59,7 +59,6 @@ function AppInner() {
         }));
         setActionsCatalog(actionsCatalog);
         try { (window as any).__actionsCatalog = actionsCatalog; } catch { }
-        console.log('[App] Loaded', actionsCatalog.length, 'actions from Task_Templates');
       })
       .catch(err => {
         console.warn('[App] Failed to load actions from Task_Templates, falling back to actionsCatalog.json', err);
@@ -94,71 +93,12 @@ function AppInner() {
 
   // ✅ Precarica tutte le cache in parallelo all'avvio (non blocca il rendering)
   React.useEffect(() => {
-    const preloadStartTime = performance.now();
-    console.log('[App][CACHE_PRELOAD] ════════════════════════════════════════');
-    console.log('[App][CACHE_PRELOAD] 🚀 Precaricando cache per inferenza istantanea...', {
-      timestamp: new Date().toISOString()
-    });
-
     Promise.all([
-      // 1. Template di tipo (date, phone, email, ecc.)
-      TypeTemplateService.loadTemplates().then((templates) => {
-        const count = Object.keys(templates || {}).length;
-        console.log('[App][CACHE_PRELOAD] ✅ TypeTemplateService precaricato', {
-          templatesCount: count,
-          timestamp: new Date().toISOString()
-        });
-        return templates;
-      }).catch(err => {
-        console.warn('[App][CACHE_PRELOAD] ⚠️ Errore nel precaricamento TypeTemplateService:', err);
-        return null;
-      }),
-
-      // 2. Template di dialogo (DDT templates)
-      DialogueTemplateService.loadTemplates().then((templates) => {
-        const count = templates.length;
-        console.log('[App][CACHE_PRELOAD] ✅ Dialogue templates precaricati', {
-          templatesCount: count,
-          timestamp: new Date().toISOString()
-        });
-        return templates;
-      }).catch(err => {
-        console.warn('[App][CACHE_PRELOAD] ⚠️ Errore nel precaricamento Dialogue templates:', err);
-        return [];
-      }),
-
-      // 3. Task templates (Action catalog)
-      taskTemplateService.getAllTemplates().then((templates) => {
-        const count = Array.isArray(templates) ? templates.length : 0;
-        console.log('[App][CACHE_PRELOAD] ✅ TaskTemplateService precaricato', {
-          templatesCount: count,
-          timestamp: new Date().toISOString()
-        });
-        return templates;
-      }).catch(err => {
-        console.warn('[App][CACHE_PRELOAD] ⚠️ Errore nel precaricamento TaskTemplateService:', err);
-        return null;
-      })
-    ]).then((results) => {
-      const preloadElapsed = performance.now() - preloadStartTime;
-      console.log('[App][CACHE_PRELOAD] ✅✅✅ Tutte le cache precaricate!', {
-        elapsedMs: Math.round(preloadElapsed),
-        timestamp: new Date().toISOString(),
-        results: {
-          typeTemplates: results[0] ? Object.keys(results[0]).length : 0,
-          dialogueTemplates: results[1] ? results[1].length : 0,
-          taskTemplates: results[2] ? (Array.isArray(results[2]) ? results[2].length : 0) : 0
-        }
-      });
-      console.log('[App][CACHE_PRELOAD] ════════════════════════════════════════');
-    }).catch(err => {
-      const preloadElapsed = performance.now() - preloadStartTime;
-      console.warn('[App][CACHE_PRELOAD] ⚠️ Errore generale nel precaricamento cache (non critico):', {
-        error: err,
-        elapsedMs: Math.round(preloadElapsed),
-        timestamp: new Date().toISOString()
-      });
-      console.log('[App][CACHE_PRELOAD] ════════════════════════════════════════');
+      TypeTemplateService.loadTemplates().catch(() => null),
+      DialogueTemplateService.loadTemplates().catch(() => []),
+      taskTemplateService.getAllTemplates().catch(() => null)
+    ]).catch(() => {
+      // Silently handle errors - cache preload is non-critical
     });
   }, []); // Solo all'avvio
 

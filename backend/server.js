@@ -1897,6 +1897,50 @@ app.post('/api/factory/tasks', async (req, res) => {
   }
 });
 
+// Constants - GET months for language
+app.get('/api/constants/months/:language', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const constantsCollection = db.collection('Constants');
+
+    const { language } = req.params;
+    const languageUpper = language.toUpperCase();
+
+    logInfo('CONSTANTS_MONTHS', { language: languageUpper });
+
+    const constant = await constantsCollection.findOne({
+      type: 'months',
+      locale: languageUpper,
+      scope: 'global'
+    });
+
+    if (!constant) {
+      logWarn('CONSTANTS_MONTHS', {
+        language: languageUpper,
+        message: 'Months constants not found'
+      });
+      return res.status(404).json({
+        error: `Months constants for ${languageUpper} not found`
+      });
+    }
+
+    // Restituisci i valori (array unificato dopo migrazione)
+    res.json({
+      _id: constant._id,
+      locale: constant.locale,
+      values: constant.values || [], // Array unificato
+      mapping: constant.mapping || {}
+    });
+  } catch (error) {
+    logError('CONSTANTS_MONTHS', error, { language: req.params.language });
+    res.status(500).json({ error: error.message });
+  } finally {
+    await client.close();
+  }
+});
+
 // Macro Tasks - GET (legacy)
 app.get('/api/factory/macro-tasks', async (req, res) => {
   const client = new MongoClient(uri);
@@ -3264,9 +3308,9 @@ async function useExistingTemplate(templateName, templates, userDesc) {
     for (const subId of subDataIds) {
       // ✅ Cerca template per ID (può essere _id, id, name, o label)
       const subTemplate = templates[subId] ||
-                         Object.values(templates).find((t) =>
-                           t._id === subId || t.id === subId || t.name === subId || t.label === subId
-                         );
+        Object.values(templates).find((t) =>
+          t._id === subId || t.id === subId || t.name === subId || t.label === subId
+        );
 
       if (subTemplate) {
         // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
@@ -3481,6 +3525,17 @@ app.post('/api/analyze-field', async (req, res) => {
 
 // ✅ HEURISTIC MATCHING
 const { findBestTemplateMatch, buildHeuristicResponse, extractMentionedFields } = require('./template_heuristics');
+const { PatternMemoryService } = require('./services/PatternMemoryService');
+
+// PatternMemoryService instance (singleton)
+let patternMemoryService = null;
+
+function getPatternMemoryService() {
+  if (!patternMemoryService) {
+    patternMemoryService = new PatternMemoryService(uri, dbFactory);
+  }
+  return patternMemoryService;
+}
 
 // Provider selection endpoint
 app.post('/step2-with-provider', async (req, res) => {
@@ -3496,15 +3551,35 @@ app.post('/step2-with-provider', async (req, res) => {
     const templates = await loadTemplatesFromDB();
     console.log('[STEP2] Using', Object.keys(templates).length, 'templates from Factory DB cache');
 
+    // ✅ Load pattern memory for synonyms (default to 'it' for now, can be passed from request)
+    const targetLang = req.body.language || 'it';
+    const projectId = req.body.projectId || null;
+    const patternService = getPatternMemoryService();
+    let patternMemory = null;
+
+    try {
+      patternMemory = await patternService.loadPatterns(targetLang, projectId);
+      console.log('[STEP2][PATTERN_MEMORY] Loaded pattern memory:', {
+        language: targetLang,
+        projectId: projectId,
+        templatesWithPatterns: patternMemory.templatePatterns.size,
+        uniquePatterns: patternMemory.patternToGuids.size
+      });
+    } catch (patternError) {
+      console.warn('[STEP2][PATTERN_MEMORY] Failed to load pattern memory, continuing without it:', patternError.message);
+      // Continue without pattern memory (backward compatibility)
+    }
+
     // ✅ HEURISTIC MATCHING: Try deterministic matching before AI
     try {
       console.log('[STEP2][HEURISTIC] Starting heuristic matching', {
         userDesc,
         templatesCount: Object.keys(templates).length,
-        templateNames: Object.keys(templates).slice(0, 10)
+        templateNames: Object.keys(templates).slice(0, 10),
+        hasPatternMemory: !!patternMemory
       });
 
-      const heuristicResult = findBestTemplateMatch(userDesc, templates);
+      const heuristicResult = findBestTemplateMatch(userDesc, templates, null, patternMemory);
 
       console.log('[STEP2][HEURISTIC] Match result:', {
         hasResult: !!heuristicResult,
@@ -3524,7 +3599,7 @@ app.post('/step2-with-provider', async (req, res) => {
         console.log('[STEP2][HEURISTIC] Template structure:', JSON.stringify(template, null, 2));
 
         // Extract mentioned fields for response building
-        const mentionedFields = extractMentionedFields(userDesc, templates);
+        const mentionedFields = extractMentionedFields(userDesc, templates, patternMemory);
         console.log('[STEP2][HEURISTIC] Mentioned fields:', mentionedFields);
 
         // Build response from matched template

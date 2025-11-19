@@ -8,9 +8,10 @@
  * Extracts template names mentioned in the description using synonyms.
  * @param {string} text - User description (e.g., "chiedi nome e telefono")
  * @param {Object} templates - Dictionary of available templates {name: template}
+ * @param {Object} [patternMemory] - PatternMemoryService memory (optional, for loading synonyms from Translations)
  * @returns {string[]} List of template names that were mentioned
  */
-function extractMentionedFields(text, templates) {
+function extractMentionedFields(text, templates, patternMemory = null) {
   if (!text || !templates) {
     console.log('[HEURISTIC][extractMentionedFields] Empty input', { hasText: !!text, hasTemplates: !!templates });
     return [];
@@ -29,16 +30,18 @@ function extractMentionedFields(text, templates) {
     let matched = false;
 
     // PRIORITY 1: Use patterns if available (same structure as Task_Types)
+    // Patterns sono regex, quindi li usiamo direttamente per matching
     const patterns = template.patterns;
     if (patterns && typeof patterns === 'object' && !Array.isArray(patterns)) {
       // Try target language first, then fallback to other languages
+      // TODO: Passare targetLang come parametro invece di hardcoded
       const targetLang = 'IT'; // Could be passed as parameter
       const langPatterns = patterns[targetLang] || patterns.IT || patterns.EN || patterns.PT;
 
       if (Array.isArray(langPatterns)) {
         for (const patternStr of langPatterns) {
           try {
-            // Pattern is already a regex string with word boundaries
+            // Pattern è già una regex string con word boundaries
             const pattern = new RegExp(patternStr, 'i');
             if (pattern.test(textLower)) {
               console.log('[HEURISTIC][extractMentionedFields] ✅ Pattern match found', {
@@ -62,21 +65,42 @@ function extractMentionedFields(text, templates) {
       }
     }
 
-    // PRIORITY 2: Fallback to synonyms (backward compatibility)
+    // PRIORITY 2: Use synonyms from Translations (via patternMemory) or fallback to template.synonyms
     if (!matched) {
-      const synonymsRaw = template.synonyms || [];
-
-      // ✅ Support multilingual synonyms: {it: [...], en: [...], pt: [...]} or simple array
       let allSynonyms = [];
-      if (Array.isArray(synonymsRaw)) {
-        // Legacy format: simple array
-        allSynonyms = [...synonymsRaw];
-      } else if (typeof synonymsRaw === 'object' && synonymsRaw !== null) {
-        // New format: multilingual object
-        const supportedLangs = ['it', 'en', 'pt', 'IT', 'EN', 'PT'];
-        for (const lang of supportedLangs) {
-          if (Array.isArray(synonymsRaw[lang])) {
-            allSynonyms.push(...synonymsRaw[lang]);
+
+      // ✅ PRIORITY 2a: Try to load synonyms from Translations (new approach)
+      if (patternMemory && patternMemory.templatePatterns) {
+        // Cerca il GUID del template (può essere id, _id, o name usato come GUID)
+        const templateGuid = template.id || template._id || templateName;
+
+        // Carica sinonimi dalla memory (usa direttamente templatePatterns Map)
+        const memorySynonyms = patternMemory.templatePatterns.get(templateGuid) || [];
+        if (memorySynonyms && memorySynonyms.length > 0) {
+          allSynonyms = [...memorySynonyms];
+          console.log('[HEURISTIC][extractMentionedFields] ✅ Sinonimi caricati da Translations', {
+            templateName,
+            templateGuid,
+            synonymsCount: allSynonyms.length
+          });
+        }
+      }
+
+      // ✅ PRIORITY 2b: Fallback to template.synonyms (backward compatibility)
+      if (allSynonyms.length === 0) {
+        const synonymsRaw = template.synonyms || [];
+
+        // Support multilingual synonyms: {it: [...], en: [...], pt: [...]} or simple array
+        if (Array.isArray(synonymsRaw)) {
+          // Legacy format: simple array
+          allSynonyms = [...synonymsRaw];
+        } else if (typeof synonymsRaw === 'object' && synonymsRaw !== null) {
+          // New format: multilingual object
+          const supportedLangs = ['it', 'en', 'pt', 'IT', 'EN', 'PT'];
+          for (const lang of supportedLangs) {
+            if (Array.isArray(synonymsRaw[lang])) {
+              allSynonyms.push(...synonymsRaw[lang]);
+            }
           }
         }
       }
@@ -84,12 +108,17 @@ function extractMentionedFields(text, templates) {
       // Add template name and label as fallback synonyms
       allSynonyms = [...allSynonyms, templateNameLower, label].filter(s => s);
 
-      console.log('[HEURISTIC][extractMentionedFields] Checking template (synonyms fallback)', {
+      // Get template GUID for logging
+      const templateGuid = template.id || template._id || templateName;
+      const hasMemorySynonyms = patternMemory && patternMemory.templatePatterns ?
+        (patternMemory.templatePatterns.get(templateGuid)?.length > 0) : false;
+
+      console.log('[HEURISTIC][extractMentionedFields] Checking template (synonyms)', {
         templateName,
-        synonymsRaw,
-        synonymsType: Array.isArray(synonymsRaw) ? 'array' : typeof synonymsRaw,
-        allSynonyms,
-        label
+        synonymsCount: allSynonyms.length,
+        allSynonyms: allSynonyms.slice(0, 5), // Show first 5 only
+        label,
+        fromMemory: hasMemorySynonyms
       });
 
       for (const synonym of allSynonyms) {
@@ -125,18 +154,19 @@ function extractMentionedFields(text, templates) {
 /**
  * Scores an atomic template based on mentioned fields.
  * @param {Object} template - Template dictionary
- * @param {string[]} mentionedFields - List of template names mentioned in description
+ * @param {string[]} mentionedFields - List of template IDs (GUIDs) mentioned in description
  * @returns {number} Score: 1 if template is mentioned, 0 otherwise
  */
 function scoreAtomicTemplate(template, mentionedFields) {
-  const templateName = template.name || '';
-  return mentionedFields.includes(templateName) ? 1 : 0;
+  // ✅ Usa ID (GUID) invece di name
+  const templateId = template.id || template._id || template.name || '';
+  return mentionedFields.includes(templateId) ? 1 : 0;
 }
 
 /**
  * Scores a composite template based on how many subDataIds are mentioned.
  * @param {Object} template - Composite template dictionary
- * @param {string[]} mentionedFields - List of template names mentioned in description
+ * @param {string[]} mentionedFields - List of template IDs (GUIDs) mentioned in description
  * @returns {number} Score: Number of subDataIds that match mentionedFields
  */
 function scoreCompositeTemplate(template, mentionedFields) {
@@ -147,6 +177,7 @@ function scoreCompositeTemplate(template, mentionedFields) {
 
   let score = 0;
   for (const subId of subDataIds) {
+    // ✅ mentionedFields contiene già i GUID, quindi confronto diretto
     if (mentionedFields.includes(subId)) {
       score += 1;
     }
@@ -183,7 +214,7 @@ function scoreTemplate(template, mentionedFields) {
  * @param {string[]} [mentionedFields] - Pre-extracted mentioned fields (optional)
  * @returns {Object|null} Object with {template, score, reason} or null if no match
  */
-function findBestTemplateMatch(text, templates, mentionedFields = null) {
+function findBestTemplateMatch(text, templates, mentionedFields = null, patternMemory = null) {
   if (!text || !templates) {
     console.log('[HEURISTIC][findBestTemplateMatch] Empty input', { hasText: !!text, hasTemplates: !!templates });
     return null;
@@ -191,7 +222,7 @@ function findBestTemplateMatch(text, templates, mentionedFields = null) {
 
   // Extract mentioned fields if not provided
   if (!mentionedFields) {
-    mentionedFields = extractMentionedFields(text, templates);
+    mentionedFields = extractMentionedFields(text, templates, patternMemory);
   }
 
   console.log('[HEURISTIC][findBestTemplateMatch] Mentioned fields extracted', { mentionedFields, count: mentionedFields.length });
@@ -206,12 +237,13 @@ function findBestTemplateMatch(text, templates, mentionedFields = null) {
   let bestReason = '';
 
   // First pass: look for composite templates (subDataIds.length > 0) that contain ALL mentioned fields
-  for (const [templateName, template] of Object.entries(templates)) {
+  for (const [templateKey, template] of Object.entries(templates)) {
     const subDataIds = template.subDataIds || [];
+    const templateId = template.id || template._id || templateKey;
 
     // ✅ Template composito se ha subDataIds
     if (subDataIds.length > 0) {
-      // Check if composite contains all mentioned fields
+      // Check if composite contains all mentioned fields (mentionedFields contiene GUID)
       const containsAll = mentionedFields.every(field => subDataIds.includes(field));
       if (containsAll) {
         const score = mentionedFields.length;
@@ -226,7 +258,12 @@ function findBestTemplateMatch(text, templates, mentionedFields = null) {
 
   // Second pass: find template with highest score (if no perfect composite match)
   if (!bestTemplate) {
-    for (const [templateName, template] of Object.entries(templates)) {
+    for (const [templateKey, template] of Object.entries(templates)) {
+      const templateId = template.id || template._id || templateKey;
+
+      // ✅ Verifica se questo template stesso è menzionato (per template semplici)
+      const isMentioned = mentionedFields.includes(templateId);
+
       const score = scoreTemplate(template, mentionedFields);
       if (score > bestScore) {
         bestTemplate = template;

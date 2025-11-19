@@ -36,8 +36,9 @@ class TaskTemplateService {
         if (Array.isArray(factoryTemplates) && factoryTemplates.length > 0) {
           factoryTemplates.forEach((template: any) => {
             // Map database document to TaskTemplate
+            const templateId = template.id || template._id;
             const mapped: TaskTemplate = {
-              id: template.id || template._id,
+              id: templateId,
               label: template.label || '',
               description: template.description || '',
               icon: template.icon || 'Circle',
@@ -49,10 +50,50 @@ class TaskTemplateService {
               createdAt: template.createdAt ? new Date(template.createdAt) : undefined,
               updatedAt: template.updatedAt ? new Date(template.updatedAt) : undefined
             };
-            this.templates.set(mapped.id, mapped);
+            // Store the full template object (including nlpContract) for access
+            (mapped as any).nlpContract = template.nlpContract;
+            // Store also the original _id and name for lookup
+            (mapped as any)._id = template._id;
+            (mapped as any).name = template.name;
+
+            // Save with UUID as key (for compatibility)
+            this.templates.set(templateId, mapped);
+
+            // ✅ Also save with 'name' as key (canonical, language-independent) for lookup
+            if (template.name) {
+              const nameKey = template.name.toLowerCase();
+              this.templates.set(nameKey, mapped);
+
+              // Log when saving with name key for debugging
+              if (template.nlpContract) {
+                console.log('✅ [TaskTemplateService] Template salvato anche con name key', {
+                  nameKey: nameKey,
+                  templateId: templateId,
+                  hasContract: !!(mapped as any).nlpContract,
+                  contractTemplateName: template.nlpContract.templateName
+                });
+              }
+            }
+
+            // Log contract loading for debugging
+            if (template.nlpContract) {
+              console.log('✅ [TaskTemplateService] Contract caricato per template', {
+                templateId: templateId,
+                templateName: template.name || 'N/A',
+                templateLabel: mapped.label,
+                hasContract: !!template.nlpContract,
+                contractTemplateName: template.nlpContract.templateName,
+                savedWithNameKey: template.name ? template.name.toLowerCase() : 'N/A'
+              });
+            }
           });
+
+          console.log(`✅ [TaskTemplateService] Caricati ${this.templates.size} template dal database`, {
+            templateIds: Array.from(this.templates.keys()),
+            contractsCount: Array.from(this.templates.values()).filter(t => (t as any).nlpContract).length
+          });
+
           this.initialized = true;
-          console.log('[TaskTemplateService] Loaded', this.templates.size, 'templates from Factory');
           return;
         }
       }
@@ -79,7 +120,6 @@ class TaskTemplateService {
       this.addActTypeTemplates();
 
       this.initialized = true;
-      console.log('[TaskTemplateService] Initialized with', this.templates.size, 'templates from Action Catalog');
     } catch (error) {
       console.error('[TaskTemplateService] Error loading templates:', error);
       // Add ActType templates even if loading fails
@@ -117,10 +157,11 @@ class TaskTemplateService {
           createdAt: template.createdAt ? new Date(template.createdAt) : undefined,
           updatedAt: template.updatedAt ? new Date(template.updatedAt) : undefined
         };
+        // Store the full template object (including nlpContract) for access
+        (mapped as any).nlpContract = template.nlpContract;
         this.templates.set(mapped.id, mapped);
       });
 
-      console.log('[TaskTemplateService] Loaded', projectTemplates.length, 'project templates');
     } catch (error) {
       console.error('[TaskTemplateService] Error loading project templates:', error);
     }

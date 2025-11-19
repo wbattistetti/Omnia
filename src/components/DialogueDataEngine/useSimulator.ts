@@ -36,7 +36,31 @@ export function useDDTSimulator(template: DDTTemplateV2, initialConfig?: HookCon
   const pendingBgRef = useRef<any | null>(null);
   const effectsRef = useRef<SimulatorEffect[]>([]);
   const stateRef = useRef<SimulatorState>(state);
+  const prevTemplateRef = useRef<DDTTemplateV2>(template);
   useEffect(() => { stateRef.current = state; }, [state]);
+
+  // ✅ Reset state when template changes from empty to valid (or changes completely)
+  useEffect(() => {
+    const prevTemplate = prevTemplateRef.current;
+    const prevHasNodes = (prevTemplate.nodes?.length || 0) > 0;
+    const currHasNodes = (template.nodes?.length || 0) > 0;
+    const templateChanged = prevTemplate.nodes?.[0]?.id !== template.nodes?.[0]?.id;
+
+    // Reset if: template went from empty to having nodes, or template ID changed
+    if ((!prevHasNodes && currHasNodes) || (prevHasNodes && currHasNodes && templateChanged)) {
+      console.log('[useDDTSimulator] Template changed, resetting state', {
+        prevNodesCount: prevTemplate.nodes?.length || 0,
+        currNodesCount: template.nodes?.length || 0,
+        prevFirstNodeId: prevTemplate.nodes?.[0]?.id,
+        currFirstNodeId: template.nodes?.[0]?.id
+      });
+      setState(initEngine(template));
+      prevTemplateRef.current = template;
+    } else if (currHasNodes) {
+      // Update ref even if we don't reset (to track current template)
+      prevTemplateRef.current = template;
+    }
+  }, [template]);
 
   // Install logger, parsers, effects
   useEffect(() => {

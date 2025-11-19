@@ -3,10 +3,13 @@
 
 import type { DDTTemplateV2, DDTNode } from './model/ddt.v2.types';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
-import { buildPlan, isSaturated, nextMissingSub, applyComposite, setMemory, Memory, Plan } from './state';
+import { buildPlan, isSaturated, nextMissingSub, setMemory, Memory, Plan } from './state';
 import { isYes, isNo, extractImplicitCorrection } from './utils';
 import { getKind } from './parsers/registry';
 import { getLogger } from './logger';
+import { loadContract, getSubIdForCanonicalKey } from './contracts/contractLoader';
+import { extractWithContractSync } from './contracts/contractExtractor';
+import { taskTemplateService } from '../../services/TaskTemplateService';
 
 // Debug helpers for mixed-initiative tracing
 function logMI(...args: any[]) {
@@ -53,6 +56,11 @@ export interface SimulatorState {
   counters: { notConfirmed: number }; // Legacy, kept for compatibility
   // New: internal node states
   nodeStates: Record<string, NodeState>;
+  // Template originale per accedere ai contract
+  template?: DDTTemplateV2;
+  // Flag per indicare che il contract NLP è mancante
+  grammarMissing?: boolean;
+  grammarMissingNodeId?: string; // ID del nodo senza contract
 }
 
 // ============================================================================
@@ -84,27 +92,27 @@ function setNodeState(state: SimulatorState, nodeId: string, updater: (ns: NodeS
 }
 
 function requiredSubsOf(node: DDTNode, byId: Record<string, DDTNode>): string[] {
-    const subs = (node.subs || []).filter((sid) => !!byId[sid]);
-    return subs.filter((sid) => byId[sid].required !== false);
+  const subs = (node.subs || []).filter((sid) => !!byId[sid]);
+  return subs.filter((sid) => byId[sid].required !== false);
 }
 
 function nextMissingRequired(node: DDTNode, byId: Record<string, DDTNode>, memory: Memory): string | undefined {
-    const subs = requiredSubsOf(node, byId);
-    for (const sid of subs) {
-      const m = memory[sid];
-      if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return sid;
-    }
-    return undefined;
+  const subs = requiredSubsOf(node, byId);
+  for (const sid of subs) {
+    const m = memory[sid];
+    if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return sid;
+  }
+  return undefined;
 }
 
 function isSaturatedRequired(node: DDTNode, byId: Record<string, DDTNode>, memory: Memory): boolean {
-    const subs = requiredSubsOf(node, byId);
-    if (subs.length === 0) return isSaturated(node, memory);
-    for (const sid of subs) {
-      const m = memory[sid];
-      if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return false;
-    }
-    return true;
+  const subs = requiredSubsOf(node, byId);
+  if (subs.length === 0) return isSaturated(node, memory);
+  for (const sid of subs) {
+    const m = memory[sid];
+    if (!m || m.value === undefined || m.value === null || String(m.value).length === 0) return false;
+  }
+  return true;
 }
 
 // ============================================================================
@@ -323,275 +331,109 @@ function extractOrdered(
   };
 
   const applyToKind = (kind: string) => {
-    if (kind === 'email') {
-      const hit = (getKind('email')?.detect(residual)) || detectEmailSpan(residual);
-      if (hit) {
-        hasMatch = true; // Grammatica ha matchato qualcosa
-        logMI('hit', { kind, value: hit.value, span: hit.span, residualLen: residual.length });
-        for (const id of state.plan.order) {
-          const n = state.plan.byId[id];
-          if (String(n?.kind).toLowerCase() === 'email' && memory[id]?.value === undefined) {
-            memory = setMemory(memory, id, hit.value, false);
-            logMI('memWrite', { id, kind, value: hit.value });
-            subtract(hit.span);
-            logMI('write', { kind, id, afterResidualLen: residual.length });
-            break;
-          }
-        }
-      }
+    // PRIORITY: Try contract-based extraction if available (regex sync)
+    if (!mainNode || !state.template) {
+      console.warn('⚠️ [ENGINE] Nessun template o mainNode disponibile per estrazione', {
+        hasTemplate: !!state.template,
+        hasMainNode: !!mainNode,
+        kind
+      });
       return;
     }
-    if (kind === 'phone') {
-      const hit = (getKind('phone')?.detect(residual)) || detectPhoneSpan(residual);
-      if (hit) {
-        hasMatch = true; // Grammatica ha matchato qualcosa
-        let candidate = hit.value;
-        const only = candidate.replace(/[^\d+]/g, '');
-        let parsed = parsePhoneNumberFromString(only, 'IT');
-        if (!parsed && only.startsWith('00')) parsed = parsePhoneNumberFromString('+' + only.slice(2), 'IT');
-        if (!parsed && only.startsWith('39')) parsed = parsePhoneNumberFromString('+' + only, 'IT');
-        if (!parsed && !only.startsWith('+') && /^3\d{8,}$/.test(only)) parsed = parsePhoneNumberFromString('+39' + only, 'IT');
-        const normalized = parsed?.isValid() ? parsed.number : only;
-        logMI('phoneNormalize', { raw: hit.value, only, normalized, valid: parsed?.isValid?.() });
-        let wroteAny = false;
-        for (const id of state.plan.order) {
-          const n = state.plan.byId[id];
-          const labelMatch = /phone|telefono|cellulare/i.test(String((n as any)?.label || ''));
-          const isPhoneNode = String(n?.kind).toLowerCase() === 'phone' || labelMatch;
-          const existing = memory[id]?.value;
-          const phoneLike = typeof existing === 'string' && /^\+?\d[\d\s\-]{6,}$/.test(existing);
-          const canWrite = existing === undefined || !phoneLike;
-          if (isPhoneNode && canWrite) {
-            memory = setMemory(memory, id, normalized, false);
-            logMI('memWrite', { id, kind: 'phone', value: normalized, byLabel: labelMatch && String(n?.kind).toLowerCase() !== 'phone', overwrite: existing !== undefined });
-            if (Array.isArray((n as any)?.subs) && (n as any).subs.length > 0) {
-              const cc = (parsed && (parsed as any).countryCallingCode) ? '+' + (parsed as any).countryCallingCode : (normalized.match(/^(\+\d{1,3})/)?.[1] || undefined);
-              for (const sid of (n as any).subs) {
-                const sub = state.plan.byId[sid];
-                const slabel = String((sub?.label || '')).toLowerCase();
-                const isNumberLabel = /number|telefono|phone\s*number/.test(slabel);
-                const isPrefixLabel = /prefix|prefisso|country\s*code|countrycode/.test(slabel);
-                if (isNumberLabel) {
-                  if (memory[sid]?.value === undefined) {
-                    memory = setMemory(memory, sid, normalized, false);
-                    logMI('memWrite', { id: sid, kind: 'phone.number', value: normalized, label: slabel });
-                  }
-                } else if (isPrefixLabel && cc) {
-                  if (memory[sid]?.value === undefined) {
-                    memory = setMemory(memory, sid, cc, false);
-                    logMI('memWrite', { id: sid, kind: 'phone.prefix', value: cc, label: slabel });
-                  }
-                }
-              }
-            }
-            subtract(hit.span);
-            logMI('write', { kind: 'phone', id, afterResidualLen: residual.length });
-            wroteAny = true;
-            break;
-          }
-        }
-        if (!wroteAny) {
-          logMI('phoneNoTarget', { note: 'no phone-like node found to write' });
-        }
-      }
-      return;
-    }
-    if (kind === 'date') {
-      // When in ToComplete mode with mainNode, try full date detection first (can match multiple subs)
-      // Then fallback to granular detectors for isolated sub-components (e.g., "dicembre" alone)
-      const det = (getKind('date')?.detect(residual));
-      let hit: { day?: number; month?: number | string; year?: number; span?: [number, number] } | undefined;
-      if (det && ((det as any).value?.day !== undefined || (det as any).value?.month !== undefined || (det as any).value?.year !== undefined)) {
-        hit = { day: (det as any).value?.day, month: (det as any).value?.month, year: (det as any).value?.year, span: (det as any).span };
-      } else {
-        hit = detectDateSpan(residual);
-      }
 
-      // If full date detection matched, use it (can match multiple subs like "dicembre 12")
-      if (hit) {
-        hasMatch = true;
-        logMI('hit', { kind, value: { day: hit.day, month: hit.month, year: hit.year }, span: hit.span, residualLen: residual.length, full: true });
-        for (const id of state.plan.order) {
-          const n = state.plan.byId[id];
-          if (String(n?.kind).toLowerCase() === 'date') {
-            if (Array.isArray(n.subs) && n.subs.length > 0) {
-              // Match subs by label (case insensitive, exact or partial match)
-              for (const sid of n.subs) {
-                const sub = state.plan.byId[sid];
-                if (!sub) continue;
-                const label = String(sub?.label || '').toLowerCase().trim();
-                const idLower = String(sid || '').toLowerCase().trim();
+    // Load contract from original template node (must be present by construction)
+    const originalNode = state.template.nodes.find(n => n.id === mainNode.id);
 
-                // Match day: label must contain 'day' or ID is 'day'
-                if (hit.day !== undefined) {
-                  if (label === 'day' || label.includes('day') || idLower === 'day' || label.includes('giorno')) {
-                    memory = setMemory(memory, sid, hit.day, false);
-                    logMI('memWrite', { id: sid, label, idLower, kind: 'date.day', value: hit.day });
-                  }
-                }
+    console.log('🔍 [ENGINE] Searching for contract', {
+      kind,
+      mainNodeId: mainNode.id,
+      mainNodeLabel: mainNode.label,
+      foundOriginalNode: !!originalNode,
+      originalNodeId: originalNode?.id
+    });
 
-                // Match month: label must contain 'month' or ID is 'month'
-                if (hit.month !== undefined) {
-                  let monthValue = hit.month;
-                  if (typeof monthValue === 'string') {
-                    const MONTHS: Record<string, number> = {
-                      january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
-                      may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8, september: 9, sep: 9, sept: 9,
-                      october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12,
-                      gennaio: 1, gen: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, mag: 5,
-                      giugno: 6, giu: 6, luglio: 7, lug: 7, agosto: 8, ago: 8, settembre: 9, set: 9,
-                      ottobre: 10, ott: 10, novembre: 11, dicembre: 12, dic: 12,
-                    };
-                    monthValue = MONTHS[monthValue.toLowerCase()] || monthValue;
-                  }
-                  if (label === 'month' || label.includes('month') || idLower === 'month' || label.includes('mese')) {
-                    memory = setMemory(memory, sid, monthValue, false);
-                    logMI('memWrite', { id: sid, label, idLower, kind: 'date.month', value: monthValue });
-                  }
-                }
+    const contract = originalNode ? loadContract(originalNode) : null;
 
-                // Match year: label must contain 'year' or ID is 'year'
-                if (hit.year !== undefined) {
-                  if (label === 'year' || label.includes('year') || idLower === 'year' || label.includes('anno')) {
-                    memory = setMemory(memory, sid, hit.year, false);
-                    logMI('memWrite', { id: sid, label, idLower, kind: 'date.year', value: hit.year });
-                  }
-                }
-              }
-            }
-            subtract(hit.span);
-            logMI('write', { kind, id, afterResidualLen: residual.length });
-            break;
-          }
-        }
-        return;
-      }
+    if (contract && contract.templateName === kind) {
+      console.log('✅ [ENGINE] Contract trovato, usando per estrazione', {
+        kind,
+        templateName: contract.templateName,
+        contractTemplateId: contract.templateId,
+        contractSourceTemplateId: contract.sourceTemplateId,
+        mainNodeId: mainNode.id,
+        input: residual.substring(0, 50)
+      });
 
-      // Fallback to granular detectors for isolated sub-components (only in ToComplete mode)
-      // This allows matching "dicembre" alone even if it doesn't form a complete date
-      if (extractAllSubs && mainNode && Array.isArray(mainNode.subs) && mainNode.subs.length > 0) {
-        // Try granular detectors (month/day/year isolated)
-        let matchedAny = false;
+      try {
+        const result = extractWithContractSync(residual, contract);
 
-        // Try month detector
-        const monthHit = detectMonthSpan(residual);
-        if (monthHit) {
+        if (result.hasMatch && Object.keys(result.values).length > 0) {
           hasMatch = true;
-          matchedAny = true;
-          logMI('hit', { kind: 'date.month', value: monthHit.value, span: monthHit.span, residualLen: residual.length, granular: true });
+          console.log('✅ [ENGINE] Extraction SUCCESS', {
+            kind,
+            values: result.values,
+            source: result.source
+          });
 
-          // Normalize month value
-          let monthValue = monthHit.value;
-          if (typeof monthValue === 'string') {
-            const MONTHS: Record<string, number> = {
-              january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
-              may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8, september: 9, sep: 9, sept: 9,
-              october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12,
-              gennaio: 1, gen: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, mag: 5,
-              giugno: 6, giu: 6, luglio: 7, lug: 7, agosto: 8, ago: 8, settembre: 9, set: 9,
-              ottobre: 10, ott: 10, novembre: 11, dicembre: 12, dic: 12,
-            };
-            monthValue = MONTHS[monthValue.toLowerCase()] || monthValue;
-          }
+          // Map canonicalKey → subId and write to memory
+          let matchedSpan: [number, number] | undefined = undefined;
 
-          // Write to matching sub
-          for (const sid of mainNode.subs) {
-            const sub = state.plan.byId[sid];
-            if (!sub) continue;
-            const label = String(sub?.label || '').toLowerCase().trim();
-            const idLower = String(sid || '').toLowerCase().trim();
-            if (label === 'month' || label.includes('month') || idLower === 'month' || label.includes('mese')) {
-              memory = setMemory(memory, sid, monthValue, false);
-              logMI('memWrite', { id: sid, label, idLower, kind: 'date.month', value: monthValue, granular: true });
-              subtract(monthHit.span);
+          for (const [canonicalKey, value] of Object.entries(result.values)) {
+            const subId = getSubIdForCanonicalKey(contract, canonicalKey);
+            if (subId && memory[subId]?.value === undefined) {
+              memory = setMemory(memory, subId, value, false);
+              console.log(`💾 [ENGINE] Saved: ${canonicalKey} = ${value} → ${subId}`);
+            } else if (subId && memory[subId]?.value !== undefined) {
+              console.log(`⏭️ [ENGINE] Skipped (exists): ${canonicalKey} → ${subId}`);
             }
           }
-        }
 
-        // Try day detector (only if month didn't match to avoid conflicts)
-        if (!matchedAny) {
-          const dayHit = detectDaySpan(residual);
-          if (dayHit) {
-            hasMatch = true;
-            matchedAny = true;
-            logMI('hit', { kind: 'date.day', value: dayHit.value, span: dayHit.span, residualLen: residual.length, granular: true });
-
-            for (const sid of mainNode.subs) {
-              const sub = state.plan.byId[sid];
-              if (!sub) continue;
-              const label = String(sub?.label || '').toLowerCase().trim();
-              const idLower = String(sid || '').toLowerCase().trim();
-              if (label === 'day' || label.includes('day') || idLower === 'day' || label.includes('giorno')) {
-                memory = setMemory(memory, sid, dayHit.value, false);
-                logMI('memWrite', { id: sid, label, idLower, kind: 'date.day', value: dayHit.value, granular: true });
-                subtract(dayHit.span);
+          // Calculate span from regex match
+          for (const pattern of contract.regex.patterns) {
+            try {
+              const regex = new RegExp(pattern, 'i');
+              const match = residual.match(regex);
+              if (match && match.index !== undefined) {
+                matchedSpan = [match.index, match.index + match[0].length];
+                break;
               }
+            } catch (e) {
+              // Pattern invalid, skip
             }
           }
-        }
 
-        // Try year detector (only if month/day didn't match)
-        if (!matchedAny) {
-          const yearHit = detectYearSpan(residual);
-          if (yearHit) {
-            hasMatch = true;
-            matchedAny = true;
-            logMI('hit', { kind: 'date.year', value: yearHit.value, span: yearHit.span, residualLen: residual.length, granular: true });
-
-            for (const sid of mainNode.subs) {
-              const sub = state.plan.byId[sid];
-              if (!sub) continue;
-              const label = String(sub?.label || '').toLowerCase().trim();
-              const idLower = String(sid || '').toLowerCase().trim();
-              if (label === 'year' || label.includes('year') || idLower === 'year' || label.includes('anno')) {
-                memory = setMemory(memory, sid, yearHit.value, false);
-                logMI('memWrite', { id: sid, label, idLower, kind: 'date.year', value: yearHit.value, granular: true });
-                subtract(yearHit.span);
-              }
-            }
+          if (matchedSpan) {
+            subtract(matchedSpan);
           }
-        }
 
-        // If granular detectors matched, return early
-        if (matchedAny) {
           return;
+        } else {
+          console.log('❌ [ENGINE] No match from contract', {
+            kind,
+            input: residual.substring(0, 50),
+            contractPatterns: contract.regex.patterns.length,
+            firstPattern: contract.regex.patterns[0]?.substring(0, 100),
+            hasPlaceholder: contract.regex.patterns[0]?.includes('${MONTHS_PLACEHOLDER}')
+          });
         }
+      } catch (error) {
+        console.warn('⚠️ [ENGINE] Contract extraction error', {
+          kind,
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
-
-      // No match found (neither full date detection nor granular detectors matched)
-      return;
-    }
-    if (kind === 'name') {
-      const det = (getKind('name')?.detect(residual));
-      const hit = det ? { firstname: (det as any).value?.firstname, lastname: (det as any).value?.lastname, span: (det as any).span } : detectNameFrom(residual);
-      if (hit && (hit.firstname || hit.lastname)) {
-        hasMatch = true; // Grammatica ha matchato qualcosa
-        logMI('hit', { kind, value: { firstname: hit.firstname, lastname: hit.lastname }, span: hit.span, residualLen: residual.length });
-        for (const id of state.plan.order) {
-          const n = state.plan.byId[id];
-          if (String(n?.kind).toLowerCase() === 'name') {
-            let wrote = false;
-            if (Array.isArray(n.subs) && n.subs.length > 0) {
-              for (const sid of n.subs) {
-                const sub = state.plan.byId[sid];
-                const norm = (sub?.label || '').toLowerCase();
-                if (norm.includes('first') && hit.firstname && (memory[sid]?.value === undefined)) { memory = setMemory(memory, sid, hit.firstname, false); logMI('memWrite', { id: sid, kind: 'name.first', value: hit.firstname }); wrote = true; }
-                if (norm.includes('last') && hit.lastname && (memory[sid]?.value === undefined)) { memory = setMemory(memory, sid, hit.lastname, false); logMI('memWrite', { id: sid, kind: 'name.last', value: hit.lastname }); wrote = true; }
-              }
-            } else {
-              const v = [hit.firstname, hit.lastname].filter(Boolean).join(' ');
-              if (v && (memory[id]?.value === undefined)) { memory = setMemory(memory, id, v, false); logMI('memWrite', { id, kind: 'name', value: v }); wrote = true; }
-            }
-            if (wrote) {
-              subtract(hit.span);
-              logMI('write', { kind, id, afterResidualLen: residual.length });
-            } else {
-              logMI('skipSubtract', { kind, reason: 'name already present' });
-            }
-            break;
-          }
-        }
-      }
+    } else {
+      // Contract non disponibile → no match, andrà in NoMatch con flag grammarMissing
+      console.warn('❌ [ENGINE] Contract NOT AVAILABLE', {
+        kind,
+        hasContract: !!contract,
+        contractTemplateName: contract?.templateName,
+        expectedKind: kind,
+        mainNodeId: mainNode.id,
+        mainNodeLabel: mainNode.label
+      });
+      // hasMatch rimane false → andrà in NoMatch
+      // Il flag grammarMissing verrà settato in handleCollecting
       return;
     }
   };
@@ -609,16 +451,6 @@ function extractOrdered(
     logMI('loopEnd', { residual });
   }
 
-  console.log('🔍 [EXTRACT] extractOrdered completato', {
-    input: input.substring(0, 100),
-    hasMatch,
-    memoryKeys: Object.keys(memory),
-    memoryValues: Object.keys(memory).map(k => ({ key: k, value: memory[k]?.value })),
-    residual: residual.substring(0, 100),
-    extractAllSubs,
-    mainNodeId: mainNode?.id,
-    mainNodeLabel: mainNode?.label
-  });
 
   return { memory, residual, hasMatch };
 }
@@ -795,15 +627,31 @@ export function initEngine(template: DDTTemplateV2): SimulatorState {
     };
   }
 
-  return {
+  const state = {
     plan,
     mode: 'CollectingMain',
     currentIndex: 0,
     memory: {},
     transcript: [],
     counters: { notConfirmed: 0 }, // Legacy
-    nodeStates
+    nodeStates,
+    template, // Store original template for contract access
+    grammarMissing: false // Initialize grammar missing flag
   };
+
+  // ✅ DEBUG: Log initialization
+  const mainId = plan.order[0];
+  const mainNode = mainId ? plan.byId[mainId] : undefined;
+  console.log('[ENGINE] initEngine completed', {
+    nodesCount: template.nodes.length,
+    planOrderLength: plan.order.length,
+    mainNodeId: mainId,
+    mainNodeLabel: mainNode?.label,
+    mainNodeKind: mainNode?.kind,
+    mode: state.mode
+  });
+
+  return state;
 }
 
 export function advance(state: SimulatorState, input: string, extractedVariables?: Record<string, any>): SimulatorState {
@@ -923,63 +771,63 @@ function handleCollecting(
 
   // Priority: use extractedVariables if provided
   if (extractedVariables && typeof extractedVariables === 'object' && Object.keys(extractedVariables).length > 0) {
-      logMI('extractedVariables', { extractedVariables, mainKind: main.kind });
+    logMI('extractedVariables', { extractedVariables, mainKind: main.kind });
 
-      if (Array.isArray(main.subs) && main.subs.length > 0) {
-        for (const sid of main.subs) {
+    if (Array.isArray(main.subs) && main.subs.length > 0) {
+      for (const sid of main.subs) {
         const subNode = state.plan.byId[sid];
         if (!subNode) continue;
 
         const labelNorm = (subNode?.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-          let v: any = undefined;
+        let v: any = undefined;
 
-          if (main.kind === 'name') {
-            if (labelNorm.includes('first')) v = extractedVariables.firstname;
-            else if (labelNorm.includes('last')) v = extractedVariables.lastname;
-          } else if (main.kind === 'date') {
-            if (labelNorm.includes('day') || labelNorm.includes('giorno')) v = extractedVariables.day;
-            else if (labelNorm.includes('month') || labelNorm.includes('mese')) v = extractedVariables.month;
-            else if (labelNorm.includes('year') || labelNorm.includes('anno')) v = extractedVariables.year;
-          } else if (main.kind === 'address') {
-            if (labelNorm.includes('street')) v = extractedVariables.street;
-            else if (labelNorm.includes('city')) v = extractedVariables.city;
-            else if (labelNorm.includes('postal') || labelNorm.includes('zip')) v = extractedVariables.postal_code;
-            else if (labelNorm.includes('country')) v = extractedVariables.country;
-          }
-
-          if (v !== undefined && v !== null && (mem[sid]?.value === undefined)) {
-            mem = setMemory(mem, sid, v, false);
-          logMI('memWriteFromExtracted', { sid, label: subNode.label, value: v });
-          }
+        if (main.kind === 'name') {
+          if (labelNorm.includes('first')) v = extractedVariables.firstname;
+          else if (labelNorm.includes('last')) v = extractedVariables.lastname;
+        } else if (main.kind === 'date') {
+          if (labelNorm.includes('day') || labelNorm.includes('giorno')) v = extractedVariables.day;
+          else if (labelNorm.includes('month') || labelNorm.includes('mese')) v = extractedVariables.month;
+          else if (labelNorm.includes('year') || labelNorm.includes('anno')) v = extractedVariables.year;
+        } else if (main.kind === 'address') {
+          if (labelNorm.includes('street')) v = extractedVariables.street;
+          else if (labelNorm.includes('city')) v = extractedVariables.city;
+          else if (labelNorm.includes('postal') || labelNorm.includes('zip')) v = extractedVariables.postal_code;
+          else if (labelNorm.includes('country')) v = extractedVariables.country;
         }
 
-        const composeFromSubs = (m: DDTNode, memory: Memory) => {
-          if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
-          const out: Record<string, any> = {};
-          for (const s of (m.subs || [])) {
-            const v = memory[s]?.value;
-            if (v !== undefined) out[s] = v;
-          }
-          return out;
-        };
-        mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
-        state = { ...state, memory: mem };
-      } else {
-        const value = extractedVariables.value ?? extractedVariables;
-        if (value !== undefined && value !== null) {
-          mem = setMemory(state.memory, main.id, value, false);
-          state = { ...state, memory: mem };
+        if (v !== undefined && v !== null && (mem[sid]?.value === undefined)) {
+          mem = setMemory(mem, sid, v, false);
+          logMI('memWriteFromExtracted', { sid, label: subNode.label, value: v });
         }
       }
-      mem = state.memory;
 
-      // Always create extracted object with hasMatch=true when extractedVariables are provided
-      // because those variables come from a successful match
-      extracted = { memory: mem, residual: input, hasMatch: true };
-      logMI('extractedFromVariables', { hasMatch: true, memoryKeys: Object.keys(mem) });
+      const composeFromSubs = (m: DDTNode, memory: Memory) => {
+        if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
+        const out: Record<string, any> = {};
+        for (const s of (m.subs || [])) {
+          const v = memory[s]?.value;
+          if (v !== undefined) out[s] = v;
+        }
+        return out;
+      };
+      mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
+      state = { ...state, memory: mem };
     } else {
+      const value = extractedVariables.value ?? extractedVariables;
+      if (value !== undefined && value !== null) {
+        mem = setMemory(state.memory, main.id, value, false);
+        state = { ...state, memory: mem };
+      }
+    }
+    mem = state.memory;
+
+    // Always create extracted object with hasMatch=true when extractedVariables are provided
+    // because those variables come from a successful match
+    extracted = { memory: mem, residual: input, hasMatch: true };
+    logMI('extractedFromVariables', { hasMatch: true, memoryKeys: Object.keys(mem) });
+  } else {
     // Fallback to mixed-initiative extraction
-      logMI('primaryKind', { mainKind, label: labelStr, chosen: primaryKind });
+    logMI('primaryKind', { mainKind, label: labelStr, chosen: primaryKind });
 
     // When in collectingSub context, extract ALL subs of the main
     // This allows user to answer the direct question AND provide other subs
@@ -990,76 +838,8 @@ function handleCollecting(
     // Use extracted memory directly - it already has the values from extractOrdered
     mem = extracted.memory;
 
-    // Only use applyComposite if extractOrdered didn't find anything (residual is still the input)
-      const residual = extracted.residual ?? input;
-    const extractedFoundSomething = Object.keys(extracted.memory).length > Object.keys(state.memory).length ||
-      Object.keys(extracted.memory).some(key => {
-        const oldVal = state.memory[key];
-        const newVal = extracted.memory[key];
-        return !oldVal || (oldVal.value !== newVal?.value);
-      });
-
-    if (!extractedFoundSomething && residual.trim() === input.trim()) {
-      // extractOrdered didn't find anything, try applyComposite as fallback
-      const dateDet = getKind('date')?.detect(residual);
-      const corrected = extractImplicitCorrection(residual) || dateDet?.value || residual;
-      const applied = applyComposite(main.kind, corrected);
-      const variables = applied.variables;
-
-      // For mains with subs, populate only subs
-      if (Array.isArray(main.subs) && main.subs.length > 0) {
-        for (const sid of main.subs) {
-        const subNode = state.plan.byId[sid];
-        const labelNorm = (subNode?.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-          let v: any = undefined;
-          if (main.kind === 'name') {
-            if (labelNorm.includes('first')) v = (variables as any).firstname;
-            else if (labelNorm.includes('last')) v = (variables as any).lastname;
-          } else if (main.kind === 'date') {
-            if (labelNorm.includes('day')) v = (variables as any).day;
-            else if (labelNorm.includes('month')) v = (variables as any).month;
-            else if (labelNorm.includes('year')) v = (variables as any).year;
-          } else if (main.kind === 'address') {
-            if (labelNorm.includes('street')) v = (variables as any).street;
-            else if (labelNorm.includes('city')) v = (variables as any).city;
-            else if (labelNorm.includes('postal') || labelNorm.includes('zip')) v = (variables as any).postal_code;
-            else if (labelNorm.includes('country')) v = (variables as any).country;
-          }
-          if (v !== undefined && (mem[sid]?.value === undefined)) {
-            mem = setMemory(mem, sid, v, false);
-          }
-        }
-      } else {
-        const nextVal = (variables as any).value ?? corrected;
-        const hasExisting = mem[main.id]?.value !== undefined;
-        const isEmpty = nextVal === undefined || String(nextVal).trim().length === 0;
-        if (!hasExisting && !isEmpty) {
-          mem = setMemory(state.memory, main.id, nextVal, false);
-        }
-      }
-
-    // Propagate composite parts into sub memory
-      if (Array.isArray(main.subs) && main.subs.length > 0) {
-        for (const sid of main.subs) {
-          const val = (applied.variables as any)[sid];
-          const alt = Object.entries(applied.variables as any).find(([k]) => k === sid || k.replace(/[^a-z0-9]+/g, '') === sid.replace(/[^a-z0-9]+/g, ''));
-          const chosen = val !== undefined ? val : (alt ? alt[1] : undefined);
-          if (chosen !== undefined) {
-            mem = setMemory(mem, sid, chosen, false);
-          }
-        }
-        const composeFromSubs = (m: DDTNode, memory: Memory) => {
-          if (!Array.isArray(m.subs) || m.subs.length === 0) return memory[m.id]?.value;
-          const out: Record<string, any> = {};
-          for (const s of (m.subs || [])) {
-            const v = memory[s]?.value;
-            if (v !== undefined) out[s] = v;
-          }
-          return out;
-        };
-        mem = setMemory(mem, main.id, composeFromSubs(main, mem), false);
-      }
-    }
+    // REMOVED: applyComposite fallback - ora richiediamo sempre il contract NLP
+    // Se extractOrdered non trova nulla e non c'è contract, andrà in NoMatch con grammarMissing=true
   }
 
   // Separate concepts: matchOccurred vs memoryChanged
@@ -1154,23 +934,23 @@ function handleCollecting(
       reason: 'NoMatch totale: nessuna grammatica ha riconosciuto nulla'
     });
 
+    // Verifica se il contract è mancante
+    const originalNode = state.template?.nodes.find(n => n.id === main.id);
+    const contract = originalNode ? loadContract(originalNode) : null;
+    const isGrammarMissing = !contract || (contract && contract.templateName !== main.kind);
+
     // NoMatch sul nodo in contesto (main se collectingMain, sub se collectingSub)
     const noMatchState = handleNoMatch(state, contextNode);
 
-    console.log('🚨 [ENGINE] Dopo handleNoMatch sul nodo in contesto', {
-      contextType,
-      contextNodeId: contextNode.id,
-      contextCounter: noMatchState.nodeStates[contextNode.id]?.counters?.noMatch,
-      contextStep: noMatchState.nodeStates[contextNode.id]?.step,
-      mode: noMatchState.mode,
-      currentSubId: noMatchState.currentSubId,
-      note: 'Nodo in contesto rimane in NoMatch per permettere alla UI di mostrare escalation'
-    });
+    // Aggiungi flag grammarMissing se il contract non è disponibile
+    const finalState = isGrammarMissing
+      ? { ...noMatchState, grammarMissing: true, grammarMissingNodeId: main.id }
+      : { ...noMatchState, grammarMissing: false };
 
     // Preserva currentSubId se eravamo in collectingSub
     const preservedState = state.currentSubId
-      ? { ...noMatchState, currentSubId: state.currentSubId }
-      : noMatchState;
+      ? { ...finalState, currentSubId: state.currentSubId }
+      : finalState;
 
     return { ...preservedState, mode: mapStateToMode(preservedState, main) };
   }
@@ -1194,14 +974,64 @@ function handleCollecting(
 
     // Check if the active sub matched (per distinguere match utile da irrilevante)
     const activeSubMatched = mem[sub.id]?.value !== undefined &&
-                             mem[sub.id]?.value !== state.memory[sub.id]?.value;
+      mem[sub.id]?.value !== state.memory[sub.id]?.value;
 
     // Find next missing required sub
     const requiredIds = (main.subs || []).filter((s) => !!state.plan.byId[s] && state.plan.byId[s].required !== false);
-    const nextRequiredMissing = requiredIds.find((s) => {
-      const m = mem[s];  // Usa memoria aggiornata (mem) invece di state.memory
-      return !m || m.value === undefined || m.value === null || String(m.value).length === 0;
-    });
+
+    // ✅ SMART LOGIC: For date fields, prioritize year if we have month or day
+    let nextRequiredMissing: string | undefined = undefined;
+
+    // Check if this is a date main node with contract
+    const originalNode = state.template?.nodes.find(n => n.id === main.id);
+    const contract = originalNode ? loadContract(originalNode) : null;
+
+    if (contract && contract.templateName === 'date' && contract.subDataMapping) {
+      // Map subId → canonicalKey
+      const subIdToCanonical: Record<string, string> = {};
+      Object.entries(contract.subDataMapping).forEach(([subId, mapping]: [string, any]) => {
+        subIdToCanonical[subId] = mapping.canonicalKey;
+      });
+
+      // Check what we have
+      const hasDay = requiredIds.some(sid => {
+        const canonical = subIdToCanonical[sid];
+        return canonical === 'day' && mem[sid]?.value !== undefined && mem[sid]?.value !== null && String(mem[sid]?.value).length > 0;
+      });
+      const hasMonth = requiredIds.some(sid => {
+        const canonical = subIdToCanonical[sid];
+        return canonical === 'month' && mem[sid]?.value !== undefined && mem[sid]?.value !== null && String(mem[sid]?.value).length > 0;
+      });
+      const hasYear = requiredIds.some(sid => {
+        const canonical = subIdToCanonical[sid];
+        return canonical === 'year' && mem[sid]?.value !== undefined && mem[sid]?.value !== null && String(mem[sid]?.value).length > 0;
+      });
+
+      // If we have month or day but not year, prioritize year
+      if ((hasMonth || hasDay) && !hasYear) {
+        const yearSubId = requiredIds.find(sid => subIdToCanonical[sid] === 'year');
+        if (yearSubId) {
+          const yearMem = mem[yearSubId];
+          if (!yearMem || yearMem.value === undefined || yearMem.value === null || String(yearMem.value).length === 0) {
+            nextRequiredMissing = yearSubId;
+            console.log('🎯 [ENGINE] Smart date logic: prioritizing year (have month/day, missing year)', {
+              hasDay,
+              hasMonth,
+              hasYear,
+              yearSubId
+            });
+          }
+        }
+      }
+    }
+
+    // If smart logic didn't find anything, use linear order
+    if (!nextRequiredMissing) {
+      nextRequiredMissing = requiredIds.find((s) => {
+        const m = mem[s];  // Usa memoria aggiornata (mem) invece di state.memory
+        return !m || m.value === undefined || m.value === null || String(m.value).length === 0;
+      });
+    }
 
     if (nextRequiredMissing) {
       // More subs to collect
@@ -1348,9 +1178,9 @@ function handleNoInput(state: SimulatorState, main: DDTNode): SimulatorState {
 // ============================================================================
 
 function handleConfirmation(state: SimulatorState, main: DDTNode, input: string): SimulatorState {
-    if (isYes(input)) {
+  if (isYes(input)) {
     // Confirmed → mark as confirmed and go to Success
-      const mem = setMemory(state.memory, main.id, state.memory[main.id]?.value, true);
+    const mem = setMemory(state.memory, main.id, state.memory[main.id]?.value, true);
     const successState = setNodeState(
       { ...state, memory: mem },
       main.id,
@@ -1359,7 +1189,7 @@ function handleConfirmation(state: SimulatorState, main: DDTNode, input: string)
     return { ...successState, mode: mapStateToMode(successState, main) };
   }
 
-    if (isNo(input)) {
+  if (isNo(input)) {
     // Not confirmed → go to NotConfirmed
     const nodeState = getNodeState(state, main.id);
     const nextCounter = Math.min(3, nodeState.counters.notConfirmed + 1);

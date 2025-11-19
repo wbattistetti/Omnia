@@ -5,11 +5,10 @@ import type {
   StepMessages,
   StepAsk,
   StepConfirm,
-  StepNotConfirmed,
-  StepViolation,
-  StepDisambiguation,
   StepSuccess,
 } from '../ddt.v2.types';
+import { taskTemplateService } from '../../../../services/TaskTemplateService';
+import { cloneAndAdaptContract, createSubIdMapping } from '../../../../utils/contractUtils';
 
 // Helper to ensure arrays length 3
 function pad3(arr?: string[]): string[] {
@@ -54,7 +53,7 @@ function extractSingleKey(group: any): string {
   return keys[0] || '';
 }
 
-function mapNode(current: MainDataNode, asType: 'main' | 'sub'): DDTNode {
+async function mapNode(current: MainDataNode, asType: 'main' | 'sub', projectLanguage: string): Promise<DDTNode> {
   const startG = getGroup(current, 'start');
   const noInputG = getGroup(current, 'noInput');
   const noMatchG = getGroup(current, 'noMatch');
@@ -162,7 +161,7 @@ function mapNode(current: MainDataNode, asType: 'main' | 'sub'): DDTNode {
   const explicitOrCorrected = ((): string | undefined => {
     if (!explicitKind || explicitKind === 'generic' || explicitKind === 'auto') return undefined;
     if (explicitKind === 'address' && looksLikePhone && !looksLikeAddress) {
-      try { console.log('[KindPersist][Adapter][correct explicit]', { label: current.label, from: explicitKind, to: 'phone' }); } catch {}
+      try { console.log('[KindPersist][Adapter][correct explicit]', { label: current.label, from: explicitKind, to: 'phone' }); } catch { }
       return 'phone';
     }
     return explicitKind;
@@ -170,12 +169,126 @@ function mapNode(current: MainDataNode, asType: 'main' | 'sub'): DDTNode {
 
   const detectedKind = explicitOrCorrected ? explicitOrCorrected
     : looksLikeDate ? 'date'
-    : looksLikeName ? 'name'
-    : looksLikePhone ? 'phone'
-    : looksLikeAddress ? 'address'
-    : (typeStr as any) || 'generic';
+      : looksLikeName ? 'name'
+        : looksLikePhone ? 'phone'
+          : looksLikeAddress ? 'address'
+            : (typeStr as any) || 'generic';
 
-  // Removed verbose logging
+  // Load source template and contract for cloning
+  let sourceTemplate = null;
+  let sourceContract = (current as any).nlpContract;
+
+  console.log('🔍 [adaptCurrentToV2] Checking contract on current node', {
+    nodeId: current.id,
+    nodeLabel: current.label,
+    detectedKind,
+    hasContractOnNode: !!sourceContract,
+    contractKeys: sourceContract ? Object.keys(sourceContract).slice(0, 5) : [],
+    currentKeys: Object.keys(current).slice(0, 15)
+  });
+
+  // Check if contract is already an instance (has sourceTemplateId) - if so, keep it as is
+  const isAlreadyInstance = sourceContract && sourceContract.sourceTemplateId;
+
+  if (!sourceContract && (current as any).templateId) {
+    // ✅ CERCO PER GUID dal nodo (NO kind/name!)
+    const templateGuid = (current as any).templateId;
+    const template = taskTemplateService.getTemplateSync(templateGuid);
+
+    if (template) {
+      sourceTemplate = template;
+      if ((template as any).nlpContract) {
+        sourceContract = (template as any).nlpContract;
+        console.log('✅ [adaptCurrentToV2] Contract trovato per GUID (FALLBACK)', {
+          templateGuid,
+          templateId: template.id,
+          templateName: (template as any).name || 'N/A',
+          nodeId: current.id,
+          nodeLabel: current.label,
+          contractTemplateName: sourceContract.templateName
+        });
+      } else {
+        console.warn('❌ [adaptCurrentToV2] Template trovato per GUID ma SENZA contract', {
+          templateGuid,
+          templateId: template.id,
+          templateName: (template as any).name,
+          nodeLabel: current.label
+        });
+      }
+    } else {
+      console.warn('❌ [adaptCurrentToV2] Template NON trovato per GUID', {
+        templateGuid,
+        nodeId: current.id,
+        nodeLabel: current.label
+      });
+    }
+  }
+
+  // ✅ Clone and adapt contract if needed (not already an instance OR if instance has placeholder)
+  let instanceContract = sourceContract;
+  if (sourceContract) {
+    // ✅ Verifica se è un'istanza ma ha ancora il placeholder (istanza vecchia)
+    const isOldInstance = isAlreadyInstance && sourceContract.regex?.patterns?.some((p: string) => p.includes('${MONTHS_PLACEHOLDER}'));
+
+    if (!isAlreadyInstance || isOldInstance) {
+      // Get source template ID
+      const sourceTemplateId = isOldInstance
+        ? (sourceContract.sourceTemplateId || sourceContract.templateId || '')
+        : (sourceTemplate?.id || sourceContract.templateId || '');
+
+      // Create mapping: sub-template IDs → sub-instance IDs
+      // Extract sub-template IDs from original contract's subDataMapping
+      const subTemplateIds = Object.keys(sourceContract.subDataMapping || {});
+      // Get sub-instance IDs from current.subData (if main node)
+      const subInstanceIds = asType === 'main' && current.subData
+        ? current.subData.map((s: any) => s.id)
+        : [];
+
+      // Create mapping
+      const subIdMapping = createSubIdMapping(subTemplateIds, subInstanceIds);
+
+      // Clone and adapt contract (async - compiles regex if needed)
+      // ✅ projectLanguage è OBBLIGATORIO - nessun fallback
+      if (!projectLanguage) {
+        throw new Error(`[adaptCurrentToV2] projectLanguage is REQUIRED for contract cloning. Node: ${current.id}, label: ${current.label}`);
+      }
+      const language = projectLanguage.toUpperCase();
+      instanceContract = await cloneAndAdaptContract(
+        sourceContract,
+        current.id,  // Instance GUID (use existing node ID)
+        sourceTemplateId,  // Source template GUID
+        subIdMapping,
+        language
+      );
+
+      console.log('✅ [adaptCurrentToV2] Contract clonato e adattato per istanza', {
+        instanceId: current.id,
+        instanceLabel: current.label,
+        sourceTemplateId: sourceTemplateId,
+        templateName: instanceContract.templateName,
+        contractTemplateId: instanceContract.templateId,
+        contractSourceTemplateId: instanceContract.sourceTemplateId,
+        subMappings: Object.keys(instanceContract.subDataMapping).length,
+        wasAlreadyInstance: isAlreadyInstance,
+        wasOldInstance: isOldInstance,
+        regexCompiled: !instanceContract.regex?.patterns?.some((p: string) => p.includes('${MONTHS_PLACEHOLDER}'))
+      });
+    } else {
+      // ✅ Istanza già compilata correttamente
+      console.log('✅ [adaptCurrentToV2] Contract già istanza compilata, mantenuto', {
+        instanceId: current.id,
+        sourceTemplateId: sourceContract.sourceTemplateId,
+        contractTemplateId: sourceContract.templateId,
+        regexCompiled: !sourceContract.regex?.patterns?.some((p: string) => p.includes('${MONTHS_PLACEHOLDER}'))
+      });
+    }
+  } else if (!sourceContract) {
+    console.warn('❌ [adaptCurrentToV2] Nessun contract disponibile (PROBLEMA!)', {
+      instanceId: current.id,
+      instanceLabel: current.label,
+      detectedKind
+    });
+  }
 
   return {
     id: current.id,
@@ -188,20 +301,28 @@ function mapNode(current: MainDataNode, asType: 'main' | 'sub'): DDTNode {
     subs: asType === 'main' ? (current.subData || []).map((s) => s.id) : undefined,
     condition: current.condition,
     synonyms: (current as any).synonyms || undefined,
+    // Use cloned contract if available
+    nlpContract: instanceContract || undefined,
   } as DDTNode;
 }
 
-export function adaptCurrentToV2(current: AssembledDDT): DDTTemplateV2 {
+export async function adaptCurrentToV2(current: AssembledDDT, projectLanguage: string): Promise<DDTTemplateV2> {
+  // ✅ projectLanguage è OBBLIGATORIO - nessun fallback
+  if (!projectLanguage) {
+    throw new Error('[adaptCurrentToV2] projectLanguage is REQUIRED. Cannot adapt DDT without project language.');
+  }
+  const language = projectLanguage.toUpperCase();
+
   const mains: any[] = Array.isArray((current as any).mainData)
     ? ((current as any).mainData as any[])
-    : [ (current as any).mainData ];
+    : [(current as any).mainData];
   const nodes: DDTNode[] = [];
   for (const m of mains) {
     if (!m) continue;
-    const mainNode = mapNode(m, 'main');
+    const mainNode = await mapNode(m, 'main', language);
     nodes.push(mainNode);
     for (const s of (m.subData || [])) {
-      nodes.push(mapNode(s, 'sub'));
+      nodes.push(await mapNode(s, 'sub', language));
     }
   }
 
@@ -238,5 +359,6 @@ export function adaptCurrentToV2(current: AssembledDDT): DDTTemplateV2 {
     nodes,
   };
 }
+
 
 

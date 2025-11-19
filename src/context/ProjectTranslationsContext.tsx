@@ -89,33 +89,14 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   // Load all project translations from database
   const loadAllTranslations = useCallback(async () => {
     if (!currentProjectId) {
-      console.log('[ProjectTranslations] No project ID, skipping load');
       return;
     }
 
     try {
-      console.log('[ProjectTranslations] Loading all translations for project', currentProjectId, 'locale:', projectLocale);
-
-          const allTranslations = await loadAllProjectTranslations(currentProjectId, projectLocale);
-
-          console.log('[ProjectTranslations] 📥 Raw translations from API', {
-            count: Object.keys(allTranslations).length,
-            sampleGuids: Object.keys(allTranslations).slice(0, 10),
-            sampleTranslations: Object.entries(allTranslations).slice(0, 5).map(([guid, text]) => ({
-              guid: guid.substring(0, 20) + '...',
-              text: String(text).substring(0, 30) + '...'
-            }))
-          });
-
-          setTranslations(allTranslations);
-          setAllGuids(new Set(Object.keys(allTranslations)));
-          setIsDirty(false);
-
-          console.log('[ProjectTranslations] ✅ Loaded all translations', {
-            count: Object.keys(allTranslations).length,
-            sampleGuids: Object.keys(allTranslations).slice(0, 10),
-            stateTranslationsCount: Object.keys(allTranslations).length
-          });
+      const allTranslations = await loadAllProjectTranslations(currentProjectId, projectLocale);
+      setTranslations(allTranslations);
+      setAllGuids(new Set(Object.keys(allTranslations)));
+      setIsDirty(false);
     } catch (err) {
       console.error('[ProjectTranslations] Error loading translations:', err);
     }
@@ -129,16 +110,10 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
 
     if (!isDirty) {
-      console.log('[ProjectTranslations] No changes to save');
       return;
     }
 
     try {
-      console.log('[ProjectTranslations] Saving all translations to database', {
-        projectId: currentProjectId,
-        count: Object.keys(translations).length
-      });
-
       // Convert to array format for saveProjectTranslations
       const translationsToSave = Object.entries(translations).map(([guid, text]) => ({
         guid,
@@ -149,10 +124,6 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
       await saveProjectTranslations(currentProjectId, translationsToSave);
       setIsDirty(false);
-
-      console.log('[ProjectTranslations] ✅ Saved translations to database', {
-        count: translationsToSave.length
-      });
     } catch (err) {
       console.error('[ProjectTranslations] Error saving translations:', err);
       throw err;

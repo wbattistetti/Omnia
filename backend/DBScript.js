@@ -1,8 +1,13 @@
-// Aggiungi questa funzione a DBScript.js
+/**
+ * Test per verificare che la regex Date mappi correttamente "12 aprile 1980"
+ */
 
-const { ObjectId } = require('mongodb');
+const { MongoClient } = require('mongodb');
 
-async function checkSubDataTemplates() {
+const uri = process.env.MONGODB_URI || 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
+const DB_NAME = 'factory';
+
+async function testDateRegex() {
     const client = new MongoClient(uri);
 
     try {
@@ -11,281 +16,164 @@ async function checkSubDataTemplates() {
 
         const db = client.db(DB_NAME);
         const templatesCollection = db.collection('Task_Templates');
+        const constantsCollection = db.collection('Constants');
 
-        // ID cercati dal frontend
-        const searchedIds = [
-            '691708f082f0c8d95d05b706',
-            '691708f082f0c8d95d05b707',
-            '691708f082f0c8d95d05b708'
-        ];
-
-        console.log('🔍 Verificando template sottodato...\n');
-
-        for (const idStr of searchedIds) {
-            // Prova come ObjectId
-            let found = await templatesCollection.findOne({ _id: new ObjectId(idStr) });
-
-            if (!found) {
-                // Prova come stringa
-                found = await templatesCollection.findOne({ _id: idStr });
-            }
-
-            if (!found) {
-                // Prova cercando per name o label che potrebbero corrispondere
-                found = await templatesCollection.findOne({
-                    $or: [
-                        { name: /day|month|year/i },
-                        { label: /day|month|year|giorno|mese|anno/i }
-                    ]
-                });
-            }
-
-            if (found) {
-                console.log(`✅ Trovato per ID ${idStr}:`, {
-                    _id: found._id,
-                    _idString: String(found._id),
-                    _idType: found._id?.constructor?.name,
-                    name: found.name,
-                    label: found.label
-                });
-            } else {
-                console.log(`❌ NON trovato per ID ${idStr}`);
-            }
-        }
-
-        // Mostra tutti i template con name Day, Month, Year
-        console.log('\n🔍 Cercando template Day, Month, Year...\n');
-        const dayMonthYear = await templatesCollection.find({
-            $or: [
-                { name: /day|month|year/i },
-                { label: /day|month|year|giorno|mese|anno/i }
-            ]
-        }).toArray();
-
-        console.log(`Trovati ${dayMonthYear.length} template:`);
-        dayMonthYear.forEach(t => {
-            console.log({
-                _id: String(t._id),
-                name: t.name,
-                label: t.label
-            });
-        });
-
-    } catch (error) {
-        console.error('❌ Error:', error);
-    } finally {
-        await client.close();
-    }
-}
-
-async function checkTranslationGuid() {
-    const { MongoClient } = require('mongodb');
-    const uri = process.env.MONGODB_URI || 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
-    const DB_NAME = 'factory';
-    const client = new MongoClient(uri);
-
-    try {
-        await client.connect();
-        console.log('✅ Connected to MongoDB\n');
-
-        const db = client.db(DB_NAME);
-        const translationsCollection = db.collection('Translations');
-
-        const guid = '3fde2e6e-2b5d-43c2-9c37-16f42e84abcf';
-
-        console.log(`🔍 Cercando GUID: ${guid}\n`);
-
-        // Cerca per guid
-        const found = await translationsCollection.find({ guid: guid }).toArray();
-
-        if (found.length > 0) {
-            console.log(`✅ Trovate ${found.length} traduzioni per GUID ${guid}:\n`);
-            found.forEach((doc, idx) => {
-                console.log(`[${idx + 1}]`, {
-                    _id: String(doc._id),
-                    guid: doc.guid,
-                    language: doc.language,
-                    type: doc.type,
-                    text: doc.text ? doc.text.substring(0, 100) : 'NO TEXT',
-                    projectId: doc.projectId,
-                    createdAt: doc.createdAt,
-                    updatedAt: doc.updatedAt,
-                    allKeys: Object.keys(doc)
-                });
-            });
-        } else {
-            console.log(`❌ Nessuna traduzione trovata per GUID ${guid}\n`);
-
-            // Verifica se esiste come _id
-            const foundById = await translationsCollection.findOne({ _id: guid });
-            if (foundById) {
-                console.log(`⚠️ Trovato come _id invece di guid:`, {
-                    _id: foundById._id,
-                    guid: foundById.guid,
-                    language: foundById.language,
-                    type: foundById.type,
-                    text: foundById.text ? foundById.text.substring(0, 100) : 'NO TEXT'
-                });
-            } else {
-                console.log(`❌ Non trovato né come guid né come _id\n`);
-            }
-        }
-
-        // Mostra alcuni esempi di traduzioni per capire la struttura
-        console.log('\n🔍 Esempi di traduzioni nel database (primi 5):\n');
-        const samples = await translationsCollection.find({ type: 'Template' }).limit(5).toArray();
-        samples.forEach((doc, idx) => {
-            console.log(`[Sample ${idx + 1}]`, {
-                _id: String(doc._id),
-                guid: doc.guid || 'NO GUID',
-                language: doc.language,
-                type: doc.type,
-                text: doc.text ? doc.text.substring(0, 50) : 'NO TEXT',
-                hasGuid: !!doc.guid,
-                hasId: !!doc._id
-            });
-        });
-
-    } catch (error) {
-        console.error('❌ Error:', error);
-        console.error(error.stack);
-    } finally {
-        await client.close();
-        console.log('\n🔌 Disconnected from MongoDB');
-    }
-}
-
-async function checkTemplateGuids() {
-    const { MongoClient, ObjectId } = require('mongodb');
-    const uri = process.env.MONGODB_URI || 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
-    const DB_NAME = 'factory';
-    const client = new MongoClient(uri);
-
-    try {
-        await client.connect();
-        console.log('✅ Connected to MongoDB\n');
-
-        const db = client.db(DB_NAME);
-        const templatesCollection = db.collection('Task_Templates');
-        const translationsCollection = db.collection('Translations');
-
-        // Cerca il template "Date"
+        // 1. Trova template Date
+        console.log('🔍 Step 1: Looking for DATE template...');
         const dateTemplate = await templatesCollection.findOne({
             $or: [
-                { label: 'Date' },
-                { label: /date/i },
+                { name: 'date' },
                 { name: 'Date' },
-                { name: /date/i }
+                { type: 'date' }
             ]
         });
 
         if (!dateTemplate) {
-            console.log('❌ Template Date non trovato\n');
+            console.error('❌ Template DATE non trovato');
             return;
         }
 
-        console.log('✅ Template Date trovato:', {
-            _id: String(dateTemplate._id),
-            label: dateTemplate.label,
-            hasStepPrompts: !!dateTemplate.stepPrompts
+        console.log(`✅ Found: ${dateTemplate.name || dateTemplate.label}`);
+        console.log(`   ID: ${dateTemplate._id}\n`);
+
+        // 2. Carica costanti mesi per italiano
+        console.log('🔍 Step 2: Loading Italian months constants...');
+        const itMonths = await constantsCollection.findOne({
+            type: 'months',
+            scope: 'global',
+            locale: 'IT'
         });
 
-        // Estrai tutti i GUID dai stepPrompts
-        const templateGuids = [];
-        if (dateTemplate.stepPrompts) {
-            console.log('\n🔍 GUID nei stepPrompts del template Date:\n');
-            Object.entries(dateTemplate.stepPrompts).forEach(([stepKey, guids]) => {
-                if (Array.isArray(guids)) {
-                    guids.forEach(guid => {
-                        if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                            templateGuids.push(guid);
-                            console.log(`  [${stepKey}] ${guid}`);
-                        }
-                    });
-                }
-            });
+        if (!itMonths || !Array.isArray(itMonths.values)) {
+            console.error('❌ Constants for IT months not found');
+            return;
         }
 
-        // Verifica quali GUID esistono nel database
-        console.log(`\n🔍 Verificando quali GUID esistono nel database (${templateGuids.length} totali):\n`);
-        const uniqueGuids = [...new Set(templateGuids)];
-        const foundGuids = [];
-        const missingGuids = [];
+        const months = itMonths.values;
+        const unique = Array.from(new Set(months)).sort((a, b) => b.length - a.length);
+        const monthsPattern = `(${unique.join('|')})`;
 
-        for (const guid of uniqueGuids) {
-            const found = await translationsCollection.findOne({ guid: guid, type: 'Template' });
-            if (found) {
-                foundGuids.push(guid);
-                console.log(`  ✅ ${guid} - Trovato (${found.language})`);
+        console.log(`✅ Loaded ${unique.length} months (ordered by length)`);
+        console.log(`   Sample: ${unique.slice(0, 5).join(', ')}...\n`);
+
+        // 3. Estrai regex template dal contract
+        console.log('🔍 Step 3: Extracting regex template from contract...');
+        if (!dateTemplate.nlpContract || !dateTemplate.nlpContract.regex) {
+            console.error('❌ nlpContract.regex not found');
+            return;
+        }
+
+        const templateRegex = dateTemplate.nlpContract.regex.patterns[0];
+        console.log(`✅ Template regex found (${templateRegex.length} chars)`);
+        console.log(`   Preview: ${templateRegex.substring(0, 150)}...\n`);
+
+        // 4. Compila regex sostituendo placeholder
+        console.log('🔍 Step 4: Compiling regex (replacing placeholder)...');
+        if (!templateRegex.includes('${MONTHS_PLACEHOLDER}')) {
+            console.warn('⚠️  Template regex does NOT contain ${MONTHS_PLACEHOLDER}');
+            console.log('   Using regex as-is (already compiled)\n');
+        }
+
+        const compiledRegex = templateRegex.replace('${MONTHS_PLACEHOLDER}', monthsPattern);
+        console.log(`✅ Regex compiled (${compiledRegex.length} chars)`);
+        console.log(`   Preview: ${compiledRegex.substring(0, 200)}...\n`);
+
+        // 5. Test con "12 aprile 1980"
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('🧪 TEST: Matching "12 aprile 1980"');
+        console.log('═══════════════════════════════════════════════════════════\n');
+
+        const testText = '12 aprile 1980';
+        const regex = new RegExp(compiledRegex, 'i');
+        const match = testText.match(regex);
+
+        if (!match) {
+            console.error('❌ NO MATCH! Regex did not match "12 aprile 1980"');
+            console.log('\n🔍 Debug info:');
+            console.log(`   Test text: "${testText}"`);
+            console.log(`   Regex length: ${compiledRegex.length}`);
+            console.log(`   Regex preview: ${compiledRegex.substring(0, 300)}...`);
+            return;
+        }
+
+        console.log('✅ MATCH FOUND!\n');
+        console.log('📊 Match details:');
+        console.log(`   Full match: "${match[0]}"`);
+        console.log(`   Index: ${match.index}`);
+        console.log(`   Groups count: ${match.groups ? Object.keys(match.groups).length : 0}\n`);
+
+        // 6. Verifica gruppi named
+        console.log('🔍 Step 5: Verifying named groups...');
+        const groups = match.groups || {};
+
+        const expectedGroups = ['day', 'month', 'year'];
+        const results = {
+            day: groups.day,
+            month: groups.month,
+            year: groups.year
+        };
+
+        console.log('\n📋 Extracted values:');
+        console.log(`   day:   ${results.day || '❌ MISSING'} ${results.day === '12' ? '✅' : results.day ? '⚠️  (expected: 12)' : ''}`);
+        console.log(`   month: ${results.month || '❌ MISSING'} ${results.month === 'aprile' ? '✅' : results.month ? '⚠️  (expected: aprile)' : ''}`);
+        console.log(`   year:  ${results.year || '❌ MISSING'} ${results.year === '1980' ? '✅' : results.year ? '⚠️  (expected: 1980)' : ''}`);
+
+        // 7. Verifica finale
+        console.log('\n═══════════════════════════════════════════════════════════');
+        const allCorrect = results.day === '12' && results.month === 'aprile' && results.year === '1980';
+
+        if (allCorrect) {
+            console.log('✅✅✅ SUCCESS! All values extracted correctly!');
+            console.log('   day: 12 ✅');
+            console.log('   month: aprile ✅');
+            console.log('   year: 1980 ✅');
+        } else {
+            console.log('❌❌❌ FAILURE! Some values are incorrect:');
+            if (results.day !== '12') console.log(`   ❌ day: got "${results.day}", expected "12"`);
+            if (results.month !== 'aprile') console.log(`   ❌ month: got "${results.month}", expected "aprile"`);
+            if (results.year !== '1980') console.log(`   ❌ year: got "${results.year}", expected "1980"`);
+        }
+        console.log('═══════════════════════════════════════════════════════════\n');
+
+        // 8. Test aggiuntivi
+        console.log('🔍 Step 6: Additional tests...\n');
+        const additionalTests = [
+            { text: '15 aprile 1980', expected: { day: '15', month: 'aprile', year: '1980' } },
+            { text: '1 maggio 2000', expected: { day: '1', month: 'maggio', year: '2000' } },
+            { text: 'aprile 1980', expected: { day: undefined, month: 'aprile', year: '1980' } },
+            { text: '12/04/1980', expected: { day: '12', month: '04', year: '1980' } }
+        ];
+
+        for (const test of additionalTests) {
+            const testMatch = test.text.match(new RegExp(compiledRegex, 'i'));
+            if (testMatch && testMatch.groups) {
+                const testResults = {
+                    day: testMatch.groups.day,
+                    month: testMatch.groups.month,
+                    year: testMatch.groups.year
+                };
+                const testPass =
+                    testResults.day === test.expected.day &&
+                    testResults.month === test.expected.month &&
+                    testResults.year === test.expected.year;
+
+                console.log(`   "${test.text}": ${testPass ? '✅' : '❌'}`);
+                if (!testPass) {
+                    console.log(`      Got: day=${testResults.day}, month=${testResults.month}, year=${testResults.year}`);
+                    console.log(`      Expected: day=${test.expected.day}, month=${test.expected.month}, year=${test.expected.year}`);
+                }
             } else {
-                missingGuids.push(guid);
-                console.log(`  ❌ ${guid} - NON trovato`);
-            }
-        }
-
-        console.log(`\n📊 Riepilogo:`);
-        console.log(`  Total GUID nei template: ${uniqueGuids.length}`);
-        console.log(`  GUID trovati nel DB: ${foundGuids.length}`);
-        console.log(`  GUID mancanti nel DB: ${missingGuids.length}`);
-
-        if (missingGuids.length > 0) {
-            console.log(`\n❌ GUID mancanti:\n`);
-            missingGuids.forEach(guid => console.log(`  - ${guid}`));
-        }
-
-        // Verifica anche i subData
-        if (dateTemplate.subDataIds && dateTemplate.subDataIds.length > 0) {
-            console.log(`\n🔍 Verificando subData templates (${dateTemplate.subDataIds.length}):\n`);
-            for (const subId of dateTemplate.subDataIds) {
-                // Prova come ObjectId se è un ObjectId valido
-                let subTemplate = null;
-                try {
-                    if (ObjectId.isValid(subId)) {
-                        subTemplate = await templatesCollection.findOne({ _id: new ObjectId(subId) });
-                    }
-                } catch (e) {
-                    // Ignora errori di conversione
-                }
-
-                // Se non trovato, prova come stringa o label/name
-                if (!subTemplate) {
-                    subTemplate = await templatesCollection.findOne({
-                        $or: [
-                            { _id: subId },
-                            { label: subId },
-                            { name: subId }
-                        ]
-                    });
-                }
-
-                if (subTemplate) {
-                    console.log(`\n  📄 Sub-template: ${subTemplate.label || subTemplate.name}`);
-                    if (subTemplate.stepPrompts) {
-                        for (const [stepKey, guids] of Object.entries(subTemplate.stepPrompts)) {
-                            if (Array.isArray(guids)) {
-                                for (const guid of guids) {
-                                    if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                                        const found = await translationsCollection.findOne({ guid: guid, type: 'Template' });
-                                        console.log(`    [${stepKey}] ${guid} - ${found ? '✅ Trovato' : '❌ Mancante'}`);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    console.log(`  ❌ Sub-template non trovato per ID: ${subId}`);
-                }
+                console.log(`   "${test.text}": ❌ NO MATCH`);
             }
         }
 
     } catch (error) {
         console.error('❌ Error:', error);
-        console.error(error.stack);
     } finally {
         await client.close();
-        console.log('\n🔌 Disconnected from MongoDB');
+        console.log('\n✅ Connection closed');
     }
 }
 
-// Esegui la query
-checkTemplateGuids().catch(console.error);
+// Run test
+testDateRegex().catch(console.error);

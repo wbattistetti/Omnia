@@ -223,13 +223,21 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         constraints: m.constraints || [],
         // ✅ Preserva stepPrompts per main
         stepPrompts: m.stepPrompts || null,
+        // ✅ CRITICO: Preserva nlpContract, templateId, kind
+        nlpContract: m.nlpContract || undefined,
+        templateId: m.templateId || undefined,
+        kind: m.kind || undefined,
         subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
           label: s.label,
           type: s.type,
           icon: s.icon,
           constraints: s.constraints || [],
           // ✅ Preserva stepPrompts per subData (solo start, noInput, noMatch)
-          stepPrompts: s.stepPrompts || null
+          stepPrompts: s.stepPrompts || null,
+          // ✅ CRITICO: Preserva nlpContract, templateId, kind anche per sub
+          nlpContract: (s as any).nlpContract || undefined,
+          templateId: (s as any).templateId || undefined,
+          kind: (s as any).kind || undefined
         })) : []
       }));
 
@@ -274,7 +282,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Check if DDT is composite (has multiple mainData or is explicitly composite)
   const isCompositeDDT = useMemo(() => {
     return schemaMains.length > 1 ||
-           (schemaMains.length === 1 && schemaMains[0]?.subData && schemaMains[0].subData.length > 0);
+      (schemaMains.length === 1 && schemaMains[0]?.subData && schemaMains[0].subData.length > 0);
   }, [schemaMains]);
 
   // Save template to Factory (global)
@@ -571,7 +579,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               type: s.type,
               icon: s.icon,
               constraints: [],
-              stepPrompts: s.stepPrompts || undefined
+              stepPrompts: s.stepPrompts || undefined,
+              // ✅ CRITICO: Preserva nlpContract, templateId, kind anche per sub
+              nlpContract: (s as any).nlpContract || undefined,
+              templateId: (s as any).templateId || undefined,
+              kind: (s as any).kind || undefined
             };
           }) : [];
 
@@ -591,7 +603,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             constraints: [],
             subData: processedSubData,
             // Include stepPrompts from template match if present
-            stepPrompts: finalStepPrompts
+            stepPrompts: finalStepPrompts,
+            // ✅ CRITICO: Preserva nlpContract, templateId, kind
+            nlpContract: m.nlpContract || undefined,
+            templateId: m.templateId || undefined,
+            kind: m.kind || undefined
           } as any;
         });
 
@@ -984,11 +1000,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             type,
             icon: m.icon,
             constraints: [], // TODO: Implement proper validation constraints later
+            // ✅ CRITICO: Preserva nlpContract, templateId, kind
+            nlpContract: m.nlpContract || undefined,
+            templateId: m.templateId || undefined,
+            kind: m.kind || undefined,
             subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
               label: s.label || s.name || 'Field',
               type: s.type,
               icon: s.icon,
-              constraints: [] // TODO: Implement proper validation constraints later
+              constraints: [], // TODO: Implement proper validation constraints later
+              // ✅ CRITICO: Preserva nlpContract, templateId, kind anche per sub
+              nlpContract: (s as any).nlpContract || undefined,
+              templateId: (s as any).templateId || undefined,
+              kind: (s as any).kind || undefined
             })) : [],
           } as any;
         });
@@ -1357,7 +1381,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
             constraints: subTemplate.dataContracts || subTemplate.constraints || [],
             examples: subTemplate.examples || [],
-            subData: []
+            subData: [],
+            // ✅ CRITICO: Preserva nlpContract, templateId, kind
+            nlpContract: subTemplate.nlpContract || undefined,
+            templateId: subTemplate.id || subTemplate._id || undefined,
+            kind: subTemplate.name || subTemplate.type || undefined
           });
         } else {
           console.warn('[DDT][Wizard][templateSelect] ⚠️ Template sottodato non trovato per ID', { subId });
@@ -1383,7 +1411,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
         constraints: template.dataContracts || template.constraints || [],
         examples: template.examples || [],
-        subData: subDataInstances // ✅ Sottodati QUI dentro subData[], non in mainData[]
+        subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in mainData[]
+        // ✅ CRITICO: Preserva nlpContract, templateId, kind
+        nlpContract: template.nlpContract || undefined,
+        templateId: template.id || template._id || undefined,
+        kind: template.name || template.type || undefined
       };
       mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
     } else {
@@ -1396,7 +1428,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         stepPrompts: template.stepPrompts || null,
         constraints: template.dataContracts || template.constraints || [],
         examples: template.examples || [],
-        subData: []
+        subData: [],
+        // ✅ CRITICO: Preserva nlpContract, templateId, kind
+        nlpContract: template.nlpContract || undefined,
+        templateId: template.id || template._id || undefined,
+        kind: template.name || template.type || undefined
       });
     }
 
@@ -1419,10 +1455,18 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           icon: s.icon,
           constraints: s.constraints || [],
           // ✅ Preserva stepPrompts filtrati (solo start, noInput, noMatch) per sottodati
-          stepPrompts: s.stepPrompts || null
+          stepPrompts: s.stepPrompts || null,
+          // ✅ CRITICO: Preserva nlpContract, templateId, kind anche per sub
+          nlpContract: (s as any).nlpContract || undefined,
+          templateId: (s as any).templateId || undefined,
+          kind: (s as any).kind || undefined
         })) : [],
         // ✅ Include stepPrompts completi (tutti e 6 i tipi) per main
-        stepPrompts: m.stepPrompts || template.stepPrompts || null
+        stepPrompts: m.stepPrompts || template.stepPrompts || null,
+        // ✅ CRITICO: Preserva nlpContract, templateId, kind
+        nlpContract: m.nlpContract || undefined,
+        templateId: m.templateId || undefined,
+        kind: m.kind || undefined
       } as any;
     });
 
@@ -1800,7 +1844,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             // ✅ assembleFinalDDT now adds translations to global table via addTranslations callback
                             // Translations are NOT stored in finalDDT.translations anymore
                             // Translations will be saved to database only on explicit save
-                            const finalDDT = assembleFinalDDT(
+                            const finalDDT = await assembleFinalDDT(
                               root || 'Data',
                               mains0,
                               emptyStore,
@@ -2049,7 +2093,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           const emptyStore = buildArtifactStore([]);
                           const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
                           // ✅ assembleFinalDDT now adds translations to global table via addTranslations callback
-                          const finalDDT = assembleFinalDDT(
+                          const finalDDT = await assembleFinalDDT(
                             schemaRootLabel || 'Data',
                             schemaMains,
                             emptyStore,
@@ -2122,105 +2166,105 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       }}
                     >
                       <WizardPipelineStep
-                      headless={pipelineHeadless}
-                      dataNode={mainDataNode}
-                      detectTypeIcon={(mainItem as any)?.icon || detectTypeIcon}
-                      onCancel={() => setStep('structure')}
-                      skipDetectType
-                      confirmedLabel={mainDataNode?.name || 'Data'}
-                      setFieldProcessingStates={setFieldProcessingStates}
-                      progressByPath={taskProgress}
-                      onProgress={(m) => {
-                        const mainLabel = mainItem.label;
-                        // Update individual main progress
-                        const mainProgress = typeof (m as any)?.[mainLabel] === 'number' ? (m as any)[mainLabel] : 0;
+                        headless={pipelineHeadless}
+                        dataNode={mainDataNode}
+                        detectTypeIcon={(mainItem as any)?.icon || detectTypeIcon}
+                        onCancel={() => setStep('structure')}
+                        skipDetectType
+                        confirmedLabel={mainDataNode?.name || 'Data'}
+                        setFieldProcessingStates={setFieldProcessingStates}
+                        progressByPath={taskProgress}
+                        onProgress={(m) => {
+                          const mainLabel = mainItem.label;
+                          // Update individual main progress
+                          const mainProgress = typeof (m as any)?.[mainLabel] === 'number' ? (m as any)[mainLabel] : 0;
 
-                        setTaskProgress((prev) => {
-                          const updated = { ...(prev || {}), ...(m || {}) };
-                          // Calculate overall root progress (average of all mains)
-                          const allProgress = schemaMains.map(m => updated[m.label] || 0);
-                          const avgProgress = allProgress.reduce((sum, p) => sum + p, 0) / schemaMains.length;
-                          updated.__root__ = avgProgress;
-                          return updated;
-                        });
+                          setTaskProgress((prev) => {
+                            const updated = { ...(prev || {}), ...(m || {}) };
+                            // Calculate overall root progress (average of all mains)
+                            const allProgress = schemaMains.map(m => updated[m.label] || 0);
+                            const avgProgress = allProgress.reduce((sum, p) => sum + p, 0) / schemaMains.length;
+                            updated.__root__ = avgProgress;
+                            return updated;
+                          });
 
-                        setRootProgress((prev) => {
-                          // 🎯 CORRETTO: Usa TaskCounter per calcolare task completati/totali
-                          const mainDataArray = schemaMains.map(m => ({
-                            label: m.label,
-                            subData: (m.subData || []).map(s => ({ label: s.label }))
-                          }));
+                          setRootProgress((prev) => {
+                            // 🎯 CORRETTO: Usa TaskCounter per calcolare task completati/totali
+                            const mainDataArray = schemaMains.map(m => ({
+                              label: m.label,
+                              subData: (m.subData || []).map(s => ({ label: s.label }))
+                            }));
 
-                          const progressMap = taskCounter.calculateRecursiveProgress(mainDataArray);
-                          return progressMap.__root__ || 0;
-                        });
-                      }}
-                      onComplete={(partialDDT) => {
-                        // Accumulate partial result
-                        setPartialResults(prev => {
-                          const updated = { ...prev, [mainIdx]: partialDDT };
+                            const progressMap = taskCounter.calculateRecursiveProgress(mainDataArray);
+                            return progressMap.__root__ || 0;
+                          });
+                        }}
+                        onComplete={(partialDDT) => {
+                          // Accumulate partial result
+                          setPartialResults(prev => {
+                            const updated = { ...prev, [mainIdx]: partialDDT };
 
-                          // Check if all mains completed
-                          const completedCount = Object.keys(updated).length;
+                            // Check if all mains completed
+                            const completedCount = Object.keys(updated).length;
 
-                          if (completedCount === schemaMains.length) {
-                            // All mains completed - assemble final DDT
+                            if (completedCount === schemaMains.length) {
+                              // All mains completed - assemble final DDT
 
-                            try {
-                              // Merge all mainData from partial results
-                              const allMains = schemaMains.map((schemaMain, idx) => {
-                                const partial = updated[idx];
-                                if (!partial || !partial.mainData || partial.mainData.length === 0) {
-                                  console.warn(`[DDT][Wizard][parallel] Missing mainData for idx ${idx}:`, schemaMain.label);
-                                  return null;
+                              try {
+                                // Merge all mainData from partial results
+                                const allMains = schemaMains.map((schemaMain, idx) => {
+                                  const partial = updated[idx];
+                                  if (!partial || !partial.mainData || partial.mainData.length === 0) {
+                                    console.warn(`[DDT][Wizard][parallel] Missing mainData for idx ${idx}:`, schemaMain.label);
+                                    return null;
+                                  }
+                                  return partial.mainData[0]; // Each partial has 1 main
+                                }).filter(Boolean);
+
+                                // Merge translations
+                                const mergedTranslations: any = {};
+                                Object.values(updated).forEach((partial: any) => {
+                                  if (partial?.translations) {
+                                    Object.assign(mergedTranslations, partial.translations);
+                                  }
+                                });
+
+                                const finalDDT = {
+                                  id: schemaRootLabel || 'Data',
+                                  label: schemaRootLabel || 'Data',
+                                  mainData: allMains,
+                                  translations: mergedTranslations,
+                                  _fromWizard: true  // Flag to identify wizard-generated DDTs
+                                };
+
+                                // Preserve _userLabel and _sourceAct
+                                if ((dataNode as any)?._userLabel && !(finalDDT as any)._userLabel) {
+                                  (finalDDT as any)._userLabel = (dataNode as any)._userLabel;
                                 }
-                                return partial.mainData[0]; // Each partial has 1 main
-                              }).filter(Boolean);
-
-                              // Merge translations
-                              const mergedTranslations: any = {};
-                              Object.values(updated).forEach((partial: any) => {
-                                if (partial?.translations) {
-                                  Object.assign(mergedTranslations, partial.translations);
+                                if ((dataNode as any)?._sourceAct) {
+                                  (finalDDT as any)._sourceAct = (dataNode as any)._sourceAct;
                                 }
-                              });
 
-                              const finalDDT = {
-                                id: schemaRootLabel || 'Data',
-                                label: schemaRootLabel || 'Data',
-                                mainData: allMains,
-                                translations: mergedTranslations,
-                                _fromWizard: true  // Flag to identify wizard-generated DDTs
-                              };
-
-                              // Preserve _userLabel and _sourceAct
-                              if ((dataNode as any)?._userLabel && !(finalDDT as any)._userLabel) {
-                                (finalDDT as any)._userLabel = (dataNode as any)._userLabel;
+                                // Store in ref instead of calling handleClose directly
+                                // ❌ REMOVED: finalDDT.translations - translations are now in global table
+                                pendingCloseRef.current = {
+                                  ddt: finalDDT,
+                                  translations: {} // Translations are in global table, not in DDT
+                                };
+                              } catch (err) {
+                                console.error('[DDT][Wizard][parallel] Failed to assemble final DDT:', err);
                               }
-                              if ((dataNode as any)?._sourceAct) {
-                                (finalDDT as any)._sourceAct = (dataNode as any)._sourceAct;
-                              }
-
-                              // Store in ref instead of calling handleClose directly
-                              // ❌ REMOVED: finalDDT.translations - translations are now in global table
-                              pendingCloseRef.current = {
-                                ddt: finalDDT,
-                                translations: {} // Translations are in global table, not in DDT
-                              };
-                            } catch (err) {
-                              console.error('[DDT][Wizard][parallel] Failed to assemble final DDT:', err);
                             }
-                          }
 
-                          return updated;
-                        });
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          );
+                            return updated;
+                          });
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            );
           })()}
 
           {/* Contenuto “normale” del pannello destro (solo quando non in pipeline) */}

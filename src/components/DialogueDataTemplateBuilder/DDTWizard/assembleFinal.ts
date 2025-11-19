@@ -3,6 +3,8 @@ import type { SchemaNode } from './MainDataCollection';
 import { normalizeDDTMainNodes } from './normalizeKinds';
 import type { ArtifactStore } from './artifactStore';
 import { getAllV2Draft } from './V2DraftStore';
+import { taskTemplateService } from '../../../services/TaskTemplateService';
+import { cloneAndAdaptContract, createSubIdMapping } from '../../../utils/contractUtils';
 
 export interface AssembledDDT {
   id: string;
@@ -47,21 +49,18 @@ type AssembleOptions = {
   addTranslations?: (translations: Record<string, string>) => void; // ✅ Callback to add translations to global table
 };
 
-export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): AssembledDDT {
+export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): Promise<AssembledDDT> {
   const ddtId = `${rootLabel || 'DDT'}_${uuidv4()}`;
   const translations: Translations = { en: {}, it: {}, pt: {} };
   // Limit AI-driven re-asks to max 2
   const defaultEscalations = { noMatch: 2, noInput: 2, confirmation: 2 } as Record<string, number>;
   const counts = { ...defaultEscalations, ...(options?.escalationCounts || {}) } as Record<string, number>;
 
-  // Get project locale (default to 'pt' if not provided)
-  const projectLocale = options?.projectLocale || (() => {
-    try {
-      return (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
-    } catch {
-      return 'pt';
-    }
-  })();
+  // ✅ projectLocale è OBBLIGATORIO - nessun fallback
+  if (!options?.projectLocale) {
+    throw new Error('[assembleFinalDDT] projectLocale is REQUIRED in options. Cannot assemble DDT without project language.');
+  }
+  const projectLocale = options.projectLocale;
 
   const templateTranslations = options?.templateTranslations || {};
   const addTranslations = options?.addTranslations; // ✅ Callback to add translations to global table
@@ -69,7 +68,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
   // ✅ Collect translations for project locale only (flat dictionary: { guid: text })
   const projectTranslations: Record<string, string> = {};
 
-  const assembleNode = (node: SchemaNode, nodePath: string[]): any => {
+  const assembleNode = async (node: SchemaNode, nodePath: string[]): Promise<any> => {
     const nodeId = uuidv4();
     const path = pathFor(nodePath);
     const pathBucket = store.byPath[path];
@@ -92,6 +91,57 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
       }
     }
 
+    // Load source template and contract for cloning
+    let sourceTemplate = null;
+    let sourceContract = (node as any).nlpContract;
+
+    // Log contract presence check
+    console.log('🔍 [assembleFinal] Checking nlpContract', {
+      nodeLabel: node.label,
+      nodeKind: node.kind,
+      hasContractOnNode: !!sourceContract,
+      contractKeys: sourceContract ? Object.keys(sourceContract).slice(0, 5) : [],
+      nodeKeys: Object.keys(node).slice(0, 15) // Debug: check all node keys
+    });
+
+    // ✅ If contract is already on node, use it directly (it was copied from template in ResponseEditor)
+    if (sourceContract) {
+      console.log('✅ [assembleFinal] Contract PRESENT on node (from ResponseEditor)', {
+        nodeLabel: node.label,
+        contractTemplateName: sourceContract.templateName,
+        contractTemplateId: sourceContract.templateId
+      });
+    } else if ((node as any).templateId) {
+      // ✅ CERCO PER GUID dal nodo (NO kind/name!)
+      const templateGuid = (node as any).templateId;
+      const template = taskTemplateService.getTemplateSync(templateGuid);
+
+      if (template) {
+        sourceTemplate = template;
+        if ((template as any).nlpContract) {
+          sourceContract = (template as any).nlpContract;
+          console.log('✅ [assembleFinal] Contract trovato per GUID', {
+            templateGuid,
+            templateId: template.id,
+            templateName: (template as any).name,
+            hasContract: true
+          });
+        } else {
+          console.warn('⚠️ [assembleFinal] Template trovato per GUID ma SENZA contract', {
+            templateGuid,
+            templateId: template.id,
+            templateName: (template as any).name,
+            templateKeys: Object.keys(template).slice(0, 10)
+          });
+        }
+      } else {
+        console.warn('⚠️ [assembleFinal] Template NON trovato per GUID', {
+          templateGuid,
+          nodeLabel: node.label
+        });
+      }
+    }
+
     const assembled: any = {
       id: nodeId,
       label: node.label,
@@ -102,6 +152,8 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
       messages: {} as Record<string, any>,
       steps: {} as Record<string, any>,
       synonyms: [node.label, (node.label || '').toLowerCase()].filter(Boolean),
+      // Contract will be set after sub-instances are created
+      nlpContract: undefined,
     };
 
     // Constraints
@@ -189,7 +241,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
               actions: [
                 {
                   actionId: 'sayMessage',
-                    actionInstanceId: uuidv4(),
+                  actionInstanceId: uuidv4(),
                   parameters: [{ parameterId: 'text', value: r1Key }]
                 }
               ]
@@ -204,7 +256,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
               actions: [
                 {
                   actionId: 'sayMessage',
-                    actionInstanceId: uuidv4(),
+                  actionInstanceId: uuidv4(),
                   parameters: [{ parameterId: 'text', value: r2Key }]
                 }
               ]
@@ -225,23 +277,15 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     }
 
     // ✅ CRITICAL: Check sub-data stepPrompts before processing
-
+    // Create sub-instances first (needed for contract mapping)
+    const subInstances: any[] = [];
     for (const s of node.subData || []) {
       const subHasStepPrompts = !!(s as any).stepPrompts && typeof (s as any).stepPrompts === 'object' && Object.keys((s as any).stepPrompts).length > 0;
 
       if (!subHasStepPrompts) {
-        console.error('🔴 [CRITICAL] ASSEMBLE - SUB-DATA MISSING STEPPROMPTS', {
+        console.error('❌ [assembleFinal] Sub missing stepPrompts', {
           parent: node.label,
-          sub: s.label,
-          subKeys: Object.keys(s),
-          hasProp: 'stepPrompts' in s,
-          value: (s as any).stepPrompts
-        });
-      } else {
-        console.log('✅ [CRITICAL] ASSEMBLE - SUB-DATA HAS STEPPROMPTS', {
-          parent: node.label,
-          sub: s.label,
-          keys: Object.keys((s as any).stepPrompts)
+          sub: s.label
         });
       }
 
@@ -250,7 +294,65 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         ...s,
         stepPrompts: (s as any).stepPrompts || undefined
       };
-      assembled.subData.push(assembleNode(subNodeWithStepPrompts, [...nodePath, s.label]));
+      const subInstance = await assembleNode(subNodeWithStepPrompts, [...nodePath, s.label]);
+      subInstances.push(subInstance);
+      assembled.subData.push(subInstance);
+    }
+
+    // ✅ Clone and adapt contract after sub-instances are created
+    if (sourceContract) {
+      // Get source template ID (from template or from contract itself if it's already an instance)
+      // If contract is already an instance (has sourceTemplateId), use that; otherwise use template ID
+      const sourceTemplateId = sourceContract.sourceTemplateId || sourceTemplate?.id || sourceContract.templateId || '';
+
+      // Create mapping: sub-template IDs → sub-instance IDs
+      // Extract sub-template IDs from original contract's subDataMapping
+      const subTemplateIds = Object.keys(sourceContract.subDataMapping || {});
+      const subInstanceIds = subInstances.map(sub => sub.id);
+
+      console.log('🔍 [assembleFinal] Contract cloning setup', {
+        nodeLabel: node.label,
+        sourceTemplateId,
+        subTemplateIds,
+        subInstanceIds,
+        contractIsInstance: !!sourceContract.sourceTemplateId,
+        sourceContractMapping: Object.entries(sourceContract.subDataMapping || {}).map(([id, m]: [string, any]) => ({
+          templateId: id.substring(0, 20) + '...',
+          canonicalKey: m.canonicalKey,
+          label: m.label
+        }))
+      });
+
+      // Create mapping (assumes same order - if not, we'll need to match by label/canonicalKey)
+      const subIdMapping = createSubIdMapping(subTemplateIds, subInstanceIds);
+
+      // Clone and adapt contract (async - compiles regex if needed)
+      const projectLanguage = projectLocale.toUpperCase(); // IT, PT, EN
+      const instanceContract = await cloneAndAdaptContract(
+        sourceContract,
+        nodeId,  // Instance GUID
+        sourceTemplateId,  // Source template GUID
+        subIdMapping,
+        projectLanguage
+      );
+
+      assembled.nlpContract = instanceContract;
+
+      console.log('✅ [assembleFinal] Contract CLONED and ASSIGNED', {
+        instanceId: nodeId,
+        instanceLabel: node.label,
+        sourceTemplateId: sourceTemplateId,
+        templateName: instanceContract.templateName,
+        contractTemplateId: instanceContract.templateId,
+        contractSourceTemplateId: instanceContract.sourceTemplateId,
+        subMappings: Object.keys(instanceContract.subDataMapping).length
+      });
+    } else {
+      console.warn('❌ [assembleFinal] NO contract to clone', {
+        nodeLabel: node.label,
+        nodeKind: node.kind,
+        nodeKeys: Object.keys(node).slice(0, 10)
+      });
     }
 
     // Minimal base messages (ensure ResponseEditor displays steps)
@@ -311,7 +413,7 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
         try {
           // eslint-disable-next-line no-console
           console.log('[assembleFinalDDT] step', path, stepKey, 'key', chosenKey, 'hasAI', Boolean(translations[ai0Key]));
-        } catch {}
+        } catch { }
       }
 
       const isAsk = ['text', 'email', 'number', 'date'].includes((node.type || '').toString());
@@ -428,17 +530,20 @@ export function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: 
     const normalizedMains = normalizeDDTMainNodes(mains as any);
     console.log('[assembleFinalDDT][NORMALIZED]', { count: normalizedMains?.length || 0, labels: (normalizedMains || []).map((m: any) => m.label) });
 
-    const assembledMains = (normalizedMains || []).map((m, idx) => {
+    // ✅ Use for...of loop to handle async assembleNode
+    const assembledMains: any[] = [];
+    for (let idx = 0; idx < (normalizedMains || []).length; idx++) {
+      const m = normalizedMains![idx];
       console.log(`[assembleFinalDDT][ASSEMBLING] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '| subData:', (m.subData || []).length);
       try {
-        const assembled = assembleNode(m, [m.label]);
+        const assembled = await assembleNode(m, [m.label]);
         console.log(`[assembleFinalDDT][ASSEMBLED] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '✓');
-        return assembled;
+        assembledMains.push(assembled);
       } catch (err) {
         console.error(`[assembleFinalDDT][ERROR] Failed to assemble main ${idx + 1}:`, m.label, err);
         throw err;
       }
-    });
+    }
 
     console.log('[assembleFinalDDT][COMPLETE]', {
       mainsCount: assembledMains.length,

@@ -31,9 +31,35 @@ const demoTemplate: DDTTemplateV2 = {
 };
 
 export default function DDTSimulatorPreview({ currentDDT }: Props) {
-  const template = useMemo<DDTTemplateV2>(() => {
-    if (currentDDT) return adaptCurrentToV2(currentDDT);
-    return demoTemplate;
+  const [template, setTemplate] = useState<DDTTemplateV2>(demoTemplate);
+
+  useEffect(() => {
+    if (currentDDT) {
+      // ✅ projectLanguage è OBBLIGATORIO - nessun fallback
+      let projectLanguage: string;
+      try {
+        const lang = localStorage.getItem('project.lang');
+        if (!lang) {
+          throw new Error('[DDTSimulatorPreview] project.lang not found in localStorage. Cannot adapt DDT without project language.');
+        }
+        projectLanguage = lang;
+      } catch (err) {
+        console.error('[DDTSimulatorPreview] Failed to get project language:', err);
+        setTemplate(demoTemplate);
+        return;
+      }
+
+      adaptCurrentToV2(currentDDT, projectLanguage)
+        .then((result) => {
+          setTemplate(result);
+        })
+        .catch((err) => {
+          console.error('[DDTSimulatorPreview] Error adapting DDT to V2', err);
+          setTemplate(demoTemplate);
+        });
+    } else {
+      setTemplate(demoTemplate);
+    }
   }, [currentDDT]);
 
   const { state, send, reset, setConfig } = useDDTSimulator(template, {
@@ -49,13 +75,12 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
   const translations = useMemo(() => ((currentDDT as any)?.translations && (((currentDDT as any).translations as any).en || (currentDDT as any).translations)) || {}, [currentDDT]);
   const planById = useMemo<Record<string, any>>(() => {
     const map: Record<string, any> = {};
-    try { (adaptCurrentToV2 as any); } catch {}
     try {
-      const nodes = (adaptCurrentToV2(currentDDT as any).nodes || []) as any[];
+      const nodes = (template.nodes || []) as any[];
       for (const n of nodes) map[n.id] = n;
     } catch {}
     return map;
-  }, [currentDDT]);
+  }, [template]);
 
   const resolveTxt = (key?: string): string => {
     if (!key) return '';
@@ -68,12 +93,11 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
   useEffect(() => {
     if (messages.length > 0) return;
     try {
-      const tpl = adaptCurrentToV2(currentDDT as any);
-      const firstMain = (tpl.nodes || []).find((n: any) => n?.type === 'main');
+      const firstMain = (template.nodes || []).find((n: any) => n?.type === 'main');
       const ask = resolveTxt(firstMain?.steps?.ask?.base);
       if (ask) setMessages([{ from: 'bot', text: ask }]);
     } catch {}
-  }, [currentDDT, messages.length]);
+  }, [template, messages.length]);
 
   // Append prompts based on engine transitions
   const prevIndexRef = useRef<number>(-1);

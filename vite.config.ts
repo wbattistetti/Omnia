@@ -27,6 +27,7 @@ export default defineConfig({
       // Node.js backend endpoints (MongoDB)
       '/api/factory': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/projects': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/constants': { target: 'http://localhost:3100', changeOrigin: true },
       '/projects': { target: 'http://localhost:3100', changeOrigin: true },
 
       // FastAPI namespaced endpoints (other /api routes)

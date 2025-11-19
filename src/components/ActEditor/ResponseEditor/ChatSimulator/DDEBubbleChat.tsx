@@ -47,10 +47,40 @@ export default function DDEBubbleChat({
   });
 
   const { combinedClass, fontSize } = useFontContext();
-  const template: DDTTemplateV2 = React.useMemo(() => adaptCurrentToV2(currentDDT), [currentDDT]);
+  const [template, setTemplate] = React.useState<DDTTemplateV2 | null>(null);
+
+  React.useEffect(() => {
+    if (currentDDT) {
+      // ✅ projectLanguage è OBBLIGATORIO - nessun fallback
+      let projectLanguage: string;
+      try {
+        const lang = localStorage.getItem('project.lang');
+        if (!lang) {
+          throw new Error('[DDEBubbleChat] project.lang not found in localStorage. Cannot adapt DDT without project language.');
+        }
+        projectLanguage = lang;
+      } catch (err) {
+        console.error('[DDEBubbleChat] Failed to get project language:', err);
+        setTemplate(null);
+        return;
+      }
+
+      adaptCurrentToV2(currentDDT, projectLanguage)
+        .then((result) => {
+          setTemplate(result);
+        })
+        .catch((err) => {
+          console.error('[DDEBubbleChat] Error adapting DDT to V2', err);
+          setTemplate(null);
+        });
+    } else {
+      setTemplate(null);
+    }
+  }, [currentDDT]);
+
   // Enable simulator debug logs only when explicitly toggled
   const debugEnabled = (() => { try { return localStorage.getItem('debug.chatSimulator') === '1'; } catch { return false; } })();
-  const { state, send, reset, setConfig } = useDDTSimulator(template, { typingIndicatorMs: 0, debug: debugEnabled });
+  const { state, send, reset, setConfig } = useDDTSimulator(template || { nodes: [], introduction: undefined }, { typingIndicatorMs: 0, debug: debugEnabled });
 
   console.log('[DDEBubbleChat] Simulator state initialized', {
     stateMode: state?.mode,

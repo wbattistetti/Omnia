@@ -39,18 +39,6 @@ export default function DDEBubbleChat({
   const renderCountRef = React.useRef(0);
   renderCountRef.current += 1;
 
-  console.log('🔵🔵🔵 [DDEBubbleChat] FUNCTION CALLED 🔵🔵🔵', {
-    renderCount: renderCountRef.current,
-    mode,
-    hasPropCurrentDDT: !!propCurrentDDT,
-    propCurrentDDTId: propCurrentDDT?.id,
-    propCurrentDDTLabel: propCurrentDDT?.label,
-    translationsKeys: translations ? Object.keys(translations).length : 0,
-    propNodesCount: propNodes?.length || 0,
-    propEdgesCount: propEdges?.length || 0,
-    stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
-  });
-
   // Flow orchestrator reads directly from window.__flowNodes in flow mode
   // This ensures it always has the latest nodes/rows order without polling or synchronization
   // Using new compiler-based orchestrator
@@ -58,7 +46,6 @@ export default function DDEBubbleChat({
     const nodes = mode === 'flow'
       ? ((window as any).__flowNodes || propNodes || [])
       : (propNodes || []);
-    console.log('🔵 [DDEBubbleChat] getCurrentNodes called', { mode, nodesCount: nodes.length, propNodesCount: propNodes?.length || 0 });
     return nodes;
   }, [mode, propNodes]);
 
@@ -66,7 +53,6 @@ export default function DDEBubbleChat({
     const edges = mode === 'flow'
       ? ((window as any).__flowEdges || propEdges || [])
       : (propEdges || []);
-    console.log('🔵 [DDEBubbleChat] getCurrentEdges called', { mode, edgesCount: edges.length, propEdgesCount: propEdges?.length || 0 });
     return edges;
   }, [mode, propEdges]);
 
@@ -106,15 +92,9 @@ export default function DDEBubbleChat({
   }, [propNodes, propEdges]);
 
   // Create stable empty config for single-ddt mode (never changes)
-  const emptyConfigRef = React.useRef({ nodes: [], edges: [], onMessage: () => {}, onDDTStart: () => {}, onDDTComplete: () => {} });
+  const emptyConfigRef = React.useRef({ nodes: [], edges: [], onMessage: () => { }, onDDTStart: () => { }, onDDTComplete: () => { } });
 
   const orchestratorConfig = React.useMemo(() => {
-    console.log('🔵 [DDEBubbleChat] orchestratorConfig useMemo recalculated', {
-      mode,
-      renderCount: renderCountRef.current,
-      propNodesCount: propNodes?.length || 0,
-      propEdgesCount: propEdges?.length || 0
-    });
     if (mode === 'flow') {
       const nodes = mode === 'flow'
         ? ((window as any).__flowNodes || stableNodesRef.current || [])
@@ -147,7 +127,7 @@ export default function DDEBubbleChat({
             onUpdateDDTRef.current(() => ddt);
           }
         },
-        onDDTComplete: () => {}
+        onDDTComplete: () => { }
       };
     }
     // Return stable empty config for single-ddt mode
@@ -160,13 +140,7 @@ export default function DDEBubbleChat({
 
   // Only log orchestrator changes in flow mode
   React.useEffect(() => {
-    if (mode === 'flow' && flowOrchestrator) {
-      console.log('🔵 [DDEBubbleChat] orchestrator changed', {
-        hasOrchestrator: !!flowOrchestrator,
-        currentDDTId: flowOrchestrator?.currentDDT?.id,
-        renderCount: renderCountRef.current
-      });
-    }
+    // Orchestrator change tracking removed - not needed
   }, [mode, flowOrchestrator]);
 
   // Set up callback to update user message matchStatus
@@ -193,13 +167,6 @@ export default function DDEBubbleChat({
   // Determine current DDT: from orchestrator in flow mode, from prop in single-ddt mode
   const currentDDT = React.useMemo(() => {
     const result = mode === 'flow' ? (orchestrator?.currentDDT || null) : (propCurrentDDT || null);
-    console.log('🔵 [DDEBubbleChat] currentDDT useMemo recalculated', {
-      mode,
-      resultId: result?.id,
-      propCurrentDDTId: propCurrentDDT?.id,
-      orchestratorDDTId: mode === 'flow' ? orchestrator?.currentDDT?.id : 'N/A',
-      renderCount: renderCountRef.current
-    });
     return result;
   }, [mode, propCurrentDDT, mode === 'flow' ? orchestrator?.currentDDT : null]);
 
@@ -213,33 +180,37 @@ export default function DDEBubbleChat({
   // Messages state - must be declared before useEffect that uses it
   const [messages, setMessages] = React.useState<Message[]>([]);
 
-  // Log when onUpdateDDT changes
-  React.useEffect(() => {
-    console.log('🔵 [DDEBubbleChat] onUpdateDDT changed', {
-      hasOnUpdateDDT: !!onUpdateDDT,
-      renderCount: renderCountRef.current
-    });
-  }, [onUpdateDDT]);
 
   // Use DDT simulator for single-ddt mode to handle user input
-  const template = React.useMemo(() => {
-    console.log('🔵 [DDEBubbleChat] template useMemo recalculated', {
-      mode,
-      hasCurrentDDT: !!currentDDT,
-      currentDDTId: currentDDT?.id,
-      renderCount: renderCountRef.current
-    });
+  const [template, setTemplate] = React.useState<any>(null);
+
+  React.useEffect(() => {
     if (mode === 'single-ddt' && currentDDT) {
+      // ✅ projectLanguage è OBBLIGATORIO - nessun fallback
+      let projectLanguage: string;
       try {
-        const result = adaptCurrentToV2(currentDDT);
-        console.log('🔵 [DDEBubbleChat] template adapted successfully', { hasResult: !!result });
-        return result;
+        const lang = localStorage.getItem('project.lang');
+        if (!lang) {
+          throw new Error('[DDEBubbleChat] project.lang not found in localStorage. Cannot adapt DDT without project language.');
+        }
+        projectLanguage = lang;
       } catch (err) {
-        console.error('[DDEBubbleChat] Error adapting DDT to V2', err);
-        return null;
+        console.error('[DDEBubbleChat] Failed to get project language:', err);
+        setTemplate(null);
+        return;
       }
+
+      adaptCurrentToV2(currentDDT, projectLanguage)
+        .then((result) => {
+          setTemplate(result);
+        })
+        .catch((err) => {
+          console.error('[DDEBubbleChat] Error adapting DDT to V2', err);
+          setTemplate(null);
+        });
+    } else {
+      setTemplate(null);
     }
-    return null;
   }, [mode, currentDDT]);
 
   const debugEnabled = React.useMemo(() => {
@@ -250,12 +221,28 @@ export default function DDEBubbleChat({
     }
   }, []);
 
-  const simulator = mode === 'single-ddt' && template
-    ? useDDTSimulator(template, { typingIndicatorMs: 0, debug: debugEnabled })
-    : null;
+  // ✅ Always call useDDTSimulator (React hooks rules) - use empty template if not ready
+  // The hook will automatically reset when template changes from empty to valid
+  const emptyTemplate = React.useMemo(() => ({ nodes: [], introduction: undefined }), []);
+  const simulatorTemplate = mode === 'single-ddt' && template ? template : emptyTemplate;
+  const simulator = useDDTSimulator(simulatorTemplate, { typingIndicatorMs: 0, debug: debugEnabled });
 
   // Track last position key to avoid duplicate messages
   const lastKeyRef = React.useRef<string>('');
+
+  // Update user message with grammarMissing flag after simulator processes input
+  React.useEffect(() => {
+    if (!simulator?.state || mode !== 'single-ddt' || !template || !lastUserMessageIdRef.current) return;
+
+    const currentState = simulator.state;
+    if (currentState.grammarMissing) {
+      setMessages((prev) => prev.map((msg) =>
+        msg.id === lastUserMessageIdRef.current && msg.type === 'user'
+          ? { ...msg, grammarMissing: true }
+          : msg
+      ));
+    }
+  }, [simulator?.state?.grammarMissing, mode]);
 
   // Helper to get position key from simulator state
   // Include counters to trigger when escalation happens (same position, different message)
@@ -284,26 +271,15 @@ export default function DDEBubbleChat({
 
   // Listen to simulator state changes and add messages to chat
   React.useEffect(() => {
-    console.log('🔵 [DDEBubbleChat] useEffect - simulator state listener', {
-      mode,
-      hasSimulator: !!simulator,
-      stateMode: simulator?.state?.mode,
-      currentIndex: simulator?.state?.currentIndex,
-      currentSubId: simulator?.state?.currentSubId,
-      renderCount: renderCountRef.current
-    });
-
-    if (mode !== 'single-ddt' || !simulator) return;
+    if (mode !== 'single-ddt' || !simulator || !template) return;
 
     const state = simulator.state;
     const key = getPositionKey(state);
 
     // Skip if same position - only add message when position changes
     if (lastKeyRef.current === key) {
-      console.log('🔵 [DDEBubbleChat] useEffect - same position key, skipping', { key, lastKey: lastKeyRef.current });
       return;
     }
-    console.log('🔵 [DDEBubbleChat] useEffect - position key changed', { key, lastKey: lastKeyRef.current });
     lastKeyRef.current = key;
 
     const main = getMain(state);
@@ -328,81 +304,14 @@ export default function DDEBubbleChat({
     const step = (mainStep === 'NoMatch' || mainStep === 'NoInput') ? mainStep : targetStep;
     const counters = (mainStep === 'NoMatch' || mainStep === 'NoInput') ? mainCounters : targetCounters;
 
-    // 🔍 LOG DIAGNOSTICO: Verifica quale nodo viene controllato
-    console.log('🔍 [DIAGNOSTIC] Controllo nodeState per step', {
-      hasSub: !!sub,
-      subId: sub?.id,
-      subLabel: sub?.label,
-      mainId: main?.id,
-      mainLabel: main?.label,
-      targetNodeId: targetNodeId,
-      targetNodeType: sub ? 'sub' : 'main',
-      mainStep: mainStep,
-      mainCounters: mainCounters,
-      targetStep: targetStep,
-      targetCounters: targetCounters,
-      finalStep: step,
-      finalCounters: counters,
-      // Controlla anche il sub per vedere il suo step
-      subNodeState: sub?.id ? state.nodeStates?.[sub.id] : null,
-      subStep: sub?.id ? state.nodeStates?.[sub.id]?.step : undefined,
-      subCounters: sub?.id ? state.nodeStates?.[sub.id]?.counters : undefined,
-      mode: state.mode,
-      currentSubId: state.currentSubId,
-      // Tutti i nodeStates per vedere lo stato completo
-      allNodeStates: Object.keys(state.nodeStates || {}).map(k => ({
-        id: k,
-        step: state.nodeStates[k]?.step,
-        counters: state.nodeStates[k]?.counters
-      }))
-    });
-
     // Resolve and add message based on current mode and step
     if (step === 'NoMatch') {
-      console.log('🔵 [DDEBubbleChat] Step NoMatch rilevato', {
-        targetNodeId: targetNodeId,
-        isSub: !!sub,
-        subId: sub?.id,
-        subLabel: sub?.label,
-        mainId: main?.id,
-        mainLabel: main?.label,
-        counters: counters,
-        escalationLevel: (counters.noMatch || 0) + 1,
-        mode: state.mode,
-        currentSubId: state.currentSubId,
-        nodeStates: Object.keys(state.nodeStates || {}).map(k => ({
-          id: k,
-          step: state.nodeStates[k]?.step,
-          counters: state.nodeStates[k]?.counters
-        }))
-      });
-
-      const escalationLevel = (counters.noMatch || 0) + 1; // Counter is 0-based, escalation is 1-based
-      // NoMatch totale → sempre escalation sul main, non sul sub
-      // Perché è un fallimento globale, non del sub specifico
-      // Anche se siamo in ToComplete con sub attivo, il noMatch è sempre sul main
-      const legacyNode = legacyMain; // Sempre main per noMatch totale
-
-      console.log('🔵 [DDEBubbleChat] Cercando escalation', {
-        legacyNodeId: legacyNode?.id,
-        legacyNodeLabel: legacyNode?.label,
-        escalationLevel,
-        stepType: 'noMatch',
-        hasLegacyDict: !!legacyDict,
-        hasTranslations: !!translations
-      });
-
+      // Mostra sempre il normale messaggio di escalation NoMatch
+      // Il badge "Grammar missing!" viene mostrato sul messaggio utente, non qui
+      const escalationLevel = (counters.noMatch || 0) + 1;
+      const legacyNode = legacyMain;
       const { text, key: textKey } = resolveEscalation(legacyNode, 'noMatch', escalationLevel, legacyDict, translations);
-
-      console.log('🔵 [DDEBubbleChat] Risultato escalation', {
-        found: !!text,
-        text: text ? text.substring(0, 100) : undefined,
-        textKey,
-        escalationLevel
-      });
-
       if (text) {
-        console.log('🔵 [DDEBubbleChat] Adding NoMatch message', { escalationLevel, text, textKey, node: 'main' });
         setMessages((prev) => [...prev, {
           id: `sim-${Date.now()}-${Math.random()}`,
           type: 'bot',
@@ -411,19 +320,12 @@ export default function DDEBubbleChat({
           textKey,
           color: getStepColor('noMatch')
         }]);
-      } else {
-        console.warn('🔵 [DDEBubbleChat] Escalation non trovata!', {
-          legacyNodeId: legacyNode?.id,
-          escalationLevel
-        });
       }
     } else if (step === 'NoInput') {
-      const escalationLevel = (counters.noInput || 0) + 1; // Counter is 0-based, escalation is 1-based
-      // NoInput → sempre escalation sul main, non sul sub (stessa logica di noMatch)
-      const legacyNode = legacyMain; // Sempre main per noInput
+      const escalationLevel = (counters.noInput || 0) + 1;
+      const legacyNode = legacyMain;
       const { text, key: textKey } = resolveEscalation(legacyNode, 'noInput', escalationLevel, legacyDict, translations);
       if (text) {
-        console.log('🔵 [DDEBubbleChat] Adding NoInput message', { escalationLevel, text, textKey, node: 'main' });
         setMessages((prev) => [...prev, {
           id: `sim-${Date.now()}-${Math.random()}`,
           type: 'bot',
@@ -434,44 +336,16 @@ export default function DDEBubbleChat({
         }]);
       }
     } else if (state.mode === 'CollectingMain' || state.mode === 'CollectingSub') {
-      console.log('🔍 [DIAGNOSTIC] Entrato in CollectingMain/CollectingSub invece di NoMatch', {
-        step: step,
-        targetNodeId: targetNodeId,
-        targetNodeType: sub ? 'sub' : 'main',
-        mainHasNoMatch: main?.id ? state.nodeStates?.[main.id]?.step === 'NoMatch' : false,
-        subHasNoMatch: sub?.id ? state.nodeStates?.[sub.id]?.step === 'NoMatch' : false,
-        mode: state.mode,
-        mainStep: main?.id ? state.nodeStates?.[main.id]?.step : undefined,
-        subStep: sub?.id ? state.nodeStates?.[sub.id]?.step : undefined
-      });
-
       // Trova legacySub se c'è un sub attivo
-      // findOriginalNode si aspetta: (currentDDT, nodeLabel?, nodeId?)
       const legacySub = sub?.id && currentDDT ? findOriginalNode(currentDDT, undefined, sub.id) : undefined;
-
       const { text, key: textKey } = resolveAsk(main, sub, translations, legacyDict, legacyMain, legacySub);
       if (text) {
-        console.log('🔍 [DIAGNOSTIC] Aggiungendo messaggio ask normale', {
-          text: text.substring(0, 100),
-          textKey,
-          messagesCount: 'will be logged in setMessages',
-          hasSub: !!sub,
-          hasLegacySub: !!legacySub
-        });
         setMessages((prev) => {
           // Rimuovi 'init' solo se esiste un altro messaggio ask diverso da 'init'
-          // 'init' è un messaggio di bootstrap, non va trattato con regole generiche dei bot messages
           const hasOtherAskMessage = prev.some(
             m => m.id !== 'init' && (m.stepType === 'ask' || m.stepType === 'start')
           );
           const filtered = hasOtherAskMessage ? prev.filter(m => m.id !== 'init') : prev;
-          console.log('🔍 [DIAGNOSTIC] Messaggi prima di aggiungere ask', {
-            prevCount: prev.length,
-            filteredCount: filtered.length,
-            removedInit: prev.length - filtered.length,
-            hasOtherAskMessage,
-            lastMessages: prev.slice(-3).map(m => ({ id: m.id, type: m.type, stepType: m.stepType, text: m.text?.substring(0, 50) }))
-          });
           return [...filtered, {
             id: `sim-${Date.now()}-${Math.random()}`,
             type: 'bot',
@@ -719,8 +593,11 @@ export default function DDEBubbleChat({
           onClick={() => {
             setMessages([]);
             messageIdCounter.current = 0;
+            lastKeyRef.current = ''; // Reset position key tracking
             if (mode === 'flow') {
               orchestrator.reset();
+            } else if (mode === 'single-ddt' && simulator && template) {
+              simulator.reset(); // Reset simulator state to initial state
             }
           }}
           className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
@@ -790,105 +667,100 @@ export default function DDEBubbleChat({
         })}
         {/* Input field DOPO tutti i messaggi - show when DDT is active AND retrieve is NOT in progress */}
         {(currentDDT || (mode === 'flow' && orchestrator.currentTask?.state === 'WaitingUserInput')) &&
-         !orchestrator.isRetrieving && (
-          <div className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3">
-            <input
-              type="text"
-              className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-              ref={inlineInputRef}
-              onFocus={() => {
-                try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }
-              }}
-              placeholder={mode === 'flow' && !currentDDT ? 'In attesa di atto interattivo...' : 'Type response...'}
-              value={inlineDraft}
-              onChange={(e) => setInlineDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  const v = inlineDraft.trim();
+          !orchestrator.isRetrieving && (
+            <div className="bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3">
+              <input
+                type="text"
+                className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                ref={inlineInputRef}
+                onFocus={() => {
+                  try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }
+                }}
+                placeholder={mode === 'flow' && !currentDDT ? 'In attesa di atto interattivo...' : 'Type response...'}
+                value={inlineDraft}
+                onChange={(e) => setInlineDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const v = inlineDraft.trim();
 
-                  console.log('[DDEBubbleChat] Enter pressed', {
-                    mode,
-                    input: v,
-                    hasCurrentDDT: !!currentDDT,
-                    hasSimulator: !!simulator
-                  });
 
-                  // Handle single-ddt mode
-                  if (mode === 'single-ddt' && currentDDT && simulator) {
-                    // Add user message to chat
-                    const userMessageId = `msg-${Date.now()}-${Math.random()}`;
-                    lastUserMessageIdRef.current = userMessageId;
-                    lastUserInputRef.current = v;
-                    setMessages((prev) => [...prev, {
-                      id: userMessageId,
-                      type: 'user',
-                      text: v,
-                      matchStatus: undefined
-                    }]);
+                    // Handle single-ddt mode
+                    if (mode === 'single-ddt' && currentDDT && simulator && template) {
+                      // Add user message to chat
+                      const userMessageId = `msg-${Date.now()}-${Math.random()}`;
+                      lastUserMessageIdRef.current = userMessageId;
+                      lastUserInputRef.current = v;
+                      setMessages((prev) => [...prev, {
+                        id: userMessageId,
+                        type: 'user',
+                        text: v,
+                        matchStatus: undefined,
+                        grammarMissing: simulator?.state?.grammarMissing || false
+                      }]);
 
-                    // Send input to simulator
-                    console.log('[DDEBubbleChat] Sending input to simulator', { input: v });
-                    simulator.send(v);
+                      // Send input to simulator
+                      simulator.send(v);
 
-                    // Clear input
-                    sentTextRef.current = v;
-                    setInlineDraft('');
-                    return;
-                  }
-
-                  // Handle empty input (noInput)
-                  if (!v) {
-                    if (mode === 'single-ddt' && simulator) {
-                      console.log('[DDEBubbleChat] Empty input - sending noInput');
-                      simulator.send('');
+                      // Clear input
+                      sentTextRef.current = v;
+                      setInlineDraft('');
                       return;
                     }
-                    if (mode === 'flow' && orchestrator.handleUserInput) {
-                      orchestrator.handleUserInput('');
-                      return;
-                    }
-                    return;
-                  }
 
-                  // In flow mode, always use new DDT navigator (handleUserInput)
-                  if (mode === 'flow' && (currentDDT || orchestrator.currentTask?.state === 'WaitingUserInput')) {
-                    // Add user message to chat
-                    const userMessageId = `msg-${Date.now()}-${Math.random()}`;
-                    lastUserMessageIdRef.current = userMessageId;
-                    lastUserInputRef.current = v;
-                    setMessages((prev) => [...prev, {
-                      id: userMessageId,
-                      type: 'user',
-                      text: v,
-                      matchStatus: undefined // Will be updated after processing
-                    }]);
-
-                    // Send input to DDT navigator (async, no await needed)
-                    if (orchestrator.handleUserInput) {
-                      console.log('[DDEBubbleChat] Calling handleUserInput', { input: v, hasCurrentDDT: !!currentDDT, taskState: orchestrator.currentTask?.state });
-                      void orchestrator.handleUserInput(v);
-                    } else {
-                      console.warn('[DDEBubbleChat] handleUserInput not available');
-                      // Fallback: complete the waiting task
-                      const waitingTask = orchestrator.currentTask;
-                      if (waitingTask && orchestrator.onDDTCompleted) {
-                        orchestrator.onDDTCompleted('saturated');
+                    // Handle empty input (noInput)
+                    if (!v) {
+                      if (mode === 'single-ddt' && simulator && template) {
+                        console.log('[DDEBubbleChat] Empty input - sending noInput');
+                        simulator.send('');
+                        return;
                       }
+                      if (mode === 'flow' && orchestrator.handleUserInput) {
+                        orchestrator.handleUserInput('');
+                        return;
+                      }
+                      return;
                     }
 
-                    // Clear input
-                    sentTextRef.current = v;
-                    setInlineDraft('');
+                    // In flow mode, always use new DDT navigator (handleUserInput)
+                    if (mode === 'flow' && (currentDDT || orchestrator.currentTask?.state === 'WaitingUserInput')) {
+                      // Add user message to chat
+                      const userMessageId = `msg-${Date.now()}-${Math.random()}`;
+                      lastUserMessageIdRef.current = userMessageId;
+                      lastUserInputRef.current = v;
+                      setMessages((prev) => [...prev, {
+                        id: userMessageId,
+                        type: 'user',
+                        text: v,
+                        matchStatus: undefined, // Will be updated after processing
+                        grammarMissing: false // Will be updated after processing in flow mode
+                      }]);
+
+                      // Send input to DDT navigator (async, no await needed)
+                      if (orchestrator.handleUserInput) {
+                        console.log('[DDEBubbleChat] Calling handleUserInput', { input: v, hasCurrentDDT: !!currentDDT, taskState: orchestrator.currentTask?.state });
+                        void orchestrator.handleUserInput(v);
+                      } else {
+                        console.warn('[DDEBubbleChat] handleUserInput not available');
+                        // Fallback: complete the waiting task
+                        const waitingTask = orchestrator.currentTask;
+                        if (waitingTask && orchestrator.onDDTCompleted) {
+                          orchestrator.onDDTCompleted('saturated');
+                        }
+                      }
+
+                      // Clear input
+                      sentTextRef.current = v;
+                      setInlineDraft('');
+                    }
+                    // Focus will be handled after input is cleared (see useEffect below)
                   }
-                  // Focus will be handled after input is cleared (see useEffect below)
-                }
-              }}
-              autoFocus
-              disabled={!currentDDT && !(mode === 'flow' && orchestrator.currentTask?.state === 'WaitingUserInput')}
-            />
-          </div>
-        )}
+                }}
+                autoFocus
+                disabled={!currentDDT && !(mode === 'flow' && orchestrator.currentTask?.state === 'WaitingUserInput')}
+              />
+            </div>
+          )}
       </div>
       {/* input spostato nella nuvoletta inline sotto l'ultimo prompt */}
     </div>

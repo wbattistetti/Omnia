@@ -542,6 +542,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                     console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅✅✅ MATCH LOCALE TROVATO!', {
                       templateLabel: template.label || template.name,
                       templateId: template._id || template.id,
+                      templateName: template.name,
+                      hasNlpContract: !!template.nlpContract,
+                      contractTemplateName: template.nlpContract?.templateName,
                       pattern: patternStr,
                       elapsedMs: Math.round(localMatchElapsed),
                       timestamp: new Date().toISOString()
@@ -560,7 +563,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                       // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
                       console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 📦 Template composito, creando istanze per sottodati', {
                         subDataIds,
-                        count: subDataIds.length
+                        count: subDataIds.length,
+                        hasNlpContract: !!template.nlpContract,
+                        templateName: template.name,
+                        templateId: template.id || template._id
                       });
 
                       // ✅ PRIMA: Costruisci array di subData instances
@@ -595,7 +601,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                             stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : undefined,
                             constraints: subTemplate.dataContracts || subTemplate.constraints || [],
                             examples: subTemplate.examples || [],
-                            subData: []
+                            subData: [],
+                            // ✅ Copia anche nlpContract, templateId e kind dal sub-template (saranno adattati in assembleFinal)
+                            nlpContract: subTemplate.nlpContract || undefined,
+                            templateId: subTemplate.id || subTemplate._id, // ✅ GUID del template per lookup
+                            kind: subTemplate.name || subTemplate.type || 'generic'
                           });
                         } else {
                           console.warn('[RESPONSE_EDITOR][LOCAL_MATCH] ⚠️ Template sottodato non trovato per ID', { subId });
@@ -611,8 +621,21 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                         stepPrompts: template.stepPrompts || undefined, // ✅ Tutti e 6 i tipi per main
                         constraints: template.dataContracts || template.constraints || [],
                         examples: template.examples || [],
-                        subData: subDataInstances // ✅ Sottodati QUI dentro subData[], non in mainData[]
+                        subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in mainData[]
+                        // ✅ Copia anche nlpContract, templateId e kind dal template (saranno adattati in assembleFinal)
+                        nlpContract: template.nlpContract || undefined,
+                        templateId: template.id || template._id, // ✅ GUID del template per lookup
+                        kind: template.name || template.type || 'generic'
                       };
+
+                      console.log('🔍 [RESPONSE_EDITOR][LOCAL_MATCH] Main instance created', {
+                        label: mainInstance.label,
+                        hasNlpContract: !!mainInstance.nlpContract,
+                        contractTemplateName: mainInstance.nlpContract?.templateName,
+                        kind: mainInstance.kind,
+                        subDataCount: mainInstance.subData.length
+                      });
+
                       mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
                     } else {
                       // ✅ Template semplice: crea istanza dal template root
@@ -624,7 +647,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                         stepPrompts: template.stepPrompts || undefined,
                         constraints: template.dataContracts || template.constraints || [],
                         examples: template.examples || [],
-                        subData: []
+                        subData: [],
+                        // ✅ Copia anche nlpContract, templateId e kind dal template (saranno adattati in assembleFinal)
+                        nlpContract: template.nlpContract || undefined,
+                        templateId: template.id || template._id, // ✅ GUID del template per lookup
+                        kind: template.name || template.type || 'generic'
                       };
                       mainData.push(mainInstance);
                     }

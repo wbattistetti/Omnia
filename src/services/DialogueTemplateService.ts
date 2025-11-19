@@ -47,7 +47,6 @@ export class DialogueTemplateService {
 
   private static async _loadTemplatesFromAPI(): Promise<DialogueTemplate[]> {
     try {
-      console.log('[DialogueTemplateService] Caricando template dal database Factory...');
       const response = await fetch('/api/factory/dialogue-templates');
 
       if (!response.ok) {
@@ -57,7 +56,6 @@ export class DialogueTemplateService {
       const data = await response.json();
       this.cache = Array.isArray(data) ? data : [];
       this.cacheLoaded = true;
-      console.log(`[DialogueTemplateService] Caricati ${this.cache.length} template dal database`);
       return this.cache;
     } catch (error) {
       console.error('[DialogueTemplateService] Errore nel caricamento dei template:', error);
