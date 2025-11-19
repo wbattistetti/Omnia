@@ -345,7 +345,7 @@ def generate_condition(body: dict = Body(...)):
         "Email: trim+lowercase; regex ^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$. "
         "Phone: keep leading +, strip non-digits; length>=9. "
         "Strings: trim and collapse whitespace; case-insensitive unless specified. "
-        "Numbers: Number(...), require Number.isFinite. "
+        "Numbers: CRITICAL - Values from ctx[\"key\"] may be strings (from HTML inputs). ALWAYS convert with Number(ctx[\"key\"]) and check Number.isFinite(...) before comparison. Example: const month = Number(ctx[\"data A.Month\"]); if (!Number.isFinite(month)) return false; return month === 2; NEVER use ctx[\"key\"] === 2 directly. "
         "Mini-DSL: AGE(ACCESSOR_ROOT[\"<key>\"]) >= N ; Now - ACCESSOR_ROOT[\"<dateKey>\"] > N years|days|hours ; ACCESSOR_ROOT[\"<dateA>\"] before|after (ACCESSOR_ROOT[\"<dateB>\"]|Now) ; is valid email/phone ; ACCESSOR_ROOT[\"<strKey>\"] contains|equals \"<text>\" (case-insensitive by default).\n"
         "Helper (copy verbatim when dates are involved):\n"
         "function parseDate(v){ if(v instanceof Date&&!Number.isNaN(v.valueOf()))return v; if(typeof v===\"number\"&&Number.isFinite(v))return new Date(v); if(typeof v===\"string\"){ const s=v.trim(); let m=s.match(/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{2,4})$/); if(m){ let d=parseInt(m[1],10),mo=parseInt(m[2],10)-1,y=parseInt(m[3],10); if(y<100)y+=2000; const dt=new Date(Date.UTC(y,mo,d)); return (dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d)?dt:null; } m=s.match(/^(\\d{4})[\\/-](\\d{1,2})[\\/-](\\d{1,2})$/); if(m){ const y=parseInt(m[1],10),mo=parseInt(m[2],10)-1,d=parseInt(m[3],10); const dt=new Date(Date.UTC(y,mo,d)); return (dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d)?dt:null; } const iso=/^\\d{4}-\\d{2}-\\d{2}(?:[T\\s]\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+\\-]\\d{2}:\\d{2})?)?$/; if(iso.test(s)){ const tt=Date.parse(s); if(!Number.isNaN(tt)) return new Date(tt); } } return null; }"
@@ -357,6 +357,13 @@ def generate_condition(body: dict = Body(...)):
             "content": (
                 'Example (age >= 18): NL "utente maggiorenne"; Vars include "agents asks for personal data.Date of Birth" -> '
                 '{"label":"Utente maggiorenne","script":"const CONDITION={label:\"Utente maggiorenne\",type:\"predicate\",inputs:[\"agents asks for personal data.Date of Birth\"]};function main(ctx){const k=\"agents asks for personal data.Date of Birth\";if(!ctx||!Object.prototype.hasOwnProperty.call(ctx,k))return false;const d=parseDate(ctx[k]);if(!d)return false;const t=new Date();let a=t.getUTCFullYear()-d.getUTCFullYear();const m=t.getUTCMonth()-d.getUTCMonth();if(m<0||(m===0&&t.getUTCDate()<d.getUTCDate()))a--;return a>=18;}function parseDate(v){if(v instanceof Date&&!Number.isNaN(v.valueOf()))return v;if(typeof v===\\\"number\\\"&&Number.isFinite(v))return new Date(v);if(typeof v===\\\"string\\\"){const s=v.trim();let m=s.match(/^(\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{2,4})$/);if(m){let d=parseInt(m[1],10),mo=parseInt(m[2],10)-1,y=parseInt(m[3],10);if(y<100)y+=2000;const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}m=s.match(/^(\\\\d{4})[\\\\\/\\\\\-](\\\\d{1,2})[\\\\\/\\\\\-](\\\\d{1,2})$/);if(m){const y=parseInt(m[1],10),mo=parseInt(m[2],10)-1,d=parseInt(m[3],10);const dt=new Date(Date.UTC(y,mo,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo&&dt.getUTCDate()===d?dt:null;}const tt=Date.parse(s);if(!Number.isNaN(tt))return new Date(tt);}return null;}"}'
+            )
+        },
+        {
+            "role": "system",
+            "content": (
+                'Example (numeric comparison): NL "febbraio" or "month is 2"; Vars include "data A.Month" -> '
+                '{"label":"Febbraio","script":"const CONDITION={label:\"Febbraio\",type:\"predicate\",inputs:[\"data A.Month\"]};function main(ctx){try{if(!ctx)return false;const month=Number(ctx[\\\"data A.Month\\\"]);if(!Number.isFinite(month))return false;return month===2;}catch(e){return false;}}"}'
             )
         }
     ]
@@ -702,7 +709,7 @@ def normalize_pseudocode(body: dict = Body(...)):
         "4) If the operator is unstated, default to equality under the default comparison rule (case-insensitive, first token).\n"
         "5) If the pseudo-code asks for a full-string/\"exact\" match, do NOT split to first token; compare the entire trimmed string case-insensitively.\n"
         "6) If the comparison value is missing, return false (do not invent values).\n"
-        "7) For numbers: parse with `Number(...)`; if `NaN`, return false. No range inference unless written.\n"
+        "7) For numbers: CRITICAL - Values from ctx[\"key\"] may be strings (from HTML inputs). ALWAYS convert with `Number(ctx[\"key\"])` and check `Number.isFinite(...)` before comparison. Example: `const month = Number(ctx[\"data A.Month\"]); if (!Number.isFinite(month)) return false; return month === 2;` NEVER use `ctx[\"key\"] === 2` directly. No range inference unless written.\n"
         "8) Use only variables listed in `CONDITION.inputs`. Do not read any other `ctx` keys.\n"
         "9) Do not add proxies (e.g., timezone, phone prefix, IP country) or regexes unless explicitly requested.\n"
         "10) Determinism: produce identical output for identical inputs.\n\n"
