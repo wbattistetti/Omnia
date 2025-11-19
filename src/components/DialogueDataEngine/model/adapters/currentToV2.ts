@@ -228,7 +228,9 @@ async function mapNode(current: MainDataNode, asType: 'main' | 'sub', projectLan
   let instanceContract = sourceContract;
   if (sourceContract) {
     // ✅ Verifica se è un'istanza ma ha ancora il placeholder (istanza vecchia)
-    const isOldInstance = isAlreadyInstance && sourceContract.regex?.patterns?.some((p: string) => p.includes('${MONTHS_PLACEHOLDER}'));
+    // Nel template il placeholder è \${MONTHS_PLACEHOLDER} (con escape)
+    const placeholderPattern = '\\${MONTHS_PLACEHOLDER}';
+    const isOldInstance = isAlreadyInstance && sourceContract.regex?.patterns?.some((p: string) => p.includes(placeholderPattern));
 
     if (!isAlreadyInstance || isOldInstance) {
       // Get source template ID
@@ -271,7 +273,7 @@ async function mapNode(current: MainDataNode, asType: 'main' | 'sub', projectLan
         subMappings: Object.keys(instanceContract.subDataMapping).length,
         wasAlreadyInstance: isAlreadyInstance,
         wasOldInstance: isOldInstance,
-        regexCompiled: !instanceContract.regex?.patterns?.some((p: string) => p.includes('${MONTHS_PLACEHOLDER}'))
+        regexCompiled: !instanceContract.regex?.patterns?.some((p: string) => p.includes('\\${MONTHS_PLACEHOLDER}'))
       });
     } else {
       // ✅ Istanza già compilata correttamente
@@ -279,7 +281,7 @@ async function mapNode(current: MainDataNode, asType: 'main' | 'sub', projectLan
         instanceId: current.id,
         sourceTemplateId: sourceContract.sourceTemplateId,
         contractTemplateId: sourceContract.templateId,
-        regexCompiled: !sourceContract.regex?.patterns?.some((p: string) => p.includes('${MONTHS_PLACEHOLDER}'))
+        regexCompiled: !sourceContract.regex?.patterns?.some((p: string) => p.includes('\\${MONTHS_PLACEHOLDER}'))
       });
     }
   } else if (!sourceContract) {

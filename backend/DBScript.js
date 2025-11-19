@@ -51,7 +51,8 @@ async function testDateRegex() {
 
         const months = itMonths.values;
         const unique = Array.from(new Set(months)).sort((a, b) => b.length - a.length);
-        const monthsPattern = `(${unique.join('|')})`;
+        // ✅ NON includere parentesi perché il pattern viene inserito dentro un gruppo named (?<month>...)
+        const monthsPattern = unique.join('|');
 
         console.log(`✅ Loaded ${unique.length} months (ordered by length)`);
         console.log(`   Sample: ${unique.slice(0, 5).join(', ')}...\n`);
@@ -141,7 +142,9 @@ async function testDateRegex() {
             { text: '15 aprile 1980', expected: { day: '15', month: 'aprile', year: '1980' } },
             { text: '1 maggio 2000', expected: { day: '1', month: 'maggio', year: '2000' } },
             { text: 'aprile 1980', expected: { day: undefined, month: 'aprile', year: '1980' } },
-            { text: '12/04/1980', expected: { day: '12', month: '04', year: '1980' } }
+            { text: '12/04/1980', expected: { day: '12', month: '04', year: '1980' } },
+            { text: '1980', expected: { day: undefined, month: undefined, year: '1980' } },
+            { text: '12 aprile', expected: { day: '12', month: 'aprile', year: undefined } }
         ];
 
         for (const test of additionalTests) {

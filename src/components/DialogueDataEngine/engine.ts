@@ -299,7 +299,8 @@ function extractOrdered(
   input: string,
   primaryKind: string,
   extractAllSubs?: boolean,
-  mainNode?: DDTNode
+  mainNode?: DDTNode,
+  activeSubId?: string  // ✅ Context-aware: ID del sub attivo per pattern selection
 ): { memory: Memory; residual: string; hasMatch: boolean } {
   let residual = input;
   let memory = state.memory;
@@ -341,6 +342,8 @@ function extractOrdered(
       return;
     }
 
+    // ✅ Context-aware: usa activeSubId se disponibile
+
     // Load contract from original template node (must be present by construction)
     const originalNode = state.template.nodes.find(n => n.id === mainNode.id);
 
@@ -365,7 +368,8 @@ function extractOrdered(
       });
 
       try {
-        const result = extractWithContractSync(residual, contract);
+        // ✅ Passa activeSubId per context-aware pattern selection
+        const result = extractWithContractSync(residual, contract, activeSubId);
 
         if (result.hasMatch && Object.keys(result.values).length > 0) {
           hasMatch = true;
@@ -833,7 +837,9 @@ function handleCollecting(
     // This allows user to answer the direct question AND provide other subs
     // Context determinato da currentSubId, non da step
     const isCollectingSub = sub !== undefined;
-    extracted = extractOrdered(state, input, primaryKind, isCollectingSub, main);
+    // ✅ Passa activeSubId per context-aware pattern selection
+    const activeSubId = sub?.id;
+    extracted = extractOrdered(state, input, primaryKind, isCollectingSub, main, activeSubId);
 
     // Use extracted memory directly - it already has the values from extractOrdered
     mem = extracted.memory;
@@ -1304,7 +1310,9 @@ function handleNotConfirmed(
     }
   } else {
     // Try extraction
-    const extracted = extractOrdered(state, input, primaryKind);
+    // ✅ In CollectingSub, passa currentSubId per context-aware extraction
+    const activeSubId = state.mode === 'CollectingSub' && state.currentSubId ? state.currentSubId : undefined;
+    const extracted = extractOrdered(state, input, primaryKind, false, undefined, activeSubId);
     if (extracted.memory !== state.memory) {
       mem = extracted.memory;
     }

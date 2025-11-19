@@ -14,10 +14,20 @@ export interface NLPContract {
             canonicalKey: string;
             label: string;
             type: string;
+            patternIndex?: number;  // ✅ Context-aware: quale pattern usare per questo sub
         };
     };
     regex: {
         patterns: string[];
+        patternModes?: string[];  // ✅ Context-aware: ['main', 'day', 'month', 'year', ...]
+        ambiguityPattern?: string;  // ✅ Regex per rilevare valori ambigui (es. numeri 1-12 per date)
+        ambiguity?: {  // ✅ Configurazione ambiguità
+            ambiguousValues: {
+                pattern: string;  // Regex che matcha i valori ambigui
+                description: string;  // Descrizione umana (es: "Numbers 1-12 can be interpreted as day or month")
+            };
+            ambiguousCanonicalKeys: string[];  // Lista di canonicalKey che possono essere ambigui (es: ['day', 'month'])
+        };
         examples: string[];
         testCases: string[];
     };
@@ -58,7 +68,7 @@ export function loadContract(node: DDTNode): NLPContract | null {
 
         // ✅ DEBUG: Verifica se la regex è compilata (non contiene placeholder)
         const regexPatterns = contract.regex?.patterns || [];
-        const hasPlaceholder = regexPatterns.some(p => p.includes('${MONTHS_PLACEHOLDER}'));
+        const hasPlaceholder = regexPatterns.some((p: string) => p.includes('${MONTHS_PLACEHOLDER}') || p.includes('\\${MONTHS_PLACEHOLDER}'));
 
         console.log('✅ [Contract] Loaded', {
             nodeId: node.id,
@@ -77,9 +87,9 @@ export function loadContract(node: DDTNode): NLPContract | null {
             console.error('🚨 [Contract] CRITICAL: Regex contains placeholder! Contract was NOT compiled!', {
                 nodeId: node.id,
                 templateName: contract.templateName,
-                patterns: regexPatterns.map((p, i) => ({
+                patterns: regexPatterns.map((p: string, i: number) => ({
                     index: i,
-                    hasPlaceholder: p.includes('${MONTHS_PLACEHOLDER}'),
+                    hasPlaceholder: p.includes('${MONTHS_PLACEHOLDER}') || p.includes('\\${MONTHS_PLACEHOLDER}'),
                     preview: p.substring(0, 100)
                 }))
             });

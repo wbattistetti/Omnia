@@ -61,38 +61,40 @@ async function regenerateDateContract() {
         });
         console.log('');
 
-        // Genera regex template con placeholder
-        // ✅ La regex contiene ${MONTHS_PLACEHOLDER} che verrà sostituito quando si crea l'istanza
-        // ✅ Usa anchor ^...$ per forzare match completo (non spezza "12" in "1" + "2")
-        const generateUniversalRegex = () => {
-            // Giorno: 0?[1-9]|[12][0-9]|3[01] (1-31, con o senza zero iniziale) - OPCIONALE
-            const dayPattern = '(?<day>0?[1-9]|[12][0-9]|3[01])';
+        // ✅ Genera pattern context-aware multipli (main + sub-specific)
+        const generateContextAwarePatterns = () => {
+            const separators = '(?:\\s+|\\s*[/\\\\-]\\s*)';
 
-            // Mese: testuale (PLACEHOLDER) O numerico (1-12) - verrà sostituito all'istanza
-            // ✅ ORDINE: nomi mesi (placeholder) prima dei numeri
-            const monthPattern = '(?<month>${MONTHS_PLACEHOLDER}|0?[1-9]|1[0-2])';
+            // Pattern 0: MAIN - multi-componente con separatori
+            const mainPattern = '^(?=.*\\d)(?:(?<day>0?[1-9]|[12][0-9]|3[01])' + separators + ')?(?:(?<month>\\${MONTHS_PLACEHOLDER}|(?:0?[1-9]|1[0-2])(?=' + separators + '))' + separators + '?)?(?<year>\\d{2,4})?$';
 
-            // Anno: 2 o 4 cifre - OPCIONALE
-            const yearPattern = '(?<year>\\d{2,4})';
+            // Pattern 1: DAY only - accetta anche senza separatori
+            const dayPattern = '^(?<day>0?[1-9]|[12][0-9]|3[01])$';
 
-            // Separatori: spazio, /, -, \ - ALMENO UNO obbligatorio
-            const separators = '[\\s/\\\\-]+';
+            // Pattern 2: MONTH only - accetta nome testuale o numero
+            const monthPattern = '^(?<month>\\${MONTHS_PLACEHOLDER}|0?[1-9]|1[0-2])$';
 
-            // ✅ REGEX TEMPLATE con placeholder e anchor
-            // ^...$  → forza match completo della stringa (non spezza "12" in "1" + "2")
-            // [\s/\\-]+ → richiede almeno un separatore tra i componenti
-            return `^(?:${dayPattern}${separators})?${monthPattern}(?:${separators}${yearPattern})?$`;
+            // Pattern 3: YEAR only - 2 o 4 cifre
+            const yearPattern = '^(?<year>\\d{2,4})$';
+
+            return {
+                patterns: [mainPattern, dayPattern, monthPattern, yearPattern],
+                patternModes: ['main', 'day', 'month', 'year']
+            };
         };
 
-        const templateRegex = generateUniversalRegex();
+        const { patterns, patternModes } = generateContextAwarePatterns();
 
-        // Verifica che il placeholder sia presente
-        if (!templateRegex.includes('${MONTHS_PLACEHOLDER}')) {
-            throw new Error('❌ Regex template does not contain ${MONTHS_PLACEHOLDER} placeholder!');
+        // Verifica che il placeholder sia presente nel main pattern
+        if (!patterns[0].includes('${MONTHS_PLACEHOLDER}')) {
+            throw new Error('❌ Main regex template does not contain ${MONTHS_PLACEHOLDER} placeholder!');
         }
 
-        console.log('✅ Generated regex template with placeholder:');
-        console.log(`   ${templateRegex.substring(0, 100)}...\n`);
+        console.log('✅ Generated context-aware regex patterns:');
+        console.log(`   [0] main: ${patterns[0].substring(0, 80)}...`);
+        console.log(`   [1] day: ${patterns[1]}`);
+        console.log(`   [2] month: ${patterns[2].substring(0, 60)}...`);
+        console.log(`   [3] year: ${patterns[3]}\n`);
 
         // Costruisci subDataMapping (preserva quello esistente se presente)
         const subDataMapping = {};
@@ -107,10 +109,17 @@ async function regenerateDateContract() {
                     const label = subTemplate.label || subTemplate.name || '';
                     const canonicalKey = label.toLowerCase();
 
+                    // ✅ Assegna patternIndex in base al canonicalKey
+                    let patternIndex = 0; // default: main pattern
+                    if (canonicalKey === 'day') patternIndex = 1;
+                    else if (canonicalKey === 'month') patternIndex = 2;
+                    else if (canonicalKey === 'year') patternIndex = 3;
+
                     subDataMapping[subTemplate._id.toString()] = {
                         canonicalKey: canonicalKey,
                         label: label,
-                        type: subTemplate.type || 'text'
+                        type: subTemplate.type || 'text',
+                        patternIndex: patternIndex
                     };
                 }
             }
@@ -123,8 +132,22 @@ async function regenerateDateContract() {
             subDataMapping: subDataMapping,
 
             regex: {
-                // ✅ SINGOLA REGEX TEMPLATE con placeholder
-                patterns: [templateRegex],
+                // ✅ PATTERN CONTEXT-AWARE multipli (mainPattern sempre usato, altri per supporto)
+                patterns: patterns,
+                patternModes: patternModes,
+
+                // ✅ NUOVO: Regex per rilevare valori ambigui (numeri 1-12)
+                ambiguityPattern: '^(?<ambiguous>\\b(?:0?[1-9]|1[0-2])\\b)$',
+
+                // ✅ NUOVO: Configurazione ambiguità
+                ambiguity: {
+                    ambiguousValues: {
+                        pattern: '^(?:0?[1-9]|1[0-2])$',
+                        description: 'Numbers 1-12 can be interpreted as day or month'
+                    },
+                    ambiguousCanonicalKeys: ['day', 'month']  // Solo day e month sono ambigui
+                },
+
                 examples: [
                     '12 aprile 1980',
                     '12 abril 1980',

@@ -101,3 +101,4 @@ Nel contract dell'istanza (puoi loggarlo), la regex NON deve contenere `${MONTHS
 - Ogni istanza ha la sua regex compilata per la lingua del progetto
 - Nessun fallback: se manca qualcosa, lancia errore esplicito
 
+

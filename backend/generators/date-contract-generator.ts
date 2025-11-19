@@ -121,22 +121,30 @@ export class DateContractGenerator extends BaseContractGenerator {
     // Giorno: 0?[1-9]|[12][0-9]|3[01] (1-31, con o senza zero iniziale) - OPCIONALE
     const dayPattern = '(?<day>0?[1-9]|[12][0-9]|3[01])';
 
-    // Mese: testuale (PLACEHOLDER) O numerico (1-12) - verrà sostituito all'istanza
+    // Mese: testuale (PLACEHOLDER) O numerico (1-12) - OPCIONALE per permettere solo anno
     // ✅ ORDINE: nomi mesi (placeholder) prima dei numeri
     // ✅ Usa stringa letterale per placeholder (non template literal)
-    const monthPattern = '(?<month>${MONTHS_PLACEHOLDER}|0?[1-9]|1[0-2])';
+    // ✅ Mese numerico richiede separatore (per evitare che "1980" matchi "1" come mese)
+    const monthPattern = `(?<month>${MONTHS_PLACEHOLDER}|(?:0?[1-9]|1[0-2])(?=${separators}|$))`;
 
     // Anno: 2 o 4 cifre - OPCIONALE
     const yearPattern = '(?<year>\\d{2,4})';
 
-    // Separatori: spazio, /, -, \ - ALMENO UNO obbligatorio
-    const separators = '[\\s/\\\\-]+';
+    // Separatori: uno o più spazi OPPURE separatore (/ - \) con spazi opzionali prima e dopo
+    // Pattern: (\s+|\s*[/\\-]\s*)
+    const separators = '(?:\\s+|\\s*[/\\\\-]\\s*)';
 
     // ✅ REGEX TEMPLATE con placeholder e anchor
     // ^...$  → forza match completo della stringa (non spezza "12" in "1" + "2")
     // [\s/\\-]+ → richiede almeno un separatore tra i componenti
+    // Tutti i componenti sono opzionali: "1980" (solo anno), "aprile 1980" (mese+anno), "12 aprile 1980" (tutto), "12 aprile" (giorno+mese)
+    // Pattern: (giorno+separatore)? (mese+separatore?)? (anno)?
+    // ✅ Separatore dopo mese è opzionale (per permettere "12 aprile" senza anno)
+    // ✅ Lookahead positivo per assicurare che almeno UN componente sia presente (non matcha stringa vuota)
     // Il placeholder ${MONTHS_PLACEHOLDER} verrà sostituito con i mesi reali quando si crea l'istanza
-    return `^(?:${dayPattern}${separators})?${monthPattern}(?:${separators}${yearPattern})?$`;
+    // ✅ Mese numerico usa lookahead per richiedere separatore (evita match "1" in "1980")
+    const monthWithLookahead = `(?<month>${MONTHS_PLACEHOLDER}|(?:0?[1-9]|1[0-2])(?=${separators}|$))`;
+    return `^(?=.*[0-9])(?:(?<day>0?[1-9]|[12][0-9]|3[01])${separators})?(?:(?:${monthWithLookahead})(?:${separators})?)?(?<year>\\d{2,4})?$`;
   }
 
   /**

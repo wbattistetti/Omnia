@@ -15,17 +15,20 @@ export interface ExtractionResult {
 
 /**
  * Esegue escalation usando contract (versione sincrona per regex)
- * 1. Prova regex patterns (sincrono)
+ * 1. Prova regex patterns (sincrono) - context-aware
  * 2. Se fallisce, prova rules (extractorCode) - TODO
  * 3. Se fallisce e NER abilitato, prova NER (async)
  * 4. Se fallisce e LLM abilitato, prova LLM (async)
+ *
+ * @param activeSubId - ID del sub attivo (per context-aware pattern selection)
  */
 export function extractWithContractSync(
     text: string,
-    contract: NLPContract
+    contract: NLPContract,
+    activeSubId?: string
 ): ExtractionResult {
-    // ESCALATION LEVEL 1: Regex (sincrono)
-    const regexResult = tryRegexExtraction(text, contract);
+    // ESCALATION LEVEL 1: Regex (sincrono) - context-aware
+    const regexResult = tryRegexExtraction(text, contract, activeSubId);
     if (regexResult.hasMatch) {
         return { ...regexResult, source: 'regex' };
     }
@@ -64,119 +67,217 @@ export async function extractWithContractAsync(
 }
 
 /**
- * Prova estrazione con regex patterns
+ * Prova estrazione con regex patterns - sempre usa mainPattern per correzione implicita
+ * @param activeSubId - ID del sub attivo (per risoluzione ambiguità)
  */
-function tryRegexExtraction(text: string, contract: NLPContract): ExtractionResult {
+function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: string): ExtractionResult {
     const values: Record<string, any> = {};
 
-    const mappingDetails = Object.entries(contract.subDataMapping).map(([guid, mapping]) => ({
-        guid: guid.substring(0, 20) + '...',
-        canonicalKey: mapping.canonicalKey,
-        label: mapping.label
-    }));
-
-    console.log('🔍 [NLP Regex] Inizio estrazione', {
-        text: text.substring(0, 100),
-        patternsCount: contract.regex.patterns.length,
-        templateName: contract.templateName,
-        subDataMappingCount: Object.keys(contract.subDataMapping).length
-    });
-    console.log('🔍 [NLP Regex] SubDataMapping details:', JSON.stringify(mappingDetails, null, 2));
-
-    // ✅ DEBUG: Log regex patterns per verificare se sono compilate
-    contract.regex.patterns.forEach((pattern, idx) => {
-        const hasPlaceholder = pattern.includes('${MONTHS_PLACEHOLDER}');
-        console.log(`🔍 [NLP Regex] Pattern ${idx + 1}:`, {
-            hasPlaceholder: hasPlaceholder ? '❌ YES (NOT COMPILED!)' : '✅ NO (compiled)',
-            patternPreview: pattern.substring(0, 150),
-            patternLength: pattern.length
-        });
-    });
-
-    for (let i = 0; i < contract.regex.patterns.length; i++) {
-        const pattern = contract.regex.patterns[i];
-        try {
-            const regex = new RegExp(pattern, 'i');
-            const match = text.match(regex);
-
-            if (match) {
-                console.log(`✅ [NLP Regex] Pattern ${i + 1} MATCHATO`, {
-                    pattern: pattern.substring(0, 80),
-                    fullMatch: match[0],
-                    groups: match.groups ? Object.keys(match.groups).length : 0
-                });
-
-                if (match.groups) {
-                    // Estrai valori dai gruppi nominati
-                    Object.entries(match.groups).forEach(([groupKey, value]) => {
-                        if (value !== undefined && value !== null && value !== '') {
-                            // ✅ Validazione range per campi numerici
-                            const numValue = parseInt(value, 10);
-                            if (!isNaN(numValue)) {
-                                if (groupKey === 'month' && (numValue < 1 || numValue > 12)) {
-                                    console.warn(`  ⚠️ [NLP Regex] ${groupKey} fuori range, scartato: ${numValue} (range: 1-12)`);
-                                    return; // Skip this group
-                                }
-                                if (groupKey === 'day' && (numValue < 1 || numValue > 31)) {
-                                    console.warn(`  ⚠️ [NLP Regex] ${groupKey} fuori range, scartato: ${numValue} (range: 1-31)`);
-                                    return; // Skip this group
-                                }
-                                if (groupKey === 'year' && numValue < 1900) {
-                                    console.warn(`  ⚠️ [NLP Regex] ${groupKey} fuori range, scartato: ${numValue} (range: >= 1900)`);
-                                    return; // Skip this group
-                                }
-                            }
-
-                            const subId = getSubIdForCanonicalKey(contract, groupKey);
-                            if (subId) {
-                                values[groupKey] = value;
-                                console.log(`  📝 [NLP Regex] Estratto: ${groupKey} = ${value} → subId: ${subId}`);
-                            } else {
-                                console.warn(`  ⚠️ [NLP Regex] canonicalKey "${groupKey}" NON trovata`, {
-                                    groupKey,
-                                    subDataMapping: Object.entries(contract.subDataMapping).map(([guid, mapping]) => ({
-                                        guid: guid.substring(0, 20) + '...',
-                                        canonicalKey: mapping.canonicalKey,
-                                        label: mapping.label
-                                    }))
-                                });
-                            }
-                        }
-                    });
-
-                    if (Object.keys(values).length > 0) {
-                        console.log('✅ [NLP Regex] Estrazione completata con successo', {
-                            values,
-                            source: 'regex'
-                        });
-                        return { values, hasMatch: true, source: 'regex' };
-                    }
-                }
-            } else {
-                console.log(`❌ [NLP Regex] Pattern ${i + 1} non matchato`, {
-                    pattern: pattern.substring(0, 80)
-                });
-            }
-        } catch (error) {
-            console.warn(`⚠️ [NLP Regex] Pattern ${i + 1} fallito (sintassi invalida)`, {
-                pattern: pattern.substring(0, 80),
-                error: error instanceof Error ? error.message : String(error)
-            });
-        }
+    // ✅ SEMPLIFICATO: usa sempre solo mainPattern (pattern[0]) per correzione implicita
+    const mainPattern = contract.regex.patterns[0];
+    if (!mainPattern) {
+        console.warn('⚠️ [NLP Regex] Main pattern non trovato nel contract');
+        return { values: {}, hasMatch: false, source: null };
     }
 
-    console.log('❌ [NLP Regex] Nessun pattern ha matchato', {
-        text: text.substring(0, 100),
-        patternsTried: contract.regex.patterns.length
+    // ✅ DEBUG: Log regex pattern per verificare se è compilata
+    const hasPlaceholder = mainPattern.includes('${MONTHS_PLACEHOLDER}') || mainPattern.includes('\\${MONTHS_PLACEHOLDER}');
+    console.log('🔍 [NLP Regex] Estrazione con mainPattern', {
+        mode: activeSubId ? 'collecting_sub' : 'collecting_main',
+        activeSubId: activeSubId ? activeSubId.substring(0, 20) + '...' : undefined,
+        activeSubCanonicalKey: activeSubId ? contract.subDataMapping[activeSubId]?.canonicalKey : undefined,
+        hasPlaceholder: hasPlaceholder ? '❌ YES (NOT COMPILED!)' : '✅ NO (compiled)',
+        patternPreview: mainPattern.substring(0, 150),
+        templateName: contract.templateName
     });
 
-    return { values: {}, hasMatch: false, source: null };
+    try {
+        const regex = new RegExp(mainPattern, 'i');
+        const match = text.match(regex);
+
+        if (!match || !match.groups) {
+            console.log('❌ [NLP Regex] MainPattern non matchato', {
+                text: text.substring(0, 100),
+                pattern: mainPattern.substring(0, 80)
+            });
+            return { values: {}, hasMatch: false, source: null };
+        }
+
+        console.log(`✅ [NLP Regex] MainPattern MATCHATO`, {
+            fullMatch: match[0],
+            groupsCount: Object.keys(match.groups).length
+        });
+
+        // Estrai TUTTI i gruppi matchati (senza validazione per ora)
+        const allMatchedGroups: Record<string, string> = {};
+        Object.entries(match.groups).forEach(([groupKey, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                allMatchedGroups[groupKey] = value;
+                console.log(`  📝 [NLP Regex] Gruppo matchato: ${groupKey} = ${value}`);
+            }
+        });
+
+        if (Object.keys(allMatchedGroups).length === 0) {
+            console.log('❌ [NLP Regex] Nessun gruppo matchato');
+            return { values: {}, hasMatch: false, source: null };
+        }
+
+        // ✅ Logica ambiguità: se match singolo, verifica ambiguità PRIMA di associare
+        const groupCount = Object.keys(allMatchedGroups).length;
+        if (groupCount === 1) {
+            const matchedCanonicalKey = Object.keys(allMatchedGroups)[0];
+            const matchedValue = allMatchedGroups[matchedCanonicalKey];
+
+            console.log('🔍 [NLP Regex] Match singolo gruppo, verifica ambiguità', {
+                canonicalKey: matchedCanonicalKey,
+                value: matchedValue
+            });
+
+            // Verifica se il valore è ambiguo
+            if (checkAmbiguity(text, contract)) {
+                console.log('  ⚠️ [NLP Regex] Valore ambiguo rilevato, risoluzione con contesto');
+
+                // Risolvi ambiguità usando il contesto
+                const resolved = resolveWithContext(matchedValue, matchedCanonicalKey, activeSubId, contract);
+
+                if (!resolved.isRelevant) {
+                    // Match irrilevante → ritorna no match
+                    console.log('  ❌ [NLP Regex] Match irrilevante: sub attivo non è ambiguo', {
+                        activeSubCanonicalKey: activeSubId ? contract.subDataMapping[activeSubId]?.canonicalKey : undefined,
+                        ambiguousCanonicalKeys: contract.regex.ambiguity?.ambiguousCanonicalKeys || []
+                    });
+                    return { values: {}, hasMatch: false, source: null };
+                }
+
+                // Match rilevante → assegna valore risolto al canonicalKey corretto
+                values[resolved.canonicalKey!] = resolved.value;
+                console.log('  ✅ [NLP Regex] Ambiguità risolta', {
+                    originalMatchedKey: matchedCanonicalKey,
+                    resolvedCanonicalKey: resolved.canonicalKey,
+                    value: resolved.value
+                });
+            } else {
+                // Non ambiguo → usa valore originale
+                values[matchedCanonicalKey] = matchedValue;
+                console.log('  ℹ️ [NLP Regex] Valore non ambiguo, usa valore originale');
+            }
+        } else {
+            // Match multi-gruppo → usa tutti i valori direttamente
+            Object.assign(values, allMatchedGroups);
+            console.log('  ℹ️ [NLP Regex] Match multi-gruppo, usa tutti i valori');
+        }
+
+        if (Object.keys(values).length > 0) {
+            console.log('✅ [NLP Regex] Estrazione completata con successo', {
+                values,
+                source: 'regex'
+            });
+            return { values, hasMatch: true, source: 'regex' };
+        }
+
+        return { values: {}, hasMatch: false, source: null };
+    } catch (error) {
+        console.warn(`⚠️ [NLP Regex] MainPattern fallito (sintassi invalida)`, {
+            pattern: mainPattern.substring(0, 80),
+            error: error instanceof Error ? error.message : String(error)
+        });
+        return { values: {}, hasMatch: false, source: null };
+    }
+}
+
+/**
+ * Verifica se un valore matchato è ambiguo (può appartenere a più subData)
+ * @param text - Testo originale dell'input
+ * @param contract - Contract NLP
+ * @returns true se il valore è ambiguo
+ */
+function checkAmbiguity(text: string, contract: NLPContract): boolean {
+    const ambiguityPattern = contract.regex.ambiguityPattern;
+
+    if (!ambiguityPattern) {
+        // Nessun pattern ambiguità definito → non è ambiguo
+        return false;
+    }
+
+    try {
+        const regex = new RegExp(ambiguityPattern, 'i');
+        const match = text.match(regex);
+
+        const isAmbiguous = match !== null;
+        console.log('🔍 [NLP Regex] checkAmbiguity', {
+            text: text.substring(0, 50),
+            ambiguityPattern: ambiguityPattern.substring(0, 80),
+            isAmbiguous
+        });
+
+        return isAmbiguous;
+    } catch (error) {
+        console.warn('⚠️ [NLP Regex] checkAmbiguity fallito (sintassi invalida)', {
+            pattern: ambiguityPattern.substring(0, 80),
+            error: error instanceof Error ? error.message : String(error)
+        });
+        return false;
+    }
+}
+
+/**
+ * Risolve ambiguità assegnando il valore al sub attivo se è tra quelli ambigui
+ * @param value - Valore ambiguo estratto
+ * @param matchedCanonicalKey - CanonicalKey del gruppo matchato dalla regex principale
+ * @param activeSubId - ID del sub attivo (contesto)
+ * @param contract - Contract NLP
+ * @returns Oggetto con canonicalKey risolto, valore e flag isRelevant
+ */
+function resolveWithContext(
+    value: any,
+    matchedCanonicalKey: string,
+    activeSubId: string | undefined,
+    contract: NLPContract
+): { canonicalKey?: string; value?: any; isRelevant: boolean } {
+    // Se non c'è sub attivo, mantieni assegnazione originale
+    if (!activeSubId) {
+        console.log('  ℹ️ [NLP Regex] Nessun activeSubId, mantiene assegnazione originale', {
+            canonicalKey: matchedCanonicalKey,
+            value
+        });
+        return { canonicalKey: matchedCanonicalKey, value, isRelevant: true };
+    }
+
+    // Ottieni canonicalKey del sub attivo
+    const subMapping = contract.subDataMapping[activeSubId];
+    if (!subMapping) {
+        console.warn('  ⚠️ [NLP Regex] activeSubId non trovato nel subDataMapping', {
+            activeSubId: activeSubId.substring(0, 20) + '...'
+        });
+        return { isRelevant: false };
+    }
+
+    const targetCanonicalKey = subMapping.canonicalKey;
+
+    // Verifica se targetCanonicalKey è tra quelli ambigui
+    const ambiguousCanonicalKeys = contract.regex.ambiguity?.ambiguousCanonicalKeys || [];
+
+    if (!ambiguousCanonicalKeys.includes(targetCanonicalKey)) {
+        // Sub attivo non è ambiguo → match irrilevante
+        console.log('  ❌ [NLP Regex] Match irrilevante: sub attivo non è ambiguo', {
+            targetCanonicalKey,
+            ambiguousCanonicalKeys
+        });
+        return { isRelevant: false };
+    }
+
+    // Sub attivo è ambiguo → assegna valore
+    console.log('  ✅ [NLP Regex] Match rilevante: sub attivo è ambiguo', {
+        targetCanonicalKey,
+        value
+    });
+    return { canonicalKey: targetCanonicalKey, value, isRelevant: true };
 }
 
 /**
  * Prova estrazione con NER
  */
-async function tryNERExtraction(text: string, contract: NLPContract): Promise<ExtractionResult> {
+async function tryNERExtraction(_text: string, _contract: NLPContract): Promise<ExtractionResult> {
     // TODO: Implementare chiamata a backend NER
     // Per ora ritorna no match
     return { values: {}, hasMatch: false, source: null };
@@ -191,10 +292,6 @@ async function tryLLMExtraction(text: string, contract: NLPContract): Promise<Ex
         const subDataList = Object.values(contract.subDataMapping)
             .map(m => `- ${m.canonicalKey}: ${m.label} (${m.type})`)
             .join('\n');
-
-        const canonicalKeys = Object.values(contract.subDataMapping)
-            .map(m => m.canonicalKey)
-            .join(', ');
 
         const userPrompt = contract.llm.userPromptTemplate
             .replace('{text}', text)

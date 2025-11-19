@@ -264,6 +264,8 @@ Start (torna a chiedere)
 2. **Estrazione tramite Contract**
    - Se `extractedVariables` forniti → usa direttamente (priorità)
    - Altrimenti → chiama `extractOrdered()` per mixed-initiative extraction
+   - **Regex extraction**: Usa sempre solo il `mainPattern` (pattern[0]) per permettere correzione implicita
+   - **Logica ambiguità**: Se match singolo e valore ambiguo, risolve in base al sub attivo (vedi sezione "Logica di Ambiguità")
    - Contract (regex/NER/LLM) ritorna:
      ```typescript
      {
@@ -629,6 +631,150 @@ if (matched && !valid) {
 if (extracted.status === 'match' && extracted.matchedButInvalid) {
   // Trattare come noMatch
   return handleNoMatch(state, main);
+}
+```
+
+---
+
+## Logica di Ambiguità e Match Irrilevante
+
+### Panoramica
+
+Il motore di estrazione usa **sempre il mainPattern** (pattern principale) per permettere la correzione implicita. Quando il mainPattern matcha un singolo gruppo e quel valore può essere ambiguo (es. "12" può essere giorno o mese), il sistema usa la logica di ambiguità per risolvere il valore in base al contesto attivo.
+
+### Uso del MainPattern
+
+**IMPORTANTE**: Il motore usa **sempre solo il mainPattern** (pattern[0]) per l'estrazione, anche quando c'è un sub attivo. Questo permette:
+
+1. **Correzione implicita**: Se l'utente dice "prima novembre, ora dicembre", il mainPattern può catturare l'intera stringa e ridefinire i valori coerentemente
+2. **Uniformità**: Un solo punto di verità, meno complessità
+3. **Opzionalità integrata**: Il mainPattern con gruppi opzionali può gestire sia input completi sia parziali
+
+I pattern specifici (dayPattern, monthPattern, yearPattern) rimangono nel contract per supporto/debug, ma **non vengono usati nell'estrazione normale**.
+
+### Configurazione Ambiguità nel Contract
+
+Il contract deve definire:
+
+```typescript
+regex: {
+    patterns: [mainPattern, dayPattern, monthPattern, yearPattern],  // Pattern specifici mantenuti per supporto
+    patternModes: ['main', 'day', 'month', 'year'],
+
+    // ✅ Regex per rilevare valori ambigui
+    ambiguityPattern: '^(?<ambiguous>\\b(?:0?[1-9]|1[0-2])\\b)$',  // Matcha numeri 1-12
+
+    // ✅ Configurazione ambiguità
+    ambiguity: {
+        ambiguousValues: {
+            pattern: '^(?:0?[1-9]|1[0-2])$',
+            description: 'Numbers 1-12 can be interpreted as day or month'
+        },
+        ambiguousCanonicalKeys: ['day', 'month']  // Solo day e month sono ambigui
+    }
+}
+```
+
+### Flusso di Risoluzione Ambiguità
+
+1. **Match con mainPattern**: Il mainPattern matcha l'input
+2. **Conta gruppi estratti**: Se c'è un solo gruppo estratto → possibile ambiguità
+3. **Verifica ambiguità**: Applica `ambiguityPattern` al testo originale
+   - Se matcha → valore è ambiguo
+   - Altrimenti → non ambiguo, usa valore originale
+4. **Risoluzione con contesto**: Se ambiguo:
+   - Ottiene `canonicalKey` del sub attivo (`activeSubId`)
+   - Verifica se quel `canonicalKey` è in `ambiguousCanonicalKeys`
+   - Se sì → **match rilevante**: assegna valore al sub attivo
+   - Se no → **match irrilevante**: ritorna `hasMatch: false`
+
+### Esempi di Comportamento
+
+#### Esempio 1: Match Rilevante
+```
+Input: "12"
+Sub attivo: day (canonicalKey: "day")
+MainPattern matcha: { day: "12" } (singolo gruppo)
+AmbiguityPattern matcha: "12" → TRUE (ambiguo)
+ResolveWithContext:
+  - canonicalKey attivo = "day"
+  - "day" È IN ambiguousCanonicalKeys ['day', 'month'] → TRUE
+  - Risultato: { canonicalKey: "day", value: "12", isRelevant: true }
+Output: { values: { day: "12" }, hasMatch: true }
+```
+
+#### Esempio 2: Match Irrilevante
+```
+Input: "12"
+Sub attivo: year (canonicalKey: "year")
+MainPattern matcha: { day: "12" } (singolo gruppo)
+AmbiguityPattern matcha: "12" → TRUE (ambiguo)
+ResolveWithContext:
+  - canonicalKey attivo = "year"
+  - "year" NON È IN ambiguousCanonicalKeys ['day', 'month'] → FALSE
+  - Risultato: { isRelevant: false }
+Output: { values: {}, hasMatch: false }
+Comportamento: NoMatch → ripete prompt per year
+```
+
+#### Esempio 3: Match Multi-Gruppo (Non Ambiguo)
+```
+Input: "12 aprile 1980"
+Sub attivo: day
+MainPattern matcha: { day: "12", month: "aprile", year: "1980" } (multi-gruppo)
+Logica ambiguità: NON applicata (multi-gruppo)
+Output: { values: { day: "12", month: "aprile", year: "1980" }, hasMatch: true }
+```
+
+#### Esempio 4: Valore Non Ambiguo
+```
+Input: "1980"
+Sub attivo: year
+MainPattern matcha: { year: "1980" } (singolo gruppo)
+AmbiguityPattern matcha: "1980" → FALSE (non ambiguo, non è 1-12)
+Logica ambiguità: NON applicata (non ambiguo)
+Output: { values: { year: "1980" }, hasMatch: true }
+```
+
+### Match Irrilevante vs NoMatch
+
+**Match Irrilevante**:
+- Il mainPattern **ha matchato** qualcosa
+- Ma il valore matchato è ambiguo e il sub attivo **non è tra quelli ambigui**
+- Comportamento: ritorna `hasMatch: false` → il motore va in NoMatch e ripete il prompt
+- **NON incrementa il contatore noMatch** (c'è stato un match, anche se irrilevante)
+
+**NoMatch Totale**:
+- Il mainPattern **non ha matchato** nulla
+- Comportamento: ritorna `hasMatch: false` → il motore va in NoMatch e incrementa il contatore
+
+### Integrazione nel Motore
+
+La logica di ambiguità è implementata in `tryRegexExtraction()`:
+
+```typescript
+// 1. Usa sempre solo mainPattern
+const mainPattern = contract.regex.patterns[0];
+const match = text.match(new RegExp(mainPattern, 'i'));
+
+// 2. Estrai gruppi
+const extractedGroups = /* ... */;
+const groupCount = Object.keys(extractedGroups).length;
+
+// 3. Se match singolo, verifica ambiguità
+if (groupCount === 1) {
+    if (checkAmbiguity(text, contract)) {
+        const resolved = resolveWithContext(value, canonicalKey, activeSubId, contract);
+        if (!resolved.isRelevant) {
+            return { values: {}, hasMatch: false };  // Match irrilevante
+        }
+        values[resolved.canonicalKey] = resolved.value;
+    } else {
+        values[matchedCanonicalKey] = matchedValue;  // Non ambiguo
+    }
+} else {
+    // Multi-gruppo → usa tutti i valori
+    Object.assign(values, extractedGroups);
 }
 ```
 

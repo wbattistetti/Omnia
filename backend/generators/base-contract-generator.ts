@@ -11,6 +11,7 @@ export interface SubDataMapping {
     canonicalKey: string;
     label: string;
     type: string;
+    patternIndex?: number;  // ✅ Context-aware: quale pattern usare per questo sub
   };
 }
 
@@ -20,6 +21,15 @@ export interface NLPContract {
   subDataMapping: SubDataMapping;
   regex: {
     patterns: string[];
+    patternModes?: string[];  // ✅ Context-aware: ['main', 'day', 'month', 'year', ...]
+    ambiguityPattern?: string;  // ✅ Regex per rilevare valori ambigui (es. numeri 1-12 per date)
+    ambiguity?: {  // ✅ Configurazione ambiguità
+      ambiguousValues: {
+        pattern: string;  // Regex che matcha i valori ambigui
+        description: string;  // Descrizione umana (es: "Numbers 1-12 can be interpreted as day or month")
+      };
+      ambiguousCanonicalKeys: string[];  // Lista di canonicalKey che possono essere ambigui (es: ['day', 'month'])
+    };
     examples: string[];
     testCases: string[];
   };

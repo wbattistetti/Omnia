@@ -68,8 +68,9 @@ export async function cloneAndAdaptContract(
     if (cloned.templateName === 'date' && cloned.regex?.patterns?.length > 0) {
         const templateRegex = cloned.regex.patterns[0];
 
-        // Verifica se contiene placeholder
-        if (templateRegex.includes('${MONTHS_PLACEHOLDER}')) {
+        // ✅ Verifica se contiene placeholder (nel template c'è \${MONTHS_PLACEHOLDER} con escape)
+        const placeholderPattern = '\\${MONTHS_PLACEHOLDER}';
+        if (templateRegex.includes(placeholderPattern)) {
             // ✅ projectLanguage è OBBLIGATORIO - nessun fallback
             if (!projectLanguage) {
                 throw new Error(`[contractUtils] projectLanguage is REQUIRED for date contract compilation. Contract: ${cloned.templateName}, instanceId: ${instanceId}`);
@@ -85,8 +86,8 @@ export async function cloneAndAdaptContract(
             // Carica costanti mesi per quella lingua - lancia errore se non trova
             const monthsPattern = await loadMonthsPatternForLanguage(language);
 
-            // Sostituisci placeholder con mesi reali
-            const compiledRegex = templateRegex.replace('${MONTHS_PLACEHOLDER}', monthsPattern);
+            // ✅ Sostituisci placeholder con mesi reali (cerca \${MONTHS_PLACEHOLDER} con escape)
+            const compiledRegex = templateRegex.replace(placeholderPattern, monthsPattern);
 
             cloned.regex.patterns = [compiledRegex];
 
@@ -104,7 +105,7 @@ export async function cloneAndAdaptContract(
         newMappingCount: Object.keys(newMapping).length,
         newMappingKeys: Object.keys(newMapping).slice(0, 5),
         canonicalKeys: Object.values(newMapping).map((m: any) => m.canonicalKey),
-        regexCompiled: cloned.regex?.patterns?.[0]?.includes('${MONTHS_PLACEHOLDER}') === false
+        regexCompiled: cloned.regex?.patterns?.[0]?.includes('\\${MONTHS_PLACEHOLDER}') === false
     });
 
     return cloned;
@@ -133,8 +134,9 @@ async function loadMonthsPatternForLanguage(language: string): Promise<string> {
     // Ordina per lunghezza (più lunghi prima per match corretto)
     const unique = Array.from(new Set(months)).sort((a, b) => b.length - a.length);
 
-    // Costruisci pattern regex: (gennaio|febbraio|...|gen\.?|feb\.?|...)
-    const pattern = `(${unique.join('|')})`;
+    // Costruisci pattern regex: gennaio|febbraio|...|gen\.?|feb\.?|...
+    // ✅ NON includere parentesi perché il pattern viene inserito dentro un gruppo named (?<month>...)
+    const pattern = unique.join('|');
 
     console.log('✅ [contractUtils] Pattern mesi caricato', {
         language,
