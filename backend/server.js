@@ -2629,42 +2629,49 @@ app.post('/api/projects/:pid/translations', async (req, res) => {
     const projDb = await getProjectDb(client, projectId);
     const projColl = projDb.collection('Translations');
 
-    let savedCount = 0;
     const now = new Date();
 
-    // Upsert each translation
-    for (const trans of translations) {
-      if (!trans.guid || !trans.language || trans.text === undefined) {
-        console.warn(`[PROJECT_TRANSLATIONS_SAVE] Skipping invalid translation:`, trans);
-        continue;
-      }
-
-      const filter = {
-        guid: trans.guid,
-        language: trans.language,
-        type: trans.type || 'Instance'
-      };
-
-      const update = {
-        $set: {
+    // Prepare bulk operations for all translations
+    const bulkOps = translations
+      .filter(trans => trans.guid && trans.language && trans.text !== undefined)
+      .map(trans => {
+        const filter = {
           guid: trans.guid,
           language: trans.language,
-          text: trans.text,
-          type: trans.type || 'Instance',
-          updatedAt: now
-        },
-        $setOnInsert: {
-          createdAt: now
-        }
-      };
+          type: trans.type || 'Instance'
+        };
 
-      const result = await projColl.updateOne(filter, update, { upsert: true });
-      if (result.upsertedCount > 0 || result.modifiedCount > 0) {
-        savedCount++;
-      }
+        const update = {
+          $set: {
+            guid: trans.guid,
+            language: trans.language,
+            text: trans.text,
+            type: trans.type || 'Instance',
+            updatedAt: now
+          },
+          $setOnInsert: {
+            createdAt: now
+          }
+        };
+
+        return {
+          updateOne: {
+            filter,
+            update,
+            upsert: true
+          }
+        };
+      });
+
+    // Execute bulk write (much faster than sequential updates)
+    let savedCount = 0;
+    let result = null;
+    if (bulkOps.length > 0) {
+      result = await projColl.bulkWrite(bulkOps, { ordered: false });
+      savedCount = result.upsertedCount + result.modifiedCount;
     }
 
-    console.log(`[PROJECT_TRANSLATIONS_SAVE] ✅ Saved ${savedCount} translations for project ${projectId}`);
+    console.log(`[PROJECT_TRANSLATIONS_SAVE] ✅ Saved ${savedCount} translations for project ${projectId} (${result?.upsertedCount || 0} inserted, ${result?.modifiedCount || 0} updated)`);
     res.json({ success: true, count: savedCount });
   } catch (err) {
     console.error('[PROJECT_TRANSLATIONS_SAVE] Error:', err);

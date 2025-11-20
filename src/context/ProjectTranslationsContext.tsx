@@ -48,6 +48,8 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
   // Global translations table: { guid: text } where text is for project locale only
   const [translations, setTranslations] = useState<Record<string, string>>({});
+  // Original translations loaded from DB (for comparison)
+  const [originalTranslations, setOriginalTranslations] = useState<Record<string, string>>({});
   const [isDirty, setIsDirty] = useState(false);
   const [allGuids, setAllGuids] = useState<Set<string>>(new Set());
 
@@ -95,6 +97,8 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     try {
       const allTranslations = await loadAllProjectTranslations(currentProjectId, projectLocale);
       setTranslations(allTranslations);
+      // Save original values for comparison (deep copy)
+      setOriginalTranslations(JSON.parse(JSON.stringify(allTranslations)));
       setAllGuids(new Set(Object.keys(allTranslations)));
       setIsDirty(false);
     } catch (err) {
@@ -102,7 +106,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
   }, [currentProjectId, projectLocale]);
 
-  // Save all translations to database (explicit save)
+  // Save all translations to database (explicit save) - only modified ones
   const saveAllTranslations = useCallback(async () => {
     if (!currentProjectId) {
       console.warn('[ProjectTranslations] No project ID, cannot save');
@@ -110,31 +114,56 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
 
     if (!isDirty) {
+      console.log('[ProjectTranslations] No changes to save (isDirty: false)');
       return;
     }
 
     try {
-      // Convert to array format for saveProjectTranslations
-      const translationsToSave = Object.entries(translations).map(([guid, text]) => ({
-        guid,
-        language: projectLocale,
-        text,
-        type: 'Instance'
-      }));
+      // Compare current translations with original ones to find only modified ones
+      const modifiedTranslations: Array<{ guid: string; language: string; text: string; type: string }> = [];
 
-      await saveProjectTranslations(currentProjectId, translationsToSave);
+      Object.entries(translations).forEach(([guid, text]) => {
+        const originalText = originalTranslations[guid];
+        // Include if: new translation (not in original) OR modified (different from original)
+        if (originalText === undefined || originalText !== text) {
+          modifiedTranslations.push({
+            guid,
+            language: projectLocale,
+            text,
+            type: 'Instance'
+          });
+        }
+      });
+
+      if (modifiedTranslations.length === 0) {
+        console.log('[ProjectTranslations] No modified translations to save');
+        setIsDirty(false);
+        return;
+      }
+
+      console.log(`[ProjectTranslations] Saving ${modifiedTranslations.length} modified translations (out of ${Object.keys(translations).length} total)`);
+
+      await saveProjectTranslations(currentProjectId, modifiedTranslations);
+
+      // Update original translations with saved values
+      const newOriginal = { ...originalTranslations };
+      modifiedTranslations.forEach(({ guid, text }) => {
+        newOriginal[guid] = text;
+      });
+      setOriginalTranslations(newOriginal);
       setIsDirty(false);
     } catch (err) {
       console.error('[ProjectTranslations] Error saving translations:', err);
       throw err;
     }
-  }, [currentProjectId, translations, projectLocale, isDirty]);
+  }, [currentProjectId, translations, originalTranslations, projectLocale, isDirty]);
 
   // Load translations when project changes
   useEffect(() => {
     if (currentProjectId) {
       // Reset translations when project changes
       setTranslations({});
+      setOriginalTranslations({});
       setAllGuids(new Set());
       setIsDirty(false);
       // Load all translations for the project
