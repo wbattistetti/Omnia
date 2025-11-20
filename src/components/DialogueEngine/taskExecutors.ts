@@ -2,6 +2,7 @@
 
 import type { CompiledTask } from '../FlowCompiler/types';
 import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import { taskRepository } from '../../services/TaskRepository';
 
 export interface TaskExecutionResult {
   success: boolean;
@@ -298,6 +299,41 @@ async function executeGetData(
 
   const ddt = task.value?.ddt;
 
+  // ✅ Extract variables from DDT structure to create mappings (BEFORE execution)
+  // This ensures FlowchartVariablesService has the mappings needed for condition evaluation
+  // Do this early so mappings are available when conditions are evaluated
+  if (ddt) {
+    try {
+      const { flowchartVariablesService } = await import('../../services/FlowchartVariablesService');
+      const projectId = (window as any).__currentProjectId || (window as any).__projectId;
+      if (projectId) {
+        await flowchartVariablesService.init(projectId);
+
+        // Get row text from task (this is the label of the row)
+        const originalTask = taskRepository.getTask(task.id);
+        const rowText = originalTask?.value?.text || task.value?.text || task.source?.rowText || task.source?.label || 'Task';
+
+        // Extract variables from DDT using row text and DDT labels
+        const varNames = await flowchartVariablesService.extractVariablesFromDDT(
+          ddt,
+          task.id, // taskId
+          task.id, // rowId (same as taskId)
+          rowText, // Row text (e.g., "chiedi data A")
+          task.source?.nodeId // nodeId
+        );
+
+        console.log('[TaskExecutor][executeGetData] ✅ Extracted variables from DDT (before execution)', {
+          taskId: task.id,
+          rowText,
+          varCount: varNames.length,
+          varNames: varNames.slice(0, 10)
+        });
+      }
+    } catch (e) {
+      console.warn('[TaskExecutor][executeGetData] ⚠️ Failed to extract variables from DDT', e);
+    }
+  }
+
   // ❌ REMOVED: Don't extract or show initial message here
   // The DDT navigator will handle the "start" step and show the message correctly
   // This was causing duplicate messages (GUID first, then translated)
@@ -477,7 +513,17 @@ async function executeGetData(
         Object.entries(engineState.memory).forEach(([key, mem]: [string, any]) => {
           if (mem.confirmed) {
             variables[key] = mem.value;
+            console.log('[TaskExecutor][executeGetData] ✅ Adding variable to result (no main)', {
+              guid: key.substring(0, 20) + '...',
+              value: mem.value,
+              confirmed: mem.confirmed
+            });
           }
+        });
+        console.log('[TaskExecutor][executeGetData] 📊 Variables built from memory (no main)', {
+          variablesCount: Object.keys(variables).length,
+          variableKeys: Object.keys(variables).map(k => k.substring(0, 20) + '...'),
+          variables
         });
         return {
           success: true,
@@ -678,14 +724,190 @@ async function executeGetData(
       // Show messages from new state
       showMessageFromState(engineState);
 
-      // Check if completed
-      if (engineState.mode === 'Completed') {
+      // 🔍 DEBUG: Log engineState.mode after advance
+      console.log('[TaskExecutor][executeGetData] 🔍 Engine state after advance', {
+        mode: engineState.mode,
+        hasMain: !!getMain(engineState),
+        mainId: getMain(engineState)?.id,
+        memoryKeys: Object.keys(engineState.memory || {}),
+        memoryConfirmed: Object.entries(engineState.memory || {}).filter(([k, v]: [string, any]) => v?.confirmed).map(([k]) => k)
+      });
+
+      // Check if completed (SuccessMain means the DDT was successfully completed)
+      if (engineState.mode === 'Completed' || engineState.mode === 'SuccessMain') {
         task.state = 'Executed';
         const variables: Record<string, any> = {};
+
+        // ✅ STEP 1: Add variables with GUID as keys (for internal engine)
+        // IMPORTANT: Skip composed values with canonical keys (day, month, year, etc.)
+        // because sub-nodes are already in memory with their GUIDs
+        console.log('[TaskExecutor][executeGetData] 🔍 Analyzing engineState.memory', {
+          memoryKeys: Object.keys(engineState.memory),
+          memoryEntries: Object.entries(engineState.memory).map(([k, v]: [string, any]) => ({
+            key: k.substring(0, 20) + '...',
+            confirmed: v?.confirmed,
+            valueType: typeof v?.value,
+            valueKeys: v?.value && typeof v.value === 'object' ? Object.keys(v.value) : null,
+            value: v?.value
+          }))
+        });
+
+        // Store main node GUID for alias creation
+        let mainNodeGuid: string | null = null;
+
         Object.entries(engineState.memory).forEach(([key, mem]: [string, any]) => {
           if (mem.confirmed) {
-            variables[key] = mem.value;
+            const value = mem.value;
+
+            // ✅ Handle composed values (main node with sub-nodes)
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+              const keys = Object.keys(value);
+
+              // If it's an object with multiple keys, it's a composed main node value
+              // Extract each sub-node and add it as a separate variable
+              if (keys.length > 0) {
+                mainNodeGuid = key; // Store for alias creation
+
+                console.log('[TaskExecutor][executeGetData] 🔍 Extracting sub-nodes from composed main node', {
+                  mainNodeGuid: key.substring(0, 20) + '...',
+                  keysCount: keys.length,
+                  keys: keys.slice(0, 5),
+                  valuePreview: Object.fromEntries(Object.entries(value).slice(0, 3))
+                });
+
+                // Extract each sub-node from the composed value
+                Object.entries(value).forEach(([subNodeGuid, subValue]) => {
+                  variables[subNodeGuid] = subValue; // Add each sub-node as a separate variable
+                  console.log('[TaskExecutor][executeGetData] ✅ Added sub-node variable', {
+                    subNodeGuid: subNodeGuid.substring(0, 20) + '...',
+                    value: subValue,
+                    valueType: typeof subValue
+                  });
+                });
+
+                return; // Don't add the main node composto itself
+              }
+            }
+
+            // ✅ Only add simple values (non-composed, e.g., single sub-nodes if they exist separately)
+            variables[key] = value; // GUID come chiave
+            console.log('[TaskExecutor][executeGetData] ✅ Adding variable to result (completed)', {
+              guid: key.substring(0, 20) + '...',
+              value: value,
+              valueType: typeof value,
+              confirmed: mem.confirmed
+            });
           }
+        });
+
+        // ✅ STEP 2: Enrich with LABEL keys (for scripts)
+        // Add labels as additional keys pointing to the same values
+        console.log('[TaskExecutor][executeGetData] 🔍 Starting label enrichment', {
+          variablesCount: Object.keys(variables).length,
+          variableKeys: Object.keys(variables).map(k => k.substring(0, 20) + '...')
+        });
+
+        try {
+          const { flowchartVariablesService } = await import('../../services/FlowchartVariablesService');
+
+          // ✅ Get projectId from multiple sources (guaranteed fallback to localStorage)
+          let projectId: string | undefined = undefined;
+          if (typeof window !== 'undefined') {
+            // Try window first, then localStorage (note: key is 'current.projectId' with a dot!)
+            projectId = (window as any).__currentProjectId ||
+                       (window as any).__projectId ||
+                       (localStorage.getItem('current.projectId') || undefined);
+          }
+
+          console.log('[TaskExecutor][executeGetData] 🔍 FlowchartVariablesService import', {
+            hasService: !!flowchartVariablesService,
+            projectId,
+            hasWindow: typeof window !== 'undefined',
+            fromWindow: !!(window as any).__currentProjectId || !!(window as any).__projectId,
+            fromLocalStorage: typeof window !== 'undefined' ? !!localStorage.getItem('current.projectId') : false,
+            localStorageKey: 'current.projectId'
+          });
+
+          if (projectId) {
+            await flowchartVariablesService.init(projectId);
+            console.log('[TaskExecutor][executeGetData] ✅ FlowchartVariablesService initialized');
+
+            // ✅ Add label keys for each GUID key (sub-nodes)
+            Object.entries(variables).forEach(([guid, value]) => {
+              const readableName = flowchartVariablesService.getReadableName(guid);
+              console.log('[TaskExecutor][executeGetData] 🔍 Mapping GUID to label', {
+                guid: guid.substring(0, 20) + '...',
+                readableName,
+                hasValue: value !== undefined,
+                valueType: typeof value
+              });
+
+              if (readableName) {
+                variables[readableName] = value; // Aggiungi label come chiave aggiuntiva
+                console.log('[TaskExecutor][executeGetData] ✅ Added label key', {
+                  guid: guid.substring(0, 20) + '...',
+                  readableName,
+                  valueType: typeof value
+                });
+              } else {
+                console.warn('[TaskExecutor][executeGetData] ⚠️ No readable name found for GUID', {
+                  guid: guid.substring(0, 20) + '...',
+                  valueType: typeof value,
+                  fullGuid: guid
+                });
+              }
+            });
+
+            // ✅ Optional: Add main node alias (e.g., "data A") pointing to composed object
+            if (mainNodeGuid) {
+              const mainNodeReadableName = flowchartVariablesService.getReadableName(mainNodeGuid);
+              if (mainNodeReadableName) {
+                // Reconstruct composed object from sub-nodes
+                const composedValue: Record<string, any> = {};
+                Object.entries(variables).forEach(([key, value]) => {
+                  // If key is a GUID (sub-node), add it to composed object
+                  if (key.length === 36 && key.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+                    const subNodeLabel = flowchartVariablesService.getReadableName(key);
+                    if (subNodeLabel && subNodeLabel.startsWith(mainNodeReadableName + '.')) {
+                      // This is a sub-node of the main node
+                      const subKey = subNodeLabel.substring(mainNodeReadableName.length + 1); // Remove "data A." prefix
+                      composedValue[subKey] = value;
+                    }
+                  }
+                });
+
+                // Add main node alias with composed value (using labels as keys, not canonical)
+                if (Object.keys(composedValue).length > 0) {
+                  variables[mainNodeReadableName] = composedValue;
+                  console.log('[TaskExecutor][executeGetData] ✅ Added main node alias', {
+                    mainNodeGuid: mainNodeGuid.substring(0, 20) + '...',
+                    mainNodeReadableName,
+                    composedKeys: Object.keys(composedValue)
+                  });
+                }
+              }
+            }
+
+            const guidKeys = Object.keys(variables).filter(k => k.length === 36 && k.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));
+            const labelKeys = Object.keys(variables).filter(k => !guidKeys.includes(k));
+
+            console.log('[TaskExecutor][executeGetData] ✅ Variables enriched with labels', {
+              guidKeysCount: guidKeys.length,
+              labelKeysCount: labelKeys.length,
+              totalKeys: Object.keys(variables).length,
+              guidKeys: guidKeys.slice(0, 5),
+              labelKeys: labelKeys.slice(0, 5),
+              variablesPreview: Object.fromEntries(Object.entries(variables).slice(0, 10))
+            });
+          }
+        } catch (e) {
+          console.warn('[TaskExecutor][executeGetData] ⚠️ Failed to enrich variables with labels', e);
+        }
+
+        console.log('[TaskExecutor][executeGetData] 📊 Variables built from memory (completed)', {
+          variablesCount: Object.keys(variables).length,
+          variableKeys: Object.keys(variables).map(k => k.substring(0, 20) + '...'),
+          variables
         });
         return {
           success: true,

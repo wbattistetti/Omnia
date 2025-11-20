@@ -46,11 +46,20 @@ export function buildFirstRowCondition(
     ];
 
     // If edge has condition, add it (AND with parent executed)
-    if (edge.data?.condition) {
+    // Check both edge.data.condition and edge.data.conditionId for compatibility
+    const conditionId = edge.data?.conditionId || edge.data?.condition;
+    if (conditionId) {
+      console.log('[ConditionBuilder] 🔍 Found condition on edge', {
+        edgeId: edge.id,
+        edgeLabel: edge.label,
+        conditionId,
+        hasConditionId: !!edge.data?.conditionId,
+        hasCondition: !!edge.data?.condition
+      });
       linkConditionParts.push({
         type: 'EdgeCondition',
         edgeId: edge.id,
-        condition: edge.data.condition
+        condition: conditionId // Pass conditionId (GUID) to evaluator
       });
     }
 

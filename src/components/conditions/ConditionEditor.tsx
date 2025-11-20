@@ -11,6 +11,7 @@ import { setupMonacoEnvironment } from '../../utils/monacoWorkerSetup';
 import VariablesPanel from './VariablesPanel';
 import { useAIProvider } from '../../context/AIProviderContext';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
+import { convertScriptGuidsToLabels, convertScriptLabelsToGuids } from '../../utils/conditionScriptConverter';
 // SmartTooltip is used only in the tester's toolbar (right panel)
 
 // Ensure Monaco workers configured once
@@ -66,7 +67,29 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   // Helper: update projectData with generated script
   const updateProjectDataScript = React.useCallback((scriptToSave: string) => {
-    if (!label || !projectData || !pdUpdate) return;
+    console.log('[ConditionEditor][SAVE] 🚀 START saving script', {
+      conditionName: label,
+      scriptLength: scriptToSave?.length || 0,
+      scriptPreview: scriptToSave?.substring(0, 200) || ''
+    });
+
+    if (!label || !projectData || !pdUpdate) {
+      console.warn('[ConditionEditor][SAVE] ⚠️ Missing required data', {
+        hasLabel: !!label,
+        hasProjectData: !!projectData,
+        hasPdUpdate: !!pdUpdate
+      });
+      return;
+    }
+
+    // ✅ Convert label → GUID before saving (language-independent)
+    console.log('[ConditionEditor][SAVE] 🔄 Converting label → GUID before save');
+    const scriptWithGuids = convertScriptLabelsToGuids(scriptToSave);
+    console.log('[ConditionEditor][SAVE] ✅ Conversion complete', {
+      originalLength: scriptToSave.length,
+      convertedLength: scriptWithGuids.length,
+      changed: scriptToSave !== scriptWithGuids
+    });
 
     const updatedPd = JSON.parse(JSON.stringify(projectData));
     const conditions = updatedPd?.conditions || [];
@@ -77,12 +100,16 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         const itemName = item.name || item.label;
         if (itemName === label) {
           if (!item.data) item.data = {};
-          item.data.script = scriptToSave;
+          const oldScript = item.data.script || '';
+          item.data.script = scriptWithGuids; // ✅ Save with GUIDs
           found = true;
-          console.log('[SAVE_SCRIPT] ✅ Saved script to condition', {
+          console.log('[ConditionEditor][SAVE] ✅ Saved script to condition (converted to GUIDs)', {
             conditionName: label,
             itemId: item.id,
-            scriptLength: scriptToSave.length
+            scriptLength: scriptWithGuids.length,
+            originalLength: scriptToSave.length,
+            oldScriptLength: oldScript.length,
+            oldScriptPreview: oldScript.substring(0, 100)
           });
           break;
         }
@@ -92,9 +119,12 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
     if (found) {
       pdUpdate.updateDataDirectly(updatedPd);
-      console.log('[SAVE_SCRIPT] ✅ Updated projectData via updateDataDirectly');
+      console.log('[ConditionEditor][SAVE] ✅ Updated projectData via updateDataDirectly');
     } else {
-      console.warn('[SAVE_SCRIPT] ⚠️ Condition not found in projectData', { conditionName: label });
+      console.warn('[ConditionEditor][SAVE] ⚠️ Condition not found in projectData', {
+        conditionName: label,
+        availableConditions: conditions.flatMap(cat => (cat.items || []).map((item: any) => item.name || item.label))
+      });
     }
   }, [label, projectData, pdUpdate]);
 
@@ -348,7 +378,28 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return () => document.removeEventListener('keydown', onKey);
   }, [showVarsMenu, varsMenuHover]);
 
-  React.useEffect(() => { setScript((initialScript && initialScript.trim()) ? initialScript : DEFAULT_CODE); }, [initialScript]);
+  // ✅ Update script when initialScript changes, converting GUID → label for display
+  React.useEffect(() => {
+    console.log('[ConditionEditor][UPDATE] 🔄 initialScript changed', {
+      hasInitialScript: !!(initialScript && initialScript.trim()),
+      initialScriptLength: initialScript?.length || 0,
+      initialScriptPreview: initialScript?.substring(0, 100) || ''
+    });
+
+    if (initialScript && initialScript.trim()) {
+      console.log('[ConditionEditor][UPDATE] 🔄 Converting GUID → label');
+      const scriptWithLabels = convertScriptGuidsToLabels(initialScript);
+      console.log('[ConditionEditor][UPDATE] ✅ Conversion complete', {
+        originalLength: initialScript.length,
+        convertedLength: scriptWithLabels.length,
+        changed: initialScript !== scriptWithLabels
+      });
+      setScript(scriptWithLabels);
+    } else {
+      console.log('[ConditionEditor][UPDATE] ℹ️ No initial script, using DEFAULT_CODE');
+      setScript(DEFAULT_CODE);
+    }
+  }, [initialScript]);
 
   // legacy filtered list removed (hierarchical tree used instead)
 

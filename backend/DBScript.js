@@ -1,182 +1,236 @@
-/**
- * Test per verificare che la regex Date mappi correttamente "12 aprile 1980"
- */
-
 const { MongoClient } = require('mongodb');
 
-const uri = process.env.MONGODB_URI || 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
-const DB_NAME = 'factory';
+const uri = process.env.MONGO_URI || 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
+const dbFactory = 'factory';
 
-async function testDateRegex() {
+/**
+ * Migrates DDT node labels and Task Template labels to Translations
+ *
+ * For DDT Templates:
+ * - Extracts labels from mainData[].label and mainData[].subData[].label
+ * - Saves to factory.Translations with type: 'Template'
+ *
+ * For Task Templates:
+ * - Extracts label from template.label
+ * - Saves to factory.Translations with type: 'Template'
+ */
+async function migrateLabelsToTranslations() {
     const client = new MongoClient(uri);
 
     try {
         await client.connect();
-        console.log('✅ Connected to MongoDB\n');
+        console.log('✅ Connected to MongoDB');
 
-        const db = client.db(DB_NAME);
-        const templatesCollection = db.collection('Task_Templates');
-        const constantsCollection = db.collection('Constants');
+        const factoryDb = client.db(dbFactory);
+        const taskTemplatesColl = factoryDb.collection('Task_Templates');
+        const translationsColl = factoryDb.collection('Translations');
 
-        // 1. Trova template Date
-        console.log('🔍 Step 1: Looking for DATE template...');
-        const dateTemplate = await templatesCollection.findOne({
-            $or: [
-                { name: 'date' },
-                { name: 'Date' },
-                { type: 'date' }
-            ]
-        });
+        // ============================================
+        // 1. MIGRATE DDT TEMPLATES (type: 'data')
+        // ============================================
+        console.log('\n📦 [DDT Templates] Loading DDT templates...');
+        const ddtTemplates = await taskTemplatesColl.find({ type: 'data' }).toArray();
+        console.log(`   Found ${ddtTemplates.length} DDT templates`);
 
-        if (!dateTemplate) {
-            console.error('❌ Template DATE non trovato');
-            return;
-        }
+        const ddtTranslations = [];
+        let ddtNodesProcessed = 0;
 
-        console.log(`✅ Found: ${dateTemplate.name || dateTemplate.label}`);
-        console.log(`   ID: ${dateTemplate._id}\n`);
+        for (const ddt of ddtTemplates) {
+            const ddtId = ddt.id || ddt._id || 'unknown';
 
-        // 2. Carica costanti mesi per italiano
-        console.log('🔍 Step 2: Loading Italian months constants...');
-        const itMonths = await constantsCollection.findOne({
-            type: 'months',
-            scope: 'global',
-            locale: 'IT'
-        });
+            // Helper function to process a node (main or sub)
+            // Creates translations for EN, IT, and PT
+            const processNode = (node, nodeType = 'main') => {
+                if (!node) return;
 
-        if (!itMonths || !Array.isArray(itMonths.values)) {
-            console.error('❌ Constants for IT months not found');
-            return;
-        }
+                const nodeId = node.id || node._id;
+                const nodeLabel = node.label || node.name || '';
 
-        const months = itMonths.values;
-        const unique = Array.from(new Set(months)).sort((a, b) => b.length - a.length);
-        // ✅ NON includere parentesi perché il pattern viene inserito dentro un gruppo named (?<month>...)
-        const monthsPattern = unique.join('|');
+                if (!nodeId || !nodeLabel) {
+                    return;
+                }
 
-        console.log(`✅ Loaded ${unique.length} months (ordered by length)`);
-        console.log(`   Sample: ${unique.slice(0, 5).join(', ')}...\n`);
+                // Create translations for all three languages
+                const languages = ['en', 'it', 'pt'];
+                languages.forEach(lang => {
+                    ddtTranslations.push({
+                        guid: nodeId,
+                        text: nodeLabel, // Same label for all languages (can be translated later)
+                        type: 'Template',
+                        language: lang,
+                        projectId: null,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
+                });
+                ddtNodesProcessed++;
+                console.log(`   ✅ ${nodeType} node: ${nodeId.substring(0, 20)}... → "${nodeLabel}" (EN/IT/PT)`);
+            };
 
-        // 3. Estrai regex template dal contract
-        console.log('🔍 Step 3: Extracting regex template from contract...');
-        if (!dateTemplate.nlpContract || !dateTemplate.nlpContract.regex) {
-            console.error('❌ nlpContract.regex not found');
-            return;
-        }
+            // Case 1: mainData as array (new structure)
+            if (ddt.mainData && Array.isArray(ddt.mainData)) {
+                for (const mainNode of ddt.mainData) {
+                    processNode(mainNode, 'main');
 
-        const templateRegex = dateTemplate.nlpContract.regex.patterns[0];
-        console.log(`✅ Template regex found (${templateRegex.length} chars)`);
-        console.log(`   Preview: ${templateRegex.substring(0, 150)}...\n`);
+                    // Process subData if exists
+                    if (mainNode.subData && Array.isArray(mainNode.subData)) {
+                        for (const subNode of mainNode.subData) {
+                            processNode(subNode, 'sub');
+                        }
+                    }
+                }
+                continue;
+            }
 
-        // 4. Compila regex sostituendo placeholder
-        console.log('🔍 Step 4: Compiling regex (replacing placeholder)...');
-        if (!templateRegex.includes('${MONTHS_PLACEHOLDER}')) {
-            console.warn('⚠️  Template regex does NOT contain ${MONTHS_PLACEHOLDER}');
-            console.log('   Using regex as-is (already compiled)\n');
-        }
+            // Case 2: mainData as single object (old structure)
+            if (ddt.mainData && typeof ddt.mainData === 'object' && !Array.isArray(ddt.mainData)) {
+                processNode(ddt.mainData, 'main');
 
-        const compiledRegex = templateRegex.replace('${MONTHS_PLACEHOLDER}', monthsPattern);
-        console.log(`✅ Regex compiled (${compiledRegex.length} chars)`);
-        console.log(`   Preview: ${compiledRegex.substring(0, 200)}...\n`);
+                // Process subData if exists
+                if (ddt.mainData.subData && Array.isArray(ddt.mainData.subData)) {
+                    for (const subNode of ddt.mainData.subData) {
+                        processNode(subNode, 'sub');
+                    }
+                }
+                continue;
+            }
 
-        // 5. Test con "12 aprile 1980"
-        console.log('═══════════════════════════════════════════════════════════');
-        console.log('🧪 TEST: Matching "12 aprile 1980"');
-        console.log('═══════════════════════════════════════════════════════════\n');
+            // Case 3: DDT root has label/id (template base without mainData)
+            if (ddt.label || ddt.name) {
+                const rootId = ddt.id || ddt._id;
+                const rootLabel = ddt.label || ddt.name;
 
-        const testText = '12 aprile 1980';
-        const regex = new RegExp(compiledRegex, 'i');
-        const match = testText.match(regex);
-
-        if (!match) {
-            console.error('❌ NO MATCH! Regex did not match "12 aprile 1980"');
-            console.log('\n🔍 Debug info:');
-            console.log(`   Test text: "${testText}"`);
-            console.log(`   Regex length: ${compiledRegex.length}`);
-            console.log(`   Regex preview: ${compiledRegex.substring(0, 300)}...`);
-            return;
-        }
-
-        console.log('✅ MATCH FOUND!\n');
-        console.log('📊 Match details:');
-        console.log(`   Full match: "${match[0]}"`);
-        console.log(`   Index: ${match.index}`);
-        console.log(`   Groups count: ${match.groups ? Object.keys(match.groups).length : 0}\n`);
-
-        // 6. Verifica gruppi named
-        console.log('🔍 Step 5: Verifying named groups...');
-        const groups = match.groups || {};
-
-        const expectedGroups = ['day', 'month', 'year'];
-        const results = {
-            day: groups.day,
-            month: groups.month,
-            year: groups.year
-        };
-
-        console.log('\n📋 Extracted values:');
-        console.log(`   day:   ${results.day || '❌ MISSING'} ${results.day === '12' ? '✅' : results.day ? '⚠️  (expected: 12)' : ''}`);
-        console.log(`   month: ${results.month || '❌ MISSING'} ${results.month === 'aprile' ? '✅' : results.month ? '⚠️  (expected: aprile)' : ''}`);
-        console.log(`   year:  ${results.year || '❌ MISSING'} ${results.year === '1980' ? '✅' : results.year ? '⚠️  (expected: 1980)' : ''}`);
-
-        // 7. Verifica finale
-        console.log('\n═══════════════════════════════════════════════════════════');
-        const allCorrect = results.day === '12' && results.month === 'aprile' && results.year === '1980';
-
-        if (allCorrect) {
-            console.log('✅✅✅ SUCCESS! All values extracted correctly!');
-            console.log('   day: 12 ✅');
-            console.log('   month: aprile ✅');
-            console.log('   year: 1980 ✅');
-        } else {
-            console.log('❌❌❌ FAILURE! Some values are incorrect:');
-            if (results.day !== '12') console.log(`   ❌ day: got "${results.day}", expected "12"`);
-            if (results.month !== 'aprile') console.log(`   ❌ month: got "${results.month}", expected "aprile"`);
-            if (results.year !== '1980') console.log(`   ❌ year: got "${results.year}", expected "1980"`);
-        }
-        console.log('═══════════════════════════════════════════════════════════\n');
-
-        // 8. Test aggiuntivi
-        console.log('🔍 Step 6: Additional tests...\n');
-        const additionalTests = [
-            { text: '15 aprile 1980', expected: { day: '15', month: 'aprile', year: '1980' } },
-            { text: '1 maggio 2000', expected: { day: '1', month: 'maggio', year: '2000' } },
-            { text: 'aprile 1980', expected: { day: undefined, month: 'aprile', year: '1980' } },
-            { text: '12/04/1980', expected: { day: '12', month: '04', year: '1980' } },
-            { text: '1980', expected: { day: undefined, month: undefined, year: '1980' } },
-            { text: '12 aprile', expected: { day: '12', month: 'aprile', year: undefined } }
-        ];
-
-        for (const test of additionalTests) {
-            const testMatch = test.text.match(new RegExp(compiledRegex, 'i'));
-            if (testMatch && testMatch.groups) {
-                const testResults = {
-                    day: testMatch.groups.day,
-                    month: testMatch.groups.month,
-                    year: testMatch.groups.year
-                };
-                const testPass =
-                    testResults.day === test.expected.day &&
-                    testResults.month === test.expected.month &&
-                    testResults.year === test.expected.year;
-
-                console.log(`   "${test.text}": ${testPass ? '✅' : '❌'}`);
-                if (!testPass) {
-                    console.log(`      Got: day=${testResults.day}, month=${testResults.month}, year=${testResults.year}`);
-                    console.log(`      Expected: day=${test.expected.day}, month=${test.expected.month}, year=${test.expected.year}`);
+                if (rootId && rootLabel) {
+                    // Create translations for all three languages
+                    const languages = ['en', 'it', 'pt'];
+                    languages.forEach(lang => {
+                        ddtTranslations.push({
+                            guid: rootId,
+                            text: rootLabel, // Same label for all languages (can be translated later)
+                            type: 'Template',
+                            language: lang,
+                            projectId: null,
+                            createdAt: new Date(),
+                            updatedAt: new Date()
+                        });
+                    });
+                    ddtNodesProcessed++;
+                    console.log(`   ✅ DDT root: ${rootId.substring(0, 20)}... → "${rootLabel}" (EN/IT/PT)`);
                 }
             } else {
-                console.log(`   "${test.text}": ❌ NO MATCH`);
+                console.log(`   ⚠️  Skipping DDT ${ddtId}: no mainData, label, or name`);
             }
         }
 
+        console.log(`\n📊 [DDT Templates] Processed ${ddtNodesProcessed} nodes, ${ddtTranslations.length} translations to save (${ddtNodesProcessed} nodes × 3 languages)`);
+
+        // ============================================
+        // 2. MIGRATE TASK TEMPLATES (no type: 'data')
+        // ============================================
+        console.log('\n📦 [Task Templates] Loading Task templates...');
+        const taskTemplates = await taskTemplatesColl.find({
+            $or: [
+                { type: { $exists: false } },
+                { type: { $ne: 'data' } }
+            ]
+        }).toArray();
+        console.log(`   Found ${taskTemplates.length} Task templates`);
+
+        const taskTranslations = [];
+        let taskTemplatesProcessed = 0;
+
+        for (const template of taskTemplates) {
+            const templateId = template.id || template._id;
+            const templateLabel = template.label || template.name || '';
+
+            if (!templateId || !templateLabel) {
+                console.log(`   ⚠️  Skipping template: no id or label`);
+                continue;
+            }
+
+            // Create translations for all three languages
+            const languages = ['en', 'it', 'pt'];
+            languages.forEach(lang => {
+                taskTranslations.push({
+                    guid: templateId,
+                    text: templateLabel, // Same label for all languages (can be translated later)
+                    type: 'Template',
+                    language: lang,
+                    projectId: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                });
+            });
+            taskTemplatesProcessed++;
+            console.log(`   ✅ Task template: ${templateId.substring(0, 20)}... → "${templateLabel}" (EN/IT/PT)`);
+        }
+
+        console.log(`\n📊 [Task Templates] Processed ${taskTemplatesProcessed} templates, ${taskTranslations.length} translations to save (${taskTemplatesProcessed} templates × 3 languages)`);
+
+        // ============================================
+        // 3. SAVE TO TRANSLATIONS (BULK UPSERT)
+        // ============================================
+        const allTranslations = [...ddtTranslations, ...taskTranslations];
+        console.log(`\n💾 [Translations] Saving ${allTranslations.length} translations...`);
+
+        if (allTranslations.length > 0) {
+            const bulkOps = allTranslations.map(trans => ({
+                updateOne: {
+                    filter: {
+                        guid: trans.guid,
+                        language: trans.language,
+                        type: trans.type,
+                        $or: [
+                            { projectId: null },
+                            { projectId: { $exists: false } }
+                        ]
+                    },
+                    update: {
+                        $set: {
+                            guid: trans.guid,
+                            text: trans.text,
+                            type: trans.type,
+                            language: trans.language,
+                            projectId: null,
+                            updatedAt: trans.updatedAt
+                        },
+                        $setOnInsert: {
+                            createdAt: trans.createdAt
+                        }
+                    },
+                    upsert: true
+                }
+            }));
+
+            const result = await translationsColl.bulkWrite(bulkOps, { ordered: false });
+            console.log(`\n✅ [Translations] Migration complete!`);
+            console.log(`   - Inserted: ${result.upsertedCount}`);
+            console.log(`   - Updated: ${result.modifiedCount}`);
+            console.log(`   - Total: ${result.upsertedCount + result.modifiedCount}`);
+        } else {
+            console.log(`\n⚠️  No translations to save`);
+        }
+
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ Migration error:', error);
+        throw error;
     } finally {
         await client.close();
         console.log('\n✅ Connection closed');
     }
 }
 
-// Run test
-testDateRegex().catch(console.error);
+// Run migration
+if (require.main === module) {
+    migrateLabelsToTranslations()
+        .then(() => {
+            console.log('\n🎉 Migration completed successfully!');
+            process.exit(0);
+        })
+        .catch((error) => {
+            console.error('\n💥 Migration failed:', error);
+            process.exit(1);
+        });
+}
+
+module.exports = { migrateLabelsToTranslations };

@@ -66,6 +66,18 @@ export class DialogueEngine {
    */
   private async runLoop(): Promise<void> {
     console.log('[DialogueEngine][runLoop] Starting loop');
+    console.log('[DialogueEngine][runLoop] 📋 All compiled tasks', {
+      totalTasks: this.result.tasks.length,
+      tasks: this.result.tasks.map(t => ({
+        id: t.id,
+        action: t.action,
+        state: t.state,
+        condition: t.condition,
+        conditionType: t.condition?.type,
+        sourceNodeId: t.source?.nodeId,
+        sourceRowText: t.source?.rowText || t.source?.label
+      }))
+    });
     while (this.isRunning) {
       // Check for suspensive condition: if any task is waiting for user input, stop
       const waitingTask = this.result.tasks.find(t => t.state === 'WaitingUserInput');
@@ -104,8 +116,19 @@ export class DialogueEngine {
         taskId: nextTask.id,
         stateBefore: taskStateBefore,
         stateAfter: taskStateAfter,
-        isSameReference: nextTask === this.result.tasks.find(t => t.id === nextTask.id)
+        isSameReference: nextTask === this.result.tasks.find(t => t.id === nextTask.id),
+        isRunning: this.isRunning,
+        willContinueLoop: this.isRunning
       });
+
+      // 🔍 DEBUG: Check if we should continue the loop
+      if (this.isRunning && taskStateAfter === 'Executed') {
+        console.log('[DialogueEngine][runLoop] ✅ Task executed, continuing loop to find next task', {
+          taskId: nextTask.id,
+          executedTaskIds: Array.from(this.state.executedTaskIds),
+          variableStoreKeys: Object.keys(this.state.variableStore)
+        });
+      }
       // Wait until task is executed (loop continues automatically)
     }
     console.log('[DialogueEngine][runLoop] Loop ended, isRunning:', this.isRunning);
@@ -115,34 +138,64 @@ export class DialogueEngine {
    * Finds next executable task (condition = true, state = UnExecuted)
    */
   private findNextExecutableTask(): CompiledTask | null {
+    console.log('[DialogueEngine][findNextExecutableTask] 🚀 START searching', {
+      totalTasks: this.result.tasks.length,
+      executedTasks: Array.from(this.state.executedTaskIds),
+      waitingTasks: this.result.tasks.filter(t => t.state === 'WaitingUserInput').map(t => t.id),
+      unexecutedTasks: this.result.tasks.filter(t => t.state === 'UnExecuted').length,
+      variableStoreKeys: Object.keys(this.state.variableStore),
+      variableStore: this.state.variableStore
+    });
+
     for (const task of this.result.tasks) {
       // Skip if already executed or waiting for user input
       if (task.state === 'Executed' || task.state === 'WaitingUserInput') {
         continue;
       }
 
+      console.log('[DialogueEngine][findNextExecutableTask] 🔍 Checking task', {
+        taskId: task.id,
+        action: task.action,
+        condition: task.condition,
+        conditionType: task.condition?.type
+      });
+
       // Evaluate condition
       const conditionMet = evaluateCondition(task.condition, this.state);
+      console.log('[DialogueEngine][findNextExecutableTask] ✅ Condition evaluation result', {
+        taskId: task.id,
+        action: task.action,
+        conditionMet,
+        conditionType: task.condition?.type
+      });
+
       if (conditionMet) {
         console.log(`[DialogueEngine] ✅ Found executable task: ${task.id} (action: ${task.action})`, {
           taskId: task.id,
           action: task.action,
           condition: task.condition,
-          executedTaskIds: Array.from(this.state.executedTaskIds)
+          executedTaskIds: Array.from(this.state.executedTaskIds),
+          variableStore: this.state.variableStore
         });
         return task;
       } else {
         // 🔍 DEBUG: Log why condition is not met
+        console.log(`[DialogueEngine] ⏸️ Task ${task.id} condition not met`, {
+          taskId: task.id,
+          action: task.action,
+          conditionType: task.condition?.type,
+          condition: task.condition,
+          executedTaskIds: Array.from(this.state.executedTaskIds),
+          variableStore: this.state.variableStore
+        });
+
         if (task.condition?.type === 'TaskState') {
           const prevTaskExecuted = this.state.executedTaskIds.has(task.condition.taskId);
-          console.log(`[DialogueEngine] ⏸️ Task ${task.id} condition not met`, {
+          console.log(`[DialogueEngine] ⏸️ TaskState condition details`, {
             taskId: task.id,
-            action: task.action,
-            conditionType: task.condition.type,
             requiredTaskId: task.condition.taskId,
             requiredState: task.condition.state,
-            prevTaskExecuted,
-            executedTaskIds: Array.from(this.state.executedTaskIds)
+            prevTaskExecuted
           });
         }
       }
@@ -155,7 +208,10 @@ export class DialogueEngine {
       unexecutedTasks: this.result.tasks.filter(t => t.state === 'UnExecuted').map(t => ({
         id: t.id,
         action: t.action,
-        condition: t.condition
+        condition: t.condition,
+        conditionType: t.condition?.type,
+        sourceNodeId: t.source?.nodeId,
+        sourceRowText: t.source?.rowText || t.source?.label
       }))
     });
     return null;
@@ -224,7 +280,44 @@ export class DialogueEngine {
   private updateStateFromResult(task: CompiledTask, result: any): void {
     // Update variable store
     if (result.variables) {
+      // Helper to identify GUID keys (36 chars with hyphens)
+      const isGuid = (key: string) => key.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
+
+      const guidKeys = Object.keys(result.variables).filter(isGuid);
+      const labelKeys = Object.keys(result.variables).filter(k => !isGuid(k));
+
+      console.log('[DialogueEngine][updateStateFromResult] 🔄 Updating variableStore', {
+        taskId: task.id,
+        action: task.action,
+        variablesCount: Object.keys(result.variables).length,
+        guidKeysCount: guidKeys.length,
+        labelKeysCount: labelKeys.length,
+        guidKeys: guidKeys.slice(0, 5),
+        labelKeys: labelKeys.slice(0, 5),
+        variableKeys: Object.keys(result.variables).map(k => k.substring(0, 20) + '...'),
+        variables: result.variables,
+        variableStoreBefore: { ...this.state.variableStore }
+      });
       Object.assign(this.state.variableStore, result.variables);
+
+      const finalGuidKeys = Object.keys(this.state.variableStore).filter(isGuid);
+      const finalLabelKeys = Object.keys(this.state.variableStore).filter(k => !isGuid(k));
+
+      console.log('[DialogueEngine][updateStateFromResult] ✅ variableStore updated', {
+        taskId: task.id,
+        variableStoreAfter: { ...this.state.variableStore },
+        variableStoreKeys: Object.keys(this.state.variableStore),
+        guidKeysCount: finalGuidKeys.length,
+        labelKeysCount: finalLabelKeys.length,
+        guidKeys: finalGuidKeys.slice(0, 5),
+        labelKeys: finalLabelKeys.slice(0, 5)
+      });
+    } else {
+      console.log('[DialogueEngine][updateStateFromResult] ⚠️ No variables in result', {
+        taskId: task.id,
+        action: task.action,
+        hasResult: !!result
+      });
     }
 
     // Update retrieval state for DDT tasks

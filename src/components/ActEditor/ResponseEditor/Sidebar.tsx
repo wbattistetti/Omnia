@@ -5,6 +5,7 @@ import { getLabel, getSubDataList } from './ddtSelectors';
 import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
 import { useFontContext } from '../../../context/FontContext';
+import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 
 interface SidebarProps {
   mainList: any[];
@@ -27,6 +28,7 @@ interface SidebarProps {
 
 const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onChangeSubRequired, onReorderSub, onAddMain, onRenameMain, onDeleteMain, onAddSub, onRenameSub, onDeleteSub }, ref) {
   const { combinedClass } = useFontContext();
+  const { translations } = useProjectTranslations(); // ✅ Get translations for node labels
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
   if (!Array.isArray(mainList) || mainList.length === 0) return null;
   // Pastel/silver palette
@@ -251,7 +253,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                 </span>
               )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
-              <span style={{ whiteSpace: 'nowrap' }}>{getLabel(main)}</span>
+              <span style={{ whiteSpace: 'nowrap' }}>{getLabel(main, translations)}</span>
               {(subs.length > 0) && (
                 <span
                   role="button"
@@ -320,7 +322,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                       onDragStart={(e) => {
                         dragStateRef.current = { mainIdx: idx, fromIdx: sidx };
                         try { e.dataTransfer?.setData('text/plain', String(sidx)); e.dataTransfer.dropEffect = 'move'; e.dataTransfer.effectAllowed = 'move'; } catch {}
-                        try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.dragStart]', { main: getLabel(main), from: sidx }); } catch {}
+                        try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.dragStart]', { main: getLabel(main, translations), from: sidx }); } catch {}
                       }}
                       onDragEnter={(e) => {
                         // same-main only
@@ -339,7 +341,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                         if (st.mainIdx === idx && st.fromIdx !== null && typeof onReorderSub === 'function') {
                           if (st.fromIdx !== sidx) {
                             onReorderSub(idx, st.fromIdx, sidx);
-                            try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.drop]', { main: getLabel(main), from: st.fromIdx, to: sidx }); } catch {}
+                            try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.drop]', { main: getLabel(main, translations), from: st.fromIdx, to: sidx }); } catch {}
                           }
                         }
                         dragStateRef.current = { mainIdx: null, fromIdx: null };
@@ -375,7 +377,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                         )}
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                      <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub)}</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub, translations)}</span>
                     </button>
                   );
                 })}
@@ -431,7 +433,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
               <button title="Add sub-data" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setAddingSubFor(overlay.mainIdx); setDraftLabel(''); setOverlay(null); } }}>
                 <Plus size={14} color="#e5e7eb" />
               </button>
-              <button title="Rename" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setEditingMainIdx(overlay.mainIdx); setEditDraft(getLabel(mainList[overlay.mainIdx])); setOverlay(null); } }}>
+              <button title="Rename" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setEditingMainIdx(overlay.mainIdx); setEditDraft(getLabel(mainList[overlay.mainIdx], translations)); setOverlay(null); } }}>
                 <Pencil size={14} color="#e5e7eb" />
               </button>
               <button title="Delete" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && onDeleteMain) { onDeleteMain(overlay.mainIdx); setOverlay(null); } }}>
@@ -441,7 +443,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
           )}
           {overlay.type === 'sub' && (
             <>
-              <button title="Rename sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number') { setEditingSub({ mainIdx: overlay.mainIdx, subIdx: overlay.subIdx }); const sub = getSubDataList(mainList[overlay.mainIdx])[overlay.subIdx]; setEditDraft(getLabel(sub)); setOverlay(null); } }}>
+              <button title="Rename sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number') { setEditingSub({ mainIdx: overlay.mainIdx, subIdx: overlay.subIdx }); const sub = getSubDataList(mainList[overlay.mainIdx])[overlay.subIdx]; setEditDraft(getLabel(sub, translations)); setOverlay(null); } }}>
                 <Pencil size={12} color="#e5e7eb" />
               </button>
               <button title="Delete sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number' && onDeleteSub) { onDeleteSub(overlay.mainIdx, overlay.subIdx); setOverlay(null); } }}>

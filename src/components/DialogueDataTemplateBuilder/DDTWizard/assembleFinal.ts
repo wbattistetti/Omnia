@@ -156,6 +156,18 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       nlpContract: undefined,
     };
 
+    // ✅ Save node label to Translations (for current project locale)
+    // This will be saved to DB when the DDT is saved
+    if (node.label && nodeId) {
+      projectTranslations[nodeId] = node.label;
+      console.log('[assembleFinalDDT] ✅ Saved node label to translations', {
+        nodeId: nodeId.substring(0, 20) + '...',
+        label: node.label,
+        locale: projectLocale,
+        isSub: isSub
+      });
+    }
+
     // Constraints
     for (const c of node.constraints || []) {
       if (c.kind === 'required') continue;
