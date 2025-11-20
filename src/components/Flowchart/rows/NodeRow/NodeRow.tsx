@@ -8,7 +8,8 @@ import { useActEditor } from '../../../ActEditor/EditorHost/ActEditorContext';
 import { emitSidebarRefresh } from '../../../../ui/events';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
-import { SIDEBAR_TYPE_ICONS, getSidebarIconComponent } from '../../../Sidebar/sidebarTheme';
+import { SIDEBAR_TYPE_ICONS, getSidebarIconComponent, SIDEBAR_ICON_COMPONENTS } from '../../../Sidebar/sidebarTheme';
+import { HelpCircle } from 'lucide-react';
 import { IntellisenseItem } from '../../../Intellisense/IntellisenseTypes';
 import { getLabelColor } from '../../../../utils/labelColor';
 import { NodeRowEditor } from '../../NodeRowEditor';
@@ -522,13 +523,38 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         try { inputRef.current?.blur(); } catch { }
         return;
       }
-      // Heuristica multilingua: IT/EN/PT con fallback a Message
+      // Heuristica multilingua: IT/EN/PT con fallback a UNDEFINED
       try {
         console.log('🔮 [INFERENCE] Starting inference for text:', q);
         const inf = await inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
         console.log('🔮 [INFERENCE] Result:', inf);
         const internal = heuristicToInternal(inf.type as any);
-        console.log('🔮 [INFERENCE] Internal type:', internal);
+        console.log('🔮 [INFERENCE] Internal type:', internal, 'original type:', inf.type);
+
+        // Se il tipo è UNDEFINED, passa un flag speciale
+        if (inf.type === 'UNDEFINED') {
+          console.log('🔮 [INFERENCE] UNDEFINED detected, creating node with question mark icon');
+          // Crea un task Message ma con flag isUndefined per mostrare icona punto interrogativo
+          const projectId = getProjectId?.() || undefined;
+          if (!row.taskId) {
+            const task = createRowWithTask(row.id, 'Message', q, projectId);
+            (row as any).taskId = task.id;
+          }
+          // Aggiorna la row con flag isUndefined e tipo Message per permettere cambio tipo
+          const updatedRow = {
+            ...row,
+            text: q,
+            type: 'Message' as any,
+            mode: 'Message' as any,
+            isUndefined: true // Flag per icona punto interrogativo
+          };
+          console.log('🔮 [INFERENCE] Updating row with UNDEFINED flag', { updatedRow, text: q });
+          // onUpdate richiede (row, newText) - passa entrambi i parametri
+          onUpdate(updatedRow as any, q);
+          setIsEditing(false);
+          return;
+        }
+
         if (dbg) { }
         await handlePickType(internal);
         return;
@@ -607,6 +633,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         rowId: row.id,
         oldType: row.categoryType,
         newType: key,
+        wasUndefined: (row as any)?.isUndefined,
         timestamp: Date.now()
       });
 
@@ -620,14 +647,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         actId: (row as any).actId,
         baseActId: (row as any).baseActId,
         factoryId: (row as any).factoryId,
-        instanceId: (row as any).instanceId
+        instanceId: (row as any).instanceId,
+        // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
+        isUndefined: false
       };
 
       console.log('🎯 [CHANGE_TYPE][CALLING_UPDATE]', {
         rowId: row.id,
         label: row.text,
         categoryType: 'agentActs',
-        meta: updateMeta
+        meta: updateMeta,
+        isUndefinedRemoved: true
       });
 
       (onUpdateWithCategory as any)(row, row.text, 'agentActs', updateMeta);
@@ -700,7 +730,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             mode: finalMode,
             actId: createdActId,
             baseActId: createdActId,
-            factoryId: createdItem?.factoryId
+            factoryId: createdItem?.factoryId,
+            // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
+            isUndefined: false
           };
 
           console.log('🎯 [TEMPLATE_CREATION][BEFORE_UPDATE]', {
@@ -729,9 +761,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           } else {
             console.log('🎯 [TEMPLATE_CREATION][CALLING_ON_UPDATE]', {
               rowId: row.id,
-              label
+              label,
+              wasUndefined: (row as any)?.isUndefined
             });
-            onUpdate(row, label);
+            // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
+            onUpdate({ ...row, isUndefined: false } as any, label);
             console.log('🎯 [TEMPLATE_CREATION][AFTER_ON_UPDATE]', {
               rowId: row.id,
               label,
@@ -1267,15 +1301,27 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   let Icon: React.ComponentType<any> | null = null;
   let currentTypeForPicker: string | undefined = undefined;
 
+  // Check if this is an undefined node (no heuristic match found)
+  const isUndefined = (row as any)?.isUndefined === true;
+  if (isUndefined) {
+    console.log('🔮 [UNDEFINED] Row is undefined', {
+      rowId: row.id,
+      rowText: row.text,
+      rowType: (row as any).type,
+      isUndefined: (row as any)?.isUndefined
+    });
+  }
+
   if (isAgentAct) {
     const typeResolved = resolveActType(row as any, actFound) as any;
     currentTypeForPicker = typeResolved;
     const has = hasActDDT(row as any, actFound);
 
     const visuals = getAgentActVisualsByType(typeResolved, has);
-    Icon = visuals.Icon;
-    labelTextColor = visuals.labelColor; // Label: sempre colore del tipo
-    iconColor = visuals.iconColor; // Icona: grigio se no DDT, colore del tipo se ha DDT
+    // Se è undefined, usa icona punto interrogativo invece dell'icona normale
+    Icon = isUndefined ? HelpCircle : visuals.Icon;
+    labelTextColor = isUndefined ? '#94a3b8' : visuals.labelColor; // Label: grigio se undefined, altrimenti colore del tipo
+    iconColor = isUndefined ? '#94a3b8' : visuals.iconColor; // Icona: sempre grigio se undefined
   } else {
     // Since we removed categoryType and userActs from NodeRowData, use defaults
     labelTextColor = (typeof propTextColor === 'string' ? propTextColor : '#111');
@@ -1283,7 +1329,26 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       const colorObj = getLabelColor('', []);
       labelTextColor = colorObj.text;
     }
-    Icon = null;
+    // Se è undefined, mostra icona punto interrogativo
+    // NON impostare currentTypeForPicker per undefined, così nessuna voce sarà selezionata nel picker
+    if (isUndefined) {
+      Icon = HelpCircle;
+      labelTextColor = '#94a3b8'; // Grigio per undefined
+      iconColor = '#94a3b8';
+      // Lascia currentTypeForPicker undefined così il picker non mostra nessuna voce selezionata
+      // Il picker funzionerà comunque per permettere cambio tipo
+      console.log('🔮 [UNDEFINED] Setting up undefined node', {
+        hasIcon: !!Icon,
+        iconColor,
+        labelTextColor,
+        currentTypeForPicker: undefined, // Nessun tipo selezionato
+        rowId: row.id,
+        rowText: row.text,
+        isUndefined: (row as any)?.isUndefined
+      });
+    } else {
+      Icon = null;
+    }
   }
 
   // FASE 4: Listen for instance updates to force re-render and update icon color
@@ -1386,8 +1451,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             bgColor={bgColor}
             labelTextColor={labelTextColor}
             iconColor={iconColor}
-            hasDDT={hasActDDT(row as any, actFound)}
-            gearColor={labelTextColor}
+            hasDDT={isUndefined ? false : hasActDDT(row as any, actFound)} // Se undefined, non mostrare DDT gear
+            gearColor={isUndefined ? '#94a3b8' : labelTextColor} // Se undefined, gear grigio
             onOpenDDT={async () => {
               try {
                 // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType

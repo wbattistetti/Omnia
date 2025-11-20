@@ -39,7 +39,7 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
       hasREQUEST_DATA: RS.REQUEST_DATA?.length || 0,
       hasSUMMARY: RS.SUMMARY?.length || 0,
       hasMESSAGE: RS.MESSAGE?.length || 0,
-      hasPROBLEM: !!RS.PROBLEM
+      hasPROBLEM: !!RS.PROBLEM && RS.PROBLEM !== null
     });
 
     // 0. AI_AGENT (priorità massima - riconosce "AI:" o "AI :" all'inizio)
@@ -65,7 +65,10 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
     // 2. PROBLEM_SPEC_DIRECT
     if (RS.PROBLEM_SPEC_DIRECT?.some(r => {
       const match = r.test(txt);
-      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ PROBLEM_SPEC_DIRECT match! Pattern: ${r.source}`);
+      if (match) {
+        console.log(`[ACT_TYPE_CLASSIFY] ✅ PROBLEM_SPEC_DIRECT match! Pattern: ${r.source}, Text: "${txt}"`);
+        console.log(`[ACT_TYPE_CLASSIFY] 🔍 Full regex: ${r.toString()}`);
+      }
       return match;
     })) {
       console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: PROBLEM_SPEC (lang: ${L}, reason: PROBLEM_SPEC_DIRECT)`);
@@ -124,8 +127,8 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
       return { type: 'MESSAGE', lang: L, reason: 'MESSAGE' };
     }
 
-    // 8. PROBLEM (generico)
-    if (RS.PROBLEM?.test(txt)) {
+    // 8. PROBLEM (generico) - solo se esiste un pattern valido (non null)
+    if (RS.PROBLEM && RS.PROBLEM.test(txt)) {
       console.log(`[ACT_TYPE_CLASSIFY] ✅ PROBLEM match! Pattern: ${RS.PROBLEM.source}`);
       console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: PROBLEM_SPEC (lang: ${L}, reason: PROBLEM)`);
       return { type: 'PROBLEM_SPEC', lang: L, reason: 'PROBLEM' };
@@ -134,9 +137,9 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
     console.log(`[ACT_TYPE_CLASSIFY] ❌ No match found for language: ${L}`);
   }
 
-  // Fallback: se nessun match, ritorna MESSAGE
-  console.log(`[ACT_TYPE_CLASSIFY] ⚠️ FALLBACK: No match found, returning MESSAGE`);
-  return { type: 'MESSAGE', reason: 'fallback' };
+  // Fallback: se nessun match, ritorna UNDEFINED (nodo con punto interrogativo)
+  console.log(`[ACT_TYPE_CLASSIFY] ⚠️ FALLBACK: No match found, returning UNDEFINED`);
+  return { type: 'UNDEFINED', reason: 'no_match' };
 }
 
 

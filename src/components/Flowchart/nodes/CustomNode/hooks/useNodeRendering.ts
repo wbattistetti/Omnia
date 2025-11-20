@@ -77,8 +77,30 @@ export function useNodeRendering({
         rows: visibleRows,
         editingRowId,
         handleInsertRow: handleInsertRow,
-        onUpdate: (row: any, newText: string) => handleUpdateRow(row.id, newText, row.categoryType, { included: (row as any).included }),
-        onUpdateWithCategory: (row: any, newText: string, categoryType: any, meta: any) => handleUpdateRow(row.id, newText, categoryType, { included: (row as any).included, ...(meta || {}) }),
+        onUpdate: (row: any, newText: string) => {
+          // Estrai tutti i campi importanti dalla row per preservarli (incluso isUndefined)
+          const meta = {
+            included: (row as any).included,
+            type: (row as any).type,
+            mode: (row as any).mode,
+            isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
+            actId: (row as any).actId,
+            baseActId: (row as any).baseActId,
+            factoryId: (row as any).factoryId,
+            instanceId: (row as any).instanceId,
+            taskId: (row as any).taskId
+          };
+          return handleUpdateRow(row.id, newText, row.categoryType, meta);
+        },
+        onUpdateWithCategory: (row: any, newText: string, categoryType: any, meta: any) => {
+          // Merge meta passato con campi importanti dalla row
+          const mergedMeta = {
+            included: (row as any).included,
+            isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
+            ...(meta || {})
+          };
+          return handleUpdateRow(row.id, newText, categoryType, mergedMeta);
+        },
         onDelete: (row: any) => handleDeleteRow(row.id),
         onDragStart: handleRowDragStart
     }), [

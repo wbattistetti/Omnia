@@ -13,6 +13,7 @@ export function heuristicToInternal(t: HeuristicType): InternalType {
     case 'SUMMARY': return 'Summarizer';
     case 'BACKEND_CALL': return 'BackendCall';
     case 'NEGOTIATION': return 'Negotiation';
+    case 'UNDEFINED': return 'Message'; // UNDEFINED viene mappato a Message ma con icona speciale
   }
 }
 

@@ -42,7 +42,8 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
           AI_AGENT: rules.AI_AGENT?.map((s: string) => new RegExp(s, 'i')) || [],
           MESSAGE: rules.MESSAGE?.map((s: string) => new RegExp(s, 'i')) || [],
           REQUEST_DATA: rules.REQUEST_DATA?.map((s: string) => new RegExp(s, 'i')) || [],
-          PROBLEM: rules.PROBLEM ? new RegExp(rules.PROBLEM, 'i') : /\b()\b/i,
+          // PROBLEM: solo se esiste un pattern valido, altrimenti null (non usare fallback che matcha sempre)
+          PROBLEM: rules.PROBLEM && rules.PROBLEM.trim() ? new RegExp(rules.PROBLEM, 'i') : null as any,
           PROBLEM_SPEC_DIRECT: rules.PROBLEM_SPEC_DIRECT?.map((s: string) => new RegExp(s, 'i')) || [],
           PROBLEM_REASON: rules.PROBLEM_REASON?.map((s: string) => new RegExp(s, 'i')) || [],
           SUMMARY: rules.SUMMARY?.map((s: string) => new RegExp(s, 'i')) || [],

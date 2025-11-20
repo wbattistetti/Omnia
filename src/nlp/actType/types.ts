@@ -5,7 +5,8 @@ export type HeuristicType =
   | 'PROBLEM_SPEC'
   | 'SUMMARY'
   | 'BACKEND_CALL'
-  | 'NEGOTIATION';
+  | 'NEGOTIATION'
+  | 'UNDEFINED';
 
 export type InternalType =
   | 'AIAgent'
@@ -22,7 +23,7 @@ export type RuleSet = {
   AI_AGENT: RegExp[];
   MESSAGE: RegExp[];
   REQUEST_DATA: RegExp[];
-  PROBLEM: RegExp;
+  PROBLEM: RegExp | null; // Può essere null se non esiste un pattern valido
   PROBLEM_SPEC_DIRECT: RegExp[];
   // Phrases that express the "reason of the call/contact" etc.
   PROBLEM_REASON?: RegExp[];

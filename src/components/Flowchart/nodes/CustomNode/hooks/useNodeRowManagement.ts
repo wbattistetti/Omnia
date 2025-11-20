@@ -120,6 +120,20 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 timestamp: Date.now()
             });
 
+            // Preserva flag isUndefined se presente (per nodi undefined con punto interrogativo)
+            const preserveIsUndefined = (incoming as any)?.isUndefined !== undefined
+                ? (incoming as any).isUndefined
+                : (row as any)?.isUndefined;
+
+            if (preserveIsUndefined) {
+                console.log('🔮 [UNDEFINED] Preserving isUndefined flag', {
+                    rowId,
+                    incomingIsUndefined: (incoming as any)?.isUndefined,
+                    rowIsUndefined: (row as any)?.isUndefined,
+                    preserved: preserveIsUndefined
+                });
+            }
+
             const updatedRow = {
                 ...row,
                 ...incoming,
@@ -129,7 +143,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 categoryType:
                     (meta && (meta as any).categoryType)
                         ? (meta as any).categoryType
-                        : (categoryType ?? row.categoryType)
+                        : (categoryType ?? row.categoryType),
+                // Preserva flag isUndefined
+                isUndefined: preserveIsUndefined
             } as any;
 
             console.log('🎯 [HANDLE_UPDATE_ROW][ROW_UPDATED]', {

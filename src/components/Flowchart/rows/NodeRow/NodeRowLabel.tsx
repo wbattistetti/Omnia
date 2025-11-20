@@ -300,7 +300,25 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
     <span
       ref={labelRef}
       className="block cursor-pointer transition-colors flex items-center relative nodrag"
-      style={{ background: included ? 'transparent' : '#f3f4f6', color: included ? labelTextColor : '#9ca3af', borderRadius: 4, paddingLeft: row.categoryType && Icon ? 4 : 0, paddingRight: 8, minHeight: '1.5em', lineHeight: 1.1, marginTop: 0, marginBottom: 0, whiteSpace: 'nowrap', userSelect: 'none', cursor: 'grab' }}
+      style={{
+        background: included ? 'transparent' : '#f3f4f6',
+        color: (() => {
+          // Se la row è undefined, usa sempre grigio per il testo
+          const isUndefined = (row as any)?.isUndefined === true;
+          if (isUndefined) return '#94a3b8';
+          return included ? labelTextColor : '#9ca3af';
+        })(),
+        borderRadius: 4,
+        paddingLeft: row.categoryType && Icon ? 4 : 0,
+        paddingRight: 8,
+        minHeight: '1.5em',
+        lineHeight: 1.1,
+        marginTop: 0,
+        marginBottom: 0,
+        whiteSpace: 'nowrap',
+        userSelect: 'none',
+        cursor: 'grab'
+      }}
       onDoubleClick={onDoubleClick}
       onMouseDown={(e) => {
         // consenti drag diretto sulla label quando non si è in editing
@@ -316,7 +334,18 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
       onMouseLeave={() => onLabelHoverChange && onLabelHoverChange(false)}
     >
       {Icon && (() => {
-        const finalIconColor = iconColor || labelTextColor;
+        // Se la row è undefined, usa sempre grigio per l'icona
+        const isUndefined = (row as any)?.isUndefined === true;
+        const finalIconColor = isUndefined ? '#94a3b8' : (iconColor || labelTextColor);
+        if (isUndefined) {
+          console.log('🔮 [UNDEFINED] Rendering icon for undefined row', {
+            rowId: row.id,
+            rowText: row.text,
+            hasIcon: !!Icon,
+            finalIconColor,
+            hasOnTypeChangeRequest: !!onTypeChangeRequest
+          });
+        }
         return (
           <PrimaryIconButton
             Icon={Icon}

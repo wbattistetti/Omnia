@@ -58,7 +58,7 @@ export const SIDEBAR_TYPE_ICONS = {
 
 // Centralized Lucide icon components for sidebar/icon reuse
 // Import kept here to ensure a single source of truth across Sidebar and Flowchart labels
-import { Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle } from 'lucide-react';
+import { Bot, User, Database, GitBranch, CheckSquare, Layers, Puzzle, HelpCircle } from 'lucide-react';
 
 export const SIDEBAR_ICON_COMPONENTS: Record<string, any> = {
   bot: Bot,
@@ -68,6 +68,7 @@ export const SIDEBAR_ICON_COMPONENTS: Record<string, any> = {
   checkSquare: CheckSquare,
   layers: Layers,
   puzzle: Puzzle,
+  helpCircle: HelpCircle, // Icona punto interrogativo per nodi undefined
 };
 
 export const getSidebarIconComponent = (iconKey?: string) => {
