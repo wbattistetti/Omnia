@@ -64,7 +64,8 @@ export default function DDEBubbleChat({
   const stubOrchestratorRef = React.useRef({
     currentDDT: null,
     variableStore: {},
-    onUserInputProcessedRef: { current: null }
+    onUserInputProcessedRef: { current: null },
+    onUserInputProcessedWithValuesRef: { current: null }  // ✅ Support extractedValues in single-ddt mode
   });
 
   // Store onUpdateDDT in ref to avoid re-creating orchestratorConfig
@@ -277,19 +278,177 @@ export default function DDEBubbleChat({
   // Track last position key to avoid duplicate messages
   const lastKeyRef = React.useRef<string>('');
 
-  // Update user message with grammarMissing flag after simulator processes input
+  // Track previous memory to detect when new values are extracted
+  const prevMemoryRef = React.useRef<Record<string, any>>({});
+
+  // Update user message with grammarMissing flag and extractedValues after simulator processes input
   React.useEffect(() => {
-    if (!simulator?.state || mode !== 'single-ddt' || !template || !lastUserMessageIdRef.current) return;
+    console.log('[DDEBubbleChat][USE-EFFECT] ════════════════════════════════════════');
+    console.log('[DDEBubbleChat][USE-EFFECT] 🔍 Effect triggered', {
+      hasSimulatorState: !!simulator?.state,
+      mode,
+      hasTemplate: !!template,
+      lastUserMessageId: lastUserMessageIdRef.current,
+      hasOrchestrator: !!orchestrator,
+      hasOnUserInputProcessedWithValuesRef: !!orchestrator.onUserInputProcessedWithValuesRef,
+      hasCallback: !!orchestrator.onUserInputProcessedWithValuesRef?.current,
+      lastUserInput: lastUserInputRef.current,
+      hasMemory: !!simulator?.state?.memory,
+      memoryKeys: simulator?.state?.memory ? Object.keys(simulator.state.memory) : []
+    });
+
+    if (!simulator?.state || mode !== 'single-ddt' || !template || !lastUserMessageIdRef.current) {
+      console.log('[DDEBubbleChat][USE-EFFECT] ⚠️ Early return', {
+        hasSimulatorState: !!simulator?.state,
+        mode,
+        hasTemplate: !!template,
+        lastUserMessageId: lastUserMessageIdRef.current
+      });
+      return;
+    }
 
     const currentState = simulator.state;
+
+    // Update grammarMissing flag
     if (currentState.grammarMissing) {
+      console.log('[DDEBubbleChat][USE-EFFECT] 📝 Updating grammarMissing flag');
       setMessages((prev) => prev.map((msg) =>
         msg.id === lastUserMessageIdRef.current && msg.type === 'user'
           ? { ...msg, grammarMissing: true }
           : msg
       ));
     }
-  }, [simulator?.state?.grammarMissing, mode]);
+
+    // ✅ Extract values from memory when memory changes (new values extracted)
+    if (orchestrator.onUserInputProcessedWithValuesRef?.current && lastUserInputRef.current && currentState.memory) {
+      console.log('[DDEBubbleChat][USE-EFFECT] 🔍 Checking for extracted values', {
+        hasCallback: !!orchestrator.onUserInputProcessedWithValuesRef.current,
+        lastUserInput: lastUserInputRef.current,
+        memorySize: Object.keys(currentState.memory).length,
+        memoryKeys: Object.keys(currentState.memory),
+        prevMemorySize: Object.keys(prevMemoryRef.current).length,
+        prevMemoryKeys: Object.keys(prevMemoryRef.current)
+      });
+
+      // ✅ Use getMain helper instead of direct plan.main access
+      const main = getMain(currentState);
+      if (!main) {
+        console.log('[DDEBubbleChat][USE-EFFECT] ⚠️ No main node found', {
+          hasPlan: !!currentState.plan,
+          planKeys: currentState.plan ? Object.keys(currentState.plan) : [],
+          planStructure: currentState.plan
+        });
+        return;
+      }
+
+      console.log('[DDEBubbleChat][USE-EFFECT] ✅ Found main node', {
+        mainId: main.id,
+        mainLabel: main.label
+      });
+
+      // Check if memory has changed (new values extracted)
+      const memoryChanged = JSON.stringify(currentState.memory) !== JSON.stringify(prevMemoryRef.current);
+      console.log('[DDEBubbleChat][USE-EFFECT] 🔄 Memory changed check', {
+        memoryChanged,
+        currentMemory: currentState.memory,
+        prevMemory: prevMemoryRef.current
+      });
+
+      if (!memoryChanged) {
+        console.log('[DDEBubbleChat][USE-EFFECT] ⏭️ Memory unchanged, skipping');
+        return; // Skip if memory hasn't changed
+      }
+
+      // Find original node to get nlpContract
+      console.log('[DDEBubbleChat][USE-EFFECT] 🔍 Finding original node', {
+        currentDDTId: currentDDT?.id,
+        mainLabel: main.label,
+        mainId: main.id
+      });
+      const originalNode = findOriginalNode(currentDDT, main.label, main.id);
+      console.log('[DDEBubbleChat][USE-EFFECT] ✅ Original node found', {
+        hasOriginalNode: !!originalNode,
+        originalNodeId: originalNode?.id,
+        originalNodeLabel: originalNode?.label,
+        hasNlpContract: !!(originalNode as any)?.nlpContract
+      });
+
+      const contract = originalNode?.nlpContract;
+      console.log('[DDEBubbleChat][USE-EFFECT] 🔍 Contract check', {
+        hasContract: !!contract,
+        hasSubDataMapping: !!contract?.subDataMapping,
+        subDataMappingKeys: contract?.subDataMapping ? Object.keys(contract.subDataMapping) : []
+      });
+
+      if (contract && contract.subDataMapping) {
+        // Extract values from memory using contract mapping
+        const extractedValues: any[] = [];
+
+        console.log('[DDEBubbleChat][USE-EFFECT] 🔍 Extracting values from memory', {
+          subDataMappingEntries: Object.entries(contract.subDataMapping).length
+        });
+
+        for (const [subId, mappingData] of Object.entries(contract.subDataMapping)) {
+          const memValue = currentState.memory[subId]?.value;
+          console.log('[DDEBubbleChat][USE-EFFECT] 🔍 Checking sub', {
+            subId: subId.substring(0, 20) + '...',
+            canonicalKey: mappingData.canonicalKey,
+            hasMemoryValue: memValue !== undefined && memValue !== null,
+            memValue
+          });
+
+          if (memValue !== undefined && memValue !== null) {
+            extractedValues.push({
+              variable: mappingData.canonicalKey,
+              linguisticValue: String(memValue), // Use the raw value as linguistic
+              semanticValue: memValue
+            });
+            console.log('[DDEBubbleChat][USE-EFFECT] ✅ Added extracted value', {
+              variable: mappingData.canonicalKey,
+              semanticValue: memValue
+            });
+          }
+        }
+
+        console.log('[DDEBubbleChat][USE-EFFECT] 📊 Extraction complete', {
+          extractedValuesCount: extractedValues.length,
+          extractedValues
+        });
+
+        if (extractedValues.length > 0) {
+          console.log('[DDEBubbleChat][USE-EFFECT] ✅ ✅ ✅ CALLING CALLBACK', {
+            extractedValues,
+            count: extractedValues.length,
+            input: lastUserInputRef.current,
+            memoryKeys: Object.keys(currentState.memory),
+            callbackExists: !!orchestrator.onUserInputProcessedWithValuesRef.current
+          });
+
+          // Call the callback to update the message
+          orchestrator.onUserInputProcessedWithValuesRef.current(
+            lastUserInputRef.current,
+            'match', // Assume match if we have values
+            extractedValues
+          );
+
+          console.log('[DDEBubbleChat][USE-EFFECT] ✅ Callback called, updating prevMemoryRef');
+
+          // Update prevMemoryRef to avoid duplicate calls
+          prevMemoryRef.current = JSON.parse(JSON.stringify(currentState.memory));
+        } else {
+          console.log('[DDEBubbleChat][USE-EFFECT] ⚠️ No extracted values found');
+        }
+      } else {
+        console.log('[DDEBubbleChat][USE-EFFECT] ⚠️ No contract or subDataMapping');
+      }
+    } else {
+      console.log('[DDEBubbleChat][USE-EFFECT] ⚠️ Missing prerequisites', {
+        hasCallback: !!orchestrator.onUserInputProcessedWithValuesRef?.current,
+        lastUserInput: lastUserInputRef.current,
+        hasMemory: !!currentState.memory
+      });
+    }
+  }, [simulator?.state?.memory, simulator?.state?.grammarMissing, mode, template, currentDDT, orchestrator, setMessages]);
 
   // Helper to get position key from simulator state
   // Include counters to trigger when escalation happens (same position, different message)
@@ -734,10 +893,24 @@ export default function DDEBubbleChat({
 
                     // Handle single-ddt mode
                     if (mode === 'single-ddt' && currentDDT && simulator && template) {
+                      console.log('[DDEBubbleChat][SINGLE-DDT] ════════════════════════════════════════');
+                      console.log('[DDEBubbleChat][SINGLE-DDT] 📨 User input received', {
+                        input: v,
+                        hasCurrentDDT: !!currentDDT,
+                        hasSimulator: !!simulator,
+                        hasTemplate: !!template,
+                        hasOrchestrator: !!orchestrator,
+                        hasOnUserInputProcessedWithValuesRef: !!orchestrator.onUserInputProcessedWithValuesRef
+                      });
+
                       // Add user message to chat
                       const userMessageId = `msg-${Date.now()}-${Math.random()}`;
                       lastUserMessageIdRef.current = userMessageId;
                       lastUserInputRef.current = v;
+                      console.log('[DDEBubbleChat][SINGLE-DDT] ✅ User message added', {
+                        messageId: userMessageId,
+                        input: v
+                      });
                       setMessages((prev) => [...prev, {
                         id: userMessageId,
                         type: 'user',
@@ -746,8 +919,14 @@ export default function DDEBubbleChat({
                         grammarMissing: simulator?.state?.grammarMissing || false
                       }]);
 
-                      // Send input to simulator
+                      // ✅ Reset prevMemoryRef to detect new extraction
+                      prevMemoryRef.current = {};
+                      console.log('[DDEBubbleChat][SINGLE-DDT] 🔄 Reset prevMemoryRef');
+
+                      // Send input to simulator (async)
+                      console.log('[DDEBubbleChat][SINGLE-DDT] 🚀 Calling simulator.send()', { input: v });
                       simulator.send(v);
+                      console.log('[DDEBubbleChat][SINGLE-DDT] ✅ simulator.send() called (async)');
 
                       // Clear input
                       sentTextRef.current = v;
