@@ -801,49 +801,62 @@ export const AppContent: React.FC<AppContentProps> = ({
 
             {/* Canvas */}
             <div className="flex-1 flex flex-col min-w-0">
-              <div id="flow-canvas-host" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: showGlobalDebugger ? `1fr ${debuggerWidth}px` : '1fr', position: 'relative' }}>
+              <div id="flow-canvas-host" style={{
+                flex: 1,
+                minHeight: 0,
+                display: 'grid',
+                gridTemplateColumns: showGlobalDebugger ? `1fr ${debuggerWidth}px` : '1fr',
+                gridTemplateRows: '1fr auto',
+                position: 'relative'
+              }}>
               {showBackendBuilder ? (
-                <div style={{ flex: 1, minHeight: 0 }}>
+                <div style={{ gridColumn: '1 / -1', flex: 1, minHeight: 0 }}>
                   <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
                 </div>
               ) : (
-                <div style={{ position: 'relative' }}>
-                  {currentPid ? (
-                    <FlowWorkspaceProvider>
-                      <DockManager
-                        root={dockTree}
-                        setRoot={setDockTree}
-                        renderTabContent={(tab) => (<FlowTabContent tab={tab} />)}
+                <>
+                  {/* Canvas - prima riga, colonna sinistra */}
+                  <div style={{ position: 'relative', gridRow: '1', gridColumn: '1' }}>
+                    {currentPid ? (
+                      <FlowWorkspaceProvider>
+                        <DockManager
+                          root={dockTree}
+                          setRoot={setDockTree}
+                          renderTabContent={(tab) => (<FlowTabContent tab={tab} />)}
+                        />
+                      </FlowWorkspaceProvider>
+                    ) : (
+                      <FlowEditor
+                        nodes={(window as any).__flowNodes || []}
+                        setNodes={(updater: any) => {
+                          try {
+                            const current = (window as any).__flowNodes || [];
+                            const updated = typeof updater === 'function' ? updater(current) : updater;
+                            (window as any).__flowNodes = updated;
+                          } catch { }
+                        }}
+                        edges={(window as any).__flowEdges || []}
+                        setEdges={(updater: any) => {
+                          try {
+                            const current = (window as any).__flowEdges || [];
+                            const updated = typeof updater === 'function' ? updater(current) : updater;
+                            (window as any).__flowEdges = updated;
+                          } catch { }
+                        }}
+                        currentProject={currentProject}
+                        setCurrentProject={setCurrentProject}
+                        onPlayNode={onPlayNode}
+                        testPanelOpen={testPanelOpen}
+                        setTestPanelOpen={setTestPanelOpen}
+                        testNodeId={testNodeId}
+                        setTestNodeId={setTestNodeId}
                       />
-                    </FlowWorkspaceProvider>
-                  ) : (
-                    <FlowEditor
-                      nodes={(window as any).__flowNodes || []}
-                      setNodes={(updater: any) => {
-                        try {
-                          const current = (window as any).__flowNodes || [];
-                          const updated = typeof updater === 'function' ? updater(current) : updater;
-                          (window as any).__flowNodes = updated;
-                        } catch { }
-                      }}
-                      edges={(window as any).__flowEdges || []}
-                      setEdges={(updater: any) => {
-                        try {
-                          const current = (window as any).__flowEdges || [];
-                          const updated = typeof updater === 'function' ? updater(current) : updater;
-                          (window as any).__flowEdges = updated;
-                        } catch { }
-                      }}
-                      currentProject={currentProject}
-                      setCurrentProject={setCurrentProject}
-                      onPlayNode={onPlayNode}
-                      testPanelOpen={testPanelOpen}
-                      setTestPanelOpen={setTestPanelOpen}
-                      testNodeId={testNodeId}
-                      setTestNodeId={setTestNodeId}
-                    />
-                  )}
-                  {!showGlobalDebugger && (
+                    )}
+                  </div>
+
+                  {/* Act Editor + Condition Editor - seconda riga, colonna sinistra (solo sotto canvas) */}
+                  <div style={{ gridRow: '2', gridColumn: '1', minHeight: 0, position: 'relative' }}>
+                    <ActEditorPanel />
                     <ConditionEditor
                       open={conditionEditorOpen}
                       onClose={() => setConditionEditorOpen(false)}
@@ -860,8 +873,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                         try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
                       }}
                     />
-                  )}
-                </div>
+                  </div>
+                </>
               )}
               {showGlobalDebugger && (
                 <>
@@ -891,13 +904,15 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }}
                   />
 
-                  {/* Pannello di debug con scrollbar */}
+                  {/* Pannello di debug - colonna destra, span su 2 righe (tutta l'altezza) */}
                   <div
                     style={{
+                      gridRow: '1 / -1',
+                      gridColumn: '2',
                       position: 'relative',
                       width: '100%',
                       height: '100%',
-                      overflowY: 'auto', // Scrollbar verticale
+                      overflowY: 'auto',
                       overflowX: 'hidden',
                       borderLeft: '1px solid #e5e7eb'
                     }}
@@ -906,28 +921,10 @@ export const AppContent: React.FC<AppContentProps> = ({
                       mode="flow"
                       // nodes and edges are read directly from window.__flowNodes in flow mode
                     />
-                    <ConditionEditor
-                      open={conditionEditorOpen}
-                      onClose={() => setConditionEditorOpen(false)}
-                      variables={conditionVars}
-                      initialScript={conditionScript}
-                      variablesTree={conditionVarsTree}
-                      label={conditionLabel}
-                      dockWithinParent={true}
-                      onRename={(next) => {
-                        setConditionLabel(next);
-                        try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
-                      }}
-                      onSave={(script) => {
-                        try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
-                      }}
-                    />
                   </div>
                 </>
               )}
               </div>
-              {/* Act Editor - parte del layout normale, riduce lo spazio del canvas sopra */}
-              <ActEditorPanel />
 
             {nonInteractiveEditor && (
               <ResizableNonInteractiveEditor

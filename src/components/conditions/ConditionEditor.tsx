@@ -671,7 +671,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
           }, 300);
           return; // success path
         }
-            } catch (e) {
+      } catch (e) {
       }
 
       // 2) Fallback to previous condition generator
