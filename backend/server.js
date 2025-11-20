@@ -638,10 +638,15 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       }
     }
 
-    // 6) Collezioni vuote necessarie
+    // 6) Collezioni vuote necessarie e indici per performance
     await projDb.collection('tasks').createIndex({ updatedAt: -1 }).catch(() => { });
     await projDb.collection('flow_nodes').createIndex({ updatedAt: -1 }).catch(() => { });
     await projDb.collection('flow_edges').createIndex({ updatedAt: -1 }).catch(() => { });
+
+    // Indici per Translations collection (ottimizzazione caricamento)
+    const translationsColl = projDb.collection('Translations');
+    await translationsColl.createIndex({ language: 1, type: 1 }).catch(() => { });
+    await translationsColl.createIndex({ guid: 1, language: 1 }).catch(() => { });
 
     logInfo('Projects.bootstrap', {
       projectId,
@@ -2548,11 +2553,13 @@ app.get('/api/projects/:pid/translations/all', async (req, res) => {
 
     console.log(`[PROJECT_TRANSLATIONS_ALL] Loading all translations for project ${projectId}, locale: ${projectLocale}`);
 
-    // Try project database first
+    // Get both databases
     const projDb = await getProjectDb(client, projectId);
     const projColl = projDb.collection('Translations');
+    const factoryDb = client.db(dbFactory);
+    const factoryColl = factoryDb.collection('Translations');
 
-    // Query: type = 'Instance' OR type = 'Template' (project-specific translations)
+    // Prepare queries
     const projectQuery = {
       $or: [
         { type: 'Instance' },
@@ -2560,16 +2567,7 @@ app.get('/api/projects/:pid/translations/all', async (req, res) => {
       ],
       language: projectLocale
     };
-    console.log(`[PROJECT_TRANSLATIONS_ALL] Project query:`, JSON.stringify(projectQuery));
 
-    const projectTranslations = await projColl.find(projectQuery).toArray();
-    console.log(`[PROJECT_TRANSLATIONS_ALL] Found ${projectTranslations.length} translations in project DB`);
-
-    // Also check factory database for template translations (fallback)
-    const factoryDb = client.db(dbFactory);
-    const factoryColl = factoryDb.collection('Translations');
-
-    // Query: type = 'Template' AND (projectId = null OR projectId doesn't exist) AND language = projectLocale
     const factoryQuery = {
       type: 'Template',
       language: projectLocale,
@@ -2578,29 +2576,33 @@ app.get('/api/projects/:pid/translations/all', async (req, res) => {
         { projectId: { $exists: false } }
       ]
     };
-    console.log(`[PROJECT_TRANSLATIONS_ALL] Factory query:`, JSON.stringify(factoryQuery));
 
-    const factoryTranslations = await factoryColl.find(factoryQuery).toArray();
-    console.log(`[PROJECT_TRANSLATIONS_ALL] Found ${factoryTranslations.length} translations in factory DB`);
+    // Execute queries in parallel for better performance
+    const [projectTranslations, factoryTranslations] = await Promise.all([
+      projColl.find(projectQuery).toArray(),
+      factoryColl.find(factoryQuery).toArray()
+    ]);
 
-    // Build flat dictionary: { guid: text } where text is for project locale only
+    console.log(`[PROJECT_TRANSLATIONS_ALL] Found ${projectTranslations.length} translations in project DB, ${factoryTranslations.length} in factory DB`);
+
+    // Build flat dictionary: { guid: text } - optimized merge
     const merged = {};
 
-    // First add factory translations (template defaults)
-    factoryTranslations.forEach((doc) => {
+    // First add factory translations (template defaults) - using for loop for better performance
+    for (const doc of factoryTranslations) {
       if (doc.guid && doc.text !== undefined) {
         merged[doc.guid] = doc.text || '';
       }
-    });
+    }
 
     // Then override with project translations (instance-specific or project overrides)
-    projectTranslations.forEach((doc) => {
+    for (const doc of projectTranslations) {
       if (doc.guid && doc.text !== undefined) {
         merged[doc.guid] = doc.text || '';
       }
-    });
+    }
 
-    console.log(`[PROJECT_TRANSLATIONS_ALL] Loaded ${Object.keys(merged).length} translations (project: ${projectTranslations.length}, factory: ${factoryTranslations.length})`);
+    console.log(`[PROJECT_TRANSLATIONS_ALL] ✅ Loaded ${Object.keys(merged).length} translations (project: ${projectTranslations.length}, factory: ${factoryTranslations.length})`);
     res.json(merged);
   } catch (err) {
     console.error('[PROJECT_TRANSLATIONS_ALL] Error:', err);
@@ -4019,6 +4021,26 @@ async function preloadAllServerCaches() {
 
 // ✅ Precarica tutte le cache all'avvio del server
 preloadAllServerCaches();
+
+// Initialize indexes for factory Translations collection (one-time, async)
+(async () => {
+  try {
+    const client = new MongoClient(uri);
+    await client.connect();
+    const factoryDb = client.db(dbFactory);
+    const factoryTranslationsColl = factoryDb.collection('Translations');
+
+    // Create indexes for faster translation queries
+    await factoryTranslationsColl.createIndex({ language: 1, type: 1 }).catch(() => { });
+    await factoryTranslationsColl.createIndex({ guid: 1, language: 1 }).catch(() => { });
+    await factoryTranslationsColl.createIndex({ language: 1, type: 1, projectId: 1 }).catch(() => { });
+
+    await client.close();
+    console.log('[SERVER] ✅ Factory Translations indexes initialized');
+  } catch (err) {
+    console.warn('[SERVER] ⚠️ Could not initialize factory Translations indexes:', err.message);
+  }
+})();
 
 app.listen(3100, () => {
   console.log('Backend API pronta su http://localhost:3100');
