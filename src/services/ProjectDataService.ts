@@ -106,44 +106,69 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
 
 export const ProjectDataService = {
   async loadActsFromProject(projectId: string): Promise<void> {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/acts`);
-    if (!res.ok) throw new Error('Failed to load project acts');
-    const json = await res.json();
-    const items = Array.isArray(json?.items) ? json.items : [];
+    const startTime = performance.now();
+    console.log(`[PERF][${new Date().toISOString()}] 📦 START loadActsFromProject`, { projectId });
 
-    // Load conditions from project DB (project-specific) + factory DB (global/industry)
+    // ✅ OPTIMIZATION: Load acts, project conditions, and factory conditions in parallel
+    const parallelStart = performance.now();
+    const [actsRes, projectCondRes, factoryCondRes] = await Promise.all([
+      fetch(`/api/projects/${encodeURIComponent(projectId)}/acts`),
+      fetch(`/api/projects/${encodeURIComponent(projectId)}/conditions`),
+      fetch('/api/factory/conditions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ industry: projectData.industry || '', scope: ['global', 'industry'] })
+      })
+    ]);
+    console.log(`[PERF][${new Date().toISOString()}] ✅ END parallel fetch`, {
+      duration: `${(performance.now() - parallelStart).toFixed(2)}ms`
+    });
+
+    // Process acts
+    const actsStart = performance.now();
+    if (!actsRes.ok) throw new Error('Failed to load project acts');
+    const json = await actsRes.json();
+    const items = Array.isArray(json?.items) ? json.items : [];
+    console.log(`[PERF][${new Date().toISOString()}] ✅ END parse acts`, {
+      duration: `${(performance.now() - actsStart).toFixed(2)}ms`,
+      itemsCount: items.length
+    });
+
+    // Process conditions
+    const conditionsStart = performance.now();
     let conditions: any[] = [];
     try {
-      // First, load project-specific conditions from project DB
-      const projectCondRes = await fetch(`/api/projects/${encodeURIComponent(projectId)}/conditions`);
+      // Process project conditions
       if (projectCondRes.ok) {
         const projectJson = await projectCondRes.json();
         const projectConditions = Array.isArray(projectJson?.items) ? projectJson.items : [];
         conditions.push(...projectConditions);
-        console.log('[LOAD_CONDITIONS] 🔍 Loaded project conditions', {
+        console.log(`[PERF][${new Date().toISOString()}] ✅ END parse project conditions`, {
           projectId,
           count: projectConditions.length
         });
       }
 
-      // Then, load global/industry conditions from factory DB
-      const condRes = await fetch('/api/factory/conditions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ industry: projectData.industry || '', scope: ['global', 'industry'] })
-      });
-      if (condRes.ok) {
-        const globalConditions = await condRes.json();
+      // Process factory conditions
+      if (factoryCondRes.ok) {
+        const globalConditions = await factoryCondRes.json();
         conditions.push(...globalConditions);
-        console.log('[LOAD_CONDITIONS] 🔍 Loaded global/industry conditions', {
+        console.log(`[PERF][${new Date().toISOString()}] ✅ END parse factory conditions`, {
           count: globalConditions.length,
           total: conditions.length
         });
       }
     } catch (e) {
-      console.error('[LOAD_CONDITIONS] ❌ Error loading conditions', e);
+      console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR parse conditions`, {
+        error: e
+      });
     }
+    console.log(`[PERF][${new Date().toISOString()}] ✅ END load conditions`, {
+      duration: `${(performance.now() - conditionsStart).toFixed(2)}ms`,
+      totalConditions: conditions.length
+    });
 
+    const convertStart = performance.now();
     projectData = {
       name: projectData.name || '',
       industry: projectData.industry || '',
@@ -154,6 +179,16 @@ export const ProjectDataService = {
       tasks: [],
       macrotasks: []
     };
+    console.log(`[PERF][${new Date().toISOString()}] ✅ END convertToCategories`, {
+      duration: `${(performance.now() - convertStart).toFixed(2)}ms`
+    });
+
+    const totalDuration = performance.now() - startTime;
+    console.log(`[PERF][${new Date().toISOString()}] 🎉 COMPLETE loadActsFromProject`, {
+      projectId,
+      totalDuration: `${totalDuration.toFixed(2)}ms`,
+      totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`
+    });
   },
   async loadActsFromFactory(projectIndustry?: string): Promise<void> {
     console.log('[ProjectDataService] loadActsFromFactory CALLED with industry:', projectIndustry, typeof projectIndustry);
@@ -530,8 +565,15 @@ export const ProjectDataService = {
   },
 
   async loadProjectData(): Promise<ProjectData> {
+    const startTime = performance.now();
+    console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
     await new Promise(resolve => setTimeout(resolve, 50));
-    return { ...projectData };
+    const result = { ...projectData };
+    const duration = performance.now() - startTime;
+    console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
+      duration: `${duration.toFixed(2)}ms`
+    });
+    return result;
   },
 
   async addCategory(type: EntityType, name: string): Promise<Category> {
@@ -911,9 +953,32 @@ export async function loadAllProjectTranslations(
   projectId: string,
   locale: string = 'pt'
 ): Promise<Record<string, string>> {
+  const startTime = performance.now();
+  console.log(`[PERF][${new Date().toISOString()}] 🌐 START loadAllProjectTranslations`, { projectId, locale });
+
   const res = await fetch(`/api/projects/${projectId}/translations/all?locale=${locale}`);
-  if (!res.ok) throw new Error('Errore nel recupero di tutte le Project Translations');
-  return res.json();
+  if (!res.ok) {
+    const duration = performance.now() - startTime;
+    console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllProjectTranslations`, {
+      duration: `${duration.toFixed(2)}ms`,
+      projectId,
+      status: res.status
+    });
+    throw new Error('Errore nel recupero di tutte le Project Translations');
+  }
+
+  const jsonStart = performance.now();
+  const result = await res.json();
+  const jsonDuration = performance.now() - jsonStart;
+  const totalDuration = performance.now() - startTime;
+
+  console.log(`[PERF][${new Date().toISOString()}] ✅ END loadAllProjectTranslations`, {
+    duration: `${totalDuration.toFixed(2)}ms`,
+    jsonParseDuration: `${jsonDuration.toFixed(2)}ms`,
+    translationsCount: Object.keys(result).length
+  });
+
+  return result;
 }
 
 export async function saveDataDialogueTranslations(payload: Record<string, string>) {

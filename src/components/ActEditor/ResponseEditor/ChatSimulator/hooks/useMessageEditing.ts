@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Message } from '../UserMessage';
+import type { Message } from '../../../../ChatSimulator/UserMessage';
 import { useDDTManager } from '../../../../../context/DDTManagerContext';
 import type { AssembledDDT } from '../../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import { updateActionTextInDDT } from '../utils/updateActionText';

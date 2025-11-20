@@ -359,17 +359,56 @@ export function useMessageHandling({
             return;
           }
 
+          // Helper per convertire valori estratti in formato ExtractedValue[]
+          const convertToExtractedValues = (value: any, inputText: string): any[] => {
+            if (!value || typeof value !== 'object') return [];
+            const result: any[] = [];
+            Object.entries(value).forEach(([key, val]) => {
+              // Try to find the linguistic value in the input text
+              let linguisticValue: string | undefined = undefined;
+              if (typeof val === 'number') {
+                // For dates, try to find the original text
+                if (key === 'month' && val >= 1 && val <= 12) {
+                  // Try to find month name in input
+                  const monthNames = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+                  const monthName = monthNames[val - 1];
+                  if (inputText.toLowerCase().includes(monthName)) {
+                    linguisticValue = monthName;
+                  }
+                }
+                // For day/year, use the number as linguistic value if found in text
+                if (!linguisticValue && (key === 'day' || key === 'year')) {
+                  const numStr = String(val);
+                  if (inputText.includes(numStr)) {
+                    linguisticValue = numStr;
+                  }
+                }
+              } else if (typeof val === 'string') {
+                linguisticValue = val;
+              }
+
+              result.push({
+                variable: key,
+                linguisticValue: linguisticValue,
+                semanticValue: val
+              });
+            });
+            return result;
+          };
+
           // Se l'estrazione è parziale (ask-more), mostra partialMatch ma invia comunque al motore
           // Il motore gestirà la richiesta di ulteriori informazioni
           // 🆕 Pass partial extracted values so engine can saturate what's available
           if (extractionResult.status === 'ask-more') {
             const partialValue = extractionResult.value ? extractionResult.value : undefined;
+            const extractedValues = convertToExtractedValues(partialValue, trimmed);
 
             setMessages((prev) => [...prev, {
               id: generateMessageId('user'),
               type: 'user',
               text: trimmed,
-              matchStatus: 'partialMatch'
+              matchStatus: 'partialMatch',
+              extractedValues
             }]);
 
             await send(text, partialValue);
@@ -381,12 +420,14 @@ export function useMessageHandling({
           const extractedValue = extractionResult.status === 'accepted' && extractionResult.value
             ? extractionResult.value
             : undefined;
+          const extractedValues = convertToExtractedValues(extractedValue, trimmed);
 
           setMessages((prev) => [...prev, {
             id: generateMessageId('user'),
             type: 'user',
             text: trimmed,
-            matchStatus: 'match'
+            matchStatus: 'match',
+            extractedValues
           }]);
 
           await send(text, extractedValue);

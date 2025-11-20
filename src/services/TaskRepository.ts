@@ -153,23 +153,39 @@ class TaskRepository {
    * @returns True if loaded successfully
    */
   async loadAllTasksFromDatabase(projectId?: string): Promise<boolean> {
+    const startTime = performance.now();
+    const finalProjectId = projectId || this.getCurrentProjectId();
+    console.log(`[PERF][${new Date().toISOString()}] 📋 START loadAllTasksFromDatabase`, { projectId: finalProjectId });
+
     try {
-      const finalProjectId = projectId || this.getCurrentProjectId();
       if (!finalProjectId) {
         console.warn('[TaskRepository] No project ID available for loading tasks');
         return false;
       }
 
+      const fetchStart = performance.now();
       const response = await fetch(`/api/projects/${finalProjectId}/tasks`);
       if (!response.ok) {
-        console.error('[TaskRepository] Failed to load tasks from database');
+        const duration = performance.now() - startTime;
+        console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTasksFromDatabase`, {
+          duration: `${duration.toFixed(2)}ms`,
+          projectId: finalProjectId,
+          status: response.status
+        });
         return false;
       }
 
+      const jsonStart = performance.now();
       const data = await response.json();
       const items: Task[] = data.items || [];
+      console.log(`[PERF][${new Date().toISOString()}] ✅ END fetch tasks`, {
+        fetchDuration: `${(performance.now() - fetchStart).toFixed(2)}ms`,
+        jsonParseDuration: `${(performance.now() - jsonStart).toFixed(2)}ms`,
+        itemsCount: items.length
+      });
 
       // Clear and populate internal storage
+      const processStart = performance.now();
       this.tasks.clear();
       for (const item of items) {
         // Map database document to Task (remove MongoDB _id, keep id field)
@@ -182,15 +198,32 @@ class TaskRepository {
         };
         this.tasks.set(task.id, task);
       }
+      console.log(`[PERF][${new Date().toISOString()}] ✅ END process tasks`, {
+        processDuration: `${(performance.now() - processStart).toFixed(2)}ms`,
+        tasksCount: this.tasks.size
+      });
 
       // Emit event to notify components that tasks have been loaded
       window.dispatchEvent(new CustomEvent('tasks:loaded', {
         detail: { projectId: finalProjectId, tasksCount: this.tasks.size }
       }));
 
+      const totalDuration = performance.now() - startTime;
+      console.log(`[PERF][${new Date().toISOString()}] 🎉 COMPLETE loadAllTasksFromDatabase`, {
+        projectId: finalProjectId,
+        totalDuration: `${totalDuration.toFixed(2)}ms`,
+        totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`,
+        tasksCount: this.tasks.size
+      });
+
       return true;
     } catch (error) {
-      console.error('[TaskRepository][LOAD_ALL] Error loading tasks:', error);
+      const totalDuration = performance.now() - startTime;
+      console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTasksFromDatabase`, {
+        duration: `${totalDuration.toFixed(2)}ms`,
+        projectId: finalProjectId,
+        error: error instanceof Error ? error.message : error
+      });
       return false;
     }
   }

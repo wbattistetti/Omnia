@@ -161,7 +161,7 @@ export default function DDEBubbleChat({
     // Orchestrator change tracking removed - not needed
   }, [mode, flowOrchestrator]);
 
-  // Set up callback to update user message matchStatus
+  // Set up callback to update user message matchStatus and extracted values
   React.useEffect(() => {
     if (orchestrator.onUserInputProcessedRef) {
       orchestrator.onUserInputProcessedRef.current = (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch') => {
@@ -175,12 +175,41 @@ export default function DDEBubbleChat({
         }
       };
     }
+    // Set up callback for extracted values
+    if (orchestrator.onUserInputProcessedWithValuesRef) {
+      orchestrator.onUserInputProcessedWithValuesRef.current = (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch', extractedValues?: any[]) => {
+        console.log('[DDEBubbleChat] onUserInputProcessedWithValuesRef called', {
+          input,
+          matchStatus,
+          extractedValues,
+          lastUserMessageId: lastUserMessageIdRef.current,
+          lastUserInput: lastUserInputRef.current
+        });
+        // Update the last user message with matchStatus and extracted values
+        if (lastUserMessageIdRef.current && lastUserInputRef.current === input) {
+          setMessages((prev) => prev.map((msg) => {
+            if (msg.id === lastUserMessageIdRef.current && msg.type === 'user') {
+              console.log('[DDEBubbleChat] Updating message with extracted values', {
+                messageId: msg.id,
+                extractedValues,
+                count: extractedValues?.length || 0
+              });
+              return { ...msg, matchStatus, extractedValues };
+            }
+            return msg;
+          }));
+        }
+      };
+    }
     return () => {
       if (orchestrator.onUserInputProcessedRef) {
         orchestrator.onUserInputProcessedRef.current = null;
       }
+      if (orchestrator.onUserInputProcessedWithValuesRef) {
+        orchestrator.onUserInputProcessedWithValuesRef.current = null;
+      }
     };
-  }, [orchestrator.onUserInputProcessedRef]);
+  }, [orchestrator.onUserInputProcessedRef, orchestrator.onUserInputProcessedWithValuesRef]);
 
   // Determine current DDT: from orchestrator in flow mode, from prop in single-ddt mode
   const currentDDT = React.useMemo(() => {

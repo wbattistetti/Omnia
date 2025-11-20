@@ -6,7 +6,7 @@ import { useDDTSimulator } from '../../../DialogueDataEngine/useSimulator';
 // Removed resolveMessage and DEFAULT_FALLBACKS - using translations directly like StepEditor
 import { extractTranslations, resolveActionText } from './DDTAdapter';
 import { AlertTriangle } from 'lucide-react';
-import UserMessage, { type Message } from './UserMessage';
+import UserMessage, { type Message } from '../../../ChatSimulator/UserMessage';
 import BotMessage from './BotMessage';
 import { getStepColor } from './chatSimulatorUtils';
 import { useFontContext } from '../../../../context/FontContext';

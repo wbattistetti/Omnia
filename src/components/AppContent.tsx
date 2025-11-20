@@ -490,55 +490,97 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const handleOpenProjectById = useCallback(async (id: string) => {
     if (!id) return;
+    const startTime = performance.now();
+    console.log(`[PERF][${new Date().toISOString()}] 🚀 START handleOpenProjectById`, { projectId: id });
+
     try {
       // Modalità persisted: apri da catalogo e carica acts dal DB progetto
+      const catStart = performance.now();
+      console.log(`[PERF][${new Date().toISOString()}] 📋 START fetch catalog`);
       const catRes = await fetch('/api/projects/catalog');
       if (!catRes.ok) throw new Error('Errore nel recupero catalogo');
       const list = await catRes.json();
       const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
+      console.log(`[PERF][${new Date().toISOString()}] ✅ END fetch catalog`, {
+        duration: `${(performance.now() - catStart).toFixed(2)}ms`,
+        found: !!meta
+      });
+
       pdUpdate.setCurrentProjectId(id);
       try { localStorage.setItem('current.projectId', id); } catch { }
-      // Carica atti dal DB progetto
-      await ProjectDataService.loadActsFromProject(id);
-      // FASE 2: Carica Tasks dal DB progetto (TaskRepository ora gestisce tutto)
-      try {
-        console.log('[OpenProject][LOAD_TASKS][START]', { projectId: id });
-        const { taskRepository } = await import('../services/TaskRepository');
-        const success = await taskRepository.loadAllTasksFromDatabase(id);
-        console.log('[OpenProject][LOAD_TASKS][RESULT]', {
-          projectId: id,
-          success,
-          tasksCount: taskRepository.getInternalTasksCount(),
-          tasksWithValue: taskRepository.getAllTasks().filter(t => t.value && Object.keys(t.value).length > 0).length,
-          messageTasks: taskRepository.getAllTasks().filter(t => t.value?.text).map(t => ({
-            taskId: t.id,
-            messageText: t.value?.text?.substring(0, 50) || 'N/A'
-          }))
-        });
 
-        // FASE 2: TaskRepository sincronizza automaticamente con InstanceRepository
-        // Quindi InstanceRepository è aggiornato automaticamente (backward compatibility)
-      } catch (e) {
-        console.error('[OpenProject][LOAD_TASKS][ERROR]', {
-          projectId: id,
-          error: String(e),
-          stack: e?.stack?.substring(0, 200)
-        });
-        // Non bloccare l'apertura del progetto se questo fallisce
+      // ✅ OPTIMIZATION: Load acts, tasks, and flow in parallel (they are independent)
+      const parallelStart = performance.now();
+      console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (acts, tasks, flow)`);
+
+      const [actsResult, tasksResult, flowResult] = await Promise.allSettled([
+        ProjectDataService.loadActsFromProject(id),
+        (async () => {
+          try {
+            const { taskRepository } = await import('../services/TaskRepository');
+            return await taskRepository.loadAllTasksFromDatabase(id);
+          } catch (e) {
+            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTasksFromDatabase`, {
+              projectId: id,
+              error: String(e)
+            });
+            return false;
+          }
+        })(),
+        (async () => {
+          try {
+            const flowRes = await fetch(`/api/projects/${encodeURIComponent(id)}/flow`);
+            if (flowRes.ok) {
+              const flow = await flowRes.json();
+              return {
+                nodes: Array.isArray(flow.nodes) ? flow.nodes : [],
+                edges: Array.isArray(flow.edges) ? flow.edges : []
+              };
+            }
+            return { nodes: [], edges: [] };
+          } catch (e) {
+            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load flow`, e);
+            return { nodes: [], edges: [] };
+          }
+        })()
+      ]);
+
+      console.log(`[PERF][${new Date().toISOString()}] ✅ END parallel load`, {
+        duration: `${(performance.now() - parallelStart).toFixed(2)}ms`
+      });
+
+      // Process results
+      if (actsResult.status === 'rejected') {
+        throw actsResult.reason;
       }
-      // Carica flow (nodi/edge)
+
       let loadedNodes: any[] = [];
       let loadedEdges: any[] = [];
-      try {
-        const flowRes = await fetch(`/api/projects/${encodeURIComponent(id)}/flow`);
-        if (flowRes.ok) {
-          const flow = await flowRes.json();
-          loadedNodes = Array.isArray(flow.nodes) ? flow.nodes : [];
-          loadedEdges = Array.isArray(flow.edges) ? flow.edges : [];
-          // Removed verbose log
-        }
-      } catch { }
+      if (flowResult.status === 'fulfilled') {
+        loadedNodes = flowResult.value.nodes;
+        loadedEdges = flowResult.value.edges;
+        console.log(`[PERF][${new Date().toISOString()}] ✅ Flow loaded`, {
+          nodesCount: loadedNodes.length,
+          edgesCount: loadedEdges.length
+        });
+      }
+
+      if (tasksResult.status === 'fulfilled') {
+        const { taskRepository } = await import('../services/TaskRepository');
+        console.log(`[PERF][${new Date().toISOString()}] ✅ Tasks loaded`, {
+          success: tasksResult.value,
+          tasksCount: taskRepository.getInternalTasksCount(),
+          tasksWithValue: taskRepository.getAllTasks().filter(t => t.value && Object.keys(t.value).length > 0).length
+        });
+      }
+
+      const dataStart = performance.now();
+      console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
       const data = await ProjectDataService.loadProjectData();
+      console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
+        duration: `${(performance.now() - dataStart).toFixed(2)}ms`
+      });
+
       const newProject: any = {
         id,
         name: meta.projectName || 'Project',
@@ -560,9 +602,29 @@ export const AppContent: React.FC<AppContentProps> = ({
         (window as any).__flowNodes = loadedNodes as any;
         (window as any).__flowEdges = loadedEdges as any;
       } catch { }
+
+      const refreshStart = performance.now();
+      console.log(`[PERF][${new Date().toISOString()}] 🔄 START refreshData`);
       await refreshData();
+      console.log(`[PERF][${new Date().toISOString()}] ✅ END refreshData`, {
+        duration: `${(performance.now() - refreshStart).toFixed(2)}ms`
+      });
+
       setAppState('mainApp');
+
+      const totalDuration = performance.now() - startTime;
+      console.log(`[PERF][${new Date().toISOString()}] 🎉 COMPLETE handleOpenProjectById`, {
+        projectId: id,
+        totalDuration: `${totalDuration.toFixed(2)}ms`,
+        totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`
+      });
     } catch (err) {
+      const totalDuration = performance.now() - startTime;
+      console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR handleOpenProjectById`, {
+        projectId: id,
+        totalDuration: `${totalDuration.toFixed(2)}ms`,
+        error: err instanceof Error ? err.message : err
+      });
       alert('Errore: ' + (err instanceof Error ? err.message : err));
     }
   }, [refreshData, setAppState]);

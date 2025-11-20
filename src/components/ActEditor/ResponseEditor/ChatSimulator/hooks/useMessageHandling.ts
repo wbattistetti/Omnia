@@ -10,7 +10,7 @@ import {
   resolveEscalation,
   resolveAsk
 } from '../messageResolvers';
-import type { Message } from '../UserMessage';
+import type { Message } from '../../../../ChatSimulator/UserMessage';
 import { extractTranslations } from '../DDTAdapter';
 
 interface UseMessageHandlingProps {

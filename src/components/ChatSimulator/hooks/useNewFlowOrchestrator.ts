@@ -10,7 +10,10 @@ import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssem
 import type { PlayedMessage } from './flowRowPlayer';
 import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { extractGUIDsFromDDT } from '../../../utils/ddtUtils';
-import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
+import { useProjectTranslations, ProjectTranslationsContextType } from '../../../context/ProjectTranslationsContext';
+import { findOriginalNode } from '../../ActEditor/ResponseEditor/ChatSimulator/messageResolvers';
+import { loadContract } from '../../DialogueDataEngine/contracts/contractLoader';
+import { extractWithContractSync } from '../../DialogueDataEngine/contracts/contractExtractor';
 
 interface UseNewFlowOrchestratorProps {
   nodes: Node<NodeData>[];
@@ -19,6 +22,25 @@ interface UseNewFlowOrchestratorProps {
   onDDTStart?: (ddt: AssembledDDT) => void;
   onDDTComplete?: () => void;
 }
+
+// Safe hook to use ProjectTranslations if available, otherwise return empty translations
+const useProjectTranslationsSafe = (): ProjectTranslationsContextType => {
+  try {
+    return useProjectTranslations();
+  } catch (e) {
+    // ProjectTranslationsProvider not available - return safe defaults
+    // This allows useNewFlowOrchestrator to work even when rendered outside the provider tree
+    return {
+      translations: {},
+      addTranslation: () => {},
+      addTranslations: () => {},
+      getTranslation: () => undefined,
+      loadAllTranslations: async () => {},
+      saveAllTranslations: async () => {},
+      isDirty: false
+    };
+  }
+};
 
 /**
  * New Flow Orchestrator using compiler + engine
@@ -63,8 +85,8 @@ export function useNewFlowOrchestrator({
   // Track current DDT
   const [currentDDTState, setCurrentDDTState] = useState<AssembledDDT | null>(null);
 
-  // ✅ Get global translations from context
-  const { translations: globalTranslations } = useProjectTranslations();
+  // ✅ Get global translations from context (safe - handles missing provider)
+  const { translations: globalTranslations } = useProjectTranslationsSafe();
 
   // ✅ Load translations for current DDT from global table (for state tracking)
   const ddtTranslations = useDDTTranslations(currentDDTState);
@@ -150,11 +172,13 @@ export function useNewFlowOrchestrator({
 
   // Ref to expose onUserInputProcessed callback to DDEBubbleChat
   const onUserInputProcessedRef = React.useRef<((input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch') => void) | null>(null);
+  // Ref to expose onUserInputProcessed with extracted values
+  const onUserInputProcessedWithValuesRef = React.useRef<((input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch', extractedValues?: any[]) => void) | null>(null);
 
   // Execute task callback
   const handleTaskExecute = useCallback(async (task: any) => {
     // 🔍 Extract DDT from task and load translations immediately (don't wait for state update)
-    const taskDDT = task.value?.ddt;
+    const taskDDT: AssembledDDT | null = task.value?.ddt || null;
     const taskTranslations = loadTranslationsFromDDT(taskDDT);
 
     console.log('[useNewFlowOrchestrator][handleTaskExecute] Starting', {
@@ -302,13 +326,37 @@ export function useNewFlowOrchestrator({
           // Return raw input as 'match' event - will be processed in retrieve()
         });
       },
-      onUserInputProcessed: (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch') => {
+      onUserInputProcessed: (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch', extractedValues?: any[]) => {
         // This callback is called from ddtRetrieve after processing input
         // We'll expose it via a ref so DDEBubbleChat can listen to it
-        console.log('[useNewFlowOrchestrator] User input processed', { input, matchStatus });
+        console.log('[useNewFlowOrchestrator] User input processed', { input, matchStatus, extractedValues });
         // Store in a ref that DDEBubbleChat can access
         if (onUserInputProcessedRef.current) {
           onUserInputProcessedRef.current(input, matchStatus);
+        }
+        // Also call the callback with extracted values if available
+        if (onUserInputProcessedWithValuesRef.current && extractedValues) {
+          // Enhance extracted values with linguistic values from input text
+          const enhancedValues = extractedValues.map(ev => {
+            let linguisticValue = ev.linguisticValue;
+            if (!linguisticValue) {
+              // Try to find linguistic value in input
+              const semanticStr = String(ev.semanticValue);
+              if (ev.variable === 'month' && typeof ev.semanticValue === 'number' && ev.semanticValue >= 1 && ev.semanticValue <= 12) {
+                const monthNames = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+                const monthName = monthNames[ev.semanticValue - 1];
+                if (input.toLowerCase().includes(monthName)) {
+                  linguisticValue = monthName;
+                } else if (input.includes(semanticStr)) {
+                  linguisticValue = semanticStr;
+                }
+              } else if (input.includes(semanticStr)) {
+                linguisticValue = semanticStr;
+              }
+            }
+            return { ...ev, linguisticValue };
+          });
+          onUserInputProcessedWithValuesRef.current(input, matchStatus, enhancedValues);
         }
       },
       onProcessInput: async (input: string, node: any) => {
@@ -317,74 +365,96 @@ export function useNewFlowOrchestrator({
           nodeId: node?.id,
           nodeLabel: node?.label,
           nodeKind: node?.kind,
-          hasNlpProfile: !!node?.nlpProfile,
-          regex: node?.nlpProfile?.regex
+          hasTaskDDT: !!taskDDT
         });
 
-        // Process input using NLP extraction
+        // ✅ USA LO STESSO METODO DEL RESPONSE EDITOR: Contract invece di extractField
         try {
-          const { extractField } = await import('../../../nlp/pipeline');
-          const fieldName = node?.label || node?.name || '';
+          // ✅ WORKAROUND: Il node V2 non ha nlpContract
+          // Recupera il nodo originale dal DDT (come fa il Response Editor)
+          let originalNode: any = null;
+          if (taskDDT) {
+            originalNode = findOriginalNode(taskDDT, node?.label, node?.id);
+            console.log('[useNewFlowOrchestrator] Found original node', {
+              hasOriginalNode: !!originalNode,
+              originalNodeId: originalNode?.id,
+              originalNodeLabel: originalNode?.label,
+              hasNlpContract: !!(originalNode as any)?.nlpContract
+            });
+          }
 
-          // Build extraction context with waiting messages callback
-          const context = {
-            node: {
-              subData: node?.subData || [],
-              kind: node?.kind,
-              label: node?.label,
-              nlpProfile: node?.nlpProfile // Passa tutto il nlpProfile per accedere a waitingEsc1/2
-            },
-            regex: node?.nlpProfile?.regex,
-            onWaitingMessage: (message: string) => {
-              // Mostra messaggio waiting durante escalation
-              if (onMessage) {
-                onMessage({
-                  id: `waiting-${Date.now()}-${Math.random()}`,
-                  text: message,
-                  stepType: 'waiting',
-                  timestamp: new Date()
-                });
-              }
+          // ✅ USA IL CONTRACT (come fa il Response Editor)
+          const contract = originalNode ? loadContract(originalNode) : null;
+
+          if (contract && contract.templateName === node?.kind) {
+            console.log('[useNewFlowOrchestrator] ✅ Contract trovato, usando per estrazione', {
+              templateName: contract.templateName,
+              contractTemplateId: contract.templateId,
+              input: input.substring(0, 50)
+            });
+
+            // ✅ Estrai usando il Contract (stesso metodo del Response Editor)
+            const result = extractWithContractSync(input, contract, undefined);
+
+            if (result.hasMatch && Object.keys(result.values).length > 0) {
+              console.log('[useNewFlowOrchestrator] ✅ Extraction SUCCESS', {
+                values: result.values,
+                source: result.source,
+                valuesCount: Object.keys(result.values).length
+              });
+              return { status: 'match' as const, value: result.values };
+            } else {
+              console.log('[useNewFlowOrchestrator] ❌ No match from contract', {
+                input: input.substring(0, 50),
+                contractPatterns: contract.regex.patterns.length
+              });
+              return { status: 'noMatch' as const };
             }
-          };
-
-          console.log('[useNewFlowOrchestrator] Calling extractField', {
-            fieldName,
-            input,
-            hasRegex: !!context.regex,
-            regex: context.regex,
-            hasWaitingEsc1: !!node?.nlpProfile?.waitingEsc1,
-            hasWaitingEsc2: !!node?.nlpProfile?.waitingEsc2
-          });
-
-          const extractionResult = await extractField(fieldName, input, undefined, context);
-
-          console.log('[useNewFlowOrchestrator] Extraction result', {
-            status: extractionResult.status,
-            hasValue: !!extractionResult.value,
-            value: extractionResult.value
-          });
-
-          if (extractionResult.status === 'accepted') {
-            return { status: 'match' as const, value: extractionResult.value };
-          } else if (extractionResult.status === 'ask-more') {
-            return { status: 'partialMatch' as const, value: extractionResult.value };
-          } else if (extractionResult.status === 'reject') {
-            // Regex matched but validation failed - treat as noMatch
-            console.log('[useNewFlowOrchestrator] Input rejected - returning noMatch', {
-              input,
-              status: extractionResult.status,
-              reasons: (extractionResult as any).reasons,
-              fieldName
-            });
-            return { status: 'noMatch' as const };
           } else {
-            console.log('[useNewFlowOrchestrator] Input did not match - returning noMatch', {
-              input,
-              status: extractionResult.status,
-              fieldName
+            console.warn('[useNewFlowOrchestrator] ⚠️ Contract non trovato, fallback a extractField', {
+              hasOriginalNode: !!originalNode,
+              hasContract: !!contract,
+              nodeKind: node?.kind,
+              contractTemplateName: contract?.templateName
             });
-            return { status: 'noMatch' as const };
+
+            // ✅ FALLBACK: Se non c'è Contract, usa extractField (per compatibilità)
+            const { extractField } = await import('../../../nlp/pipeline');
+            const fieldName = node?.label || node?.name || '';
+
+            const subData = originalNode?.subData || node?.subData || [];
+            const nlpProfile = originalNode?.nlpProfile || node?.nlpProfile;
+
+            const context = {
+              node: {
+                subData: subData,
+                subSlots: subData,
+                kind: originalNode?.kind || node?.kind,
+                label: originalNode?.label || node?.label,
+                nlpProfile: nlpProfile
+              },
+              regex: nlpProfile?.regex,
+              onWaitingMessage: (message: string) => {
+                if (onMessage) {
+                  onMessage({
+                    id: `waiting-${Date.now()}-${Math.random()}`,
+                    text: message,
+                    stepType: 'waiting',
+                    timestamp: new Date()
+                  });
+                }
+              }
+            };
+
+            const extractionResult = await extractField(fieldName, input, undefined, context);
+
+            if (extractionResult.status === 'accepted') {
+              return { status: 'match' as const, value: extractionResult.value };
+            } else if (extractionResult.status === 'ask-more') {
+              return { status: 'partialMatch' as const, value: extractionResult.value };
+            } else {
+              return { status: 'noMatch' as const };
+            }
           }
         } catch (error) {
           console.error('[useNewFlowOrchestrator] Error processing input', error);
@@ -440,6 +510,7 @@ export function useNewFlowOrchestrator({
     error: null, // TODO: Track errors
     isRetrieving, // Expose isRetrieving state
     onUserInputProcessedRef, // Expose ref for DDEBubbleChat to set callback
+    onUserInputProcessedWithValuesRef, // Expose ref for passing extracted values
 
     // Actions
     start: engine.start,

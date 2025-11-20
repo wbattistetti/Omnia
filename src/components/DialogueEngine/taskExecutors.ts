@@ -73,6 +73,7 @@ export async function executeTask(
     onProblemClassify?: (intents: any[], ddt: AssembledDDT) => Promise<any>;
     onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<any>;
     onProcessInput?: (input: string, node: any) => Promise<{ status: 'match' | 'noMatch' | 'noInput' | 'partialMatch'; value?: any }>;
+    onUserInputProcessed?: (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch', extractedValues?: any[]) => void;
     translations?: Record<string, string>; // ✅ Translations from global table
   }
 ): Promise<TaskExecutionResult> {
@@ -124,6 +125,7 @@ export async function executeTask(
           onDDTStart: callbacks.onDDTStart,
           onGetRetrieveEvent: callbacks.onGetRetrieveEvent,
           onProcessInput: callbacks.onProcessInput,
+          onUserInputProcessed: callbacks.onUserInputProcessed,
           translations: callbacks.translations // ✅ Pass translations from callbacks
         });
 
@@ -279,6 +281,7 @@ async function executeGetData(
     onDDTStart?: (ddt: AssembledDDT) => void;
     onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<any>;
     onProcessInput?: (input: string, node: any) => Promise<any>;
+    onUserInputProcessed?: (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch', extractedValues?: any[]) => void;
     translations?: Record<string, string>; // ✅ Translations from global table
   }
 ): Promise<TaskExecutionResult> {
@@ -499,19 +502,86 @@ async function executeGetData(
         // No input - will be handled by advance() as empty string
         engineState = advance(engineState, '');
       } else if (typeof userInput === 'string') {
-        // Process input if callback provided
+        // Process input if callback provided BEFORE calling advance()
+        // This allows us to extract values and pass them to onUserInputProcessed
         let extractedVars: Record<string, any> | undefined;
+        let extractedValues: any[] | undefined = undefined;
+        let matchStatus: 'match' | 'noMatch' | 'partialMatch' = 'noMatch';
+
         if (callbacks.onProcessInput) {
+          console.log('[TaskExecutor][executeGetData] Processing input', { userInput, hasOnUserInputProcessed: !!callbacks.onUserInputProcessed });
           const processResult = await callbacks.onProcessInput(userInput, main);
+          console.log('[TaskExecutor][executeGetData] Process result', {
+            status: processResult.status,
+            hasValue: !!processResult.value,
+            valueKeys: processResult.value ? Object.keys(processResult.value) : []
+          });
+
+          matchStatus = processResult.status === 'partialMatch' ? 'match' : processResult.status;
+
           if (processResult.status === 'match' && processResult.value) {
-            extractedVars = { value: processResult.value };
-          } else if (processResult.status === 'partialMatch' && processResult.value) {
+            // ✅ CRITICAL: Contract ritorna { day: 12, month: 2, year: 1980 }
+            // advance() si aspetta questo formato direttamente, NON wrappato in { value: ... }
             extractedVars = processResult.value;
+            console.log('[TaskExecutor][executeGetData] ✅ Using extracted values directly from Contract', {
+              extractedVars,
+              valuesCount: Object.keys(extractedVars).length
+            });
+
+            // Convert extracted value to ExtractedValue[] format for display (simple, no nested value)
+            extractedValues = Object.entries(processResult.value)
+              .filter(([key, val]) => val !== undefined && val !== null)
+              .map(([key, val]) => ({
+                variable: key,
+                linguisticValue: undefined, // Will be filled by useNewFlowOrchestrator
+                semanticValue: val
+              }));
+            console.log('[TaskExecutor][executeGetData] Converted extracted values for display', {
+              extractedValuesCount: extractedValues.length,
+              extractedValues
+            });
+          } else if (processResult.status === 'partialMatch' && processResult.value) {
+            // ✅ CRITICAL: For partialMatch, also pass directly
+            extractedVars = processResult.value;
+            console.log('[TaskExecutor][executeGetData] ✅ Using extracted values (partialMatch)', {
+              extractedVars,
+              valuesCount: Object.keys(extractedVars).length
+            });
+
+            // Convert extracted value to ExtractedValue[] format for display (simple, no nested value)
+            extractedValues = Object.entries(processResult.value)
+              .filter(([key, val]) => val !== undefined && val !== null)
+              .map(([key, val]) => ({
+                variable: key,
+                linguisticValue: undefined, // Will be filled by useNewFlowOrchestrator
+                semanticValue: val
+              }));
+            console.log('[TaskExecutor][executeGetData] Converted extracted values for display (partialMatch)', {
+              extractedValuesCount: extractedValues.length,
+              extractedValues
+            });
           }
+
+          // Call onUserInputProcessed callback if provided
+          if (callbacks.onUserInputProcessed) {
+            console.log('[TaskExecutor][executeGetData] Calling onUserInputProcessed', {
+              userInput,
+              matchStatus,
+              extractedValuesCount: extractedValues?.length || 0,
+              extractedValues: extractedValues
+            });
+            callbacks.onUserInputProcessed(userInput, matchStatus, extractedValues);
+          } else {
+            console.warn('[TaskExecutor][executeGetData] onUserInputProcessed callback not provided');
+          }
+        } else {
+          console.warn('[TaskExecutor][executeGetData] onProcessInput callback not provided');
         }
+
+        // Now call advance() with the extracted vars (or let it extract internally if onProcessInput wasn't called)
         engineState = advance(engineState, userInput, extractedVars);
-      } else {
-        // Event object
+      } else if (userInput && typeof userInput === 'object' && 'type' in userInput) {
+        // Event object (e.g., { type: 'match', value: '12 2 1980' })
         if (userInput.type === 'exit') {
           return {
             success: false,
@@ -519,8 +589,90 @@ async function executeGetData(
             retrievalState: 'empty'
           };
         }
+
         const inputStr = userInput.type === 'match' ? String(userInput.value || '') : '';
-        engineState = advance(engineState, inputStr);
+
+        // Process input if callback provided BEFORE calling advance()
+        // This allows us to extract values and pass them to onUserInputProcessed
+        let extractedVars: Record<string, any> | undefined;
+        let extractedValues: any[] | undefined = undefined;
+        let matchStatus: 'match' | 'noMatch' | 'partialMatch' = 'noMatch';
+
+        if (callbacks.onProcessInput && inputStr) {
+          console.log('[TaskExecutor][executeGetData] Processing input (from event)', { inputStr, hasOnUserInputProcessed: !!callbacks.onUserInputProcessed });
+          const processResult = await callbacks.onProcessInput(inputStr, main);
+          console.log('[TaskExecutor][executeGetData] Process result (from event)', {
+            status: processResult.status,
+            hasValue: !!processResult.value,
+            valueKeys: processResult.value ? Object.keys(processResult.value) : []
+          });
+
+          matchStatus = processResult.status === 'partialMatch' ? 'match' : processResult.status;
+
+          if (processResult.status === 'match' && processResult.value) {
+            // ✅ CRITICAL: Contract ritorna { day: 12, month: 2, year: 1980 }
+            // advance() si aspetta questo formato direttamente, NON wrappato in { value: ... }
+            extractedVars = processResult.value;
+            console.log('[TaskExecutor][executeGetData] ✅ Using extracted values directly from Contract (from event)', {
+              extractedVars,
+              valuesCount: Object.keys(extractedVars).length
+            });
+
+            // Convert extracted value to ExtractedValue[] format for display (simple, no nested value)
+            extractedValues = Object.entries(processResult.value)
+              .filter(([key, val]) => val !== undefined && val !== null)
+              .map(([key, val]) => ({
+                variable: key,
+                linguisticValue: undefined, // Will be filled by useNewFlowOrchestrator
+                semanticValue: val
+              }));
+            console.log('[TaskExecutor][executeGetData] Converted extracted values for display (from event)', {
+              extractedValuesCount: extractedValues.length,
+              extractedValues
+            });
+          } else if (processResult.status === 'partialMatch' && processResult.value) {
+            // ✅ CRITICAL: For partialMatch, also pass directly
+            extractedVars = processResult.value;
+            console.log('[TaskExecutor][executeGetData] ✅ Using extracted values (partialMatch, from event)', {
+              extractedVars,
+              valuesCount: Object.keys(extractedVars).length
+            });
+
+            // Convert extracted value to ExtractedValue[] format for display (simple, no nested value)
+            extractedValues = Object.entries(processResult.value)
+              .filter(([key, val]) => val !== undefined && val !== null)
+              .map(([key, val]) => ({
+                variable: key,
+                linguisticValue: undefined, // Will be filled by useNewFlowOrchestrator
+                semanticValue: val
+              }));
+            console.log('[TaskExecutor][executeGetData] Converted extracted values for display (partialMatch, from event)', {
+              extractedValuesCount: extractedValues.length,
+              extractedValues
+            });
+          }
+
+          // Call onUserInputProcessed callback if provided
+          if (callbacks.onUserInputProcessed) {
+            console.log('[TaskExecutor][executeGetData] Calling onUserInputProcessed (from event)', {
+              inputStr,
+              matchStatus,
+              extractedValuesCount: extractedValues?.length || 0,
+              extractedValues: extractedValues
+            });
+            callbacks.onUserInputProcessed(inputStr, matchStatus, extractedValues);
+          } else {
+            console.warn('[TaskExecutor][executeGetData] onUserInputProcessed callback not provided');
+          }
+        } else {
+          console.warn('[TaskExecutor][executeGetData] onProcessInput callback not provided or empty input');
+        }
+
+        // Now call advance() with the extracted vars
+        engineState = advance(engineState, inputStr, extractedVars);
+      } else {
+        // Fallback: treat as string
+        engineState = advance(engineState, String(userInput));
       }
 
       // Show messages from new state

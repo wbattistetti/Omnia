@@ -95,7 +95,16 @@ export async function retrieve(
       // Notify callback about user input processing result
       if (callbacks.onUserInputProcessed) {
         const matchStatus = processResult.status === 'partialMatch' ? 'match' : processResult.status;
-        callbacks.onUserInputProcessed(rawInput, matchStatus as 'match' | 'noMatch' | 'partialMatch');
+        // Convert extracted value to ExtractedValue[] format
+        let extractedValues: any[] | undefined = undefined;
+        if (processResult.value && typeof processResult.value === 'object') {
+          extractedValues = Object.entries(processResult.value).map(([key, val]) => ({
+            variable: key,
+            linguisticValue: undefined, // Will be filled by useNewFlowOrchestrator
+            semanticValue: val
+          }));
+        }
+        callbacks.onUserInputProcessed(rawInput, matchStatus as 'match' | 'noMatch' | 'partialMatch', extractedValues);
       }
 
       if (processResult.status === 'match') {

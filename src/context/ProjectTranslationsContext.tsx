@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { useProjectDataUpdate } from './ProjectDataContext';
 import { loadProjectTranslations, saveProjectTranslations, loadAllProjectTranslations } from '../services/ProjectDataService';
 
-interface ProjectTranslationsContextType {
+export interface ProjectTranslationsContextType {
   // Global translations table: { guid: text } where text is for project locale only
   translations: Record<string, string>;
   // Add translation to global table (in memory only)
@@ -94,6 +94,9 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       return;
     }
 
+    const startTime = performance.now();
+    console.log(`[PERF][${new Date().toISOString()}] 🌐 START loadAllTranslations`, { projectId: currentProjectId, locale: projectLocale });
+
     try {
       const allTranslations = await loadAllProjectTranslations(currentProjectId, projectLocale);
       setTranslations(allTranslations);
@@ -101,8 +104,18 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       setOriginalTranslations(JSON.parse(JSON.stringify(allTranslations)));
       setAllGuids(new Set(Object.keys(allTranslations)));
       setIsDirty(false);
+
+      const duration = performance.now() - startTime;
+      console.log(`[PERF][${new Date().toISOString()}] ✅ END loadAllTranslations`, {
+        duration: `${duration.toFixed(2)}ms`,
+        translationsCount: Object.keys(allTranslations).length
+      });
     } catch (err) {
-      console.error('[ProjectTranslations] Error loading translations:', err);
+      const duration = performance.now() - startTime;
+      console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTranslations`, {
+        duration: `${duration.toFixed(2)}ms`,
+        error: err
+      });
     }
   }, [currentProjectId, projectLocale]);
 
