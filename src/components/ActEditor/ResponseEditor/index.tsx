@@ -1425,16 +1425,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                     ddt={localDDT}
                     translations={localTranslations}
                     selectedNode={selectedNode}
-                    // DEBUG: Log when passing translations to ResponseSimulator
-                    // eslint-disable-next-line react-hooks/exhaustive-deps
-                    {...(() => {
-                      console.log('[ResponseEditor] Passing translations to ResponseSimulator', {
-                        localTranslationsKeys: Object.keys(localTranslations).length,
-                        sampleKeys: Object.keys(localTranslations).slice(0, 5),
-                        sampleValues: Object.entries(localTranslations).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) }))
-                      });
-                      return {};
-                    })()}
                     onUpdateDDT={(updater) => {
                       setLocalDDT((prev: any) => {
                         const updated = updater(prev);

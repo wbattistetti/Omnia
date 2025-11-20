@@ -164,24 +164,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
           </div>
         )}
         {(() => {
-          console.log('[RightPanel] Rendering mode check', {
-            mode,
-            isChat: mode === 'chat',
-            hasDDT: !!ddt,
-            ddtId: ddt?.id,
-            ddtLabel: ddt?.label,
-            translationsKeys: translations ? Object.keys(translations).length : 0,
-            sampleTranslations: translations ? Object.entries(translations).slice(0, 3).map(([k, v]) => ({
-              guid: k.substring(0, 20) + '...',
-              text: String(v).substring(0, 30) + '...'
-            })) : []
-          });
-
           if (mode === 'chat') {
-            console.log('[RightPanel] ✅ Rendering DDEBubbleChat', {
-              hasDDT: !!ddt,
-              translationsKeys: translations ? Object.keys(translations).length : 0
-            });
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

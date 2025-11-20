@@ -10,6 +10,7 @@ import { SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_ICONS } from '../Sidebar/sidebarT
 import { setupMonacoEnvironment } from '../../utils/monacoWorkerSetup';
 import VariablesPanel from './VariablesPanel';
 import { useAIProvider } from '../../context/AIProviderContext';
+import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 // SmartTooltip is used only in the tester's toolbar (right panel)
 
 // Ensure Monaco workers configured once
@@ -52,6 +53,51 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   ].join('\n');
   // ✅ Inizializza con DEFAULT_CODE se initialScript è vuoto, così il pulsante appare subito
   const [script, setScript] = React.useState(initialScript && initialScript.trim() ? initialScript : DEFAULT_CODE);
+
+  // Use context directly - much simpler!
+  let projectData: any = null;
+  let pdUpdate: any = null;
+  try {
+    projectData = useProjectData().data;
+    pdUpdate = useProjectDataUpdate();
+  } catch {
+    // Provider not available - skip
+  }
+
+  // Helper: update projectData with generated script
+  const updateProjectDataScript = React.useCallback((scriptToSave: string) => {
+    if (!label || !projectData || !pdUpdate) return;
+
+    const updatedPd = JSON.parse(JSON.stringify(projectData));
+    const conditions = updatedPd?.conditions || [];
+
+    let found = false;
+    for (const cat of conditions) {
+      for (const item of (cat.items || [])) {
+        const itemName = item.name || item.label;
+        if (itemName === label) {
+          if (!item.data) item.data = {};
+          item.data.script = scriptToSave;
+          found = true;
+          console.log('[SAVE_SCRIPT] ✅ Saved script to condition', {
+            conditionName: label,
+            itemId: item.id,
+            scriptLength: scriptToSave.length
+          });
+          break;
+        }
+      }
+      if (found) break;
+    }
+
+    if (found) {
+      pdUpdate.updateDataDirectly(updatedPd);
+      console.log('[SAVE_SCRIPT] ✅ Updated projectData via updateDataDirectly');
+    } else {
+      console.warn('[SAVE_SCRIPT] ⚠️ Condition not found in projectData', { conditionName: label });
+    }
+  }, [label, projectData, pdUpdate]);
+
   const [busy, setBusy] = React.useState(false);
   const [aiQuestion, setAiQuestion] = React.useState<string>('');
   // describe/chat removed
@@ -124,7 +170,13 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     setTestRows([]);
     setHasFailures(false);
     try { getFailuresRef.current = () => []; hasFailuresRef.current = () => false; resetTesterVisualsRef.current = () => {}; markNotesAsUsedRef.current = () => {}; } catch {}
-    // Reset script to template or provided initialScript when opening a new condition
+    // ✅ Reset script to template or provided initialScript when opening a new condition
+    console.log('[LOAD_SCRIPT] 🔍 Opening editor', {
+      conditionName: label,
+      hasInitialScript: !!initialScript,
+      initialScriptLength: initialScript?.length || 0,
+      initialScriptPreview: initialScript?.substring(0, 50) || ''
+    });
     const base = (initialScript && initialScript.trim()) ? initialScript : DEFAULT_CODE;
     setScript(base);
     const created = !!(initialScript && initialScript.trim());
@@ -136,7 +188,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     setWTester(360);
     setFontPx(13);
     // no local tester toolbar state
-  }, [open]);
+  }, [open, initialScript, label]); // ✅ Aggiunto initialScript e label alle dipendenze
 
   // Ensure tester cannot be opened before code exists
   React.useEffect(() => {
@@ -243,7 +295,6 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         setExpandedActs(prev => ({ ...prev, [entry.act!]: !prev[entry.act!] }));
       } else if (entry.token) {
         insertVariableToken(entry.token);
-        try { console.log('[ConditionEditor][Intellisense][enter]', { index: varsNavIndex, token: entry.token }); } catch {}
       }
       return;
     }
@@ -253,7 +304,6 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         const el = varsMenuRef.current?.querySelector(`[data-nav-index="${next}"]`) as HTMLElement | null;
         if (el) el.scrollIntoView({ block: 'nearest' });
       }, 0);
-      try { console.log('[ConditionEditor][Intellisense][move]', { key, prev, next, len }); } catch {}
       return next;
     });
   }, [varsNavIndex, navEntries]);
@@ -524,6 +574,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       const candidate = (norm as any)?.script;
       if (candidate && typeof candidate === 'string' && candidate.trim()) {
         setScript(candidate);
+        updateProjectDataScript(candidate);
         setHasCreated(true);
         setLastAcceptedScript(candidate);
         setShowTester(true);
@@ -539,7 +590,6 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         return;
       }
     } catch (e) {
-      try { console.error('[Condition][AI][modify][error]', e); } catch {}
     } finally {
       setBusy(false);
     }
@@ -593,7 +643,6 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       // 1) Try normalize pseudo+chat+current code into clean JS
       try {
         const allowedVars = (parsed.vars && parsed.vars.length > 0) ? parsed.vars : ((selectedVars && selectedVars.length > 0) ? selectedVars : variablesFlatWithPreference);
-        try { console.log('[Normalize][req]', { provider: (window as any).__AI_PROVIDER || 'openai', label: parsed.label || titleValue, nl: parsed.when, vars: allowedVars }); } catch {}
         const norm = await normalizePseudoCode({
           chat: [] as any,
           pseudo: parsed.when || '',
@@ -603,12 +652,10 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
           provider: (window as any).__AI_PROVIDER || undefined,
           label: parsed.label || titleValue
         });
-        console.log('🔍 [Normalize][res]', norm);
         const candidate = (norm as any)?.script;
-        console.log('🔍 [Normalize][script]', { hasScript: !!candidate, scriptPreview: candidate?.substring(0, 100) });
         if (candidate && typeof candidate === 'string' && candidate.trim()) {
-          console.log('✅ [Normalize] SUCCESS - setting script');
           setScript(candidate);
+          updateProjectDataScript(candidate);
           setShowCode(true);
           setHasCreated(true);
           setLastAcceptedScript(candidate);
@@ -624,9 +671,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
           }, 300);
           return; // success path
         }
-        console.log('⚠️ [Normalize] No valid script, trying fallback');
-      } catch (e) {
-        console.log('❌ [Normalize] Error:', e);
+            } catch (e) {
       }
 
       // 2) Fallback to previous condition generator
@@ -634,20 +679,16 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       const varsList = (varsForAI || []).map(v => `- ${v}`).join('\n');
       const guidance = `${nlText}\n\nConstraints:\n- Use EXACTLY these variable keys when reading input; do not invent or rename keys.\n${varsList}\n- Access variables strictly as vars["<key>"] (no dot access).\n- Return a boolean (predicate).\n\nPlease return well-formatted JavaScript for function main(ctx) with detailed inline comments explaining each step and rationale. Use clear variable names, add section headers, and ensure readability (one statement per line).`;
       const out = await generateConditionWithAI(guidance, varsForAI);
-      console.log('🔍 [Generate][res]', out);
       const aiLabel = (out as any)?.label as string | undefined;
       const aiScript = (out as any)?.script as string | undefined;
       const question = (out as any)?.question as string | undefined;
-      console.log('🔍 [Generate][parsed]', { label: aiLabel, scriptPreview: aiScript?.substring(0, 100), question });
       if (question && !aiScript) {
-        console.log('⚠️ [Generate] AI asked a question:', question);
         setAiQuestion(question);
         return;
       }
       setAiQuestion('');
       if (!titleValue || titleValue === 'Condition') setTitleValue(aiLabel || 'Nuova condizione');
       let nextScript = aiScript || 'try { return false; } catch { return false; }';
-      console.log('🔍 [Generate][nextScript]', { length: nextScript.length, preview: nextScript.substring(0, 100) });
       // Post-fix common alias mistakes (e.g., Act.DOB) by rewriting to the selected Date key when unique
       try {
         const all = varsForAI || [];
@@ -709,7 +750,6 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
         setTesterHints({ hintTrue: (cases as any).hintTrue, hintFalse: (cases as any).hintFalse, labelTrue: (cases as any).labelTrue, labelFalse: (cases as any).labelFalse });
       } catch {}
     } catch (e) {
-      try { console.error('[Condition][AI][error]', e); } catch {}
       const msg = String((e as any)?.message || '').toLowerCase();
       if (msg.includes('backend_error:')) {
         setAiQuestion('Errore backend: ' + msg.replace('backend_error:', '').trim());
@@ -970,6 +1010,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                           const resp = await repairCondition(script, failures, variablesForTester, (window as any).__AI_PROVIDER || undefined);
                           if (resp?.script && typeof resp.script === 'string') {
                             setScript(resp.script);
+                            updateProjectDataScript(resp.script);
                             setLastAcceptedScript(resp.script);
                             resetTesterVisuals();
                             resetTesterVisualsRef.current?.();
@@ -1098,6 +1139,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
                       // Actually, we need to expose a way to set diff in CodeEditor
                       // For now, set script directly and CodeEditor will sync
                       setScript(resp.script);
+                      updateProjectDataScript(resp.script);
                       setLastAcceptedScript(resp.script);
                       resetTesterVisuals();
                       resetTesterVisualsRef.current?.();

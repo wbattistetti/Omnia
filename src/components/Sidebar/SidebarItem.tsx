@@ -6,6 +6,7 @@ import { classifyActInteractivity } from '../../nlp/actInteractivity';
 // import DeleteConfirmation from './DeleteConfirmation';
 import { Pencil, Trash2, Wrench, Settings } from 'lucide-react';
 import { getAgentActIconColor } from '../../utils/agentActIconColor';
+import { useProjectData } from '../../context/ProjectDataContext';
 
 interface SidebarItemProps {
   item: ProjectEntityItem;
@@ -22,6 +23,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
   const [editing, setEditing] = useState(false);
   // const [showDelete, setShowDelete] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const { data: projectData } = useProjectData();
 
   const isAgentAct = categoryType === 'agentActs' || (item as any)?.type === 'agent_act' || (item as any)?.categoryType === 'agentActs';
   const mode: 'DataRequest' | 'DataConfirmation' | 'Message' = (isAgentAct ? ((item as any)?.mode || 'Message') : 'Message');
@@ -88,6 +90,11 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                 const variables = (window as any).__omniaVars || {};
                 const script = (item as any)?.data?.script || '';
                 const label = String((item as any)?.name || (item as any)?.label || 'Condition');
+                console.log('[LOAD_SCRIPT] 🔍 From SidebarItem (click)', {
+                  conditionName: label,
+                  hasScript: !!script,
+                  scriptLength: script.length
+                });
                 (await import('../../ui/events')).emitConditionEditorOpen({ variables, script, label, name: label });
               } catch {}
             }}
@@ -181,6 +188,11 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                     const variables = (window as any).__omniaVars || {};
                     const script = (item as any)?.data?.script || '';
                     const label = String((item as any)?.name || (item as any)?.label || 'Condition');
+                    console.log('[LOAD_SCRIPT] 🔍 From SidebarItem (gear)', {
+                      conditionName: label,
+                      hasScript: !!script,
+                      scriptLength: script.length
+                    });
                     const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label, name: label }, bubbles: true });
                     (e.currentTarget as any).dispatchEvent(ev);
                   } catch {}

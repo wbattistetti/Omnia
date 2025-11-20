@@ -633,7 +633,26 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
                       e.stopPropagation();
                       try {
                         const variables = (window as any).__omniaVars || {};
-                        const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script: '', label: String(label || 'Condition'), name: String(label || 'Condition') }, bubbles: true });
+                        // ✅ Carica lo script dalla condizione in projectData (come in SidebarItem)
+                        const conditionName = String(label || 'Condition');
+                        let script = '';
+                        const conditions = (projectData as any)?.conditions || [];
+                        for (const cat of conditions) {
+                          for (const item of (cat.items || [])) {
+                            const itemName = item.name || item.label;
+                            if (itemName === conditionName) {
+                              script = (item as any)?.data?.script || '';
+                              break;
+                            }
+                          }
+                          if (script) break;
+                        }
+                        console.log('[LOAD_SCRIPT] 🔍 From CustomEdge (gear)', {
+                          conditionName,
+                          hasScript: !!script,
+                          scriptLength: script.length
+                        });
+                        const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label: conditionName, name: conditionName }, bubbles: true });
                         document.dispatchEvent(ev);
                       } catch { }
                     }}

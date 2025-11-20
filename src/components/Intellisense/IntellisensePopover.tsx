@@ -3,12 +3,13 @@ import { createPortal } from "react-dom";
 import { useIntellisense, IntellisenseItem } from "../../context/IntellisenseContext";
 import { useNodeRegistry } from "../../context/NodeRegistryContext";
 import { IntellisenseMenu } from "./IntellisenseMenu";
-import { IntellisenseStandalone } from "./IntellisenseStandalone"; // ✅ NUOVO IMPORT
-import { useInMemoryConditions } from '../../context/InMemoryConditionsContext';
+import { IntellisenseStandalone } from "./IntellisenseStandalone";
+import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 
 export const IntellisensePopover: React.FC = () => {
     const { state, actions } = useIntellisense();
-    const { addCondition, getConditionById } = useInMemoryConditions(); // ✅ Hook per condizioni in memoria
+    const { data: projectData } = useProjectData();
+    const { addItem, addCategory } = useProjectDataUpdate();
     const { getEl } = useNodeRegistry();
     const [rect, setRect] = useState<DOMRect | null>(null);
     const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
@@ -135,7 +136,7 @@ export const IntellisensePopover: React.FC = () => {
     };
 
     // Handler per selezione
-    const handleSelect = (item: IntellisenseItem | null) => {
+    const handleSelect = async (item: IntellisenseItem | null) => {
         console.log("Item selected or text entered:", item ? item.label : "TEXT_INPUT");
 
         // ✅ 1. Chiudi Intellisense
@@ -148,39 +149,69 @@ export const IntellisensePopover: React.FC = () => {
             // ✅ GESTISCI CASI SPECIALI
             let label: string | undefined;
             let isElse = false;
-            let conditionId: string | undefined; // ✅ ID condizione (in memoria o database)
+            let conditionId: string | undefined;
 
             if (item && (item as any).id === '__else__') {
-                // ✅ Caso Else
+                // Caso Else
                 label = 'Else';
                 isElse = true;
-                console.log("🎯 [IntellisensePopover] Else button clicked");
             } else if (item && (item as any).id === '__unlinked__') {
-                // ✅ Caso Unlinked (nessuna label)
+                // Caso Unlinked (nessuna label)
                 label = undefined;
-                console.log("🎯 [IntellisensePopover] Unlinked button clicked");
             } else if (item) {
-                // ✅ Condizione normale dall'Intellisense
+                // Condizione dall'Intellisense
                 label = item.label;
-                // ✅ Se è una condizione in memoria, usa il suo ID
-                if ((item as any)?.payload?.inMemory) {
-                    conditionId = (item as any).payload.conditionId;
-                } else if (item.actId) {
-                    conditionId = item.actId;
-                }
-                console.log("🎯 [IntellisensePopover] Condition selected:", label, conditionId ? { conditionId } : '');
+                conditionId = item.actId || item.id;
             } else {
-                // ✅ Testo digitato (Enter senza selezione) - CREA CONDIZIONE IN MEMORIA
+                // Testo digitato (Enter senza selezione) - CREA CONDIZIONE
                 const customText = (state.query || "Condition").trim();
                 label = customText;
 
-                // ✅ Crea condizione in memoria
-                const inMemoryCondition = addCondition(customText);
-                conditionId = inMemoryCondition.id;
-                console.log("🎯 [IntellisensePopover] Custom text entered - created in-memory condition:", {
-                    conditionId: inMemoryCondition.id,
-                    name: inMemoryCondition.name
-                });
+                // Verifica se esiste già
+                const conditions = (projectData as any)?.conditions || [];
+                let found = false;
+                for (const cat of conditions) {
+                    for (const condItem of cat.items || []) {
+                        const condName = String(condItem?.name || condItem?.label || '').trim();
+                        if (condName.toLowerCase() === customText.toLowerCase()) {
+                            conditionId = condItem.id || condItem._id;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+
+                // Se non esiste, creala
+                if (!found) {
+                    try {
+                        let categoryId = conditions.length > 0 ? conditions[0].id : '';
+                        if (!categoryId) {
+                            await addCategory('conditions', 'Default Conditions');
+                            const { ProjectDataService } = await import('../../services/ProjectDataService');
+                            const refreshed = await ProjectDataService.loadProjectData();
+                            categoryId = (refreshed as any)?.conditions?.[0]?.id || '';
+                        }
+
+                        if (categoryId) {
+                            await addItem('conditions', categoryId, customText, '');
+
+                            // Ricarica per ottenere l'ID
+                            const { ProjectDataService } = await import('../../services/ProjectDataService');
+                            const refreshed = await ProjectDataService.loadProjectData();
+                            const created = (refreshed as any)?.conditions?.[0]?.items?.find((i: any) => i.name === customText);
+                            conditionId = created?.id || created?._id;
+
+                            // Forza refresh sidebar
+                            (await import('../../ui/events')).emitSidebarForceRender();
+                            setTimeout(async () => {
+                                try { (await import('../../ui/events')).emitSidebarHighlightItem('conditions', customText); } catch { }
+                            }, 100);
+                        }
+                    } catch (e) {
+                        console.error("Error creating condition:", e);
+                    }
+                }
             }
 
             console.log("🎯 [IntellisensePopover] Processing edge selection:", {
@@ -195,7 +226,7 @@ export const IntellisensePopover: React.FC = () => {
             const setEdges = (window as any).__setEdges;
 
             if (scheduleApplyLabel && label !== undefined) {
-                scheduleApplyLabel(edgeId, label, conditionId); // ✅ Passa conditionId se disponibile
+                scheduleApplyLabel(edgeId, label, conditionId ? { conditionId } : undefined); // ✅ Passa conditionId come oggetto
                 console.log("🎯 [IntellisensePopover] Edge label scheduled:", label, conditionId ? { conditionId } : '');
             } else if (setEdges) {
                 setEdges((eds: any[]) => eds.map(e =>

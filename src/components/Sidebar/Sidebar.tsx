@@ -95,7 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     // Persist via regular updateItem flow (will call Factory PUT best-effort)
     try {
       await updateItem('agentActs', categoryId, itemId, { ddt: snapshot } as any);
-    } catch (e) { console.warn('[Sidebar] persist embedded ddt failed', e); }
+    } catch (e) { }
 
     // Immediately open Response Editor from the freshly embedded snapshot
     try {
@@ -115,7 +115,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       } as any;
       // Usa ctx.act invece di openDDT per unificare l'apertura editor
       actEditorCtx.open(ddtToAct(transient));
-    } catch (e) { console.error('[Sidebar] auto-open embedded DDT failed', e); }
+    } catch (e) { }
   };
 
   // Open Response Editor from embedded DDT snapshot on the act
@@ -139,7 +139,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     try {
       // Usa ctx.act invece di openDDT per unificare l'apertura editor
       actEditorCtx.open(ddtToAct(transient));
-    } catch (e) { console.error('[Sidebar] open embedded DDT failed', e); }
+    } catch (e) { }
   };
 
   // const handleEditDDT = (_id: string) => {};
@@ -152,10 +152,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const handleBuildFromItem = (item: any) => {
     // Show DDT builder inline with initial DDT containing the label in root
     try {
-      console.log('[DDT][BuildFromAct][emit]', {
-        label: item?.name || item?.label,
-        startOnStructure: false
-      });
       // Open below DDT header (same behavior of '+')
       const event: any = new CustomEvent('ddt:openBuilderBelowHeader', {
         detail: {
@@ -167,7 +163,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       });
       document.dispatchEvent(event);
     } catch (e) {
-      console.error('[Sidebar] build-from-item error', e);
     }
   };
 
@@ -190,7 +185,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       try {
         await saveDataDialogueTranslations(translationsPayload);
       } catch (e) {
-        console.warn('[Sidebar] DataDialogueTranslations save failed, continuing with DDT save:', e);
       }
 
       // 2) Save DDTs (strip heavy fields not needed by factory DB)
@@ -200,7 +194,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       });
       try {
         const approxSize = new Blob([JSON.stringify(payload)]).size;
-        console.log('[Sidebar] DDT save payload size ~', approxSize, 'bytes');
       } catch { }
       const res = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
@@ -210,7 +203,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       if (!res.ok) {
         throw new Error('Server error: unable to save DDT');
       }
-      try { console.log('[KindPersist][Sidebar][saved payload mains]', payload.flatMap((d: any) => (d?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })))); } catch { }
       // Nota: non ricarichiamo da backend per evitare flicker; la lista è già la sorgente del payload
       // ensure spinner is visible at least 600ms
       const elapsed = Date.now() - startedAt;
@@ -221,7 +213,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Errore nel salvataggio DDT';
       setSaveError(errorMessage);
-      console.error('[Sidebar] Errore salvataggio DDT:', err);
       // TODO: Mostrare toast/alert con l'errore
     } finally {
       setIsSavingDDT(false);
@@ -231,7 +222,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   // Mostra errori di salvataggio
   useEffect(() => {
     if (saveError) {
-      console.error('[Sidebar] Errore salvataggio DDT:', saveError);
       // TODO: Mostrare toast/alert con l'errore
     }
   }, [saveError]);
@@ -239,7 +229,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   // Mostra errori di caricamento
   useEffect(() => {
     if (loadDDTError) {
-      console.error('[Sidebar] Errore caricamento DDT:', loadDDTError);
       // TODO: Mostrare toast/alert con l'errore
     }
   }, [loadDDTError]);
@@ -254,7 +243,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     };
 
     const handleSidebarRefresh = (_e: any) => {
-      try { console.log('[SidebarFlow] refresh received'); } catch { }
       try {
         // Forza un leggero refresh locale leggendo dal ProjectDataService
         const ev = new CustomEvent('sidebar:forceRender', { bubbles: true });
@@ -263,7 +251,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     };
 
     const handleForceRender = () => {
-      try { console.log('[SidebarFlow] forceRender tick'); } catch { }
       setForceTick((t) => t + 1);
     };
 

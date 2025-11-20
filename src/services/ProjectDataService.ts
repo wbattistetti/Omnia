@@ -110,13 +110,47 @@ export const ProjectDataService = {
     if (!res.ok) throw new Error('Failed to load project acts');
     const json = await res.json();
     const items = Array.isArray(json?.items) ? json.items : [];
+
+    // Load conditions from project DB (project-specific) + factory DB (global/industry)
+    let conditions: any[] = [];
+    try {
+      // First, load project-specific conditions from project DB
+      const projectCondRes = await fetch(`/api/projects/${encodeURIComponent(projectId)}/conditions`);
+      if (projectCondRes.ok) {
+        const projectJson = await projectCondRes.json();
+        const projectConditions = Array.isArray(projectJson?.items) ? projectJson.items : [];
+        conditions.push(...projectConditions);
+        console.log('[LOAD_CONDITIONS] 🔍 Loaded project conditions', {
+          projectId,
+          count: projectConditions.length
+        });
+      }
+
+      // Then, load global/industry conditions from factory DB
+      const condRes = await fetch('/api/factory/conditions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ industry: projectData.industry || '', scope: ['global', 'industry'] })
+      });
+      if (condRes.ok) {
+        const globalConditions = await condRes.json();
+        conditions.push(...globalConditions);
+        console.log('[LOAD_CONDITIONS] 🔍 Loaded global/industry conditions', {
+          count: globalConditions.length,
+          total: conditions.length
+        });
+      }
+    } catch (e) {
+      console.error('[LOAD_CONDITIONS] ❌ Error loading conditions', e);
+    }
+
     projectData = {
       name: projectData.name || '',
       industry: projectData.industry || '',
       agentActs: this.convertToCategories(items, 'agentActs'),
       userActs: [],
       backendActions: [],
-      conditions: [],
+      conditions: this.convertToCategories(conditions, 'conditions'),
       tasks: [],
       macrotasks: []
     };
@@ -651,6 +685,62 @@ export const ProjectDataService = {
       } else {
       }
     } catch { }
+  },
+
+  /** Persist Conditions with scripts to project DB. Called only on explicit Save. */
+  async saveProjectConditionsToDb(projectId: string, data?: ProjectData): Promise<void> {
+    try {
+      const pd: any = data || projectData;
+      const categories: any[] = Array.isArray(pd?.conditions) ? pd.conditions : [];
+      const itemsToPersist: any[] = [];
+
+      for (const cat of categories) {
+        const items: any[] = Array.isArray(cat?.items) ? cat.items : [];
+        for (const item of items) {
+          if (item?.data?.script) {
+            const conditionId = item.id || item._id;
+            itemsToPersist.push({
+              _id: conditionId,
+              name: item.name || item.label,
+              label: item.label || item.name,
+              description: item.description || '',
+              data: item.data
+            });
+          }
+        }
+      }
+
+      if (!itemsToPersist.length) return;
+
+      // Use bulk endpoint to minimize round-trips
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/conditions/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToPersist })
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[SAVE_CONDITION] ❌ Failed to save conditions', {
+          projectId,
+          status: res.status,
+          error: errorText
+        });
+      } else {
+        const result = await res.json();
+        console.log('[SAVE_CONDITION] ✅ Conditions saved successfully', {
+          projectId,
+          inserted: result.inserted,
+          updated: result.updated,
+          total: result.total
+        });
+      }
+    } catch (e: any) {
+      console.error('[SAVE_CONDITION] ❌ Error in saveProjectConditionsToDb', {
+        error: e.message,
+        stack: e.stack
+      });
+    }
   },
 
   async importProjectData(jsonData: string): Promise<void> {

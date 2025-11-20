@@ -71,6 +71,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 }) => {
   const pdUpdate = useProjectDataUpdate();
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
+
   // Dock tree (new dock manager)
   const [dockTree, setDockTree] = useState<DockNode>({ kind: 'tabset', id: 'ts_main', tabs: [{ id: 'tab_main', title: 'Main', flowId: 'main' }], active: 0 });
 
@@ -319,6 +320,10 @@ export const AppContent: React.FC<AppContentProps> = ({
       const finalVars = hasProvided ? provided : allVars;
       setConditionVars(finalVars);
       setConditionVarsTree((d as any).variablesTree || varsTree);
+      console.log('[LOAD_SCRIPT] 🔍 From AppContent (event)', {
+        conditionName: d.label || d.name || 'Condition',
+        scriptLength: d.script?.length || 0
+      });
       setConditionScript(d.script || '');
       setConditionLabel(d.label || d.name || 'Condition');
       setConditionEditorOpen(true);
@@ -421,7 +426,6 @@ export const AppContent: React.FC<AppContentProps> = ({
     setIsCreatingProject(true);
     try {
       // Bootstrap immediato: crea DB e catalog subito
-      console.log('[AppContent] Creating project with bootstrap...');
       const resp = await fetch('/api/projects/bootstrap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -440,12 +444,9 @@ export const AppContent: React.FC<AppContentProps> = ({
       const projectId = boot.projectId;
 
       // Carica atti dal progetto appena creato
-      console.log('[AppContent] Loading acts from project...');
       try {
         await ProjectDataService.loadActsFromProject(projectId);
-        console.log('[AppContent] Project acts loaded successfully');
       } catch (error) {
-        console.error('[AppContent] Error loading project acts:', error);
       }
 
       const data = await ProjectDataService.loadProjectData();
@@ -476,7 +477,6 @@ export const AppContent: React.FC<AppContentProps> = ({
       setAppState('mainApp');
       return true;
     } catch (e) {
-      console.error('[AppContent] Error creating project:', e);
       setCreateError('Errore nella creazione del progetto');
       return false;
     } finally {
@@ -730,6 +730,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                       } catch { }
                       const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                       await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
+                      await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
                       // Reload fresh project data so act.problem is populated from DB
                       try {
                         const fresh = await (ProjectDataService as any).loadProjectData?.();

@@ -128,17 +128,7 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
   // CRITICAL: Pre-register custom language BEFORE MonacoEditor renders
   // This ensures the tokenizer is available when Monaco loads the initial content
   React.useEffect(() => {
-    console.log('[EditorPanel] 🔍 PRE-REGISTRATION useEffect triggered', {
-      hasCustomLanguage: !!customLanguage,
-      langId: customLanguage?.id,
-      windowAvailable: typeof window !== 'undefined'
-    });
-
     if (!customLanguage || typeof window === 'undefined') {
-      console.log('[EditorPanel] ⚠️ Skipping pre-registration:', {
-        noCustomLanguage: !customLanguage,
-        noWindow: typeof window === 'undefined'
-      });
       return;
     }
 
@@ -166,65 +156,29 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
 
       try {
         const langId = customLanguage.id;
-        console.log('[EditorPanel] 🔍 Starting pre-registration for:', langId);
-
         const existingLanguages = monaco.languages.getLanguages();
         const isRegistered = existingLanguages.some((l: any) => l.id === langId);
-        console.log('[EditorPanel] 🔍 Language registration check:', {
-          langId,
-          isRegistered,
-          totalLanguages: existingLanguages.length,
-          existingIds: existingLanguages.slice(0, 5).map((l: any) => l.id)
-        });
 
         if (!isRegistered) {
           monaco.languages.register({ id: langId });
-          console.log('[EditorPanel] ✅ Registered new language:', langId);
         }
 
         // Register tokenizer
         const tokenizerConfig = {
           tokenizer: customLanguage.tokenizer
         };
-        console.log('[EditorPanel] 🔍 Registering tokenizer:', {
-          langId,
-          hasTokenizer: !!customLanguage.tokenizer,
-          hasRoot: !!customLanguage.tokenizer?.root,
-          rootRules: customLanguage.tokenizer?.root?.length || 0
-        });
-
         monaco.languages.setMonarchTokensProvider(langId, tokenizerConfig);
-        console.log('[EditorPanel] ✅ Tokenizer registered for:', langId);
-
-        // Verify tokenizer was registered
-        const tokenizerProvider = (monaco.languages as any).getEncodedTokensProvider(langId);
-        console.log('[EditorPanel] 🔍 Tokenizer verification:', {
-          langId,
-          hasProvider: !!tokenizerProvider,
-          providerType: typeof tokenizerProvider
-        });
 
         // Define theme
         if (customLanguage.theme) {
           const themeName = customLanguage.themeName || `${langId}Theme`;
-          console.log('[EditorPanel] 🔍 Defining theme:', {
-            themeName,
-            base: customLanguage.theme.base,
-            rulesCount: customLanguage.theme.rules?.length || 0,
-            colorsCount: Object.keys(customLanguage.theme.colors || {}).length
-          });
-
           monaco.editor.defineTheme(themeName, {
             base: customLanguage.theme.base || 'vs-dark',
             inherit: customLanguage.theme.inherit !== false,
             rules: customLanguage.theme.rules || [],
             colors: customLanguage.theme.colors || {},
           });
-
-          console.log('[EditorPanel] ✅ Theme defined:', themeName);
         }
-
-        console.log('[EditorPanel] ✅✅✅ PRE-registration COMPLETE for:', langId);
       } catch (err) {
         console.error('[EditorPanel] ❌ Failed to pre-register language:', err);
       }
@@ -330,29 +284,15 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
 
 
             // Register custom language FIRST, before anything else
-            console.log('[EditorPanel] 🔍 editorDidMount called', {
-              hasCustomLanguage: !!customLanguage,
-              langId: customLanguage?.id,
-              editorLanguage,
-              safeCodeLength: safeCode?.length || 0
-            });
 
             if (customLanguage) {
               try {
                 const langId = customLanguage.id;
-                console.log('[EditorPanel] 🔍 Starting registration in editorDidMount:', langId);
-
                 const existingLanguages = monaco.languages.getLanguages();
                 const isRegistered = existingLanguages.some((l: any) => l.id === langId);
-                console.log('[EditorPanel] 🔍 Language check in editorDidMount:', {
-                  langId,
-                  isRegistered,
-                  wasPreRegistered: isRegistered
-                });
 
                 if (!isRegistered) {
                   monaco.languages.register({ id: langId });
-                  console.log('[EditorPanel] ✅ Registered language in editorDidMount:', langId);
                 }
 
                 // Monaco expects: { tokenizer: { root: [...] } }
@@ -362,19 +302,6 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                 };
 
                 monaco.languages.setMonarchTokensProvider(langId, tokenizerConfig);
-                console.log('[EditorPanel] ✅ Set tokenizer in editorDidMount:', langId);
-
-                // Verify tokenizer
-                try {
-                  const tokenizerProvider = (monaco.languages as any).getEncodedTokensProvider(langId);
-                  console.log('[EditorPanel] 🔍 Tokenizer verification in editorDidMount:', {
-                    langId,
-                    hasProvider: !!tokenizerProvider,
-                    canGetProvider: !!tokenizerProvider
-                  });
-                } catch (verifyErr) {
-                  console.warn('[EditorPanel] ⚠️ Cannot verify tokenizer:', verifyErr);
-                }
 
                 // Define custom theme if provided
                 if (customLanguage.theme) {
@@ -388,80 +315,36 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                   // Apply theme immediately
                   monaco.editor.setTheme(themeName);
                   editor.updateOptions({ theme: themeName });
-                  console.log('[EditorPanel] ✅ Applied theme in editorDidMount:', themeName);
                 }
 
                 // CRITICAL: Get model and set language BEFORE tokenization
                 const model = editor.getModel();
-                console.log('[EditorPanel] 🔍 Model check:', {
-                  hasModel: !!model,
-                  modelUri: model?.uri?.toString(),
-                  currentLanguage: model?.getLanguageId(),
-                  expectedLanguage: langId
-                });
 
                 if (model) {
-                  const previousLanguage = model.getLanguageId();
-                  console.log('[EditorPanel] 🔍 Setting model language:', {
-                    from: previousLanguage,
-                    to: langId,
-                    willChange: previousLanguage !== langId
-                  });
-
                   // Set language IMMEDIATELY
                   monaco.editor.setModelLanguage(model, langId);
 
-                  const afterLanguage = model.getLanguageId();
-                  console.log('[EditorPanel] ✅ Set model language:', {
-                    before: previousLanguage,
-                    after: afterLanguage,
-                    success: afterLanguage === langId
-                  });
-
                   // Get current content
                   const currentValue = model.getValue();
-                  console.log('[EditorPanel] 📝 Current content:', {
-                    length: currentValue?.length || 0,
-                    preview: currentValue?.substring(0, 50) || '(empty)',
-                    isEmpty: !currentValue || currentValue.trim().length === 0
-                  });
 
                   // AGGRESSIVE: Force tokenization multiple times with different strategies
                   const forceTokenizationAggressively = (attempt: number) => {
-                    console.log(`[EditorPanel] 🔄 Force tokenization attempt ${attempt}`);
-
-                    if (!model) {
-                      console.warn('[EditorPanel] ⚠️ No model for tokenization attempt', attempt);
-                      return;
-                    }
+                    if (!model) return;
 
                     try {
-                      const currentLang = model.getLanguageId();
-                      console.log(`[EditorPanel] 🔍 Attempt ${attempt} - Current model language:`, currentLang);
-
                       // Always force language update
                       monaco.editor.setModelLanguage(model, langId);
-                      const afterSetLang = model.getLanguageId();
-                      console.log(`[EditorPanel] 🔍 Attempt ${attempt} - After setLanguage:`, {
-                        expected: langId,
-                        actual: afterSetLang,
-                        match: afterSetLang === langId
-                      });
 
                       if (currentValue && currentValue.trim().length > 0) {
-                        console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Has content, clearing and resetting`);
-
                         // Strategy 1: Clear and reset content to force full tokenization
                         const savedValue = currentValue;
                         model.setValue('');
-                        console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Cleared model`);
 
                         // Use setTimeout(0) to ensure Monaco processes the clear
                         setTimeout(() => {
                           if (model) {
                             model.setValue(savedValue);
                             monaco.editor.setModelLanguage(model, langId);
-                            console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Reset content and language`);
 
                             // Strategy 2: Force edit operation
                             setTimeout(() => {
@@ -475,32 +358,19 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                                   }],
                                   () => null
                                 );
-                                console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Applied edit operations`);
 
                                 // Strategy 3: Force multiple renders
                                 editor.render(true);
                                 editor.deltaDecorations([], []);
                                 editor.render(true);
-
-                                // Check if tokens are actually applied
-                                try {
-                                  const decorations = editor.getLineDecorations(1);
-                                  console.log(`[EditorPanel] 🔍 Attempt ${attempt} - Decorations on line 1:`, decorations?.length || 0);
-                                } catch (e) {
-                                  console.warn(`[EditorPanel] ⚠️ Cannot check decorations:`, e);
-                                }
-
-                                console.log(`[EditorPanel] ✅✅✅ Attempt ${attempt} - AGGRESSIVE tokenization completed`);
                               }
                             }, 5);
                           }
                         }, 5);
                       } else {
-                        console.log(`[EditorPanel] 🔄 Attempt ${attempt} - Empty content, just setting language`);
                         // Even for empty content, ensure language is set
                         monaco.editor.setModelLanguage(model, langId);
                         editor.render(true);
-                        console.log(`[EditorPanel] ✅ Attempt ${attempt} - Language set and rendered`);
                       }
                     } catch (e) {
                       console.error(`[EditorPanel] ❌ Error in aggressive tokenization attempt ${attempt}:`, e);
@@ -508,7 +378,6 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                   };
 
                   // Execute IMMEDIATELY and MULTIPLE TIMES to ensure it works
-                  console.log('[EditorPanel] 🚀 Starting aggressive tokenization sequence');
                   forceTokenizationAggressively(1);
 
                   // Backup executions
@@ -643,18 +512,15 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
               if (dom) {
                 // ✅ Open menu on right-click
                 onCtx = (e: any) => {
-                  console.log('🔍 [EditorPanel] Right-click detected!', { clientX: e.clientX, clientY: e.clientY });
                   try {
                     e.preventDefault();
                     e.stopPropagation();
                     editor.focus();
                     const pos = editor.getPosition();
                     const coords = editor.getScrolledVisiblePosition(pos);
-                    console.log('🔍 [EditorPanel] Right-click position:', { pos, coords });
                     if (coords) {
                       setMenuPosition({ x: e.clientX, y: e.clientY });
                       setMenuOpen(true);
-                      console.log('🔍 [EditorPanel] Menu opened via right-click!');
                     }
                   } catch (err) {
                     console.error('🔍 [EditorPanel] Error in right-click handler:', err);
@@ -665,13 +531,11 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                 // ✅ Open menu on right mouse button
                 onMouseUp = (e: MouseEvent) => {
                   if (e.button === 2) {
-                    console.log('🔍 [EditorPanel] Right mouse button up detected!', { clientX: e.clientX, clientY: e.clientY });
                     try {
                       e.preventDefault();
                       e.stopPropagation();
                       setMenuPosition({ x: e.clientX, y: e.clientY });
                       setMenuOpen(true);
-                      console.log('🔍 [EditorPanel] Menu opened via right mouse button!');
                     } catch (err) {
                       console.error('🔍 [EditorPanel] Error in mouseup handler:', err);
                     }
@@ -680,27 +544,20 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
 
                 // ✅ Open menu when typing '[' (trigger for variables)
                 editor.onKeyDown((e: any) => {
-                  console.log('🔍 [EditorPanel] Key pressed:', { keyCode: e.keyCode, key: e.browserEvent?.key, monacoKeyCode: monaco.KeyCode.BracketLeft });
                   if (e.keyCode === monaco.KeyCode.BracketLeft) {
-                    console.log('🔍 [EditorPanel] BracketLeft detected!');
                     // Check if we're inside vars["..."] context
                     const pos = editor.getPosition();
                     const model = editor.getModel();
-                    console.log('🔍 [EditorPanel] Position and model:', { pos, hasModel: !!model });
                     if (pos && model) {
                       const lineText = model.getLineContent(pos.lineNumber);
                       const textUntilPosition = lineText.substring(0, pos.column - 1);
-                      console.log('🔍 [EditorPanel] Line text:', { lineText, textUntilPosition });
                       const varsPattern = /vars\s*\[\s*["']([^"']*)$/;
                       const match = textUntilPosition.match(varsPattern);
-                      console.log('🔍 [EditorPanel] Pattern match:', match);
 
                       if (match) {
-                        console.log('🔍 [EditorPanel] Match found! Opening menu...');
                         // We're inside vars["..."], open menu
                         setTimeout(() => {
                           const coords = editor.getScrolledVisiblePosition(pos);
-                          console.log('🔍 [EditorPanel] Coordinates:', coords);
                           if (coords) {
                             const domNode = editor.getDomNode();
                             if (domNode) {
@@ -709,15 +566,11 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                                 x: rect.left + coords.left,
                                 y: rect.top + coords.top + 20 // Position below cursor
                               };
-                              console.log('🔍 [EditorPanel] Setting menu position:', newPos);
                               setMenuPosition(newPos);
                               setMenuOpen(true);
-                              console.log('🔍 [EditorPanel] Menu opened!');
                             }
                           }
                         }, 100); // Small delay to let Monaco process the '[' character
-                      } else {
-                        console.log('🔍 [EditorPanel] No match - not inside vars["..."]');
                       }
                     }
                   }
@@ -771,7 +624,6 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
               editor={editorRef.current}
               monaco={monacoRef.current}
               onClose={() => {
-                console.log('🔍 [EditorPanel] Closing menu');
                 setMenuOpen(false);
               }}
             />

@@ -1057,6 +1057,111 @@ app.post('/api/projects/:pid/acts/bulk', async (req, res) => {
 });
 
 // -----------------------------
+// Endpoint: Project Conditions (create/upsert)
+// -----------------------------
+app.post('/api/projects/:pid/conditions', async (req, res) => {
+  const pid = req.params.pid;
+  const payload = req.body || {};
+  if (!payload || !payload._id || !payload.name) {
+    return res.status(400).json({ error: 'id_and_name_required' });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = await getProjectDb(client, pid);
+    const coll = db.collection('project_conditions');
+    const now = new Date();
+    const doc = {
+      _id: payload._id,
+      name: payload.name,
+      label: payload.label || payload.name,
+      description: payload.description || '',
+      data: payload.data || {},
+      updatedAt: now
+    };
+    const setDoc = { ...doc };
+    delete setDoc.createdAt;
+    setDoc.updatedAt = now;
+    await coll.updateOne(
+      { _id: doc._id },
+      { $set: setDoc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+    const saved = await coll.findOne({ _id: doc._id });
+    logInfo('Conditions.post', { projectId: pid, id: doc._id, name: doc.name });
+    res.json(saved);
+  } catch (e) {
+    logError('Conditions.post', e, { projectId: pid, id: payload?._id });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoint: Project Conditions bulk upsert
+// -----------------------------
+app.post('/api/projects/:pid/conditions/bulk', async (req, res) => {
+  const pid = req.params.pid;
+  const payload = req.body || {};
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  if (!items.length) {
+    return res.json({ inserted: 0, updated: 0, total: 0 });
+  }
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = await getProjectDb(client, pid);
+    const coll = db.collection('project_conditions');
+    const now = new Date();
+    const bulkOps = items.map(item => ({
+      updateOne: {
+        filter: { _id: item._id || item.id },
+        update: {
+          $set: {
+            name: item.name || item.label,
+            label: item.label || item.name,
+            description: item.description || '',
+            data: item.data || {},
+            updatedAt: now
+          },
+          $setOnInsert: { createdAt: now }
+        },
+        upsert: true
+      }
+    }));
+    const result = await coll.bulkWrite(bulkOps);
+    logInfo('Conditions.bulk', { projectId: pid, inserted: result.upsertedCount, updated: result.modifiedCount, total: items.length });
+    res.json({ inserted: result.upsertedCount, updated: result.modifiedCount, total: items.length });
+  } catch (e) {
+    logError('Conditions.bulk', e, { projectId: pid });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// Endpoint: Get Project Conditions
+// -----------------------------
+app.get('/api/projects/:pid/conditions', async (req, res) => {
+  const pid = req.params.pid;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = await getProjectDb(client, pid);
+    const coll = db.collection('project_conditions');
+    const items = await coll.find({}).toArray();
+    res.json({ items });
+  } catch (e) {
+    logError('Conditions.get', e, { projectId: pid });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
 // Endpoints: Act Instances (create/update/get)
 // -----------------------------
 app.post('/api/projects/:pid/instances', async (req, res) => {
@@ -1829,6 +1934,76 @@ app.post('/api/factory/conditions', async (req, res) => {
   } catch (error) {
     console.error('Error fetching conditions with scope filtering:', error);
     res.status(500).json({ error: 'Failed to fetch conditions' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Conditions - POST (create new)
+app.post('/api/factory/conditions/create', async (req, res) => {
+  const payload = req.body || {};
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('Conditions');
+
+    if (!payload._id || !payload.name) {
+      return res.status(400).json({ error: 'id_and_name_required' });
+    }
+
+    const now = new Date();
+    const doc = {
+      _id: payload._id,
+      name: payload.name,
+      label: payload.label || payload.name,
+      description: payload.description || '',
+      data: payload.data || {},
+      updatedAt: now
+    };
+
+    await coll.updateOne(
+      { _id: doc._id },
+      { $set: doc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+
+    const saved = await coll.findOne({ _id: doc._id });
+    res.json(saved);
+  } catch (error) {
+    console.error('[Conditions][Create] Error:', error);
+    res.status(500).json({ error: 'Failed to create condition' });
+  } finally {
+    await client.close();
+  }
+});
+
+// Conditions - PUT (update)
+app.put('/api/factory/conditions/:id', async (req, res) => {
+  const conditionId = req.params.id;
+  const payload = req.body || {};
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+    const coll = db.collection('Conditions');
+
+    const update = { $set: { updatedAt: new Date() } };
+    if (payload.data) update.$set.data = payload.data;
+    if (payload.name) update.$set.name = payload.name;
+    if (payload.label) update.$set.label = payload.label;
+    if (payload.description !== undefined) update.$set.description = payload.description;
+
+    const result = await coll.updateOne({ _id: conditionId }, update);
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Condition not found' });
+    }
+
+    const updated = await coll.findOne({ _id: conditionId });
+    res.json(updated);
+  } catch (error) {
+    console.error('[Conditions][Update] Error:', error);
+    res.status(500).json({ error: 'Failed to update condition' });
   } finally {
     await client.close();
   }
