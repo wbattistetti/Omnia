@@ -118,24 +118,26 @@ export default function DDEBubbleChat({
             escalationNumber: message.escalationNumber
           });
           const uniqueId = message.id ? `${message.id}-${Date.now()}-${Math.random()}` : `msg-${Date.now()}-${Math.random()}`;
+          const messageType = message.type || 'bot'; // Support 'system' type for error messages
           flushSync(() => {
             setMessages((prev) => {
-              const existingIndex = prev.findIndex(m => m.text === message.text && m.type === 'bot');
+              const existingIndex = prev.findIndex(m => m.text === message.text && m.type === messageType);
               if (existingIndex >= 0) {
-                console.log('[DDEBubbleChat] ⚠️ Message already exists, skipping', { text: message.text });
+                console.log('[DDEBubbleChat] ⚠️ Message already exists, skipping', { text: message.text, type: messageType });
                 return prev;
               }
               console.log('[DDEBubbleChat] ✅ Adding message to state', {
                 messageCount: prev.length + 1,
-                text: message.text?.substring(0, 50)
+                text: message.text?.substring(0, 50),
+                type: messageType
               });
               return [...prev, {
                 id: uniqueId,
-                type: 'bot',
+                type: messageType,
                 text: message.text,
                 stepType: message.stepType || 'message',
                 escalationNumber: message.escalationNumber,
-                color: getStepColor(message.stepType || 'message')
+                color: messageType === 'system' ? '#ef4444' : getStepColor(message.stepType || 'message') // Red for system/error messages
               }];
             });
           });
@@ -858,10 +860,12 @@ export default function DDEBubbleChat({
           }
 
           // Render system message (legacy - dovrebbe essere raro ora)
+          // Render error messages (e.g., flow ambiguity) in red
           if (m.type === 'system') {
+            const isError = m.stepType === 'error' || m.text?.toLowerCase().includes('ambiguity');
             return (
-              <div key={m.id} className="flex items-center gap-2 text-xs text-yellow-700">
-                <AlertTriangle size={12} className="flex-shrink-0 text-yellow-600" />
+              <div key={m.id} className={`flex items-center gap-2 text-xs ${isError ? 'text-red-700' : 'text-yellow-700'}`}>
+                <AlertTriangle size={12} className={`flex-shrink-0 ${isError ? 'text-red-600' : 'text-yellow-600'}`} />
                 <span>{m.text}</span>
               </div>
             );

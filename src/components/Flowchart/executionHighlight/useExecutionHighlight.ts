@@ -1,7 +1,7 @@
 // Hook for calculating execution highlight styles
 import { useMemo } from 'react';
 import { useExecutionState } from './ExecutionStateContext';
-import { Highlight } from './executionHighlightConstants';
+import { Highlight, StepColor } from './executionHighlightConstants';
 import type { NodeRowData } from '../../../types/project';
 
 export interface ExecutionHighlightStyles {
@@ -31,18 +31,36 @@ export function useNodeExecutionHighlight(nodeId: string, rows: NodeRowData[]): 
       return execState.isTaskExecuted(taskId);
     });
 
-    // 🎨 [HIGHLIGHT] Log node highlighting calculation (only for executing nodes)
+    // ✅ Node in esecuzione: bordo con colore dello step della riga in esecuzione (4px)
     if (isExecuting) {
-      console.log('🎨 [HIGHLIGHT] Node executing', {
-        nodeId,
-        currentNodeId: execState.executionState?.currentNodeId
+      // Trova la riga in esecuzione e ottieni il suo stepType
+      const executingRow = rows.find(row => {
+        return execState.isRowExecuting(row.id);
       });
-    }
 
-    // ✅ Node in esecuzione: bordo verde 4px
-    if (isExecuting) {
+      let stepType: 'stepStart' | 'stepMatch' | 'stepNoMatch' | null = null;
+      if (executingRow) {
+        stepType = execState.getRowStepType(executingRow.id);
+      }
+
+      // Mappa stepType ai colori StepColor (come per le righe)
+      let borderColor: string;
+      switch (stepType) {
+        case 'stepStart':
+          borderColor = StepColor.Normal; // Blu
+          break;
+        case 'stepMatch':
+          borderColor = StepColor.Match; // Verde
+          break;
+        case 'stepNoMatch':
+          borderColor = StepColor.NoMatch; // Rosso
+          break;
+        default:
+          borderColor = StepColor.Normal; // Default blu
+      }
+
       return {
-        nodeBorder: Highlight.FlowNode.borderColor,
+        nodeBorder: borderColor,
         nodeBorderWidth: Highlight.FlowNode.executingBorderWidth
       };
     }
@@ -82,12 +100,30 @@ export function useRowExecutionHighlight(rowId: string, taskId?: string): {
     const isExecuted = taskId ? execState.isTaskExecuted(taskId) : false;
     const stepType = execState.getRowStepType(rowId);
 
-    // ✅ Riga in esecuzione: bordo verde 4px
+    // ✅ Riga in esecuzione: bordo con colore dello step corrente (4px)
     if (isExecuting) {
+      const currentStepType = stepType || 'stepStart';
+
+      // Mappa stepType ai colori StepColor
+      let borderColor: string;
+      switch (currentStepType) {
+        case 'stepStart':
+          borderColor = StepColor.Normal; // Blu
+          break;
+        case 'stepMatch':
+          borderColor = StepColor.Match; // Verde
+          break;
+        case 'stepNoMatch':
+          borderColor = StepColor.NoMatch; // Rosso
+          break;
+        default:
+          borderColor = StepColor.Normal; // Default blu
+      }
+
       return {
-        border: Highlight.FlowNodeRow.borderColor,
+        border: borderColor,
         borderWidth: Highlight.FlowNodeRow.executingBorderWidth,
-        stepType: stepType || 'stepStart'
+        stepType: currentStepType
       };
     }
 

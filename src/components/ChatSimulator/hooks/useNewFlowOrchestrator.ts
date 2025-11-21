@@ -497,13 +497,18 @@ export function useNewFlowOrchestrator({
     }
   });
 
-  // ✅ Expose execution state to window for FlowEditor highlighting
-  const prevStateRef = React.useRef<{ currentNodeId?: string | null; executedCount?: number; isRunning?: boolean }>({});
-  React.useEffect(() => {
-    try {
-      (window as any).__executionState = engine.executionState;
-      (window as any).__currentTask = engine.currentTask;
-      (window as any).__isRunning = engine.isRunning;
+      // ✅ Expose execution state to window for FlowEditor highlighting
+      // ✅ Expose onMessage to window for edge error messages
+      const prevStateRef = React.useRef<{ currentNodeId?: string | null; executedCount?: number; isRunning?: boolean }>({});
+      React.useEffect(() => {
+        try {
+          (window as any).__executionState = engine.executionState;
+          (window as any).__currentTask = engine.currentTask;
+          (window as any).__isRunning = engine.isRunning;
+          // Expose onMessage for edge error messages
+          if (onMessage) {
+            (window as any).__flowOnMessage = onMessage;
+          }
 
       // 🎨 [HIGHLIGHT] Log when execution state changes (only when values change)
       const prev = prevStateRef.current;

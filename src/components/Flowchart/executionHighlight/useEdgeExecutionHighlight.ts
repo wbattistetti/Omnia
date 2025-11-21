@@ -1,5 +1,5 @@
 // Hook for calculating edge/link execution highlight
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { useExecutionState } from './ExecutionStateContext';
 import { Highlight } from './executionHighlightConstants';
 import type { Edge } from 'reactflow';
@@ -20,11 +20,12 @@ export function useEdgeExecutionHighlight(
   isError: boolean; // true if multiple valid links (logical error)
 } {
   const execState = useExecutionState();
+  const errorReportedRef = useRef<Set<string>>(new Set());
 
   // Get all edges from window if not provided
   const edges = allEdges || (typeof window !== 'undefined' ? (window as any).__flowEdges : []) || [];
 
-  return useMemo(() => {
+  const highlightResult = useMemo(() => {
     if (!execState || !execState.isRunning || !execState.executionState) {
       return {
         stroke: edge.style?.stroke || '#8b5cf6',
@@ -116,8 +117,10 @@ export function useEdgeExecutionHighlight(
 
         return {
           stroke: isError ? Highlight.Edge.multipleValidError : Highlight.Edge.validCondition,
-          strokeWidth: 3,
-          isError
+          strokeWidth: Highlight.Edge.validConditionStrokeWidth, // ✅ Usa spessore dalla costante (2px)
+          isError,
+          sourceNodeId, // Include sourceNodeId for error reporting
+          validEdgesCount: validEdges.length
         };
       }
     } catch (error) {
@@ -127,8 +130,50 @@ export function useEdgeExecutionHighlight(
     return {
       stroke: edge.style?.stroke || '#8b5cf6',
       strokeWidth: 1.5,
-      isError: false
+      isError: false,
+      sourceNodeId: edge.source,
+      validEdgesCount: 0
     };
   }, [execState, edge, edges]);
+
+  // ✅ Send error message to chat when multiple valid links are detected
+  useEffect(() => {
+    if (highlightResult.isError && highlightResult.sourceNodeId) {
+      const errorKey = `flow-ambiguity-${highlightResult.sourceNodeId}`;
+
+      // Check if we've already reported this error for this node
+      if (!errorReportedRef.current.has(errorKey)) {
+        errorReportedRef.current.add(errorKey);
+
+        // Get onMessage from window
+        const onMessage = typeof window !== 'undefined' ? (window as any).__flowOnMessage : null;
+
+        if (onMessage) {
+          // Send system message with error icon
+          onMessage({
+            id: `flow-ambiguity-${highlightResult.sourceNodeId}-${Date.now()}`,
+            type: 'system',
+            text: 'Flow ambiguity',
+            stepType: 'error',
+            timestamp: new Date()
+          });
+          console.log('🎨 [HIGHLIGHT] Flow ambiguity error message sent to chat', {
+            sourceNodeId: highlightResult.sourceNodeId,
+            validEdgesCount: highlightResult.validEdgesCount
+          });
+        }
+      }
+    } else if (!highlightResult.isError && highlightResult.sourceNodeId) {
+      // Clear error key when error is resolved
+      const errorKey = `flow-ambiguity-${highlightResult.sourceNodeId}`;
+      errorReportedRef.current.delete(errorKey);
+    }
+  }, [highlightResult.isError, highlightResult.sourceNodeId, highlightResult.validEdgesCount]);
+
+  return {
+    stroke: highlightResult.stroke,
+    strokeWidth: highlightResult.strokeWidth,
+    isError: highlightResult.isError
+  };
 }
 

@@ -29,6 +29,7 @@ export const Highlight = {
   },
   Edge: {
     validCondition: '#22c55e',             // Green - link with condition=true
+    validConditionStrokeWidth: 2,          // ✅ Spessore 2px per link eseguiti (più grande di 1.5px default)
     multipleValidError: '#ef4444'         // Red - multiple links with condition=true (logical error)
   }
 } as const;
