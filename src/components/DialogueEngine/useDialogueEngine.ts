@@ -23,6 +23,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
   const [currentTask, setCurrentTask] = useState<CompiledTask | null>(null);
   const engineRef = useRef<DialogueEngine | null>(null);
 
+  // 🎨 [HIGHLIGHT] Ref to track previous state for logging
+  const prevStateRef = useRef<{ currentNodeId?: string | null; executedCount?: number }>({});
+
   // Expose currentTask for useNewFlowOrchestrator
   const getCurrentTask = useCallback(() => currentTask, [currentTask]);
 
@@ -66,6 +69,25 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           return await options.onTaskExecute(task);
         },
         onStateUpdate: (state) => {
+          // 🎨 [HIGHLIGHT] Log only when state actually changes (reduced noise)
+          const prev = prevStateRef.current;
+          const current = {
+            currentNodeId: state.currentNodeId,
+            executedCount: state.executedTaskIds.size
+          };
+
+          if (
+            prev.currentNodeId !== current.currentNodeId ||
+            prev.executedCount !== current.executedCount ||
+            !prev.currentNodeId // Log on first update
+          ) {
+            console.log('🎨 [HIGHLIGHT] useDialogueEngine - State updated', {
+              currentNodeId: current.currentNodeId,
+              executedCount: current.executedCount
+            });
+            prevStateRef.current = current;
+          }
+
           setExecutionState(state);
         },
         onComplete: () => {

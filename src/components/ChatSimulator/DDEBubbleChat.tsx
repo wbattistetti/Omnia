@@ -282,28 +282,26 @@ export default function DDEBubbleChat({
   const prevMemoryRef = React.useRef<Record<string, any>>({});
 
   // Update user message with grammarMissing flag and extractedValues after simulator processes input
+  // 🎨 [HIGHLIGHT] Reduced noise: only log when values change
+  const prevEffectStateRef = React.useRef<{ lastUserMessageId?: string | null; mode?: string }>({});
   React.useEffect(() => {
-    console.log('[DDEBubbleChat][USE-EFFECT] ════════════════════════════════════════');
-    console.log('[DDEBubbleChat][USE-EFFECT] 🔍 Effect triggered', {
-      hasSimulatorState: !!simulator?.state,
-      mode,
-      hasTemplate: !!template,
+    const prev = prevEffectStateRef.current;
+    const current = {
       lastUserMessageId: lastUserMessageIdRef.current,
-      hasOrchestrator: !!orchestrator,
-      hasOnUserInputProcessedWithValuesRef: !!orchestrator.onUserInputProcessedWithValuesRef,
-      hasCallback: !!orchestrator.onUserInputProcessedWithValuesRef?.current,
-      lastUserInput: lastUserInputRef.current,
-      hasMemory: !!simulator?.state?.memory,
-      memoryKeys: simulator?.state?.memory ? Object.keys(simulator.state.memory) : []
-    });
+      mode
+    };
+
+    // Only log if values actually changed or on first run
+    if (
+      prev.lastUserMessageId !== current.lastUserMessageId ||
+      prev.mode !== current.mode ||
+      !prev.lastUserMessageId
+    ) {
+      // Log removed - too noisy
+    }
+    prevEffectStateRef.current = current;
 
     if (!simulator?.state || mode !== 'single-ddt' || !template || !lastUserMessageIdRef.current) {
-      console.log('[DDEBubbleChat][USE-EFFECT] ⚠️ Early return', {
-        hasSimulatorState: !!simulator?.state,
-        mode,
-        hasTemplate: !!template,
-        lastUserMessageId: lastUserMessageIdRef.current
-      });
       return;
     }
 

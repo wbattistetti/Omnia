@@ -497,6 +497,45 @@ export function useNewFlowOrchestrator({
     }
   });
 
+  // ✅ Expose execution state to window for FlowEditor highlighting
+  const prevStateRef = React.useRef<{ currentNodeId?: string | null; executedCount?: number; isRunning?: boolean }>({});
+  React.useEffect(() => {
+    try {
+      (window as any).__executionState = engine.executionState;
+      (window as any).__currentTask = engine.currentTask;
+      (window as any).__isRunning = engine.isRunning;
+
+      // 🎨 [HIGHLIGHT] Log when execution state changes (only when values change)
+      const prev = prevStateRef.current;
+      const current = {
+        currentNodeId: engine.executionState?.currentNodeId,
+        executedCount: engine.executionState?.executedTaskIds.size || 0,
+        isRunning: engine.isRunning
+      };
+
+      if (
+        engine.isRunning && (
+          prev.currentNodeId !== current.currentNodeId ||
+          prev.executedCount !== current.executedCount ||
+          prev.isRunning !== current.isRunning ||
+          !prev.isRunning || // Log on first run
+          !engine.executionState // Log when state is first initialized
+        )
+      ) {
+        console.log('🎨 [HIGHLIGHT] useNewFlowOrchestrator - State changed', {
+          isRunning: engine.isRunning,
+          hasExecutionState: !!engine.executionState,
+          currentNodeId: current.currentNodeId,
+          executedCount: current.executedCount,
+          currentTaskId: engine.currentTask?.id
+        });
+        prevStateRef.current = current;
+      }
+    } catch (error) {
+      console.warn('🎨 [HIGHLIGHT] Failed to expose execution state to window', error);
+    }
+  }, [engine.executionState, engine.currentTask, engine.isRunning]);
+
   // Expose same API as old orchestrator
   return {
     // State

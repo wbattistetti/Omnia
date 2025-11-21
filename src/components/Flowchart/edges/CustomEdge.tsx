@@ -10,6 +10,8 @@ import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDa
 import { ProjectDataService } from '../../../services/ProjectDataService';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../../utils/fontSizeUtils';
+import { useEdgeExecutionHighlight } from '../executionHighlight/useEdgeExecutionHighlight';
+import { Highlight } from '../executionHighlight/executionHighlightConstants';
 
 export type CustomEdgeProps = EdgeProps & {
   onDeleteEdge?: (edgeId: string) => void;
@@ -29,6 +31,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     onDeleteEdge,
     data,
   } = props;
+
+  // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles for edge
+  // Get all edges from window for multiple link detection
+  const allEdges = typeof window !== 'undefined' ? (window as any).__flowEdges : [];
+  const edgeHighlight = useEdgeExecutionHighlight(props as any, allEdges);
 
   const { addItem, addCategory } = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
@@ -318,8 +325,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           style={{
             ...style,
             strokeDasharray: undefined,
-            stroke: trashHovered ? '#dc2626' : (style.stroke || '#8b5cf6'),
-            strokeWidth: (hovered || props.selected) ? 3 : 1.5,
+            stroke: edgeHighlight.isError
+              ? Highlight.Edge.multipleValidError
+              : (trashHovered ? '#dc2626' : (edgeHighlight.stroke || style.stroke || '#8b5cf6')),
+            strokeWidth: edgeHighlight.isError || edgeHighlight.strokeWidth > 1.5
+              ? edgeHighlight.strokeWidth
+              : ((hovered || props.selected) ? 3 : 1.5),
             opacity: (hovered || props.selected) ? 0.95 : 0.85,
             transition: 'stroke 0.15s',
           }}

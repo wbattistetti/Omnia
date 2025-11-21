@@ -42,6 +42,9 @@ export class DialogueEngine {
 
     this.isRunning = true;
 
+    // ✅ Initialize execution state by notifying immediately
+    this.callbacks.onStateUpdate?.(this.state);
+
     try {
       // Start from entry task
       if (this.result.entryTaskId) {
@@ -229,6 +232,20 @@ export class DialogueEngine {
       hasValue: !!task.value,
       valueKeys: task.value ? Object.keys(task.value) : []
     });
+
+    // ✅ Update currentNodeId IMMEDIATELY when task starts executing (for highlighting)
+    if (task.source.nodeId) {
+      this.state.currentNodeId = task.source.nodeId;
+      console.log('🎨 [HIGHLIGHT] DialogueEngine - Updated currentNodeId (task starting)', {
+        taskId: task.id,
+        action: task.action,
+        sourceType: task.source.type,
+        currentNodeId: this.state.currentNodeId
+      });
+      // Notify state update immediately so UI can highlight the node
+      this.callbacks.onStateUpdate?.(this.state);
+    }
+
     try {
       // Execute task (task executor will set the state)
       const result = await this.callbacks.onTaskExecute(task);
@@ -266,6 +283,13 @@ export class DialogueEngine {
 
       // Notify state update
       this.callbacks.onStateUpdate?.(this.state);
+      console.log('🎨 [HIGHLIGHT] DialogueEngine - onStateUpdate called', {
+        taskId: task.id,
+        currentNodeId: this.state.currentNodeId,
+        executedTaskIds: Array.from(this.state.executedTaskIds),
+        executedCount: this.state.executedTaskIds.size,
+        variableStoreKeys: Object.keys(this.state.variableStore)
+      });
 
     } catch (error) {
       console.error(`[DialogueEngine][executeTask] Error executing task ${task.id}:`, error);
@@ -327,10 +351,16 @@ export class DialogueEngine {
       }
     }
 
-    // Update current node/row for flowchart tasks
-    if (task.source.type === 'flowchart' && task.source.nodeId) {
+    // Update current node/row for all tasks that have a nodeId (flowchart or DDT from flowchart)
+    // DDT tasks can have nodeId if they come from a flowchart node that triggered the DDT
+    if (task.source.nodeId) {
       this.state.currentNodeId = task.source.nodeId;
-      // Row index would need to be tracked separately
+      console.log('🎨 [HIGHLIGHT] DialogueEngine - Updated currentNodeId', {
+        taskId: task.id,
+        action: task.action,
+        sourceType: task.source.type,
+        currentNodeId: this.state.currentNodeId
+      });
     }
   }
 

@@ -39,6 +39,7 @@ import { CustomEdge } from './edges/CustomEdge';
 import { v4 as uuidv4 } from 'uuid';
 import { useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
+import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -65,7 +66,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   edges,
   setEdges,
   onCreateTaskFlow,
-  onOpenTaskFlow
+  onOpenTaskFlow,
+  executionState: propExecutionState,
+  currentTask: propCurrentTask,
+  isRunning: propIsRunning
 }) => {
   // Ref sempre aggiornata con lo stato dei nodi
   const nodesRef = useRef(nodes);
@@ -112,6 +116,41 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       delete (window as any).__setEdges;
     };
   }, [scheduleApplyLabel, setEdges]);
+
+  // 🎨 [HIGHLIGHT] Log execution state changes (only when values change)
+  const prevStateRef = useRef<{ currentNodeId?: string | null; executedCount?: number; isRunning?: boolean }>({});
+  useEffect(() => {
+    const execState = propExecutionState ?? (window as any).__executionState ?? null;
+    const task = propCurrentTask ?? (window as any).__currentTask ?? null;
+    const running = propIsRunning ?? (window as any).__isRunning ?? false;
+
+    const prev = prevStateRef.current;
+    const current = {
+      currentNodeId: execState?.currentNodeId,
+      executedCount: execState ? execState.executedTaskIds.size : 0,
+      isRunning: running
+    };
+
+    // Only log if values actually changed
+    if (
+      running && (
+        prev.currentNodeId !== current.currentNodeId ||
+        prev.executedCount !== current.executedCount ||
+        prev.isRunning !== current.isRunning ||
+        !prev.isRunning // Log on first run
+      )
+    ) {
+      console.log('🎨 [HIGHLIGHT] FlowEditor - State changed', {
+        hasExecutionState: !!execState,
+        hasCurrentTask: !!task,
+        isRunning: running,
+        currentNodeId: current.currentNodeId,
+        executedCount: current.executedCount,
+        currentTaskId: task?.id
+      });
+      prevStateRef.current = current;
+    }
+  }, [propExecutionState, propCurrentTask, propIsRunning]);
 
   // Helper functions for edge label logic
   const handleExistingEdgeLabel = useCallback((pid: string, label: string) => {
@@ -1399,7 +1438,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       {/* Expose nodes/edges to GlobalDebuggerPanel (bridge) */}
       {(() => { try { (window as any).__flowNodes = nodes; (window as any).__flowEdges = edges; if (flowId) { (window as any).__flows = (window as any).__flows || {}; (window as any).__flows[flowId] = { nodes, edges }; } } catch { } return null; })()}
 
-      <FlowchartWrapper
+      {/* Execution State Provider - Pass execution state from props or window */}
+      {/* Also expose edges to window for edge highlighting */}
+      {(() => {
+        try {
+          (window as any).__flowEdges = edges;
+        } catch {}
+        return null;
+      })()}
+      <ExecutionStateProvider
+        executionState={propExecutionState ?? (window as any).__executionState ?? null}
+        currentTask={propCurrentTask ?? (window as any).__currentTask ?? null}
+        isRunning={propIsRunning ?? (window as any).__isRunning ?? false}
+      >
+        <FlowchartWrapper
         nodes={nodes}
         edges={edges}
         padding={400}
@@ -1534,6 +1586,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           </svg>
         </ReactFlow>
       </FlowchartWrapper>
+      </ExecutionStateProvider>
 
       {persistedSel && (
         <div

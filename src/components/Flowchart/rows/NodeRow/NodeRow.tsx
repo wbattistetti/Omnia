@@ -30,6 +30,7 @@ import { modeToType, typeToMode } from '../../../../utils/normalizers';
 import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
 import { taskRepository } from '../../../../services/TaskRepository';
+import { useRowExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
 import { getTaskIdFromRow, updateRowTaskAction, createRowWithTask } from '../../../../utils/taskHelpers';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
@@ -1260,6 +1261,18 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Merge visual styles with conditional styles
   conditionalStyles = { ...conditionalStyles, ...getVisualStyles() };
 
+  // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles for row
+  const taskId = getTaskIdFromRow(row);
+  const rowHighlight = useRowExecutionHighlight(row.id, taskId);
+
+  // ✅ Applica bordo invece di background
+  const rowBorderStyle = rowHighlight.border !== 'transparent'
+    ? {
+        border: `${rowHighlight.borderWidth}px solid ${rowHighlight.border}`,
+        borderRadius: '4px' // Opzionale: per rendere il bordo più visibile
+      }
+    : {};
+
   // Checkbox styles (always applied based on included state)
   const checkboxStyles = getCheckboxStyles();
 
@@ -1394,6 +1407,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           ...conditionalStyles,
           ...checkboxStyles,
           ...finalStyles,
+          ...rowBorderStyle, // ✅ Applica bordo invece di background
+          backgroundColor: finalStyles.backgroundColor || 'transparent' // ✅ Mantieni background originale
         }}
         data-index={index}
         data-being-dragged={isBeingDragged ? 'true' : 'false'}

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useProjectTranslations } from '../context/ProjectTranslationsContext';
 import { extractGUIDsFromDDT } from '../utils/ddtUtils';
 
@@ -16,6 +16,9 @@ import { extractGUIDsFromDDT } from '../utils/ddtUtils';
  */
 export function useDDTTranslations(ddt: any | null | undefined): Record<string, string> {
   const { translations: globalTranslations } = useProjectTranslations();
+
+  // 🎨 [HIGHLIGHT] Ref to track previous state for logging (reduced noise)
+  const prevStateRef = useRef<{ foundCount?: number; missingCount?: number; ddtId?: string }>({});
 
   return useMemo(() => {
     if (!ddt) {
@@ -42,27 +45,32 @@ export function useDDTTranslations(ddt: any | null | undefined): Record<string, 
       }
     });
 
-    console.log('[useDDTTranslations] ✅ Loaded translations from global table', {
-      requestedGuids: guids.length,
-      uniqueGuids: [...new Set(guids)].length,
-      foundTranslations: foundGuids.length,
-      missingGuids: missingGuids.length,
-      sampleFound: foundGuids.slice(0, 5),
-      sampleMissing: missingGuids.slice(0, 5),
-      globalTableSize: Object.keys(globalTranslations).length,
-      // 🔍 DEBUG: Show all found translations
-      allFoundTranslations: Object.entries(translationsFromGlobal).map(([k, v]) => ({
-        key: k,
-        value: String(v).substring(0, 50)
-      })),
-      // 🔍 DEBUG: Show all requested GUIDs
-      allRequestedGuids: guids,
-      // 🔍 DEBUG: Show global translations sample
-      globalTranslationsSample: Object.entries(globalTranslations).slice(0, 10).map(([k, v]) => ({
-        key: k,
-        value: String(v).substring(0, 50)
-      }))
-    });
+    // 🎨 [HIGHLIGHT] Log only when values change significantly or there are missing translations
+    const prev = prevStateRef.current;
+    const current = {
+      foundCount: foundGuids.length,
+      missingCount: missingGuids.length,
+      ddtId: ddt.id
+    };
+
+    if (
+      prev.foundCount !== current.foundCount ||
+      prev.missingCount !== current.missingCount ||
+      prev.ddtId !== current.ddtId ||
+      current.missingCount > 0 // Always log if there are missing translations
+    ) {
+      // Only log if there are missing translations or significant changes
+      if (current.missingCount > 0 || prev.ddtId !== current.ddtId) {
+        console.log('[useDDTTranslations] ✅ Loaded translations', {
+          ddtId: current.ddtId,
+          requestedGuids: guids.length,
+          foundTranslations: current.foundCount,
+          missingGuids: current.missingCount,
+          sampleMissing: missingGuids.slice(0, 5)
+        });
+      }
+      prevStateRef.current = current;
+    }
 
     return translationsFromGlobal;
   }, [ddt, globalTranslations]);

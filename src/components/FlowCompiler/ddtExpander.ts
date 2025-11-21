@@ -96,6 +96,7 @@ export function expandDDT(
           state: 'UnExecuted',
           source: {
             type: 'ddt-recovery-action',
+            nodeId: parentNodeId, // ✅ Add nodeId so currentNodeId can be tracked for highlighting
             stepType,
             recoveryId,
             actionId,

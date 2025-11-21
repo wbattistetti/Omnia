@@ -18,6 +18,7 @@ import { useNodeRendering } from './hooks/useNodeRendering';
 import { useNodeEffects } from './hooks/useNodeEffects';
 import { useNodeExitEditing } from './hooks/useNodeExitEditing';
 import { useRegisterAsNode } from '../../../../context/NodeRegistryContext';
+import { useNodeExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -274,6 +275,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
   // ✅ CHECK FOR UNCHECKED ROWS: Calculate if there are any unchecked rows
   const hasUncheckedRows = nodeRows.some(row => row.included === false);
+
+  // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles
+  const executionHighlight = useNodeExecutionHighlight(id, nodeRows);
 
   // ✅ CROSS-NODE DRAG: Listen for cross-node row moves - VERSIONE SEMPLIFICATA
   React.useEffect(() => {
@@ -681,7 +685,14 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         }}
         data-id={id}
         className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
-        style={nodeStyles}
+        style={{
+          ...nodeStyles,
+          // ✅ Solo bordo, NO background
+          border: executionHighlight.nodeBorder !== 'transparent'
+            ? `${executionHighlight.nodeBorderWidth}px solid ${executionHighlight.nodeBorder}`
+            : (selected ? '2px solid black' : '1px solid black'),
+          backgroundColor: 'white' // ✅ Sempre bianco, non toccare
+        }}
         tabIndex={-1}
         draggable={false}
         onMouseEnter={() => {
