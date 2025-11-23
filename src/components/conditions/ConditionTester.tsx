@@ -1,6 +1,6 @@
 /* @refresh reload */
 import React from 'react';
-import { Trash, FileText, RotateCcw, X as XIcon } from 'lucide-react';
+import { Trash, FileText, RotateCcw, X as XIcon, ThumbsUp, ThumbsDown } from 'lucide-react';
 
 function stripCode(code: string): string {
   return (code || '')
@@ -81,6 +81,8 @@ export default function ConditionTester({
   const [editingCellValue, setEditingCellValue] = React.useState<string>('');
   const [headerInputs, setHeaderInputs] = React.useState<Record<string, string>>({});
   const [expandedRows, setExpandedRows] = React.useState<Set<string>>(new Set());
+  const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null);
+  const [manualEvaluation, setManualEvaluation] = React.useState<Record<string, 'correct' | 'incorrect' | null>>({});
   const noteRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
   const cellInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -422,32 +424,55 @@ export default function ConditionTester({
     return { result: firstResult, hasError };
   };
 
-  // Build failures list for repair (only rows with active notes)
+  // Build failures list for repair (rows with active notes OR marked as incorrect)
   const getFailures = React.useCallback(() => {
     const list: Array<any> = [];
     rows.forEach(r => {
-      if (!r.note || r.noteUsed) return; // Only active notes
       const keys = variablesList.filter(k => r.values[k] && r.values[k].length > 0);
       if (keys.length === 0) return;
+
+      // Check if row is marked as incorrect (red border)
+      const isIncorrect = manualEvaluation[r.id] === 'incorrect';
+      // Check if row has active note
+      const hasActiveNote = r.note && !r.noteUsed;
+
+      // Skip if neither incorrect nor has active note
+      if (!isIncorrect && !hasActiveNote) return;
 
       // Generate combinations and check results
       const generateAndAdd = (current: Record<string, any>, remainingKeys: string[], index: number): void => {
         if (index >= remainingKeys.length) {
           const comboId = `${r.id}-${JSON.stringify(current)}`;
           const testResult = resultMap[comboId];
-          const shouldMatch = r.note?.toLowerCase().includes('dovrebbe matchare');
-          const shouldNotMatch = r.note?.toLowerCase().includes('non dovrebbe matchare');
+          const got = testResult?.result === true ? true : (testResult?.result === false ? false : null);
 
-          if (shouldMatch || shouldNotMatch) {
-            const expected = shouldMatch;
-            const got = testResult?.result === true ? true : (testResult?.result === false ? false : null);
-            if (got !== expected) {
-              list.push({
-                input: { ...current },
-                expected,
-                got,
-                note: r.note,
-              });
+          // Case 1: Row marked as incorrect (red border) - risultato atteso è l'opposto
+          if (isIncorrect && got !== null) {
+            const expected = !got; // Opposto del risultato attuale
+            list.push({
+              input: { ...current },
+              expected,
+              got,
+              note: r.note || undefined, // Include note if present
+            });
+            return;
+          }
+
+          // Case 2: Row with active note (existing logic)
+          if (hasActiveNote) {
+            const shouldMatch = r.note?.toLowerCase().includes('dovrebbe matchare');
+            const shouldNotMatch = r.note?.toLowerCase().includes('non dovrebbe matchare');
+
+            if (shouldMatch || shouldNotMatch) {
+              const expected = shouldMatch;
+              if (got !== expected) {
+                list.push({
+                  input: { ...current },
+                  expected,
+                  got,
+                  note: r.note,
+                });
+              }
             }
           }
           return;
@@ -460,7 +485,7 @@ export default function ConditionTester({
       generateAndAdd({}, keys, 0);
     });
     return list;
-  }, [rows, resultMap, variablesList]);
+  }, [rows, resultMap, variablesList, manualEvaluation]);
 
   const resetVisuals = React.useCallback(() => {
     setResultMap({});
@@ -526,7 +551,7 @@ export default function ConditionTester({
       <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
         <div style={{ display: 'grid', gap: 4 }}>
           {/* Header row with textboxes for each variable - always visible */}
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${variablesList.length}, minmax(120px, 1fr)) 140px auto`, gap: 6, padding: '4px 0', borderBottom: '1px solid #334155', marginBottom: rows.length > 0 ? 8 : 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${variablesList.length}, auto) auto auto`, gap: 6, padding: '4px 0', borderBottom: '1px solid #334155', marginBottom: rows.length > 0 ? 8 : 0 }}>
             {variablesList.map(k => {
               const leaf = String(k).split('.').pop() || String(k);
               return (
@@ -576,9 +601,20 @@ export default function ConditionTester({
               const isEditingNote = editingNoteRowId === r.id;
 
               return (
-                <div key={r.id} style={{ display: 'contents' }}>
+                <div
+                  key={r.id}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${variablesList.length}, auto) auto auto`,
+                    gap: 6,
+                    padding: '4px 0',
+                    alignItems: 'start'
+                  }}
+                  onMouseEnter={() => setHoveredRowId(r.id)}
+                  onMouseLeave={() => setHoveredRowId(null)}
+                >
                   {/* Main row */}
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${variablesList.length}, minmax(120px, 1fr)) 140px auto`, gap: 6, padding: '4px 0', alignItems: 'start' }}>
+                  <div style={{ display: 'contents' }}>
                     {/* Variable columns */}
                     {variablesList.map(k => {
                       const values = r.values[k] || [];
@@ -610,7 +646,9 @@ export default function ConditionTester({
                                       }}
                                       onBlur={saveEditingCell}
                                       style={{
-                                        flex: 1,
+                                        width: 'max-content',
+                                        minWidth: '100px',
+                                        maxWidth: '200px',
                                         padding: '2px 6px',
                                         border: '1px solid #3b82f6',
                                         borderRadius: 4,
@@ -629,7 +667,8 @@ export default function ConditionTester({
                                         padding: '2px 6px',
                                         background: 'rgba(148,163,184,0.1)',
                                         borderRadius: 4,
-                                        flex: 1,
+                                        width: 'max-content',
+                                        maxWidth: '200px',
                                         cursor: 'text',
                                       }}
                                       title="Double-click to edit"
@@ -637,13 +676,6 @@ export default function ConditionTester({
                                       {val}
                                     </span>
                                   )}
-                                  <button
-                                    title="Remove value"
-                                    onClick={() => removeValueFromCell(r.id, k, valIndex)}
-                                    style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', padding: 2 }}
-                                  >
-                                    <XIcon className="w-3 h-3" />
-                                  </button>
                                 </div>
                               );
                             })
@@ -652,8 +684,102 @@ export default function ConditionTester({
                       );
                     })}
 
-                    {/* Result column */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 32 }}>
+                    {/* Result column - position relative per toolbar assoluta */}
+                    <div style={{
+                      position: 'relative',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-end',
+                      justifyContent: 'center',
+                      minHeight: 32,
+                      gap: 4
+                    }}>
+                      {/* Toolbar visible on hover - posizionata sopra l'etichetta, allineata a destra */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          opacity: hoveredRowId === r.id ? 1 : 0,
+                          transition: 'opacity 0.2s',
+                          position: 'absolute',
+                          top: -4,
+                          right: 0,
+                          zIndex: 10,
+                        }}
+                      >
+                        {/* Thumbs up (correct) - SEMPRE VERDE */}
+                        <button
+                          title="Mark as correct"
+                          onClick={() => {
+                            setManualEvaluation(prev => ({
+                              ...prev,
+                              [r.id]: prev[r.id] === 'correct' ? null : 'correct'
+                            }));
+                          }}
+                          style={{
+                            border: '1px solid #334155',
+                            borderRadius: 4,
+                            padding: '4px 6px',
+                            background: manualEvaluation[r.id] === 'correct' ? 'rgba(34,197,94,0.2)' : 'transparent',
+                            color: '#22c55e', // ✅ SEMPRE VERDE
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <ThumbsUp className="w-3 h-3" />
+                        </button>
+                        {/* Thumbs down (incorrect) - SEMPRE ROSSO */}
+                        <button
+                          title="Mark as incorrect"
+                          onClick={() => {
+                            setManualEvaluation(prev => ({
+                              ...prev,
+                              [r.id]: prev[r.id] === 'incorrect' ? null : 'incorrect'
+                            }));
+                          }}
+                          style={{
+                            border: '1px solid #334155',
+                            borderRadius: 4,
+                            padding: '4px 6px',
+                            background: manualEvaluation[r.id] === 'incorrect' ? 'rgba(239,68,68,0.2)' : 'transparent',
+                            color: '#ef4444', // ✅ SEMPRE ROSSO
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <ThumbsDown className="w-3 h-3" />
+                        </button>
+                        {/* Note button */}
+                        <button
+                          title={hasNote ? (isNoteUsed ? 'Note used (click to reactivate)' : 'Edit note') : 'Add note'}
+                          onClick={() => {
+                            if (isEditingNote) {
+                              setEditingNoteRowId(null);
+                            } else {
+                              setEditingNoteRowId(r.id);
+                            }
+                          }}
+                          style={{
+                            border: '1px solid #334155',
+                            borderRadius: 4,
+                            padding: '4px 6px',
+                            background: hasNote ? (isNoteUsed ? 'rgba(148,163,184,0.2)' : 'rgba(59,130,246,0.2)') : 'transparent',
+                            color: hasNote ? (isNoteUsed ? '#94a3b8' : '#3b82f6') : '#64748b',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <FileText className="w-3 h-3" />
+                        </button>
+                        {/* Remove row */}
+                        <button
+                          title="Remove row"
+                          onClick={() => removeRow(r.id)}
+                          style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', padding: 2 }}
+                        >
+                          <Trash className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Etichetta "not evaluated!" o risultato */}
                       {(() => {
                         const { result, hasError } = getRowResult(r);
                         const isValidated = validatedRows.has(r.id);
@@ -676,7 +802,13 @@ export default function ConditionTester({
                           displayText = conditionLabel;
                           text = '#0b1220'; // nero sempre
 
-                          if (isValidated) {
+                          // Priorità: valutazione manuale > nota > default
+                          const manualEval = manualEvaluation[r.id];
+                          if (manualEval === 'correct') {
+                            border = '#166534'; // verde
+                          } else if (manualEval === 'incorrect') {
+                            border = '#7f1d1d'; // rosso
+                          } else if (isValidated) {
                             // Determina se è corretto basandosi sulla nota
                             const shouldMatch = r.note?.toLowerCase().includes('dovrebbe matchare');
                             const shouldNotMatch = r.note?.toLowerCase().includes('non dovrebbe matchare');
@@ -697,7 +829,13 @@ export default function ConditionTester({
                           displayText = `Not ${conditionLabel}`;
                           text = '#0b1220'; // nero sempre
 
-                          if (isValidated) {
+                          // Priorità: valutazione manuale > nota > default
+                          const manualEval = manualEvaluation[r.id];
+                          if (manualEval === 'correct') {
+                            border = '#166534'; // verde
+                          } else if (manualEval === 'incorrect') {
+                            border = '#7f1d1d'; // rosso
+                          } else if (isValidated) {
                             // Determina se è corretto basandosi sulla nota
                             const shouldMatch = r.note?.toLowerCase().includes('dovrebbe matchare');
                             const shouldNotMatch = r.note?.toLowerCase().includes('non dovrebbe matchare');
@@ -740,7 +878,8 @@ export default function ConditionTester({
                               fontWeight: 600,
                               cursor: result !== null ? 'pointer' : 'default',
                               textAlign: 'center',
-                              minWidth: 120,
+                              width: 'max-content',
+                              maxWidth: '100%',
                             }}
                             title={result !== null ? (isValidated ? 'Click to unvalidate' : 'Click to validate') : 'No result yet'}
                           >
@@ -750,43 +889,19 @@ export default function ConditionTester({
                       })()}
                     </div>
 
-                    {/* Actions column */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {/* Note button */}
-                      <button
-                        title={hasNote ? (isNoteUsed ? 'Note used (click to reactivate)' : 'Edit note') : 'Add note'}
-                        onClick={() => {
-                          if (isEditingNote) {
-                            setEditingNoteRowId(null);
-                          } else {
-                            setEditingNoteRowId(r.id);
-                          }
-                        }}
-                        style={{
-                          border: '1px solid #334155',
-                          borderRadius: 4,
-                          padding: '4px 6px',
-                          background: hasNote ? (isNoteUsed ? 'rgba(148,163,184,0.2)' : 'rgba(59,130,246,0.2)') : 'transparent',
-                          color: hasNote ? (isNoteUsed ? '#94a3b8' : '#3b82f6') : '#64748b',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <FileText className="w-3 h-3" />
-                      </button>
-                      {/* Remove row */}
-                      <button
-                        title="Remove row"
-                        onClick={() => removeRow(r.id)}
-                        style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', padding: 2 }}
-                      >
-                        <Trash className="w-3 h-3" />
-                      </button>
-                    </div>
+                    {/* Actions column - Rimossa (toolbar spostata sopra l'etichetta) */}
+                    <div style={{ width: 'auto', minWidth: 0 }}></div>
                   </div>
 
                   {/* Note editing row */}
                   {isEditingNote && (
-                    <div style={{ gridColumn: `1 / ${variablesList.length + 2}`, padding: '8px', background: 'rgba(59,130,246,0.1)', borderRadius: 6, marginBottom: 4 }}>
+                    <div style={{
+                      gridColumn: `1 / ${variablesList.length + 3}`,
+                      padding: '8px',
+                      background: 'rgba(59,130,246,0.1)',
+                      borderRadius: 6,
+                      marginTop: 4
+                    }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <textarea
                           ref={(el) => { noteRefs.current[r.id] = el; autoResize(el); }}
@@ -864,11 +979,11 @@ export default function ConditionTester({
                   {/* Note display (when not editing) */}
                   {hasNote && !isEditingNote && (
                     <div style={{
-                      gridColumn: `1 / ${variablesList.length + 2}`,
+                      gridColumn: `1 / ${variablesList.length + 3}`,
                       padding: '6px 8px',
                       background: isNoteUsed ? 'rgba(148,163,184,0.1)' : 'rgba(59,130,246,0.1)',
                       borderRadius: 4,
-                      marginBottom: 4,
+                      marginTop: 4,
                       color: isNoteUsed ? '#94a3b8' : '#e5e7eb',
                       fontSize: 11,
                       fontStyle: isNoteUsed ? 'italic' : 'normal',

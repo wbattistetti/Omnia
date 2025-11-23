@@ -35,6 +35,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
+  const [openVersionMenuId, setOpenVersionMenuId] = useState<string | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [dataReady, setDataReady] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -623,6 +624,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     const isHovered = hoveredRowId === projectId;
                     const isLoading = loadingProjectId === projectId;
                     const projectName = proj.projectName || proj.name || '(senza nome)';
+
+                    // Gestione versione: per ora mostriamo solo versione corrente se esiste
+                    const currentVersion = proj.version || '1.0';
+                    const versionQualifier = proj.versionQualifier || 'production';
+                    const versionDisplay = versionQualifier !== 'production'
+                      ? `${currentVersion}-${versionQualifier}`
+                      : currentVersion;
+                    const availableVersions = [versionDisplay]; // TODO: Caricare versioni multiple dal backend
+                    const isVersionMenuOpen = openVersionMenuId === projectId;
+
                     return (
                       <React.Fragment key={proj._id}>
                         {/* Cliente */}
@@ -659,18 +670,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         </div>
                         {/* Progetto */}
                         <div
-                          className={`border border-emerald-200 p-1.5 text-left ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
+                          className={`border border-emerald-200 p-1.5 text-left ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer relative`}
                           onMouseEnter={() => setHoveredRowId(projectId)}
                           onMouseLeave={(e) => {
                             const relatedTarget = e.relatedTarget as HTMLElement;
-                            if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                            if (relatedTarget && relatedTarget.closest('.action-buttons-container') ||
+                                relatedTarget && relatedTarget.closest('.version-menu-container') ||
+                                relatedTarget && relatedTarget.closest('.version-badge')) {
                               return;
                             }
                             if (!isLoading) {
                               setHoveredRowId(null);
+                              setOpenVersionMenuId(null);
                             }
                           }}
-                          onClick={async () => {
+                          onClick={async (e) => {
+                            // Non aprire progetto se si clicca sul badge versione
+                            if ((e.target as HTMLElement).closest('.version-badge') ||
+                                (e.target as HTMLElement).closest('.version-menu-container')) {
+                              return;
+                            }
                             if (!isLoading) {
                               setLoadingProjectId(projectId);
                               try {
@@ -691,9 +710,66 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                               </span>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <Folder className={`w-4 h-4 flex-shrink-0 ${isRecovered ? 'text-red-600' : 'text-emerald-900'}`} />
                               <span className="text-emerald-900 break-words">{projectName}</span>
+                              <div className="flex items-center gap-1 version-badge" onClick={(e) => e.stopPropagation()}>
+                                <span
+                                  className={`text-xs font-medium px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                                    versionQualifier === 'production'
+                                      ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                                      : versionQualifier === 'rc'
+                                      ? 'text-orange-700 bg-orange-50 hover:bg-orange-100'
+                                      : versionQualifier === 'beta'
+                                      ? 'text-yellow-700 bg-yellow-50 hover:bg-yellow-100'
+                                      : 'text-purple-700 bg-purple-50 hover:bg-purple-100'
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (availableVersions.length > 1) {
+                                      setOpenVersionMenuId(isVersionMenuOpen ? null : projectId);
+                                    }
+                                  }}
+                                >
+                                  {versionDisplay}
+                                </span>
+                                {availableVersions.length > 1 && (
+                                  <ChevronDown
+                                    className={`w-3 h-3 text-slate-400 transition-transform cursor-pointer ${isVersionMenuOpen ? 'rotate-180' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenVersionMenuId(isVersionMenuOpen ? null : projectId);
+                                    }}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Menu a tendina versioni */}
+                          {isVersionMenuOpen && availableVersions.length > 1 && (
+                            <div
+                              className="version-menu-container absolute left-1.5 top-full mt-1 bg-white border border-slate-300 rounded shadow-lg z-20 min-w-[120px]"
+                              onMouseEnter={() => setOpenVersionMenuId(projectId)}
+                              onMouseLeave={() => setOpenVersionMenuId(null)}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {availableVersions.map((v) => (
+                                <div
+                                  key={v}
+                                  className={`px-2 py-1.5 hover:bg-emerald-50 cursor-pointer text-sm ${
+                                    v === versionDisplay ? 'bg-emerald-50 font-medium' : ''
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // TODO: Implementare cambio versione
+                                    console.log('Cambio versione progetto', projectId, 'a:', v);
+                                    setOpenVersionMenuId(null);
+                                  }}
+                                >
+                                  {v}
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
