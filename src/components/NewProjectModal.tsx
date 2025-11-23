@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Folder, FileText, Zap, CircleSlash } from 'lucide-react';
 import { ProjectData, ProjectInfo } from '../types/project';
 import { OmniaSelect } from './common/OmniaSelect';
+import { VersionInput } from './common/VersionInput';
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -47,7 +48,9 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
     clientName: '',
     industry: 'undefined',
     ownerCompany: '',
-    ownerClient: ''
+    ownerClient: '',
+    version: '1.0',
+    versionQualifier: 'alpha'
   });
   const [errors, setErrors] = useState<Partial<ProjectInfo>>({});
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
@@ -127,13 +130,10 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
+    // Validation - Solo nome obbligatorio
     const newErrors: Partial<ProjectInfo> = {};
     if (!formData.name.trim()) {
       newErrors.name = 'Il nome del progetto è obbligatorio';
-    }
-    if (!formData.ownerCompany?.trim()) {
-      newErrors.ownerCompany = 'Owner azienda è obbligatorio';
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -181,7 +181,9 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
         clientName: '',
         industry: 'undefined',
         ownerCompany: '',
-        ownerClient: ''
+        ownerClient: '',
+        version: '1.0',
+        versionQualifier: 'alpha'
       });
       setErrors({});
     }
@@ -257,7 +259,7 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Riga 1: Nome Progetto + Cliente */}
           <div className="grid grid-cols-2 gap-4">
             {/* Project Name */}
@@ -281,14 +283,14 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 <p className="mt-1 text-sm text-red-400">{duplicateNameError}</p>
               )}
               {errors.name && (
-                <p className="mt-1 text-sm text-red-400">{errors.name}</p>
+                <p className="mt-1.5 text-sm text-red-400">{errors.name}</p>
               )}
             </div>
 
             {/* Client Name - Combo box creatable */}
             <div className="relative">
               <label className="block text-base font-medium text-slate-200 mb-2">
-                Cliente *
+                Cliente
               </label>
               <OmniaSelect
                 variant="dark"
@@ -300,33 +302,13 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 isInvalid={!!errors.clientName}
               />
               {errors.clientName && (
-                <p className="mt-1 text-sm text-red-400">{String(errors.clientName)}</p>
+                <p className="mt-1.5 text-sm text-red-400">{String(errors.clientName)}</p>
               )}
             </div>
           </div>
 
-          {/* Riga 2: Descrizione */}
-          <div>
-            <label className="block text-sm font-medium text-slate-200 mb-2">
-              Descrizione
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => handleInputChange('description', e.target.value)}
-              rows={3}
-              className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors resize-none ${
-                errors.description ? 'border-red-500' : 'border-slate-600'
-              }`}
-              placeholder="Descrivi brevemente il progetto"
-              disabled={isLoading}
-            />
-            {errors.description && (
-              <p className="mt-1 text-sm text-red-400">{errors.description}</p>
-            )}
-          </div>
-
-          {/* Riga 3: Industry + Lingua */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Riga 2: Industry + Versione + Lingua */}
+          <div className="grid grid-cols-3 gap-4">
             {/* Industry - Combo box creatable */}
             <div className="relative">
               <label className="block text-sm font-medium text-slate-200 mb-2">
@@ -343,8 +325,22 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 isInvalid={!!errors.industry}
               />
               {errors.industry && (
-                <p className="mt-1 text-sm text-red-400">{String(errors.industry)}</p>
+                <p className="mt-1.5 text-sm text-red-400">{String(errors.industry)}</p>
               )}
+            </div>
+
+            {/* Versione (campo combinato) */}
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">
+                Versione (major.minor)
+              </label>
+              <VersionInput
+                version={formData.version ?? '1.0'}
+                versionQualifier={formData.versionQualifier || 'alpha'}
+                onVersionChange={(value) => handleInputChange('version', value)}
+                onQualifierChange={(value) => handleInputChange('versionQualifier', value)}
+                disabled={isLoading}
+              />
             </div>
 
             {/* Language Selection */}
@@ -367,12 +363,12 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
             </div>
           </div>
 
-          {/* Riga 4: Owner Azienda + Owner Cliente */}
+          {/* Riga 3: Owner Azienda + Owner Cliente */}
           <div className="grid grid-cols-2 gap-4">
             {/* Owner Company */}
             <div>
               <label className="block text-sm font-medium text-slate-200 mb-2">
-                Owner (Azienda) *
+                Owner (Azienda)
               </label>
               <input
                 type="text"
@@ -381,11 +377,11 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
                   errors.ownerCompany ? 'border-red-500' : 'border-slate-600'
                 }`}
-                placeholder="Owner del progetto (chi lo costruisce)"
+                placeholder="Owner Sovran"
                 disabled={isLoading}
               />
               {errors.ownerCompany && (
-                <p className="mt-1 text-sm text-red-400">{String(errors.ownerCompany)}</p>
+                <p className="mt-1.5 text-sm text-red-400">{String(errors.ownerCompany)}</p>
               )}
             </div>
 
@@ -401,13 +397,33 @@ export function NewProjectModal({ isOpen, onClose, onCreateProject, onLoadProjec
                 className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors ${
                   errors.ownerClient ? 'border-red-500' : 'border-slate-600'
                 }`}
-                placeholder="Owner del progetto (chi lo commissiona)"
+                placeholder="Owner cliente"
                 disabled={isLoading}
               />
               {errors.ownerClient && (
-                <p className="mt-1 text-sm text-red-400">{String(errors.ownerClient)}</p>
+                <p className="mt-1.5 text-sm text-red-400">{String(errors.ownerClient)}</p>
               )}
             </div>
+          </div>
+
+          {/* Riga 4: Descrizione */}
+          <div>
+            <label className="block text-sm font-medium text-slate-200 mb-2">
+              Descrizione
+            </label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => handleInputChange('description', e.target.value)}
+              rows={3}
+              className={`w-full px-4 py-3 bg-slate-700 border rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors resize-none ${
+                errors.description ? 'border-red-500' : 'border-slate-600'
+              }`}
+              placeholder="Descrivi brevemente il progetto"
+              disabled={isLoading}
+            />
+            {errors.description && (
+              <p className="mt-1.5 text-sm text-red-400">{errors.description}</p>
+            )}
           </div>
 
           {/* Actions */}

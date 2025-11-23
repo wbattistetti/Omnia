@@ -436,6 +436,8 @@ export const AppContent: React.FC<AppContentProps> = ({
           language: projectInfo.language || 'pt',
           ownerCompany: projectInfo.ownerCompany || null,
           ownerClient: projectInfo.ownerClient || null,
+          version: projectInfo.version || '1.0',
+          versionQualifier: projectInfo.versionQualifier || 'alpha',
           tenantId: 'tenant_default'
         })
       });

@@ -98,6 +98,8 @@ export interface ProjectInfo {
   industry?: string;
   ownerCompany?: string; // Owner del progetto lato azienda (chi lo costruisce) - obbligatorio
   ownerClient?: string; // Owner del progetto lato cliente (chi lo commissiona) - opzionale
+  version?: string; // Versione in formato major.minor (es. "1.0")
+  versionQualifier?: 'alpha' | 'beta' | 'rc' | 'production'; // Qualificatore versione
 }
 
 /**

@@ -500,6 +500,8 @@ app.post('/api/projects/bootstrap', async (req, res) => {
   const language = payload.language || 'pt';
   const ownerCompany = payload.ownerCompany || null; // Owner del progetto lato azienda (obbligatorio)
   const ownerClient = payload.ownerClient || null; // Owner del progetto lato cliente (opzionale)
+  const version = payload.version || '1.0';
+  const versionQualifier = payload.versionQualifier || 'alpha';
   if (!projectName) {
     return res.status(400).json({ error: 'projectName_required' });
   }
@@ -527,6 +529,8 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       language,
       ownerCompany: ownerCompany || null,
       ownerClient: ownerClient || null,
+      version,
+      versionQualifier,
       dbName,
       status: 'active',
       createdAt: now,
@@ -557,6 +561,8 @@ app.post('/api/projects/bootstrap', async (req, res) => {
           language,
           ownerCompany: ownerCompany || null,
           ownerClient: ownerClient || null,
+          version,
+          versionQualifier,
           updatedAt: now
         },
         $setOnInsert: { createdAt: now }
