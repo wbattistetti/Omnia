@@ -96,6 +96,15 @@ export default function ConditionTester({
     Object.values(noteRefs.current).forEach(autoResize);
   }, [editingNoteRowId]);
 
+  // Reset all tests when script changes
+  React.useEffect(() => {
+    setResultMap({});
+    setErrorMap({});
+    setValidatedRows(new Set());
+    setManualEvaluation({});
+    setEditingNoteRowId(null);
+  }, [script]);
+
   // Convert rows back to CaseRow[] for onChange callback (for backward compatibility)
   React.useEffect(() => {
     if (onChange) {
@@ -510,6 +519,50 @@ export default function ConditionTester({
     onFailuresChange?.(hasFailures());
   }, [hasFailures, onFailuresChange]);
 
+  // Calculate optimal column widths
+  const columnWidths = React.useMemo(() => {
+    const varWidths: number[] = [];
+    const conditionLabel = title || 'Condition';
+
+    // Calculate width for each variable column
+    variablesList.forEach((k) => {
+      const leaf = String(k).split('.').pop() || String(k);
+      // Width of header placeholder
+      let maxWidth = leaf.length * 7 + 20; // Approximate: 7px per char + padding
+
+      // Check all values in this column
+      rows.forEach(r => {
+        const values = r.values[k] || [];
+        values.forEach(val => {
+          const width = val.length * 7 + 20;
+          if (width > maxWidth) maxWidth = width;
+        });
+      });
+
+      varWidths.push(Math.max(maxWidth, 60)); // Min 60px
+    });
+
+    // Calculate width for Result column (no header, only content)
+    let resultWidth = 120; // Min width
+    rows.forEach(r => {
+      const { result } = getRowResult(r);
+      let displayText = '';
+      if (result === null) {
+        displayText = 'not evaluated!';
+      } else if (result === true) {
+        displayText = conditionLabel;
+      } else if (result === false) {
+        displayText = `Not ${conditionLabel}`;
+      } else {
+        displayText = String(result);
+      }
+      const width = displayText.length * 7 + 20;
+      if (width > resultWidth) resultWidth = width;
+    });
+
+    return { varWidths, resultWidth: Math.max(resultWidth, 120) }; // Min 120px for Result
+  }, [variablesList, rows, title, getRowResult]);
+
   // Expose controls to parent
   React.useEffect(() => {
     if (typeof registerControls === 'function') {
@@ -551,7 +604,7 @@ export default function ConditionTester({
       <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
         <div style={{ display: 'grid', gap: 4 }}>
           {/* Header row with textboxes for each variable - always visible */}
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${variablesList.length}, auto) auto auto`, gap: 6, padding: '4px 0', borderBottom: '1px solid #334155', marginBottom: rows.length > 0 ? 8 : 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `${columnWidths.varWidths.map(w => `${w}px`).join(' ')} ${columnWidths.resultWidth}px 24px`, gap: 6, padding: '4px 0', borderBottom: '1px solid #334155', marginBottom: rows.length > 0 ? 8 : 0 }}>
             {variablesList.map(k => {
               const leaf = String(k).split('.').pop() || String(k);
               return (
@@ -581,10 +634,7 @@ export default function ConditionTester({
                 </div>
               );
               })}
-            {/* Result column header */}
-            <div style={{ color: '#94a3b8', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              Result
-            </div>
+            {/* Result column header - removed */}
             <div style={{ width: 24 }}></div>
           </div>
 
@@ -605,7 +655,7 @@ export default function ConditionTester({
                   key={r.id}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: `repeat(${variablesList.length}, auto) auto auto`,
+                    gridTemplateColumns: `${columnWidths.varWidths.map(w => `${w}px`).join(' ')} ${columnWidths.resultWidth}px 24px`,
                     gap: 6,
                     padding: '4px 0',
                     alignItems: 'start'
@@ -684,101 +734,15 @@ export default function ConditionTester({
                       );
                     })}
 
-                    {/* Result column - position relative per toolbar assoluta */}
+                    {/* Result column */}
                     <div style={{
-                      position: 'relative',
                       display: 'flex',
                       flexDirection: 'column',
-                      alignItems: 'flex-end',
+                      alignItems: 'flex-start',
                       justifyContent: 'center',
                       minHeight: 32,
                       gap: 4
                     }}>
-                      {/* Toolbar visible on hover - posizionata sopra l'etichetta, allineata a destra */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          opacity: hoveredRowId === r.id ? 1 : 0,
-                          transition: 'opacity 0.2s',
-                          position: 'absolute',
-                          top: -4,
-                          right: 0,
-                          zIndex: 10,
-                        }}
-                      >
-                        {/* Thumbs up (correct) - SEMPRE VERDE */}
-                        <button
-                          title="Mark as correct"
-                          onClick={() => {
-                            setManualEvaluation(prev => ({
-                              ...prev,
-                              [r.id]: prev[r.id] === 'correct' ? null : 'correct'
-                            }));
-                          }}
-                          style={{
-                            border: '1px solid #334155',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            background: manualEvaluation[r.id] === 'correct' ? 'rgba(34,197,94,0.2)' : 'transparent',
-                            color: '#22c55e', // ✅ SEMPRE VERDE
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <ThumbsUp className="w-3 h-3" />
-                        </button>
-                        {/* Thumbs down (incorrect) - SEMPRE ROSSO */}
-                        <button
-                          title="Mark as incorrect"
-                          onClick={() => {
-                            setManualEvaluation(prev => ({
-                              ...prev,
-                              [r.id]: prev[r.id] === 'incorrect' ? null : 'incorrect'
-                            }));
-                          }}
-                          style={{
-                            border: '1px solid #334155',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            background: manualEvaluation[r.id] === 'incorrect' ? 'rgba(239,68,68,0.2)' : 'transparent',
-                            color: '#ef4444', // ✅ SEMPRE ROSSO
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <ThumbsDown className="w-3 h-3" />
-                        </button>
-                        {/* Note button */}
-                        <button
-                          title={hasNote ? (isNoteUsed ? 'Note used (click to reactivate)' : 'Edit note') : 'Add note'}
-                          onClick={() => {
-                            if (isEditingNote) {
-                              setEditingNoteRowId(null);
-                            } else {
-                              setEditingNoteRowId(r.id);
-                            }
-                          }}
-                          style={{
-                            border: '1px solid #334155',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            background: hasNote ? (isNoteUsed ? 'rgba(148,163,184,0.2)' : 'rgba(59,130,246,0.2)') : 'transparent',
-                            color: hasNote ? (isNoteUsed ? '#94a3b8' : '#3b82f6') : '#64748b',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <FileText className="w-3 h-3" />
-                        </button>
-                        {/* Remove row */}
-                        <button
-                          title="Remove row"
-                          onClick={() => removeRow(r.id)}
-                          style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', padding: 2 }}
-                        >
-                          <Trash className="w-3 h-3" />
-                        </button>
-                      </div>
-
                       {/* Etichetta "not evaluated!" o risultato */}
                       {(() => {
                         const { result, hasError } = getRowResult(r);
@@ -878,8 +842,8 @@ export default function ConditionTester({
                               fontWeight: 600,
                               cursor: result !== null ? 'pointer' : 'default',
                               textAlign: 'center',
-                              width: 'max-content',
-                              maxWidth: '100%',
+                              width: `${columnWidths.resultWidth}px`,
+                              boxSizing: 'border-box',
                             }}
                             title={result !== null ? (isValidated ? 'Click to unvalidate' : 'Click to validate') : 'No result yet'}
                           >
@@ -887,6 +851,94 @@ export default function ConditionTester({
                           </span>
                         );
                       })()}
+
+                      {/* Toolbar sotto la label - allineata a sinistra - visibile solo se c'è un risultato (non "not evaluated!") */}
+                      {hoveredRowId === r.id && (() => {
+                        const { result } = getRowResult(r);
+                        return result !== null; // Mostra toolbar solo se c'è un risultato
+                      })() && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            background: '#334155',
+                            padding: '4px 6px',
+                            borderRadius: 4,
+                            border: '1px solid #475569',
+                          }}
+                        >
+                          {/* Thumbs up (correct) - SEMPRE VERDE */}
+                          <button
+                            title="Mark as correct"
+                            onClick={() => {
+                              setManualEvaluation(prev => ({
+                                ...prev,
+                                [r.id]: prev[r.id] === 'correct' ? null : 'correct'
+                              }));
+                            }}
+                            style={{
+                              border: '1px solid #475569',
+                              borderRadius: 4,
+                              padding: '4px 6px',
+                              background: manualEvaluation[r.id] === 'correct' ? 'rgba(34,197,94,0.2)' : 'transparent',
+                              color: '#22c55e',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <ThumbsUp className="w-3 h-3" />
+                          </button>
+                          {/* Thumbs down (incorrect) - SEMPRE ROSSO */}
+                          <button
+                            title="Mark as incorrect"
+                            onClick={() => {
+                              setManualEvaluation(prev => ({
+                                ...prev,
+                                [r.id]: prev[r.id] === 'incorrect' ? null : 'incorrect'
+                              }));
+                            }}
+                            style={{
+                              border: '1px solid #475569',
+                              borderRadius: 4,
+                              padding: '4px 6px',
+                              background: manualEvaluation[r.id] === 'incorrect' ? 'rgba(239,68,68,0.2)' : 'transparent',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <ThumbsDown className="w-3 h-3" />
+                          </button>
+                          {/* Note button */}
+                          <button
+                            title={hasNote ? (isNoteUsed ? 'Note used (click to reactivate)' : 'Edit note') : 'Add note'}
+                            onClick={() => {
+                              if (isEditingNote) {
+                                setEditingNoteRowId(null);
+                              } else {
+                                setEditingNoteRowId(r.id);
+                              }
+                            }}
+                            style={{
+                              border: '1px solid #475569',
+                              borderRadius: 4,
+                              padding: '4px 6px',
+                              background: hasNote ? (isNoteUsed ? 'rgba(148,163,184,0.2)' : 'rgba(59,130,246,0.2)') : 'transparent',
+                              color: hasNote ? (isNoteUsed ? '#94a3b8' : '#3b82f6') : '#64748b',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <FileText className="w-3 h-3" />
+                          </button>
+                          {/* Remove row */}
+                          <button
+                            title="Remove row"
+                            onClick={() => removeRow(r.id)}
+                            style={{ border: '1px solid #475569', background: 'transparent', color: '#64748b', cursor: 'pointer', padding: '4px 6px', borderRadius: 4 }}
+                          >
+                            <Trash className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions column - Rimossa (toolbar spostata sopra l'etichetta) */}
