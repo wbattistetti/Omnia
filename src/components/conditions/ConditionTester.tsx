@@ -519,6 +519,47 @@ export default function ConditionTester({
     onFailuresChange?.(hasFailures());
   }, [hasFailures, onFailuresChange]);
 
+  // Check if there are any test results (not all "not evaluated!")
+  const hasResults = React.useMemo(() => {
+    return rows.some(r => {
+      const { result } = getRowResult(r);
+      return result !== null;
+    });
+  }, [rows, resultMap]);
+
+  // Functions to set all results at once
+  const setAllCorrect = React.useCallback(() => {
+    const newEvaluation: Record<string, 'correct' | 'incorrect' | null> = {};
+    rows.forEach(r => {
+      const { result } = getRowResult(r);
+      if (result !== null) {
+        newEvaluation[r.id] = 'correct';
+      }
+    });
+    setManualEvaluation(prev => ({ ...prev, ...newEvaluation }));
+  }, [rows, resultMap]);
+
+  const setAllIncorrect = React.useCallback(() => {
+    const newEvaluation: Record<string, 'correct' | 'incorrect' | null> = {};
+    rows.forEach(r => {
+      const { result } = getRowResult(r);
+      if (result !== null) {
+        newEvaluation[r.id] = 'incorrect';
+      }
+    });
+    setManualEvaluation(prev => ({ ...prev, ...newEvaluation }));
+  }, [rows, resultMap]);
+
+  const resetAllEvaluations = React.useCallback(() => {
+    setManualEvaluation(prev => {
+      const updated = { ...prev };
+      rows.forEach(r => {
+        updated[r.id] = null;
+      });
+      return updated;
+    });
+  }, [rows]);
+
   // Calculate optimal column widths
   const columnWidths = React.useMemo(() => {
     const varWidths: number[] = [];
@@ -599,6 +640,77 @@ export default function ConditionTester({
           Run
         </button>
       </div>
+
+      {/* Toolbar to set all results at once - visible only if there are results */}
+      {hasResults && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 12px',
+          borderBottom: '1px solid #334155',
+          background: '#1e293b'
+        }}>
+          <span style={{ color: '#94a3b8', fontSize: 11, marginRight: 4 }}>Set all:</span>
+          <button
+            title="Mark all results as correct"
+            onClick={setAllCorrect}
+            style={{
+              border: '1px solid #334155',
+              borderRadius: 4,
+              padding: '4px 8px',
+              background: 'transparent',
+              color: '#22c55e',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 11,
+            }}
+          >
+            <ThumbsUp className="w-3 h-3" />
+            <span>All Correct</span>
+          </button>
+          <button
+            title="Mark all results as incorrect"
+            onClick={setAllIncorrect}
+            style={{
+              border: '1px solid #334155',
+              borderRadius: 4,
+              padding: '4px 8px',
+              background: 'transparent',
+              color: '#ef4444',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 11,
+            }}
+          >
+            <ThumbsDown className="w-3 h-3" />
+            <span>All Incorrect</span>
+          </button>
+          <button
+            title="Reset all evaluations (mark as to be evaluated)"
+            onClick={resetAllEvaluations}
+            style={{
+              border: '1px solid #334155',
+              borderRadius: 4,
+              padding: '4px 8px',
+              background: 'transparent',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 11,
+            }}
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>Reset</span>
+          </button>
+        </div>
+      )}
 
       {/* Grid container */}
       <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
