@@ -24,7 +24,7 @@ export function emitSidebarHighlightItem(entityType: string, itemName: string) {
 }
 
 // Condition editor events
-export function emitConditionEditorOpen(detail: { variables?: any; script?: string; label?: string; name?: string }) {
+export function emitConditionEditorOpen(detail: { variables?: any; script?: string; label?: string; name?: string; nodeId?: string | null; nodeElement?: HTMLElement }) {
   try { document.dispatchEvent(new CustomEvent('conditionEditor:open', { detail, bubbles: true })); } catch {}
 }
 export function emitConditionEditorSave(script: string) {

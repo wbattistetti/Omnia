@@ -389,8 +389,55 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           onWrenchClick={async () => {
             try {
               const variables = (window as any).__omniaVars || {};
-              (await import('../../../../ui/events')).emitConditionEditorOpen({ variables });
-            } catch { }
+              // Get node element for scrolling - try multiple selectors
+              let nodeElement: HTMLElement | null = null;
+              let nodeId: string | null = null;
+
+              // Try to find the ReactFlow node element
+              if (labelRef.current) {
+                // First try: look for ReactFlow node (has data-id attribute)
+                nodeElement = labelRef.current.closest('.react-flow__node') as HTMLElement | null;
+
+                if (nodeElement) {
+                  // ReactFlow nodes have data-id attribute
+                  nodeId = nodeElement.getAttribute('data-id');
+                }
+
+                // If not found, try to find by data-row-id and then find parent node
+                if (!nodeElement || !nodeId) {
+                  const rowElement = labelRef.current.closest('[data-row-id]') as HTMLElement | null;
+                  if (rowElement) {
+                    nodeElement = rowElement.closest('.react-flow__node') as HTMLElement | null;
+                    if (nodeElement) {
+                      nodeId = nodeElement.getAttribute('data-id');
+                    }
+                  }
+                }
+
+                // If still not found, try data-node-id
+                if (!nodeElement || !nodeId) {
+                  nodeElement = labelRef.current.closest('[data-node-id]') as HTMLElement | null;
+                  if (nodeElement) {
+                    nodeId = nodeElement.getAttribute('data-node-id') || nodeElement.getAttribute('data-id');
+                  }
+                }
+              }
+
+              console.log('[NodeRowLabel] Opening condition editor', {
+                hasNodeElement: !!nodeElement,
+                nodeId,
+                nodeElementTag: nodeElement?.tagName,
+                nodeElementClasses: nodeElement?.className
+              });
+
+              (await import('../../../../ui/events')).emitConditionEditorOpen({
+                variables,
+                nodeId: nodeId || undefined,
+                nodeElement: nodeElement || undefined
+              });
+            } catch (err) {
+              console.warn('[NodeRowLabel] Error opening condition editor:', err);
+            }
           }}
           ActIcon={Icon}
           actColor={iconColor || labelTextColor}

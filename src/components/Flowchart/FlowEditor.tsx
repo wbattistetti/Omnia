@@ -89,6 +89,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const reactFlowInstance = useReactFlow();
   // Rimuovo tempEdgeIdState
   const selection = useSelectionManager();
+
+  // Save/restore viewport for ConditionEditor scroll
+  const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick } = selection;
   // Ref per memorizzare l'ID dell'ultima edge creata (sia tra nodi esistenti che con nodo temporaneo)
   const pendingEdgeIdRef = useRef<string | null>(null);
@@ -1014,6 +1017,114 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       try { (reactFlowInstance as any).setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 0 }); } catch { }
       initializedRef.current = true;
     }
+  }, [reactFlowInstance]);
+
+  // Listen for scroll to node event (from ConditionEditor)
+  useEffect(() => {
+    if (!reactFlowInstance) return;
+
+    const handleScrollToNode = (e: any) => {
+      const nodeId = e.detail?.nodeId;
+      const clickPosition = e.detail?.clickPosition; // Screen coordinates of the click
+      console.log('[FlowEditor] Scroll to node event received', { nodeId, clickPosition, detail: e.detail });
+
+      if (!nodeId && !clickPosition) {
+        console.warn('[FlowEditor] No nodeId or clickPosition provided in scroll event');
+        return;
+      }
+
+      try {
+        // Save current viewport
+        const currentViewport = reactFlowInstance.getViewport();
+        savedViewportRef.current = { x: currentViewport.x, y: currentViewport.y, zoom: currentViewport.zoom };
+        console.log('[FlowEditor] Saved viewport', savedViewportRef.current);
+
+        // Get viewport dimensions
+        const viewport = reactFlowInstance.getViewport();
+        const pane = document.querySelector('.react-flow__pane') as HTMLElement;
+        if (!pane) {
+          console.warn('[FlowEditor] ReactFlow pane not found');
+          return;
+        }
+
+        const paneRect = pane.getBoundingClientRect();
+        const viewportWidth = paneRect.width;
+        const viewportHeight = paneRect.height;
+
+        let newX: number;
+        let newY: number;
+
+        // If we have click position, use it for precise scrolling
+        if (clickPosition && typeof clickPosition.x === 'number' && typeof clickPosition.y === 'number') {
+          // Convert screen coordinates to flow coordinates
+          const flowPosition = reactFlowInstance.screenToFlowPosition({
+            x: clickPosition.x,
+            y: clickPosition.y
+          });
+
+          console.log('[FlowEditor] Converted click position to flow coordinates', {
+            screen: clickPosition,
+            flow: flowPosition,
+            viewport
+          });
+
+          // Calculate viewport position to center the click point (with offset from top)
+          // We want the click point to be at the top of the viewport (with 20px padding)
+          newX = -flowPosition.x + (viewportWidth / 2);
+          newY = -flowPosition.y + 20; // 20px padding from top
+        } else if (nodeId) {
+          // Fallback: use node position
+          const node = reactFlowInstance.getNode(nodeId);
+          console.log('[FlowEditor] Node found', { nodeId, node, hasPosition: !!node?.position });
+
+          if (!node || !node.position) {
+            console.warn('[FlowEditor] Node not found or has no position', { nodeId, node });
+            return;
+          }
+
+          // Calculate viewport position to center node at top
+          const nodeX = node.position.x;
+          const nodeY = node.position.y;
+          const nodeWidth = node.width || 280; // Default node width
+
+          newX = -nodeX + (viewportWidth / 2) - (nodeWidth / 2);
+          newY = -nodeY + 20; // 20px padding from top
+        } else {
+          return;
+        }
+
+        console.log('[FlowEditor] Scrolling to position', {
+          nodeId,
+          clickPosition,
+          viewportSize: { width: viewportWidth, height: viewportHeight },
+          newViewport: { x: newX, y: newY, zoom: viewport.zoom }
+        });
+
+        // Set viewport with smooth animation
+        reactFlowInstance.setViewport({ x: newX, y: newY, zoom: viewport.zoom }, { duration: 300 });
+      } catch (err) {
+        console.error('[FlowEditor] Failed to scroll to node', err);
+      }
+    };
+
+    const handleRestoreViewport = () => {
+      if (savedViewportRef.current && reactFlowInstance) {
+        try {
+          reactFlowInstance.setViewport(savedViewportRef.current, { duration: 300 });
+          savedViewportRef.current = null;
+        } catch (err) {
+          console.warn('[FlowEditor] Failed to restore viewport', err);
+        }
+      }
+    };
+
+    document.addEventListener('flowchart:scrollToNode', handleScrollToNode);
+    document.addEventListener('flowchart:restoreViewport', handleRestoreViewport);
+
+    return () => {
+      document.removeEventListener('flowchart:scrollToNode', handleScrollToNode);
+      document.removeEventListener('flowchart:restoreViewport', handleRestoreViewport);
+    };
   }, [reactFlowInstance]);
 
   // ✅ SOLUZIONE DEFINITIVA: Forza la griglia a coprire tutto il canvas con CSS semplice

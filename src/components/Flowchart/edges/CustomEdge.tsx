@@ -20,6 +20,8 @@ export type CustomEdgeProps = EdgeProps & {
 export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const {
     id,
+    source,
+    target,
     sourceX,
     sourceY,
     targetX,
@@ -658,12 +660,32 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
                           }
                           if (script) break;
                         }
+
+                        // Get click position in screen coordinates
+                        const clickX = e.clientX;
+                        const clickY = e.clientY;
+
                         console.log('[LOAD_SCRIPT] 🔍 From CustomEdge (gear)', {
                           conditionName,
                           hasScript: !!script,
-                          scriptLength: script.length
+                          scriptLength: script.length,
+                          sourceNodeId: source,
+                          targetNodeId: target,
+                          clickPosition: { x: clickX, y: clickY }
                         });
-                        const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label: conditionName, name: conditionName }, bubbles: true });
+
+                        // Use target node ID and click position for precise scrolling
+                        const ev: any = new CustomEvent('conditionEditor:open', {
+                          detail: {
+                            variables,
+                            script,
+                            label: conditionName,
+                            name: conditionName,
+                            nodeId: target, // Use target node ID as fallback
+                            clickPosition: { x: clickX, y: clickY } // Exact click position
+                          },
+                          bubbles: true
+                        });
                         document.dispatchEvent(ev);
                       } catch { }
                     }}

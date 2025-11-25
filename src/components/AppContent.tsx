@@ -326,6 +326,25 @@ export const AppContent: React.FC<AppContentProps> = ({
       });
       setConditionScript(d.script || '');
       setConditionLabel(d.label || d.name || 'Condition');
+
+      // Scroll to node using ReactFlow viewport (if nodeId is provided)
+      if (d.nodeId) {
+        console.log('[AppContent] Emitting scroll to node event', { nodeId: d.nodeId });
+        setTimeout(() => {
+          try {
+            document.dispatchEvent(new CustomEvent('flowchart:scrollToNode', {
+              detail: { nodeId: d.nodeId },
+              bubbles: true
+            }));
+            console.log('[AppContent] Scroll event dispatched');
+          } catch (err) {
+            console.warn('[ConditionEditor] Failed to emit scroll event', err);
+          }
+        }, 100);
+      } else {
+        console.log('[AppContent] No nodeId provided, skipping scroll');
+      }
+
       setConditionEditorOpen(true);
     };
     document.addEventListener('conditionEditor:open', handler as any);
@@ -923,7 +942,17 @@ export const AppContent: React.FC<AppContentProps> = ({
                     <ActEditorPanel />
                     <ConditionEditor
                       open={conditionEditorOpen}
-                      onClose={() => setConditionEditorOpen(false)}
+                      onClose={() => {
+                        setConditionEditorOpen(false);
+                        // Restore previous viewport position
+                        setTimeout(() => {
+                          try {
+                            document.dispatchEvent(new CustomEvent('flowchart:restoreViewport', { bubbles: true }));
+                          } catch (err) {
+                            console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
+                          }
+                        }, 100);
+                      }}
                       variables={conditionVars}
                       initialScript={conditionScript}
                       variablesTree={conditionVarsTree}
