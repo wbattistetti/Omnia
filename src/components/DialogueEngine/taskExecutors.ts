@@ -377,7 +377,128 @@ async function executeGetData(
     console.warn('[TaskExecutor][executeGetData] DDT callback is not provided');
   }
 
-  // Use DialogueDataEngine (same as ResponseEditor chat simulator)
+  // ✅ Use executeGetDataHierarchical (supports toggle between old/new engine)
+  // Check if we should use new engine from localStorage
+  const useNewEngine = (() => {
+    try {
+      return localStorage.getItem('ddt.useNewEngine') === 'true';
+    } catch {
+      return false;
+    }
+  })();
+
+  console.log('[TaskExecutor][executeGetData] ═══════════════════════════════════════════════════════');
+  console.log('[TaskExecutor][executeGetData] 🔍 Checking which engine to use', {
+    useNewEngine,
+    fromStorage: (() => {
+      try {
+        return localStorage.getItem('ddt.useNewEngine');
+      } catch {
+        return 'N/A';
+      }
+    })(),
+    timestamp: new Date().toISOString()
+  });
+  console.log('[TaskExecutor][executeGetData] ═══════════════════════════════════════════════════════');
+
+  if (useNewEngine) {
+    // ✅ Use new hierarchical navigator (supports new engine via toggle)
+    console.log('[TaskExecutor][executeGetData] 🆕 Using executeGetDataHierarchical (supports NEW engine)');
+    try {
+      const { executeGetDataHierarchical } = await import('./ddt/ddtNavigator');
+
+      // Initialize DDTState
+      const ddtState = {
+        memory: {},
+        noMatchCounters: {},
+        noInputCounters: {},
+        notConfirmedCounters: {}
+      };
+
+      // Create callbacks compatible with DDTNavigatorCallbacks
+      const navigatorCallbacks = {
+        onMessage: callbacks.onMessage,
+        onGetRetrieveEvent: async (nodeId: string, ddtParam?: AssembledDDT) => {
+          if (callbacks.onGetRetrieveEvent) {
+            // Use ddtParam if provided, otherwise use ddt from closure
+            return await callbacks.onGetRetrieveEvent(nodeId, ddtParam || ddt);
+          }
+          throw new Error('onGetRetrieveEvent not provided');
+        },
+        onProcessInput: callbacks.onProcessInput,
+        translations: callbacks.translations
+      };
+
+      console.log('[TaskExecutor][executeGetData] 🆕 Calling executeGetDataHierarchical', {
+        useNewEngine,
+        willUseNew: useNewEngine
+      });
+
+      // Call hierarchical navigator (will use new/old engine based on toggle)
+      // Pass useNewEngine from toggle to ensure it's respected
+      const result = await executeGetDataHierarchical(
+        ddt,
+        ddtState,
+        navigatorCallbacks,
+        { useNewEngine } // Use toggle value
+      );
+
+      console.log('[TaskExecutor][executeGetData] ✅ executeGetDataHierarchical completed', {
+        success: result.success,
+        hasValue: !!result.value,
+        hasError: !!result.error
+      });
+
+      if (result.success) {
+        task.state = 'Executed';
+        // Extract variables from result.value (new engine) or ddtState.memory (old engine)
+        const variables: Record<string, any> = {};
+
+        if (result.value && typeof result.value === 'object') {
+          // New engine returns data in result.value
+          Object.entries(result.value).forEach(([key, value]) => {
+            variables[key] = value;
+          });
+          console.log('[TaskExecutor][executeGetData] ✅ Variables from NEW engine result.value', {
+            variablesCount: Object.keys(variables).length
+          });
+        } else {
+          // Fallback: extract from ddtState.memory (old engine format)
+          Object.entries(ddtState.memory).forEach(([key, mem]) => {
+            if (mem.confirmed) {
+              variables[key] = mem.value;
+            }
+          });
+          console.log('[TaskExecutor][executeGetData] ✅ Variables from ddtState.memory (fallback)', {
+            variablesCount: Object.keys(variables).length
+          });
+        }
+
+        return {
+          success: true,
+          variables
+        };
+      } else {
+        task.state = 'WaitingUserInput';
+        return {
+          success: false,
+          error: result.error || new Error('DDT execution failed'),
+          retrievalState: 'empty'
+        };
+      }
+    } catch (error) {
+      console.error('[TaskExecutor][executeGetData] Error in new hierarchical navigator', error);
+      task.state = 'WaitingUserInput';
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error('DDT execution failed'),
+        retrievalState: 'empty'
+      };
+    }
+  }
+
+  // Fallback: Use DialogueDataEngine V2 (old engine)
+  console.log('[TaskExecutor][executeGetData] 🔧 Using DialogueDataEngine V2 (OLD engine)');
   try {
     // Import DialogueDataEngine modules
     const { adaptCurrentToV2 } = await import('../DialogueDataEngine/model/adapters/currentToV2');

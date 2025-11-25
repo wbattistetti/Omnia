@@ -49,7 +49,8 @@ export function buildFirstRowCondition(
 
     // Get last row's taskId
     const lastRow = rows[rows.length - 1];
-    const lastTaskId = lastRow.taskId || lastRow.id; // Fallback to row.id if no taskId
+    // ✅ FIX: Use lastRow.taskId if present, otherwise fallback to lastRow.id
+    const lastTaskId = lastRow.taskId || lastRow.id;
 
     // Build condition for this link: (Parent.Executed ∧ Link.Condition)
     const linkConditionParts: Condition[] = [

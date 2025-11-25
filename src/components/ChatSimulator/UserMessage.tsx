@@ -21,6 +21,7 @@ export interface Message {
   color?: string;
   grammarMissing?: boolean; // Flag per indicare che manca la grammatica NLP
   extractedValues?: ExtractedValue[]; // Valori estratti dall'input
+  engineType?: 'new' | 'old'; // Track which engine generated this message
 }
 
 interface UserMessageProps {

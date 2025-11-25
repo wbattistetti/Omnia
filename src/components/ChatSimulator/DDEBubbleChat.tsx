@@ -13,6 +13,7 @@ import { extractTranslations, resolveActionText } from './DDTAdapter';
 import { adaptCurrentToV2 } from '../DialogueDataEngine/model/adapters/currentToV2';
 import { useDDTSimulator } from '../DialogueDataEngine/useSimulator';
 import { getMain, getSub, resolveAsk, resolveConfirm, resolveSuccess, resolveEscalation, findOriginalNode } from './messageResolvers';
+import { taskRepository } from '../../services/TaskRepository';
 
 // getStepIcon and getStepColor moved to chatSimulatorUtils.tsx
 // Helper functions for message resolution moved to messageResolvers.ts
@@ -131,13 +132,23 @@ export default function DDEBubbleChat({
                 text: message.text?.substring(0, 50),
                 type: messageType
               });
+              // Add engine indicator to message
+              const currentUseNewEngine = (() => {
+                try {
+                  return localStorage.getItem('ddt.useNewEngine') === 'true';
+                } catch {
+                  return false;
+                }
+              })();
+
               return [...prev, {
                 id: uniqueId,
                 type: messageType,
                 text: message.text,
                 stepType: message.stepType || 'message',
                 escalationNumber: message.escalationNumber,
-                color: messageType === 'system' ? '#ef4444' : getStepColor(message.stepType || 'message') // Red for system/error messages
+                color: messageType === 'system' ? '#ef4444' : getStepColor(message.stepType || 'message'), // Red for system/error messages
+                engineType: currentUseNewEngine ? 'new' : 'old' // Track which engine generated this message
               }];
             });
           });
@@ -788,21 +799,52 @@ export default function DDEBubbleChat({
     return false;
   }, [mode, messages.length, orchestrator.variableStore]);
 
+  // Toggle for new/old engine (synchronized with localStorage)
+  const [useNewEngine, setUseNewEngine] = React.useState(() => {
+    try {
+      return localStorage.getItem('ddt.useNewEngine') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('ddt.useNewEngine', useNewEngine ? 'true' : 'false');
+      // Force re-render of components that read from localStorage
+      window.dispatchEvent(new Event('storage'));
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [useNewEngine]);
+
   // Restart function: reset + start (which recompiles)
   const handleRestart = React.useCallback(async () => {
     if (mode === 'flow') {
+      console.log('[DDEBubbleChat] 🔄 RESTART called');
+
       // Clear messages
       setMessages([]);
       messageIdCounter.current = 0;
       lastKeyRef.current = '';
+
       // Reset engine state
       orchestrator.reset();
+
+      console.log('[DDEBubbleChat] 🔄 After reset, tasks in memory:', {
+        tasksCount: taskRepository.getAllTasks().length,
+        taskIds: taskRepository.getAllTasks().map(t => ({ id: t.id, action: t.action }))
+      });
+
       // Small delay to ensure reset completes before starting
       await new Promise(resolve => setTimeout(resolve, 10));
+
       // Start (which will recompile)
+      console.log('[DDEBubbleChat] 🔄 Calling orchestrator.start()');
       if (orchestrator.start) {
         await orchestrator.start();
       }
+      console.log('[DDEBubbleChat] 🔄 RESTART complete');
     } else if (mode === 'single-ddt' && simulator && template) {
       simulator.reset();
     }
@@ -810,7 +852,7 @@ export default function DDEBubbleChat({
 
   return (
     <div className="h-full flex flex-col bg-white">
-      <div className="border-b p-3 bg-gray-50 flex items-center gap-2">
+      <div className="border-b p-3 bg-gray-50 flex items-center gap-2 flex-wrap">
         {mode === 'flow' && (
           <>
             {orchestrator.isRunning ? (
@@ -830,6 +872,27 @@ export default function DDEBubbleChat({
             )}
           </>
         )}
+        {/* Engine Toggle */}
+        <label className="flex items-center gap-2 cursor-pointer ml-auto">
+          <input
+            type="checkbox"
+            checked={useNewEngine}
+            onChange={(e) => {
+              setUseNewEngine(e.target.checked);
+              console.log('[DDEBubbleChat] Engine toggle changed', { useNewEngine: e.target.checked });
+            }}
+            className="w-4 h-4 cursor-pointer"
+            title={useNewEngine ? 'Using NEW DDT Engine' : 'Using OLD DDT Engine'}
+          />
+          <span className="text-xs text-gray-700">
+            {useNewEngine ? '🆕 Nuovo Engine' : '🔧 Vecchio Engine'}
+          </span>
+          {useNewEngine && (
+            <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">
+              NEW
+            </span>
+          )}
+        </label>
       </div>
       {/* Error message from orchestrator (e.g., DDT validation failed) */}
       {mode === 'flow' && orchestrator.error && (

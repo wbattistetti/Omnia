@@ -386,28 +386,13 @@ export function useNewFlowOrchestrator({
           // ✅ USA IL CONTRACT (come fa il Response Editor)
           const contract = originalNode ? loadContract(originalNode) : null;
 
-          if (contract && contract.templateName === node?.kind) {
-            console.log('[useNewFlowOrchestrator] ✅ Contract trovato, usando per estrazione', {
-              templateName: contract.templateName,
-              contractTemplateId: contract.templateId,
-              input: input.substring(0, 50)
-            });
-
+          if (contract) {
             // ✅ Estrai usando il Contract (stesso metodo del Response Editor)
             const result = extractWithContractSync(input, contract, undefined);
 
             if (result.hasMatch && Object.keys(result.values).length > 0) {
-              console.log('[useNewFlowOrchestrator] ✅ Extraction SUCCESS', {
-                values: result.values,
-                source: result.source,
-                valuesCount: Object.keys(result.values).length
-              });
               return { status: 'match' as const, value: result.values };
             } else {
-              console.log('[useNewFlowOrchestrator] ❌ No match from contract', {
-                input: input.substring(0, 50),
-                contractPatterns: contract.regex.patterns.length
-              });
               return { status: 'noMatch' as const };
             }
           } else {

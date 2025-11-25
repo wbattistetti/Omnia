@@ -22,13 +22,14 @@ export async function retrieve(
     node.id = nodeId;
   }
 
-  console.log('[DDTRetrieve] Starting retrieve for node', {
+  console.log('[DDTRetrieve] 🔧 OLD ENGINE: Starting retrieve for node', {
     nodeId,
     nodeLabel: node.label || node.name,
     hasSteps: !!node.steps,
     stepsType: Array.isArray(node.steps) ? 'array' : typeof node.steps,
     stepsTypes: node.steps ? (Array.isArray(node.steps) ? node.steps.map((s: any) => s.type) : [node.steps.type]) : [],
-    nodeKeys: Object.keys(node)
+    nodeKeys: Object.keys(node),
+    timestamp: new Date().toISOString()
   });
 
   // Initialize counters for this node if not present

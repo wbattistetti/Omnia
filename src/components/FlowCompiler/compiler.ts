@@ -6,6 +6,7 @@ import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/c
 import type { CompiledTask, CompilationResult, DDTExpansion } from './types';
 import { buildFirstRowCondition, buildSequentialCondition } from './conditionBuilder';
 import { expandDDT } from './ddtExpander';
+import { taskRepository } from '../../services/TaskRepository';
 
 interface CompilerOptions {
   getTask: (taskId: string) => any; // Function to resolve Task from taskId
@@ -42,16 +43,51 @@ export function compileFlow(
 
     if (rows.length === 0) continue;
 
+    console.log('[Compiler] 🔍 Processing node', {
+      nodeId: node.id,
+      rowsCount: rows.length,
+      rows: rows.map(r => ({
+        id: r.id,
+        text: r.text,
+        hasTaskId: !!r.taskId,
+        taskId: r.taskId
+      }))
+    });
+
     // Process rows in sequence
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
-      const taskId = row.id; // Always use row.id (rule: row.id === task.id)
+      // ✅ FIX: Use row.taskId if present, otherwise fallback to row.id
+      const taskId = row.taskId || row.id;
+
+      console.log('[Compiler] 🔍 Looking for task', {
+        rowId: row.id,
+        rowText: row.text,
+        rowTaskId: row.taskId,
+        lookingForTaskId: taskId,
+        usingTaskId: !!row.taskId
+      });
 
       // Resolve task
       const task = options.getTask(taskId);
       if (!task) {
+        console.error('[Compiler] ❌ Task not found', {
+          taskId,
+          nodeId: node.id,
+          rowId: row.id,
+          rowText: row.text,
+          rowTaskId: row.taskId,
+          allTasksInMemory: taskRepository.getAllTasks().map(t => ({ id: t.id, action: t.action }))
+        });
         throw new Error(`[Compiler] Task not found: ${taskId} in node ${node.id}, row ${row.id}. Task must exist in memory.`);
       }
+
+      console.log('[Compiler] ✅ Task found', {
+        taskId: task.id,
+        rowId: row.id,
+        rowText: row.text,
+        taskAction: task.action
+      });
 
       // Build condition
       let condition;
@@ -61,7 +97,8 @@ export function compileFlow(
       } else {
         // Subsequent rows: previous row completed
         const prevRow = rows[rowIndex - 1];
-        const prevTaskId = prevRow.id; // Always use row.id (rule: row.id === task.id)
+        // ✅ FIX: Use prevRow.taskId if present, otherwise fallback to prevRow.id
+        const prevTaskId = prevRow.taskId || prevRow.id;
         condition = buildSequentialCondition(prevTaskId);
       }
 

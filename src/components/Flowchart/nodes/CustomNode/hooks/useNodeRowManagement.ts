@@ -3,6 +3,7 @@ import { NodeRowData, EntityType } from '../../../../../types/project';
 import { typeToMode } from '../../../../../utils/normalizers';
 import { createRowWithTask, getTaskIdFromRow, updateRowData } from '../../../../../utils/taskHelpers';
 import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
+import { taskRepository } from '../../../../../services/TaskRepository';
 
 interface UseNodeRowManagementProps {
     nodeId: string;
@@ -47,8 +48,19 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     // Migration: Now creates Task in TaskRepository (dual mode)
     const appendEmptyRow = useCallback((rows: NodeRowData[]) => {
         const newRowId = makeRowId();
+        console.log('[appendEmptyRow] 🔍 Creating new row with task', {
+            newRowId,
+            tasksInMemoryBefore: taskRepository.getAllTasks().length
+        });
         // Create row with Task (dual mode: Task + InstanceRepository)
         const newRow = createRowWithTask(newRowId, 'Message', '');
+        console.log('[appendEmptyRow] ✅ Row created', {
+            rowId: newRow.id,
+            rowTaskId: newRow.taskId,
+            rowHasTaskId: !!newRow.taskId,
+            tasksInMemoryAfter: taskRepository.getAllTasks().length,
+            taskExistsInRepo: !!taskRepository.getTask(newRow.id)
+        });
         return { nextRows: [...rows, newRow], newRowId };
     }, [makeRowId]);
 

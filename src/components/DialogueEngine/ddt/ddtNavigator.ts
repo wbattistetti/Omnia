@@ -5,20 +5,106 @@ import type { DDTState, RetrieveResult, DDTNavigatorCallbacks } from './ddtTypes
 import { retrieve } from './ddtRetrieve';
 import { findMissingRequiredSub, isAllRequiredSubsFilled } from './ddtMemory';
 import { compositeMainValue } from './ddtComposition';
+import { executeGetDataHierarchicalWithFallback } from './ddtEngineAdapter';
+
+/**
+ * Reads useNewEngine flag from localStorage or environment variable
+ */
+function getUseNewEngineFromStorage(): boolean {
+  try {
+    // First check localStorage (set by UI toggle)
+    const fromStorage = localStorage.getItem('ddt.useNewEngine');
+    if (fromStorage !== null) {
+      return fromStorage === 'true';
+    }
+    // Fallback to environment variable (Vite uses import.meta.env)
+    return (import.meta.env.VITE_USE_NEW_DDT_ENGINE === 'true') || false;
+  } catch {
+    // Fallback to environment variable if localStorage not available
+    return (import.meta.env.VITE_USE_NEW_DDT_ENGINE === 'true') || false;
+  }
+}
 
 /**
  * Executes GetData task using hierarchical DDT navigation
  * Implements: FOR EACH maindata → Retrieve → FOR EACH sub → Retrieve → Composite
+ *
+ * @param options.useNewEngine - If true, uses new DDT engine. If false or undefined, reads from localStorage/env.
  */
 export async function executeGetDataHierarchical(
   ddt: AssembledDDT,
   state: DDTState,
-  callbacks: DDTNavigatorCallbacks
+  callbacks: DDTNavigatorCallbacks,
+  options?: { useNewEngine?: boolean }
 ): Promise<RetrieveResult> {
-  console.log('[DDTNavigator] Starting hierarchical navigation', {
+  // ✅ FIX: Read from localStorage if options not passed
+  const useNew = options?.useNewEngine ?? getUseNewEngineFromStorage();
+
+  // Log which source was used
+  const source = options?.useNewEngine !== undefined
+    ? 'options parameter'
+    : 'localStorage/env';
+
+  if (useNew) {
+    console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
+    console.log('[DDTNavigator] 🆕 USING NEW ENGINE via adapter');
+    console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
+    console.log('[DDTNavigator] Using NEW engine via adapter', {
+      ddtId: ddt.id,
+      ddtLabel: ddt.label,
+      source,
+      fromOptions: options?.useNewEngine !== undefined,
+      fromStorage: options?.useNewEngine === undefined
+    });
+    // Usa nuovo engine tramite adapter con fallback automatico
+    return executeGetDataHierarchicalWithFallback(
+      ddt,
+      state,
+      callbacks,
+      async () => {
+        // Fallback: vecchio engine
+        return executeGetDataHierarchicalOld(ddt, state, callbacks);
+      }
+    );
+  }
+
+  // Vecchio engine (comportamento predefinito)
+  console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
+  console.log('[DDTNavigator] 🔧 USING OLD ENGINE');
+  console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
+  console.log('[DDTNavigator] Using OLD engine', {
     ddtId: ddt.id,
     ddtLabel: ddt.label,
-    hasMainData: !!ddt.mainData
+    source,
+    fromOptions: options?.useNewEngine !== undefined,
+    fromStorage: options?.useNewEngine === undefined,
+    storageValue: (() => {
+      try {
+        return localStorage.getItem('ddt.useNewEngine');
+      } catch {
+        return 'N/A';
+      }
+    })()
+  });
+  return executeGetDataHierarchicalOld(ddt, state, callbacks);
+}
+
+/**
+ * Old engine implementation (renamed from executeGetDataHierarchical)
+ */
+async function executeGetDataHierarchicalOld(
+  ddt: AssembledDDT,
+  state: DDTState,
+  callbacks: DDTNavigatorCallbacks
+): Promise<RetrieveResult> {
+  console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
+  console.log('[DDTNavigator] 🔧🔧🔧 OLD ENGINE ACTIVE 🔧🔧🔧');
+  console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
+  console.log('[DDTNavigator] Starting hierarchical navigation (OLD ENGINE)', {
+    ddtId: ddt.id,
+    ddtLabel: ddt.label,
+    hasMainData: !!ddt.mainData,
+    timestamp: new Date().toISOString()
   });
 
   // DDT can have mainData as array or single object

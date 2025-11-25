@@ -240,9 +240,21 @@ export function updateRowData(
  * @returns Array of rows with taskId set (row.text remains unchanged)
  */
 export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
-  return rows.map(row => {
+  console.log('[enrichRowsWithTaskId] 🔍 START enriching rows', {
+    rowsCount: rows.length,
+    rowsWithTaskId: rows.filter(r => r.taskId).length,
+    rowsWithoutTaskId: rows.filter(r => !r.taskId).length,
+    allTasksInMemory: taskRepository.getAllTasks().length
+  });
+
+  const result = rows.map(row => {
     // If row already has taskId, just return it (row.text stays as is)
     if (row.taskId) {
+      console.log('[enrichRowsWithTaskId] ✅ Row already has taskId', {
+        rowId: row.id,
+        taskId: row.taskId,
+        rowText: row.text
+      });
       return row;
     }
 
@@ -253,16 +265,35 @@ export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
     if (!task) {
       // Task doesn't exist yet - it will be created when user clicks the gear icon
       // Return row without taskId - task will be created later with same ID as row.id
+      console.log('[enrichRowsWithTaskId] ❌ Task NOT found for row', {
+        rowId: row.id,
+        rowText: row.text,
+        allTaskIds: taskRepository.getAllTasks().map(t => t.id).slice(0, 10)
+      });
       return row;
     }
 
     // Row has a corresponding Task, add taskId
     // row.text remains unchanged - it's the user's label, not synced with task.value.text
+    console.log('[enrichRowsWithTaskId] ✅ Task found, adding taskId to row', {
+      rowId: row.id,
+      taskId: task.id,
+      rowText: row.text,
+      taskAction: task.action
+    });
     return {
       ...row,
       taskId: task.id
       // row.text stays as written by user - no synchronization
     };
   });
+
+  console.log('[enrichRowsWithTaskId] 🎉 DONE enriching rows', {
+    resultRowsCount: result.length,
+    resultRowsWithTaskId: result.filter(r => r.taskId).length,
+    resultRowsWithoutTaskId: result.filter(r => !r.taskId).length
+  });
+
+  return result;
 }
 
