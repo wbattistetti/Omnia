@@ -777,39 +777,59 @@ export default function DDEBubbleChat({
     return messages;
   }, [messages]);
 
+  // Check if there has been any execution (messages exist or variableStore has values)
+  const hasExecuted = React.useMemo(() => {
+    if (mode === 'flow') {
+      // Check if there are messages or if variableStore has values
+      const hasMessages = messages.length > 0;
+      const hasVariables = orchestrator.variableStore && Object.keys(orchestrator.variableStore).length > 0;
+      return hasMessages || hasVariables;
+    }
+    return false;
+  }, [mode, messages.length, orchestrator.variableStore]);
+
+  // Restart function: reset + start (which recompiles)
+  const handleRestart = React.useCallback(async () => {
+    if (mode === 'flow') {
+      // Clear messages
+      setMessages([]);
+      messageIdCounter.current = 0;
+      lastKeyRef.current = '';
+      // Reset engine state
+      orchestrator.reset();
+      // Small delay to ensure reset completes before starting
+      await new Promise(resolve => setTimeout(resolve, 10));
+      // Start (which will recompile)
+      if (orchestrator.start) {
+        await orchestrator.start();
+      }
+    } else if (mode === 'single-ddt' && simulator && template) {
+      simulator.reset();
+    }
+  }, [mode, orchestrator, simulator, template]);
+
   return (
     <div className="h-full flex flex-col bg-white">
       <div className="border-b p-3 bg-gray-50 flex items-center gap-2">
         {mode === 'flow' && (
           <>
-            <button
-              onClick={orchestrator.isRunning ? orchestrator.stop : orchestrator.start}
-              className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
-            >
-              {orchestrator.isRunning ? 'Stop' : 'Start'}
-            </button>
-            {orchestrator.isRunning && orchestrator.currentNodeId && (
-              <span className="text-xs text-gray-600">
-                Node: {orchestrator.getCurrentNode()?.data?.title || orchestrator.currentNodeId}
-              </span>
+            {orchestrator.isRunning ? (
+              <button
+                onClick={orchestrator.stop}
+                className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={hasExecuted ? handleRestart : orchestrator.start}
+                className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
+              >
+                {hasExecuted ? 'Restart' : 'Start'}
+              </button>
             )}
           </>
         )}
-        <button
-          onClick={() => {
-            setMessages([]);
-            messageIdCounter.current = 0;
-            lastKeyRef.current = ''; // Reset position key tracking
-            if (mode === 'flow') {
-              orchestrator.reset();
-            } else if (mode === 'single-ddt' && simulator && template) {
-              simulator.reset(); // Reset simulator state to initial state
-            }
-          }}
-          className="px-2 py-1 text-xs rounded border bg-gray-100 border-gray-300 text-gray-700"
-        >
-          Reset
-        </button>
       </div>
       {/* Error message from orchestrator (e.g., DDT validation failed) */}
       {mode === 'flow' && orchestrator.error && (

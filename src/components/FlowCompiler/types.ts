@@ -26,7 +26,8 @@ export type Condition =
   | { type: 'StepActivated'; stepId: string } // Step is active
   | { type: 'EdgeCondition'; edgeId: string; condition: any } // Edge condition from flowchart
   | { type: 'And'; conditions: Condition[] } // All conditions must be true
-  | { type: 'Or'; conditions: Condition[] }; // At least one condition must be true
+  | { type: 'Or'; conditions: Condition[] } // At least one condition must be true
+  | { type: 'Not'; condition: Condition }; // Negation (used for Else edges)
 
 /**
  * CompiledTask: Task with condition and state for execution

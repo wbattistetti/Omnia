@@ -191,6 +191,19 @@ export function evaluateCondition(
       });
       return orFinal;
 
+    case 'Not':
+      console.log('[ConditionEvaluator][Not] 🔍 Evaluating NOT condition', {
+        innerConditionType: condition.condition.type
+      });
+      const innerResult = evaluateCondition(condition.condition, state);
+      const notFinal = !innerResult;
+      console.log('[ConditionEvaluator][Not] ✅ NOT condition result', {
+        innerConditionType: condition.condition.type,
+        innerResult,
+        finalResult: notFinal
+      });
+      return notFinal;
+
     default:
       console.warn(`[ConditionEvaluator] Unknown condition type: ${(condition as any).type}`);
       return false;
