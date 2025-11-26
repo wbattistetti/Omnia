@@ -1,236 +1,102 @@
 const { MongoClient } = require('mongodb');
 
-const uri = process.env.MONGO_URI || 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
+const uri = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
 const dbFactory = 'factory';
+const dbProjects = 'Projects';
 
-/**
- * Migrates DDT node labels and Task Template labels to Translations
- *
- * For DDT Templates:
- * - Extracts labels from mainData[].label and mainData[].subData[].label
- * - Saves to factory.Translations with type: 'Template'
- *
- * For Task Templates:
- * - Extracts label from template.label
- * - Saves to factory.Translations with type: 'Template'
- */
-async function migrateLabelsToTranslations() {
+async function createIndexes() {
     const client = new MongoClient(uri);
 
     try {
         await client.connect();
-        console.log('✅ Connected to MongoDB');
+        console.log('[MongoDB] ✅ Connected\n');
 
+        // ===================================
+        // FACTORY DATABASE INDEXES
+        // ===================================
+        console.log('📦 Creating indexes for Factory database...');
         const factoryDb = client.db(dbFactory);
-        const taskTemplatesColl = factoryDb.collection('Task_Templates');
-        const translationsColl = factoryDb.collection('Translations');
 
-        // ============================================
-        // 1. MIGRATE DDT TEMPLATES (type: 'data')
-        // ============================================
-        console.log('\n📦 [DDT Templates] Loading DDT templates...');
-        const ddtTemplates = await taskTemplatesColl.find({ type: 'data' }).toArray();
-        console.log(`   Found ${ddtTemplates.length} DDT templates`);
+        // AgentActs collection
+        await factoryDb.collection('AgentActs').createIndex({ scope: 1, industry: 1 });
+        console.log('  ✅ AgentActs: { scope, industry }');
 
-        const ddtTranslations = [];
-        let ddtNodesProcessed = 0;
+        // Conditions collection
+        await factoryDb.collection('Conditions').createIndex({ scope: 1, industry: 1 });
+        console.log('  ✅ Conditions: { scope, industry }');
 
-        for (const ddt of ddtTemplates) {
-            const ddtId = ddt.id || ddt._id || 'unknown';
+        // Translations collection (già esistenti ma verifichiamo)
+        await factoryDb.collection('Translations').createIndex({ language: 1, type: 1 });
+        await factoryDb.collection('Translations').createIndex({ guid: 1, language: 1 });
+        await factoryDb.collection('Translations').createIndex({ language: 1, type: 1, projectId: 1 });
+        console.log('  ✅ Translations: { language, type }, { guid, language }, { language, type, projectId }');
 
-            // Helper function to process a node (main or sub)
-            // Creates translations for EN, IT, and PT
-            const processNode = (node, nodeType = 'main') => {
-                if (!node) return;
+        // ===================================
+        // PROJECT DATABASES INDEXES
+        // ===================================
+        console.log('\n📂 Getting all project databases...');
+        const catalogDb = client.db(dbProjects);
+        const catalog = await catalogDb.collection('projects_catalog').find({}).toArray();
+        console.log(`  Found ${catalog.length} projects\n`);
 
-                const nodeId = node.id || node._id;
-                const nodeLabel = node.label || node.name || '';
+        for (const project of catalog) {
+            const dbName = project.dbName;
+            if (!dbName) continue;
 
-                if (!nodeId || !nodeLabel) {
-                    return;
-                }
+            console.log(`📁 Creating indexes for project: ${project.projectName} (${dbName})`);
+            const projDb = client.db(dbName);
 
-                // Create translations for all three languages
-                const languages = ['en', 'it', 'pt'];
-                languages.forEach(lang => {
-                    ddtTranslations.push({
-                        guid: nodeId,
-                        text: nodeLabel, // Same label for all languages (can be translated later)
-                        type: 'Template',
-                        language: lang,
-                        projectId: null,
-                        createdAt: new Date(),
-                        updatedAt: new Date()
-                    });
-                });
-                ddtNodesProcessed++;
-                console.log(`   ✅ ${nodeType} node: ${nodeId.substring(0, 20)}... → "${nodeLabel}" (EN/IT/PT)`);
-            };
+            // project_acts collection - query without filters or by name
+            await projDb.collection('project_acts').createIndex({ name: 1 });
+            await projDb.collection('project_acts').createIndex({ _id: 1, name: 1 });
+            console.log('  ✅ project_acts: { name }, { _id, name }');
 
-            // Case 1: mainData as array (new structure)
-            if (ddt.mainData && Array.isArray(ddt.mainData)) {
-                for (const mainNode of ddt.mainData) {
-                    processNode(mainNode, 'main');
+            // tasks collection - query by projectId and sort by updatedAt
+            await projDb.collection('tasks').createIndex({ projectId: 1, updatedAt: -1 });
+            await projDb.collection('tasks').createIndex({ projectId: 1, id: 1 }); // For upsert operations
+            console.log('  ✅ tasks: { projectId, updatedAt }, { projectId, id }');
 
-                    // Process subData if exists
-                    if (mainNode.subData && Array.isArray(mainNode.subData)) {
-                        for (const subNode of mainNode.subData) {
-                            processNode(subNode, 'sub');
-                        }
-                    }
-                }
-                continue;
-            }
+            // flow_nodes collection - query by flowId
+            await projDb.collection('flow_nodes').createIndex({ flowId: 1 });
+            await projDb.collection('flow_nodes').createIndex({ flowId: 1, updatedAt: -1 });
+            console.log('  ✅ flow_nodes: { flowId }, { flowId, updatedAt }');
 
-            // Case 2: mainData as single object (old structure)
-            if (ddt.mainData && typeof ddt.mainData === 'object' && !Array.isArray(ddt.mainData)) {
-                processNode(ddt.mainData, 'main');
+            // flow_edges collection - query by flowId
+            await projDb.collection('flow_edges').createIndex({ flowId: 1 });
+            await projDb.collection('flow_edges').createIndex({ flowId: 1, updatedAt: -1 });
+            console.log('  ✅ flow_edges: { flowId }, { flowId, updatedAt }');
 
-                // Process subData if exists
-                if (ddt.mainData.subData && Array.isArray(ddt.mainData.subData)) {
-                    for (const subNode of ddt.mainData.subData) {
-                        processNode(subNode, 'sub');
-                    }
-                }
-                continue;
-            }
+            // project_conditions collection - usually scanned fully, but index on _id is automatic
+            // No specific index needed unless you add filters later
 
-            // Case 3: DDT root has label/id (template base without mainData)
-            if (ddt.label || ddt.name) {
-                const rootId = ddt.id || ddt._id;
-                const rootLabel = ddt.label || ddt.name;
+            // variable_mappings collection - query by projectId
+            await projDb.collection('variable_mappings').createIndex({ projectId: 1 });
+            console.log('  ✅ variable_mappings: { projectId }');
 
-                if (rootId && rootLabel) {
-                    // Create translations for all three languages
-                    const languages = ['en', 'it', 'pt'];
-                    languages.forEach(lang => {
-                        ddtTranslations.push({
-                            guid: rootId,
-                            text: rootLabel, // Same label for all languages (can be translated later)
-                            type: 'Template',
-                            language: lang,
-                            projectId: null,
-                            createdAt: new Date(),
-                            updatedAt: new Date()
-                        });
-                    });
-                    ddtNodesProcessed++;
-                    console.log(`   ✅ DDT root: ${rootId.substring(0, 20)}... → "${rootLabel}" (EN/IT/PT)`);
-                }
-            } else {
-                console.log(`   ⚠️  Skipping DDT ${ddtId}: no mainData, label, or name`);
-            }
+            // Translations collection - query by type, language, guid
+            await projDb.collection('Translations').createIndex({ language: 1, type: 1 });
+            await projDb.collection('Translations').createIndex({ guid: 1, language: 1 });
+            await projDb.collection('Translations').createIndex({ type: 1, language: 1, projectId: 1 });
+            console.log('  ✅ Translations: { language, type }, { guid, language }, { type, language, projectId }');
+
+            console.log('');
         }
 
-        console.log(`\n📊 [DDT Templates] Processed ${ddtNodesProcessed} nodes, ${ddtTranslations.length} translations to save (${ddtNodesProcessed} nodes × 3 languages)`);
-
-        // ============================================
-        // 2. MIGRATE TASK TEMPLATES (no type: 'data')
-        // ============================================
-        console.log('\n📦 [Task Templates] Loading Task templates...');
-        const taskTemplates = await taskTemplatesColl.find({
-            $or: [
-                { type: { $exists: false } },
-                { type: { $ne: 'data' } }
-            ]
-        }).toArray();
-        console.log(`   Found ${taskTemplates.length} Task templates`);
-
-        const taskTranslations = [];
-        let taskTemplatesProcessed = 0;
-
-        for (const template of taskTemplates) {
-            const templateId = template.id || template._id;
-            const templateLabel = template.label || template.name || '';
-
-            if (!templateId || !templateLabel) {
-                console.log(`   ⚠️  Skipping template: no id or label`);
-                continue;
-            }
-
-            // Create translations for all three languages
-            const languages = ['en', 'it', 'pt'];
-            languages.forEach(lang => {
-                taskTranslations.push({
-                    guid: templateId,
-                    text: templateLabel, // Same label for all languages (can be translated later)
-                    type: 'Template',
-                    language: lang,
-                    projectId: null,
-                    createdAt: new Date(),
-                    updatedAt: new Date()
-                });
-            });
-            taskTemplatesProcessed++;
-            console.log(`   ✅ Task template: ${templateId.substring(0, 20)}... → "${templateLabel}" (EN/IT/PT)`);
-        }
-
-        console.log(`\n📊 [Task Templates] Processed ${taskTemplatesProcessed} templates, ${taskTranslations.length} translations to save (${taskTemplatesProcessed} templates × 3 languages)`);
-
-        // ============================================
-        // 3. SAVE TO TRANSLATIONS (BULK UPSERT)
-        // ============================================
-        const allTranslations = [...ddtTranslations, ...taskTranslations];
-        console.log(`\n💾 [Translations] Saving ${allTranslations.length} translations...`);
-
-        if (allTranslations.length > 0) {
-            const bulkOps = allTranslations.map(trans => ({
-                updateOne: {
-                    filter: {
-                        guid: trans.guid,
-                        language: trans.language,
-                        type: trans.type,
-                        $or: [
-                            { projectId: null },
-                            { projectId: { $exists: false } }
-                        ]
-                    },
-                    update: {
-                        $set: {
-                            guid: trans.guid,
-                            text: trans.text,
-                            type: trans.type,
-                            language: trans.language,
-                            projectId: null,
-                            updatedAt: trans.updatedAt
-                        },
-                        $setOnInsert: {
-                            createdAt: trans.createdAt
-                        }
-                    },
-                    upsert: true
-                }
-            }));
-
-            const result = await translationsColl.bulkWrite(bulkOps, { ordered: false });
-            console.log(`\n✅ [Translations] Migration complete!`);
-            console.log(`   - Inserted: ${result.upsertedCount}`);
-            console.log(`   - Updated: ${result.modifiedCount}`);
-            console.log(`   - Total: ${result.upsertedCount + result.modifiedCount}`);
-        } else {
-            console.log(`\n⚠️  No translations to save`);
-        }
+        console.log('🎉 All indexes created successfully!');
 
     } catch (error) {
-        console.error('❌ Migration error:', error);
+        console.error('❌ Error creating indexes:', error);
         throw error;
     } finally {
         await client.close();
-        console.log('\n✅ Connection closed');
+        console.log('\n[MongoDB] Connection closed');
     }
 }
 
-// Run migration
-if (require.main === module) {
-    migrateLabelsToTranslations()
-        .then(() => {
-            console.log('\n🎉 Migration completed successfully!');
-            process.exit(0);
-        })
-        .catch((error) => {
-            console.error('\n💥 Migration failed:', error);
-            process.exit(1);
-        });
-}
-
-module.exports = { migrateLabelsToTranslations };
+// Run the script
+createIndexes()
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error('Fatal error:', error);
+        process.exit(1);
+    });

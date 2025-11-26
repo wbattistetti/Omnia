@@ -373,18 +373,20 @@ app.get('/api/projects/dbname/preview', async (req, res) => {
 });
 
 app.get('/api/projects/catalog', async (req, res) => {
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
+    const queryStart = Date.now();
     const list = await db.collection('projects_catalog').find({}).sort({ updatedAt: -1 }).toArray();
-    logInfo('Catalog.list', { count: Array.isArray(list) ? list.length : 0 });
+    const duration = Date.now() - startTime;
+    const queryDuration = Date.now() - queryStart;
+    logInfo('Catalog.list', { count: Array.isArray(list) ? list.length : 0, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json(list);
   } catch (e) {
-    logError('Catalog.list', e);
+    const duration = Date.now() - startTime;
+    logError('Catalog.list', e, { duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
 });
 
@@ -880,19 +882,23 @@ app.get('/api/projects/:pid/task-heuristics', async (req, res) => {
 app.get('/api/projects/:pid/flow', async (req, res) => {
   const pid = req.params.pid;
   const flowId = String(req.query.flowId || 'main');
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = await getProjectDb(client, pid);
-    const nodes = await db.collection('flow_nodes').find({ flowId }).toArray();
-    const edges = await db.collection('flow_edges').find({ flowId }).toArray();
-    logInfo('Flow.get', { projectId: pid, flowId, nodesCount: nodes?.length || 0, edgesCount: edges?.length || 0 });
+    const queryStart = Date.now();
+    const [nodes, edges] = await Promise.all([
+      db.collection('flow_nodes').find({ flowId }).toArray(),
+      db.collection('flow_edges').find({ flowId }).toArray()
+    ]);
+    const queryDuration = Date.now() - queryStart;
+    const duration = Date.now() - startTime;
+    logInfo('Flow.get', { projectId: pid, flowId, nodesCount: nodes?.length || 0, edgesCount: edges?.length || 0, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json({ nodes, edges });
   } catch (e) {
-    logError('Flow.get', e, { projectId: pid, flowId });
+    const duration = Date.now() - startTime;
+    logError('Flow.get', e, { projectId: pid, flowId, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
 });
 
@@ -1016,20 +1022,26 @@ app.get('/api/projects/:pid/flows', async (req, res) => {
 app.get('/api/projects/:pid/acts', async (req, res) => {
   const projectId = req.params.pid;
   const { limit, q } = req.query || {};
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const coll = projDb.collection('project_acts');
     const filter = q ? { name: { $regex: String(q), $options: 'i' } } : {};
     const cursor = coll.find(filter).sort({ name: 1 });
+    const queryStart = Date.now();
     const docs = await (limit ? cursor.limit(parseInt(String(limit), 10) || 50) : cursor).toArray();
-    const count = await coll.countDocuments(filter);
+    // Optimization: Only count if limit is applied and we need total count
+    // Otherwise, docs.length is sufficient
+    const count = limit ? await coll.countDocuments(filter) : docs.length;
+    const queryDuration = Date.now() - queryStart;
+    const duration = Date.now() - startTime;
+    logInfo('Acts.get', { projectId, count, itemsReturned: docs.length, duration: `${duration}ms`, queryDuration: `${queryDuration}ms`, hasLimit: !!limit, hasQuery: !!q });
     res.json({ count, items: docs });
   } catch (e) {
+    const duration = Date.now() - startTime;
+    logError('Acts.get', e, { projectId, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
 });
 
@@ -1228,18 +1240,21 @@ app.post('/api/projects/:pid/conditions/bulk', async (req, res) => {
 // -----------------------------
 app.get('/api/projects/:pid/conditions', async (req, res) => {
   const pid = req.params.pid;
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = await getProjectDb(client, pid);
     const coll = db.collection('project_conditions');
+    const queryStart = Date.now();
     const items = await coll.find({}).toArray();
+    const queryDuration = Date.now() - queryStart;
+    const duration = Date.now() - startTime;
+    logInfo('Conditions.get', { projectId: pid, count: items.length, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json({ items });
   } catch (e) {
-    logError('Conditions.get', e, { projectId: pid });
+    const duration = Date.now() - startTime;
+    logError('Conditions.get', e, { projectId: pid, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
 });
 
@@ -1581,19 +1596,21 @@ app.get('/api/projects/:pid/instances', async (req, res) => {
 // GET /api/projects/:pid/tasks - Load all tasks
 app.get('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const coll = projDb.collection('tasks');
+    const queryStart = Date.now();
     const items = await coll.find({ projectId }).sort({ updatedAt: -1 }).toArray();
-    logInfo('Tasks.get', { projectId, count: items.length });
+    const queryDuration = Date.now() - queryStart;
+    const duration = Date.now() - startTime;
+    logInfo('Tasks.get', { projectId, count: items.length, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json({ count: items.length, items });
   } catch (e) {
-    logError('Tasks.get', e, { projectId });
+    const duration = Date.now() - startTime;
+    logError('Tasks.get', e, { projectId, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
 });
 
@@ -1764,16 +1781,23 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
 // GET /api/projects/:pid/variable-mappings - Get variable mappings for project
 app.get('/api/projects/:pid/variable-mappings', async (req, res) => {
   const projectId = req.params.pid;
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
+    const queryStart = Date.now();
     const doc = await projDb.collection('variable_mappings').findOne({ projectId });
+    const queryDuration = Date.now() - queryStart;
 
     if (!doc) {
+      const duration = Date.now() - startTime;
+      logInfo('VariableMappings.get', { projectId, found: false, duration: `${duration}ms` });
       return res.status(404).json({ error: 'not_found' });
     }
 
+    const duration = Date.now() - startTime;
+    const mappingsCount = (doc.mappings || []).length;
+    logInfo('VariableMappings.get', { projectId, found: true, mappingsCount, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json({
       version: doc.version || '1.0',
       mappings: doc.mappings || [],
@@ -1782,10 +1806,9 @@ app.get('/api/projects/:pid/variable-mappings', async (req, res) => {
       taskIdToSnapshot: doc.taskIdToSnapshot || []
     });
   } catch (e) {
-    logError('VariableMappings.get', e, { projectId });
+    const duration = Date.now() - startTime;
+    logError('VariableMappings.get', e, { projectId, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
 });
 
@@ -2061,9 +2084,9 @@ app.get('/api/factory/conditions', async (req, res) => {
 
 // Conditions - POST (with scope filtering)
 app.post('/api/factory/conditions', async (req, res) => {
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Conditions');
 
@@ -2093,14 +2116,18 @@ app.post('/api/factory/conditions', async (req, res) => {
 
     console.log('>>> Conditions query:', JSON.stringify(query, null, 2));
 
+    const queryStart = Date.now();
     const docs = await coll.find(query).toArray();
-    console.log(`>>> Found ${docs.length} Conditions with scope filtering`);
+    const queryDuration = Date.now() - queryStart;
+    const duration = Date.now() - startTime;
+    console.log(`>>> Found ${docs.length} Conditions with scope filtering (query: ${queryDuration}ms, total: ${duration}ms)`);
+    logInfo('Factory.Conditions.post', { industry, scope, count: docs.length, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json(docs);
   } catch (error) {
+    const duration = Date.now() - startTime;
     console.error('Error fetching conditions with scope filtering:', error);
+    logError('Factory.Conditions.post', error, { duration: `${duration}ms` });
     res.status(500).json({ error: 'Failed to fetch conditions' });
-  } finally {
-    await client.close();
   }
 });
 
@@ -2706,11 +2733,10 @@ app.get('/api/projects/:pid/translations/all', async (req, res) => {
   const projectId = req.params.pid;
   const { locale } = req.query || {};
   const projectLocale = locale || 'pt'; // Default to 'pt' if not specified
+  const startTime = Date.now();
 
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
-
     console.log(`[PROJECT_TRANSLATIONS_ALL] Loading all translations for project ${projectId}, locale: ${projectLocale}`);
 
     // Get both databases
@@ -2738,14 +2764,17 @@ app.get('/api/projects/:pid/translations/all', async (req, res) => {
     };
 
     // Execute queries in parallel for better performance
+    const queryStart = Date.now();
     const [projectTranslations, factoryTranslations] = await Promise.all([
       projColl.find(projectQuery).toArray(),
       factoryColl.find(factoryQuery).toArray()
     ]);
+    const queryDuration = Date.now() - queryStart;
 
-    console.log(`[PROJECT_TRANSLATIONS_ALL] Found ${projectTranslations.length} translations in project DB, ${factoryTranslations.length} in factory DB`);
+    console.log(`[PROJECT_TRANSLATIONS_ALL] Found ${projectTranslations.length} translations in project DB, ${factoryTranslations.length} in factory DB (query: ${queryDuration}ms)`);
 
     // Build flat dictionary: { guid: text } - optimized merge
+    const mergeStart = Date.now();
     const merged = {};
 
     // First add factory translations (template defaults) - using for loop for better performance
@@ -2761,14 +2790,17 @@ app.get('/api/projects/:pid/translations/all', async (req, res) => {
         merged[doc.guid] = doc.text || '';
       }
     }
+    const mergeDuration = Date.now() - mergeStart;
 
-    console.log(`[PROJECT_TRANSLATIONS_ALL] ✅ Loaded ${Object.keys(merged).length} translations (project: ${projectTranslations.length}, factory: ${factoryTranslations.length})`);
+    const duration = Date.now() - startTime;
+    console.log(`[PROJECT_TRANSLATIONS_ALL] ✅ Loaded ${Object.keys(merged).length} translations (project: ${projectTranslations.length}, factory: ${factoryTranslations.length}, total: ${duration}ms, query: ${queryDuration}ms, merge: ${mergeDuration}ms)`);
+    logInfo('Translations.getAll', { projectId, locale: projectLocale, count: Object.keys(merged).length, duration: `${duration}ms`, queryDuration: `${queryDuration}ms`, mergeDuration: `${mergeDuration}ms` });
     res.json(merged);
   } catch (err) {
+    const duration = Date.now() - startTime;
     console.error('[PROJECT_TRANSLATIONS_ALL] Error:', err);
+    logError('Translations.getAll', err, { projectId, duration: `${duration}ms` });
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
   }
 });
 

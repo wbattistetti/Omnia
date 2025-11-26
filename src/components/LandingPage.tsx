@@ -39,6 +39,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [dataReady, setDataReady] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [hasEverLoadedProjects, setHasEverLoadedProjects] = useState(false);
 
   // Stati per filtri combo box
   const [availableClients, setAvailableClients] = useState<string[]>([]);
@@ -118,8 +119,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   // Carica clienti, nomi progetti e owners all'inizio
   useEffect(() => {
+    console.log('[LandingPage] useEffect triggered:', { allProjectsCount: allProjects.length, initialLoadComplete });
     // Solo al primo mount imposta loading
     if (!initialLoadComplete) {
+      console.log('[LandingPage] Setting initial loading state');
       setLoadingProjects(true);
       setDataReady(false);
     }
@@ -154,6 +157,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     // Estrai owners unici dai progetti (separati per ownerCompany e ownerClient)
     const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id || p.projectId, p])).values());
+
+    // Traccia se abbiamo mai caricato progetti (per evitare di mostrare "Nessun progetto" prima del primo caricamento)
+    if (uniqueAllProjects.length > 0 && !hasEverLoadedProjects) {
+      console.log('[LandingPage] First time projects loaded, count:', uniqueAllProjects.length);
+      setHasEverLoadedProjects(true);
+    }
+
     const ownerCompanies = new Set<string>();
     const ownerClients = new Set<string>();
     uniqueAllProjects.forEach((p: any) => {
@@ -178,14 +188,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     // Caricamento completato - ritarda leggermente solo al primo caricamento
     if (!initialLoadComplete) {
+      console.log('[LandingPage] Starting timeout sequence, allProjects count:', allProjects.length);
       setTimeout(() => {
+        console.log('[LandingPage] Setting loadingProjects to false, allProjects count:', allProjects.length);
         setLoadingProjects(false);
         // Attendi ancora un po' prima di rendere i dati "pronti" per evitare flash
         setTimeout(() => {
+          console.log('[LandingPage] Setting dataReady to true, allProjects count:', allProjects.length, 'hasProjects:', uniqueAllProjects.length > 0);
           setDataReady(true);
           setInitialLoadComplete(true);
         }, 300);
       }, 100);
+    } else {
+      // Se initialLoadComplete è già true ma allProjects cambia, aggiorna dataReady se necessario
+      if (allProjects.length > 0 && !dataReady) {
+        console.log('[LandingPage] allProjects updated after initial load, setting dataReady to true');
+        setDataReady(true);
+      }
     }
   }, [allProjects, initialLoadComplete]);
 
@@ -197,6 +216,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   // Controlla se ci sono progetti
   const hasProjects = uniqueAllProjects.length > 0;
+
+  // Debug log per tracciare gli stati (solo quando cambiano valori significativi)
+  useEffect(() => {
+    console.log('[LandingPage] State update:', {
+      showDropdown,
+      loadingProjects,
+      dataReady,
+      hasProjects,
+      allProjectsCount: allProjects.length,
+      uniqueAllProjectsCount: uniqueAllProjects.length,
+      initialLoadComplete,
+      hasEverLoadedProjects
+    });
+  }, [showDropdown, loadingProjects, dataReady, hasProjects, allProjects.length, uniqueAllProjects.length, initialLoadComplete, hasEverLoadedProjects]);
 
   // Filtra per tipo di vista (tutti/recenti/recuperati)
   let projectsToShow: any[] = [];
@@ -285,20 +318,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
             <div className="relative flex flex-col items-start">
               <button
-                onClick={() => setShowDropdown((v) => !v)}
+                onClick={() => {
+                  const newValue = !showDropdown;
+                  console.log('[LandingPage] Chevron clicked, showDropdown:', newValue, {
+                    loadingProjects,
+                    dataReady,
+                    hasProjects,
+                    allProjectsCount: allProjects.length
+                  });
+                  setShowDropdown(newValue);
+                }}
                 className={`bg-white text-emerald-800 px-10 py-4 text-xl font-semibold flex items-center gap-2 shadow-2xl transition-all duration-300 rounded-full hover:bg-emerald-50 hover:scale-105`}
               >
                 Progetti esistenti
-                {loadingProjects ? (
+                {/* Spinner nel bottone solo se dropdown è aperto E progetti non sono pronti */}
+                {(showDropdown && (loadingProjects || !dataReady || (!hasEverLoadedProjects && allProjects.length === 0))) ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <ChevronDown className="w-5 h-5" />
                 )}
               </button>
 
-              {/* Messaggio quando non ci sono progetti - solo se i dati sono pronti */}
+              {/* Messaggio quando non ci sono progetti - solo se i dati sono pronti E non sta caricando E abbiamo già caricato almeno una volta */}
               {(() => {
-                const shouldShow = showDropdown && !hasProjects && dataReady;
+                // Mostra "Nessun progetto" solo se:
+                // 1. Il dropdown è aperto
+                // 2. Non ci sono progetti
+                // 3. I dati sono pronti (caricamento completato)
+                // 4. NON sta ancora caricando
+                // 5. Abbiamo già caricato progetti almeno una volta (per evitare di mostrare "Nessun progetto" prima del primo caricamento)
+                const shouldShow = showDropdown && !hasProjects && dataReady && !loadingProjects && hasEverLoadedProjects;
+                if (shouldShow) {
+                  console.log('[LandingPage] Showing "Nessun progetto":', { showDropdown, hasProjects, dataReady, loadingProjects, hasEverLoadedProjects });
+                }
                 return shouldShow ? (
                   <div className="mt-2 text-emerald-100 text-lg">
                     Nessun progetto
@@ -380,8 +432,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
           </div>
 
-          {/* Pannello progetti visibile solo quando showDropdown è true */}
-          {hasProjects && showDropdown && (
+          {/* Pannello progetti visibile solo quando showDropdown è true, dati pronti E non sta caricando */}
+          {hasProjects && showDropdown && dataReady && !loadingProjects && (
             <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`} style={{ overflow: 'visible' }}>
             {/* Header con 3 pulsanti/tab */}
             <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl" style={{ paddingRight: '80px', marginRight: 0 }}>
