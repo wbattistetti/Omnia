@@ -46,16 +46,7 @@ export async function executeGetDataHierarchical(
     : 'localStorage/env';
 
   if (useNew) {
-    console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
-    console.log('[DDTNavigator] 🆕 USING NEW ENGINE via adapter');
-    console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
-    console.log('[DDTNavigator] Using NEW engine via adapter', {
-      ddtId: ddt.id,
-      ddtLabel: ddt.label,
-      source,
-      fromOptions: options?.useNewEngine !== undefined,
-      fromStorage: options?.useNewEngine === undefined
-    });
+    // Removed verbose logging
     // Usa nuovo engine tramite adapter con fallback automatico
     return executeGetDataHierarchicalWithFallback(
       ddt,
@@ -69,23 +60,7 @@ export async function executeGetDataHierarchical(
   }
 
   // Vecchio engine (comportamento predefinito)
-  console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
-  console.log('[DDTNavigator] 🔧 USING OLD ENGINE');
-  console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
-  console.log('[DDTNavigator] Using OLD engine', {
-    ddtId: ddt.id,
-    ddtLabel: ddt.label,
-    source,
-    fromOptions: options?.useNewEngine !== undefined,
-    fromStorage: options?.useNewEngine === undefined,
-    storageValue: (() => {
-      try {
-        return localStorage.getItem('ddt.useNewEngine');
-      } catch {
-        return 'N/A';
-      }
-    })()
-  });
+  // Removed verbose logging
   return executeGetDataHierarchicalOld(ddt, state, callbacks);
 }
 
@@ -97,15 +72,7 @@ async function executeGetDataHierarchicalOld(
   state: DDTState,
   callbacks: DDTNavigatorCallbacks
 ): Promise<RetrieveResult> {
-  console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
-  console.log('[DDTNavigator] 🔧🔧🔧 OLD ENGINE ACTIVE 🔧🔧🔧');
-  console.log('[DDTNavigator] ═══════════════════════════════════════════════════════');
-  console.log('[DDTNavigator] Starting hierarchical navigation (OLD ENGINE)', {
-    ddtId: ddt.id,
-    ddtLabel: ddt.label,
-    hasMainData: !!ddt.mainData,
-    timestamp: new Date().toISOString()
-  });
+  // Removed verbose logging
 
   // DDT can have mainData as array or single object
   let mainData = Array.isArray(ddt.mainData) ? ddt.mainData[0] : ddt.mainData;
@@ -143,28 +110,13 @@ async function executeGetDataHierarchicalOld(
     mainData.label = ddt.label || 'Data';
   }
 
-  console.log('[DDTNavigator] Retrieving mainData', {
-    mainDataId: mainData.id,
-    mainDataLabel: mainData.label || mainData.name,
-    mainDataName: mainData.name,
-    hasSubData: !!mainData.subData,
-    subDataCount: mainData.subData?.length || 0,
-    mainDataKeys: Object.keys(mainData),
-    hasSteps: !!mainData.steps,
-    stepsType: Array.isArray(mainData.steps) ? 'array' : typeof mainData.steps,
-    mainDataStructure: JSON.stringify(mainData).substring(0, 500)
-  });
+  // Removed verbose logging
 
   // Retrieve mainData
   // Pass DDT to callbacks so retrieve() can access it
   const mainResult = await retrieve(mainData, state, { ...callbacks, ddt });
 
-  console.log('[DDTNavigator] MainData retrieve result', {
-    success: mainResult.success,
-    exit: mainResult.exit,
-    hasValue: !!mainResult.value,
-    error: mainResult.error?.message
-  });
+  // Removed verbose logging
 
   // Check for exit action
   if (mainResult.exit) {
@@ -188,37 +140,19 @@ async function executeGetDataHierarchicalOld(
   const subDataList = mainData.subData || [];
   const requiredSubs = subDataList.filter((sub: any) => sub.required !== false);
 
-  console.log('[DDTNavigator] Processing subData', {
-    totalSubs: subDataList.length,
-    requiredSubs: requiredSubs.length,
-    subIds: requiredSubs.map((s: any) => ({ id: s.id, label: s.label }))
-  });
+  // Removed verbose logging
 
   for (const subData of requiredSubs) {
     // Check if sub is already filled
     const isFilled = state.memory[subData.id]?.value !== undefined;
 
-    console.log('[DDTNavigator] Checking subData', {
-      subId: subData.id,
-      subLabel: subData.label,
-      isFilled
-    });
-
     if (!isFilled) {
-      console.log('[DDTNavigator] Retrieving subData', {
-        subId: subData.id,
-        subLabel: subData.label
-      });
+      // Removed verbose logging
 
       // Retrieve subData
       const subResult = await retrieve(subData, state, callbacks);
 
-      console.log('[DDTNavigator] SubData retrieve result', {
-        subId: subData.id,
-        success: subResult.success,
-        exit: subResult.exit,
-        hasValue: !!subResult.value
-      });
+      // Removed verbose logging
 
       // Check for exit action
       if (subResult.exit) {

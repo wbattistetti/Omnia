@@ -35,16 +35,7 @@ export async function executeGetDataHierarchicalNew(
   state: DDTState,
   callbacks: DDTNavigatorCallbacks
 ): Promise<RetrieveResult> {
-  const useNew = getUseNewEngine();
-  console.log('[DDTEngineAdapter] ═══════════════════════════════════════════════════════');
-  console.log('[DDTEngineAdapter] 🆕 ADAPTER: Calling NEW engine (runDDT)');
-  console.log('[DDTEngineAdapter] ═══════════════════════════════════════════════════════');
-  console.log('[DDTEngineAdapter] Using NEW engine', {
-    ddtId: ddt.id,
-    ddtLabel: ddt.label,
-    useNewEngine: useNew,
-    timestamp: new Date().toISOString()
-  });
+  // Removed verbose logging
 
   try {
     // Converti DDTState vecchio in DDTEngineState nuovo
@@ -74,26 +65,10 @@ export async function executeGetDataHierarchicalWithFallback(
   useOldEngine: () => Promise<RetrieveResult>
 ): Promise<RetrieveResult> {
   const useNew = getUseNewEngine();
-  console.log('[DDTEngineAdapter] ═══════════════════════════════════════════════════════');
-  console.log('[DDTEngineAdapter] 🔍 Checking which engine to use', {
-    useNewEngine: useNew,
-    fromStorage: (() => {
-      try {
-        return localStorage.getItem('ddt.useNewEngine');
-      } catch {
-        return 'N/A';
-      }
-    })(),
-    fromEnv: import.meta.env.VITE_USE_NEW_DDT_ENGINE,
-    timestamp: new Date().toISOString()
-  });
-  console.log('[DDTEngineAdapter] ═══════════════════════════════════════════════════════');
 
   if (useNew) {
-    console.log('[DDTEngineAdapter] ✅ Decision: Using NEW engine');
     try {
       const result = await executeGetDataHierarchicalNew(ddt, state, callbacks);
-      console.log('[DDTEngineAdapter] ✅ NEW engine completed successfully');
       return result;
     } catch (error) {
       console.error('[DDTEngineAdapter] ❌ New engine failed, falling back to old', error);
@@ -104,7 +79,6 @@ export async function executeGetDataHierarchicalWithFallback(
       return await useOldEngine();
     }
   } else {
-    console.log('[DDTEngineAdapter] ✅ Decision: Using OLD engine (fallback)');
     return await useOldEngine();
   }
 }
@@ -144,13 +118,14 @@ function convertNewResultToOld(
   if (newResult.success && newResult.value && typeof newResult.value === 'object') {
     const convertedValue: Record<string, any> = {};
 
-    // Estrai i valori dalla memoria (solo quelli confirmed)
+    // ✅ FIX: Se il DDT è completato con successo, includi TUTTI i valori (confirmed o meno)
+    // perché il vecchio engine non aveva il concetto di "confirmed"
+    // Quando il DDT completa con successo, tutti i valori estratti devono essere disponibili
     Object.entries(newResult.value).forEach(([key, mem]: [string, any]) => {
       if (mem && typeof mem === 'object' && 'value' in mem) {
-        // Se confirmed è true o non specificato, estrai il valore
-        if (mem.confirmed !== false) {
-          convertedValue[key] = mem.value;
-        }
+        // Se il DDT è completato con successo, includi tutti i valori estratti
+        // (il vecchio engine non aveva il concetto di confirmed)
+        convertedValue[key] = mem.value;
       } else {
         // Fallback: se non è un oggetto {value, confirmed}, usa direttamente
         convertedValue[key] = mem;

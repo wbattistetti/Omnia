@@ -28,13 +28,22 @@ class FlowchartVariablesService {
   private taskIdToReadableNames: Map<string, string[]> = new Map(); // taskId -> readableName[]
   private taskIdToSnapshot: Map<string, DDTNodeSnapshot[]> = new Map(); // taskId -> snapshot of DDT structure
   private projectId: string | null = null;
+  private isInitialized: boolean = false; // Track initialization to avoid redundant DB calls
 
   /**
    * Initialize service for a project (loads from database)
+   * Only loads from database if not already initialized for this project
    */
   async init(projectId: string): Promise<void> {
+    // ✅ OPTIMIZATION: Skip reload if already initialized for the same project
+    if (this.isInitialized && this.projectId === projectId) {
+      // Already initialized for this project, skip database call
+      return;
+    }
     this.projectId = projectId;
+    this.isInitialized = false; // Reset flag before loading
     await this.loadFromDatabase();
+    this.isInitialized = true; // Mark as initialized after successful load
   }
 
   /**
@@ -428,7 +437,18 @@ class FlowchartVariablesService {
    * Get readable name from node ID
    */
   getReadableName(nodeId: string): string | null {
-    return this.nodeIdToReadableName.get(nodeId) || null;
+    const readableName = this.nodeIdToReadableName.get(nodeId) || null;
+    if (!readableName) {
+      console.log('[FlowchartVariables][getReadableName] ❌ No mapping found', {
+        nodeId: nodeId.substring(0, 20) + '...',
+        totalMappings: this.nodeIdToReadableName.size,
+        sampleMappings: Array.from(this.nodeIdToReadableName.entries()).slice(0, 5).map(([id, name]) => ({
+          id: id.substring(0, 20) + '...',
+          name
+        }))
+      });
+    }
+    return readableName;
   }
 
   /**
@@ -552,8 +572,8 @@ class FlowchartVariablesService {
 
       if (!response.ok) {
         if (response.status === 404) {
-          // No mappings yet for this project (first time)
-          console.log('[FlowchartVariables] No mappings found in database (first time)');
+          // No mappings yet for this project (first time) - still mark as initialized
+          // Removed verbose logging
           return;
         }
         throw new Error(`Failed to load: ${response.statusText}`);
@@ -587,11 +607,7 @@ class FlowchartVariablesService {
           });
         }
 
-        console.log('[FlowchartVariables] Loaded mappings from database', {
-          count: this.mappings.size,
-          projectId: this.projectId,
-          version
-        });
+        // Removed verbose logging - service is initialized once at project open
       }
     } catch (e) {
       console.warn('[FlowchartVariables] Failed to load from database', e);
@@ -607,6 +623,7 @@ class FlowchartVariablesService {
     this.nodeIdToReadableName.clear();
     this.taskIdToReadableNames.clear();
     this.taskIdToSnapshot.clear();
+    this.isInitialized = false; // Reset initialization flag
     // Note: Mappings are saved to database when project is saved (not immediately)
   }
 

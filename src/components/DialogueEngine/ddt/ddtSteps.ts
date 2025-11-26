@@ -104,20 +104,11 @@ export async function executeStep(
   escalationNumber?: number,
   inputValue?: any // Value to replace {input} placeholder
 ): Promise<void> {
-  console.log('[ddtSteps][executeStep] Starting', {
-    hasStep: !!stepOrEscalation,
-    hasEscalations: !!stepOrEscalation?.escalations,
-    hasActions: !!stepOrEscalation?.actions,
-    stepType: stepOrEscalation?.type,
-    escalationsType: stepOrEscalation?.escalations ? (Array.isArray(stepOrEscalation.escalations) ? 'array' : typeof stepOrEscalation.escalations) : 'none',
-    actionsType: stepOrEscalation?.actions ? (Array.isArray(stepOrEscalation.actions) ? 'array' : typeof stepOrEscalation.actions) : 'none'
-  });
+  // Removed verbose logging
 
   // If it's an escalation (has actions directly), execute it
   if (stepOrEscalation?.actions && !stepOrEscalation?.escalations) {
-    console.log('[ddtSteps][executeStep] Executing escalation directly (has actions)', {
-      actionsCount: Array.isArray(stepOrEscalation.actions) ? stepOrEscalation.actions.length : 1
-    });
+    // Removed verbose logging
     const actions = Array.isArray(stepOrEscalation.actions) ? stepOrEscalation.actions : [stepOrEscalation.actions];
 
     for (const action of actions) {
@@ -136,19 +127,12 @@ export async function executeStep(
   }
 
   const escalations = Array.isArray(stepOrEscalation.escalations) ? stepOrEscalation.escalations : [stepOrEscalation.escalations];
-  console.log('[ddtSteps][executeStep] Escalations', { count: escalations.length });
 
   // Execute first escalation (usually the main action)
   if (escalations.length > 0) {
     const firstEscalation = escalations[0];
-    console.log('[ddtSteps][executeStep] First escalation', {
-      hasActions: !!firstEscalation?.actions,
-      actionsType: firstEscalation?.actions ? (Array.isArray(firstEscalation.actions) ? 'array' : typeof firstEscalation.actions) : 'none'
-    });
-
     if (firstEscalation && firstEscalation.actions) {
       const actions = Array.isArray(firstEscalation.actions) ? firstEscalation.actions : [firstEscalation.actions];
-      console.log('[ddtSteps][executeStep] Actions', { count: actions.length });
 
       for (const action of actions) {
         await executeAction(action, callbacks, stepType, escalationNumber, inputValue);
@@ -171,36 +155,14 @@ async function executeAction(
   escalationNumber?: number,
   inputValue?: any // Value to replace {input} placeholder
 ): Promise<void> {
-  console.log('[ddtSteps][executeAction] Processing action', {
-    actionId: action?.actionId,
-    actionInstanceId: action?.actionInstanceId,
-    hasParameters: !!action?.parameters,
-    parametersCount: action?.parameters ? action.parameters.length : 0
-  });
+  // Removed verbose logging
 
   // Resolve action text from parameters and translations
   try {
     const { resolveActionText } = await import('../../ChatSimulator/DDTAdapter');
     const translations = callbacks.translations || {};
 
-    // 🔍 DEBUG: Log translations received
-    console.log('[ddtSteps][executeAction] 🔍 Translations received', {
-      hasTranslations: !!callbacks.translations,
-      translationsCount: Object.keys(translations).length,
-      sampleTranslationKeys: Object.keys(translations).slice(0, 5),
-      sampleTranslations: Object.entries(translations).slice(0, 3).map(([k, v]) => ({
-        key: k,
-        value: String(v).substring(0, 50)
-      })),
-      actionInstanceId: action?.actionInstanceId,
-      textParamValue: action?.parameters?.find((p: any) => p.parameterId === 'text')?.value,
-      allActionParameters: action?.parameters?.map((p: any) => ({
-        parameterId: p.parameterId,
-        key: p.key,
-        value: p.value,
-        valueType: typeof p.value
-      })) || []
-    });
+    // Removed verbose translation logging
 
     let text = resolveActionText(action, translations);
 
@@ -211,34 +173,13 @@ async function executeAction(
         ? JSON.stringify(inputValue)
         : String(inputValue);
       text = text.replace(/{input}/g, inputDisplay);
-      console.log('[ddtSteps][executeAction] 🔄 Replaced {input} placeholder', {
-        originalText: resolveActionText(action, translations),
-        replacedText: text,
-        inputValue: inputDisplay
-      });
+      // Removed verbose placeholder replacement logging
     }
 
-    console.log('[ddtSteps][executeAction] ═════════════════════════════════');
-    console.log('[ddtSteps][executeAction] 🔍 RESOLVED TEXT FOR MESSAGE');
-    console.log('[ddtSteps][executeAction] ═════════════════════════════════');
-    console.log('[ddtSteps][executeAction] Resolved text', {
-      hasText: !!text,
-      textLength: text?.length || 0,
-      textPreview: text?.substring(0, 100),
-      fullText: text,
-      hasOnMessage: !!callbacks.onMessage,
-      textFound: !!text,
-      textSource: text ? 'translation' : 'not-found',
-      stepType,
-      escalationNumber,
-      hasInputValue: inputValue !== undefined,
-      inputValue
-    });
+    // Removed verbose text resolution logging
 
     if (text && callbacks.onMessage) {
-      console.log('[ddtSteps][executeAction] ✅ CALLING onMessage CALLBACK');
       callbacks.onMessage(text, stepType, escalationNumber);
-      console.log('[ddtSteps][executeAction] ✅ onMessage callback COMPLETED');
     } else {
       console.error('[ddtSteps][executeAction] ❌ CANNOT SEND MESSAGE', {
         hasText: !!text,

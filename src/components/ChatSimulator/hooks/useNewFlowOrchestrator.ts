@@ -116,18 +116,7 @@ export function useNewFlowOrchestrator({
       }
     });
 
-    console.log('[useNewFlowOrchestrator][loadTranslationsFromDDT] 🔍 Loaded translations from DDT', {
-      ddtId: ddt.id,
-      ddtLabel: ddt.label,
-      requestedGuids: guids.length,
-      foundTranslations: foundGuids.length,
-      missingGuids: missingGuids.length,
-      sampleKeys: Object.keys(translationsFromGlobal).slice(0, 5),
-      sampleTranslations: Object.entries(translationsFromGlobal).slice(0, 3).map(([k, v]) => ({
-        key: k,
-        value: String(v).substring(0, 50)
-      }))
-    });
+    // Removed verbose logging
 
     return translationsFromGlobal;
   }, [globalTranslations]);
@@ -200,20 +189,12 @@ export function useNewFlowOrchestrator({
     });
     const result = await executeTask(task, {
       onMessage: (text: string, stepType?: string, escalationNumber?: number) => {
-        console.log('[useNewFlowOrchestrator][handleTaskExecute] ═══════════════════════════════════════');
-        console.log('[useNewFlowOrchestrator][handleTaskExecute] 🔔 onMessage CALLBACK RECEIVED FROM DDT');
-        console.log('[useNewFlowOrchestrator][handleTaskExecute] ═══════════════════════════════════════');
-        console.log('[useNewFlowOrchestrator][handleTaskExecute] onMessage called', {
-          text: text?.substring(0, 100),
-          fullText: text,
-          taskId: task.id,
-          stepType,
-          escalationNumber,
-          hasOnMessageParent: !!onMessage
-        });
+        // Removed verbose logging
         if (onMessage) {
           // Import getStepColor dynamically
+          const tMsg1 = performance.now();
           import('../chatSimulatorUtils').then(({ getStepColor }) => {
+            const tMsg2 = performance.now();
             onMessage({
               id: task.id, // Use task GUID directly - no need to generate new ID
               text,
@@ -222,7 +203,7 @@ export function useNewFlowOrchestrator({
               timestamp: new Date(),
               color: stepType ? getStepColor(stepType) : undefined
             });
-            console.log('[useNewFlowOrchestrator][handleTaskExecute] Message sent to onMessage callback');
+            // Removed verbose performance logging
           }).catch((error) => {
             console.error('[useNewFlowOrchestrator][handleTaskExecute] Error importing getStepColor', error);
             // Fallback: send message without color
@@ -360,39 +341,41 @@ export function useNewFlowOrchestrator({
         }
       },
       onProcessInput: async (input: string, node: any) => {
-        console.log('[useNewFlowOrchestrator] Processing input', {
-          input,
-          nodeId: node?.id,
-          nodeLabel: node?.label,
-          nodeKind: node?.kind,
-          hasTaskDDT: !!taskDDT
-        });
+        const t0 = performance.now();
+        // Removed verbose logging
 
         // ✅ USA LO STESSO METODO DEL RESPONSE EDITOR: Contract invece di extractField
         try {
           // ✅ WORKAROUND: Il node V2 non ha nlpContract
           // Recupera il nodo originale dal DDT (come fa il Response Editor)
           let originalNode: any = null;
+          const t1 = performance.now();
           if (taskDDT) {
             originalNode = findOriginalNode(taskDDT, node?.label, node?.id);
-            console.log('[useNewFlowOrchestrator] Found original node', {
-              hasOriginalNode: !!originalNode,
-              originalNodeId: originalNode?.id,
-              originalNodeLabel: originalNode?.label,
-              hasNlpContract: !!(originalNode as any)?.nlpContract
-            });
+            const t2 = performance.now();
+            // Removed verbose logging
           }
 
           // ✅ USA IL CONTRACT (come fa il Response Editor)
+          const t3 = performance.now();
           const contract = originalNode ? loadContract(originalNode) : null;
+          const t4 = performance.now();
+          // Removed verbose logging
 
           if (contract) {
             // ✅ Estrai usando il Contract (stesso metodo del Response Editor)
+            const t5 = performance.now();
             const result = extractWithContractSync(input, contract, undefined);
+            const t6 = performance.now();
+            // Removed verbose logging
 
             if (result.hasMatch && Object.keys(result.values).length > 0) {
+              const t7 = performance.now();
+              // Removed verbose logging
               return { status: 'match' as const, value: result.values };
             } else {
+              const t7 = performance.now();
+              // Removed verbose logging
               return { status: 'noMatch' as const };
             }
           } else {
@@ -593,11 +576,8 @@ export function useNewFlowOrchestrator({
       }
     },
     handleUserInput: async (input: string) => {
-      console.log('[useNewFlowOrchestrator] handleUserInput called', {
-        input,
-        hasPendingResolve: !!pendingInputResolve,
-        hasCurrentNode: !!currentNodeForInput
-      });
+      const t0 = performance.now();
+      // Removed verbose logging
       // Handle user input for DDT navigation
       if (pendingInputResolve) {
         // Set isRetrieving to true when processing starts
@@ -605,10 +585,13 @@ export function useNewFlowOrchestrator({
 
         // Return raw input as 'match' event - will be processed in retrieve() using onProcessInput
         // This allows retrieve() to process the input and determine if it's actually match/noMatch
-        console.log('[useNewFlowOrchestrator] Resolving pending input', { input });
+        const t1 = performance.now();
+        // Removed verbose logging
         pendingInputResolve({ type: 'match' as const, value: input });
         setPendingInputResolve(null);
         setCurrentNodeForInput(null);
+        const t2 = performance.now();
+        // Removed verbose logging
       } else {
         console.warn('[useNewFlowOrchestrator] handleUserInput called but no pendingInputResolve');
       }

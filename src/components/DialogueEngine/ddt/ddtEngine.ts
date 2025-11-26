@@ -85,6 +85,7 @@ export async function runDDT(
   callbacks: DDTNavigatorCallbacks,
   limits: Limits = DEFAULT_LIMITS
 ): Promise<RetrieveResult> {
+  const tStart = performance.now();
   console.log('[DDTEngine] ═══════════════════════════════════════════════════════');
   console.log('[DDTEngine] 🆕🆕🆕 NEW ENGINE ACTIVE 🆕🆕🆕');
   console.log('[DDTEngine] ═══════════════════════════════════════════════════════');
@@ -241,12 +242,14 @@ export async function runDDT(
   }
 
   // Fine dialogo
+  const tEnd = performance.now();
   console.log('[DDTEngine] ═══════════════════════════════════════════════════════');
   console.log('[DDTEngine] ✅ NEW ENGINE completed successfully');
   console.log('[DDTEngine] ═══════════════════════════════════════════════════════');
   console.log('[DDTEngine][runDDT] Returning success', {
     memoryKeys: Object.keys(state.memory),
-    memoryCount: Object.keys(state.memory).length
+    memoryCount: Object.keys(state.memory).length,
+    totalMs: Math.round(tEnd - tStart)
   });
   return { success: true, value: state.memory };
 }
@@ -548,7 +551,10 @@ async function processUserInput(
     console.warn('[DDTEngine][processUserInput] Failed to load contract', error);
   }
 
+  const t0 = performance.now();
   const userInputEvent = await callbacks.onGetRetrieveEvent(nodeId);
+  const t1 = performance.now();
+  console.log('[DDTEngine][processUserInput][PERF] onGetRetrieveEvent', { ms: Math.round(t1 - t0) });
 
   // 2. Processa input tramite contract (regex/NER/LLM)
   let recognitionResult: {
@@ -559,10 +565,13 @@ async function processUserInput(
 
   if (userInputEvent.type === 'match' && callbacks.onProcessInput && userInputEvent.value) {
     // Processa input raw
+    const t2 = performance.now();
     recognitionResult = await callbacks.onProcessInput(
       userInputEvent.value,
       node
     );
+    const t3 = performance.now();
+    console.log('[DDTEngine][processUserInput][PERF] onProcessInput', { ms: Math.round(t3 - t2) });
 
     // Log solo se necessario
     if (recognitionResult.status === 'match' && recognitionResult.value) {
@@ -617,6 +626,7 @@ async function processUserInput(
 
             if (contract && contract.subDataMapping) {
               // Mappa canonicalKey → subId usando contract (come fa DialogueDataEngine/engine.ts riga 386)
+              const tMap = performance.now();
               for (const [canonicalKey, value] of Object.entries(recognitionResult.value)) {
                 const subId = getSubIdForCanonicalKey(contract, canonicalKey);
                 if (subId) {
@@ -624,7 +634,8 @@ async function processUserInput(
                   mappedCount++;
                 }
               }
-              console.log('[DDTEngine] ✅ Mapped', { mappedCount, total: Object.keys(recognitionResult.value).length });
+              const tMapEnd = performance.now();
+              console.log('[DDTEngine][PERF] ✅ Mapped', { mappedCount, total: Object.keys(recognitionResult.value).length, ms: Math.round(tMapEnd - tMap) });
             } else {
               console.warn('[DDTEngine] ⚠️ No contract for mapping');
             }

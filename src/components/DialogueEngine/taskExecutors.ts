@@ -26,22 +26,10 @@ function normalizeActionType(action: string, value?: Record<string, any>): strin
   // Infer from value structure
   // IMPORTANT: Check DDT first, as GetData tasks can have both text and ddt
   if (value) {
-    console.log('[TaskExecutor][normalizeActionType] Checking value structure', {
-      action,
-      hasDDT: value.ddt !== undefined,
-      hasText: value.text !== undefined,
-      hasIntents: value.intents !== undefined,
-      hasProblem: value.problem !== undefined,
-      hasConfig: value.config !== undefined,
-      hasEndpoint: value.endpoint !== undefined,
-      valueKeys: Object.keys(value)
-    });
     if (value.ddt !== undefined) {
-      console.log('[TaskExecutor][normalizeActionType] Inferred as GetData (has DDT)');
       return 'GetData';
     }
     if (value.text !== undefined) {
-      console.log('[TaskExecutor][normalizeActionType] Inferred as SayMessage (has text)');
       return 'SayMessage';
     }
     if (value.intents !== undefined || value.problem !== undefined) {
@@ -78,49 +66,22 @@ export async function executeTask(
     translations?: Record<string, string>; // ✅ Translations from global table
   }
 ): Promise<TaskExecutionResult> {
-  console.log('[TaskExecutor][executeTask] Starting', {
-    taskId: task.id,
-    action: task.action,
-    normalizedAction: normalizeActionType(task.action, task.value),
-    hasValue: !!task.value,
-    valueKeys: task.value ? Object.keys(task.value) : []
-  });
+  // Removed verbose logging
   try {
     // Normalize action type (handle item IDs, etc.)
     const normalizedAction = normalizeActionType(task.action, task.value);
-    console.log('[TaskExecutor][executeTask] Action normalized', {
-      original: task.action,
-      normalized: normalizedAction
-    });
+    // Removed verbose logging
 
     switch (normalizedAction) {
       case 'SayMessage':
       case 'Message':
-        console.log('[TaskExecutor][executeTask] Calling executeSayMessage', {
-          taskId: task.id,
-          taskStateBefore: task.state
-        });
+        // Removed verbose logging
         const result = await executeSayMessage(task, callbacks);
-        console.log('[TaskExecutor][executeTask] executeSayMessage returned', {
-          taskId: task.id,
-          taskStateAfter: task.state,
-          resultSuccess: result.success
-        });
+        // Removed verbose logging
         return result;
 
       case 'GetData':
-        // 🔍 DEBUG: Log translations being passed to executeGetData
-        console.log('[TaskExecutor][executeTask] 🔍 Passing translations to executeGetData', {
-          hasTranslations: !!callbacks.translations,
-          translationsCount: callbacks.translations ? Object.keys(callbacks.translations).length : 0,
-          sampleTranslationKeys: callbacks.translations ? Object.keys(callbacks.translations).slice(0, 5) : [],
-          sampleTranslations: callbacks.translations ? Object.entries(callbacks.translations).slice(0, 3).map(([k, v]) => ({
-            key: k,
-            value: String(v).substring(0, 50)
-          })) : [],
-          taskId: task.id,
-          taskAction: task.action
-        });
+        // Removed verbose logging
         return await executeGetData(task, {
           onMessage: callbacks.onMessage,
           onDDTStart: callbacks.onDDTStart,
@@ -161,12 +122,7 @@ async function executeSayMessage(
   task: CompiledTask,
   callbacks: { onMessage?: (text: string) => void }
 ): Promise<TaskExecutionResult> {
-  console.log('[TaskExecutor][executeSayMessage] Starting', {
-    taskId: task.id,
-    taskState: task.state,
-    hasValue: !!task.value,
-    hasText: !!task.value?.text
-  });
+  // Removed verbose logging
 
   // Get text from task.value.text
   const text = task.value?.text || '';
@@ -180,23 +136,13 @@ async function executeSayMessage(
   }
 
   // Show message
-  console.log('[TaskExecutor][executeSayMessage] About to call onMessage', {
-    taskId: task.id,
-    hasOnMessage: !!callbacks.onMessage,
-    textLength: text.length
-  });
+  // Removed verbose logging
 
   if (callbacks.onMessage) {
     try {
-      console.log('[TaskExecutor][executeSayMessage] Calling onMessage callback', {
-        taskId: task.id,
-        textLength: text.length
-      });
+      // Removed verbose logging
       callbacks.onMessage(text);
-      console.log('[TaskExecutor][executeSayMessage] onMessage callback completed', {
-        taskId: task.id,
-        taskState: task.state
-      });
+      // Removed verbose logging
     } catch (error) {
       console.error('[TaskExecutor][executeSayMessage] Error in onMessage callback', {
         taskId: task.id,
@@ -209,15 +155,10 @@ async function executeSayMessage(
       console.warn('[TaskExecutor][executeSayMessage] Continuing despite onMessage error');
     }
   } else {
-    console.log('[TaskExecutor][executeSayMessage] No onMessage callback provided');
+    // Removed verbose logging
   }
 
-  console.log('[TaskExecutor][executeSayMessage] After onMessage call', {
-    taskId: task.id,
-    taskState: task.state,
-    taskStateDirect: task.state,
-    taskStateCheck: task.state === 'Executed' ? 'YES' : 'NO'
-  });
+  // Removed verbose logging
 
   // Check if this message is inside a GetData or ClassifyProblem row recovery
   // If so, mark as interactive (WaitingUserInput) instead of Executed
@@ -225,44 +166,21 @@ async function executeSayMessage(
   const isInteractiveRow = parentRowAction === 'GetData' || parentRowAction === 'ClassifyProblem';
   const isRecoveryAction = task.source?.type === 'ddt-recovery-action';
 
-  console.log('[TaskExecutor][executeSayMessage] Checking task source', {
-    taskId: task.id,
-    hasSource: !!task.source,
-    sourceType: task.source?.type,
-    parentRowAction,
-    isInteractiveRow,
-    isRecoveryAction
-  });
+  // Removed verbose logging
 
   if (isInteractiveRow && isRecoveryAction) {
     // Message inside GetData/ClassifyProblem row recovery is interactive
     task.state = 'WaitingUserInput';
-    console.log('[TaskExecutor][executeSayMessage] Message marked as interactive', {
-      taskId: task.id,
-      parentRowAction,
-      isRecoveryAction,
-      taskState: task.state
-    });
+    // Removed verbose logging
   } else {
     // Regular message: mark as Executed
     // TODO: If task has duration (e.g., audio), wait for completion
     task.state = 'Executed';
-    console.log('[TaskExecutor][executeSayMessage] Message marked as Executed', {
-      taskId: task.id,
-      taskState: task.state,
-      isInteractiveRow,
-      isRecoveryAction,
-      taskStateDirect: task.state,
-      taskObject: { id: task.id, state: task.state }
-    });
+    // Removed verbose logging
   }
 
   // Double-check state before returning
-  console.log('[TaskExecutor][executeSayMessage] Final check before return', {
-    taskId: task.id,
-    finalState: task.state,
-    taskStateProperty: task.state
-  });
+  // Removed verbose logging
 
   return {
     success: true,
@@ -286,16 +204,7 @@ async function executeGetData(
     translations?: Record<string, string>; // ✅ Translations from global table
   }
 ): Promise<TaskExecutionResult> {
-  console.log('[TaskExecutor][executeGetData] Starting', {
-    taskId: task.id,
-    hasValue: !!task.value,
-    valueKeys: task.value ? Object.keys(task.value) : [],
-    hasText: !!task.value?.text,
-    text: task.value?.text,
-    hasDDT: !!task.value?.ddt,
-    hasOnMessage: !!callbacks.onMessage,
-    hasOnDDTStart: !!callbacks.onDDTStart
-  });
+  // Removed verbose logging
 
   const ddt = task.value?.ddt;
 
@@ -305,33 +214,35 @@ async function executeGetData(
   if (ddt) {
     try {
       const { flowchartVariablesService } = await import('../../services/FlowchartVariablesService');
-      const projectId = (window as any).__currentProjectId || (window as any).__projectId;
+      const projectId = (window as any).__currentProjectId ||
+                        (window as any).__projectId ||
+                        localStorage.getItem('current.projectId') ||
+                        localStorage.getItem('currentProjectId');
+
       if (projectId) {
-        await flowchartVariablesService.init(projectId);
+        // Service should already be initialized when project is opened
+        // No need to call init() during execution
 
         // Get row text from task (this is the label of the row)
         const originalTask = taskRepository.getTask(task.id);
         const rowText = originalTask?.value?.text || task.value?.text || task.source?.rowText || task.source?.label || 'Task';
 
         // Extract variables from DDT using row text and DDT labels
-        const varNames = await flowchartVariablesService.extractVariablesFromDDT(
+        await flowchartVariablesService.extractVariablesFromDDT(
           ddt,
           task.id, // taskId
           task.id, // rowId (same as taskId)
           rowText, // Row text (e.g., "chiedi data A")
           task.source?.nodeId // nodeId
         );
-
-        console.log('[TaskExecutor][executeGetData] ✅ Extracted variables from DDT (before execution)', {
-          taskId: task.id,
-          rowText,
-          varCount: varNames.length,
-          varNames: varNames.slice(0, 10)
-        });
+      } else {
+        console.warn('[TaskExecutor][executeGetData] ⚠️ No projectId, cannot extract variables from DDT');
       }
     } catch (e) {
-      console.warn('[TaskExecutor][executeGetData] ⚠️ Failed to extract variables from DDT', e);
+      console.error('[TaskExecutor][executeGetData] ❌ Failed to extract variables from DDT', e);
     }
+  } else {
+    console.warn('[TaskExecutor][executeGetData] ⚠️ No DDT in task, cannot extract variables');
   }
 
   // ❌ REMOVED: Don't extract or show initial message here
@@ -339,20 +250,7 @@ async function executeGetData(
   // This was causing duplicate messages (GUID first, then translated)
   // The DDT navigator executes the step "start" which already shows the message
 
-  // Log DDT structure for debugging
-  if (ddt) {
-    console.log('[TaskExecutor][executeGetData] DDT structure', {
-      ddtId: ddt.id,
-      ddtLabel: ddt.label,
-      ddtKeys: Object.keys(ddt),
-      hasMainData: !!ddt.mainData,
-      mainDataType: typeof ddt.mainData,
-      isMainDataArray: Array.isArray(ddt.mainData),
-      hasNodes: !!(ddt as any).nodes,
-      nodesCount: (ddt as any).nodes?.length || 0,
-      mainDataValue: ddt.mainData ? (Array.isArray(ddt.mainData) ? ddt.mainData[0] : ddt.mainData) : null
-    });
-  }
+  // Removed verbose DDT structure logging
 
   if (!ddt) {
     console.error('[TaskExecutor][executeGetData] GetData task missing DDT', {
@@ -366,13 +264,8 @@ async function executeGetData(
   }
 
   // Start DDT (interactive - waits for user input)
-  console.log('[TaskExecutor][executeGetData] Starting DDT', {
-    hasOnDDTStart: !!callbacks.onDDTStart,
-    ddtKeys: ddt ? Object.keys(ddt) : []
-  });
   if (callbacks.onDDTStart) {
     callbacks.onDDTStart(ddt);
-    console.log('[TaskExecutor][executeGetData] DDT callback called');
   } else {
     console.warn('[TaskExecutor][executeGetData] DDT callback is not provided');
   }
@@ -387,23 +280,8 @@ async function executeGetData(
     }
   })();
 
-  console.log('[TaskExecutor][executeGetData] ═══════════════════════════════════════════════════════');
-  console.log('[TaskExecutor][executeGetData] 🔍 Checking which engine to use', {
-    useNewEngine,
-    fromStorage: (() => {
-      try {
-        return localStorage.getItem('ddt.useNewEngine');
-      } catch {
-        return 'N/A';
-      }
-    })(),
-    timestamp: new Date().toISOString()
-  });
-  console.log('[TaskExecutor][executeGetData] ═══════════════════════════════════════════════════════');
-
   if (useNewEngine) {
     // ✅ Use new hierarchical navigator (supports new engine via toggle)
-    console.log('[TaskExecutor][executeGetData] 🆕 Using executeGetDataHierarchical (supports NEW engine)');
     try {
       const { executeGetDataHierarchical } = await import('./ddt/ddtNavigator');
 
@@ -429,11 +307,6 @@ async function executeGetData(
         translations: callbacks.translations
       };
 
-      console.log('[TaskExecutor][executeGetData] 🆕 Calling executeGetDataHierarchical', {
-        useNewEngine,
-        willUseNew: useNewEngine
-      });
-
       // Call hierarchical navigator (will use new/old engine based on toggle)
       // Pass useNewEngine from toggle to ensure it's respected
       const result = await executeGetDataHierarchical(
@@ -443,12 +316,6 @@ async function executeGetData(
         { useNewEngine } // Use toggle value
       );
 
-      console.log('[TaskExecutor][executeGetData] ✅ executeGetDataHierarchical completed', {
-        success: result.success,
-        hasValue: !!result.value,
-        hasError: !!result.error
-      });
-
       if (result.success) {
         task.state = 'Executed';
         // Extract variables from result.value (new engine) or ddtState.memory (old engine)
@@ -457,13 +324,6 @@ async function executeGetData(
         if (result.value && typeof result.value === 'object') {
           // New engine returns data in result.value with GUID keys
           // Convert GUID keys to readable names using FlowchartVariablesService
-          console.log('[TaskExecutor][executeGetData] 🔍 BEFORE conversion', {
-            resultValueKeys: Object.keys(result.value),
-            resultValueSample: Object.entries(result.value).slice(0, 3).map(([k, v]) => ({
-              key: k.substring(0, 20) + '...',
-              value: v
-            }))
-          });
 
           try {
             const { flowchartVariablesService } = await import('../../services/FlowchartVariablesService');
@@ -486,42 +346,51 @@ async function executeGetData(
                 projectId = (window as any).__currentProjectId || (window as any).__projectId || (window as any).currentProjectId;
               }
             }
-            console.log('[TaskExecutor][executeGetData] 🔍 Service init', { projectId, hasService: !!flowchartVariablesService });
+            // Service initialized
 
             if (projectId) {
-              await flowchartVariablesService.init(projectId);
+              // Service should already be initialized when project is opened
+              // No need to call init() during execution
 
               // Convert each GUID key to readable name
               // IMPORTANT: Add BOTH GUID and readable name (like old engine does)
               // This ensures conditions work with both key types
               const conversionResults: Array<{ guid: string; readableName: string | null; value: any }> = [];
-              Object.entries(result.value).forEach(([guidKey, value]) => {
+              Object.entries(result.value).forEach(([guidKey, memValue]) => {
+                // Handle both formats:
+                // 1. Direct value: { [guid]: value }
+                // 2. Memory format: { [guid]: { value: any, confirmed: boolean } }
+                let actualValue = memValue;
+                if (memValue && typeof memValue === 'object' && 'value' in memValue) {
+                  // Extract value from memory format
+                  actualValue = memValue.value;
+                }
+
                 // STEP 1: Always add GUID key first (for internal engine)
-                variables[guidKey] = value;
+                variables[guidKey] = actualValue;
 
                 // STEP 2: Add readable name as additional key (for conditions/scripts)
                 const readableName = flowchartVariablesService.getReadableName(guidKey);
                 conversionResults.push({
                   guid: guidKey.substring(0, 20) + '...',
+                  guidFull: guidKey,
                   readableName,
-                  value: typeof value === 'object' ? 'object' : value
+                  value: typeof actualValue === 'object' ? 'object' : actualValue
                 });
                 if (readableName) {
-                  variables[readableName] = value; // Add as additional key, not replacement
+                  variables[readableName] = actualValue; // Add as additional key, not replacement
+                } else {
+                  console.warn('[TaskExecutor][executeGetData] ⚠️ No readable name found for GUID', {
+                    guid: guidKey.substring(0, 20) + '...',
+                    guidFull: guidKey
+                  });
                 }
               });
 
               const guidKeys = Object.keys(variables).filter(k => k.length === 36 && k.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));
               const labelKeys = Object.keys(variables).filter(k => !guidKeys.includes(k));
 
-              console.log('[TaskExecutor][executeGetData] ✅ Variables from NEW engine (enriched with readable names)', {
-                variablesCount: Object.keys(variables).length,
-                guidKeysCount: guidKeys.length,
-                labelKeysCount: labelKeys.length,
-                readableNames: labelKeys.slice(0, 5),
-                conversionResults: conversionResults.slice(0, 10),
-                allVariableKeys: Object.keys(variables)
-              });
+              // Removed verbose logging
             } else {
               console.warn('[TaskExecutor][executeGetData] ⚠️ No projectId, using GUID keys directly');
               // No projectId: use GUID keys directly
@@ -543,9 +412,8 @@ async function executeGetData(
               variables[key] = mem.value;
             }
           });
-          console.log('[TaskExecutor][executeGetData] ✅ Variables from ddtState.memory (fallback)', {
-            variablesCount: Object.keys(variables).length
-          });
+          // Removed verbose logging
+          // Removed verbose logging
         }
 
         return {
@@ -572,7 +440,6 @@ async function executeGetData(
   }
 
   // Fallback: Use DialogueDataEngine V2 (old engine)
-  console.log('[TaskExecutor][executeGetData] 🔧 Using DialogueDataEngine V2 (OLD engine)');
   try {
     // Import DialogueDataEngine modules
     const { adaptCurrentToV2 } = await import('../DialogueDataEngine/model/adapters/currentToV2');
@@ -595,10 +462,6 @@ async function executeGetData(
 
     // Adapt DDT to V2 format
     const template = await adaptCurrentToV2(ddt, projectLanguage);
-    console.log('[TaskExecutor][executeGetData] DDT adapted to V2', {
-      templateNodesCount: template.nodes.length,
-      templateId: template.id
-    });
 
     // Initialize engine state
     let engineState = initEngine(template);
@@ -1024,8 +887,8 @@ async function executeGetData(
           });
 
           if (projectId) {
-            await flowchartVariablesService.init(projectId);
-            console.log('[TaskExecutor][executeGetData] ✅ FlowchartVariablesService initialized');
+            // Service should already be initialized when project is opened
+            // No need to call init() during execution
 
             // ✅ Add label keys for each GUID key (sub-nodes)
             Object.entries(variables).forEach(([guid, value]) => {

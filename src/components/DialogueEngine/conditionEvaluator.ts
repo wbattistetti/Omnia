@@ -124,84 +124,22 @@ export function evaluateCondition(
 
     case 'EdgeCondition':
       // Evaluate edge condition (e.g., variable checks)
-      console.log('[ConditionEvaluator][EdgeCondition] 🔍 Evaluating edge condition', {
-        edgeId: condition.edgeId,
-        conditionType: typeof condition.condition,
-        conditionValue: condition.condition,
-        variableStoreKeys: Object.keys(state.variableStore),
-        variableStore: state.variableStore
-      });
       const result = evaluateEdgeCondition(condition.condition, state.variableStore);
-      console.log('[ConditionEvaluator][EdgeCondition] ✅ Evaluation result', {
-        edgeId: condition.edgeId,
-        result
-      });
       return result;
 
     case 'And':
-      console.log('[ConditionEvaluator][And] 🔍 Evaluating AND condition', {
-        conditionsCount: condition.conditions.length,
-        conditions: condition.conditions.map((c, i) => ({
-          index: i,
-          type: c.type,
-          taskId: (c as any).taskId,
-          edgeId: (c as any).edgeId,
-          conditionId: (c as any).condition
-        }))
-      });
-      const andResults = condition.conditions.map((c, i) => {
-        const result = evaluateCondition(c, state);
-        console.log('[ConditionEvaluator][And] 🔍 Condition result', {
-          index: i,
-          type: c.type,
-          result,
-          taskId: (c as any).taskId,
-          edgeId: (c as any).edgeId,
-          executedTaskIds: Array.from(state.executedTaskIds),
-          variableStoreKeys: Object.keys(state.variableStore)
-        });
-        return result;
-      });
+      const andResults = condition.conditions.map((c) => evaluateCondition(c, state));
       const andFinal = andResults.every(r => r === true);
-      console.log('[ConditionEvaluator][And] ✅ AND condition result', {
-        conditionsCount: condition.conditions.length,
-        individualResults: andResults,
-        finalResult: andFinal
-      });
       return andFinal;
 
     case 'Or':
-      console.log('[ConditionEvaluator][Or] 🔍 Evaluating OR condition', {
-        conditionsCount: condition.conditions.length
-      });
-      const orResults = condition.conditions.map((c, i) => {
-        const result = evaluateCondition(c, state);
-        console.log('[ConditionEvaluator][Or] 🔍 Condition result', {
-          index: i,
-          type: c.type,
-          result
-        });
-        return result;
-      });
+      const orResults = condition.conditions.map((c) => evaluateCondition(c, state));
       const orFinal = orResults.some(r => r === true);
-      console.log('[ConditionEvaluator][Or] ✅ OR condition result', {
-        conditionsCount: condition.conditions.length,
-        individualResults: orResults,
-        finalResult: orFinal
-      });
       return orFinal;
 
     case 'Not':
-      console.log('[ConditionEvaluator][Not] 🔍 Evaluating NOT condition', {
-        innerConditionType: condition.condition.type
-      });
       const innerResult = evaluateCondition(condition.condition, state);
       const notFinal = !innerResult;
-      console.log('[ConditionEvaluator][Not] ✅ NOT condition result', {
-        innerConditionType: condition.condition.type,
-        innerResult,
-        finalResult: notFinal
-      });
       return notFinal;
 
     default:
@@ -217,27 +155,13 @@ function evaluateEdgeCondition(
   edgeCondition: any,
   variableStore: Record<string, any>
 ): boolean {
-  console.log('[ConditionEvaluator][evaluateEdgeCondition] 🚀 START', {
-    edgeConditionType: typeof edgeCondition,
-    edgeConditionValue: edgeCondition,
-    variableStoreKeys: Object.keys(variableStore),
-    variableStoreSize: Object.keys(variableStore).length,
-    variableStorePreview: Object.fromEntries(Object.entries(variableStore).slice(0, 5))
-  });
-
   if (!edgeCondition) {
-    console.log('[ConditionEvaluator][evaluateEdgeCondition] ⚠️ No edgeCondition, returning true');
     return true;
   }
 
   // Simple variable check: { variable: 'name', operator: '===', value: 'John' }
   if (edgeCondition.variable && edgeCondition.operator && edgeCondition.value !== undefined) {
-    console.log('[ConditionEvaluator][evaluateEdgeCondition] 🔍 Simple variable check', {
-      variable: edgeCondition.variable,
-      operator: edgeCondition.operator,
-      expectedValue: edgeCondition.value,
-      actualValue: variableStore[edgeCondition.variable]
-    });
+    // Removed verbose logging
     const variableValue = variableStore[edgeCondition.variable];
     const result = (() => {
       switch (edgeCondition.operator) {
@@ -257,23 +181,14 @@ function evaluateEdgeCondition(
           return false;
       }
     })();
-    console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Simple check result', {
-      variable: edgeCondition.variable,
-      result
-    });
+    // Removed verbose logging
     return result;
   }
 
   // Complex condition (function, etc.)
   if (typeof edgeCondition === 'function') {
-    console.log('[ConditionEvaluator][evaluateEdgeCondition] 🔍 Function condition', {
-      functionName: edgeCondition.name || 'anonymous'
-    });
     try {
       const result = edgeCondition(variableStore);
-      console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Function result', {
-        result
-      });
       return result;
     } catch (e) {
       console.error('[ConditionEvaluator][evaluateEdgeCondition] ❌ Function error', {
@@ -285,10 +200,7 @@ function evaluateEdgeCondition(
 
   // Check if it's a conditionId (string GUID) - need to load script
   if (typeof edgeCondition === 'string') {
-    console.log('[ConditionEvaluator][evaluateEdgeCondition] 🔍 ConditionId detected (string)', {
-      conditionId: edgeCondition,
-      conditionIdLength: edgeCondition.length
-    });
+    // Removed verbose logging
 
     // Load script synchronously (using async would require changing function signature)
     // For now, try to load from cache or use a synchronous approach
@@ -385,11 +297,7 @@ function evaluateEdgeCondition(
                       (window as any).__conditionCache = {};
                     }
                     (window as any).__conditionCache[cacheKey] = conditionFunction;
-                    console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Script compiled and cached', {
-                      conditionId: edgeCondition,
-                      hasConditionFunction: !!conditionFunction,
-                      conditionFunctionType: typeof conditionFunction
-                    });
+                    // Removed verbose logging
                   } catch (e) {
                     console.error('[ConditionEvaluator][evaluateEdgeCondition] ❌ Script compilation error', {
                       conditionId: edgeCondition,
@@ -420,28 +328,11 @@ function evaluateEdgeCondition(
       }
     }
 
-    console.log('[ConditionEvaluator][evaluateEdgeCondition] 🔍 Final conditionFunction status', {
-      conditionId: edgeCondition,
-      hasConditionFunction: !!conditionFunction,
-      conditionFunctionType: typeof conditionFunction
-    });
+    // Removed verbose logging
 
     if (conditionFunction) {
       try {
-        console.log('[ConditionEvaluator][evaluateEdgeCondition] 🚀 Executing condition function', {
-          conditionId: edgeCondition,
-          variableStoreKeys: Object.keys(variableStore),
-          variableStoreSize: Object.keys(variableStore).length,
-          variableStorePreview: Object.fromEntries(Object.entries(variableStore).slice(0, 10)),
-          variableStoreFull: variableStore // ✅ Log completo per debug
-        });
         const result = conditionFunction(variableStore);
-        console.log('[ConditionEvaluator][evaluateEdgeCondition] ✅ Condition function result', {
-          conditionId: edgeCondition,
-          result,
-          variableStoreKeys: Object.keys(variableStore),
-          variableStorePreview: Object.fromEntries(Object.entries(variableStore).slice(0, 10))
-        });
         return result;
       } catch (e) {
         console.error('[ConditionEvaluator][evaluateEdgeCondition] ❌ Condition function error', {
@@ -459,10 +350,6 @@ function evaluateEdgeCondition(
   }
 
   // Default: true if condition exists
-  console.log('[ConditionEvaluator][evaluateEdgeCondition] ⚠️ Unknown condition type, returning true', {
-    edgeConditionType: typeof edgeCondition,
-    edgeConditionValue: edgeCondition
-  });
   return true;
 }
 

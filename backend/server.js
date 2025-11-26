@@ -45,6 +45,56 @@ const path = require('path');
 const dbFactory = 'factory';
 const dbProjects = 'Projects';
 
+// ✅ OPTIMIZATION: MongoDB Connection Pool (reuse connections instead of creating new ones)
+// This reduces connection overhead from ~3s to ~0ms for subsequent operations
+let mongoClientPool = null;
+let mongoClientPoolPromise = null;
+
+async function getMongoClient() {
+  if (mongoClientPool) {
+    return mongoClientPool;
+  }
+
+  if (mongoClientPoolPromise) {
+    return mongoClientPoolPromise;
+  }
+
+  mongoClientPoolPromise = (async () => {
+    const client = new MongoClient(uri, {
+      maxPoolSize: 10, // Maximum number of connections in the pool
+      minPoolSize: 2,  // Minimum number of connections in the pool
+      maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
+      serverSelectionTimeoutMS: 5000, // Timeout for server selection
+    });
+
+    try {
+      await client.connect();
+      console.log('[MongoDB] ✅ Connection pool initialized');
+      mongoClientPool = client;
+      mongoClientPoolPromise = null;
+      return client;
+    } catch (error) {
+      mongoClientPoolPromise = null;
+      console.error('[MongoDB] ❌ Failed to initialize connection pool', error);
+      throw error;
+    }
+  })();
+
+  return mongoClientPoolPromise;
+}
+
+// Helper function to use MongoDB connection pool (replaces new MongoClient + connect + close pattern)
+async function withMongoClient(callback) {
+  const client = await getMongoClient();
+  try {
+    return await callback(client);
+  } catch (error) {
+    // Don't close the pool on error - let it be reused
+    throw error;
+  }
+  // Don't close the client - it's a pool that should be reused!
+}
+
 // -----------------------------
 // Template Cache Management
 // -----------------------------
@@ -852,9 +902,7 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
   const payload = req.body || {};
   const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const edges = Array.isArray(payload.edges) ? payload.edges : [];
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
+  await withMongoClient(async (client) => {
     const db = await getProjectDb(client, pid);
     const ncoll = db.collection('flow_nodes');
     const ecoll = db.collection('flow_edges');
@@ -934,12 +982,10 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
       result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } }
     });
     res.json({ ok: true, nodes: nodes.length, edges: edges.length });
-  } catch (e) {
+  }).catch((e) => {
     logError('Flow.put', e, { projectId: pid, flowId, payloadNodes: nodes.length, payloadEdges: edges.length });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
+  });
 });
 
 // List flows (by distinct flowId in flow_nodes)
@@ -1049,9 +1095,7 @@ app.post('/api/projects/:pid/acts/bulk', async (req, res) => {
   if (!items.length) {
     return res.json({ ok: true, upsertedCount: 0, modifiedCount: 0, matchedCount: 0 });
   }
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
+  await withMongoClient(async (client) => {
     const db = await getProjectDb(client, pid);
     const coll = db.collection('project_acts');
     const now = new Date();
@@ -1092,12 +1136,10 @@ app.post('/api/projects/:pid/acts/bulk', async (req, res) => {
     }
     logInfo('Acts.post.bulk', { projectId: pid, count: items.length, matched: result.matchedCount, modified: result.modifiedCount, upserted: result.upsertedCount });
     res.json({ ok: true, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, upsertedCount: result.upsertedCount });
-  } catch (e) {
+  }).catch((e) => {
     logError('Acts.post.bulk', e, { projectId: pid, count: items.length });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
+  });
 });
 
 // -----------------------------
@@ -1152,9 +1194,7 @@ app.post('/api/projects/:pid/conditions/bulk', async (req, res) => {
   if (!items.length) {
     return res.json({ inserted: 0, updated: 0, total: 0 });
   }
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
+  await withMongoClient(async (client) => {
     const db = await getProjectDb(client, pid);
     const coll = db.collection('project_conditions');
     const now = new Date();
@@ -1177,12 +1217,10 @@ app.post('/api/projects/:pid/conditions/bulk', async (req, res) => {
     const result = await coll.bulkWrite(bulkOps);
     logInfo('Conditions.bulk', { projectId: pid, inserted: result.upsertedCount, updated: result.modifiedCount, total: items.length });
     res.json({ inserted: result.upsertedCount, updated: result.modifiedCount, total: items.length });
-  } catch (e) {
+  }).catch((e) => {
     logError('Conditions.bulk', e, { projectId: pid });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
+  });
 });
 
 // -----------------------------
@@ -1668,9 +1706,8 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
   const items = Array.isArray(payload?.items) ? payload.items : [];
   if (!items.length) return res.json({ ok: true, inserted: 0, updated: 0 });
 
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
+  const tStart = Date.now();
+  await withMongoClient(async (client) => {
     const projDb = await getProjectDb(client, projectId);
     const coll = projDb.collection('tasks');
     const now = new Date();
@@ -1704,19 +1741,24 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
     let updated = 0;
 
     if (bulkOps.length > 0) {
+      const tBulk = Date.now();
       const result = await coll.bulkWrite(bulkOps, { ordered: false });
+      const tBulkEnd = Date.now();
+      console.log(`[Tasks.bulk][PERF] bulkWrite: ${tBulkEnd - tBulk}ms (${bulkOps.length} ops)`);
       inserted = result.upsertedCount;
       updated = result.modifiedCount;
     }
 
+    const tEnd = Date.now();
+    console.log(`[Tasks.bulk][PERF] Total: ${tEnd - tStart}ms`);
     logInfo('Tasks.bulk', { projectId, inserted, updated, total: items.length });
     res.json({ ok: true, inserted, updated });
-  } catch (e) {
+  }).catch((e) => {
+    const tEnd = Date.now();
+    console.error(`[Tasks.bulk][PERF] ERROR after ${tEnd - tStart}ms`);
     logError('Tasks.bulk', e, { projectId, itemsCount: items.length });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
+  });
 });
 
 // GET /api/projects/:pid/variable-mappings - Get variable mappings for project
