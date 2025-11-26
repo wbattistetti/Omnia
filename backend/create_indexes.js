@@ -55,10 +55,24 @@ async function createIndexes() {
 
     // projects_catalog collection - CRITICAL for catalog load performance
     try {
-      await client.db(dbProjects).collection('projects_catalog').createIndex({ updatedAt: -1 });
+      const catalogColl = client.db(dbProjects).collection('projects_catalog');
+      await catalogColl.createIndex({ updatedAt: -1 }, { background: true });
       console.log('  ✅ projects_catalog: { updatedAt: -1 }');
     } catch (e) {
-      console.log('  ⚠️  projects_catalog index may already exist:', e.message);
+      // Index might already exist, try to verify
+      try {
+        const indexes = await client.db(dbProjects).collection('projects_catalog').indexes();
+        const hasIndex = indexes.some(idx =>
+          idx.key && idx.key.updatedAt === -1
+        );
+        if (hasIndex) {
+          console.log('  ✅ projects_catalog: { updatedAt: -1 } (already exists)');
+        } else {
+          console.log('  ⚠️  projects_catalog index creation failed:', e.message);
+        }
+      } catch (verifyErr) {
+        console.log('  ⚠️  projects_catalog index may already exist:', e.message);
+      }
     }
 
     // ===================================

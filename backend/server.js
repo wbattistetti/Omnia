@@ -378,9 +378,13 @@ app.get('/api/projects/catalog', async (req, res) => {
   try {
     const db = client.db(dbProjects);
     const queryStart = Date.now();
-    const list = await db.collection('projects_catalog').find({}).sort({ updatedAt: -1 }).toArray();
-    const duration = Date.now() - startTime;
+    // ✅ OPTIMIZATION: Sort by updatedAt (index should exist, but don't force hint if it doesn't)
+    const list = await db.collection('projects_catalog')
+      .find({})
+      .sort({ updatedAt: -1 })
+      .toArray();
     const queryDuration = Date.now() - queryStart;
+    const duration = Date.now() - startTime;
     logInfo('Catalog.list', { count: Array.isArray(list) ? list.length : 0, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json(list);
   } catch (e) {
@@ -1602,7 +1606,11 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
     const projDb = await getProjectDb(client, projectId);
     const coll = projDb.collection('tasks');
     const queryStart = Date.now();
-    const items = await coll.find({ projectId }).sort({ updatedAt: -1 }).toArray();
+    // ✅ OPTIMIZATION: Sort by projectId and updatedAt (index should exist)
+    const items = await coll
+      .find({ projectId })
+      .sort({ updatedAt: -1 })
+      .toArray();
     const queryDuration = Date.now() - queryStart;
     const duration = Date.now() - startTime;
     logInfo('Tasks.get', { projectId, count: items.length, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
