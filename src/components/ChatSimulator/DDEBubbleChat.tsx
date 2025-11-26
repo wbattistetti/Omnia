@@ -196,24 +196,39 @@ export default function DDEBubbleChat({
           input,
           matchStatus,
           extractedValues,
+          extractedValuesCount: extractedValues?.length || 0,
           lastUserMessageId: lastUserMessageIdRef.current,
-          lastUserInput: lastUserInputRef.current
+          lastUserInput: lastUserInputRef.current,
+          inputMatches: lastUserInputRef.current === input
         });
         // Update the last user message with matchStatus and extracted values
         if (lastUserMessageIdRef.current && lastUserInputRef.current === input) {
-          setMessages((prev) => prev.map((msg) => {
-            if (msg.id === lastUserMessageIdRef.current && msg.type === 'user') {
-              console.log('[DDEBubbleChat] Updating message with extracted values', {
-                messageId: msg.id,
-                extractedValues,
-                count: extractedValues?.length || 0
-              });
-              return { ...msg, matchStatus, extractedValues };
-            }
-            return msg;
-          }));
+          setMessages((prev) => {
+            const updated = prev.map((msg) => {
+              if (msg.id === lastUserMessageIdRef.current && msg.type === 'user') {
+                console.log('[DDEBubbleChat] ✅ Updating message with extracted values', {
+                  messageId: msg.id,
+                  extractedValues,
+                  count: extractedValues?.length || 0,
+                  previousExtractedValues: msg.extractedValues
+                });
+                return { ...msg, matchStatus, extractedValues };
+              }
+              return msg;
+            });
+            return updated;
+          });
+        } else {
+          console.warn('[DDEBubbleChat] ⚠️ Cannot update message - conditions not met', {
+            hasLastUserMessageId: !!lastUserMessageIdRef.current,
+            lastUserInput: lastUserInputRef.current,
+            currentInput: input,
+            inputsMatch: lastUserInputRef.current === input
+          });
         }
       };
+    } else {
+      console.warn('[DDEBubbleChat] ⚠️ onUserInputProcessedWithValuesRef not available on orchestrator');
     }
     return () => {
       if (orchestrator.onUserInputProcessedRef) {
@@ -432,17 +447,26 @@ export default function DDEBubbleChat({
             count: extractedValues.length,
             input: lastUserInputRef.current,
             memoryKeys: Object.keys(currentState.memory),
-            callbackExists: !!orchestrator.onUserInputProcessedWithValuesRef.current
+            callbackExists: !!orchestrator.onUserInputProcessedWithValuesRef.current,
+            lastUserMessageId: lastUserMessageIdRef.current
           });
 
           // Call the callback to update the message
-          orchestrator.onUserInputProcessedWithValuesRef.current(
-            lastUserInputRef.current,
-            'match', // Assume match if we have values
-            extractedValues
-          );
+          if (orchestrator.onUserInputProcessedWithValuesRef.current && lastUserInputRef.current) {
+            orchestrator.onUserInputProcessedWithValuesRef.current(
+              lastUserInputRef.current,
+              'match', // Assume match if we have values
+              extractedValues
+            );
+            console.log('[DDEBubbleChat][USE-EFFECT] ✅ Callback called successfully');
+          } else {
+            console.warn('[DDEBubbleChat][USE-EFFECT] ⚠️ Cannot call callback', {
+              hasCallback: !!orchestrator.onUserInputProcessedWithValuesRef.current,
+              hasLastUserInput: !!lastUserInputRef.current
+            });
+          }
 
-          console.log('[DDEBubbleChat][USE-EFFECT] ✅ Callback called, updating prevMemoryRef');
+          console.log('[DDEBubbleChat][USE-EFFECT] ✅ Updating prevMemoryRef');
 
           // Update prevMemoryRef to avoid duplicate calls
           prevMemoryRef.current = JSON.parse(JSON.stringify(currentState.memory));

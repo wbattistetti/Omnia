@@ -204,6 +204,12 @@ async function executeGetData(
     translations?: Record<string, string>; // ✅ Translations from global table
   }
 ): Promise<TaskExecutionResult> {
+  console.log('[TaskExecutor][executeGetData] 🚀 STARTING executeGetData', {
+    taskId: task.id,
+    taskAction: task.action,
+    hasOnProcessInput: !!callbacks.onProcessInput,
+    hasOnUserInputProcessed: !!callbacks.onUserInputProcessed
+  });
   // Removed verbose logging
 
   const ddt = task.value?.ddt;
@@ -668,15 +674,18 @@ async function executeGetData(
 
           // Call onUserInputProcessed callback if provided
           if (callbacks.onUserInputProcessed) {
-            console.log('[TaskExecutor][executeGetData] Calling onUserInputProcessed', {
+            console.log('[TaskExecutor][executeGetData] ✅ Calling onUserInputProcessed', {
               userInput,
               matchStatus,
               extractedValuesCount: extractedValues?.length || 0,
-              extractedValues: extractedValues
+              extractedValues: extractedValues,
+              extractedValuesDefined: extractedValues !== undefined,
+              extractedValuesIsArray: Array.isArray(extractedValues)
             });
             callbacks.onUserInputProcessed(userInput, matchStatus, extractedValues);
+            console.log('[TaskExecutor][executeGetData] ✅ onUserInputProcessed called successfully');
           } else {
-            console.warn('[TaskExecutor][executeGetData] onUserInputProcessed callback not provided');
+            console.warn('[TaskExecutor][executeGetData] ⚠️ onUserInputProcessed callback not provided');
           }
         } else {
           console.warn('[TaskExecutor][executeGetData] onProcessInput callback not provided');

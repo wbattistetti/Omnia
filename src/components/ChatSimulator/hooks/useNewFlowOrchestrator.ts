@@ -310,34 +310,57 @@ export function useNewFlowOrchestrator({
       onUserInputProcessed: (input: string, matchStatus: 'match' | 'noMatch' | 'partialMatch', extractedValues?: any[]) => {
         // This callback is called from ddtRetrieve after processing input
         // We'll expose it via a ref so DDEBubbleChat can listen to it
-        console.log('[useNewFlowOrchestrator] User input processed', { input, matchStatus, extractedValues });
+        console.log('[useNewFlowOrchestrator] User input processed', {
+          input,
+          matchStatus,
+          extractedValues,
+          extractedValuesCount: extractedValues?.length || 0,
+          hasOnUserInputProcessedRef: !!onUserInputProcessedRef.current,
+          hasOnUserInputProcessedWithValuesRef: !!onUserInputProcessedWithValuesRef.current
+        });
         // Store in a ref that DDEBubbleChat can access
         if (onUserInputProcessedRef.current) {
           onUserInputProcessedRef.current(input, matchStatus);
         }
         // Also call the callback with extracted values if available
-        if (onUserInputProcessedWithValuesRef.current && extractedValues) {
-          // Enhance extracted values with linguistic values from input text
-          const enhancedValues = extractedValues.map(ev => {
-            let linguisticValue = ev.linguisticValue;
-            if (!linguisticValue) {
-              // Try to find linguistic value in input
-              const semanticStr = String(ev.semanticValue);
-              if (ev.variable === 'month' && typeof ev.semanticValue === 'number' && ev.semanticValue >= 1 && ev.semanticValue <= 12) {
-                const monthNames = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
-                const monthName = monthNames[ev.semanticValue - 1];
-                if (input.toLowerCase().includes(monthName)) {
-                  linguisticValue = monthName;
+        if (onUserInputProcessedWithValuesRef.current) {
+          if (extractedValues && extractedValues.length > 0) {
+            // Enhance extracted values with linguistic values from input text
+            const enhancedValues = extractedValues.map(ev => {
+              let linguisticValue = ev.linguisticValue;
+              if (!linguisticValue) {
+                // Try to find linguistic value in input
+                const semanticStr = String(ev.semanticValue);
+                if (ev.variable === 'month' && typeof ev.semanticValue === 'number' && ev.semanticValue >= 1 && ev.semanticValue <= 12) {
+                  const monthNames = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+                  const monthName = monthNames[ev.semanticValue - 1];
+                  if (input.toLowerCase().includes(monthName)) {
+                    linguisticValue = monthName;
+                  } else if (input.includes(semanticStr)) {
+                    linguisticValue = semanticStr;
+                  }
                 } else if (input.includes(semanticStr)) {
                   linguisticValue = semanticStr;
                 }
-              } else if (input.includes(semanticStr)) {
-                linguisticValue = semanticStr;
               }
-            }
-            return { ...ev, linguisticValue };
-          });
-          onUserInputProcessedWithValuesRef.current(input, matchStatus, enhancedValues);
+              return { ...ev, linguisticValue };
+            });
+            console.log('[useNewFlowOrchestrator] ✅ Calling onUserInputProcessedWithValuesRef with enhanced values', {
+              input,
+              matchStatus,
+              enhancedValuesCount: enhancedValues.length,
+              enhancedValues
+            });
+            onUserInputProcessedWithValuesRef.current(input, matchStatus, enhancedValues);
+          } else {
+            console.log('[useNewFlowOrchestrator] ⚠️ No extractedValues to pass to callback', {
+              input,
+              matchStatus,
+              extractedValues
+            });
+          }
+        } else {
+          console.warn('[useNewFlowOrchestrator] ⚠️ onUserInputProcessedWithValuesRef.current is null');
         }
       },
       onProcessInput: async (input: string, node: any) => {
@@ -371,7 +394,53 @@ export function useNewFlowOrchestrator({
 
             if (result.hasMatch && Object.keys(result.values).length > 0) {
               const t7 = performance.now();
-              // Removed verbose logging
+              // ✅ Convert extracted values to ExtractedValue[] format and call callback immediately
+              const extractedValues = Object.entries(result.values)
+                .filter(([key, val]) => val !== undefined && val !== null)
+                .map(([key, val]) => ({
+                  variable: key,
+                  linguisticValue: undefined, // Will be enhanced in onUserInputProcessed
+                  semanticValue: val
+                }));
+
+              console.log('[useNewFlowOrchestrator][onProcessInput] ✅ Values extracted, calling callback', {
+                input,
+                extractedValuesCount: extractedValues.length,
+                extractedValues,
+                hasCallback: !!onUserInputProcessedWithValuesRef.current
+              });
+
+              // Call callback immediately with extracted values
+              if (onUserInputProcessedWithValuesRef.current && extractedValues.length > 0) {
+                // Enhance extracted values with linguistic values from input text
+                const enhancedValues = extractedValues.map(ev => {
+                  let linguisticValue = ev.linguisticValue;
+                  if (!linguisticValue) {
+                    const semanticStr = String(ev.semanticValue);
+                    if (ev.variable === 'month' && typeof ev.semanticValue === 'number' && ev.semanticValue >= 1 && ev.semanticValue <= 12) {
+                      const monthNames = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+                      const monthName = monthNames[ev.semanticValue - 1];
+                      if (input.toLowerCase().includes(monthName)) {
+                        linguisticValue = monthName;
+                      } else if (input.includes(semanticStr)) {
+                        linguisticValue = semanticStr;
+                      }
+                    } else if (input.includes(semanticStr)) {
+                      linguisticValue = semanticStr;
+                    }
+                  }
+                  return { ...ev, linguisticValue };
+                });
+
+                console.log('[useNewFlowOrchestrator][onProcessInput] ✅ Calling onUserInputProcessedWithValuesRef', {
+                  input,
+                  enhancedValuesCount: enhancedValues.length,
+                  enhancedValues
+                });
+
+                onUserInputProcessedWithValuesRef.current(input, 'match', enhancedValues);
+              }
+
               return { status: 'match' as const, value: result.values };
             } else {
               const t7 = performance.now();
