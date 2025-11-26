@@ -1,7 +1,7 @@
 // Service to extract and manage readable variable names from DDT structures
 // Features:
 // - Incremental updates (merge/diff instead of delete+recreate)
-// - Extensible persistence (localStorage now, ready for backend/IndexedDB)
+// - Database persistence (saved when project is saved, loaded when project is opened)
 
 import { getMainDataList, getSubDataList, hasMultipleMains, getLabel } from '../components/ActEditor/ResponseEditor/ddtSelectors';
 
@@ -22,52 +22,19 @@ interface DDTNodeSnapshot {
   subData?: DDTNodeSnapshot[];
 }
 
-interface PersistenceAdapter {
-  save(projectId: string, data: any): Promise<void>;
-  load(projectId: string): Promise<any | null>;
-}
-
-class LocalStorageAdapter implements PersistenceAdapter {
-  async save(projectId: string, data: any): Promise<void> {
-    try {
-      const key = `flowchart_vars_${projectId}`;
-      localStorage.setItem(key, JSON.stringify(data));
-    } catch (e) {
-      console.warn('[FlowchartVariables][LocalStorage] Failed to save', e);
-      throw e;
-    }
-  }
-
-  async load(projectId: string): Promise<any | null> {
-    try {
-      const key = `flowchart_vars_${projectId}`;
-      const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : null;
-    } catch (e) {
-      console.warn('[FlowchartVariables][LocalStorage] Failed to load', e);
-      return null;
-    }
-  }
-}
-
 class FlowchartVariablesService {
   private mappings: Map<string, VariableMapping> = new Map(); // readableName -> mapping
   private nodeIdToReadableName: Map<string, string> = new Map(); // nodeId -> readableName
   private taskIdToReadableNames: Map<string, string[]> = new Map(); // taskId -> readableName[]
   private taskIdToSnapshot: Map<string, DDTNodeSnapshot[]> = new Map(); // taskId -> snapshot of DDT structure
   private projectId: string | null = null;
-  private persistenceAdapter: PersistenceAdapter;
-
-  constructor(adapter?: PersistenceAdapter) {
-    this.persistenceAdapter = adapter || new LocalStorageAdapter();
-  }
 
   /**
-   * Initialize service for a project
+   * Initialize service for a project (loads from database)
    */
   async init(projectId: string): Promise<void> {
     this.projectId = projectId;
-    await this.loadFromStorage();
+    await this.loadFromDatabase();
   }
 
   /**
@@ -307,7 +274,7 @@ class FlowchartVariablesService {
     // Save snapshot for next comparison
     this.taskIdToSnapshot.set(taskId, newSnapshot);
 
-    await this.saveToStorage();
+    // Note: Mappings are saved to database when project is saved (not immediately)
 
     console.log('[FlowchartVariables] Extracted variables from DDT (incremental)', {
       taskId,
@@ -508,16 +475,18 @@ class FlowchartVariablesService {
 
   /**
    * Delete mappings by task ID
+   * Note: Changes are saved to database when project is saved
    */
   async deleteMappingsByTaskId(taskId: string): Promise<void> {
     const readableNames = this.taskIdToReadableNames.get(taskId) || [];
     readableNames.forEach(name => this.deleteMapping(name));
     this.taskIdToSnapshot.delete(taskId);
-    await this.saveToStorage();
+    // Note: Mappings are saved to database when project is saved (not immediately)
   }
 
   /**
    * Delete mappings by row ID
+   * Note: Changes are saved to database when project is saved
    */
   async deleteMappingsByRowId(rowId: string): Promise<void> {
     const toDelete: string[] = [];
@@ -527,14 +496,19 @@ class FlowchartVariablesService {
       }
     });
     toDelete.forEach(name => this.deleteMapping(name));
-    await this.saveToStorage();
+    // Note: Mappings are saved to database when project is saved (not immediately)
   }
 
   /**
-   * Save to storage (async, ready for backend/IndexedDB)
+   * Save mappings to database (called when project is saved)
    */
-  private async saveToStorage(): Promise<void> {
-    if (!this.projectId) return;
+  async saveToDatabase(projectId?: string): Promise<boolean> {
+    const pid = projectId || this.projectId;
+    if (!pid) {
+      console.warn('[FlowchartVariables] No projectId, cannot save to database');
+      return false;
+    }
+
     try {
       const data = {
         version: '1.0', // For future migrations
@@ -543,19 +517,50 @@ class FlowchartVariablesService {
         taskIdToReadableNames: Array.from(this.taskIdToReadableNames.entries()),
         taskIdToSnapshot: Array.from(this.taskIdToSnapshot.entries())
       };
-      await this.persistenceAdapter.save(this.projectId, data);
+
+      const response = await fetch(`/api/projects/${pid}/variable-mappings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        console.error('[FlowchartVariables] Failed to save to database', response.statusText);
+        return false;
+      }
+
+      console.log('[FlowchartVariables] Saved mappings to database', {
+        count: this.mappings.size,
+        projectId: pid
+      });
+
+      return true;
     } catch (e) {
-      console.warn('[FlowchartVariables] Failed to save to storage', e);
+      console.error('[FlowchartVariables] Error saving to database', e);
+      return false;
     }
   }
 
   /**
-   * Load from storage (async, ready for backend/IndexedDB)
+   * Load mappings from database (called when project is opened)
    */
-  private async loadFromStorage(): Promise<void> {
+  private async loadFromDatabase(): Promise<void> {
     if (!this.projectId) return;
+
     try {
-      const data = await this.persistenceAdapter.load(this.projectId);
+      const response = await fetch(`/api/projects/${this.projectId}/variable-mappings`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // No mappings yet for this project (first time)
+          console.log('[FlowchartVariables] No mappings found in database (first time)');
+          return;
+        }
+        throw new Error(`Failed to load: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
       if (data) {
         this.mappings.clear();
         this.nodeIdToReadableName.clear();
@@ -582,28 +587,27 @@ class FlowchartVariablesService {
           });
         }
 
-        console.log('[FlowchartVariables] Loaded mappings', {
+        console.log('[FlowchartVariables] Loaded mappings from database', {
           count: this.mappings.size,
           projectId: this.projectId,
           version
         });
       }
     } catch (e) {
-      console.warn('[FlowchartVariables] Failed to load from storage', e);
+      console.warn('[FlowchartVariables] Failed to load from database', e);
     }
   }
 
   /**
    * Clear all mappings (for testing or reset)
+   * Note: Changes are saved to database when project is saved
    */
   async clear(): Promise<void> {
     this.mappings.clear();
     this.nodeIdToReadableName.clear();
     this.taskIdToReadableNames.clear();
     this.taskIdToSnapshot.clear();
-    if (this.projectId) {
-      await this.saveToStorage();
-    }
+    // Note: Mappings are saved to database when project is saved (not immediately)
   }
 
   /**

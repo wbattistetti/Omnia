@@ -866,32 +866,65 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
     const existingNodeIds = new Set(existingNodes.map(d => d.id));
     const existingEdgeIds = new Set(existingEdges.map(d => d.id));
 
-    // Upsert nodes (exclude immutable _id)
+    // ✅ OPTIMIZATION: Use bulkWrite instead of sequential loops (much faster!)
+    // Prepare bulk operations for nodes
+    const nodeOps = [];
     for (const n of nodes) {
       if (!n || !n.id) continue;
       const { _id: _nid, ...nset } = n || {};
-      await ncoll.updateOne({ id: n.id, flowId }, { $set: { ...nset, flowId, updatedAt: now } }, { upsert: true });
+      nodeOps.push({
+        updateOne: {
+          filter: { id: n.id, flowId },
+          update: { $set: { ...nset, flowId, updatedAt: now } },
+          upsert: true
+        }
+      });
       nUpserts++;
       if (n.id) existingNodeIds.delete(n.id);
     }
-    // Delete removed nodes
+    // Add delete operations for removed nodes
     if (existingNodeIds.size) {
-      await ncoll.deleteMany({ id: { $in: Array.from(existingNodeIds) }, flowId });
+      nodeOps.push({
+        deleteMany: {
+          filter: { id: { $in: Array.from(existingNodeIds) }, flowId }
+        }
+      });
       nDeletes = existingNodeIds.size;
     }
 
-    // Upsert edges (exclude immutable _id)
+    // Execute bulk write for nodes
+    if (nodeOps.length > 0) {
+      await ncoll.bulkWrite(nodeOps, { ordered: false });
+    }
+
+    // Prepare bulk operations for edges
+    const edgeOps = [];
     for (const e of edges) {
       if (!e || !e.id) continue;
       const { _id: _eid, ...eset } = e || {};
-      await ecoll.updateOne({ id: e.id, flowId }, { $set: { ...eset, flowId, updatedAt: now } }, { upsert: true });
+      edgeOps.push({
+        updateOne: {
+          filter: { id: e.id, flowId },
+          update: { $set: { ...eset, flowId, updatedAt: now } },
+          upsert: true
+        }
+      });
       eUpserts++;
       if (e.id) existingEdgeIds.delete(e.id);
     }
-    // Delete removed edges
+    // Add delete operations for removed edges
     if (existingEdgeIds.size) {
-      await ecoll.deleteMany({ id: { $in: Array.from(existingEdgeIds) }, flowId });
+      edgeOps.push({
+        deleteMany: {
+          filter: { id: { $in: Array.from(existingEdgeIds) }, flowId }
+        }
+      });
       eDeletes = existingEdgeIds.size;
+    }
+
+    // Execute bulk write for edges
+    if (edgeOps.length > 0) {
+      await ecoll.bulkWrite(edgeOps, { ordered: false });
     }
 
     logInfo('Flow.put', {
@@ -1642,38 +1675,117 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
     const coll = projDb.collection('tasks');
     const now = new Date();
 
+    // ✅ OPTIMIZATION: Use bulkWrite instead of sequential findOne + updateOne/insertOne
+    // This reduces 2*N database calls to just 1 bulk operation!
+    const bulkOps = items
+      .filter(item => item.id && item.action)
+      .map(item => {
+        const task = {
+          projectId,
+          id: item.id,
+          action: item.action,
+          value: item.value || {},
+          updatedAt: now
+        };
+
+        return {
+          updateOne: {
+            filter: { projectId, id: item.id },
+            update: {
+              $set: task,
+              $setOnInsert: { createdAt: now }
+            },
+            upsert: true
+          }
+        };
+      });
+
     let inserted = 0;
     let updated = 0;
 
-    for (const item of items) {
-      if (!item.id || !item.action) continue;
-
-      const task = {
-        projectId,
-        id: item.id,
-        action: item.action,
-        value: item.value || {},
-        updatedAt: now
-      };
-
-      const existing = await coll.findOne({ projectId, id: item.id });
-      if (existing) {
-        await coll.updateOne(
-          { projectId, id: item.id },
-          { $set: task }
-        );
-        updated++;
-      } else {
-        task.createdAt = now;
-        await coll.insertOne(task);
-        inserted++;
-      }
+    if (bulkOps.length > 0) {
+      const result = await coll.bulkWrite(bulkOps, { ordered: false });
+      inserted = result.upsertedCount;
+      updated = result.modifiedCount;
     }
 
     logInfo('Tasks.bulk', { projectId, inserted, updated, total: items.length });
     res.json({ ok: true, inserted, updated });
   } catch (e) {
     logError('Tasks.bulk', e, { projectId, itemsCount: items.length });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// GET /api/projects/:pid/variable-mappings - Get variable mappings for project
+app.get('/api/projects/:pid/variable-mappings', async (req, res) => {
+  const projectId = req.params.pid;
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const doc = await projDb.collection('variable_mappings').findOne({ projectId });
+
+    if (!doc) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+
+    res.json({
+      version: doc.version || '1.0',
+      mappings: doc.mappings || [],
+      nodeIdToReadableName: doc.nodeIdToReadableName || [],
+      taskIdToReadableNames: doc.taskIdToReadableNames || [],
+      taskIdToSnapshot: doc.taskIdToSnapshot || []
+    });
+  } catch (e) {
+    logError('VariableMappings.get', e, { projectId });
+    res.status(500).json({ error: String(e?.message || e) });
+  } finally {
+    await client.close();
+  }
+});
+
+// POST /api/projects/:pid/variable-mappings - Save variable mappings for project
+app.post('/api/projects/:pid/variable-mappings', async (req, res) => {
+  const projectId = req.params.pid;
+  const payload = req.body || {};
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const projDb = await getProjectDb(client, projectId);
+    const now = new Date();
+
+    const doc = {
+      projectId,
+      version: payload.version || '1.0',
+      mappings: payload.mappings || [],
+      nodeIdToReadableName: payload.nodeIdToReadableName || [],
+      taskIdToReadableNames: payload.taskIdToReadableNames || [],
+      taskIdToSnapshot: payload.taskIdToSnapshot || [],
+      updatedAt: now
+    };
+
+    const result = await projDb.collection('variable_mappings').updateOne(
+      { projectId },
+      {
+        $set: doc,
+        $setOnInsert: { createdAt: now }
+      },
+      { upsert: true }
+    );
+
+    logInfo('VariableMappings.post', {
+      projectId,
+      upserted: result.upsertedCount > 0,
+      modified: result.modifiedCount > 0,
+      mappingsCount: doc.mappings.length
+    });
+
+    res.json({ ok: true, upserted: result.upsertedCount > 0, modified: result.modifiedCount > 0 });
+  } catch (e) {
+    logError('VariableMappings.post', e, { projectId });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();

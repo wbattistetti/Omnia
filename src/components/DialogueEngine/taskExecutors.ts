@@ -455,13 +455,87 @@ async function executeGetData(
         const variables: Record<string, any> = {};
 
         if (result.value && typeof result.value === 'object') {
-          // New engine returns data in result.value
-          Object.entries(result.value).forEach(([key, value]) => {
-            variables[key] = value;
+          // New engine returns data in result.value with GUID keys
+          // Convert GUID keys to readable names using FlowchartVariablesService
+          console.log('[TaskExecutor][executeGetData] 🔍 BEFORE conversion', {
+            resultValueKeys: Object.keys(result.value),
+            resultValueSample: Object.entries(result.value).slice(0, 3).map(([k, v]) => ({
+              key: k.substring(0, 20) + '...',
+              value: v
+            }))
           });
-          console.log('[TaskExecutor][executeGetData] ✅ Variables from NEW engine result.value', {
-            variablesCount: Object.keys(variables).length
-          });
+
+          try {
+            const { flowchartVariablesService } = await import('../../services/FlowchartVariablesService');
+            // Try multiple sources for projectId (same as TaskRepository)
+            let projectId: string | undefined = undefined;
+            if (typeof window !== 'undefined') {
+              // Try localStorage first (most reliable)
+              projectId = localStorage.getItem('current.projectId') || localStorage.getItem('currentProjectId') || undefined;
+              // Fallback to runtime state
+              if (!projectId) {
+                try {
+                  const { getCurrentProjectId } = await import('../../state/runtime');
+                  projectId = getCurrentProjectId() || undefined;
+                } catch (e) {
+                  // runtime module not available
+                }
+              }
+              // Last resort: window object
+              if (!projectId) {
+                projectId = (window as any).__currentProjectId || (window as any).__projectId || (window as any).currentProjectId;
+              }
+            }
+            console.log('[TaskExecutor][executeGetData] 🔍 Service init', { projectId, hasService: !!flowchartVariablesService });
+
+            if (projectId) {
+              await flowchartVariablesService.init(projectId);
+
+              // Convert each GUID key to readable name
+              // IMPORTANT: Add BOTH GUID and readable name (like old engine does)
+              // This ensures conditions work with both key types
+              const conversionResults: Array<{ guid: string; readableName: string | null; value: any }> = [];
+              Object.entries(result.value).forEach(([guidKey, value]) => {
+                // STEP 1: Always add GUID key first (for internal engine)
+                variables[guidKey] = value;
+
+                // STEP 2: Add readable name as additional key (for conditions/scripts)
+                const readableName = flowchartVariablesService.getReadableName(guidKey);
+                conversionResults.push({
+                  guid: guidKey.substring(0, 20) + '...',
+                  readableName,
+                  value: typeof value === 'object' ? 'object' : value
+                });
+                if (readableName) {
+                  variables[readableName] = value; // Add as additional key, not replacement
+                }
+              });
+
+              const guidKeys = Object.keys(variables).filter(k => k.length === 36 && k.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));
+              const labelKeys = Object.keys(variables).filter(k => !guidKeys.includes(k));
+
+              console.log('[TaskExecutor][executeGetData] ✅ Variables from NEW engine (enriched with readable names)', {
+                variablesCount: Object.keys(variables).length,
+                guidKeysCount: guidKeys.length,
+                labelKeysCount: labelKeys.length,
+                readableNames: labelKeys.slice(0, 5),
+                conversionResults: conversionResults.slice(0, 10),
+                allVariableKeys: Object.keys(variables)
+              });
+            } else {
+              console.warn('[TaskExecutor][executeGetData] ⚠️ No projectId, using GUID keys directly');
+              // No projectId: use GUID keys directly
+              Object.entries(result.value).forEach(([key, value]) => {
+                variables[key] = value;
+              });
+            }
+          } catch (e) {
+            console.error('[TaskExecutor][executeGetData] ❌ Error converting GUID to readable names', e);
+            // Fallback: use GUID keys directly
+            Object.entries(result.value).forEach(([key, value]) => {
+              variables[key] = value;
+            });
+          }
         } else {
           // Fallback: extract from ddtState.memory (old engine format)
           Object.entries(ddtState.memory).forEach(([key, mem]) => {

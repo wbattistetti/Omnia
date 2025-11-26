@@ -530,11 +530,11 @@ export const AppContent: React.FC<AppContentProps> = ({
       pdUpdate.setCurrentProjectId(id);
       try { localStorage.setItem('current.projectId', id); } catch { }
 
-      // ✅ OPTIMIZATION: Load acts, tasks, and flow in parallel (they are independent)
+      // ✅ OPTIMIZATION: Load acts, tasks, flow, and variable mappings in parallel (they are independent)
       const parallelStart = performance.now();
-      console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (acts, tasks, flow)`);
+      console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (acts, tasks, flow, mappings)`);
 
-      const [actsResult, tasksResult, flowResult] = await Promise.allSettled([
+      const [actsResult, tasksResult, flowResult, mappingsResult] = await Promise.allSettled([
         ProjectDataService.loadActsFromProject(id),
         (async () => {
           try {
@@ -562,6 +562,16 @@ export const AppContent: React.FC<AppContentProps> = ({
           } catch (e) {
             console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load flow`, e);
             return { nodes: [], edges: [] };
+          }
+        })(),
+        (async () => {
+          try {
+            const { flowchartVariablesService } = await import('../services/FlowchartVariablesService');
+            await flowchartVariablesService.init(id);
+            return true;
+          } catch (e) {
+            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load variable mappings`, e);
+            return false;
           }
         })()
       ]);
@@ -749,104 +759,207 @@ export const AppContent: React.FC<AppContentProps> = ({
                     console.warn('[Save] No project ID available');
                     return;
                   }
-                  // Aggiorna updatedAt e owner nel catalog
-                  try {
-                    await fetch('/api/projects/catalog/update-timestamp', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        projectId: pid,
-                        ownerCompany: currentProject?.ownerCompany || null,
-                        ownerClient: currentProject?.ownerClient || null
-                      })
-                    });
-                  } catch (e) {
-                    console.warn('[Save] Failed to update catalog timestamp', e);
-                  }
+                  console.log('[Save] ═══════════════════════════════════════════════════════');
+                  console.log('[Save] 🚀 START SAVE PROJECT', { projectId: pid, timestamp: new Date().toISOString() });
+                  console.log('[Save] ═══════════════════════════════════════════════════════');
 
                   // FIX: Emetti evento per salvare modifiche in corso negli editor aperti
                   window.dispatchEvent(new CustomEvent('project:save', {
                     detail: { projectId: pid }
                   }));
 
-                  // FASE 1.5: Salva tutte le traduzioni del progetto (save esplicito)
-                  if (pid) {
-                    try {
-                      // Access ProjectTranslationsContext via window to call saveAllTranslations
-                      const translationsContext = (window as any).__projectTranslationsContext;
-                      if (translationsContext?.saveAllTranslations) {
-                        console.log('[SaveProject] Calling saveAllTranslations explicitly');
-                        await translationsContext.saveAllTranslations();
-                      } else {
-                        console.warn('[SaveProject] ProjectTranslationsContext not available on window');
-                      }
-                    } catch (e) {
-                      console.error('[SaveProject] Error saving translations explicitly:', e);
-                    }
-                  }
+                  // ✅ OPTIMIZATION: Parallelize all independent save operations
+                  const saveStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
-                  // FASE 2: Salva tutte le Tasks da TaskRepository (gestisce tutto)
-                  if (pid) {
-                    try {
-                      const tI2_0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      const { taskRepository } = await import('../services/TaskRepository');
-                      const saved = await taskRepository.saveAllTasksToDatabase(pid);
-                      const tI2_1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      if (saved) {
-                      } else {
-                        try { console.warn('[Save][tasks][repository]', { pid, ms: Math.round(tI2_1 - tI2_0), warning: 'some_failed' }); } catch { }
+                  const saveResults = await Promise.allSettled([
+                    // 1. Update catalog timestamp
+                    (async () => {
+                      const tStart = performance.now();
+                      try {
+                        console.log('[Save][1-catalog] 🚀 START');
+                        await fetch('/api/projects/catalog/update-timestamp', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            projectId: pid,
+                            ownerCompany: currentProject?.ownerCompany || null,
+                            ownerClient: currentProject?.ownerClient || null
+                          })
+                        });
+                        const tEnd = performance.now();
+                        console.log('[Save][1-catalog] ✅ DONE', { ms: Math.round(tEnd - tStart) });
+                      } catch (e) {
+                        const tEnd = performance.now();
+                        console.error('[Save][1-catalog] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
                       }
+                    })(),
 
-                      // FASE 2: TaskRepository sincronizza automaticamente con InstanceRepository
-                      // Quindi InstanceRepository è aggiornato automaticamente (backward compatibility)
-                    } catch (e) {
-                      console.error('[Save][tasks][repository] error', e);
-                      // Non bloccare il salvataggio del progetto se questo fallisce
-                    }
-                  }
-                  // 2b) persisti gli Agent Acts creati al volo nel DB progetto (solo su Save esplicito)
-                  try {
-                    if (pid && projectData) {
+                    // 2. Save translations
+                    (async () => {
+                      if (!pid) return;
+                      const tStart = performance.now();
                       try {
-                        const flows = (window as any).__flows || {};
-                        const main = flows?.main || { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] };
-                      } catch { }
-                      const tA0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
-                      await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
-                      // Reload fresh project data so act.problem is populated from DB
-                      try {
-                        const fresh = await (ProjectDataService as any).loadProjectData?.();
-                        if (fresh) {
-                          try { pdUpdate.setData && (pdUpdate as any).setData(fresh); } catch { }
+                        console.log('[Save][2-translations] 🚀 START');
+                        const translationsContext = (window as any).__projectTranslationsContext;
+                        if (translationsContext?.saveAllTranslations) {
+                          await translationsContext.saveAllTranslations();
+                          const tEnd = performance.now();
+                          console.log('[Save][2-translations] ✅ DONE', { ms: Math.round(tEnd - tStart) });
+                        } else {
+                          const tEnd = performance.now();
+                          console.warn('[Save][2-translations] ⚠️ Context not available', { ms: Math.round(tEnd - tStart) });
                         }
-                      } catch { }
-                      const tA1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                    }
-                  } catch { }
-                  // 3) salva flusso (nodi/edge) - stato così com'è, senza guard
-                  if (pid) {
-                    try {
-                      const tf0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      try {
-                        const flows = (window as any).__flows || {};
-                        const main = flows?.main || { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] };
-                      } catch { }
-                      const svc = await import('../services/FlowPersistService');
-                      await svc.flushFlowPersist();
-                      // Final PUT immediate (explicit Save)
-                      const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
-                        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] })
-                      });
-                      const tf1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                      if (!putRes.ok) {
-                        try { console.warn('[Flow][save][error]', { pid, flowId: 'main', ms: Math.round(tf1 - tf0), status: putRes.status, statusText: putRes.statusText, body: await putRes.text() }); } catch { }
-                      } else {
+                      } catch (e) {
+                        const tEnd = performance.now();
+                        console.error('[Save][2-translations] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
                       }
-                      // Reload automatico e overlay rimossi per test semplificato
-                    } catch { }
-                  }
+                    })(),
+
+                    // 3. Save tasks
+                    (async () => {
+                      if (!pid) return;
+                      const tStart = performance.now();
+                      try {
+                        console.log('[Save][3-tasks] 🚀 START');
+                        const { taskRepository } = await import('../services/TaskRepository');
+                        const tasksCount = taskRepository.getInternalTasksCount();
+                        console.log('[Save][3-tasks] 📊 Tasks to save', { count: tasksCount });
+                        const saved = await taskRepository.saveAllTasksToDatabase(pid);
+                        const tEnd = performance.now();
+                        if (saved) {
+                          console.log('[Save][3-tasks] ✅ DONE', { ms: Math.round(tEnd - tStart), tasksCount });
+                        } else {
+                          console.warn('[Save][3-tasks] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), tasksCount });
+                        }
+                      } catch (e) {
+                        const tEnd = performance.now();
+                        console.error('[Save][3-tasks] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                      }
+                    })(),
+
+                    // 4. Save variable mappings
+                    (async () => {
+                      if (!pid) return;
+                      const tStart = performance.now();
+                      try {
+                        console.log('[Save][4-mappings] 🚀 START');
+                        const { flowchartVariablesService } = await import('../services/FlowchartVariablesService');
+                        const stats = flowchartVariablesService.getStats();
+                        console.log('[Save][4-mappings] 📊 Mappings to save', stats);
+                        const mappingsSaved = await flowchartVariablesService.saveToDatabase(pid);
+                        const tEnd = performance.now();
+                        if (mappingsSaved) {
+                          console.log('[Save][4-mappings] ✅ DONE', { ms: Math.round(tEnd - tStart), stats });
+                        } else {
+                          console.warn('[Save][4-mappings] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), stats });
+                        }
+                      } catch (e) {
+                        const tEnd = performance.now();
+                        console.error('[Save][4-mappings] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                      }
+                    })(),
+
+                    // 5. Save acts and conditions
+                    (async () => {
+                      if (!pid || !projectData) return;
+                      const tStart = performance.now();
+                      try {
+                        console.log('[Save][5-acts-conditions] 🚀 START');
+                        const actsCount = projectData?.agentActs?.flatMap((cat: any) => cat.items || []).length || 0;
+                        const conditionsCount = projectData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0;
+                        console.log('[Save][5-acts-conditions] 📊 Items to save', { actsCount, conditionsCount });
+
+                        const tActs = performance.now();
+                        await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
+                        const tActsEnd = performance.now();
+                        console.log('[Save][5-acts] ✅ DONE', { ms: Math.round(tActsEnd - tActs), actsCount });
+
+                        const tCond = performance.now();
+                        await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
+                        const tCondEnd = performance.now();
+                        console.log('[Save][5-conditions] ✅ DONE', { ms: Math.round(tCondEnd - tCond), conditionsCount });
+
+                        // Reload fresh project data so act.problem is populated from DB
+                        const tReload = performance.now();
+                        let tReloadEnd = tReload;
+                        try {
+                          const fresh = await (ProjectDataService as any).loadProjectData?.();
+                          tReloadEnd = performance.now();
+                          console.log('[Save][5-reload] ✅ DONE', { ms: Math.round(tReloadEnd - tReload) });
+                          if (fresh) {
+                            try { pdUpdate.setData && (pdUpdate as any).setData(fresh); } catch { }
+                          }
+                        } catch (e) {
+                          tReloadEnd = performance.now();
+                          console.error('[Save][5-reload] ❌ ERROR', { ms: Math.round(tReloadEnd - tReload), error: e });
+                        }
+
+                        const tEnd = performance.now();
+                        console.log('[Save][5-acts-conditions] ✅ DONE', {
+                          totalMs: Math.round(tEnd - tStart),
+                          actsMs: Math.round(tActsEnd - tActs),
+                          conditionsMs: Math.round(tCondEnd - tCond),
+                          reloadMs: Math.round(tReloadEnd - tReload)
+                        });
+                      } catch (e) {
+                        const tEnd = performance.now();
+                        console.error('[Save][5-acts-conditions] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                      }
+                    })(),
+
+                    // 6. Save flow
+                    (async () => {
+                      if (!pid) return;
+                      const tStart = performance.now();
+                      try {
+                        console.log('[Save][6-flow] 🚀 START');
+                        const svc = await import('../services/FlowPersistService');
+                        const tFlush = performance.now();
+                        await svc.flushFlowPersist();
+                        const tFlushEnd = performance.now();
+                        console.log('[Save][6-flow][flush] ✅ DONE', { ms: Math.round(tFlushEnd - tFlush) });
+
+                        // Final PUT immediate (explicit Save)
+                        const tPut = performance.now();
+                        const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] })
+                        });
+                        const tPutEnd = performance.now();
+                        if (!putRes.ok) {
+                          console.error('[Save][6-flow][put] ❌ ERROR', { ms: Math.round(tPutEnd - tPut), status: putRes.status, statusText: putRes.statusText });
+                        } else {
+                          console.log('[Save][6-flow][put] ✅ DONE', { ms: Math.round(tPutEnd - tPut) });
+                        }
+
+                        const tEnd = performance.now();
+                        console.log('[Save][6-flow] ✅ DONE', {
+                          totalMs: Math.round(tEnd - tStart),
+                          flushMs: Math.round(tFlushEnd - tFlush),
+                          putMs: Math.round(tPutEnd - tPut)
+                        });
+                      } catch (e) {
+                        const tEnd = performance.now();
+                        console.error('[Save][6-flow] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                      }
+                    })()
+                  ]);
+
+                  const saveEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                  const totalMs = Math.round(saveEnd - saveStart);
+
+                  console.log('[Save] ═══════════════════════════════════════════════════════');
+                  console.log('[Save] ✅ ALL OPERATIONS COMPLETED', {
+                    totalMs,
+                    timestamp: new Date().toISOString(),
+                    results: saveResults.map((r, i) => ({
+                      operation: ['catalog', 'translations', 'tasks', 'mappings', 'acts-conditions', 'flow'][i],
+                      status: r.status,
+                      error: r.status === 'rejected' ? String(r.reason) : undefined
+                    }))
+                  });
+                  console.log('[Save] ═══════════════════════════════════════════════════════');
                   const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                   // Removed noisy meta POST; language is already stored during bootstrap
                 } catch (e) {

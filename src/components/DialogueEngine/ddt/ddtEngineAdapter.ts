@@ -138,6 +138,30 @@ function convertNewResultToOld(
   newResult: RetrieveResult,
   oldState: DDTState
 ): RetrieveResult {
-  // Il risultato è già compatibile, ma possiamo aggiungere conversioni se necessario
+  // Il nuovo engine ritorna state.memory con struttura { value: any, confirmed: boolean }
+  // Il vecchio engine ritornava direttamente i valori
+  // Converti la memoria in formato compatibile
+  if (newResult.success && newResult.value && typeof newResult.value === 'object') {
+    const convertedValue: Record<string, any> = {};
+
+    // Estrai i valori dalla memoria (solo quelli confirmed)
+    Object.entries(newResult.value).forEach(([key, mem]: [string, any]) => {
+      if (mem && typeof mem === 'object' && 'value' in mem) {
+        // Se confirmed è true o non specificato, estrai il valore
+        if (mem.confirmed !== false) {
+          convertedValue[key] = mem.value;
+        }
+      } else {
+        // Fallback: se non è un oggetto {value, confirmed}, usa direttamente
+        convertedValue[key] = mem;
+      }
+    });
+
+    return {
+      ...newResult,
+      value: convertedValue
+    };
+  }
+
   return newResult;
 }
