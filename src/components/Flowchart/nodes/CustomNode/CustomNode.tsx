@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { NodeProps, useReactFlow } from 'reactflow';
+import { NodeProps, useReactFlow, NodeToolbar, Position } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
 import { NodeDragHeader } from '../shared/NodeDragHeader';
 import { NodeHandles } from '../../NodeHandles';
@@ -348,9 +347,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Ref per il wrapper esterno (per calcolare posizione toolbar)
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Calcola posizione toolbar sopra il nodo
-  const [toolbarPos, setToolbarPos] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
-
   // ✅ LISTENER GLOBALE: Nascondi toolbar quando il mouse è sul canvas (con debouncing)
   useEffect(() => {
     let rafId: number | null = null;
@@ -368,8 +364,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
         // ✅ Verifica se il mouse è sopra il Response Editor o altri pannelli docked
         const isOverResponseEditor = el?.closest?.('[data-response-editor]') ||
-                                     el?.closest?.('.response-editor-container') ||
-                                     el?.closest?.('[data-dockable-panel]');
+          el?.closest?.('.response-editor-container') ||
+          el?.closest?.('[data-dockable-panel]');
         if (isOverResponseEditor) {
           // Se il mouse è sopra il Response Editor, nascondi immediatamente la toolbar
           if (!selected) {
@@ -399,117 +395,69 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     };
   }, [selected, setIsHoveredNode]);
 
-  useEffect(() => {
-    const shouldShow = (isHoveredNode || selected) && !isEditingNode;
-
-    if (!shouldShow || !nodeContainerRef.current) {
-      setToolbarPos(null);
-      return;
-    }
-
-    const updatePosition = () => {
-      if (!nodeContainerRef.current) return;
-
-      const nodeRect = nodeContainerRef.current.getBoundingClientRect();
-      const toolbarHeight = toolbarElementRef.current?.offsetHeight || 32;
-
-      // Il bottom della toolbar deve essere esattamente al top del nodo
-      // Quindi: toolbarTop = nodeTop - toolbarHeight
-      setToolbarPos({
-        left: nodeRect.left,
-        top: nodeRect.top - toolbarHeight,
-        width: nodeRect.width,
-        height: toolbarHeight
-      });
-    };
-
-    // Prima renderizza con altezza stimata, poi aggiorna con altezza reale
-    setToolbarPos({
-      left: 0,
-      top: 0,
-      width: 0,
-      height: 32
-    });
-
-    requestAnimationFrame(() => {
-      updatePosition();
-      // Aggiorna di nuovo dopo che la toolbar è renderizzata per avere l'altezza corretta
-      requestAnimationFrame(updatePosition);
-    });
-
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [isHoveredNode, selected, isEditingNode]);
-
   return (
     <>
-      {/* Toolbar sopra il nodo - Renderizzata in portal su document.body */}
-      {toolbarPos && (isHoveredNode || selected) && !isEditingNode && createPortal(
+      {/* Toolbar sopra il nodo - Usa NodeToolbar nativo di React Flow */}
+      <NodeToolbar
+        isVisible={(isHoveredNode || selected) && !isEditingNode}
+        position={Position.Top}
+        offset={0}
+        align="start"
+        style={{
+          width: nodeContainerRef.current
+            ? `${nodeContainerRef.current.offsetWidth}px`
+            : '100%',
+          zIndex: 1000,
+          pointerEvents: 'auto',
+          minHeight: '32px'
+        }}
+        className="node-toolbar-custom"
+        onMouseEnter={() => {
+          setIsHoveredNode(true);
+        }}
+        onMouseLeave={(e) => {
+          // ✅ Mantieni la stessa logica custom per hover
+          const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+
+          // ✅ Verifica se il mouse è sopra il Response Editor
+          const isOverResponseEditor = el?.closest?.('[data-response-editor]');
+          if (isOverResponseEditor) {
+            setIsHoveredNode(false);
+            return;
+          }
+
+          // Verifica se il mouse è ancora sul nodo o sulla toolbar
+          const isOverNode = el && (nodeContainerRef.current?.contains(el) || wrapperRef.current?.contains(el));
+          const isOverToolbar = el && toolbarElementRef.current?.contains(el);
+          const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
+
+          if (selected) {
+            return;
+          }
+
+          if (isOverNode || isOverToolbar) {
+            return;
+          }
+
+          if (isOverCanvas) {
+            setIsHoveredNode(false);
+            return;
+          }
+
+          const relatedTarget = e.relatedTarget as HTMLElement;
+          const isGoingToNode = relatedTarget && (nodeContainerRef.current?.contains(relatedTarget) || wrapperRef.current?.contains(relatedTarget));
+
+          if (isGoingToNode) {
+            return;
+          }
+
+          setIsHoveredNode(false);
+        }}
+      >
         <div
           ref={toolbarElementRef}
           data-toolbar-debug
-          style={{
-            position: 'fixed',
-            left: toolbarPos.left,
-            top: toolbarPos.top,
-            width: toolbarPos.width,
-            zIndex: 1000,
-            pointerEvents: 'auto',
-            // Assicura che tutta l'area (anche trasparente) sia hoverable
-            minHeight: toolbarPos.height || '32px'
-          }}
-          onMouseEnter={() => {
-            setIsHoveredNode(true);
-          }}
-          onMouseLeave={(e) => {
-            // ✅ Usa elementFromPoint invece di relatedTarget (più affidabile con createPortal)
-            const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-
-            // ✅ Verifica se il mouse è sopra il Response Editor - nascondi immediatamente
-            const isOverResponseEditor = el?.closest?.('[data-response-editor]');
-            if (isOverResponseEditor) {
-              setIsHoveredNode(false);
-              return;
-            }
-
-            // Verifica se il mouse è ancora sul nodo o sulla toolbar
-            const isOverNode = el && (nodeContainerRef.current?.contains(el) || wrapperRef.current?.contains(el));
-            const isOverToolbar = el && toolbarElementRef.current?.contains(el);
-            // Verifica se il mouse è sul canvas
-            const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
-
-            // Se il nodo è selected, mantieni sempre visibile
-            if (selected) {
-              return;
-            }
-
-            // Se il mouse è ancora sul nodo o sulla toolbar, mantieni visibile
-            if (isOverNode || isOverToolbar) {
-              return;
-            }
-
-            // Se il mouse è sul canvas, nascondi immediatamente
-            if (isOverCanvas) {
-              setIsHoveredNode(false);
-              return;
-            }
-
-            // Fallback: usa relatedTarget se elementFromPoint non funziona
-            const relatedTarget = e.relatedTarget as HTMLElement;
-            const isGoingToNode = relatedTarget && (nodeContainerRef.current?.contains(relatedTarget) || wrapperRef.current?.contains(relatedTarget));
-
-            if (isGoingToNode) {
-              return;
-            }
-
-            // Altrimenti nascondi
-            setIsHoveredNode(false);
-          }}
+          style={{ width: '100%' }}
         >
           <NodeDragHeader
             onEditTitle={() => setIsEditingNode(true)}
@@ -526,7 +474,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               // ✅ Verifica che NON ci sia una riga in drag (PROTEZIONE CRITICA)
               const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
               if (isDraggingRow) {
-                // Se c'è una riga in drag, NON permettere il drag del nodo
                 return;
               }
 
@@ -558,7 +505,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               setIsToolbarDrag(true);
               document.body.style.cursor = 'move';
 
-              // ✅ Handler per mouse move - aggiorna posizione del nodo E della toolbar
+              // ✅ Handler per mouse move - aggiorna posizione del nodo
               const handleMouseMove = (e: MouseEvent) => {
                 // ✅ VERIFICA CRITICA: se inizia un drag di riga, annulla il drag del nodo
                 const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
@@ -587,15 +534,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                   n.id === id ? { ...n, position: newPosition } : n
                 ));
 
-                // ✅ Aggiorna anche la posizione della toolbar in tempo reale durante il drag
-                if (toolbarElementRef.current && nodeContainerRef.current) {
-                  const nodeRect = nodeContainerRef.current.getBoundingClientRect();
-                  const toolbarHeight = toolbarElementRef.current.offsetHeight || 32;
-
-                  toolbarElementRef.current.style.left = `${nodeRect.left}px`;
-                  toolbarElementRef.current.style.top = `${nodeRect.top - toolbarHeight}px`;
-                  toolbarElementRef.current.style.width = `${nodeRect.width}px`;
-                }
+                // ✅ NodeToolbar si aggiorna automaticamente durante il drag
               };
 
               // ✅ Handler per mouse up - termina il drag
@@ -622,9 +561,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               document.addEventListener('mouseup', handleMouseUp, { capture: true });
             }}
           />
-        </div>,
-        document.body
-      )}
+        </div>
+      </NodeToolbar>
       <div
         ref={wrapperRef}
         style={{ position: 'relative', display: 'inline-block' }}
@@ -676,144 +614,144 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           setIsHoveredNode(false);
         }}
       >
-      <div
-        ref={(el) => {
-          // ✅ Assign to ALL three refs in a single callback
-          (rootRef as any).current = el;
-          (nodeRegistryRef as any).current = el;
-          (nodeContainerRef as any).current = el;
-        }}
-        data-id={id}
-        className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
-        style={{
-          ...nodeStyles,
-          // ✅ Solo bordo, NO background
-          border: executionHighlight.nodeBorder !== 'transparent'
-            ? `${executionHighlight.nodeBorderWidth}px solid ${executionHighlight.nodeBorder}`
-            : (selected ? '2px solid black' : '1px solid black'),
-          backgroundColor: 'white' // ✅ Sempre bianco, non toccare
-        }}
-        tabIndex={-1}
-        draggable={false}
-        onMouseEnter={() => {
-          setIsHoveredNode(true);
-        }}
-        onMouseLeave={(e) => {
-          // ✅ Usa elementFromPoint invece di relatedTarget (più affidabile)
-          const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+        <div
+          ref={(el) => {
+            // ✅ Assign to ALL three refs in a single callback
+            (rootRef as any).current = el;
+            (nodeRegistryRef as any).current = el;
+            (nodeContainerRef as any).current = el;
+          }}
+          data-id={id}
+          className={`bg-white border-black rounded-lg shadow-xl min-h-[40px] relative ${selected ? 'border-2' : 'border'}`}
+          style={{
+            ...nodeStyles,
+            // ✅ Solo bordo, NO background
+            border: executionHighlight.nodeBorder !== 'transparent'
+              ? `${executionHighlight.nodeBorderWidth}px solid ${executionHighlight.nodeBorder}`
+              : (selected ? '2px solid black' : '1px solid black'),
+            backgroundColor: 'white' // ✅ Sempre bianco, non toccare
+          }}
+          tabIndex={-1}
+          draggable={false}
+          onMouseEnter={() => {
+            setIsHoveredNode(true);
+          }}
+          onMouseLeave={(e) => {
+            // ✅ Usa elementFromPoint invece di relatedTarget (più affidabile)
+            const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
 
-          // Verifica dove è effettivamente il mouse
-          const isOverToolbar = el && toolbarElementRef.current?.contains(el);
-          const isOverNode = el && (wrapperRef.current?.contains(el) || nodeContainerRef.current?.contains(el));
-          const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
+            // Verifica dove è effettivamente il mouse
+            const isOverToolbar = el && toolbarElementRef.current?.contains(el);
+            const isOverNode = el && (wrapperRef.current?.contains(el) || nodeContainerRef.current?.contains(el));
+            const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
 
-          // Se il nodo è selected, mantieni sempre visibile
-          if (selected) {
-            return;
-          }
+            // Se il nodo è selected, mantieni sempre visibile
+            if (selected) {
+              return;
+            }
 
-          // Se il mouse è ancora sulla toolbar o sul nodo, mantieni visibile
-          if (isOverToolbar || isOverNode) {
-            return;
-          }
+            // Se il mouse è ancora sulla toolbar o sul nodo, mantieni visibile
+            if (isOverToolbar || isOverNode) {
+              return;
+            }
 
-          // Se il mouse è sul canvas, nascondi immediatamente
-          if (isOverCanvas) {
+            // Se il mouse è sul canvas, nascondi immediatamente
+            if (isOverCanvas) {
+              setIsHoveredNode(false);
+              return;
+            }
+
+            // Fallback: usa relatedTarget se elementFromPoint non funziona
+            const relatedTarget = e.relatedTarget as HTMLElement;
+            const isGoingToToolbar = relatedTarget && toolbarElementRef.current?.contains(relatedTarget);
+            const isStillInWrapper = relatedTarget && (wrapperRef.current?.contains(relatedTarget) || nodeContainerRef.current?.contains(relatedTarget));
+
+            if (isGoingToToolbar || isStillInWrapper) {
+              return;
+            }
+
+            // Altrimenti nascondi
             setIsHoveredNode(false);
-            return;
-          }
+          }}
+          onMouseDownCapture={(e) => {
+            const t = e.target as HTMLElement;
+            const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
 
-          // Fallback: usa relatedTarget se elementFromPoint non funziona
-          const relatedTarget = e.relatedTarget as HTMLElement;
-          const isGoingToToolbar = relatedTarget && toolbarElementRef.current?.contains(relatedTarget);
-          const isStillInWrapper = relatedTarget && (wrapperRef.current?.contains(relatedTarget) || nodeContainerRef.current?.contains(relatedTarget));
+            // ✅ Solo blocca input, lascia passare tutto il resto (incluso nodrag) alla label
+            if (isInput) {
+              e.stopPropagation();
+            }
+            // ✅ NON bloccare nodrag - l'evento deve arrivare alla label che gestirà stopPropagation
+          }}
+          onMouseUpCapture={(e) => {
+            if (!editingRowId) return;
+            const t = e.target as HTMLElement;
+            const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
+            if (isInput) e.stopPropagation();
+          }}
+          onFocusCapture={() => { }}
+        >
 
-          if (isGoingToToolbar || isStillInWrapper) {
-            return;
-          }
+          {/* Header permanente: DENTRO il nodo come fascia colorata in alto */}
+          {showPermanentHeader && (
+            <div
+              onMouseEnter={() => setIsHoverHeader(true)}
+              onMouseLeave={() => setIsHoverHeader(false)}
+            >
+              <NodeHeader
+                title={nodeTitle}
+                onDelete={handleDeleteNode}
+                onToggleEdit={handleEndTitleEditing}
+                onTitleUpdate={handleTitleUpdate}
+                isEditing={isEditingNode}
+                startEditingTitle={isEditingNode}
+                hasUnchecked={nodeRows.some(r => r.included === false)}
+                hideUnchecked={(data as any)?.hideUncheckedRows === true}
+                onToggleHideUnchecked={() => {
+                  if (typeof data.onUpdate === 'function') {
+                    data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+                  }
+                }}
+              />
+            </div>
+          )}
 
-          // Altrimenti nascondi
-          setIsHoveredNode(false);
-        }}
-        onMouseDownCapture={(e) => {
-          const t = e.target as HTMLElement;
-          const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-
-          // ✅ Solo blocca input, lascia passare tutto il resto (incluso nodrag) alla label
-          if (isInput) {
-            e.stopPropagation();
-          }
-          // ✅ NON bloccare nodrag - l'evento deve arrivare alla label che gestirà stopPropagation
-        }}
-        onMouseUpCapture={(e) => {
-          if (!editingRowId) return;
-          const t = e.target as HTMLElement;
-          const isInput = t?.classList?.contains('node-row-input') || !!t?.closest?.('.node-row-input');
-          if (isInput) e.stopPropagation();
-        }}
-        onFocusCapture={() => { }}
-      >
-
-        {/* Header permanente: DENTRO il nodo come fascia colorata in alto */}
-        {showPermanentHeader && (
-          <div
-            onMouseEnter={() => setIsHoverHeader(true)}
-            onMouseLeave={() => setIsHoverHeader(false)}
-          >
-            <NodeHeader
-              title={nodeTitle}
-              onDelete={handleDeleteNode}
-              onToggleEdit={handleEndTitleEditing}
-              onTitleUpdate={handleTitleUpdate}
-              isEditing={isEditingNode}
-              startEditingTitle={isEditingNode}
-              hasUnchecked={nodeRows.some(r => r.included === false)}
-              hideUnchecked={(data as any)?.hideUncheckedRows === true}
-              onToggleHideUnchecked={() => {
-                if (typeof data.onUpdate === 'function') {
-                  data.onUpdate({ hideUncheckedRows: !(data as any)?.hideUncheckedRows });
+          {/* Header drag: RIMOSSO - ora gestito dalla toolbar sopra il nodo */}
+          <div className="px-1.5" ref={rowsContainerRef}>
+            <NodeRowList
+              {...nodeRowListProps}
+              hoveredInserter={hoveredInserter}
+              setHoveredInserter={setHoveredInserter}
+              nodeTitle={nodeTitle}
+              hideUnchecked={!showUnchecked}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  return;
+                } else if (e.key === 'Escape') {
+                  const singleEmpty = nodeRows.length === 1 && nodeRows[0].text.trim() === '';
+                  singleEmpty ? data.onDelete?.() : exitEditing();
                 }
               }}
+              canDelete={() => nodeRows.length > 1}
+              totalRows={nodeRows.length}
+              onCreateAgentAct={data.onCreateAgentAct}
+              onCreateBackendCall={data.onCreateBackendCall}
+              onCreateTask={data.onCreateTask}
+              getProjectId={() => {
+                try { return (window as any).__omniaRuntime?.getCurrentProjectId?.() || null; } catch { return null; }
+              }}
+              hoveredRowIndex={null}
+              draggedRowId={draggedRowId}
+              draggedRowOriginalIndex={null}
+              draggedItem={null}
+              draggedRowStyle={{}}
+              onEditingEnd={exitEditing}
             />
           </div>
-        )}
-
-        {/* Header drag: RIMOSSO - ora gestito dalla toolbar sopra il nodo */}
-        <div className="px-1.5" ref={rowsContainerRef}>
-          <NodeRowList
-            {...nodeRowListProps}
-            hoveredInserter={hoveredInserter}
-            setHoveredInserter={setHoveredInserter}
-            nodeTitle={nodeTitle}
-            hideUnchecked={!showUnchecked}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                return;
-              } else if (e.key === 'Escape') {
-                const singleEmpty = nodeRows.length === 1 && nodeRows[0].text.trim() === '';
-                singleEmpty ? data.onDelete?.() : exitEditing();
-              }
-            }}
-            canDelete={() => nodeRows.length > 1}
-            totalRows={nodeRows.length}
-            onCreateAgentAct={data.onCreateAgentAct}
-            onCreateBackendCall={data.onCreateBackendCall}
-            onCreateTask={data.onCreateTask}
-            getProjectId={() => {
-              try { return (window as any).__omniaRuntime?.getCurrentProjectId?.() || null; } catch { return null; }
-            }}
-            hoveredRowIndex={null}
-            draggedRowId={draggedRowId}
-            draggedRowOriginalIndex={null}
-            draggedItem={null}
-            draggedRowStyle={{}}
-            onEditingEnd={exitEditing}
-          />
+          <NodeHandles isConnectable={isConnectable} />
+          {showIntellisense && <IntellisenseMenu {...intellisenseProps} />}
         </div>
-        <NodeHandles isConnectable={isConnectable} />
-        {showIntellisense && <IntellisenseMenu {...intellisenseProps} />}
-      </div>
       </div>
     </>
   );
