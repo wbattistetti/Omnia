@@ -27,11 +27,6 @@ function reducer(s: IntellisenseState, a: IntellisenseAction): IntellisenseState
         case "CLOSE":
             return { ...s, isOpen: false, target: null, query: "", catalog: [], highlighted: 0 };
         case "SET_QUERY":
-            console.log("🎯 [IntellisenseContext] SET_QUERY:", {
-                oldQuery: s.query,
-                newQuery: a.query,
-                timestamp: Date.now()
-            });
             return { ...s, query: a.query, highlighted: 0 };
         case "MOVE_HIGHLIGHT": {
             const n = s.catalog.length || 1;
@@ -65,18 +60,7 @@ export const IntellisenseProvider: React.FC<{ providers: GraphProviders; childre
 
     // Actions → tieni il reducer puro, chiama il service FUORI dal reducer
     const openForEdge = useCallback((edgeId: string, mouseX?: number, mouseY?: number) => {
-        console.log("🎯 [IntellisenseContext] openForEdge called with:", {
-            edgeId,
-            mouseX,
-            mouseY
-        });
-
         const items = service.getEdgeItems(edgeId);
-        console.log("🎯 [IntellisenseContext] Items from service:", {
-            totalItems: items.length,
-            items: items.map(i => ({ id: i.id, label: i.label, kind: i.kind })),
-            timestamp: Date.now()
-        });
 
         dispatch({
             type: "OPEN_WITH_ITEMS",

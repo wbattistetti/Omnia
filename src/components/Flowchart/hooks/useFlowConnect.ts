@@ -23,7 +23,6 @@ export function useFlowConnect(
     const { source, target, sourceHandle, targetHandle } = connection;
 
     if (!source || !target) {
-      console.warn('[FlowConnect] Invalid connection: missing source or target');
       return;
     }
 
@@ -46,25 +45,6 @@ export function useFlowConnect(
   // Gestisce l'inizio di una connessione
   const onConnectStart = useCallback((event: any, params: any) => {
     const { nodeId, handleId, handleType } = params;
-    const target = event.target as Element;
-
-    console.log('🔗🔗🔗 [ON_CONNECT_START] Dettagli completi:', {
-      nodeId,
-      handleId,
-      handleType,
-      eventType: event.type,
-      eventButton: (event as any).button,
-      eventClientX: (event as any).clientX,
-      eventClientY: (event as any).clientY,
-      eventTarget: target?.className,
-      eventTargetTag: target?.tagName,
-      eventTargetId: target?.id,
-      hasHandleClass: target?.classList.contains('react-flow__handle'),
-      timestamp: Date.now(),
-      previousSourceNodeId: connectionMenuRef.current.sourceNodeId,
-      previousSourceHandleId: connectionMenuRef.current.sourceHandleId,
-      stackTrace: new Error().stack?.split('\n').slice(0, 5).join('\n')
-    });
 
     connectionMenuRef.current.sourceNodeId = nodeId;
     connectionMenuRef.current.sourceHandleId = handleId;
@@ -72,15 +52,6 @@ export function useFlowConnect(
 
     // ✅ Flag globale per bloccare drag HTML5 quando si traccia una connessione
     (window as any).__isConnecting = true;
-    console.log('🚫 [ON_CONNECT_START] Flag __isConnecting = true - blocca drag HTML5');
-
-    console.log('[FlowConnect] Connect started - valori salvati:', {
-      nodeId,
-      handleId,
-      handleType,
-      savedToRef: true,
-      timestamp: Date.now()
-    });
   }, [connectionMenuRef]);
 
   // Gestisce connessioni non condizionate (crea nuovo nodo)

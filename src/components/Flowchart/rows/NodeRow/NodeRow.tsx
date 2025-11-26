@@ -526,15 +526,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       }
       // Heuristica multilingua: IT/EN/PT con fallback a UNDEFINED
       try {
-        console.log('🔮 [INFERENCE] Starting inference for text:', q);
         const inf = await inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
-        console.log('🔮 [INFERENCE] Result:', inf);
         const internal = heuristicToInternal(inf.type as any);
-        console.log('🔮 [INFERENCE] Internal type:', internal, 'original type:', inf.type);
 
         // Se il tipo è UNDEFINED, passa un flag speciale
         if (inf.type === 'UNDEFINED') {
-          console.log('🔮 [INFERENCE] UNDEFINED detected, creating node with question mark icon');
           // Crea un task Message ma con flag isUndefined per mostrare icona punto interrogativo
           const projectId = getProjectId?.() || undefined;
           if (!row.taskId) {
@@ -549,7 +545,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             mode: 'Message' as any,
             isUndefined: true // Flag per icona punto interrogativo
           };
-          console.log('🔮 [INFERENCE] Updating row with UNDEFINED flag', { updatedRow, text: q });
           // onUpdate richiede (row, newText) - passa entrambi i parametri
           onUpdate(updatedRow as any, q);
           setIsEditing(false);
@@ -560,7 +555,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         await handlePickType(internal);
         return;
       } catch (err) {
-        console.error('🔮 [INFERENCE] ERROR:', err);
         try { console.warn('[Heuristics] failed, fallback to picker', err); } catch { }
         setIntellisenseQuery(q);
         setShowIntellisense(false);
@@ -1316,14 +1310,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Check if this is an undefined node (no heuristic match found)
   const isUndefined = (row as any)?.isUndefined === true;
-  if (isUndefined) {
-    console.log('🔮 [UNDEFINED] Row is undefined', {
-      rowId: row.id,
-      rowText: row.text,
-      rowType: (row as any).type,
-      isUndefined: (row as any)?.isUndefined
-    });
-  }
 
   if (isAgentAct) {
     const typeResolved = resolveActType(row as any, actFound) as any;
@@ -1350,15 +1336,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       iconColor = '#94a3b8';
       // Lascia currentTypeForPicker undefined così il picker non mostra nessuna voce selezionata
       // Il picker funzionerà comunque per permettere cambio tipo
-      console.log('🔮 [UNDEFINED] Setting up undefined node', {
-        hasIcon: !!Icon,
-        iconColor,
-        labelTextColor,
-        currentTypeForPicker: undefined, // Nessun tipo selezionato
-        rowId: row.id,
-        rowText: row.text,
-        isUndefined: (row as any)?.isUndefined
-      });
     } else {
       Icon = null;
     }

@@ -11,7 +11,22 @@ export function useEdgeLabelScheduler(setEdges: any, setSelectedEdgeId: any, con
       if (!cur) return;
       const exists = (setEdges.current || []).some((e: Edge) => e.id === cur.id);
       if (exists) {
-        setEdges((eds: Edge[]) => eds.map(e => e.id === cur.id ? { ...e, label: cur.label, data: cur.data ? { ...(e.data || {}), ...cur.data } : e.data } : e));
+        setEdges((eds: Edge[]) => eds.map(e => {
+          if (e.id === cur.id) {
+            const mergedData = cur.data ? { ...(e.data || {}), ...cur.data } : e.data;
+            // ✅ Log when isElse is being set via scheduleApplyLabel
+            if (cur.data?.isElse === true && e.data?.isElse !== true) {
+              console.log('[useEdgeLabelScheduler] ✅ Setting isElse to true', {
+                edgeId: e.id,
+                edgeLabel: e.label,
+                oldIsElse: e.data?.isElse,
+                newIsElse: true
+              });
+            }
+            return { ...e, label: cur.label, data: mergedData };
+          }
+          return e;
+        }));
         setSelectedEdgeId(cur.id);
         pendingApplyRef.current = null;
         return;
@@ -21,7 +36,22 @@ export function useEdgeLabelScheduler(setEdges: any, setSelectedEdgeId: any, con
         const src = connectionMenuRef.current?.sourceNodeId;
         const tgt = connectionMenuRef.current?.targetNodeId;
         if (src && tgt) {
-          setEdges((eds: Edge[]) => eds.map(e => (e.source === src && e.target === tgt) ? { ...e, label: cur.label, data: cur.data ? { ...(e.data || {}), ...cur.data } : e.data } : e));
+          setEdges((eds: Edge[]) => eds.map(e => {
+            if (e.source === src && e.target === tgt) {
+              const mergedData = cur.data ? { ...(e.data || {}), ...cur.data } : e.data;
+              // ✅ Log when isElse is being set via scheduleApplyLabel (fallback)
+              if (cur.data?.isElse === true && e.data?.isElse !== true) {
+                console.log('[useEdgeLabelScheduler][fallback] ✅ Setting isElse to true', {
+                  edgeId: e.id,
+                  edgeLabel: e.label,
+                  oldIsElse: e.data?.isElse,
+                  newIsElse: true
+                });
+              }
+              return { ...e, label: cur.label, data: mergedData };
+            }
+            return e;
+          }));
         }
         pendingApplyRef.current = null;
         return;

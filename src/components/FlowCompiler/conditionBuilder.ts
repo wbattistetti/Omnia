@@ -29,8 +29,18 @@ export function buildFirstRowCondition(
 
   // First pass: separate Else edges from normal edges
   for (const edge of incomingEdges) {
-    if (edge.data?.isElse === true) {
+    // ✅ FIX: Also check if label is 'Else' even if isElse flag is missing
+    if (edge.data?.isElse === true || edge.label === 'Else') {
       elseEdges.push(edge);
+      // ✅ DEBUG: Log when Else edge is found (to verify isElse preservation)
+      if (edge.data?.isElse === true) {
+        console.log('[ConditionBuilder] ✅ Found Else edge with isElse flag', {
+          nodeId,
+          edgeId: edge.id,
+          edgeLabel: edge.label,
+          isElse: edge.data.isElse
+        });
+      }
     }
   }
 
@@ -65,13 +75,6 @@ export function buildFirstRowCondition(
     // Check both edge.data.condition and edge.data.conditionId for compatibility
     const conditionId = edge.data?.conditionId || edge.data?.condition;
     if (conditionId) {
-      console.log('[ConditionBuilder] 🔍 Found condition on edge', {
-        edgeId: edge.id,
-        edgeLabel: edge.label,
-        conditionId,
-        hasConditionId: !!edge.data?.conditionId,
-        hasCondition: !!edge.data?.condition
-      });
       linkConditionParts.push({
         type: 'EdgeCondition',
         edgeId: edge.id,
@@ -103,44 +106,32 @@ export function buildFirstRowCondition(
     const lastRow = rows[rows.length - 1];
     const lastTaskId = lastRow.taskId || lastRow.id;
 
-    // Find all other edges from the same source (excluding this Else edge)
-    const otherEdgesFromSource = incomingEdges.filter(e =>
+    // ✅ FIX: Find all edges FROM the same source node (not just incoming to target)
+    // This includes edges going to ANY target, not just this one
+    // "Gemelle" = link che condividono lo stesso nodo sorgente
+    const otherEdgesFromSource = edges.filter(e =>
       e.source === elseEdge.source &&
       e.id !== elseEdge.id &&
       e.data?.isElse !== true
     );
 
-    // Build conditions for all other edges from the same source
-    const otherConditions: Condition[] = [];
+    // ✅ FIX: Extract only edge conditions (without Parent.Executed) for the NOT
+    // The Else condition should be: (Parent.Executed ∧ NOT(OR of all other edge conditions))
+    // NOT of (Parent.Executed AND C) is wrong - we need NOT(C) only
+    const otherEdgeConditions: Condition[] = [];
     for (const otherEdge of otherEdgesFromSource) {
-      const otherConditionParts: Condition[] = [
-        {
-          type: 'TaskState',
-          taskId: lastTaskId,
-          state: 'Executed'
-        }
-      ];
-
       const otherConditionId = otherEdge.data?.conditionId || otherEdge.data?.condition;
       if (otherConditionId) {
-        otherConditionParts.push({
+        // Extract only the edge condition, without Parent.Executed
+        otherEdgeConditions.push({
           type: 'EdgeCondition',
           edgeId: otherEdge.id,
           condition: otherConditionId
         });
       }
-
-      const otherCondition: Condition = otherConditionParts.length === 1
-        ? otherConditionParts[0]
-        : {
-            type: 'And',
-            conditions: otherConditionParts
-          };
-
-      otherConditions.push(otherCondition);
     }
 
-    // Build Else condition: (Parent.Executed ∧ NOT(OR of all other conditions))
+    // Build Else condition: (Parent.Executed ∧ NOT(OR of all other edge conditions))
     const elseConditionParts: Condition[] = [
       {
         type: 'TaskState',
@@ -149,18 +140,18 @@ export function buildFirstRowCondition(
       }
     ];
 
-    if (otherConditions.length > 0) {
-      // Create NOT(OR of all other conditions)
-      const orOfOthers: Condition = otherConditions.length === 1
-        ? otherConditions[0]
+    if (otherEdgeConditions.length > 0) {
+      // Create NOT(OR of all other edge conditions) - WITHOUT Parent.Executed
+      const orOfEdgeConditions: Condition = otherEdgeConditions.length === 1
+        ? otherEdgeConditions[0]
         : {
             type: 'Or',
-            conditions: otherConditions
+            conditions: otherEdgeConditions
           };
 
       const notCondition: Condition = {
         type: 'Not',
-        condition: orOfOthers
+        condition: orOfEdgeConditions
       };
 
       elseConditionParts.push(notCondition);
@@ -173,14 +164,6 @@ export function buildFirstRowCondition(
           type: 'And',
           conditions: elseConditionParts
         };
-
-    console.log('[ConditionBuilder] 🔍 Built Else condition', {
-      elseEdgeId: elseEdge.id,
-      sourceNodeId: elseEdge.source,
-      otherEdgesCount: otherEdgesFromSource.length,
-      otherConditionsCount: otherConditions.length,
-      finalCondition: elseLinkCondition
-    });
 
     linkConditions.push(elseLinkCondition);
   }

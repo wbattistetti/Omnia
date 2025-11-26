@@ -125,6 +125,13 @@ export function evaluateCondition(
     case 'EdgeCondition':
       // Evaluate edge condition (e.g., variable checks)
       const result = evaluateEdgeCondition(condition.condition, state.variableStore);
+      console.log('[ConditionEvaluator][EdgeCondition] Evaluating edge condition', {
+        edgeId: condition.edgeId,
+        conditionId: condition.condition,
+        result,
+        variableStoreKeys: Object.keys(state.variableStore),
+        variableStore: state.variableStore
+      });
       return result;
 
     case 'And':
@@ -140,6 +147,13 @@ export function evaluateCondition(
     case 'Not':
       const innerResult = evaluateCondition(condition.condition, state);
       const notFinal = !innerResult;
+      console.log('[ConditionEvaluator][Not] Evaluating NOT condition', {
+        innerResult,
+        notFinal,
+        innerCondition: condition.condition,
+        innerConditionType: condition.condition?.type,
+        variableStoreKeys: Object.keys(state.variableStore)
+      });
       return notFinal;
 
     default:

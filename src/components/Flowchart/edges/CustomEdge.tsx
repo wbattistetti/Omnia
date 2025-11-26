@@ -407,7 +407,14 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             onSelectUnconditioned={handleSelectUnconditioned}
             onSelectElse={() => {
               if (props.data && typeof props.data.onUpdate === 'function') {
-                props.data.onUpdate({ label: 'Else', data: { ...(props.data || {}), isElse: true } });
+                const newData = { ...(props.data || {}), isElse: true };
+                console.log('[CustomEdge][onSelectElse] ✅ Setting isElse flag', {
+                  edgeId: props.id,
+                  edgeLabel: props.label,
+                  oldIsElse: props.data?.isElse,
+                  newIsElse: true
+                });
+                props.data.onUpdate({ label: 'Else', data: newData });
               }
               setShowConditionSelector(false);
             }}
@@ -665,14 +672,6 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
                         const clickX = e.clientX;
                         const clickY = e.clientY;
 
-                        console.log('[LOAD_SCRIPT] 🔍 From CustomEdge (gear)', {
-                          conditionName,
-                          hasScript: !!script,
-                          scriptLength: script.length,
-                          sourceNodeId: source,
-                          targetNodeId: target,
-                          clickPosition: { x: clickX, y: clickY }
-                        });
 
                         // Use target node ID and click position for precise scrolling
                         const ev: any = new CustomEvent('conditionEditor:open', {

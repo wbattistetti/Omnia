@@ -33,11 +33,6 @@ export const IntellisensePopover: React.FC = () => {
             const edge = flowEdges.find((e: any) => e.id === state.target!.edgeId);
             if (edge && edge.target) {
                 elementId = edge.target; // ✅ Questo è il nodo di DESTINAZIONE
-                console.log("🎯 [IntellisensePopover] Found DESTINATION node for edge:", {
-                    edgeId: state.target.edgeId,
-                    destinationNodeId: elementId,
-                    sourceNodeId: edge.source
-                });
             }
         }
 
@@ -106,7 +101,6 @@ export const IntellisensePopover: React.FC = () => {
                 return;
             }
             // ✅ Click fuori → Chiudi e cleanup
-            console.log("🎯 [IntellisensePopover] Click outside - closing and cleanup");
             actions.close();
 
             // ✅ CLEANUP: Cancella nodo temporaneo e edge
@@ -126,19 +120,15 @@ export const IntellisensePopover: React.FC = () => {
 
         // ✅ CLEANUP: Se è un edge, cancella nodo temporaneo e link
         if (state.target?.edgeId) {
-            console.log("🎯 [IntellisensePopover] Closing intellisense for edge - cleanup temp nodes");
             const cleanupTempNodesAndEdges = (window as any).__cleanupAllTempNodesAndEdges;
             if (cleanupTempNodesAndEdges) {
                 cleanupTempNodesAndEdges();
-                console.log("🎯 [IntellisensePopover] Cleanup function called");
             }
         }
     };
 
     // Handler per selezione
     const handleSelect = async (item: IntellisenseItem | null) => {
-        console.log("Item selected or text entered:", item ? item.label : "TEXT_INPUT");
-
         // ✅ 1. Chiudi Intellisense
         actions.close();
 
@@ -214,24 +204,45 @@ export const IntellisensePopover: React.FC = () => {
                 }
             }
 
-            console.log("🎯 [IntellisensePopover] Processing edge selection:", {
-                edgeId,
-                label,
-                isElse,
-                selectedItem: item
-            });
-
             // ✅ 3. Aggiorna l'edge
             const scheduleApplyLabel = (window as any).__scheduleApplyLabel;
             const setEdges = (window as any).__setEdges;
 
             if (scheduleApplyLabel && label !== undefined) {
-                scheduleApplyLabel(edgeId, label, conditionId ? { conditionId } : undefined); // ✅ Passa conditionId come oggetto
-                console.log("🎯 [IntellisensePopover] Edge label scheduled:", label, conditionId ? { conditionId } : '');
+                // ✅ Passa isElse quando è true
+                const extraData: any = {};
+                if (conditionId) extraData.conditionId = conditionId;
+                if (isElse) extraData.isElse = true;
+
+                // ✅ Log quando si passa isElse a scheduleApplyLabel
+                if (isElse) {
+                    console.log('[IntellisensePopover][scheduleApplyLabel] ✅ Passing isElse flag', {
+                        edgeId,
+                        label,
+                        isElse: true
+                    });
+                }
+
+                scheduleApplyLabel(edgeId, label, Object.keys(extraData).length > 0 ? extraData : undefined);
             } else if (setEdges) {
-                setEdges((eds: any[]) => eds.map(e =>
-                    e.id === edgeId
-                        ? {
+                setEdges((eds: any[]) => eds.map(e => {
+                    if (e.id === edgeId) {
+                        // ✅ DEBUG: Log when isElse is being set or preserved
+                        if (isElse && e.data?.isElse !== true) {
+                            console.log('[IntellisensePopover][handleSelect] ✅ Setting isElse to true', {
+                                edgeId: e.id,
+                                edgeLabel: e.label,
+                                oldIsElse: e.data?.isElse,
+                                newIsElse: true
+                            });
+                        } else if (e.data?.isElse === true && isElse === true) {
+                            console.log('[IntellisensePopover][handleSelect] ✅ Preserving isElse flag', {
+                                edgeId: e.id,
+                                edgeLabel: e.label,
+                                isElse: true
+                            });
+                        }
+                        return {
                             ...e,
                             label,
                             data: {
@@ -240,10 +251,10 @@ export const IntellisensePopover: React.FC = () => {
                                 isElse,
                                 conditionId: conditionId || (e.data as any)?.conditionId // ✅ Mantieni o aggiorna conditionId
                             }
-                        }
-                        : e
-                ));
-                console.log("🎯 [IntellisensePopover] Edge updated:", { label, isElse, conditionId: conditionId || 'none' });
+                        };
+                    }
+                    return e;
+                }));
             }
 
             // ✅ 4. Rendi visibile il nodo temporaneo (SENZA modificare il titolo)
@@ -257,10 +268,6 @@ export const IntellisensePopover: React.FC = () => {
                 if (tempNode && tempNode.data) {
                     // ✅ Rimuovi solo hidden, NON modificare il titolo
                     tempNode.data.hidden = false;
-
-                    console.log("🎯 [IntellisensePopover] Node made visible:", {
-                        nodeId: tempNode.id
-                    });
 
                     // Aggiorna anche il nodo nello stato (solo hidden)
                     const setNodes = (window as any).__setNodes;

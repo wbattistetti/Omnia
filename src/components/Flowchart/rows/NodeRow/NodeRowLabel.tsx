@@ -337,15 +337,6 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
         // Se la row è undefined, usa sempre grigio per l'icona
         const isUndefined = (row as any)?.isUndefined === true;
         const finalIconColor = isUndefined ? '#94a3b8' : (iconColor || labelTextColor);
-        if (isUndefined) {
-          console.log('🔮 [UNDEFINED] Rendering icon for undefined row', {
-            rowId: row.id,
-            rowText: row.text,
-            hasIcon: !!Icon,
-            finalIconColor,
-            hasOnTypeChangeRequest: !!onTypeChangeRequest
-          });
-        }
         return (
           <PrimaryIconButton
             Icon={Icon}

@@ -128,10 +128,9 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
     try {
       setIsListening(true);
       recognition.start();
-      console.log('🎤 [START] Dictation started');
     } catch (err: any) {
       if (!err.message?.includes('already')) {
-        console.error('🎤 [ERROR] Start:', err.message);
+        // Silent fail
       }
       setIsListening(false);
     }
@@ -144,7 +143,6 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
 
     try {
       recognition.stop();
-      console.log('🎤 [STOP] Dictation stopped');
     } catch (e) {
       // Ignore errors
     }

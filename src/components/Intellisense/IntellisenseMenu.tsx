@@ -100,13 +100,11 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   useEffect(() => {
     if (mode === 'standalone' && isOpen && inputRef.current) {
       inputRef.current.focus();
-      console.log("🎯 [IntellisenseMenu] Focus forced on input");
     }
   }, [mode, isOpen]);
 
   // ✅ Handler per tracciare gli input
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("🎯 [IntellisenseMenu] Input change:", e.target.value);
     actions.setQuery(e.target.value); // ✅ Aggiorna la query nel contesto
   };
 
@@ -442,7 +440,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     lastNavSeqRef.current = navSignal.seq;
     let idx = selectedIndex + (navSignal.dir > 0 ? 1 : -1);
     if (idx < 0) idx = total - 1; else if (idx >= total) idx = 0;
-    try { console.log('[Intellisense][nav]', { from: selectedIndex, to: idx, total, nav: navSignal }); } catch { }
     setSelectedIndex(idx);
     // Suppress hover selection for a brief window to avoid flicker
     suppressHoverUntilRef.current = Date.now() + 200;
@@ -459,10 +456,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     } catch { }
   }, [navSignal, isOpen, fuzzyResults, semanticResults, selectedIndex]);
 
-  // Log selection changes (diagnostic)
-  useEffect(() => {
-    try { console.log('[Intellisense][selectedIndex]', selectedIndex); } catch { }
-  }, [selectedIndex]);
 
   // Debug UI flag: render matched labels directly in the menu (no console needed)
   const debugIntellisenseUi = (() => { try { return localStorage.getItem('debug.intellisense.ui') === '1'; } catch { return false; } })();
@@ -593,16 +586,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     }
   }, [selectedIndex, isOpen]);
 
-  // Log menu rendering details
-  useEffect(() => {
-    if (isOpen) {
-      console.log('🔍 [INTELLISENSE_RENDER] Menu opened at position:', {
-        x: position?.x,
-        y: position?.y,
-        reference: referenceElement?.tagName
-      });
-    }
-  }, [isOpen]); // Solo isOpen come dipendenza
 
   if (!isOpen || !isInitialized) {
     return null;
@@ -661,7 +644,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             categoryConfig={{}}
             query={query}
             onItemSelect={(result) => {
-              console.log("🎯 [IntellisenseMenu] Item selected:", result.item);
               onSelect(result.item);
             }}
             onItemHover={(index) => setSelectedIndex(index)}
@@ -689,7 +671,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             categoryConfig={{}}
             query={query}
             onItemSelect={(result) => {
-              console.log("🎯 [IntellisenseMenu] Item selected:", result.item);
               onSelect(result.item);
             }}
             onItemHover={(index) => setSelectedIndex(index)}

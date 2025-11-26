@@ -58,6 +58,23 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       });
 
       // Compile flow HERE, only when Start is clicked
+      // ✅ DEBUG: Log edges passed to compiler
+      const elseEdgesCount = options.edges.filter(e => e.data?.isElse === true).length;
+      if (elseEdgesCount > 0) {
+        console.log('[useDialogueEngine][start] ✅ Else edges found before compilation', {
+          elseEdgesCount,
+          totalEdgesCount: options.edges.length,
+          elseEdges: options.edges.filter(e => e.data?.isElse === true).map(e => ({
+            id: e.id,
+            label: e.label,
+            source: e.source,
+            target: e.target,
+            hasData: !!e.data,
+            isElse: e.data?.isElse,
+            dataKeys: e.data ? Object.keys(e.data) : []
+          }))
+        });
+      }
       const compilationResult = compileFlow(enrichedNodes, options.edges, {
         getTask: options.getTask,
         getDDT: options.getDDT

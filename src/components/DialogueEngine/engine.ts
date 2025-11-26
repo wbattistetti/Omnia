@@ -169,7 +169,11 @@ export class DialogueEngine {
         taskId: task.id,
         action: task.action,
         conditionMet,
-        conditionType: task.condition?.type
+        conditionType: task.condition?.type,
+        condition: task.condition,
+        conditionStructure: task.condition ? JSON.stringify(task.condition, null, 2) : null,
+        variableStoreKeys: Object.keys(this.state.variableStore),
+        executedTaskIds: Array.from(this.state.executedTaskIds)
       });
 
       if (conditionMet) {

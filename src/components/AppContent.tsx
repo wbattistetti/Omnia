@@ -590,10 +590,10 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (flowResult.status === 'fulfilled') {
         loadedNodes = flowResult.value.nodes;
         loadedEdges = flowResult.value.edges;
-        console.log(`[PERF][${new Date().toISOString()}] ✅ Flow loaded`, {
-          nodesCount: loadedNodes.length,
-          edgesCount: loadedEdges.length
-        });
+        const elseEdgesCount = loadedEdges.filter(e => e.data?.isElse === true).length;
+        if (elseEdgesCount > 0) {
+          console.log('[AppContent][loadFlow] ✅ Found Else edges', { count: elseEdgesCount });
+        }
       }
 
       if (tasksResult.status === 'fulfilled') {

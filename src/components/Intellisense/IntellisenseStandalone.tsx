@@ -37,7 +37,6 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
     useEffect(() => {
         if (inputRef.current) {
             inputRef.current.focus();
-            console.log("🎯 [IntellisenseStandalone] Focus forced on input");
         }
     }, []);
 
@@ -98,7 +97,6 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
     }, [state.query, fontSizes.nodeRow]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        console.log("🎯 [IntellisenseStandalone] Input change:", e.target.value);
         actions.setQuery(e.target.value);
     };
 
@@ -112,7 +110,6 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
 
             if (text.length === 0) {
                 // ✅ Textbox vuota → Unconditioned (come click su LinkOff)
-                console.log("🎯 [IntellisenseStandalone] Enter with empty text - unconditioned");
                 onSelect({
                     id: '__unlinked__',
                     label: '',
@@ -121,20 +118,17 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                 } as any);
             } else {
                 // ✅ Textbox con testo → Condizione custom
-                console.log("🎯 [IntellisenseStandalone] Enter pressed - applying text:", text);
                 onSelect(null);
             }
         } else if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
-            console.log("🎯 [IntellisenseStandalone] Escape pressed - canceling");
             handleCancelClick();
         }
     };
 
     // ✅ Handler per Else button
     const handleElseClick = () => {
-        console.log("🎯 [IntellisenseStandalone] Else clicked");
         onSelect({
             id: '__else__',
             label: 'Else',
@@ -145,7 +139,6 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
 
     // ✅ Handler per Unlinked button
     const handleUnlinkedClick = () => {
-        console.log("🎯 [IntellisenseStandalone] Unlinked clicked");
         onSelect({
             id: '__unlinked__',
             label: '',
@@ -156,8 +149,6 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
 
     // ✅ Handler per Cancel (X) button - cleanup completo
     const handleCancelClick = () => {
-        console.log("🎯 [IntellisenseStandalone] Cancel clicked - cleanup temp nodes");
-
         // ✅ Chiudi Intellisense (onClose ora gestisce anche il cleanup per gli edge)
         onClose();
 
@@ -165,14 +156,12 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
         const cleanupTempNodesAndEdges = (window as any).__cleanupAllTempNodesAndEdges;
         if (cleanupTempNodesAndEdges) {
             cleanupTempNodesAndEdges();
-            console.log("🎯 [IntellisenseStandalone] Cleanup function called (fallback)");
         }
     };
 
     // ✅ Handler per prevenire la propagazione del click
     const handleWrapperClick = (e: React.MouseEvent) => {
         e.stopPropagation();
-        console.log("🎯 [IntellisenseStandalone] Wrapper click - preventing close");
     };
 
     // ✅ Calcola posizione dinamica per centrare rispetto al referenceElement
@@ -383,7 +372,6 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                 position={position}
                 referenceElement={referenceElement}
                 onSelect={(item) => {
-                    console.log("🎯 [IntellisenseStandalone] Item selected from menu:", item);
                     onSelect(item);
                 }}
                 onClose={onClose}

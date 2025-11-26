@@ -138,12 +138,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 : (row as any)?.isUndefined;
 
             if (preserveIsUndefined) {
-                console.log('🔮 [UNDEFINED] Preserving isUndefined flag', {
-                    rowId,
-                    incomingIsUndefined: (incoming as any)?.isUndefined,
-                    rowIsUndefined: (row as any)?.isUndefined,
-                    preserved: preserveIsUndefined
-                });
             }
 
             const updatedRow = {

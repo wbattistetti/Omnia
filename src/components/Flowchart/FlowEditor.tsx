@@ -143,14 +143,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         !prev.isRunning // Log on first run
       )
     ) {
-      console.log('🎨 [HIGHLIGHT] FlowEditor - State changed', {
-        hasExecutionState: !!execState,
-        hasCurrentTask: !!task,
-        isRunning: running,
-        currentNodeId: current.currentNodeId,
-        executedCount: current.executedCount,
-        currentTaskId: task?.id
-      });
+      // Log removed - only isElse logs are kept
       prevStateRef.current = current;
     }
   }, [propExecutionState, propCurrentTask, propIsRunning]);
@@ -225,7 +218,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((window as any).__debugCanvas) {
-        try { console.log('[CanvasDbg][doc.capture]', { key: e.key, target: (e.target as HTMLElement)?.className, defaultPrevented: e.defaultPrevented }); } catch { }
       }
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
@@ -387,12 +379,19 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Aggiorna edges con onUpdate per ogni edge custom
   useEffect(() => {
-    setEdges(eds => eds.map(e =>
-      e.type === 'custom'
-        ? {
+    setEdges(eds => eds.map(e => {
+      if (e.type === 'custom') {
+        // ✅ FIX: If edge has label 'Else' but isElse is not set, set it to true
+        const shouldHaveIsElse = e.label === 'Else' || (e.data as any)?.label === 'Else';
+        const hasIsElse = e.data?.isElse === true;
+        const dataWithIsElse = shouldHaveIsElse && !hasIsElse
+          ? { ...(e.data || {}), isElse: true }
+          : e.data;
+
+        return {
           ...e,
           data: {
-            ...e.data,
+            ...dataWithIsElse, // ✅ CRITICAL: Preserve ALL existing data properties (including isElse)
             onDeleteEdge,
             onUpdate: (updates: any) => {
               let safeUpdates = { ...updates };
@@ -400,16 +399,44 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
                 safeUpdates.label = updates.label.description || updates.label.name || '';
               }
               setEdges(prevEdges => {
-                const updated = prevEdges.map(edge =>
-                  edge.id === e.id ? { ...edge, ...safeUpdates } : edge
-                );
+                const updated = prevEdges.map(edge => {
+                  if (edge.id === e.id) {
+                    // ✅ FIX: Preserve existing data properties when updating
+                    const mergedData = {
+                      ...(edge.data || {}),
+                      ...(safeUpdates.data || {})
+                    };
+                    // ✅ DEBUG: Log when isElse is being set or preserved
+                    if (safeUpdates.data?.isElse === true && edge.data?.isElse !== true) {
+                      console.log('[FlowEditor][onUpdate] ✅ Setting isElse to true', {
+                        edgeId: edge.id,
+                        edgeLabel: edge.label,
+                        oldIsElse: edge.data?.isElse,
+                        newIsElse: true
+                      });
+                    } else if (edge.data?.isElse === true && mergedData.isElse === true) {
+                      console.log('[FlowEditor][onUpdate] ✅ Preserving isElse flag', {
+                        edgeId: edge.id,
+                        edgeLabel: edge.label,
+                        isElse: true
+                      });
+                    }
+                    return {
+                      ...edge,
+                      ...safeUpdates,
+                      data: mergedData
+                    };
+                  }
+                  return edge;
+                });
                 return updated;
               });
             }
           }
-        }
-        : e
-    ));
+        };
+      }
+      return e;
+    }));
   }, [onDeleteEdge, setEdges]);
 
   // Forza tutti gli edge a solidi dopo il mount o ogni volta che edges cambiano
@@ -552,24 +579,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
 
   const onConnectEnd = useCallback((event: any) => {
-    const target = event.target as HTMLElement;
-    const isPane = target?.classList?.contains('react-flow__pane');
-
-    console.log("🎬🎬🎬 [ON_CONNECT_END] Dettagli completi:", {
-      targetClassName: target?.className,
-      targetTag: target?.tagName,
-      isPane,
-      hasPendingEdge: !!pendingEdgeIdRef.current,
-      hasSourceNode: !!connectionMenuRef.current.sourceNodeId,
-      sourceNodeId: connectionMenuRef.current.sourceNodeId,
-      sourceHandleId: connectionMenuRef.current.sourceHandleId,
-      dragStartedFromHandle: dragStartedFromHandleRef.current,
-      timestamp: Date.now()
-    });
-
     // ✅ Reset flag connessione quando si rilascia
     if ((window as any).__isConnecting) {
-      console.log('🔄 [ON_CONNECT_END] Reset flag __isConnecting');
       (window as any).__isConnecting = false;
     }
 
@@ -583,45 +594,27 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
     // Se subito prima è stata creata una edge reale (onConnect), NON creare il collegamento flottante
     if (pendingEdgeIdRef.current) {
-      console.log("⏭️ [ON_CONNECT_END] Skipping - pending edge exists");
       return;
     }
 
     const targetIsPane = (event.target as HTMLElement)?.classList?.contains('react-flow__pane');
 
-    console.log("🔍 [ON_CONNECT_END] Conditions check", {
-      targetIsPane,
-      hasSourceNode: !!connectionMenuRef.current.sourceNodeId,
-      willCreateNode: targetIsPane && !!connectionMenuRef.current.sourceNodeId
-    });
-
     if (targetIsPane && connectionMenuRef.current.sourceNodeId) {
-      console.log("🚀 [ON_CONNECT_END] Starting node creation with lock");
       // ✅ FIX: Usa il lock asincrono enterprise-ready
       withNodeLock(async () => {
         try {
-          console.log("📍 [ON_CONNECT_END] About to call createTemporaryNode");
           const result = await createTemporaryNode(event);
-          console.log("✅ [ON_CONNECT_END] createTemporaryNode returned", result);
-          const { tempNodeId, tempEdgeId } = result;
-          console.log("🎯 [ON_CONNECT_END] About to call openForEdge with EDGE:", { edgeId: tempEdgeId });
+          const { tempEdgeId } = result;
           // ✅ Pass mouse coordinates to openForEdge
           if (intellisenseActions?.openForEdge) {
             intellisenseActions.openForEdge(tempEdgeId);
-            console.log("🎯 [ON_CONNECT_END] openForEdge() call completed with mouse coordinates:", {
-              mouseX: result.mouseX,
-              mouseY: result.mouseY
-            });
-          } else {
-            console.error("❌ [ON_CONNECT_END] intellisenseActions.openForEdge is undefined!");
           }
         } catch (error) {
-          console.error("❌ [ON_CONNECT_END] Error creating temporary node:", error);
+          // Silent fail
         }
       });
     } else {
       // Solo se NON stiamo creando un nodo, pulisci i temporanei
-      console.log("❌ [ON_CONNECT_END] Not creating node - conditions not met, cleaning up");
       cleanupAllTempNodesAndEdges();
     }
   }, [withNodeLock, createTemporaryNode, openMenu, cleanupAllTempNodesAndEdges, pendingEdgeIdRef, intellisenseActions]);

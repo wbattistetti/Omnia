@@ -35,8 +35,6 @@ export class IntellisenseService {
     }
 
     private buildIntentItemsFromSourceNode(sourceNode: any): IntellisenseItem[] {
-        console.log('🔥🔥🔥 [IntellisenseService] buildIntentItemsFromSourceNode called:', sourceNode?.id);
-
         // Cerca direttamente nelle righe del nodo senza dipendere da utils complesse
         const rows = [
             ...(sourceNode?.data?.rows || []),
@@ -51,7 +49,6 @@ export class IntellisenseService {
 
         const problemRow = rows.find(isProblem);
         if (!problemRow) {
-            console.log('[IntellisenseService] No problem row found in source node');
             return [];
         }
 
@@ -63,7 +60,6 @@ export class IntellisenseService {
 
         if (!task) {
             // Il Task non esiste ancora - restituiamo array vuoto
-            console.log('[IntellisenseService] Task not found, returning empty intents');
             return [];
         }
 
@@ -84,16 +80,9 @@ export class IntellisenseService {
 
     /** API principale: items da mostrare quando il target è un EDGE */
     getEdgeItems(edgeId: string): IntellisenseItem[] {
-        console.log("🔥 [IntellisenseService] getEdgeItems called for edgeId:", edgeId, "at", new Date().toISOString());
-
         const projectData = this.providers.getProjectData();
         const conditions = this.buildConditionItems(projectData);
         const sourceNode = this.getSourceNodeByEdgeId(edgeId);
-
-        console.log("🔥 [IntellisenseService] Source node found:", {
-            sourceNodeId: sourceNode?.id,
-            hasSourceNode: !!sourceNode
-        });
 
         // ✅ INTENT FISSI DI TEST - SEMPRE presenti per isolare il problema
         const TEST_INTENTS: IntellisenseItem[] = [
@@ -163,45 +152,19 @@ export class IntellisenseService {
         ];
 
         let intents: IntellisenseItem[] = [...TEST_INTENTS]; // Start with test intents
-        console.log("🔥 [IntellisenseService] Using TEST_INTENTS:", TEST_INTENTS.map(t => t.label));
 
         if (sourceNode) {
             const problemRows = collectProblemRows(sourceNode);
 
-            console.log("🔥 [IntellisenseService] Problem rows found:", {
-                problemRowsCount: problemRows.length,
-                problemRows: problemRows.map(r => ({ id: r.id, type: r.type }))
-            });
-
             if (problemRows.length > 0) {
                 const realIntents = this.buildIntentItemsFromSourceNode(sourceNode);
-                console.log("🔥 [IntellisenseService] Real intents from source node:", {
-                    realIntentsCount: realIntents.length,
-                    realIntents: realIntents.map(i => ({ id: i.id, label: i.label }))
-                });
                 // Aggiungi intent reali oltre a quelli di test
                 intents = [...intents, ...realIntents];
             }
         }
 
-        console.log("🔥 [IntellisenseService] Final intents:", {
-            totalIntents: intents.length,
-            intents: intents.map(i => ({ id: i.id, label: i.label })),
-            timestamp: new Date().toISOString()
-        });
-
-        console.log("🔥 [IntellisenseService] Conditions found:", {
-            conditionsCount: conditions.length,
-            conditions: conditions.map(c => ({ id: c.id, label: c.label }))
-        });
-
         const merged = dedupeByKey([...conditions, ...intents]);
         const result = sortItems(merged);
-
-        console.log("🔥 [IntellisenseService] Final result:", {
-            totalItems: result.length,
-            items: result.map(i => ({ id: i.id, label: i.label, kind: i.kind }))
-        });
 
         return result;
     }
