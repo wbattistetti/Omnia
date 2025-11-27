@@ -1,5 +1,6 @@
 import React from 'react';
 import CreatableSelect, { CreatableProps } from 'react-select/creatable';
+import Select, { Props as SelectProps } from 'react-select';
 import { StylesConfig, GroupBase } from 'react-select';
 
 export type OmniaSelectVariant = 'dark' | 'light';
@@ -21,6 +22,7 @@ export interface OmniaSelectProps extends Omit<CreatableProps<OmniaSelectOption,
   isInvalid?: boolean;
   showSearchIcon?: boolean;
   className?: string;
+  isCreatable?: boolean; // Se false, disabilita la creazione di nuove opzioni
 }
 
 const getStyles = (variant: OmniaSelectVariant, isInvalid?: boolean, showSearchIcon?: boolean): StylesConfig<OmniaSelectOption, false> => {
@@ -142,18 +144,49 @@ const getStyles = (variant: OmniaSelectVariant, isInvalid?: boolean, showSearchI
         marginTop: '0.25rem',
         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
       }),
-      option: (base, state) => ({
+      option: (base, state) => {
+        // Se è il separatore, renderlo come linea orizzontale
+        if (state.data?.value === '__separator__') {
+          return {
+            ...base,
+            backgroundColor: 'transparent',
+            color: '#a7f3d0', // emerald-200
+            padding: '0.125rem 0.75rem', // Padding minimo
+            cursor: 'default',
+            borderBottom: '1px solid #a7f3d0', // Linea separatrice
+            margin: '0.125rem 0',
+            '&:hover': {
+              backgroundColor: 'transparent',
+            },
+          };
+        }
+        return {
+          ...base,
+          backgroundColor: state.isSelected
+            ? '#d1fae5' // emerald-100
+            : state.isFocused
+            ? '#ecfdf5' // emerald-50
+            : 'transparent',
+          color: '#064e3b', // emerald-900
+          padding: '0.25rem 0.75rem', // Ridotto padding verticale
+          '&:hover': {
+            backgroundColor: '#ecfdf5',
+          },
+        };
+      },
+      group: (base) => ({
         ...base,
-        backgroundColor: state.isSelected
-          ? '#d1fae5' // emerald-100
-          : state.isFocused
-          ? '#ecfdf5' // emerald-50
-          : 'transparent',
-        color: '#064e3b', // emerald-900
-        padding: '0.375rem 0.75rem',
-        '&:hover': {
-          backgroundColor: '#ecfdf5',
-        },
+        padding: 0,
+      }),
+      groupHeading: (base) => ({
+        ...base,
+        padding: '0.25rem 0.75rem',
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        color: '#059669',
+        textTransform: 'none',
+        borderBottom: '1px solid #a7f3d0', // Separatore per tutta la larghezza
+        marginBottom: 0,
       }),
       indicatorSeparator: () => ({
         display: 'none',
@@ -186,6 +219,7 @@ export const OmniaSelect: React.FC<OmniaSelectProps> = ({
   isInvalid = false,
   showSearchIcon = false,
   className = '',
+  isCreatable = true, // Default: abilita creazione
   ...rest
 }) => {
   // Converti options da string[] a OmniaSelectOption[]
@@ -220,6 +254,32 @@ export const OmniaSelect: React.FC<OmniaSelectProps> = ({
 
   const styles = getStyles(variant, isInvalid, showSearchIcon);
 
+  // Se isCreatable è false, usa Select normale invece di CreatableSelect
+  if (!isCreatable) {
+    return (
+      <div className={`relative ${className}`}>
+        {showSearchIcon && variant === 'light' && (
+          <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10 pointer-events-none">
+            <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+        )}
+        <Select<OmniaSelectOption, false>
+          options={selectOptions}
+          value={selectedOption}
+          onChange={handleChange}
+          placeholder={placeholder}
+          isDisabled={isDisabled}
+          isClearable={false}
+          isSearchable={true}
+          styles={styles}
+          {...rest}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={`relative ${className}`}>
       {showSearchIcon && variant === 'light' && (
@@ -233,7 +293,7 @@ export const OmniaSelect: React.FC<OmniaSelectProps> = ({
         options={selectOptions}
         value={selectedOption}
         onChange={handleChange}
-        onCreateOption={handleCreateOption}
+        onCreateOption={onCreateOption ? handleCreateOption : undefined}
         placeholder={placeholder}
         isDisabled={isDisabled}
         isClearable={false}

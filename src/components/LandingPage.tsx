@@ -35,7 +35,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
+  const [toolbarPosition, setToolbarPosition] = useState<{ top: number; left: number; projectId: string } | null>(null);
   const [openVersionMenuId, setOpenVersionMenuId] = useState<string | null>(null);
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [dataReady, setDataReady] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -69,7 +71,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     const sorted = [...options].sort();
     return [
       { value: '', label: 'All' },
-      { value: '__separator__', label: '──────────', isDisabled: true },
+      { value: '__separator__', label: '────────────────────────────────', isDisabled: true }, // Separatore più lungo
       ...sorted.map(opt => ({ value: opt, label: opt }))
     ];
   };
@@ -436,7 +438,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           {hasProjects && showDropdown && dataReady && !loadingProjects && (
             <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`} style={{ overflow: 'visible' }}>
             {/* Header con 3 pulsanti/tab */}
-            <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl" style={{ paddingRight: '80px', marginRight: 0 }}>
+            <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl relative">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setProjectViewType('all')}
@@ -469,31 +471,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Da recuperare {recoveredProjectsCount > 0 && `(${recoveredProjectsCount})`}
                 </button>
               </div>
-              <div className="flex flex-col items-end gap-1" style={{ marginRight: 0 }}>
+              <div className="flex flex-row items-center gap-1.5 absolute" style={{ right: '5px', top: '8px' }}>
+                {/* Pulsanti Conferma/Annulla appaiono a sinistra di "Elimina tutti" quando showDeleteAllConfirm è true */}
+                {showDeleteAllConfirm && (
+                  <>
+                    <button
+                      className="bg-red-600 text-white px-1.5 py-0.5 rounded hover:bg-red-700 text-xs font-semibold"
+                      onClick={() => { setShowDeleteAllConfirm(false); onDeleteAllProjects(); }}
+                    >
+                      Conferma
+                    </button>
+                    <button
+                      className="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded hover:bg-gray-300 text-xs font-semibold"
+                      onClick={() => setShowDeleteAllConfirm(false)}
+                    >
+                      Annulla
+                    </button>
+                  </>
+                )}
                 <button
                   className="text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50 font-semibold"
                   onClick={() => setShowDeleteAllConfirm(!showDeleteAllConfirm)}
                 >
                   Elimina tutti
                 </button>
-
-                {/* Pulsanti Conferma/Annulla appaiono sotto quando showDeleteAllConfirm è true */}
-                {showDeleteAllConfirm && (
-                  <div className="flex gap-2">
-                    <button
-                      className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm font-semibold"
-                      onClick={() => { setShowDeleteAllConfirm(false); onDeleteAllProjects(); }}
-                    >
-                      Conferma
-                    </button>
-                    <button
-                      className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 text-sm font-semibold"
-                      onClick={() => setShowDeleteAllConfirm(false)}
-                    >
-                      Annulla
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -502,12 +503,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div
                 className="grid border-collapse"
                 style={{
-                  gridTemplateColumns: 'minmax(120px, 200px) minmax(200px, 300px) minmax(120px, 200px) minmax(110px, 150px) minmax(180px, 250px) minmax(180px, 250px)',
+                  gridTemplateColumns: 'auto auto auto auto auto auto', // Auto-sizing basato sul contenuto
                   width: '100%'
                 }}
               >
                 {/* Header row */}
-                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5 group">
                   {searchingColumn === 'cliente' ? (
                     <OmniaSelect
                       variant="light"
@@ -516,22 +517,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       onChange={(value) => handleColumnChange('cliente', value, setSelectedClient)}
                       onBlur={() => setSearchingColumn(null)}
                       onMenuClose={() => setSearchingColumn(null)}
+                      onMenuOpen={() => setSearchingColumn('cliente')}
                       placeholder="Cliente"
                       className={combinedClass}
-                      menuIsOpen={true}
                       autoFocus
+                      isCreatable={false}
                     />
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className={`${combinedClass} text-emerald-900 font-semibold`}>Cliente</span>
                       <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => setSearchingColumn('cliente')}
                       />
                     </div>
                   )}
                 </div>
-                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5 group">
                   {searchingColumn === 'progetto' ? (
                     <OmniaSelect
                       variant="light"
@@ -540,22 +542,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       onChange={(value) => handleColumnChange('progetto', value, setSelectedProjectName)}
                       onBlur={() => setSearchingColumn(null)}
                       onMenuClose={() => setSearchingColumn(null)}
+                      onMenuOpen={() => setSearchingColumn('progetto')}
                       placeholder="Progetto"
                       className={combinedClass}
                       menuIsOpen={true}
                       autoFocus
+                      isCreatable={false}
                     />
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className={`${combinedClass} text-emerald-900 font-semibold`}>Progetto</span>
                       <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => setSearchingColumn('progetto')}
                       />
                     </div>
                   )}
                 </div>
-                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5 group">
                   {searchingColumn === 'industry' ? (
                     <OmniaSelect
                       variant="light"
@@ -564,22 +568,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       onChange={(value) => handleColumnChange('industry', value, setSelectedIndustry)}
                       onBlur={() => setSearchingColumn(null)}
                       onMenuClose={() => setSearchingColumn(null)}
+                      onMenuOpen={() => setSearchingColumn('industry')}
                       placeholder="Industry"
                       className={combinedClass}
-                      menuIsOpen={true}
                       autoFocus
+                      isCreatable={false}
                     />
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className={`${combinedClass} text-emerald-900 font-semibold`}>Industry</span>
                       <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => setSearchingColumn('industry')}
                       />
                     </div>
                   )}
                 </div>
-                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5 group">
                   {searchingColumn === 'data' ? (
                     <OmniaSelect
                       variant="light"
@@ -588,22 +593,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       onChange={(value) => handleColumnChange('data', value, setSelectedDate)}
                       onBlur={() => setSearchingColumn(null)}
                       onMenuClose={() => setSearchingColumn(null)}
+                      onMenuOpen={() => setSearchingColumn('data')}
                       placeholder="Data"
                       className={combinedClass}
-                      menuIsOpen={true}
                       autoFocus
+                      isCreatable={false}
                     />
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className={`${combinedClass} text-emerald-900 font-semibold`}>Data</span>
                       <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => setSearchingColumn('data')}
                       />
                     </div>
                   )}
                 </div>
-                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5 group">
                   {searchingColumn === 'ownerAzienda' ? (
                     <OmniaSelect
                       variant="light"
@@ -612,22 +618,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       onChange={(value) => handleColumnChange('ownerAzienda', value, setSelectedOwnerCompany)}
                       onBlur={() => setSearchingColumn(null)}
                       onMenuClose={() => setSearchingColumn(null)}
+                      onMenuOpen={() => setSearchingColumn('ownerAzienda')}
                       placeholder="Owner (Azienda)"
                       className={combinedClass}
-                      menuIsOpen={true}
                       autoFocus
+                      isCreatable={false}
                     />
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className={`${combinedClass} text-emerald-900 font-semibold`}>Owner (Azienda)</span>
                       <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => setSearchingColumn('ownerAzienda')}
                       />
                     </div>
                   )}
                 </div>
-                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5">
+                <div className="bg-emerald-100 sticky top-0 z-10 border border-emerald-200 p-1.5 group">
                   {searchingColumn === 'ownerCliente' ? (
                     <OmniaSelect
                       variant="light"
@@ -636,16 +643,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       onChange={(value) => handleColumnChange('ownerCliente', value, setSelectedOwnerClient)}
                       onBlur={() => setSearchingColumn(null)}
                       onMenuClose={() => setSearchingColumn(null)}
+                      onMenuOpen={() => setSearchingColumn('ownerCliente')}
                       placeholder="Owner (Cliente)"
                       className={combinedClass}
-                      menuIsOpen={true}
                       autoFocus
+                      isCreatable={false}
                     />
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className={`${combinedClass} text-emerald-900 font-semibold`}>Owner (Cliente)</span>
                       <Search
-                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900"
+                        className="w-4 h-4 text-emerald-700 cursor-pointer hover:text-emerald-900 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => setSearchingColumn('ownerCliente')}
                       />
                     </div>
@@ -691,14 +699,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         {/* Cliente */}
                         <div
                           className={`border border-emerald-200 p-1.5 text-left ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
-                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseEnter={() => {
+                            setHoveredRowId(projectId);
+                            // Calcola posizione toolbar dalla cella Owner (Cliente)
+                            const ownerCell = rowRefs.current[projectId];
+                            if (ownerCell) {
+                              const rect = ownerCell.getBoundingClientRect();
+                              setToolbarPosition({
+                                top: rect.top + rect.height / 2,
+                                left: rect.right + 10,
+                                projectId
+                              });
+                            }
+                          }}
                           onMouseLeave={(e) => {
                             const relatedTarget = e.relatedTarget as HTMLElement;
+                            // Se il mouse va verso la toolbar, non nasconderla
                             if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            // Controlla se il mouse sta andando verso la toolbar (area a destra)
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const mouseX = e.clientX;
+                            const mouseY = e.clientY;
+                            const toolbarLeft = rect.right + 10;
+                            const toolbarTop = rect.top + rect.height / 2;
+                            // Se il mouse è nell'area della toolbar, non nasconderla
+                            if (mouseX >= toolbarLeft - 20 && mouseX <= toolbarLeft + 100 &&
+                                mouseY >= toolbarTop - 30 && mouseY <= toolbarTop + 30) {
                               return;
                             }
                             if (!isLoading) {
                               setHoveredRowId(null);
+                              setToolbarPosition(null);
                             }
                           }}
                           onClick={async () => {
@@ -723,7 +756,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         {/* Progetto */}
                         <div
                           className={`border border-emerald-200 p-1.5 text-left ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer relative`}
-                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseEnter={() => {
+                            setHoveredRowId(projectId);
+                            // Calcola posizione toolbar dalla cella Owner (Cliente)
+                            const ownerCell = rowRefs.current[projectId];
+                            if (ownerCell) {
+                              const rect = ownerCell.getBoundingClientRect();
+                              setToolbarPosition({
+                                top: rect.top + rect.height / 2,
+                                left: rect.right + 10,
+                                projectId
+                              });
+                            }
+                          }}
                           onMouseLeave={(e) => {
                             const relatedTarget = e.relatedTarget as HTMLElement;
                             if (relatedTarget && relatedTarget.closest('.action-buttons-container') ||
@@ -733,6 +778,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             }
                             if (!isLoading) {
                               setHoveredRowId(null);
+                              setToolbarPosition(null);
                               setOpenVersionMenuId(null);
                             }
                           }}
@@ -828,14 +874,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         {/* Industry */}
                         <div
                           className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
-                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseEnter={() => {
+                            setHoveredRowId(projectId);
+                            // Calcola posizione toolbar dalla cella Owner (Cliente)
+                            const ownerCell = rowRefs.current[projectId];
+                            if (ownerCell) {
+                              const rect = ownerCell.getBoundingClientRect();
+                              setToolbarPosition({
+                                top: rect.top + rect.height / 2,
+                                left: rect.right + 10,
+                                projectId
+                              });
+                            }
+                          }}
                           onMouseLeave={(e) => {
                             const relatedTarget = e.relatedTarget as HTMLElement;
+                            // Se il mouse va verso la toolbar, non nasconderla
                             if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            // Controlla se il mouse sta andando verso la toolbar (area a destra)
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const mouseX = e.clientX;
+                            const mouseY = e.clientY;
+                            const toolbarLeft = rect.right + 10;
+                            const toolbarTop = rect.top + rect.height / 2;
+                            // Se il mouse è nell'area della toolbar, non nasconderla
+                            if (mouseX >= toolbarLeft - 20 && mouseX <= toolbarLeft + 100 &&
+                                mouseY >= toolbarTop - 30 && mouseY <= toolbarTop + 30) {
                               return;
                             }
                             if (!isLoading) {
                               setHoveredRowId(null);
+                              setToolbarPosition(null);
                             }
                           }}
                           onClick={async () => {
@@ -855,14 +926,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         {/* Data */}
                         <div
                           className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
-                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseEnter={() => {
+                            setHoveredRowId(projectId);
+                            // Calcola posizione toolbar dalla cella Owner (Cliente)
+                            const ownerCell = rowRefs.current[projectId];
+                            if (ownerCell) {
+                              const rect = ownerCell.getBoundingClientRect();
+                              setToolbarPosition({
+                                top: rect.top + rect.height / 2,
+                                left: rect.right + 10,
+                                projectId
+                              });
+                            }
+                          }}
                           onMouseLeave={(e) => {
                             const relatedTarget = e.relatedTarget as HTMLElement;
+                            // Se il mouse va verso la toolbar, non nasconderla
                             if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            // Controlla se il mouse sta andando verso la toolbar (area a destra)
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const mouseX = e.clientX;
+                            const mouseY = e.clientY;
+                            const toolbarLeft = rect.right + 10;
+                            const toolbarTop = rect.top + rect.height / 2;
+                            // Se il mouse è nell'area della toolbar, non nasconderla
+                            if (mouseX >= toolbarLeft - 20 && mouseX <= toolbarLeft + 100 &&
+                                mouseY >= toolbarTop - 30 && mouseY <= toolbarTop + 30) {
                               return;
                             }
                             if (!isLoading) {
                               setHoveredRowId(null);
+                              setToolbarPosition(null);
                             }
                           }}
                           onClick={async () => {
@@ -882,14 +978,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         {/* Owner (Azienda) */}
                         <div
                           className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer`}
-                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseEnter={() => {
+                            setHoveredRowId(projectId);
+                            // Calcola posizione toolbar dalla cella Owner (Cliente)
+                            const ownerCell = rowRefs.current[projectId];
+                            if (ownerCell) {
+                              const rect = ownerCell.getBoundingClientRect();
+                              setToolbarPosition({
+                                top: rect.top + rect.height / 2,
+                                left: rect.right + 10,
+                                projectId
+                              });
+                            }
+                          }}
                           onMouseLeave={(e) => {
                             const relatedTarget = e.relatedTarget as HTMLElement;
+                            // Se il mouse va verso la toolbar, non nasconderla
                             if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            // Controlla se il mouse sta andando verso la toolbar (area a destra)
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const mouseX = e.clientX;
+                            const mouseY = e.clientY;
+                            const toolbarLeft = rect.right + 10;
+                            const toolbarTop = rect.top + rect.height / 2;
+                            // Se il mouse è nell'area della toolbar, non nasconderla
+                            if (mouseX >= toolbarLeft - 20 && mouseX <= toolbarLeft + 100 &&
+                                mouseY >= toolbarTop - 30 && mouseY <= toolbarTop + 30) {
                               return;
                             }
                             if (!isLoading) {
                               setHoveredRowId(null);
+                              setToolbarPosition(null);
                             }
                           }}
                           onClick={async () => {
@@ -908,15 +1029,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         </div>
                         {/* Owner (Cliente) */}
                         <div
+                          ref={(el) => { rowRefs.current[projectId] = el; }}
                           className={`border border-emerald-200 p-1.5 text-left text-slate-600 ${combinedClass} ${isLoading ? 'bg-black/10' : ''} ${isHovered ? 'bg-emerald-50' : ''} cursor-pointer relative`}
-                          onMouseEnter={() => setHoveredRowId(projectId)}
+                          onMouseEnter={(e) => {
+                            setHoveredRowId(projectId);
+                            // Calcola posizione toolbar fuori dal container
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setToolbarPosition({
+                              top: rect.top + rect.height / 2,
+                              left: rect.right + 10,
+                              projectId
+                            });
+                          }}
                           onMouseLeave={(e) => {
                             const relatedTarget = e.relatedTarget as HTMLElement;
+                            // Se il mouse va verso la toolbar, non nasconderla
                             if (relatedTarget && relatedTarget.closest('.action-buttons-container')) {
+                              return;
+                            }
+                            // Controlla se il mouse sta andando verso la toolbar (area a destra)
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const mouseX = e.clientX;
+                            const mouseY = e.clientY;
+                            const toolbarLeft = rect.right + 10;
+                            const toolbarTop = rect.top + rect.height / 2;
+                            // Se il mouse è nell'area della toolbar, non nasconderla
+                            if (mouseX >= toolbarLeft - 20 && mouseX <= toolbarLeft + 100 &&
+                                mouseY >= toolbarTop - 30 && mouseY <= toolbarTop + 30) {
                               return;
                             }
                             if (!isLoading) {
                               setHoveredRowId(null);
+                              setToolbarPosition(null);
                             }
                           }}
                           onClick={async () => {
@@ -937,90 +1081,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                               return (!ownerClient || ownerClient === 'undefined' || ownerClient === 'null') ? '-' : ownerClient;
                             })()}
                           </span>
-                          {/* Toolbar azioni - posizionata assolutamente fuori dalla griglia */}
-                          {isHovered && !isLoading && (
-                            <div
-                              className="action-buttons-container flex flex-row gap-2 z-20 absolute"
-                              data-row-id={projectId}
-                              onClick={(e) => e.stopPropagation()}
-                              onMouseEnter={() => setHoveredRowId(projectId)}
-                              onMouseLeave={(e) => {
-                                const relatedTarget = e.relatedTarget as HTMLElement;
-                                if (relatedTarget && relatedTarget.closest('[data-row-id]')) {
-                                  return;
-                                }
-                                setHoveredRowId(null);
-                              }}
-                              style={{
-                                pointerEvents: 'auto',
-                                right: '-60px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                              }}
-                            >
-                              {/* Pulsante Apri */}
-                              <button
-                                className="bg-transparent hover:bg-emerald-100 text-emerald-700 p-1 rounded transition-colors flex-shrink-0"
-                                title="Apri progetto"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  setLoadingProjectId(projectId);
-                                  try {
-                                    const maybe = onSelectProject(projectId);
-                                    if ((maybe as any)?.then) await (maybe as any);
-                                  } catch (e) {
-                                    setLoadingProjectId(null);
-                                  }
-                                }}
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                              </button>
-                              {/* Pulsante Elimina */}
-                              {confirmingDeleteId === projectId ? (
-                                <div className="flex flex-row gap-1 items-center">
-                                  <button
-                                    className="bg-red-600 text-white px-2 py-1 rounded text-xs font-semibold hover:bg-red-700 transition-colors"
-                                    title="Conferma eliminazione"
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      setDeletingId(projectId);
-                                      setConfirmingDeleteId(null);
-                                      try {
-                                        await onDeleteProject(projectId);
-                                      } finally {
-                                        setDeletingId(null);
-                                      }
-                                    }}
-                                  >
-                                    Conferma
-                                  </button>
-                                  <button
-                                    className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-semibold hover:bg-gray-300 transition-colors"
-                                    title="Annulla eliminazione"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setConfirmingDeleteId(null);
-                                    }}
-                                  >
-                                    Annulla
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  className="bg-transparent hover:bg-red-100 text-red-600 p-1 rounded transition-colors flex-shrink-0"
-                                  title="Elimina progetto"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setConfirmingDeleteId(projectId);
-                                  }}
-                                >
-                                  {deletingId === projectId
-                                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                                    : <Trash2 className="w-3 h-3" />}
-                                </button>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </React.Fragment>
                     );
@@ -1028,6 +1088,136 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
           </div>
+          )}
+
+          {/* Toolbar azioni - renderizzata fuori dal pannello con position fixed */}
+          {toolbarPosition && toolbarPosition.projectId && !loadingProjectId && (
+            <div
+              className="action-buttons-container flex flex-row gap-2 z-50 fixed bg-white rounded-lg shadow-lg border border-emerald-200 p-1"
+              style={{
+                top: `${toolbarPosition.top}px`,
+                left: `${toolbarPosition.left}px`,
+                transform: 'translateY(-50%)',
+                pointerEvents: 'auto',
+              }}
+              onMouseEnter={() => {
+                // Mantieni hover quando si passa sopra la toolbar
+                setHoveredRowId(toolbarPosition.projectId);
+                // Ricalcola posizione per assicurarsi che sia aggiornata
+                const ownerCell = rowRefs.current[toolbarPosition.projectId];
+                if (ownerCell) {
+                  const rect = ownerCell.getBoundingClientRect();
+                  setToolbarPosition({
+                    top: rect.top + rect.height / 2,
+                    left: rect.right + 10,
+                    projectId: toolbarPosition.projectId
+                  });
+                }
+              }}
+              onMouseLeave={(e) => {
+                const relatedTarget = e.relatedTarget as HTMLElement;
+                // Se il mouse va verso una cella della stessa riga, non nascondere
+                if (relatedTarget && relatedTarget.closest(`[data-project-id="${toolbarPosition.projectId}"]`)) {
+                  return;
+                }
+                // Controlla se il mouse è ancora nell'area della toolbar o della riga
+                const toolbarElement = e.currentTarget;
+                const toolbarRect = toolbarElement.getBoundingClientRect();
+                const mouseX = e.clientX;
+                const mouseY = e.clientY;
+
+                // Se il mouse è ancora vicino alla toolbar o alla riga, non nascondere
+                const ownerCell = rowRefs.current[toolbarPosition.projectId];
+                if (ownerCell) {
+                  const cellRect = ownerCell.getBoundingClientRect();
+                  const isNearToolbar = mouseX >= toolbarRect.left - 50 && mouseX <= toolbarRect.right + 50 &&
+                                       mouseY >= toolbarRect.top - 50 && mouseY <= toolbarRect.bottom + 50;
+                  const isNearRow = mouseX >= cellRect.left - 50 && mouseX <= cellRect.right + 50 &&
+                                   mouseY >= cellRect.top - 50 && mouseY <= cellRect.bottom + 50;
+
+                  if (isNearToolbar || isNearRow) {
+                    return;
+                  }
+                }
+
+                // Piccolo delay per permettere al mouse di tornare sulla riga o toolbar
+                setTimeout(() => {
+                  const stillHoveringToolbar = document.querySelector('.action-buttons-container:hover');
+                  const stillHoveringRow = document.querySelector(`[data-project-id="${toolbarPosition.projectId}"]:hover`);
+                  if (!stillHoveringToolbar && !stillHoveringRow) {
+                    setHoveredRowId(null);
+                    setToolbarPosition(null);
+                  }
+                }, 150);
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Pulsante Apri */}
+              <button
+                className="bg-transparent hover:bg-emerald-100 text-emerald-700 p-1 rounded transition-colors flex-shrink-0"
+                title="Apri progetto"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const projectId = toolbarPosition.projectId;
+                  setLoadingProjectId(projectId);
+                  setToolbarPosition(null);
+                  try {
+                    const maybe = onSelectProject(projectId);
+                    if ((maybe as any)?.then) await (maybe as any);
+                  } catch (e) {
+                    setLoadingProjectId(null);
+                  }
+                }}
+              >
+                <ExternalLink className="w-3 h-3" />
+              </button>
+              {/* Pulsante Elimina */}
+              {confirmingDeleteId === toolbarPosition.projectId ? (
+                <div className="flex flex-row gap-1 items-center">
+                  <button
+                    className="bg-red-600 text-white px-2 py-1 rounded text-xs font-semibold hover:bg-red-700 transition-colors"
+                    title="Conferma eliminazione"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const projectId = toolbarPosition.projectId;
+                      setDeletingId(projectId);
+                      setConfirmingDeleteId(null);
+                      setToolbarPosition(null);
+                      try {
+                        await onDeleteProject(projectId);
+                      } finally {
+                        setDeletingId(null);
+                      }
+                    }}
+                  >
+                    Conferma
+                  </button>
+                  <button
+                    className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-semibold hover:bg-gray-300 transition-colors"
+                    title="Annulla eliminazione"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmingDeleteId(null);
+                    }}
+                  >
+                    Annulla
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="bg-transparent hover:bg-red-100 text-red-600 p-1 rounded transition-colors flex-shrink-0"
+                  title="Elimina progetto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmingDeleteId(toolbarPosition.projectId);
+                  }}
+                >
+                  {deletingId === toolbarPosition.projectId
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Trash2 className="w-3 h-3" />}
+                </button>
+              )}
+            </div>
           )}
 
         </div>
