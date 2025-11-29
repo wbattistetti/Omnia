@@ -167,8 +167,11 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
         const isLast = idx === prev.length - 1;
 
-        // ✅ Logica semplice: auto-append solo se nodo è in stato isEmpty
-        const shouldAutoAppend = isEmpty && isLast && wasEmpty && nowFilled;
+        // ✅ Logica migliorata: auto-append se stai editando l'ultima riga, era vuota e ora è piena
+        // Questo permette di continuare l'auto-append anche dopo la prima riga
+        // Non serve più verificare isEmpty perché vogliamo continuare finché editiamo l'ultima riga vuota
+        // Quando aggiungiamo una nuova riga vuota, quella diventa l'ultima, quindi l'auto-append continua
+        const shouldAutoAppend = isLast && wasEmpty && nowFilled;
 
         console.log('🔍 [AUTO_APPEND] Checking conditions', {
             nodeId,
