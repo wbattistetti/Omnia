@@ -47,10 +47,21 @@ export function resolveActionText(action: any, dict: Record<string, string>): st
 
 /**
  * Loads NLP contract from a node
- * Simplified version - contract should be passed from frontend or loaded via callback
+ * Accepts either a node object directly or (nodeId, ddt) to find the node
  */
-export function loadContract(node: any): any | null {
-  const contract = (node as any).nlpContract;
+export function loadContract(nodeOrNodeId: any, ddtInstance?: any): any | null {
+  // If first param is a string (nodeId) and second param is provided (ddt)
+  if (typeof nodeOrNodeId === 'string' && ddtInstance) {
+    const node = findOriginalNode(ddtInstance, undefined, nodeOrNodeId);
+    if (node && node.nlpContract) {
+      return node.nlpContract;
+    }
+    return null;
+  }
+
+  // Otherwise, assume first param is a node object
+  const node = nodeOrNodeId;
+  const contract = (node as any)?.nlpContract;
   if (contract) {
     return contract;
   }

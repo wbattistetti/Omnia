@@ -166,12 +166,21 @@ async function executeAction(
     }
 
     if (text && callbacks.onMessage) {
+      console.log('[ddtSteps][executeAction] ✅ Sending message', {
+        stepType,
+        escalationNumber,
+        textLength: text.length,
+        textPreview: text.substring(0, 100),
+        hasInputValue: inputValue !== undefined
+      });
       callbacks.onMessage(text, stepType, escalationNumber);
     } else {
       console.error('[ddtSteps][executeAction] ❌ CANNOT SEND MESSAGE', {
         hasText: !!text,
         hasOnMessage: !!callbacks.onMessage,
-        reason: !text ? 'No text resolved' : 'No onMessage callback'
+        reason: !text ? 'No text resolved' : 'No onMessage callback',
+        stepType,
+        escalationNumber
       });
     }
   } catch (error) {

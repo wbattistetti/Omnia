@@ -41,6 +41,12 @@ export class DialogueEngine {
       return;
     }
 
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🚀 [BACKEND] DialogueEngine - STARTING EXECUTION');
+    console.log('📍 Location: BACKEND (Node.js server)');
+    console.log('🔧 Engine: backend/runtime/orchestrator/engine.ts');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
     this.isRunning = true;
 
     // ✅ Initialize execution state by notifying immediately
@@ -51,13 +57,24 @@ export class DialogueEngine {
       if (this.result.entryTaskId) {
         const entryTask = this.result.taskMap.get(this.result.entryTaskId);
         if (entryTask) {
+          console.log('[BACKEND][DialogueEngine] Executing entry task:', {
+            taskId: entryTask.id,
+            action: entryTask.action
+          });
           await this.executeTask(entryTask);
         }
       }
 
       // Main loop: find and execute tasks
       await this.runLoop();
+
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log('✅ [BACKEND] DialogueEngine - EXECUTION COMPLETED');
+      console.log('═══════════════════════════════════════════════════════════════════════════');
     } catch (error) {
+      console.error('═══════════════════════════════════════════════════════════════════════════');
+      console.error('❌ [BACKEND] DialogueEngine - EXECUTION ERROR');
+      console.error('═══════════════════════════════════════════════════════════════════════════');
       this.callbacks.onError?.(error as Error);
     } finally {
       this.isRunning = false;

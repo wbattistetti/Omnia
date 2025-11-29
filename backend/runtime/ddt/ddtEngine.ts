@@ -252,10 +252,40 @@ export async function runDDT(
         });
       }
 
-    // 9. Se siamo andati a Confirmation, continua ciclo per eseguire step Confirmation
+    // 9. Se siamo andati a Confirmation, esegui step Confirmation prima di continuare
     if (turnStateDesc.turnState === 'Confirmation') {
-      console.log('[DDTEngine][runDDT] 🔄 Going to Confirmation, continuing loop');
-      continue; // Continua ciclo per eseguire step Confirmation
+      console.log('[DDTEngine][runDDT] 🔄 Going to Confirmation, executing confirmation step');
+      console.log('[DDTEngine][runDDT] 📊 State before confirmation', {
+        turnState: state.turnState,
+        context: state.context,
+        memoryKeys: Object.keys(state.memory),
+        memoryValues: Object.keys(state.memory).map(key => ({
+          key,
+          hasValue: !!state.memory[key]?.value,
+          value: state.memory[key]?.value,
+          confirmed: state.memory[key]?.confirmed
+        }))
+      });
+      
+      // Ottieni la risposta per Confirmation
+      const confirmationResponse = getResponse(
+        currData,
+        'Confirmation',
+        counters,
+        limits
+      );
+      
+      console.log('[DDTEngine][runDDT] 📋 Confirmation response prepared', {
+        stepType: confirmationResponse.stepType,
+        hasStepOrEscalation: !!confirmationResponse.stepOrEscalation,
+        message: confirmationResponse.message
+      });
+      
+      // Esegui il messaggio di conferma
+      await executeResponse(confirmationResponse, callbacks, currData, state);
+      
+      console.log('[DDTEngine][runDDT] ✅ Confirmation message sent, continuing loop to wait for user input');
+      continue; // Continua ciclo per attendere input utente (conferma o negazione)
     }
 
     // 10. Se siamo andati a Success, esegui step Success prima di terminare
@@ -515,6 +545,13 @@ async function executeResponse(
   // Se è confirmation, recupera i valori dalla memoria per sostituire {input}
   let inputValue: any = undefined;
   if (response.stepType === 'confirmation' && currData && state) {
+    console.log('[DDTEngine][executeResponse] 🔄 Preparing confirmation message', {
+      stepType: response.stepType,
+      hasCurrData: !!currData,
+      hasState: !!state,
+      memoryKeys: Object.keys(state.memory || {})
+    });
+
     const mainData = currData.mainData;
 
     // Se mainData ha subData, formatta tutti i valori
@@ -527,16 +564,35 @@ async function executeResponse(
         }
       }
       inputValue = values.join(' ');
+      console.log('[DDTEngine][executeResponse] ✅ Formatted input value from subData', {
+        inputValue,
+        subDataCount: mainData.subData.length
+      });
     } else {
       // MainData atomico
       const mainValue = state.memory[mainData.id]?.value;
       if (mainValue !== undefined && mainValue !== null) {
         inputValue = mainValue;
+        console.log('[DDTEngine][executeResponse] ✅ Got input value from mainData', {
+          inputValue,
+          mainDataId: mainData.id
+        });
+      } else {
+        console.warn('[DDTEngine][executeResponse] ⚠️ No value found in memory for confirmation', {
+          mainDataId: mainData.id,
+          memoryKeys: Object.keys(state.memory || {})
+        });
       }
     }
   }
 
   if (response.stepOrEscalation) {
+    console.log('[DDTEngine][executeResponse] 🚀 Executing step', {
+      stepType: response.stepType,
+      escalationLevel: response.escalationLevel,
+      hasInputValue: inputValue !== undefined,
+      inputValue: inputValue !== undefined ? String(inputValue).substring(0, 50) : undefined
+    });
     await executeStep(
       response.stepOrEscalation,
       callbacks,
@@ -544,6 +600,14 @@ async function executeResponse(
       response.escalationLevel,
       inputValue
     );
+    console.log('[DDTEngine][executeResponse] ✅ Step executed', {
+      stepType: response.stepType
+    });
+  } else {
+    console.warn('[DDTEngine][executeResponse] ⚠️ No step or escalation to execute', {
+      stepType: response.stepType,
+      hasStepOrEscalation: !!response.stepOrEscalation
+    });
   }
 }
 

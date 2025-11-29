@@ -85,6 +85,15 @@ export function useNewFlowOrchestrator({
   // Track current DDT
   const [currentDDTState, setCurrentDDTState] = useState<AssembledDDT | null>(null);
 
+  // Debug: log when currentDDTState changes
+  React.useEffect(() => {
+    console.log('[useNewFlowOrchestrator] currentDDTState changed', {
+      hasDDT: !!currentDDTState,
+      ddtId: currentDDTState?.id,
+      ddtLabel: currentDDTState?.label
+    });
+  }, [currentDDTState]);
+
   // ✅ Get global translations from context (safe - handles missing provider)
   const { translations: globalTranslations } = useProjectTranslationsSafe();
 
@@ -171,6 +180,12 @@ export function useNewFlowOrchestrator({
     const taskDDT: AssembledDDT | null = task.value?.ddt || null;
     const taskTranslations = loadTranslationsFromDDT(taskDDT);
 
+    // ✅ Merge task translations with global translations for complete coverage
+    const mergedTranslations = {
+      ...globalTranslations, // Global translations from context
+      ...taskTranslations     // Task-specific translations from DDT
+    };
+
     console.log('[useNewFlowOrchestrator][handleTaskExecute] Starting', {
       taskId: task.id,
       action: task.action,
@@ -179,16 +194,19 @@ export function useNewFlowOrchestrator({
       hasTaskDDT: !!taskDDT,
       taskDDTId: taskDDT?.id,
       taskDDTLabel: taskDDT?.label,
-      // 🔍 DEBUG: Log translations loaded from task DDT
-      hasTranslations: Object.keys(taskTranslations).length > 0,
-      translationsCount: Object.keys(taskTranslations).length,
-      sampleTranslationKeys: Object.keys(taskTranslations).slice(0, 5),
-      sampleTranslations: Object.entries(taskTranslations).slice(0, 3).map(([k, v]) => ({
+      // 🔍 DEBUG: Log translations loaded
+      hasTranslations: Object.keys(mergedTranslations).length > 0,
+      translationsCount: Object.keys(mergedTranslations).length,
+      globalTranslationsCount: Object.keys(globalTranslations).length,
+      taskTranslationsCount: Object.keys(taskTranslations).length,
+      sampleTranslationKeys: Object.keys(mergedTranslations).slice(0, 5),
+      sampleTranslations: Object.entries(mergedTranslations).slice(0, 3).map(([k, v]) => ({
         key: k,
         value: String(v).substring(0, 50)
       }))
     });
     const result = await executeTask(task, {
+      translations: mergedTranslations, // ✅ Pass merged translations to resolve GUID keys in SayMessage tasks
       onMessage: (text: string, stepType?: string, escalationNumber?: number) => {
         // Removed verbose logging
         if (onMessage) {
@@ -560,6 +578,20 @@ export function useNewFlowOrchestrator({
     return result;
   }, [handleTaskExecute]);
 
+  // Check if backend orchestrator is enabled
+  const useBackendOrchestrator = React.useMemo(() => {
+    try {
+      // Default to backend - only use frontend if explicitly disabled
+      const flag = localStorage.getItem('orchestrator.useBackend');
+      return flag !== 'false'; // Default to true if not set
+    } catch {
+      return true; // Default to backend on error
+    }
+  }, []);
+
+  // Store orchestrator session ID for input handling
+  const orchestratorSessionIdRef = React.useRef<string | null>(null);
+
   // Use new dialogue engine
   const engine = useDialogueEngine({
     nodes,
@@ -567,6 +599,117 @@ export function useNewFlowOrchestrator({
     getTask,
     getDDT,
     onTaskExecute: handleTaskExecuteWithDDT,
+    translations: { ...globalTranslations, ...ddtTranslations }, // Pass merged translations to engine
+    onMessage: (message) => {
+      // Messages from backend orchestrator - forward to onMessage callback
+      if (onMessage) {
+        import('../chatSimulatorUtils').then(({ getStepColor }) => {
+          const messagePayload = {
+            id: message.id || message.taskId || `msg-${Date.now()}-${Math.random()}`,
+            text: message.text,
+            stepType: message.stepType || 'message',
+            escalationNumber: message.escalationNumber,
+            timestamp: new Date(),
+            color: message.stepType ? getStepColor(message.stepType) : undefined,
+            warningMessage: undefined
+          };
+          onMessage(messagePayload);
+        }).catch((error) => {
+          console.error('[useNewFlowOrchestrator] Error importing getStepColor', error);
+          const fallbackPayload = {
+            id: message.id || message.taskId || `msg-${Date.now()}-${Math.random()}`,
+            text: message.text,
+            stepType: message.stepType || 'message',
+            escalationNumber: message.escalationNumber,
+            timestamp: new Date()
+          };
+          if (onMessage) {
+            onMessage(fallbackPayload);
+          }
+        });
+      }
+    },
+    onDDTStart: (data) => {
+      // DDT start from backend orchestrator - replicate frontend logic exactly
+      const ddt = data.ddt || data;
+      if (ddt) {
+        console.log('[useNewFlowOrchestrator] onDDTStart from backend orchestrator', {
+          ddtId: ddt.id,
+          ddtLabel: ddt.label
+        });
+        // Update both state, ref, and closure variable immediately (same as frontend)
+        setCurrentDDTState(ddt);
+        currentDDTRef.current = ddt;
+        currentDDTInClosure = ddt;
+        if (onDDTStart) {
+          onDDTStart(ddt);
+          console.log('[useNewFlowOrchestrator] DDT sent to onDDTStart callback');
+        } else {
+          console.warn('[useNewFlowOrchestrator] onDDTStart callback not provided');
+        }
+      }
+    },
+    onWaitingForInput: (data) => {
+      // Store waiting state for input handling
+      console.log('[useNewFlowOrchestrator] Waiting for input from backend orchestrator', data);
+
+      // Store session ID - try multiple sources
+      // PRIORITY ORDER CHANGED: orchestratorControl.sessionId is most up-to-date
+      let sessionIdFound = false;
+
+      // 1. Try from engine.orchestratorControl.sessionId FIRST (most reliable for backend orchestrator)
+      const orchestratorControl = (engine as any).orchestratorControl;
+      if (orchestratorControl && orchestratorControl.sessionId) {
+        orchestratorSessionIdRef.current = orchestratorControl.sessionId;
+        sessionIdFound = true;
+        console.log('[useNewFlowOrchestrator] ✅ Session ID stored from engine.orchestratorControl', { sessionId: orchestratorControl.sessionId });
+      }
+
+      // 2. Try from engine.getSessionId() if available
+      if (!sessionIdFound && typeof (engine as any).getSessionId === 'function') {
+        const sessionId = (engine as any).getSessionId();
+        if (sessionId) {
+          orchestratorSessionIdRef.current = sessionId;
+          sessionIdFound = true;
+          console.log('[useNewFlowOrchestrator] ✅ Session ID stored from engine.getSessionId()', { sessionId });
+        }
+      }
+
+      // 3. Try from engine.sessionId (fallback, may be stale)
+      if (!sessionIdFound) {
+        const engineSessionId = (engine as any).sessionId;
+        if (engineSessionId) {
+          orchestratorSessionIdRef.current = engineSessionId;
+          sessionIdFound = true;
+          console.log('[useNewFlowOrchestrator] ⚠️ Session ID stored from engine.sessionId (may be stale!)', { sessionId: engineSessionId });
+        }
+      }
+
+      if (!sessionIdFound) {
+        console.warn('[useNewFlowOrchestrator] ⚠️ Could not find sessionId from any source!', {
+          hasOrchestratorControl: !!orchestratorControl,
+          hasSessionIdInControl: !!orchestratorControl?.sessionId,
+          hasGetSessionId: typeof (engine as any).getSessionId === 'function',
+          engineKeys: Object.keys(engine || {})
+        });
+      }
+
+      // If DDT is provided, call onDDTStart to replicate frontend behavior exactly
+      if (data.ddt) {
+        console.log('[useNewFlowOrchestrator] DDT provided in waitingForInput, calling onDDTStart', {
+          ddtId: data.ddt.id,
+          ddtLabel: data.ddt.label
+        });
+        // Replicate exact frontend logic: set state, ref, closure, and call callback
+        setCurrentDDTState(data.ddt);
+        currentDDTRef.current = data.ddt;
+        currentDDTInClosure = data.ddt;
+        if (onDDTStart) {
+          onDDTStart(data.ddt);
+          console.log('[useNewFlowOrchestrator] DDT sent to onDDTStart callback from waitingForInput');
+        }
+      }
+    },
     onComplete: () => {
       if (onDDTComplete) {
         onDDTComplete();
@@ -576,6 +719,30 @@ export function useNewFlowOrchestrator({
       console.error('[useNewFlowOrchestrator] Error:', error);
     }
   });
+
+  // Store session ID when available (check multiple sources)
+  React.useEffect(() => {
+    if (useBackendOrchestrator) {
+      // Try to get sessionId from engine
+      const engineSessionId = (engine as any).sessionId;
+      if (engineSessionId) {
+        orchestratorSessionIdRef.current = engineSessionId;
+        console.log('[useNewFlowOrchestrator] Backend orchestrator session ID stored from engine', {
+          sessionId: orchestratorSessionIdRef.current
+        });
+        return;
+      }
+
+      // Try to get from orchestratorControl
+      const orchestratorControl = (engine as any).orchestratorControl;
+      if (orchestratorControl && orchestratorControl.sessionId) {
+        orchestratorSessionIdRef.current = orchestratorControl.sessionId;
+        console.log('[useNewFlowOrchestrator] Backend orchestrator session ID stored from orchestratorControl', {
+          sessionId: orchestratorSessionIdRef.current
+        });
+      }
+    }
+  }, [useBackendOrchestrator, (engine as any).sessionId, (engine as any).orchestratorControl]);
 
       // ✅ Expose execution state to window for FlowEditor highlighting
       // ✅ Expose onMessage to window for edge error messages
@@ -689,27 +856,85 @@ export function useNewFlowOrchestrator({
     },
     handleUserInput: async (input: string) => {
       const t0 = performance.now();
-      // Removed verbose logging
-      // Handle user input for DDT navigation
-      // ✅ Use ref for immediate availability (no async state update)
       console.log('[useNewFlowOrchestrator] 📥 handleUserInput called', {
         input: input.substring(0, 50),
-        hasPendingResolve: !!pendingInputResolveRef.current
+        hasPendingResolve: !!pendingInputResolveRef.current,
+        useBackendOrchestrator,
+        hasSessionId: !!orchestratorSessionIdRef.current
       });
-      if (pendingInputResolveRef.current) {
-        // Set isRetrieving to true when processing starts
-        setIsRetrieving(true);
 
-        // Return raw input as 'match' event - will be processed in retrieve() using onProcessInput
-        // This allows retrieve() to process the input and determine if it's actually match/noMatch
+      // If using backend orchestrator, send input to backend
+      if (useBackendOrchestrator) {
+        // Try to get sessionId from multiple sources (in order of preference)
+        let sessionId = orchestratorSessionIdRef.current;
+
+        if (!sessionId) {
+          // Try from engine.sessionId (exposed directly)
+          sessionId = engine.sessionId || (engine as any).sessionId;
+          if (sessionId) {
+            console.log('[useNewFlowOrchestrator] Found sessionId from engine.sessionId', { sessionId });
+          }
+        }
+
+        if (!sessionId) {
+          // Try from engine.getSessionId() if available
+          if (engine.getSessionId && typeof engine.getSessionId === 'function') {
+            sessionId = engine.getSessionId();
+            if (sessionId) {
+              console.log('[useNewFlowOrchestrator] Found sessionId from engine.getSessionId()', { sessionId });
+            }
+          }
+        }
+
+        if (!sessionId) {
+          // Try from orchestratorControl (fallback)
+          const orchestratorControl = (engine as any).orchestratorControl;
+          sessionId = orchestratorControl?.sessionId;
+          if (sessionId) {
+            console.log('[useNewFlowOrchestrator] Found sessionId from orchestratorControl', { sessionId });
+          }
+        }
+
+        if (sessionId) {
+          // Update ref for next time
+          orchestratorSessionIdRef.current = sessionId;
+          console.log('[useNewFlowOrchestrator] 📤 Sending input to backend orchestrator', {
+            sessionId,
+            inputLength: input.length,
+            input: input.substring(0, 50)
+          });
+          try {
+            const { provideOrchestratorInput } = await import('../../DialogueEngine/orchestratorAdapter');
+            const result = await provideOrchestratorInput(sessionId, input);
+            if (!result.success) {
+              console.error('[useNewFlowOrchestrator] Failed to provide input to backend orchestrator', result.error);
+            } else {
+              console.log('[useNewFlowOrchestrator] ✅ Input successfully sent to backend orchestrator');
+            }
+          } catch (error) {
+            console.error('[useNewFlowOrchestrator] Error providing input to backend orchestrator', error);
+          }
+          return;
+        } else {
+          console.error('[useNewFlowOrchestrator] ⚠️ Backend orchestrator enabled but no sessionId available!', {
+            hasOrchestratorSessionIdRef: !!orchestratorSessionIdRef.current,
+            hasEngineSessionId: !!(engine.sessionId || (engine as any).sessionId),
+            hasGetSessionId: typeof engine.getSessionId === 'function',
+            hasOrchestratorControl: !!(engine as any).orchestratorControl,
+            engineKeys: Object.keys(engine || {}).slice(0, 10)
+          });
+        }
+      }
+
+      // Frontend orchestrator: handle input for DDT navigation
+      if (pendingInputResolveRef.current) {
+        setIsRetrieving(true);
         const t1 = performance.now();
-        // Removed verbose logging
         const resolve = pendingInputResolveRef.current;
-        pendingInputResolveRef.current = null; // Clear immediately
+        pendingInputResolveRef.current = null;
         resolve({ type: 'match' as const, value: input });
         setCurrentNodeForInput(null);
         const t2 = performance.now();
-        // Removed verbose logging
       } else {
         console.warn('[useNewFlowOrchestrator] handleUserInput called but no pendingInputResolve');
       }

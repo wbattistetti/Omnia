@@ -40,6 +40,18 @@ export class DialogueEngine {
       return;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🚀 DIALOGUE ENGINE START - EXECUTION LOCATION LOG
+    // ═══════════════════════════════════════════════════════════════════════════
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🚀 [FRONTEND] DialogueEngine - STARTING EXECUTION');
+    console.log('📍 Location: FRONTEND (Browser)');
+    console.log('🔧 Engine: src/components/DialogueEngine/engine.ts');
+    console.log('⚠️  Note: Task execution loop runs in browser');
+    console.log('📋 Tasks to execute:', this.result.tasks.length);
+    console.log('🎯 Entry task:', this.result.entryTaskId);
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
     this.isRunning = true;
 
     // ✅ Initialize execution state by notifying immediately
@@ -56,7 +68,16 @@ export class DialogueEngine {
 
       // Main loop: find and execute tasks
       await this.runLoop();
+
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log('✅ [FRONTEND] DialogueEngine - EXECUTION COMPLETED');
+      console.log('📍 Location: FRONTEND (Browser)');
+      console.log('═══════════════════════════════════════════════════════════════════════════');
     } catch (error) {
+      console.error('═══════════════════════════════════════════════════════════════════════════');
+      console.error('❌ [FRONTEND] DialogueEngine - EXECUTION ERROR');
+      console.error('📍 Location: FRONTEND (Browser)');
+      console.error('═══════════════════════════════════════════════════════════════════════════');
       this.callbacks.onError?.(error as Error);
     } finally {
       this.isRunning = false;

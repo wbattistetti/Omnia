@@ -4343,6 +4343,11 @@ app.post('/api/runtime/compile', async (req, res) => {
     };
 
     // Call compiler
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🔧 [BACKEND] Flow Compiler - EXECUTING ON BACKEND');
+    console.log('📍 Location: BACKEND (Node.js server)');
+    console.log('🔨 Compiler: backend/runtime/compiler/compiler.ts');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
     console.log('[API] Calling backend compiler...');
     const result = compileFlow(nodes, edges, {
       getTask,
@@ -4364,7 +4369,9 @@ app.post('/api/runtime/compile', async (req, res) => {
     };
 
     console.log('═══════════════════════════════════════════════════════════════════════════');
-    console.log('✅ [API] POST /api/runtime/compile - COMPLETED');
+    console.log('✅ [BACKEND] Flow Compiler - COMPLETED');
+    console.log('📍 Execution: BACKEND (Node.js server)');
+    console.log('✅ Compilation: SUCCESS');
     console.log('[API] Compile result:', {
       tasksCount: result.tasks.length,
       entryTaskId: result.entryTaskId,
@@ -4836,6 +4843,393 @@ app.delete('/api/runtime/ddt/session/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [API] DELETE /api/runtime/ddt/session/:id - ERROR', error);
+    res.status(500).json({
+      error: 'Failed to delete session',
+      message: error.message
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚀 RUNTIME API - Flow Orchestrator Session Endpoints (Interactive)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Import Orchestrator Session Manager (lazy load to avoid blocking server startup)
+let OrchestratorSessionManager;
+let orchestratorSessionManagerInstance;
+
+function loadOrchestratorSessionManager() {
+  if (OrchestratorSessionManager && orchestratorSessionManagerInstance) {
+    return { OrchestratorSessionManager, orchestratorSessionManagerInstance };
+  }
+
+  try {
+    require('ts-node').register({
+      transpileOnly: true,
+      compilerOptions: {
+        module: 'commonjs',
+        esModuleInterop: true,
+        resolveJsonModule: true
+      }
+    });
+    const orchestratorSessionModule = require('./runtime/session/OrchestratorSessionManager.ts');
+    OrchestratorSessionManager = orchestratorSessionModule.OrchestratorSessionManager;
+    orchestratorSessionManagerInstance = orchestratorSessionModule.orchestratorSessionManager || new OrchestratorSessionManager();
+    console.log('[SERVER] ✅ Orchestrator Session Manager loaded successfully');
+    return { OrchestratorSessionManager, orchestratorSessionManagerInstance };
+  } catch (err) {
+    console.warn('[SERVER] ⚠️ Orchestrator Session Manager not available:', err.message);
+    return { OrchestratorSessionManager: null, orchestratorSessionManagerInstance: null };
+  }
+}
+
+// POST /api/runtime/orchestrator/session/start - Start a new orchestrator session
+app.post('/api/runtime/orchestrator/session/start', async (req, res) => {
+  try {
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🚀 [API] POST /api/runtime/orchestrator/session/start - REQUEST');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    const { compilationResult, tasks, ddts, translations } = req.body;
+
+    if (!compilationResult) {
+      return res.status(400).json({
+        error: 'Missing compilationResult',
+        message: 'compilationResult is required'
+      });
+    }
+
+    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
+    if (!Manager || !instance) {
+      return res.status(500).json({
+        error: 'Orchestrator Session Manager not available',
+        message: 'Failed to load Orchestrator Session Manager'
+      });
+    }
+
+    // Convert taskMap from object to Map if needed
+    if (compilationResult.taskMap && typeof compilationResult.taskMap === 'object') {
+      const taskMap = new Map();
+      Object.entries(compilationResult.taskMap).forEach(([key, value]) => {
+        taskMap.set(key, value);
+      });
+      compilationResult.taskMap = taskMap;
+    }
+
+    const sessionManager = orchestratorSessionManagerInstance;
+    const sessionId = sessionManager.createSession(
+      compilationResult,
+      tasks || [],
+      ddts || [],
+      translations || {}
+    );
+
+    console.log('✅ [API] POST /api/runtime/orchestrator/session/start - Session created:', { sessionId });
+    res.json({
+      sessionId,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ [API] POST /api/runtime/orchestrator/session/start - ERROR', error);
+    res.status(500).json({
+      error: 'Failed to create session',
+      message: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// POST /api/runtime/orchestrator/session/:id/input - Provide user input to session
+app.post('/api/runtime/orchestrator/session/:id/input', async (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+    const { input } = req.body;
+
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('📥 [API] POST /api/runtime/orchestrator/session/:id/input - REQUEST', {
+      sessionId,
+      inputLength: input?.length || 0
+    });
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
+    if (!Manager || !instance) {
+      return res.status(500).json({
+        error: 'Orchestrator Session Manager not available'
+      });
+    }
+
+    const sessionManager = instance;
+    const result = sessionManager.provideInput(sessionId, input || '');
+
+    if (!result.success) {
+      console.warn('⚠️ [API] POST /api/runtime/orchestrator/session/:id/input - Failed:', result.error);
+      return res.status(400).json({
+        error: result.error || 'Failed to provide input'
+      });
+    }
+
+    console.log('✅ [API] POST /api/runtime/orchestrator/session/:id/input - Input provided');
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ [API] POST /api/runtime/orchestrator/session/:id/input - ERROR', error);
+    res.status(500).json({
+      error: 'Failed to provide input',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/runtime/orchestrator/session/:id/stream - SSE stream for real-time events
+app.get('/api/runtime/orchestrator/session/:id/stream', (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('📡 [API] GET /api/runtime/orchestrator/session/:id/stream - SSE connection opened', { sessionId });
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
+    if (!Manager || !instance) {
+      res.status(500).write('event: error\n');
+      res.write(`data: ${JSON.stringify({ error: 'Orchestrator Session Manager not available' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const sessionManager = instance;
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      res.status(404).write('event: error\n');
+      res.write(`data: ${JSON.stringify({ error: 'Session not found' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Setup SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    // Send existing messages first
+    if (session.messages.length > 0) {
+      for (const msg of session.messages) {
+        res.write(`event: message\n`);
+        res.write(`data: ${JSON.stringify(msg)}\n\n`);
+      }
+    }
+
+    // Send waitingForInput event if already waiting
+    if (session.waitingForInput) {
+      // Try to get DDT from the task that's waiting
+      let ddtForEvent = null;
+      try {
+        // Get the task from compilation result to find its DDT
+        const waitingTask = session.compilationResult.tasks.find(t => t.id === session.waitingForInput.taskId);
+        if (waitingTask && waitingTask.value?.ddt) {
+          ddtForEvent = waitingTask.value.ddt;
+        }
+      } catch (e) {
+        console.warn('[API] Could not get DDT for waitingForInput event', e);
+      }
+
+      console.log('[API] 📡 Sending pending waitingForInput event to SSE client', {
+        sessionId,
+        taskId: session.waitingForInput.taskId,
+        nodeId: session.waitingForInput.nodeId,
+        hasDDT: !!ddtForEvent
+      });
+      res.write(`event: waitingForInput\n`);
+      res.write(`data: ${JSON.stringify({
+        taskId: session.waitingForInput.taskId,
+        nodeId: session.waitingForInput.nodeId,
+        ddt: ddtForEvent // Include DDT so frontend can show input box
+      })}\n\n`);
+    }
+
+    // If session is already complete, send result immediately
+    if (session.isComplete) {
+      res.write(`event: complete\n`);
+      res.write(`data: ${JSON.stringify({ success: true })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Listen to events from session
+    const eventEmitter = session.eventEmitter;
+    if (!eventEmitter) {
+      res.write('event: error\n');
+      res.write(`data: ${JSON.stringify({ error: 'Session event emitter not available' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const onMessage = (msg) => {
+      if (!res.writableEnded) {
+        res.write(`event: message\n`);
+        res.write(`data: ${JSON.stringify(msg)}\n\n`);
+      }
+    };
+
+    const onDDTStart = (data) => {
+      if (!res.writableEnded) {
+        res.write(`event: ddtStart\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      }
+    };
+
+    const onWaitingForInput = (data) => {
+      if (!res.writableEnded) {
+        res.write(`event: waitingForInput\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      }
+    };
+
+    const onStateUpdate = (state) => {
+      if (!res.writableEnded) {
+        res.write(`event: stateUpdate\n`);
+        res.write(`data: ${JSON.stringify({
+          currentNodeId: state.currentNodeId,
+          executedTaskIds: Array.from(state.executedTaskIds),
+          variableStore: state.variableStore
+        })}\n\n`);
+      }
+    };
+
+    const onComplete = (result) => {
+      if (!res.writableEnded) {
+        res.write(`event: complete\n`);
+        res.write(`data: ${JSON.stringify(result)}\n\n`);
+        res.end();
+      }
+    };
+
+    const onError = (error) => {
+      if (!res.writableEnded) {
+        res.write(`event: error\n`);
+        res.write(`data: ${JSON.stringify({ error: error.error || error.message || String(error) })}\n\n`);
+        res.end();
+      }
+    };
+
+    // Register event listeners
+    eventEmitter.on('message', onMessage);
+    eventEmitter.on('ddtStart', onDDTStart);
+    eventEmitter.on('waitingForInput', onWaitingForInput);
+    eventEmitter.on('stateUpdate', onStateUpdate);
+    eventEmitter.on('complete', onComplete);
+    eventEmitter.on('error', onError);
+
+    // Cleanup on client disconnect
+    req.on('close', () => {
+      console.log('✅ [API] GET /api/runtime/orchestrator/session/:id/stream - SSE connection closed', { sessionId });
+      eventEmitter.removeListener('message', onMessage);
+      eventEmitter.removeListener('ddtStart', onDDTStart);
+      eventEmitter.removeListener('waitingForInput', onWaitingForInput);
+      eventEmitter.removeListener('stateUpdate', onStateUpdate);
+      eventEmitter.removeListener('complete', onComplete);
+      eventEmitter.removeListener('error', onError);
+    });
+
+    // Send heartbeat every 30 seconds
+    const heartbeatInterval = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': heartbeat\n\n');
+      } else {
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
+
+    req.on('close', () => {
+      clearInterval(heartbeatInterval);
+    });
+  } catch (error) {
+    console.error('❌ [API] GET /api/runtime/orchestrator/session/:id/stream - ERROR', error);
+    if (!res.headersSent) {
+      res.status(500).write('event: error\n');
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    }
+    res.end();
+  }
+});
+
+// GET /api/runtime/orchestrator/session/:id/status - Get session status
+app.get('/api/runtime/orchestrator/session/:id/status', async (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+
+    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
+    if (!Manager || !instance) {
+      return res.status(500).json({
+        error: 'Orchestrator Session Manager not available'
+      });
+    }
+
+    const sessionManager = instance;
+    const status = sessionManager.getSessionStatus(sessionId);
+
+    if (!status.found) {
+      return res.status(404).json({
+        error: 'Session not found'
+      });
+    }
+
+      if (!status.session) {
+        return res.status(404).json({
+          error: 'Session not found'
+        });
+      }
+
+      res.json({
+        session: {
+          id: status.session.id,
+          isRunning: status.session.isRunning,
+          isComplete: status.session.isComplete,
+          messages: status.session.messages,
+          executionState: status.session.executionState,
+          error: status.session.error ? status.session.error.message : undefined
+        }
+      });
+  } catch (error) {
+    console.error('❌ [API] GET /api/runtime/orchestrator/session/:id/status - ERROR', error);
+    res.status(500).json({
+      error: 'Failed to get session status',
+      message: error.message
+    });
+  }
+});
+
+// DELETE /api/runtime/orchestrator/session/:id - Delete session
+app.delete('/api/runtime/orchestrator/session/:id', async (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+
+    const { OrchestratorSessionManager: Manager, orchestratorSessionManagerInstance: instance } = loadOrchestratorSessionManager();
+    if (!Manager || !instance) {
+      return res.status(500).json({
+        error: 'Orchestrator Session Manager not available'
+      });
+    }
+
+    const sessionManager = instance;
+    const deleted = sessionManager.deleteSession(sessionId);
+
+    if (!deleted) {
+      return res.status(404).json({
+        error: 'Session not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ [API] DELETE /api/runtime/orchestrator/session/:id - ERROR', error);
     res.status(500).json({
       error: 'Failed to delete session',
       message: error.message

@@ -66,7 +66,15 @@ export async function executeTask(
     translations?: Record<string, string>; // ✅ Translations from global table
   }
 ): Promise<TaskExecutionResult> {
-  // Removed verbose logging
+  // ✅ Log task execution location
+  const executionLocation = typeof window !== 'undefined' ? 'FRONTEND' : 'BACKEND';
+  console.log(`[${executionLocation}][TaskExecutor] Executing task:`, {
+    taskId: task.id,
+    action: task.action,
+    normalizedAction: normalizeActionType(task.action, task.value),
+    location: executionLocation
+  });
+
   try {
     // Normalize action type (handle item IDs, etc.)
     const normalizedAction = normalizeActionType(task.action, task.value);
@@ -76,7 +84,10 @@ export async function executeTask(
       case 'SayMessage':
       case 'Message':
         // Removed verbose logging
-        const result = await executeSayMessage(task, callbacks);
+        const result = await executeSayMessage(task, {
+          onMessage: callbacks.onMessage,
+          translations: callbacks.translations // ✅ Pass translations to resolve GUID keys
+        });
         // Removed verbose logging
         return result;
 
@@ -120,12 +131,44 @@ export async function executeTask(
  */
 async function executeSayMessage(
   task: CompiledTask,
-  callbacks: { onMessage?: (text: string, stepType?: string, escalationNumber?: number) => void }
+  callbacks: {
+    onMessage?: (text: string, stepType?: string, escalationNumber?: number) => void;
+    translations?: Record<string, string>; // ✅ Add translations to resolve GUID keys
+  }
 ): Promise<TaskExecutionResult> {
   // Removed verbose logging
 
   // Get text from task.value.text
-  const text = task.value?.text || '';
+  let text = task.value?.text || '';
+
+  // ✅ RESOLVE GUID/TEXT KEY: If text is a GUID or translation key, resolve it using translations
+  if (text) {
+    const translations = callbacks.translations || {};
+    // Check if text is a GUID (36 chars with hyphens) or a translation key
+    const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);
+
+    if (isGuid || translations[text]) {
+      // Try to resolve from translations
+      const resolvedText = translations[text];
+      if (resolvedText && typeof resolvedText === 'string' && resolvedText.trim().length > 0) {
+        console.log('[TaskExecutor][executeSayMessage] ✅ Resolved GUID/text key to translation', {
+          taskId: task.id,
+          originalText: text.substring(0, 20) + '...',
+          resolvedText: resolvedText.substring(0, 50) + '...',
+          isGuid
+        });
+        text = resolvedText;
+      } else {
+        console.warn('[TaskExecutor][executeSayMessage] ⚠️ GUID/text key not found in translations', {
+          taskId: task.id,
+          textKey: text.substring(0, 20) + '...',
+          translationsCount: Object.keys(translations).length,
+          sampleKeys: Object.keys(translations).slice(0, 5)
+        });
+        // Keep original text (GUID) if translation not found - will show as-is
+      }
+    }
+  }
 
   if (!text) {
     console.warn('[TaskExecutor] SayMessage task has no text', { taskId: task.id, task });
