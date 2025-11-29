@@ -56,7 +56,7 @@ function normalizeActionType(action: string, value?: Record<string, any>): strin
 export async function executeTask(
   task: CompiledTask,
   callbacks: {
-    onMessage?: (text: string) => void;
+    onMessage?: (text: string, stepType?: string, escalationNumber?: number) => void;
     onDDTStart?: (ddt: AssembledDDT) => void;
     onBackendCall?: (config: any) => Promise<any>;
     onProblemClassify?: (intents: any[], ddt: AssembledDDT) => Promise<any>;
@@ -120,7 +120,7 @@ export async function executeTask(
  */
 async function executeSayMessage(
   task: CompiledTask,
-  callbacks: { onMessage?: (text: string) => void }
+  callbacks: { onMessage?: (text: string, stepType?: string, escalationNumber?: number) => void }
 ): Promise<TaskExecutionResult> {
   // Removed verbose logging
 
@@ -213,7 +213,7 @@ async function executeSayMessage(
 async function executeGetData(
   task: CompiledTask,
   callbacks: {
-    onMessage?: (text: string) => void;
+    onMessage?: (text: string, stepType?: string, escalationNumber?: number) => void;
     onDDTStart?: (ddt: AssembledDDT) => void;
     onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<any>;
     onProcessInput?: (input: string, node: any) => Promise<any>;
@@ -1080,7 +1080,7 @@ async function executeBackendCall(
  */
 async function executeAIAgent(
   task: CompiledTask,
-  _callbacks: { onMessage?: (text: string) => void }
+  _callbacks: { onMessage?: (text: string, stepType?: string, escalationNumber?: number) => void }
 ): Promise<TaskExecutionResult> {
   // AI Agent execution would go here
   // For now, just return success

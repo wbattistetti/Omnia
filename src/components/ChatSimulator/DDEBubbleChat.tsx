@@ -116,7 +116,8 @@ export default function DDEBubbleChat({
             fullText: message.text,
             messageId: message.id,
             stepType: message.stepType,
-            escalationNumber: message.escalationNumber
+            escalationNumber: message.escalationNumber,
+            warningMessage: message.warningMessage
           });
           const uniqueId = message.id ? `${message.id}-${Date.now()}-${Math.random()}` : `msg-${Date.now()}-${Math.random()}`;
           const messageType = message.type || 'bot'; // Support 'system' type for error messages
@@ -148,7 +149,8 @@ export default function DDEBubbleChat({
                 stepType: message.stepType || 'message',
                 escalationNumber: message.escalationNumber,
                 color: messageType === 'system' ? '#ef4444' : getStepColor(message.stepType || 'message'), // Red for system/error messages
-                engineType: currentUseNewEngine ? 'new' : 'old' // Track which engine generated this message
+                engineType: currentUseNewEngine ? 'new' : 'old', // Track which engine generated this message
+                warningMessage: message.warningMessage // ✅ Pass warning message to state
               }];
             });
           });

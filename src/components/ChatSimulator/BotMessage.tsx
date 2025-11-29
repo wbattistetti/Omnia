@@ -26,6 +26,16 @@ const BotMessage: React.FC<BotMessageProps> = ({
 }) => {
   const isEditing = editingId === message.id;
 
+  // Debug: log warning message
+  if (message.warningMessage) {
+    console.log('[BotMessage] ⚠️ Rendering message with warning:', {
+      id: message.id,
+      text: message.text,
+      warningMessage: message.warningMessage,
+      hasWarningMessage: !!message.warningMessage
+    });
+  }
+
   return (
     <div className="flex flex-col items-start">
       <div className="flex flex-row items-start gap-2 w-full flex-wrap">
@@ -78,7 +88,7 @@ const BotMessage: React.FC<BotMessageProps> = ({
                         }
                       }}
                     >
-                      {message.text}
+                      {message.warningMessage ? '' : message.text}
                     </div>
                     {/* Step icon on the right */}
                     {message.stepType && (

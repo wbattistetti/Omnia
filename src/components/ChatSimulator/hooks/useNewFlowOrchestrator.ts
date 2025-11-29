@@ -203,10 +203,11 @@ export function useNewFlowOrchestrator({
             if (stepType === 'warning' || text.startsWith('⚠️')) {
               // Extract warning message
               warningMessage = text.replace(/^⚠️\s*/, '');
-              messageText = 'Message task missing text';
+              messageText = ''; // ✅ Bubble vuota quando c'è warning
+              console.log('[useNewFlowOrchestrator] ⚠️ Warning detected:', { text, stepType, warningMessage, messageText });
             }
 
-            onMessage({
+            const messagePayload = {
               id: task.id, // Use task GUID directly - no need to generate new ID
               text: messageText,
               stepType: stepType === 'warning' ? 'message' : (stepType || 'message'),
@@ -214,7 +215,13 @@ export function useNewFlowOrchestrator({
               timestamp: new Date(),
               color: stepType ? getStepColor(stepType === 'warning' ? 'message' : stepType) : undefined,
               warningMessage // ✅ Add warning message if present
-            });
+            };
+
+            if (warningMessage) {
+              console.log('[useNewFlowOrchestrator] 📤 Sending message with warning:', messagePayload);
+            }
+
+            onMessage(messagePayload);
             // Removed verbose performance logging
           }).catch((error) => {
             console.error('[useNewFlowOrchestrator][handleTaskExecute] Error importing getStepColor', error);
@@ -225,18 +232,25 @@ export function useNewFlowOrchestrator({
 
             if (stepType === 'warning' || text.startsWith('⚠️')) {
               warningMessage = text.replace(/^⚠️\s*/, '');
-              messageText = 'Message task missing text';
+              messageText = ''; // ✅ Bubble vuota quando c'è warning
+              console.log('[useNewFlowOrchestrator] ⚠️ Warning detected (fallback):', { text, stepType, warningMessage, messageText });
             }
 
             // Fallback: send message without color
-            onMessage({
+            const fallbackPayload = {
               id: task.id,
               text: messageText,
               stepType: stepType === 'warning' ? 'message' : (stepType || 'message'),
               escalationNumber,
               timestamp: new Date(),
               warningMessage // ✅ Add warning message if present
-            });
+            };
+
+            if (warningMessage) {
+              console.log('[useNewFlowOrchestrator] 📤 Sending message with warning (fallback):', fallbackPayload);
+            }
+
+            onMessage(fallbackPayload);
           });
         } else {
           console.warn('[useNewFlowOrchestrator][handleTaskExecute] onMessage callback not provided');
