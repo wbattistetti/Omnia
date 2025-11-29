@@ -118,15 +118,41 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const toolbarElementRef = useRef<HTMLDivElement>(null);
 
   // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo
-  const { getNode, setNodes, getViewport } = useReactFlow();
+  const { getNode, setNodes, getViewport, getEdges } = useReactFlow();
 
-  // ✅ NODE DRAG: Ref per gestire il drag personalizzato del nodo (solo quando parte dall'icona Move)
+  // ✅ Funzione per trovare tutti i discendenti di un nodo (ricorsivo)
+  const findAllDescendants = useCallback((nodeId: string, visited: Set<string> = new Set()): string[] => {
+    if (visited.has(nodeId)) return []; // Evita cicli
+    visited.add(nodeId);
+
+    const edges = getEdges();
+    const descendants: string[] = [];
+
+    // Trova tutti i nodi raggiungibili da questo nodo
+    edges.forEach(edge => {
+      if (edge.source === nodeId) {
+        const targetId = edge.target;
+        if (!visited.has(targetId)) {
+          descendants.push(targetId);
+          // Ricorsivamente trova i discendenti del target
+          const nestedDescendants = findAllDescendants(targetId, visited);
+          descendants.push(...nestedDescendants);
+        }
+      }
+    });
+
+    return descendants;
+  }, [getEdges]);
+
+  // ✅ NODE DRAG: Ref per gestire il drag personalizzato del nodo
   const nodeDragStateRef = useRef<{
     startX: number;
     startY: number;
     nodeStartX: number;
     nodeStartY: number;
     isActive: boolean;
+    // ✅ Salva le posizioni relative dei discendenti per drag rigido
+    descendantOffsets?: Map<string, { offsetX: number; offsetY: number }>;
   } | null>(null);
 
   // ✅ NODE DRAG: Cleanup listener quando il componente viene smontato
@@ -491,12 +517,40 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               const nodeRect = nodeEl.getBoundingClientRect();
               const viewport = getViewport();
 
+              // ✅ Verifica se è drag rigido (ancora) o normale (move)
+              const isRigidDrag = (window as any).__flowDragMode === 'rigid';
+
+              // ✅ Se è drag rigido, calcola le posizioni relative dei discendenti
+              let descendantOffsets: Map<string, { offsetX: number; offsetY: number }> | undefined;
+              if (isRigidDrag) {
+                const descendants = findAllDescendants(id);
+                descendantOffsets = new Map();
+
+                descendants.forEach(descendantId => {
+                  const descNode = getNode(descendantId);
+                  if (descNode) {
+                    descendantOffsets!.set(descendantId, {
+                      offsetX: descNode.position.x - currentNode.position.x,
+                      offsetY: descNode.position.y - currentNode.position.y
+                    });
+                  }
+                });
+
+                console.log('🔗 [RIGID_DRAG] Trovati discendenti', {
+                  nodeId: id,
+                  descendantsCount: descendants.length,
+                  descendantIds: descendants,
+                  timestamp: Date.now()
+                });
+              }
+
               nodeDragStateRef.current = {
                 startX: nodeRect.left,
                 startY: nodeRect.top,
                 nodeStartX: currentNode.position.x,
                 nodeStartY: currentNode.position.y,
-                isActive: true
+                isActive: true,
+                descendantOffsets
               };
 
               // ✅ Imposta flag e stato
@@ -531,9 +585,32 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
                   y: nodeDragStateRef.current.nodeStartY + flowDeltaY
                 };
 
-                setNodes((nds) => nds.map((n) =>
-                  n.id === id ? { ...n, position: newPosition } : n
-                ));
+                // ✅ Se è drag rigido, sposta anche tutti i discendenti mantenendo le posizioni relative
+                const isRigidDrag = (window as any).__flowDragMode === 'rigid';
+                if (isRigidDrag && nodeDragStateRef.current.descendantOffsets) {
+                  setNodes((nds) => nds.map((n) => {
+                    if (n.id === id) {
+                      return { ...n, position: newPosition };
+                    }
+                    // ✅ Sposta i discendenti mantenendo l'offset relativo
+                    const offset = nodeDragStateRef.current.descendantOffsets!.get(n.id);
+                    if (offset) {
+                      return {
+                        ...n,
+                        position: {
+                          x: newPosition.x + offset.offsetX,
+                          y: newPosition.y + offset.offsetY
+                        }
+                      };
+                    }
+                    return n;
+                  }));
+                } else {
+                  // ✅ Drag normale: sposta solo il nodo
+                  setNodes((nds) => nds.map((n) =>
+                    n.id === id ? { ...n, position: newPosition } : n
+                  ));
+                }
 
                 // ✅ NodeToolbar si aggiorna automaticamente durante il drag
               };
@@ -552,6 +629,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
                 // Reset flag e stato
                 (window as any).__isToolbarDrag = null;
+                (window as any).__flowDragMode = null; // ✅ Reset anche il flag rigid
                 setIsDragging(false);
                 setIsToolbarDrag(false);
                 document.body.style.cursor = 'default';
