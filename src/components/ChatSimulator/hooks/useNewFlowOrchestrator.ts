@@ -155,7 +155,8 @@ export function useNewFlowOrchestrator({
   let currentDDTInClosure: AssembledDDT | null = null;
 
   // Track pending user input for DDT navigation
-  const [pendingInputResolve, setPendingInputResolve] = useState<((event: any) => void) | null>(null);
+  // ✅ Use useRef instead of useState for immediate availability (no async state update)
+  const pendingInputResolveRef = React.useRef<((event: any) => void) | null>(null);
   const [currentNodeForInput, setCurrentNodeForInput] = useState<any>(null);
   const [isRetrieving, setIsRetrieving] = useState(false); // Track if retrieve is in progress
 
@@ -294,8 +295,13 @@ export function useNewFlowOrchestrator({
 
         // Wait for user input - return promise that resolves when user provides input
         return new Promise((resolve) => {
-          console.log('[useNewFlowOrchestrator] Setting up pending input resolve', { nodeId });
-          setPendingInputResolve(() => resolve);
+          console.log('[useNewFlowOrchestrator] ⏳ Setting up pending input resolve', { nodeId });
+          // ✅ Use ref for immediate availability (no async state update)
+          pendingInputResolveRef.current = resolve;
+          console.log('[useNewFlowOrchestrator] ✅ pendingInputResolveRef.current has been set', {
+            hasRef: !!pendingInputResolveRef.current,
+            nodeId
+          });
           // Store current node for input processing
           if (ddt) {
             // DDT can have mainData as array, single object, or in different structure
@@ -685,7 +691,12 @@ export function useNewFlowOrchestrator({
       const t0 = performance.now();
       // Removed verbose logging
       // Handle user input for DDT navigation
-      if (pendingInputResolve) {
+      // ✅ Use ref for immediate availability (no async state update)
+      console.log('[useNewFlowOrchestrator] 📥 handleUserInput called', {
+        input: input.substring(0, 50),
+        hasPendingResolve: !!pendingInputResolveRef.current
+      });
+      if (pendingInputResolveRef.current) {
         // Set isRetrieving to true when processing starts
         setIsRetrieving(true);
 
@@ -693,8 +704,9 @@ export function useNewFlowOrchestrator({
         // This allows retrieve() to process the input and determine if it's actually match/noMatch
         const t1 = performance.now();
         // Removed verbose logging
-        pendingInputResolve({ type: 'match' as const, value: input });
-        setPendingInputResolve(null);
+        const resolve = pendingInputResolveRef.current;
+        pendingInputResolveRef.current = null; // Clear immediately
+        resolve({ type: 'match' as const, value: input });
         setCurrentNodeForInput(null);
         const t2 = performance.now();
         // Removed verbose logging

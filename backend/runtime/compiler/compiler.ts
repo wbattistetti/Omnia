@@ -18,22 +18,6 @@ export function compileFlow(
   edges: FlowEdge[],
   options: CompilerOptions
 ): CompilationResult {
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 🚀 BACKEND RUNTIME COMPILER - ENTRY POINT
-  // ═══════════════════════════════════════════════════════════════════════════
-  console.log('═══════════════════════════════════════════════════════════════════════════');
-  console.log('🚀 [BACKEND RUNTIME] FlowCompiler.compileFlow() CALLED');
-  console.log('═══════════════════════════════════════════════════════════════════════════');
-  console.log('[BACKEND RUNTIME] Compiler input:', {
-    nodesCount: nodes.length,
-    edgesCount: edges.length,
-    nodeIds: nodes.map(n => n.id),
-    hasGetTask: typeof options.getTask === 'function',
-    hasGetDDT: typeof options.getDDT === 'function',
-    timestamp: new Date().toISOString()
-  });
-  console.log('═══════════════════════════════════════════════════════════════════════════');
-
   const tasks: CompiledTask[] = [];
   const taskMap = new Map<string, CompiledTask>();
   const ddtExpansions = new Map<string, DDTExpansion>();
@@ -183,23 +167,11 @@ export function compileFlow(
     ? tasks.find(t => t.source.nodeId === entryNodeId && t.source.rowId === entryRow.id)?.id || null
     : null;
 
-  const result = {
+  return {
     tasks,
     entryTaskId,
     taskMap
   };
-
-  console.log('═══════════════════════════════════════════════════════════════════════════');
-  console.log('✅ [BACKEND RUNTIME] FlowCompiler.compileFlow() COMPLETED');
-  console.log('[BACKEND RUNTIME] Compiler output:', {
-    tasksCount: tasks.length,
-    entryTaskId,
-    taskMapSize: taskMap.size,
-    timestamp: new Date().toISOString()
-  });
-  console.log('═══════════════════════════════════════════════════════════════════════════');
-
-  return result;
 }
 
 /**

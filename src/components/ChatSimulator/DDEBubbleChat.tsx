@@ -919,6 +919,29 @@ export default function DDEBubbleChat({
             </span>
           )}
         </label>
+        {/* Backend DDT Engine Toggle */}
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={localStorage.getItem('ddt.useBackendEngine') === 'true'}
+            onChange={(e) => {
+              localStorage.setItem('ddt.useBackendEngine', e.target.checked ? 'true' : 'false');
+              console.log('[DDEBubbleChat] Backend DDT Engine toggle changed', { useBackend: e.target.checked });
+              // Force re-render
+              window.location.reload();
+            }}
+            className="w-4 h-4 cursor-pointer"
+            title="Use Backend DDT Engine (via sessions)"
+          />
+          <span className="text-xs text-gray-700">
+            🚀 Backend DDT
+          </span>
+          {localStorage.getItem('ddt.useBackendEngine') === 'true' && (
+            <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+              BACKEND
+            </span>
+          )}
+        </label>
       </div>
       {/* Error message from orchestrator (e.g., DDT validation failed) */}
       {mode === 'flow' && orchestrator.error && (

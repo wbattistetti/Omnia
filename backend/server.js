@@ -39,6 +39,22 @@ app.use(cors());
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
+// ✅ Request logging middleware
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  console.log(`[REQUEST] ${req.method} ${req.path}`, {
+    query: Object.keys(req.query).length > 0 ? req.query : undefined,
+    bodySize: req.body ? JSON.stringify(req.body).length : 0
+  });
+
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    console.log(`[RESPONSE] ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+  });
+
+  next();
+});
+
 const uri = 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
 const fs = require('fs');
 const path = require('path');
@@ -4368,6 +4384,473 @@ app.post('/api/runtime/compile', async (req, res) => {
       message: error.message,
       stack: error.stack
     });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚀 RUNTIME API - DDT Engine Endpoint
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.post('/api/runtime/ddt/run', async (req, res) => {
+  try {
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🚀 [API] POST /api/runtime/ddt/run - REQUEST RECEIVED');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    const { ddtInstance, userInputs, translations, limits } = req.body;
+
+    console.log('[API] DDT run request:', {
+      ddtId: ddtInstance?.id,
+      ddtLabel: ddtInstance?.label,
+      userInputsCount: userInputs?.length || 0,
+      hasTranslations: !!translations,
+      timestamp: new Date().toISOString()
+    });
+
+    if (!ddtInstance) {
+      return res.status(400).json({
+        error: 'Missing ddtInstance',
+        message: 'ddtInstance is required'
+      });
+    }
+
+    // Import DDT Engine (TypeScript - using ts-node)
+    let runDDT;
+    try {
+      // Register ts-node if not already registered
+      try {
+        require('ts-node').register({
+          transpileOnly: true,
+          compilerOptions: {
+            module: 'commonjs',
+            esModuleInterop: true,
+            resolveJsonModule: true
+          }
+        });
+      } catch (e) {
+        // Already registered, ignore
+      }
+
+      // Import TypeScript DDT Engine
+      const ddtModule = require('./runtime/ddt/ddtEngine.ts');
+      runDDT = ddtModule.runDDT;
+
+      if (!runDDT) {
+        throw new Error('runDDT function not found in DDT engine module');
+      }
+
+      console.log('[API] ✅ Backend DDT Engine loaded successfully');
+    } catch (err) {
+      console.error('[API] ❌ Error loading DDT Engine:', err);
+      return res.status(500).json({
+        error: 'DDT Engine not available',
+        message: 'Failed to load TypeScript DDT Engine. Make sure ts-node is installed.',
+        details: err.message,
+        stack: err.stack
+      });
+    }
+
+    // Prepare callbacks for DDT Engine
+    const messages = [];
+    const inputQueue = userInputs || [];
+    let inputIndex = 0;
+
+    const callbacks = {
+      onMessage: (text, stepType, escalationNumber) => {
+        messages.push({
+          text,
+          stepType: stepType || 'message',
+          escalationNumber,
+          timestamp: new Date().toISOString()
+        });
+        console.log('[API][DDT] Message:', { text: text?.substring(0, 50), stepType, escalationNumber });
+      },
+      onGetRetrieveEvent: async (nodeId, ddt) => {
+        // Get next input from queue
+        if (inputIndex < inputQueue.length) {
+          const input = inputQueue[inputIndex++];
+          console.log('[API][DDT] Retrieving input:', { nodeId, input: input?.substring(0, 50) });
+          return { type: 'match', value: input };
+        } else {
+          // No more inputs - return noInput
+          console.log('[API][DDT] No more inputs available');
+          return { type: 'noInput' };
+        }
+      },
+      onProcessInput: async (input, node) => {
+        // Simple processing - in real scenario, this would use NLP contracts
+        console.log('[API][DDT] Processing input:', { input: input?.substring(0, 50), nodeId: node?.id });
+        return {
+          status: 'match',
+          value: input
+        };
+      },
+      onUserInputProcessed: (input, matchStatus, extractedValues) => {
+        console.log('[API][DDT] Input processed:', { input: input?.substring(0, 50), matchStatus });
+      },
+      translations: translations || {}
+    };
+
+    // Run DDT Engine
+    console.log('[API] Calling backend DDT Engine...');
+    const result = await runDDT(ddtInstance, callbacks, limits);
+
+    const response = {
+      success: result.success,
+      value: result.value,
+      messages: messages,
+      executedBy: 'BACKEND_RUNTIME', // ✅ Flag to confirm backend DDT Engine was used
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('✅ [API] POST /api/runtime/ddt/run - COMPLETED');
+    console.log('[API] DDT result:', {
+      success: result.success,
+      messagesCount: messages.length,
+      memoryKeys: result.value ? Object.keys(result.value) : [],
+      executedBy: 'BACKEND_RUNTIME',
+      timestamp: response.timestamp
+    });
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    res.json(response);
+  } catch (error) {
+    console.error('═══════════════════════════════════════════════════════════════════════════');
+    console.error('❌ [API] POST /api/runtime/ddt/run - ERROR');
+    console.error('[API] Error:', error);
+    console.error('═══════════════════════════════════════════════════════════════════════════');
+    res.status(500).json({
+      error: 'DDT execution failed',
+      message: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚀 RUNTIME API - DDT Engine Session Endpoints (Interactive)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Import DDT Session Manager
+let DDTSessionManager;
+try {
+  require('ts-node').register({
+    transpileOnly: true,
+    compilerOptions: {
+      module: 'commonjs',
+      esModuleInterop: true,
+      resolveJsonModule: true
+    }
+  });
+  const sessionModule = require('./runtime/session/DDTSessionManager.ts');
+  DDTSessionManager = sessionModule.ddtSessionManager;
+  console.log('[SERVER] ✅ DDT Session Manager loaded successfully');
+} catch (err) {
+  console.warn('[SERVER] ⚠️ DDT Session Manager not available:', err.message);
+}
+
+// POST /api/runtime/ddt/session/start - Start a new DDT session
+app.post('/api/runtime/ddt/session/start', async (req, res) => {
+  try {
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🚀 [API] POST /api/runtime/ddt/session/start - REQUEST');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    const { ddtInstance, translations, limits } = req.body;
+
+    if (!ddtInstance) {
+      return res.status(400).json({
+        error: 'Missing ddtInstance',
+        message: 'ddtInstance is required'
+      });
+    }
+
+    if (!DDTSessionManager) {
+      return res.status(500).json({
+        error: 'DDT Session Manager not available',
+        message: 'Failed to load DDT Session Manager'
+      });
+    }
+
+    const sessionId = DDTSessionManager.createSession(
+      ddtInstance,
+      translations || {},
+      limits || {}
+    );
+
+    console.log('✅ [API] POST /api/runtime/ddt/session/start - Session created:', { sessionId });
+    res.json({
+      sessionId,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ [API] POST /api/runtime/ddt/session/start - ERROR', error);
+    res.status(500).json({
+      error: 'Failed to create session',
+      message: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// POST /api/runtime/ddt/session/:id/input - Provide user input to session
+app.post('/api/runtime/ddt/session/:id/input', async (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+    const { input } = req.body;
+
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('📥 [API] POST /api/runtime/ddt/session/:id/input - REQUEST', {
+      sessionId,
+      inputLength: input?.length || 0
+    });
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    if (!DDTSessionManager) {
+      return res.status(500).json({
+        error: 'DDT Session Manager not available'
+      });
+    }
+
+    const result = DDTSessionManager.provideInput(sessionId, input || '');
+
+    if (!result.success) {
+      console.warn('⚠️ [API] POST /api/runtime/ddt/session/:id/input - Failed:', result.error);
+      return res.status(400).json({
+        error: result.error || 'Failed to provide input'
+      });
+    }
+
+    console.log('✅ [API] POST /api/runtime/ddt/session/:id/input - Input provided');
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ [API] POST /api/runtime/ddt/session/:id/input - ERROR', error);
+    res.status(500).json({
+      error: 'Failed to provide input',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/runtime/ddt/session/:id/stream - SSE stream for real-time events
+app.get('/api/runtime/ddt/session/:id/stream', (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('📡 [API] GET /api/runtime/ddt/session/:id/stream - SSE connection opened', { sessionId });
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    if (!DDTSessionManager) {
+      res.status(500).write('event: error\n');
+      res.write(`data: ${JSON.stringify({ error: 'DDT Session Manager not available' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const session = DDTSessionManager.getSession(sessionId);
+    if (!session) {
+      res.status(404).write('event: error\n');
+      res.write(`data: ${JSON.stringify({ error: 'Session not found' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Setup SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+    // Send existing messages first
+    if (session.messages.length > 0) {
+      for (const msg of session.messages) {
+        res.write(`event: message\n`);
+        res.write(`data: ${JSON.stringify(msg)}\n\n`);
+      }
+    }
+
+    // ✅ Send waitingForInput event if already waiting (handles case where event was emitted before listener registered)
+    if (session.waitingForInput) {
+      console.log('[API] 📡 Sending pending waitingForInput event to SSE client', {
+        sessionId,
+        nodeId: session.waitingForInput.nodeId
+      });
+      res.write(`event: waitingForInput\n`);
+      res.write(`data: ${JSON.stringify({ nodeId: session.waitingForInput.nodeId })}\n\n`);
+    }
+
+    // If session is already complete, send result immediately
+    if (session.result) {
+      res.write(`event: complete\n`);
+      res.write(`data: ${JSON.stringify(session.result)}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Listen to events from session
+    const eventEmitter = session.eventEmitter;
+    if (!eventEmitter) {
+      res.write('event: error\n');
+      res.write(`data: ${JSON.stringify({ error: 'Session event emitter not available' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const onMessage = (msg) => {
+      if (!res.writableEnded) {
+        res.write(`event: message\n`);
+        res.write(`data: ${JSON.stringify(msg)}\n\n`);
+      }
+    };
+
+    const onWaitingForInput = (data) => {
+      if (!res.writableEnded) {
+        res.write(`event: waitingForInput\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      }
+    };
+
+    const onComplete = (result) => {
+      if (!res.writableEnded) {
+        res.write(`event: complete\n`);
+        res.write(`data: ${JSON.stringify(result)}\n\n`);
+        res.end();
+      }
+    };
+
+    const onError = (error) => {
+      if (!res.writableEnded) {
+        res.write(`event: error\n`);
+        res.write(`data: ${JSON.stringify({ error: error.message || String(error) })}\n\n`);
+        res.end();
+      }
+    };
+
+    // Register event listeners
+    eventEmitter.on('message', onMessage);
+    eventEmitter.on('waitingForInput', onWaitingForInput);
+    eventEmitter.on('complete', onComplete);
+    eventEmitter.on('error', onError);
+
+    // Cleanup on client disconnect
+    req.on('close', () => {
+      console.log('✅ [API] GET /api/runtime/ddt/session/:id/stream - SSE connection closed', { sessionId });
+      eventEmitter.removeListener('message', onMessage);
+      eventEmitter.removeListener('waitingForInput', onWaitingForInput);
+      eventEmitter.removeListener('complete', onComplete);
+      eventEmitter.removeListener('error', onError);
+    });
+
+    // Send heartbeat every 30 seconds to keep connection alive
+    const heartbeatInterval = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': heartbeat\n\n');
+      } else {
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
+
+    // Clear heartbeat on close
+    req.on('close', () => {
+      clearInterval(heartbeatInterval);
+    });
+  } catch (error) {
+    console.error('❌ [API] GET /api/runtime/ddt/session/:id/stream - ERROR', error);
+    if (!res.headersSent) {
+      res.status(500).write('event: error\n');
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    }
+    res.end();
+  }
+});
+
+// GET /api/runtime/ddt/session/:id/status - Get session status (kept for compatibility)
+app.get('/api/runtime/ddt/session/:id/status', async (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+    const { lastMessageIndex } = req.query;
+
+    if (!DDTSessionManager) {
+      return res.status(500).json({
+        error: 'DDT Session Manager not available'
+      });
+    }
+
+    const status = DDTSessionManager.getSessionStatus(sessionId);
+
+    if (!status.found) {
+      return res.status(404).json({
+        error: 'Session not found'
+      });
+    }
+
+    // If lastMessageIndex is provided, return only new messages
+    if (lastMessageIndex !== undefined) {
+      const lastIndex = parseInt(String(lastMessageIndex), 10);
+      const newMessages = DDTSessionManager.getNewMessages(sessionId, lastIndex);
+
+      res.json({
+        ...status.session,
+        newMessages: newMessages.messages || [],
+        hasMore: newMessages.hasMore
+      });
+    } else {
+      res.json(status.session);
+    }
+  } catch (error) {
+    console.error('❌ [API] GET /api/runtime/ddt/session/:id/status - ERROR', error);
+    res.status(500).json({
+      error: 'Failed to get session status',
+      message: error.message
+    });
+  }
+});
+
+// DELETE /api/runtime/ddt/session/:id - Delete session
+app.delete('/api/runtime/ddt/session/:id', async (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+
+    if (!DDTSessionManager) {
+      return res.status(500).json({
+        error: 'DDT Session Manager not available'
+      });
+    }
+
+    const deleted = DDTSessionManager.deleteSession(sessionId);
+
+    if (!deleted) {
+      return res.status(404).json({
+        error: 'Session not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ [API] DELETE /api/runtime/ddt/session/:id - ERROR', error);
+    res.status(500).json({
+      error: 'Failed to delete session',
+      message: error.message
+    });
+  }
+});
+
+// ✅ Global error handler (must be after all routes)
+app.use((err, req, res, next) => {
+  console.error(`[ERROR] ${req.method} ${req.path}`, {
+    error: err.message,
+    stack: err.stack
+  });
+  if (!res.headersSent) {
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 

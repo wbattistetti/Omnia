@@ -24,13 +24,14 @@ export default defineConfig({
       '/step3b': { target: 'http://localhost:8000', changeOrigin: true },
       '/step4': { target: 'http://localhost:8000', changeOrigin: true },
 
-      // Node.js backend endpoints (MongoDB)
+      // Node.js backend endpoints (MongoDB) - MUST come BEFORE generic /api
       '/api/factory': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/projects': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/constants': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/runtime': { target: 'http://localhost:3100', changeOrigin: true },
       '/projects': { target: 'http://localhost:3100', changeOrigin: true },
 
-      // FastAPI namespaced endpoints (other /api routes)
+      // FastAPI namespaced endpoints (other /api routes) - MUST come LAST
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
     }
   }

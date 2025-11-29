@@ -123,23 +123,6 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
       const compileData = await compileResponse.json();
 
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-      console.log('✅ [FRONTEND] Backend compiler API response received');
-      console.log('[FRONTEND] Compilation result:', {
-        tasksCount: compileData.tasks?.length || 0,
-        entryTaskId: compileData.entryTaskId,
-        compiledBy: compileData.compiledBy || 'UNKNOWN',
-        timestamp: compileData.timestamp
-      });
-
-      // ✅ Verify backend compiler was used
-      if (compileData.compiledBy === 'BACKEND_RUNTIME') {
-        console.log('✅ [FRONTEND] ✅ CONFIRMED: Backend Runtime Compiler was used!');
-      } else {
-        console.warn('⚠️ [FRONTEND] WARNING: compiledBy flag missing or incorrect:', compileData.compiledBy);
-      }
-      console.log('═══════════════════════════════════════════════════════════════════════════');
-
       // Convert taskMap from object back to Map
       const taskMap = new Map<string, CompiledTask>();
       if (compileData.taskMap) {
