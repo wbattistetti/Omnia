@@ -19,6 +19,9 @@
     "opossum": "^9.0.0"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@types/node": "^24.10.1",
+    "concurrently": "^8.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }

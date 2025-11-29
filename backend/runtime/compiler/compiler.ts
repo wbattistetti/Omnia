@@ -1,12 +1,9 @@
 // Flow Compiler: Transforms flowchart + DDT into flat list of Tasks with conditions
 
-import type { Node, Edge } from 'reactflow';
-import type { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
-import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { FlowNode, FlowEdge, NodeData, AssembledDDT } from '../types';
 import type { CompiledTask, CompilationResult, DDTExpansion } from './types';
 import { buildFirstRowCondition, buildSequentialCondition } from './conditionBuilder';
 import { expandDDT } from './ddtExpander';
-import { taskRepository } from '../../services/TaskRepository';
 
 interface CompilerOptions {
   getTask: (taskId: string) => any; // Function to resolve Task from taskId
@@ -17,17 +14,17 @@ interface CompilerOptions {
  * Compiles flowchart and DDT into flat list of tasks with conditions
  */
 export function compileFlow(
-  nodes: Node<NodeData>[],
-  edges: Edge<EdgeData>[],
+  nodes: FlowNode[],
+  edges: FlowEdge[],
   options: CompilerOptions
 ): CompilationResult {
   // ═══════════════════════════════════════════════════════════════════════════
-  // 🎨 FRONTEND COMPILER - ENTRY POINT (OLD - da sostituire con backend)
+  // 🚀 BACKEND RUNTIME COMPILER - ENTRY POINT
   // ═══════════════════════════════════════════════════════════════════════════
   console.log('═══════════════════════════════════════════════════════════════════════════');
-  console.log('🎨 [FRONTEND] FlowCompiler.compileFlow() CALLED (OLD VERSION)');
+  console.log('🚀 [BACKEND RUNTIME] FlowCompiler.compileFlow() CALLED');
   console.log('═══════════════════════════════════════════════════════════════════════════');
-  console.log('[FRONTEND] Compiler input:', {
+  console.log('[BACKEND RUNTIME] Compiler input:', {
     nodesCount: nodes.length,
     edgesCount: edges.length,
     nodeIds: nodes.map(n => n.id),
@@ -92,10 +89,9 @@ export function compileFlow(
           nodeId: node.id,
           rowId: row.id,
           rowText: row.text,
-          rowTaskId: row.taskId,
-          allTasksInMemory: taskRepository.getAllTasks().map(t => ({ id: t.id, action: t.action }))
+          rowTaskId: row.taskId
         });
-        throw new Error(`[Compiler] Task not found: ${taskId} in node ${node.id}, row ${row.id}. Task must exist in memory.`);
+        throw new Error(`[Compiler] Task not found: ${taskId} in node ${node.id}, row ${row.id}. Task must exist.`);
       }
 
       console.log('[Compiler] ✅ Task found', {
@@ -194,8 +190,8 @@ export function compileFlow(
   };
 
   console.log('═══════════════════════════════════════════════════════════════════════════');
-  console.log('✅ [FRONTEND] FlowCompiler.compileFlow() COMPLETED (OLD VERSION)');
-  console.log('[FRONTEND] Compiler output:', {
+  console.log('✅ [BACKEND RUNTIME] FlowCompiler.compileFlow() COMPLETED');
+  console.log('[BACKEND RUNTIME] Compiler output:', {
     tasksCount: tasks.length,
     entryTaskId,
     taskMapSize: taskMap.size,
@@ -211,9 +207,9 @@ export function compileFlow(
  * If multiple, returns all (UI should prompt user to choose)
  */
 export function findEntryNodes(
-  nodes: Node<NodeData>[],
-  edges: Edge<EdgeData>[]
-): Node<NodeData>[] {
+  nodes: FlowNode[],
+  edges: FlowEdge[]
+): FlowNode[] {
   return nodes.filter(n => !edges.some(e => e.target === n.id));
 }
 

@@ -4,8 +4,8 @@ import { useState, useCallback, useRef } from 'react';
 import type { Node, Edge } from 'reactflow';
 import type { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
 import type { CompiledTask, CompilationResult, ExecutionState } from '../FlowCompiler/types';
-import { compileFlow } from '../FlowCompiler';
 import { DialogueEngine } from './engine';
+import { taskRepository } from '../../services/TaskRepository';
 
 interface UseDialogueEngineOptions {
   nodes: Node<NodeData>[];
@@ -75,10 +75,84 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           }))
         });
       }
-      const compilationResult = compileFlow(enrichedNodes, options.edges, {
-        getTask: options.getTask,
-        getDDT: options.getDDT
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // 🚀 CALL BACKEND COMPILER API
+      // ═══════════════════════════════════════════════════════════════════════════
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log('🚀 [FRONTEND] Calling backend compiler API...');
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+
+      // Collect all tasks and ddts
+      const allTasks = taskRepository.getAllTasks();
+      const allDDTs: any[] = [];
+
+      // Extract DDTs from GetData tasks
+      allTasks.forEach(task => {
+        if (task.action === 'GetData' && task.value?.ddt) {
+          allDDTs.push(task.value.ddt);
+        }
       });
+
+      console.log('[FRONTEND] Preparing compilation request:', {
+        nodesCount: enrichedNodes.length,
+        edgesCount: options.edges.length,
+        tasksCount: allTasks.length,
+        ddtsCount: allDDTs.length
+      });
+
+      // Call backend API (NO FALLBACK - backend only)
+      const compileResponse = await fetch('http://localhost:3100/api/runtime/compile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          nodes: enrichedNodes,
+          edges: options.edges,
+          tasks: allTasks,
+          ddts: allDDTs,
+          projectId: localStorage.getItem('currentProjectId') || undefined
+        })
+      });
+
+      if (!compileResponse.ok) {
+        const errorData = await compileResponse.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(`Backend compilation failed: ${errorData.message || errorData.error || compileResponse.statusText}`);
+      }
+
+      const compileData = await compileResponse.json();
+
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log('✅ [FRONTEND] Backend compiler API response received');
+      console.log('[FRONTEND] Compilation result:', {
+        tasksCount: compileData.tasks?.length || 0,
+        entryTaskId: compileData.entryTaskId,
+        compiledBy: compileData.compiledBy || 'UNKNOWN',
+        timestamp: compileData.timestamp
+      });
+
+      // ✅ Verify backend compiler was used
+      if (compileData.compiledBy === 'BACKEND_RUNTIME') {
+        console.log('✅ [FRONTEND] ✅ CONFIRMED: Backend Runtime Compiler was used!');
+      } else {
+        console.warn('⚠️ [FRONTEND] WARNING: compiledBy flag missing or incorrect:', compileData.compiledBy);
+      }
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+
+      // Convert taskMap from object back to Map
+      const taskMap = new Map<string, CompiledTask>();
+      if (compileData.taskMap) {
+        Object.entries(compileData.taskMap).forEach(([key, value]) => {
+          taskMap.set(key, value as CompiledTask);
+        });
+      }
+
+      const compilationResult: CompilationResult = {
+        tasks: compileData.tasks || [],
+        entryTaskId: compileData.entryTaskId || null,
+        taskMap
+      };
 
       const engine = new DialogueEngine(compilationResult, {
         onTaskExecute: async (task) => {

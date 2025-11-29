@@ -4242,6 +4242,135 @@ preloadAllServerCaches();
   }
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚀 RUNTIME API - Flow Compiler Endpoint
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.post('/api/runtime/compile', async (req, res) => {
+  try {
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🚀 [API] POST /api/runtime/compile - REQUEST RECEIVED');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    const { nodes, edges, tasks, ddts, projectId } = req.body;
+
+    console.log('[API] Compile request:', {
+      nodesCount: nodes?.length || 0,
+      edgesCount: edges?.length || 0,
+      tasksCount: tasks?.length || 0,
+      ddtsCount: ddts?.length || 0,
+      projectId
+    });
+
+    // Import compiler (TypeScript - using ts-node)
+    let compileFlow;
+    try {
+      // Register ts-node to execute TypeScript
+      require('ts-node').register({
+        transpileOnly: true,
+        compilerOptions: {
+          module: 'commonjs',
+          esModuleInterop: true,
+          resolveJsonModule: true
+        }
+      });
+
+      // Import TypeScript compiler
+      const compilerModule = require('./runtime/compiler/compiler.ts');
+      compileFlow = compilerModule.compileFlow;
+
+      if (!compileFlow) {
+        throw new Error('compileFlow function not found in compiler module');
+      }
+
+      console.log('[API] ✅ Backend compiler loaded successfully');
+    } catch (err) {
+      console.error('[API] ❌ Error loading compiler:', err);
+      return res.status(500).json({
+        error: 'Compiler not available',
+        message: 'Failed to load TypeScript compiler. Make sure ts-node is installed.',
+        details: err.message,
+        stack: err.stack
+      });
+    }
+
+    // Create getTask function from tasks array
+    const taskMap = new Map();
+    if (tasks && Array.isArray(tasks)) {
+      tasks.forEach(task => {
+        taskMap.set(task.id, task);
+      });
+    }
+
+    const getTask = (taskId) => {
+      return taskMap.get(taskId) || null;
+    };
+
+    // Create getDDT function from ddts array
+    const ddtMap = new Map();
+    if (ddts && Array.isArray(ddts)) {
+      ddts.forEach(ddt => {
+        if (ddt.id) {
+          ddtMap.set(ddt.id, ddt);
+        }
+      });
+    }
+
+    const getDDT = (taskId) => {
+      // Find DDT associated with task
+      const task = getTask(taskId);
+      if (task && task.value && task.value.ddt) {
+        return task.value.ddt;
+      }
+      // Try to find by taskId in ddts
+      return ddtMap.get(taskId) || null;
+    };
+
+    // Call compiler
+    console.log('[API] Calling backend compiler...');
+    const result = compileFlow(nodes, edges, {
+      getTask,
+      getDDT
+    });
+
+    // Convert Map to object for JSON serialization
+    const taskMapObj = {};
+    result.taskMap.forEach((value, key) => {
+      taskMapObj[key] = value;
+    });
+
+    const response = {
+      tasks: result.tasks,
+      entryTaskId: result.entryTaskId,
+      taskMap: taskMapObj,
+      compiledBy: 'BACKEND_RUNTIME', // ✅ Flag to confirm backend compiler was used
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('✅ [API] POST /api/runtime/compile - COMPLETED');
+    console.log('[API] Compile result:', {
+      tasksCount: result.tasks.length,
+      entryTaskId: result.entryTaskId,
+      compiledBy: 'BACKEND_RUNTIME',
+      timestamp: response.timestamp
+    });
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+
+    res.json(response);
+  } catch (error) {
+    console.error('═══════════════════════════════════════════════════════════════════════════');
+    console.error('❌ [API] POST /api/runtime/compile - ERROR');
+    console.error('[API] Error:', error);
+    console.error('═══════════════════════════════════════════════════════════════════════════');
+    res.status(500).json({
+      error: 'Compilation failed',
+      message: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 app.listen(3100, () => {
   console.log('Backend API pronta su http://localhost:3100');
 });

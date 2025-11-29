@@ -129,6 +129,23 @@ async function executeSayMessage(
 
   if (!text) {
     console.warn('[TaskExecutor] SayMessage task has no text', { taskId: task.id, task });
+
+    // ✅ Show warning in bubble chat instead of failing silently
+    if (callbacks.onMessage) {
+      try {
+        // Call onMessage with warning stepType - orchestrator will extract warning message
+        callbacks.onMessage('⚠️ Message task missing text', 'warning');
+      } catch (error) {
+        console.error('[TaskExecutor][executeSayMessage] Error showing warning message', {
+          taskId: task.id,
+          error: error
+        });
+      }
+    }
+
+    // ✅ Mark as Executed to prevent infinite loop
+    task.state = 'Executed';
+
     return {
       success: false,
       error: new Error('SayMessage task missing text')

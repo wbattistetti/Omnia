@@ -195,24 +195,47 @@ export function useNewFlowOrchestrator({
           const tMsg1 = performance.now();
           import('../chatSimulatorUtils').then(({ getStepColor }) => {
             const tMsg2 = performance.now();
+
+            // ✅ Handle warning messages: extract warning text and set warningMessage
+            let messageText = text;
+            let warningMessage: string | undefined = undefined;
+
+            if (stepType === 'warning' || text.startsWith('⚠️')) {
+              // Extract warning message
+              warningMessage = text.replace(/^⚠️\s*/, '');
+              messageText = 'Message task missing text';
+            }
+
             onMessage({
               id: task.id, // Use task GUID directly - no need to generate new ID
-              text,
-              stepType: stepType || 'message',
+              text: messageText,
+              stepType: stepType === 'warning' ? 'message' : (stepType || 'message'),
               escalationNumber,
               timestamp: new Date(),
-              color: stepType ? getStepColor(stepType) : undefined
+              color: stepType ? getStepColor(stepType === 'warning' ? 'message' : stepType) : undefined,
+              warningMessage // ✅ Add warning message if present
             });
             // Removed verbose performance logging
           }).catch((error) => {
             console.error('[useNewFlowOrchestrator][handleTaskExecute] Error importing getStepColor', error);
+
+            // ✅ Handle warning messages in fallback too
+            let messageText = text;
+            let warningMessage: string | undefined = undefined;
+
+            if (stepType === 'warning' || text.startsWith('⚠️')) {
+              warningMessage = text.replace(/^⚠️\s*/, '');
+              messageText = 'Message task missing text';
+            }
+
             // Fallback: send message without color
             onMessage({
               id: task.id,
-              text,
-              stepType: stepType || 'message',
+              text: messageText,
+              stepType: stepType === 'warning' ? 'message' : (stepType || 'message'),
               escalationNumber,
-              timestamp: new Date()
+              timestamp: new Date(),
+              warningMessage // ✅ Add warning message if present
             });
           });
         } else {
