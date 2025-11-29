@@ -58,6 +58,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const [nodeWidth, setNodeWidth] = useState<number | null>(null);
   const nodeWidthRef = useRef<number | null>(null);
 
+  // ✅ MEASURE NODE HEIGHT: Track node height to adjust descendants when rows change
+  const nodeHeightRef = useRef<number | null>(null);
+  const previousRowsCountRef = useRef<number>(0);
+
   // ✅ ROW MANAGEMENT: Manage all row operations
   const rowManagement = useNodeRowManagement({ nodeId: id, normalizedData, displayRows });
   const {
@@ -68,6 +72,13 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     handleExitEditing, validateRows, computeIsEmpty,
     inAutoAppend
   } = rowManagement;
+
+  // ✅ Initialize previousRowsCountRef after nodeRows is available (safety net if nodeHeightRef initialization doesn't run)
+  useEffect(() => {
+    if (nodeHeightRef.current === null && previousRowsCountRef.current === 0) {
+      previousRowsCountRef.current = nodeRows.length;
+    }
+  }, [nodeRows.length]);
 
   // ✅ INTELLISENSE: Manage intellisense functionality
   const intellisense = useNodeIntellisense({
@@ -90,37 +101,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // ✅ CORREZIONE 6: Ref per il container del nodo (dichiarato prima dell'uso)
   const nodeContainerRef = useRef<HTMLDivElement>(null);
 
-  // Measure node width when not editing any row to preserve it during editing
-  useEffect(() => {
-    if (!editingRowId && nodeContainerRef.current) {
-      // Use multiple frames to ensure layout is stable
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!nodeContainerRef.current) return;
-          const rect = nodeContainerRef.current.getBoundingClientRect();
-          const computedStyle = window.getComputedStyle(nodeContainerRef.current);
-          const width = rect.width;
-          setNodeWidth(width);
-          nodeWidthRef.current = width;
-
-          // Node width measured (debug disabled)
-        });
-      });
-    } else if (editingRowId && nodeWidthRef.current && nodeContainerRef.current) {
-      // When editing, enforce the saved width directly on DOM
-      nodeContainerRef.current.style.setProperty('min-width', `${nodeWidthRef.current}px`, 'important');
-      nodeContainerRef.current.style.setProperty('width', `${nodeWidthRef.current}px`, 'important');
-      nodeContainerRef.current.style.setProperty('flex-shrink', '0', 'important');
-    }
-  }, [editingRowId, id, nodeRows.length]);
-
-  // ✅ TOOLBAR: Ref per l'elemento toolbar (dichiarato prima dell'uso)
-  const toolbarElementRef = useRef<HTMLDivElement>(null);
-
-  // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo
+  // ✅ NODE DRAG: Hook per accedere a React Flow per aggiornare posizione nodo (deve essere prima di findAllDescendants)
   const { getNode, setNodes, getViewport, getEdges } = useReactFlow();
 
-  // ✅ Funzione per trovare tutti i discendenti di un nodo (ricorsivo)
+  // ✅ Funzione per trovare tutti i discendenti di un nodo (ricorsivo) - deve essere prima del useEffect che la usa
   const findAllDescendants = useCallback((nodeId: string, visited: Set<string> = new Set()): string[] => {
     if (visited.has(nodeId)) return []; // Evita cicli
     visited.add(nodeId);
@@ -143,6 +127,91 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
     return descendants;
   }, [getEdges]);
+
+  // ✅ Effect per spostare i discendenti quando cambia l'altezza del nodo
+  useEffect(() => {
+    // Aspetta che il DOM sia aggiornato
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!nodeContainerRef.current) return;
+
+        const currentHeight = nodeContainerRef.current.getBoundingClientRect().height;
+        const previousHeight = nodeHeightRef.current;
+        const previousRowsCount = previousRowsCountRef.current;
+        const currentRowsCount = nodeRows.length;
+
+        // ✅ Solo se il numero di righe è cambiato (non durante editing)
+        if (previousRowsCount !== currentRowsCount && previousHeight !== null) {
+          const heightDelta = currentHeight - previousHeight;
+
+          // ✅ Se l'altezza è cambiata, sposta i discendenti rigidamente
+          if (Math.abs(heightDelta) > 1) { // Tolleranza di 1px per evitare micro-movimenti
+            const descendants = findAllDescendants(id);
+
+            if (descendants.length > 0) {
+              console.log('📏 [NODE_RESIZE] Spostando discendenti per mantenere distanze', {
+                nodeId: id,
+                heightDelta,
+                previousHeight,
+                currentHeight,
+                descendantsCount: descendants.length,
+                timestamp: Date.now()
+              });
+
+              // Sposta tutti i discendenti della stessa quantità
+              setNodes((nds) => nds.map((n) => {
+                if (descendants.includes(n.id)) {
+                  return {
+                    ...n,
+                    position: {
+                      x: n.position.x,
+                      y: n.position.y + heightDelta
+                    }
+                  };
+                }
+                return n;
+              }));
+            }
+          }
+        }
+
+        // ✅ Aggiorna l'altezza e il conteggio delle righe
+        nodeHeightRef.current = currentHeight;
+        previousRowsCountRef.current = currentRowsCount;
+      });
+    });
+  }, [nodeRows.length, id, findAllDescendants, setNodes]);
+
+  // Measure node width when not editing any row to preserve it during editing
+  useEffect(() => {
+    if (!editingRowId && nodeContainerRef.current) {
+      // Use multiple frames to ensure layout is stable
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!nodeContainerRef.current) return;
+          const rect = nodeContainerRef.current.getBoundingClientRect();
+          const computedStyle = window.getComputedStyle(nodeContainerRef.current);
+          const width = rect.width;
+          const height = rect.height;
+          setNodeWidth(width);
+          nodeWidthRef.current = width;
+          // ✅ Inizializza anche l'altezza se non è ancora stata misurata
+          if (nodeHeightRef.current === null) {
+            nodeHeightRef.current = height;
+            previousRowsCountRef.current = nodeRows.length;
+          }
+        });
+      });
+    } else if (editingRowId && nodeWidthRef.current && nodeContainerRef.current) {
+      // When editing, enforce the saved width directly on DOM
+      nodeContainerRef.current.style.setProperty('min-width', `${nodeWidthRef.current}px`, 'important');
+      nodeContainerRef.current.style.setProperty('width', `${nodeWidthRef.current}px`, 'important');
+      nodeContainerRef.current.style.setProperty('flex-shrink', '0', 'important');
+    }
+  }, [editingRowId, id, nodeRows.length]);
+
+  // ✅ TOOLBAR: Ref per l'elemento toolbar (dichiarato prima dell'uso)
+  const toolbarElementRef = useRef<HTMLDivElement>(null);
 
   // ✅ NODE DRAG: Ref per gestire il drag personalizzato del nodo
   const nodeDragStateRef = useRef<{
@@ -403,8 +472,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
         // Verifica se il mouse è sul canvas (react-flow__pane ma non sui nodi)
         const isCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
-        const isOverToolbar = toolbarElementRef.current?.contains(el);
-        const isOverNode = nodeContainerRef.current?.contains(el) || wrapperRef.current?.contains(el);
+        const isOverToolbar = el && toolbarElementRef.current && toolbarElementRef.current.contains(el as Node);
+        const isOverNode = el && ((nodeContainerRef.current && nodeContainerRef.current.contains(el as Node)) || (wrapperRef.current && wrapperRef.current.contains(el as Node)));
 
         if (isCanvas && !selected && !isOverToolbar && !isOverNode) {
           setIsHoveredNode(false);
@@ -454,8 +523,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           }
 
           // Verifica se il mouse è ancora sul nodo o sulla toolbar
-          const isOverNode = el && (nodeContainerRef.current?.contains(el) || wrapperRef.current?.contains(el));
-          const isOverToolbar = el && toolbarElementRef.current?.contains(el);
+          const isOverNode = el && ((nodeContainerRef.current && nodeContainerRef.current.contains(el as Node)) || (wrapperRef.current && wrapperRef.current.contains(el as Node)));
+          const isOverToolbar = el && toolbarElementRef.current && toolbarElementRef.current.contains(el as Node);
           const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
 
           if (selected) {
@@ -471,8 +540,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             return;
           }
 
-          const relatedTarget = e.relatedTarget as HTMLElement;
-          const isGoingToNode = relatedTarget && (nodeContainerRef.current?.contains(relatedTarget) || wrapperRef.current?.contains(relatedTarget));
+          const relatedTarget = e.relatedTarget as HTMLElement | null;
+          const isGoingToNode = relatedTarget && nodeContainerRef.current && wrapperRef.current &&
+            (nodeContainerRef.current.contains(relatedTarget as Node) || wrapperRef.current.contains(relatedTarget as Node));
 
           if (isGoingToNode) {
             return;
@@ -660,8 +730,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           }
 
           // Verifica dove è effettivamente il mouse
-          const isOverToolbar = el && toolbarElementRef.current?.contains(el);
-          const isOverNode = el && (nodeContainerRef.current?.contains(el) || wrapperRef.current?.contains(el));
+          const isOverToolbar = el && toolbarElementRef.current && toolbarElementRef.current.contains(el as Node);
+          const isOverNode = el && ((nodeContainerRef.current && nodeContainerRef.current.contains(el as Node)) || (wrapperRef.current && wrapperRef.current.contains(el as Node)));
           const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
 
           // Se il nodo è selected, mantieni sempre visibile
@@ -681,9 +751,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           }
 
           // Fallback: usa relatedTarget se elementFromPoint non funziona
-          const relatedTarget = e.relatedTarget as HTMLElement;
-          const isGoingToToolbar = relatedTarget && toolbarElementRef.current?.contains(relatedTarget);
-          const isGoingToNodeContainer = relatedTarget && (nodeContainerRef.current?.contains(relatedTarget) || wrapperRef.current?.contains(relatedTarget));
+          const relatedTarget = e.relatedTarget as HTMLElement | null;
+          const isGoingToToolbar = relatedTarget && toolbarElementRef.current && relatedTarget && toolbarElementRef.current.contains(relatedTarget as Node);
+          const isGoingToNodeContainer = relatedTarget && nodeContainerRef.current && wrapperRef.current &&
+            (nodeContainerRef.current.contains(relatedTarget as Node) || wrapperRef.current.contains(relatedTarget as Node));
 
           if (isGoingToToolbar || isGoingToNodeContainer) {
             return;
@@ -720,8 +791,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
 
             // Verifica dove è effettivamente il mouse
-            const isOverToolbar = el && toolbarElementRef.current?.contains(el);
-            const isOverNode = el && (wrapperRef.current?.contains(el) || nodeContainerRef.current?.contains(el));
+            const isOverToolbar = el && toolbarElementRef.current && toolbarElementRef.current.contains(el as Node);
+            const isOverNode = el && ((wrapperRef.current && wrapperRef.current.contains(el as Node)) || (nodeContainerRef.current && nodeContainerRef.current.contains(el as Node)));
             const isOverCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
 
             // Se il nodo è selected, mantieni sempre visibile
@@ -740,10 +811,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
               return;
             }
 
-            // Fallback: usa relatedTarget se elementFromPoint non funziona
-            const relatedTarget = e.relatedTarget as HTMLElement;
-            const isGoingToToolbar = relatedTarget && toolbarElementRef.current?.contains(relatedTarget);
-            const isStillInWrapper = relatedTarget && (wrapperRef.current?.contains(relatedTarget) || nodeContainerRef.current?.contains(relatedTarget));
+          // Fallback: usa relatedTarget se elementFromPoint non funziona
+          const relatedTarget = e.relatedTarget as HTMLElement | null;
+          const isGoingToToolbar = relatedTarget && toolbarElementRef.current && toolbarElementRef.current.contains(relatedTarget as Node);
+          const isStillInWrapper = relatedTarget && wrapperRef.current && nodeContainerRef.current &&
+            (wrapperRef.current.contains(relatedTarget as Node) || nodeContainerRef.current.contains(relatedTarget as Node));
 
             if (isGoingToToolbar || isStillInWrapper) {
               return;
