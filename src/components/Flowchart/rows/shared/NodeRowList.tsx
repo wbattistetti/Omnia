@@ -23,7 +23,7 @@ interface NodeRowListProps {
   draggedRowOriginalIndex: number | null;
   draggedItem: NodeRowData | null;
   draggedRowStyle: React.CSSProperties;
-  onEditingEnd?: () => void;
+  onEditingEnd?: (rowId?: string) => void;
   onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
@@ -57,18 +57,25 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   getProjectId
 }) => {
 
-  // Hide any visible inserter as soon as a textbox appears (editing mode)
-  React.useEffect(() => {
-    if (editingRowId !== null && hoveredInserter !== null) {
-      try { if (localStorage.getItem('debug.inserter') === '1') console.log('[Inserter][autoHide:onEdit]', { editingRowId, hoveredInserter }); } catch { }
-      setHoveredInserter(null);
-    }
-  }, [editingRowId]);
-
   // Filter rows based on hideUnchecked setting
   const visibleRows = hideUnchecked
     ? rows.filter(row => row.included !== false)
     : rows;
+
+  // Hide any visible inserter only if hovering over the row that is currently being edited
+  // Allow dividers to show when hovering over other rows, even if one row is in editing mode
+  React.useEffect(() => {
+    if (editingRowId !== null && hoveredInserter !== null) {
+      // Find which row index corresponds to the editing row
+      const editingRowIndex = visibleRows.findIndex(r => r.id === editingRowId);
+      // Only hide inserter if hovering near the row that is being edited
+      // Allow dividers to show between other rows
+      if (editingRowIndex !== -1 && (hoveredInserter === editingRowIndex || hoveredInserter === editingRowIndex + 1)) {
+        try { if (localStorage.getItem('debug.inserter') === '1') console.log('[Inserter][autoHide:onEdit]', { editingRowId, hoveredInserter }); } catch { }
+        setHoveredInserter(null);
+      }
+    }
+  }, [editingRowId, hoveredInserter, visibleRows]);
 
   return (
     <>
@@ -76,7 +83,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
         <React.Fragment key={row.id}>
           {/* Inserter sopra la label */}
           <RowInserter
-            visible={(hoveredInserter === idx) && (editingRowId === null)}
+            visible={(hoveredInserter === idx) && (editingRowId === null || visibleRows[idx]?.id !== editingRowId)}
             onInsert={() => handleInsertRow(idx)}
             onMouseEnter={() => {
               setHoveredInserter(idx);
@@ -126,7 +133,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             isBeingDragged={draggedRowId === row.id}
             isPlaceholder={Boolean(row.isPlaceholder)}
             forceEditing={editingRowId === row.id}
-            onEditingEnd={onEditingEnd}
+            onEditingEnd={() => onEditingEnd?.(row.id)}
             onMouseEnter={(type, i) => {
               if (type === 'top') setHoveredInserter(i);
               else if (type === 'bottom') setHoveredInserter(i + 1);
@@ -141,7 +148,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
       ))}
       {/* Inserter dopo l'ultima riga */}
       <RowInserter
-        visible={(hoveredInserter === rows.length) && (editingRowId === null)}
+        visible={(hoveredInserter === rows.length) && (editingRowId === null || visibleRows.length === 0 || visibleRows[visibleRows.length - 1]?.id !== editingRowId)}
         onInsert={() => handleInsertRow(rows.length)}
         onMouseEnter={() => {
           setHoveredInserter(rows.length);

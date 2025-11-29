@@ -265,7 +265,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   }, [toolbarSM.showIcons, toolbarSM.showPicker]);
 
   useEffect(() => {
-    if (forceEditing) setIsEditing(true);
+    if (forceEditing) {
+      setIsEditing(true);
+    } else {
+      // ✅ Quando forceEditing diventa false, esci dalla modalità editing
+      // Questo assicura che la riga torni a essere una label quando perde il focus
+      setIsEditing(false);
+    }
   }, [forceEditing]);
 
   // Debug disattivato di default (abilitabile via debug.flowIcons)
@@ -284,9 +290,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // Solo chiamare onEditingEnd se stiamo uscendo dall'editing (era true, ora false)
     // E se siamo mai entrati in editing
     if (!isEditing && hasEverBeenEditing && typeof onEditingEnd === 'function') {
-      onEditingEnd();
+      onEditingEnd(row.id);
     }
-  }, [isEditing, hasEverBeenEditing]);
+  }, [isEditing, hasEverBeenEditing, row.id, onEditingEnd]);
 
   // Canvas click = ESC semantics: close intellisense if open, otherwise end editing without deleting
   useEffect(() => {
@@ -303,7 +309,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       setShowIntellisense(false);
       setIntellisenseQuery('');
       if (typeof onEditingEnd === 'function') {
-        onEditingEnd();
+        onEditingEnd(row.id);
       }
     };
     window.addEventListener('flow:canvas:click', handleCanvasClick as any, { capture: false } as any);
@@ -461,7 +467,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       setShowIntellisense(false);
       setIntellisenseQuery('');
       if (typeof onEditingEnd === 'function') {
-        onEditingEnd();
+        onEditingEnd(row.id);
       }
     }
   };

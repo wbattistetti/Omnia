@@ -5,9 +5,10 @@ interface UseNodeExitEditingProps {
     inAutoAppend: () => boolean;
     nextPointerTargetRef: React.RefObject<EventTarget | null>;
     nodeContainerRef: React.RefObject<HTMLDivElement>;
-    handleExitEditing: () => void;
+    handleExitEditing: (rowId?: string) => void;
     validateRows: (rows: NodeRowData[]) => void;
     nodeRows: NodeRowData[];
+    editingRowId?: string | null;
 }
 
 export function useNodeExitEditing({
@@ -16,7 +17,8 @@ export function useNodeExitEditing({
     nodeContainerRef,
     handleExitEditing,
     validateRows,
-    nodeRows
+    nodeRows,
+    editingRowId
 }: UseNodeExitEditingProps) {
     const exitEditing = useCallback((nativeEvt?: Event | null) => {
         if (inAutoAppend()) return;
@@ -32,9 +34,10 @@ export function useNodeExitEditing({
             return;
         }
 
-        handleExitEditing();
+        // ✅ Passa editingRowId quando disponibile (per eliminare righe vuote auto-appendate)
+        handleExitEditing(editingRowId || undefined);
         validateRows(nodeRows);
-    }, [inAutoAppend, nextPointerTargetRef, nodeContainerRef, handleExitEditing, validateRows, nodeRows]);
+    }, [inAutoAppend, nextPointerTargetRef, nodeContainerRef, handleExitEditing, validateRows, nodeRows, editingRowId]);
 
     return { exitEditing };
 }

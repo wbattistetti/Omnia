@@ -67,6 +67,14 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
         log('onBlur');
         const rt = e.relatedTarget as HTMLElement | null;
         const toNode = rt && (rt.classList?.contains('react-flow__node') || rt.classList?.contains('react-flow'));
+
+        // ✅ Non rifocalizzare se la riga è vuota (permette l'eliminazione automatica)
+        const isEmpty = !value || value.trim() === '';
+        if (isEmpty) {
+          log('onBlur: row is empty, allowing deletion');
+          return;
+        }
+
         if (toNode || !rt) {
           // Use requestAnimationFrame instead of setTimeout
           requestAnimationFrame(() => {

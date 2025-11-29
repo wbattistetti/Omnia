@@ -250,9 +250,10 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     inAutoAppend,
     nextPointerTargetRef,
     nodeContainerRef,
-    handleExitEditing,
+    handleExitEditing: (rowId?: string) => handleExitEditing(rowId || editingRowId || null),
     validateRows,
-    nodeRows
+    nodeRows,
+    editingRowId
   });
 
   // Stato per gestire l'inserter hover

@@ -5,6 +5,13 @@ import { createRowWithTask, getTaskIdFromRow, updateRowData } from '../../../../
 import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
 import { taskRepository } from '../../../../../services/TaskRepository';
 
+// ✅ Traccia il contenuto originale quando inizi a editare una riga esistente
+interface RowOriginalContent {
+    rowId: string;
+    originalText: string;
+    wasNew: boolean; // true se la riga era nuova (mai riempita) quando ha iniziato l'editing
+}
+
 interface UseNodeRowManagementProps {
     nodeId: string;
     normalizedData: any;
@@ -24,6 +31,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     const [isEmpty, setIsEmpty] = useState(() => {
         return displayRows.length === 0 || displayRows.every(r => !r.text || r.text.trim() === '');
     });
+
+    // ✅ Traccia il contenuto originale quando inizi a editare una riga
+    const originalContentRef = useRef<RowOriginalContent | null>(null);
 
     // Guardia per sopprimere exitEditing durante auto-append
     const autoAppendGuard = useRef(0);
@@ -76,6 +86,29 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             normalizedData.onUpdate?.({ rows: cleaned, isTemporary: normalizedData.isTemporary });
         }
     }, [normalizedData, computeIsEmpty]);
+
+    // ✅ Salva il contenuto originale quando inizi a editare una riga
+    // Deve essere definito prima di essere usato in altri callback
+    const saveOriginalContent = useCallback((rowId: string) => {
+        const row = nodeRows.find(r => r.id === rowId);
+        if (!row) return;
+
+        const originalText = row.text || '';
+        const wasNew = !originalText || originalText.trim() === ''; // Riga nuova se vuota
+
+        originalContentRef.current = {
+            rowId,
+            originalText,
+            wasNew
+        };
+
+        console.log('💾 [SAVE_ORIGINAL] Salvato contenuto originale', {
+            rowId,
+            originalText,
+            wasNew,
+            timestamp: Date.now()
+        });
+    }, [nodeRows]);
 
     // Gestione aggiornamento riga
     const handleUpdateRow = useCallback((
@@ -167,6 +200,15 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
         const isLast = idx === prev.length - 1;
 
+        // ✅ Se una riga nuova viene riempita, aggiorna originalContentRef per marcarla come "non nuova"
+        if (nowFilled && originalContentRef.current?.rowId === rowId && originalContentRef.current.wasNew) {
+            originalContentRef.current.wasNew = false;
+            console.log('✅ [HANDLE_UPDATE_ROW] Riga nuova riempita, marcata come esistente', {
+                rowId,
+                timestamp: Date.now()
+            });
+        }
+
         // ✅ Logica migliorata: auto-append se stai editando l'ultima riga, era vuota e ora è piena
         // Questo permette di continuare l'auto-append anche dopo la prima riga
         // Non serve più verificare isEmpty perché vogliamo continuare finché editiamo l'ultima riga vuota
@@ -197,6 +239,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
             const { nextRows, newRowId } = appendEmptyRow(updatedRows);
             updatedRows = nextRows;
+            // ✅ Salva come "nuova" quando inizia l'editing della riga auto-appendata
+            saveOriginalContent(newRowId);
             setEditingRowId(newRowId);
 
             // ✅ Focus robusto dopo il render con requestAnimationFrame
@@ -252,7 +296,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             rowId,
             timestamp: Date.now()
         });
-    }, [nodeRows, isEmpty, nodeId, appendEmptyRow, normalizedData]);
+    }, [nodeRows, isEmpty, nodeId, appendEmptyRow, normalizedData, saveOriginalContent]);
 
     // Gestione eliminazione riga
     const handleDeleteRow = useCallback(async (rowId: string) => {
@@ -291,40 +335,179 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
     // Gestione inserimento riga
     // Migration: Now creates Task in TaskRepository (dual mode)
-    const handleInsertRow = useCallback((index: number) => {
+    const handleInsertRow = useCallback(async (index: number) => {
+        // ✅ Verifica se l'ultima riga è vuota (auto-appendata) e la elimina
+        const lastRow = nodeRows[nodeRows.length - 1];
+        const lastRowIsEmpty = lastRow && (!lastRow.text || lastRow.text.trim() === '');
+
+        let updatedRows = [...nodeRows];
+        let adjustedIndex = index;
+
+        // ✅ Se l'ultima riga è vuota, eliminala prima di inserire la nuova
+        if (lastRowIsEmpty) {
+            console.log('🗑️ [INSERT_ROW] Eliminando riga vuota auto-appendata prima di inserire nuova riga', {
+                lastRowId: lastRow.id,
+                insertIndex: index,
+                timestamp: Date.now()
+            });
+
+            // Elimina l'ultima riga vuota
+            updatedRows = updatedRows.filter(r => r.id !== lastRow.id);
+
+            // ✅ Aggiusta l'indice di inserimento se necessario
+            // Se l'indice era dopo l'ultima riga (o era l'ultima riga), ora è alla fine
+            if (index >= nodeRows.length - 1) {
+                adjustedIndex = updatedRows.length;
+            } else if (index === nodeRows.length - 1) {
+                // Se stavi inserendo prima dell'ultima riga vuota, ora inserisci alla fine
+                adjustedIndex = updatedRows.length;
+            }
+            // Se l'indice era prima dell'ultima riga, rimane invariato
+
+            // ✅ Elimina anche le variabili associate alla riga eliminata
+            try {
+                let projectId: string | undefined = undefined;
+                try {
+                    projectId = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined);
+                } catch {}
+
+                if (projectId) {
+                    await flowchartVariablesService.init(projectId);
+                    await flowchartVariablesService.deleteMappingsByRowId(lastRow.id);
+
+                    // Emit event to refresh ConditionEditor variables
+                    try {
+                        document.dispatchEvent(new CustomEvent('flowchart:variablesUpdated', {
+                            bubbles: true
+                        }));
+                    } catch {}
+                }
+            } catch (e) {
+                console.warn('[useNodeRowManagement] Failed to delete variables', e);
+            }
+        }
+
         // Inserisci una riga solo se l'ultima riga è valida (non vuota e con tipo)
-        const last = nodeRows[nodeRows.length - 1];
+        // ✅ Questo controllo ora è dopo l'eliminazione della riga vuota
+        const last = updatedRows[updatedRows.length - 1];
         const lastValid = last ? Boolean((last.text || '').trim().length > 0 && ((last as any).type || (last as any).mode)) : true;
-        if (!lastValid) return;
+        if (!lastValid && updatedRows.length > 0) return;
 
         const newRowId = makeRowId();
         // Create row with Task (dual mode: Task + InstanceRepository)
         const newRow = createRowWithTask(newRowId, 'Message', '');
         (newRow as any).isNew = true; // Preserve isNew flag
 
-        const updatedRows = [...nodeRows];
-        updatedRows.splice(index, 0, newRow);
+        updatedRows.splice(adjustedIndex, 0, newRow);
         setNodeRows(updatedRows);
+        // ✅ Salva come "nuova" quando inizia l'editing della riga inserita
+        saveOriginalContent(newRow.id);
         setEditingRowId(newRow.id);
         normalizedData.onUpdate?.({ rows: updatedRows });
-    }, [nodeRows, makeRowId, normalizedData]);
+    }, [nodeRows, makeRowId, normalizedData, saveOriginalContent]);
 
     // Gestione exit editing
-    const handleExitEditing = useCallback(() => {
+    const handleExitEditing = useCallback((rowIdToCheck?: string | null) => {
         if (inAutoAppend()) {
             console.log('🔍 [EXIT_EDITING] Soppresso durante auto-append');
             return;
         }
+
+        if (!rowIdToCheck) {
+            // Se non c'è rowId, esci semplicemente dall'editing
+            setEditingRowId(null);
+            setIsEmpty(computeIsEmpty(nodeRows));
+            originalContentRef.current = null;
+            return;
+        }
+
+        const rowToCheck = nodeRows.find(r => r.id === rowIdToCheck);
+        if (!rowToCheck) {
+            setEditingRowId(null);
+            setIsEmpty(computeIsEmpty(nodeRows));
+            originalContentRef.current = null;
+            return;
+        }
+
+        const currentText = rowToCheck.text || '';
+        const isEmpty = !currentText || currentText.trim() === '';
+        const originalContent = originalContentRef.current;
+
+        // ✅ CASO 1: Riga NUOVA (mai riempita)
+        if (originalContent?.wasNew) {
+            if (isEmpty) {
+                // Riga nuova vuota + blur = ESC → ELIMINA
+                console.log('🗑️ [EXIT_EDITING] Riga nuova vuota → ESC → Eliminata', {
+                    rowId: rowIdToCheck,
+                    timestamp: Date.now()
+                });
+                handleDeleteRow(rowIdToCheck);
+                originalContentRef.current = null;
+                return;
+            } else {
+                // Riga nuova con contenuto + blur = ENTER → CONFERMA
+                console.log('✅ [EXIT_EDITING] Riga nuova con contenuto → ENTER → Confermata', {
+                    rowId: rowIdToCheck,
+                    content: currentText,
+                    timestamp: Date.now()
+                });
+                // La riga è già stata aggiornata da handleUpdateRow, quindi basta uscire
+                setEditingRowId(null);
+                setIsEmpty(computeIsEmpty(nodeRows));
+                originalContentRef.current = null;
+                return;
+            }
+        }
+
+        // ✅ CASO 2: Riga ESISTENTE (già riempita)
+        // Blur = ESC → RIPRISTINA contenuto originale
+        if (originalContent && originalContent.originalText !== currentText) {
+            console.log('↩️ [EXIT_EDITING] Riga esistente modificata → ESC → Ripristina originale', {
+                rowId: rowIdToCheck,
+                originalText: originalContent.originalText,
+                currentText: currentText,
+                timestamp: Date.now()
+            });
+
+            // Ripristina il contenuto originale
+            setNodeRows(prev => prev.map(r =>
+                r.id === rowIdToCheck
+                    ? { ...r, text: originalContent.originalText }
+                    : r
+            ));
+
+            // Aggiorna anche il parent
+            const updatedRows = nodeRows.map(r =>
+                r.id === rowIdToCheck
+                    ? { ...r, text: originalContent.originalText }
+                    : r
+            );
+            normalizedData.onUpdate?.({ rows: updatedRows });
+        }
+
         setEditingRowId(null);
         setIsEmpty(computeIsEmpty(nodeRows));
-    }, [nodeRows, computeIsEmpty]);
+        originalContentRef.current = null;
+    }, [nodeRows, computeIsEmpty, inAutoAppend, handleDeleteRow, normalizedData]);
+
+    // ✅ Wrapper per setEditingRowId che salva il contenuto originale
+    const setEditingRowIdWithOriginal = useCallback((rowId: string | null) => {
+        if (rowId) {
+            // Salva il contenuto originale quando inizi a editare
+            saveOriginalContent(rowId);
+        } else {
+            // Pulisci il contenuto originale quando esci dall'editing
+            originalContentRef.current = null;
+        }
+        setEditingRowId(rowId);
+    }, [saveOriginalContent]);
 
     return {
         // State
         nodeRows,
         setNodeRows,
         editingRowId,
-        setEditingRowId,
+        setEditingRowId: setEditingRowIdWithOriginal,
         isEmpty,
         setIsEmpty,
 
