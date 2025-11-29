@@ -4,7 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import type { Node, Edge } from 'reactflow';
 import type { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
 import type { CompiledTask, CompilationResult, ExecutionState } from '../FlowCompiler/types';
-import { DialogueEngine } from './engine';
+// Frontend DialogueEngine removed - backend orchestrator is now default
 import { taskRepository } from '../../services/TaskRepository';
 
 interface UseDialogueEngineOptions {
@@ -304,71 +304,13 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
         return; // Backend orchestrator handles execution
       } else {
-        console.log('⚠️  [ORCHESTRATOR] Location: FRONTEND (Browser)');
-        console.log('   └─ Engine: DialogueEngine (FRONTEND VERSION)');
-        console.log('   └─ File: src/components/DialogueEngine/engine.ts');
-        console.log('   └─ Task Loop: Runs in browser');
-        console.log('   └─ Note: Set localStorage.setItem("orchestrator.useBackend", "true") to use backend');
-        console.log('');
-        console.log('✅ [DDT ENGINE] Location: BACKEND');
-        console.log('   └─ Endpoint: POST /api/runtime/ddt/session/start');
-        console.log('   └─ Engine: backend/runtime/ddt/ddtEngine.ts');
-        console.log('   └─ Called: When GetData task executes');
-        console.log('');
-        console.log('📝 [CURRENT STATE]');
-        console.log('   • Compilation: BACKEND ✅');
-        console.log('   • Orchestrator: FRONTEND ⚠️');
-        console.log('   • DDT Engine: BACKEND ✅');
-        console.log('═══════════════════════════════════════════════════════════════════════════');
-
-        // Use frontend DialogueEngine (existing behavior)
-        const engine = new DialogueEngine(compilationResult, {
-          onTaskExecute: async (task) => {
-            console.log('[FRONTEND][DialogueEngine] Executing task', {
-              taskId: task.id,
-              action: task.action,
-              executedBy: 'FRONTEND_DIALOGUE_ENGINE',
-              location: 'BROWSER'
-            });
-            setCurrentTask(task);
-            return await options.onTaskExecute(task);
-          },
-          onStateUpdate: (state) => {
-            // 🎨 [HIGHLIGHT] Log only when state actually changes (reduced noise)
-            const prev = prevStateRef.current;
-            const current = {
-              currentNodeId: state.currentNodeId,
-              executedCount: state.executedTaskIds.size
-            };
-
-            if (
-              prev.currentNodeId !== current.currentNodeId ||
-              prev.executedCount !== current.executedCount ||
-              !prev.currentNodeId // Log on first update
-            ) {
-              console.log('🎨 [HIGHLIGHT] useDialogueEngine - State updated', {
-                currentNodeId: current.currentNodeId,
-                executedCount: current.executedCount
-              });
-              prevStateRef.current = current;
-            }
-
-            setExecutionState(state);
-          },
-          onComplete: () => {
-            setIsRunning(false);
-            setCurrentTask(null);
-            options.onComplete?.();
-          },
-          onError: (error) => {
-            setIsRunning(false);
-            setCurrentTask(null);
-            options.onError?.(error);
-          }
-        });
-
-        engineRef.current = engine;
-        await engine.start();
+        // Frontend DialogueEngine removed - backend orchestrator is now default
+        // To use frontend, restore from git history
+        console.error('❌ [ORCHESTRATOR] Frontend DialogueEngine has been removed. Backend orchestrator is now default.');
+        console.error('   Set localStorage.setItem("orchestrator.useBackend", "false") is no longer supported.');
+        setIsRunning(false);
+        setCurrentTask(null);
+        options.onError?.(new Error('Frontend DialogueEngine has been removed. Backend orchestrator is required.'));
       }
     } catch (error) {
       setIsRunning(false);
