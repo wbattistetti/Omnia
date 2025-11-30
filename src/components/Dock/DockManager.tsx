@@ -1,7 +1,21 @@
 import React from 'react';
-import { DockNode, DockRegion, DockTab } from '../../dock/types';
+import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor } from '../../dock/types';
 import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab, removeTab } from '../../dock/ops';
-import { Workflow } from 'lucide-react';
+import { Workflow, FileText, Code2, GitBranch } from 'lucide-react';
+import SmartTooltip from '../SmartTooltip';
+
+// Helper to map over dock tree nodes
+function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
+  let mapped: DockNode;
+  if (n.kind === 'split') {
+    const children = n.children.map(c => mapNode(c, f));
+    mapped = { ...n, children };
+  } else {
+    mapped = { ...n };
+  }
+  const res = f(mapped);
+  return res;
+}
 
 type Props = {
   root: DockNode;
@@ -9,38 +23,33 @@ type Props = {
   renderTabContent: (tab: DockTab) => React.ReactNode;
 };
 
+// Helper to get icon for tab type
+function getTabIcon(tab: DockTab) {
+  switch (tab.type) {
+    case 'flow': return <Workflow size={14} color="#0c4a6e" />;
+    case 'responseEditor': return <FileText size={14} color="#7c3aed" />;
+    case 'nonInteractive': return <FileText size={14} color="#059669" />;
+    case 'conditionEditor': return <Code2 size={14} color="#dc2626" />;
+    default: return <GitBranch size={14} color="#0c4a6e" />;
+  }
+}
+
 export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent }) => {
   const [dragTab, setDragTab] = React.useState<DockTab | null>(null);
-  const [closedTabs, setClosedTabs] = React.useState<DockTab[]>([]);
   const [activeTabSetId, setActiveTabSetId] = React.useState<string>('ts_main');
   const [hoverTarget, setHoverTarget] = React.useState<{ tabsetId: string; region: DockRegion } | null>(null);
 
   const onDropTo = (tabsetId: string, region: DockRegion) => {
     if (!dragTab) return;
-    setRoot(moveTab(root, dragTab.id, tabsetId, region));
+    // Preserve sizes when moving (use default if not specified)
+    const sizes = region === 'bottom' ? [0.67, 0.33] : region === 'top' ? [0.33, 0.67] : undefined;
+    setRoot(moveTab(root, dragTab.id, tabsetId, region, sizes));
     setDragTab(null);
     setHoverTarget(null);
   };
 
   return (
     <div className="flex w-full h-full min-h-0">
-      {/* Shelf globale */}
-      {closedTabs.length > 0 && (
-        <div className="flex items-center gap-1 px-2 py-1 border-b bg-slate-50">
-          <span className="text-[11px] text-slate-500">Closed:</span>
-          {closedTabs.map(t => (
-            <button key={t.id} className="px-2 py-0.5 text-[11px] rounded border bg-white hover:bg-slate-100"
-              onClick={() => {
-                // riapri nella tabset attiva
-                setRoot(addTabCenter(root, activeTabSetId, t));
-                setClosedTabs(prev => prev.filter(x => x.id !== t.id));
-              }}>
-              {t.title}
-            </button>
-          ))}
-        </div>
-      )}
-
       <DockRenderer
         node={root}
         onDragTabStart={(tab) => setDragTab(tab)}
@@ -52,14 +61,140 @@ export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent }
         setRoot={setRoot}
         setActiveTabSetId={setActiveTabSetId}
         onTabClosed={(tab) => {
-          if (!tab) return;
-          setClosedTabs(prev => (prev.find(x => x.id === tab.id) ? prev : [...prev, tab]));
+          // Tab closed - no shelf, just remove it
         }}
         rootNode={root}
       />
     </div>
   );
 };
+
+// Separate component for split nodes to avoid conditional hooks
+function SplitRenderer(props: {
+  node: Extract<DockNode, { kind: 'split' }>;
+  rootNode: DockNode;
+  onDragTabStart: (tab: DockTab) => void;
+  onDragTabEnd: () => void;
+  onHover: (tabsetId: string, region: DockRegion) => void;
+  onDrop: (tabsetId: string, region: DockRegion) => void;
+  hover: { tabsetId: string; region: DockRegion } | null;
+  renderTabContent: (tab: DockTab) => React.ReactNode;
+  setRoot: (n: DockNode) => void;
+  setActiveTabSetId: (id: string) => void;
+  onTabClosed: (tab: DockTab | null) => void;
+}) {
+  const { node } = props;
+  const cls = node.orientation === 'row' ? 'flex flex-row w-full h-full' : 'flex flex-col w-full h-full';
+  const [isResizing, setIsResizing] = React.useState(false);
+  // Initialize sizes from node.sizes or default to equal distribution
+  const defaultSizes = React.useMemo(() => node.children.map(() => 1 / node.children.length), [node.children.length]);
+  const [sizes, setSizes] = React.useState<number[]>(() => node.sizes || defaultSizes);
+  const sizesRef = React.useRef<number[]>(sizes);
+
+  // Update sizes only when node.sizes changes externally (not during resize)
+  React.useEffect(() => {
+    if (!isResizing) {
+      const newSizes = node.sizes || defaultSizes;
+      // Only update if actually different to avoid unnecessary re-renders
+      if (JSON.stringify(newSizes) !== JSON.stringify(sizesRef.current)) {
+        setSizes(newSizes);
+        sizesRef.current = newSizes;
+      }
+    }
+  }, [node.sizes, defaultSizes, isResizing]);
+
+  const handleMouseDown = React.useCallback((idx: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startSizes = [...sizesRef.current];
+    const container = (e.currentTarget as HTMLElement).parentElement;
+    if (!container) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = node.orientation === 'row'
+        ? (e.clientX - startX) / container.offsetWidth
+        : (e.clientY - startY) / container.offsetHeight;
+
+      const newSizes = [...startSizes];
+      newSizes[idx] = Math.max(0.1, Math.min(0.9, startSizes[idx] + delta));
+      newSizes[idx + 1] = Math.max(0.1, Math.min(0.9, startSizes[idx + 1] - delta));
+
+      // Normalize to sum to 1
+      const sum = newSizes.reduce((a, b) => a + b, 0);
+      const normalized = newSizes.map(s => s / sum);
+      setSizes(normalized);
+      sizesRef.current = normalized;
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      // Update the tree with final sizes from ref (most up-to-date)
+      const finalSizes = sizesRef.current;
+      props.setRoot(mapNode(props.rootNode, n => {
+        if (n.id === node.id && n.kind === 'split') {
+          return { ...n, sizes: finalSizes };
+        }
+        return n;
+      }));
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [node.id, node.orientation, props.rootNode, props.setRoot]);
+
+  return (
+    <div className={cls} style={{ minHeight: 0, minWidth: 0, position: 'relative' }}>
+      {node.children.map((c, idx) => {
+        const size = sizes[idx];
+        const isLast = idx === node.children.length - 1;
+        return (
+          <React.Fragment key={c.id}>
+            <div
+              className="min-w-0 min-h-0"
+              style={{
+                flex: `0 0 ${size * 100}%`,
+                width: node.orientation === 'row' ? `${size * 100}%` : undefined,
+                height: node.orientation === 'col' ? `${size * 100}%` : undefined
+              }}
+            >
+              <DockRenderer {...props} node={c} />
+            </div>
+            {!isLast && (
+              <div
+                onMouseDown={(e) => handleMouseDown(idx, e)}
+                className={node.orientation === 'row' ? 'cursor-col-resize' : 'cursor-row-resize'}
+                style={{
+                  width: node.orientation === 'row' ? '4px' : '100%',
+                  height: node.orientation === 'col' ? '4px' : '100%',
+                  backgroundColor: isResizing ? '#38bdf8' : 'transparent',
+                  flexShrink: 0,
+                  position: 'relative',
+                  zIndex: 10,
+                  transition: isResizing ? 'none' : 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isResizing) {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(56, 189, 248, 0.3)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isResizing) {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                  }
+                }}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 function DockRenderer(props: {
   node: DockNode;
@@ -76,16 +211,7 @@ function DockRenderer(props: {
 }) {
   const { node } = props;
   if (node.kind === 'split') {
-    const cls = node.orientation === 'row' ? 'flex flex-row gap-2 w-full h-full' : 'flex flex-col gap-2 w-full h-full';
-    return (
-      <div className={cls} style={{ minHeight: 0, minWidth: 0 }}>
-        {node.children.map((c) => (
-          <div key={c.id} className="flex-1 min-w-0 min-h-0">
-            <DockRenderer {...props} node={c} />
-          </div>
-        ))}
-      </div>
-    );
+    return <SplitRenderer {...props} node={node} />;
   }
   return (
     <TabSet
@@ -146,24 +272,112 @@ function TabSet(props: {
     >
       <div className="flex items-center gap-1 px-2 border-b"
            style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>
-        {props.tabs.map((t, i) => (
-          <div key={t.id}
-            draggable
-            onDragStart={() => props.onDragTabStart(t)}
-            onDragEnd={props.onDragTabEnd}
-            onClick={() => props.setActive(i)}
-            className="px-2 py-0.5 text-xs rounded border cursor-grab flex items-center gap-1"
-            style={{
-              backgroundColor: props.active===i ? '#bae6fd' : '#ffffff',
-              borderColor: '#38bdf8',
-              color: '#0c4a6e'
-            }}>
-            {/* icona diagramma lucide */}
-            <Workflow size={14} color="#0c4a6e" />
-            <span style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{t.title}</span>
-            <button className="ml-1" style={{ color: '#0c4a6e' }} onClick={(e) => { e.stopPropagation(); props.onClose(t.id); }}>×</button>
-          </div>
-        ))}
+        {props.tabs.map((t, i) => {
+          const isActive = props.active === i;
+          const isResponseEditor = t.type === 'responseEditor';
+          const responseEditorTab = isResponseEditor ? (t as DockTabResponseEditor) : null;
+          const tabColor = isActive && responseEditorTab?.headerColor ? responseEditorTab.headerColor : undefined;
+          const toolbarButtons = isActive && responseEditorTab?.toolbarButtons ? responseEditorTab.toolbarButtons : [];
+          const showToolbar = isActive && isResponseEditor && toolbarButtons.length > 0;
+
+          return (
+            <div key={t.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', t.id);
+                props.onDragTabStart(t);
+              }}
+              onDragEnd={(e) => {
+                e.dataTransfer.clearData();
+                props.onDragTabEnd();
+              }}
+              onClick={() => props.setActive(i)}
+              className="px-2 py-0.5 text-xs rounded border cursor-grab flex items-center gap-1"
+              style={{
+                flex: isActive ? 1 : '0 0 auto',
+                minWidth: isActive ? 0 : 'auto',
+                backgroundColor: isActive
+                  ? (tabColor || '#bae6fd')
+                  : '#ffffff',
+                borderColor: tabColor || '#38bdf8',
+                color: isActive && tabColor ? '#ffffff' : '#0c4a6e'
+              }}>
+              {/* icona dinamica in base al tipo */}
+              {getTabIcon(t)}
+              <span style={{
+                flex: isActive ? 1 : '0 0 auto',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontWeight: 600,
+                minWidth: 0
+              }}>{t.title}</span>
+
+              {/* Toolbar dalla tab (solo se tab attiva e ResponseEditor) */}
+              {showToolbar && (
+                <div style={{ display: 'flex', gap: 4, marginLeft: 8, alignItems: 'center' }}>
+                  {toolbarButtons.map((btn, idx) => (
+                    btn.title ? (
+                      <SmartTooltip key={idx} text={btn.title} tutorId={`toolbar_btn_${idx}_help`} placement="bottom">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            btn.onClick();
+                          }}
+                          disabled={btn.disabled}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            background: btn.primary ? '#0b1220' : (btn.active ? 'rgba(255,255,255,0.2)' : 'transparent'),
+                            color: '#ffffff',
+                            border: btn.primary ? 'none' : '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: 6,
+                            padding: btn.label ? '4px 8px' : '4px 6px',
+                            cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                            opacity: btn.disabled ? 0.5 : 1,
+                            fontSize: '11px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {btn.icon}
+                          {btn.label && <span>{btn.label}</span>}
+                        </button>
+                      </SmartTooltip>
+                    ) : (
+                      <button
+                        key={idx}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          btn.onClick();
+                        }}
+                        disabled={btn.disabled}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          background: 'transparent',
+                          color: '#ffffff',
+                          border: '1px solid rgba(255,255,255,0.3)',
+                          borderRadius: 6,
+                          padding: '4px 6px',
+                          cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                          opacity: btn.disabled ? 0.5 : 1,
+                          fontSize: '11px',
+                        }}
+                      >
+                        {btn.icon}
+                      </button>
+                    )
+                  ))}
+                </div>
+              )}
+
+              <button className="ml-1" style={{ color: isActive && tabColor ? '#ffffff' : '#0c4a6e' }} onClick={(e) => { e.stopPropagation(); props.onClose(t.id); }}>×</button>
+            </div>
+          );
+        })}
       </div>
       <div className="w-full min-h-0" style={{ height: 'calc(100% - 40px)', backgroundColor: '#ffffff' }}>
         {props.tabs[props.active] && props.renderTabContent(props.tabs[props.active])}

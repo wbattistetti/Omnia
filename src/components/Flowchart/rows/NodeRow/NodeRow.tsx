@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useProjectData } from '../../../../context/ProjectDataContext';
 import { useDDTManager } from '../../../../context/DDTManagerContext';
+import { useDDTContext } from '../../../../context/DDTContext';
 import { ProjectDataService } from '../../../../services/ProjectDataService';
 import { EntityCreationService } from '../../../../services/EntityCreationService';
 import { createAndAttachAct } from '../../../../services/ActFactory';
@@ -67,6 +68,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   ref
 ) => {
   const { data: projectDataCtx } = useProjectData();
+  const ddtContext = useDDTContext();
+  const getTranslationsForDDT = ddtContext.getTranslationsForDDT;
   // Debug gate for icon/flow logs (enable with localStorage.setItem('debug.flowIcons','1'))
   const debugFlowIcons = (() => { try { return Boolean(localStorage.getItem('debug.flowIcons')); } catch { return false; } })();
 
@@ -1510,14 +1513,24 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                 // Host present → open deterministically
                 actEditorCtx.open({ id: String(baseId), type, label: row.text, instanceId: row.id });
-                return;
-              } catch (e) {
-                console.error('[NodeRow][onOpenDDT] Failed to open editor', {
-                  error: e,
-                  rowId: row.id,
-                  rowText: row.text,
-                  timestamp: Date.now()
+
+                // Get DDT from actFound, or create empty DDT if not found
+                const ddt = actFound?.ddt || { label: row.text || 'New DDT', mainData: [] };
+
+                // Emit event with DDT data so AppContent can open it as docking tab
+                const event = new CustomEvent('actEditor:open', {
+                  detail: {
+                    id: String(baseId),
+                    type,
+                    label: row.text,
+                    ddt: ddt,
+                    instanceId: row.id // Pass instanceId from row
+                  },
+                  bubbles: true
                 });
+                document.dispatchEvent(event);
+              } catch (e) {
+                console.error('[NodeRow][onOpenDDT] Failed to open editor', e);
               }
             }}
             onDoubleClick={handleDoubleClick}

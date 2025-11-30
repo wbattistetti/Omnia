@@ -146,7 +146,39 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
   // const handleDeleteDDT = (id: string) => {};
 
-  // const handleOpenEditor = (id: string) => {};
+  // Open Response Editor from DDT id (clicking gear icon in DDT list)
+  const handleOpenEditor = (id: string) => {
+    try {
+      // Find DDT from list
+      const ddt = ddtList.find(dt => dt.id === id || dt._id === id);
+      if (!ddt) {
+        console.warn('[Sidebar][handleOpenEditor] DDT not found', { id, ddtListLength: ddtList.length });
+        return;
+      }
+
+      // Convert DDT to ActMeta and open via context
+      const actMeta = ddtToAct(ddt);
+      actEditorCtx.open(actMeta);
+
+      // Emit event with DDT data so AppContent can open it as docking tab
+      const event = new CustomEvent('actEditor:open', {
+        detail: {
+          id: actMeta.id,
+          type: actMeta.type,
+          label: actMeta.label,
+          ddt: ddt // Pass full DDT in event detail
+        },
+        bubbles: true
+      });
+      document.dispatchEvent(event);
+    } catch (e) {
+      console.error('[Sidebar][handleOpenEditor] Failed to open editor', {
+        error: e,
+        ddtId: id,
+        timestamp: Date.now()
+      });
+    }
+  };
 
   // Build from Agent Act helper: prefill wizard with the act label as description
   const handleBuildFromItem = (item: any) => {

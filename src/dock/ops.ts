@@ -18,14 +18,16 @@ export function upsertAddCenter(tree: DockNode, targetId: string, tab: DockTab):
   return addTabCenter(without, targetId, tab);
 }
 
-export function splitWithTab(tree: DockNode, targetId: string, region: DockRegion, tab: DockTab): DockNode {
+export function splitWithTab(tree: DockNode, targetId: string, region: DockRegion, tab: DockTab, sizes?: number[]): DockNode {
   return mapNode(tree, n => {
     if (n.kind === 'tabset' && n.id === targetId) {
       const newTabSet: DockNode = { kind: 'tabset', id: newId(), tabs: [tab], active: 0 };
       if (region === 'center') return { ...n, tabs: [...n.tabs, tab], active: n.tabs.length };
       const orient: 'row' | 'col' = (region === 'left' || region === 'right') ? 'row' : 'col';
       const children = (region === 'left' || region === 'top') ? [newTabSet, n] : [n, newTabSet];
-      return { kind: 'split', id: newId(), orientation: orient, children };
+      // Use provided sizes or default proportions
+      const finalSizes = sizes || (region === 'bottom' ? [0.67, 0.33] : region === 'top' ? [0.33, 0.67] : undefined);
+      return { kind: 'split', id: newId(), orientation: orient, children, sizes: finalSizes };
     }
     return n;
   });
@@ -97,15 +99,15 @@ export function removeTab(tree: DockNode, tabId: string): DockNode {
   return compact(pruned);
 }
 
-export function insertTab(tree: DockNode, targetId: string, region: DockRegion, tab: DockTab): DockNode {
-  return region === 'center' ? addTabCenter(tree, targetId, tab) : splitWithTab(tree, targetId, region, tab);
+export function insertTab(tree: DockNode, targetId: string, region: DockRegion, tab: DockTab, sizes?: number[]): DockNode {
+  return region === 'center' ? addTabCenter(tree, targetId, tab) : splitWithTab(tree, targetId, region, tab, sizes);
 }
 
-export function moveTab(tree: DockNode, tabId: string, targetId: string, region: DockRegion): DockNode {
+export function moveTab(tree: DockNode, tabId: string, targetId: string, region: DockRegion, sizes?: number[]): DockNode {
   const tab = getTab(tree, tabId);
   if (!tab) return tree;
   const without = removeTab(tree, tabId);
-  return insertTab(without, targetId, region, tab);
+  return insertTab(without, targetId, region, tab, sizes);
 }
 
 // helpers

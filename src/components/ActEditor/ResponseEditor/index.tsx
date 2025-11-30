@@ -34,8 +34,9 @@ import { useAIProvider } from '../../../context/AIProviderContext';
 import { DialogueTemplateService } from '../../../services/DialogueTemplateService';
 import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
+import { ToolbarButton } from '../../../dock/types';
 
-function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
+function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void }) {
 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
@@ -95,122 +96,24 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
   const projectLocale = useMemo<'en' | 'it' | 'pt'>(() => {
     try {
       const saved = localStorage.getItem('project.lang');
-      console.log('[RESPONSE_EDITOR][LOCALE] Reading project language from localStorage:', saved);
       if (saved === 'en' || saved === 'it' || saved === 'pt') {
-        console.log('[RESPONSE_EDITOR][LOCALE] ✅ Using project locale:', saved);
         return saved;
       }
     } catch (err) {
-      console.error('[RESPONSE_EDITOR][LOCALE] Error reading locale:', err);
+      // Silent fail
     }
-    console.log('[RESPONSE_EDITOR][LOCALE] ⚠️ Using default locale: it');
     return 'it'; // Default to Italian
   }, []);
 
   // Get translations for project locale
   const getTranslationsForLocale = (locale: 'en' | 'it' | 'pt', ddtTranslations: any) => {
-    console.log('[RESPONSE_EDITOR][TRANSLATIONS] getTranslationsForLocale called', {
-      locale,
-      hasDDTTranslations: !!ddtTranslations,
-      ddtTranslationsType: typeof ddtTranslations,
-      ddtTranslationsKeys: ddtTranslations ? Object.keys(ddtTranslations) : [],
-      ddtTranslationsStructure: ddtTranslations ? {
-        hasEn: !!ddtTranslations.en,
-        hasIt: !!ddtTranslations.it,
-        hasPt: !!ddtTranslations.pt,
-        enKeys: ddtTranslations.en ? Object.keys(ddtTranslations.en).length : 0,
-        itKeys: ddtTranslations.it ? Object.keys(ddtTranslations.it).length : 0,
-        ptKeys: ddtTranslations.pt ? Object.keys(ddtTranslations.pt).length : 0,
-        directKeys: typeof ddtTranslations === 'object' && !ddtTranslations.en && !ddtTranslations.it && !ddtTranslations.pt ? Object.keys(ddtTranslations).length : 0,
-        isDirectStructure: typeof ddtTranslations === 'object' && !ddtTranslations.en && !ddtTranslations.it && !ddtTranslations.pt,
-        sampleDirectKeys: (typeof ddtTranslations === 'object' && !ddtTranslations.en && !ddtTranslations.it && !ddtTranslations.pt) ? Object.keys(ddtTranslations).slice(0, 5) : []
-      } : null,
-      // 🔍 ESPANDI per vedere la struttura completa
-      fullDDTTranslations: ddtTranslations ? JSON.stringify(ddtTranslations).substring(0, 1000) : null,
-      // 🔍 VERIFICA se en ha traduzioni del template
-      enTemplateKeys: ddtTranslations?.en ? Object.keys(ddtTranslations.en).filter(k => k.startsWith('template.')).slice(0, 10) : [],
-      // 🔍 VERIFICA i valori delle traduzioni en del template
-      enTemplateValues: ddtTranslations?.en ? Object.entries(ddtTranslations.en)
-        .filter(([k]) => k.startsWith('template.'))
-        .slice(0, 5)
-        .map(([k, v]) => ({ key: k, value: String(v) })) : []
-    });
-
     if (!ddtTranslations) {
-      console.log('[RESPONSE_EDITOR][TRANSLATIONS] No DDT translations, returning mergedBase only');
       return mergedBase;
     }
 
     // Structure: ddt.translations = { en: {...}, it: {...}, pt: {...} }
     const localeTranslations = ddtTranslations[locale] || ddtTranslations.en || ddtTranslations;
-
-    console.log('[RESPONSE_EDITOR][TRANSLATIONS] 🔍 LOCALE SELECTION', {
-      requestedLocale: locale,
-      hasRequestedLocale: !!ddtTranslations[locale],
-      hasEn: !!ddtTranslations.en,
-      hasIt: !!ddtTranslations.it,
-      hasPt: !!ddtTranslations.pt,
-      selectedLocaleTranslations: localeTranslations ? {
-        keysCount: Object.keys(localeTranslations).length,
-        sampleKeys: Object.keys(localeTranslations).slice(0, 5),
-        runtimeKeysCount: Object.keys(localeTranslations).filter(k => k.startsWith('runtime.')).length,
-        templateKeysCount: Object.keys(localeTranslations).filter(k => k.startsWith('template.')).length,
-        sampleRuntimeKeys: Object.keys(localeTranslations).filter(k => k.startsWith('runtime.')).slice(0, 3),
-        sampleRuntimeValues: Object.entries(localeTranslations)
-          .filter(([k]) => k.startsWith('runtime.'))
-          .slice(0, 3)
-          .map(([k, v]) => ({ key: k, value: String(v).substring(0, 50) }))
-      } : null
-    });
-
-    // 🔍 DEBUG: Verifica le chiavi runtime specifiche per questo DDT
-    const runtimeKeysForThisDDT = localeTranslations ? Object.keys(localeTranslations).filter(k =>
-      k.startsWith('runtime.') && k.includes('Time_')
-    ).slice(0, 10) : [];
-
-    console.log('[RESPONSE_EDITOR][TRANSLATIONS] Selected translations', {
-      locale,
-      requestedLocale: locale,
-      hasRequestedLocale: !!ddtTranslations[locale],
-      hasEn: !!ddtTranslations.en,
-      hasIt: !!ddtTranslations.it,
-      hasPt: !!ddtTranslations.pt,
-      usingLocale: ddtTranslations[locale] ? locale : (ddtTranslations.en ? 'en' : 'direct'),
-      localeTranslationsKeys: localeTranslations ? Object.keys(localeTranslations).length : 0,
-      sampleKeys: localeTranslations ? Object.keys(localeTranslations).slice(0, 5) : [],
-      sampleTranslations: localeTranslations ? Object.entries(localeTranslations).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) })) : [],
-      // 🔍 VERIFICA le chiavi runtime per questo DDT
-      runtimeKeysForThisDDT: runtimeKeysForThisDDT,
-      runtimeTranslationsForThisDDT: runtimeKeysForThisDDT.map(k => ({
-        key: k,
-        value: localeTranslations ? String(localeTranslations[k] || '').substring(0, 50) : ''
-      })),
-      // 🔍 ESPANDI per vedere tutte le chiavi caricate
-      allTranslationKeys: localeTranslations ? Object.keys(localeTranslations) : [],
-      // 🔍 VERIFICA se ci sono chiavi del template
-      templateKeys: localeTranslations ? Object.keys(localeTranslations).filter(k => k.startsWith('template.')).slice(0, 10) : [],
-      // 🔍 VERIFICA i valori delle traduzioni del template
-      templateTranslations: localeTranslations ? Object.entries(localeTranslations)
-        .filter(([k]) => k.startsWith('template.'))
-        .slice(0, 5)
-        .map(([k, v]) => ({ key: k, value: String(v) })) : []
-    });
-
     const result = { ...mergedBase, ...localeTranslations };
-    console.log('[RESPONSE_EDITOR][TRANSLATIONS] Final merged translations', {
-      mergedBaseKeys: Object.keys(mergedBase).length,
-      localeTranslationsKeys: localeTranslations ? Object.keys(localeTranslations).length : 0,
-      finalKeys: Object.keys(result).length,
-      sampleFinalKeys: Object.keys(result).slice(0, 5),
-      // 🔍 VERIFICA se le chiavi del DDT sono presenti nel risultato finale
-      ddtKeysInResult: localeTranslations ? Object.keys(localeTranslations).filter(k => k.includes('template.') || k.includes('runtime.')).slice(0, 10) : [],
-      // 🔍 VERIFICA i valori delle chiavi runtime (quelle usate dai messaggi)
-      runtimeKeys: localeTranslations ? Object.entries(localeTranslations)
-        .filter(([k]) => k.includes('runtime.'))
-        .slice(0, 5)
-        .map(([k, v]) => ({ key: k, value: String(v) })) : []
-    });
-
     return result;
   };
 
@@ -316,36 +219,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
   });
 
   useEffect(() => {
-    console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ════════════════════════════════════════');
-    console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] 🎯 Starting wizard logic check', {
-      timestamp: new Date().toISOString(),
-      hasAct: !!act,
-      actLabel: act?.label,
-      actType: act?.type,
-      actId: act?.id
-    });
-
     // ✅ Se kind === "intent" non deve mostrare il wizard
     const firstMain = mainList[0];
     if (firstMain?.kind === 'intent') {
-      console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ⏭️ Skipping wizard (kind === "intent")');
       setShowWizard(false);
       wizardOwnsDataRef.current = false;
       return;
     }
 
     const empty = isDDTEmpty(localDDT);
-    console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] 📊 DDT state check', {
-      empty,
-      wizardOwnsData: wizardOwnsDataRef.current,
-      hasLocalDDT: !!localDDT,
-      mainsCount: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0,
-      mainDataType: typeof localDDT?.mainData,
-      isArray: Array.isArray(localDDT?.mainData),
-      firstMainSteps: localDDT?.mainData?.[0]?.steps ? Object.keys(localDDT.mainData[0].steps) : [],
-      localDDTId: localDDT?.id,
-      localDDTLabel: localDDT?.label
-    });
 
     // ✅ IMPORTANTE: Non aprire wizard se l'inferenza è in corso
     if (empty && !wizardOwnsDataRef.current && !isInferring) {
@@ -353,32 +235,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
       const actLabel = act?.label?.trim();
       const shouldInfer = actLabel && actLabel.length >= 3 && inferenceAttemptedRef.current !== actLabel;
 
-      console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] 📊 Controllo inferenza pre-wizard', {
-        hasActLabel: !!actLabel,
-        actLabel,
-        actLabelLength: actLabel?.length || 0,
-        shouldInfer,
-        isInferring,
-        hasInferenceResult: !!inferenceResult,
-        alreadyAttempted: inferenceAttemptedRef.current
-      });
-
       // ✅ PRIMA: Se è in corso l'inferenza, aspetta (NON aprire il wizard ancora)
       if (isInferring) {
-        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ⏳ Aspettando inferenza... (non aprire wizard ancora)', {
-          actLabel,
-          timestamp: new Date().toISOString()
-        });
         // Non fare nulla, aspetta che l'inferenza finisca
         return; // ✅ IMPORTANTE: esci dall'useEffect, non continuare
       }
 
       // ✅ SECONDO: Se abbiamo già un risultato, apri il wizard direttamente
       if (inferenceResult) {
-        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ✅ Aprendo wizard con risultato inferenza già disponibile', {
-          hasInferenceResult: !!inferenceResult,
-          timestamp: new Date().toISOString()
-        });
         setShowWizard(true);
         wizardOwnsDataRef.current = true;
         try {
@@ -390,22 +254,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
       // ✅ TERZO: Se deve inferire E non sta già inferendo E non abbiamo ancora risultato, avvia inferenza
       if (shouldInfer && !inferenceResult) {
         // ✅ Fai inferenza PRIMA di aprire il wizard
-        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] 🚀 Avviando inferenza PRIMA di aprire wizard', {
-          actLabel,
-          timestamp: new Date().toISOString()
-        });
         setIsInferring(true);
         inferenceAttemptedRef.current = actLabel;
 
         // ✅ Funzione per matching locale (istantaneo, usa cache precaricata)
         const tryLocalPatternMatch = (text: string): any | null => {
-          const localMatchStartTime = performance.now();
           try {
-            console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 Tentativo matching locale (cache)...', { text });
             // ✅ Usa cache precaricata (istantaneo, no fetch!)
             const templates = DialogueTemplateService.getAllTemplates();
             if (templates.length === 0) {
-              console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ⚠️ Cache non ancora caricata, skip matching locale');
               return null;
             }
             const textLower = text.toLowerCase().trim();
@@ -423,17 +280,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                 try {
                   const regex = new RegExp(patternStr, 'i');
                   if (regex.test(textLower)) {
-                    const localMatchElapsed = performance.now() - localMatchStartTime;
-                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅✅✅ MATCH LOCALE TROVATO!', {
-                      templateLabel: template.label || template.name,
-                      templateId: template._id || template.id,
-                      templateName: template.name,
-                      hasNlpContract: !!template.nlpContract,
-                      contractTemplateName: template.nlpContract?.templateName,
-                      pattern: patternStr,
-                      elapsedMs: Math.round(localMatchElapsed),
-                      timestamp: new Date().toISOString()
-                    });
 
                     // ✅ FASE 2: Costruisci istanza DDT dal template
                     // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
@@ -446,13 +292,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
 
                     if (subDataIds.length > 0) {
                       // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
-                      console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 📦 Template composito, creando istanze per sottodati', {
-                        subDataIds,
-                        count: subDataIds.length,
-                        hasNlpContract: !!template.nlpContract,
-                        templateName: template.name,
-                        templateId: template.id || template._id
-                      });
 
                       // ✅ PRIMA: Costruisci array di subData instances
                       // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
@@ -492,8 +331,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                             templateId: subTemplate.id || subTemplate._id, // ✅ GUID del template per lookup
                             kind: subTemplate.name || subTemplate.type || 'generic'
                           });
-                        } else {
-                          console.warn('[RESPONSE_EDITOR][LOCAL_MATCH] ⚠️ Template sottodato non trovato per ID', { subId });
                         }
                       }
 
@@ -513,18 +350,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                         kind: template.name || template.type || 'generic'
                       };
 
-                      console.log('🔍 [RESPONSE_EDITOR][LOCAL_MATCH] Main instance created', {
-                        label: mainInstance.label,
-                        hasNlpContract: !!mainInstance.nlpContract,
-                        contractTemplateName: mainInstance.nlpContract?.templateName,
-                        kind: mainInstance.kind,
-                        subDataCount: mainInstance.subData.length
-                      });
-
                       mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
                     } else {
                       // ✅ Template semplice: crea istanza dal template root
-                      console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 📄 Template semplice, creando istanza root');
                       const mainInstance = {
                         label: template.label || template.name || 'Data',
                         type: template.type,
@@ -572,27 +400,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
                       }
                     });
 
-                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] 🔍 GUID estratti dai stepPrompts:', {
-                      totalGuids: allGuids.length,
-                      uniqueGuids: [...new Set(allGuids)].length,
-                      guids: [...new Set(allGuids)]
-                    });
-
-                    console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ✅ Istanza DDT costruita con stepPrompts:', {
-                      templateLabel: template.label || template.name,
-                      mainDataCount: mainData.length,
-                      mainDataWithStepPrompts: mainData.map((m: any) => ({
-                        label: m.label,
-                        hasStepPrompts: !!m.stepPrompts,
-                        stepPromptsKeys: m.stepPrompts ? Object.keys(m.stepPrompts) : [],
-                        subDataCount: m.subData?.length || 0,
-                        subDataWithStepPrompts: m.subData?.map((s: any) => ({
-                          label: s.label,
-                          hasStepPrompts: !!s.stepPrompts,
-                          stepPromptsKeys: s.stepPrompts ? Object.keys(s.stepPrompts) : []
-                        })) || []
-                      }))
-                    });
 
                     return {
                       ai: {
@@ -613,50 +420,27 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
               }
             }
 
-            const localMatchElapsed = performance.now() - localMatchStartTime;
-            console.log('[RESPONSE_EDITOR][LOCAL_MATCH] ❌ Nessun match locale trovato', {
-              elapsedMs: Math.round(localMatchElapsed),
-              templatesChecked: templates.length
-            });
             return null;
           } catch (error) {
-            console.error('[RESPONSE_EDITOR][LOCAL_MATCH] ❌ Errore nel matching locale:', error);
             return null;
           }
         };
 
         // Chiama l'inferenza
         const performInference = async () => {
-          const inferenceStartTime = performance.now();
           try {
             // ✅ PRIMA: Prova matching locale (istantaneo, sincrono, usa cache)
             const localMatch = tryLocalPatternMatch(actLabel);
             if (localMatch) {
-              const totalElapsed = performance.now() - inferenceStartTime;
-              console.log('[RESPONSE_EDITOR][INFERENCE] ✅✅✅ Inferenza LOCALE completata!', {
-                hasAi: !!localMatch.ai,
-                hasSchema: !!(localMatch.ai?.schema),
-                hasMainData: !!(localMatch.ai?.schema?.mainData && Array.isArray(localMatch.ai.schema.mainData)),
-                mainDataLength: localMatch.ai?.schema?.mainData?.length || 0,
-                totalElapsedMs: Math.round(totalElapsed),
-                timestamp: new Date().toISOString()
-              });
               // ✅ FIX: Setta risultato E apri wizard DIRETTAMENTE (non aspettare useEffect)
               setInferenceResult(localMatch);
               setIsInferring(false);
               setShowWizard(true);
               wizardOwnsDataRef.current = true;
-              console.log('[RESPONSE_EDITOR][INFERENCE] ✅ Wizard aperto direttamente dopo match locale');
               return; // ✅ Match locale trovato, non chiamare API
             }
 
             // ✅ SECONDO: Se non c'è match locale, chiama API
-            console.log('[RESPONSE_EDITOR][INFERENCE] 📡 Nessun match locale, chiamando API...', {
-              userDesc: actLabel,
-              provider: selectedProvider.toLowerCase(),
-              model: selectedModel,
-              timestamp: new Date().toISOString()
-            });
 
             const response = await fetch('/step2-with-provider', {
               method: 'POST',
@@ -668,43 +452,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
               }),
             });
 
-            const inferenceElapsed = performance.now() - inferenceStartTime;
-            console.log('[RESPONSE_EDITOR][INFERENCE] 📥 Risposta API ricevuta', {
-              status: response.status,
-              ok: response.ok,
-              elapsedMs: Math.round(inferenceElapsed),
-              timestamp: new Date().toISOString()
-            });
-
             if (response.ok) {
               const result = await response.json();
-              const totalElapsed = performance.now() - inferenceStartTime;
-              console.log('[RESPONSE_EDITOR][INFERENCE] ✅✅✅ Inferenza API completata!', {
-                hasAi: !!result.ai,
-                hasSchema: !!(result.ai?.schema),
-                hasMainData: !!(result.ai?.schema?.mainData && Array.isArray(result.ai.schema.mainData)),
-                mainDataLength: result.ai?.schema?.mainData?.length || 0,
-                totalElapsedMs: Math.round(totalElapsed),
-                timestamp: new Date().toISOString()
-              });
               // ✅ FIX: Setta risultato E apri wizard DIRETTAMENTE (non aspettare useEffect)
               setInferenceResult(result);
               setShowWizard(true);
               wizardOwnsDataRef.current = true;
-              console.log('[RESPONSE_EDITOR][INFERENCE] ✅ Wizard aperto direttamente dopo API');
-            } else {
-              console.warn('[RESPONSE_EDITOR][INFERENCE] ⚠️ Risposta non OK', {
-                status: response.status,
-                statusText: response.statusText
-              });
             }
           } catch (error) {
-            const inferenceElapsed = performance.now() - inferenceStartTime;
-            console.error('[RESPONSE_EDITOR][INFERENCE] ❌ Errore nell\'inferenza', {
-              error,
-              elapsedMs: Math.round(inferenceElapsed),
-              timestamp: new Date().toISOString()
-            });
+            // Silent fail
           } finally {
             setIsInferring(false);
           }
@@ -716,30 +472,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
 
       // ✅ QUARTO: Se non era necessaria l'inferenza (testo troppo corto o già tentato), apri il wizard
       if (!shouldInfer) {
-        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ✅ Aprendo wizard (nessuna inferenza necessaria)', {
-          hasInferenceResult: !!inferenceResult,
-          shouldInfer,
-          alreadyAttempted: inferenceAttemptedRef.current,
-          reason: 'nessuna inferenza necessaria'
-        });
         setShowWizard(true);
         wizardOwnsDataRef.current = true;
         try {
           info('RESPONSE_EDITOR', 'Wizard ON (DDT empty, no inference needed)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
         } catch { }
-      } else {
-        console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ⏸️ Aspettando inferenza o risultato...', {
-          hasInferenceResult: !!inferenceResult,
-          shouldInfer,
-          isInferring,
-          alreadyAttempted: inferenceAttemptedRef.current
-        });
       }
     } else if (!empty && wizardOwnsDataRef.current) {
       // DDT is complete and wizard had ownership → close wizard and release ownership
-      console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ✅ Chiudendo wizard (DDT riempito)', {
-        mainsCount: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0
-      });
       setShowWizard(false);
       // Don't release ownership immediately - let the onComplete handler do it after a delay
       // wizardOwnsDataRef.current = false;
@@ -747,7 +487,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
             info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
           } catch { }
         }
-    console.log('[RESPONSE_EDITOR][WIZARD_LOGIC] ════════════════════════════════════════');
       }, [localDDT, mainList, act, isInferring, inferenceResult, selectedProvider, selectedModel]); // ✅ Aggiunte dipendenze per inferenza
 
   // Nodo selezionato: root se selectedRoot, altrimenti main/sub in base agli indici
@@ -772,32 +511,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
     }
     const subList = getSubDataList(main);
     const sub = subList[selectedSubIndex] || main;
-
-    // ✅ CRITICAL: Log sub-data structure to verify messages.start
-    console.log('🔴 [CRITICAL] SELECTED SUB-DATA NODE', {
-      mainLabel: main.label,
-      subLabel: sub.label,
-      subListLength: subList.length,
-      selectedSubIndex,
-      subFromList: subList[selectedSubIndex] ? {
-        label: subList[selectedSubIndex].label,
-        hasSteps: !!subList[selectedSubIndex].steps,
-        stepsKeys: subList[selectedSubIndex].steps ? Object.keys(subList[selectedSubIndex].steps) : []
-      } : null,
-      subReturned: {
-        label: sub.label,
-        isMain: sub === main,
-        hasMessages: !!sub.messages,
-        messagesKeys: sub.messages ? Object.keys(sub.messages) : [],
-        hasMessagesStart: !!(sub.messages && sub.messages.start),
-        messagesStart: sub.messages?.start,
-        hasSteps: !!sub.steps,
-        stepsKeys: sub.steps ? Object.keys(sub.steps) : [],
-        hasStepsStart: !!(sub.steps && sub.steps.start),
-        stepsStart: sub.steps?.start
-      },
-      fullSub: sub
-    });
 
     // DEBUG: Log per verificare la struttura del sub
     const areStepsSameAsMain = main?.steps === sub?.steps;
@@ -932,18 +645,30 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
   };
 
 
+  // Esponi toolbar tramite callback quando in docking mode
+  const headerColor = '#9a4f00'; // Orange color from EditorHeader theme
+  React.useEffect(() => {
+    if (hideHeader && onToolbarUpdate) {
+      // Always call onToolbarUpdate when toolbarButtons changes, even if empty
+      // This ensures the tab header is updated with the latest toolbar state
+      onToolbarUpdate(toolbarButtons, headerColor);
+    }
+  }, [hideHeader, toolbarButtons, onToolbarUpdate, headerColor]);
+
   // Layout
   return (
     <div ref={rootRef} className={combinedClass} style={{ height: '100%', maxHeight: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onKeyDown={handleGlobalKeyDown}>
 
-      {/* Header sempre visibile (minimale durante wizard, completo dopo) */}
-      <EditorHeader
-        icon={<Icon size={18} style={{ color: iconColor }} />}
-        title={headerTitle}
-        toolbarButtons={toolbarButtons}
-        onClose={handleEditorClose}
-        color="orange"
-      />
+        {/* Header sempre visibile (minimale durante wizard, completo dopo) - nascosto quando in docking mode */}
+        {!hideHeader && (
+          <EditorHeader
+            icon={<Icon size={18} style={{ color: iconColor }} />}
+            title={headerTitle}
+            toolbarButtons={toolbarButtons}
+            onClose={handleEditorClose}
+            color="orange"
+          />
+        )}
 
       {/* Contenuto */}
       {(() => {
@@ -1026,10 +751,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
             const shouldHaveInference = actLabel && actLabel.length >= 3;
 
             if (shouldHaveInference && !inferenceResult) {
-              console.log('[RESPONSE_EDITOR][WIZARD] ⏳ Aspettando inferenceResult prima di montare wizard', {
-                actLabel,
-                hasInferenceResult: !!inferenceResult
-              });
               return (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e2e8f0' }}>
                   <div style={{ textAlign: 'center' }}>
@@ -1449,10 +1170,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act }: { ddt: any
   );
 }
 
-export default function ResponseEditor({ ddt, onClose, onWizardComplete, act }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string } }) {
+export default function ResponseEditor({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void }) {
   return (
     <FontProvider>
-      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} act={act} />
+      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} act={act} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} />
     </FontProvider>
   );
 }

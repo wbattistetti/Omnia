@@ -22,11 +22,12 @@ import { FlowEditor } from './Flowchart/FlowEditor';
 import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
-import { DockNode, DockTab } from '../dock/types';
+import { DockNode, DockTab, DockTabResponseEditor } from '../dock/types';
 import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
 import { FlowWorkspaceProvider } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
-import { upsertAddNextTo } from '../dock/ops';
+import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
+import { resolveEditorKind } from './ActEditor/EditorHost/resolveKind';
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
 import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
@@ -39,8 +40,24 @@ import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
 // TaskRepository automatically syncs with InstanceRepository for backward compatibility
 import { flowchartVariablesService } from '../services/FlowchartVariablesService';
+import ResponseEditor from './ActEditor/ResponseEditor';
+import NonInteractiveResponseEditor from './ActEditor/ResponseEditor/NonInteractiveResponseEditor';
+import { taskRepository } from '../services/TaskRepository';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
+
+// Helper function to map over dock tree nodes
+function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
+  let mapped: DockNode;
+  if (n.kind === 'split') {
+    const children = n.children.map(c => mapNode(c, f));
+    mapped = { ...n, children };
+  } else {
+    mapped = { ...n };
+  }
+  const res = f(mapped);
+  return res;
+}
 
 interface AppContentProps {
   appState: AppState;
@@ -73,30 +90,194 @@ export const AppContent: React.FC<AppContentProps> = ({
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
 
   // Dock tree (new dock manager)
-  const [dockTree, setDockTree] = useState<DockNode>({ kind: 'tabset', id: 'ts_main', tabs: [{ id: 'tab_main', title: 'Main', flowId: 'main' }], active: 0 });
+  const [dockTree, setDockTree] = useState<DockNode>({
+    kind: 'tabset',
+    id: 'ts_main',
+    tabs: [{ id: 'tab_main', title: 'Main', type: 'flow', flowId: 'main' }],
+    active: 0
+  });
 
-  // Wrapper che vive sotto il FlowWorkspaceProvider, così può usare useFlowActions
-  const FlowTabContent: React.FC<{ tab: DockTab }> = ({ tab }) => {
+  // Unified tab content renderer (remove memoization to avoid stale closures)
+  const UnifiedTabContent: React.FC<{ tab: DockTab }> = ({ tab }) => {
     const { upsertFlow, openFlowBackground } = useFlowActions();
-    return (
-      <FlowCanvasHost
-        projectId={currentPid as string}
-        flowId={tab.flowId}
-        onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
-          // 1) upsert nel workspace per avere contenuto immediato
-          upsertFlow({ id: newFlowId, title: title || newFlowId, nodes, edges });
-          openFlowBackground(newFlowId);
-          // 2) aggiungi tab accanto a quella corrente nel dock tree
-          setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', flowId: newFlowId }));
-        }}
-        onOpenTaskFlow={(taskFlowId, title) => {
-          // Apri la tab del task accanto a quella corrente (senza duplicati)
-          setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${taskFlowId}`, title: title || 'Task', flowId: taskFlowId }));
-          openFlowBackground(taskFlowId);
-        }}
-      />
-    );
+
+    // Flow tab
+    if (tab.type === 'flow') {
+      // Check projectId is valid before rendering
+      if (!currentPid) {
+        return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>Waiting for project...</div>;
+      }
+      return (
+        <FlowCanvasHost
+          projectId={currentPid}
+          flowId={tab.flowId}
+          onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
+            // 1) upsert nel workspace per avere contenuto immediato
+            upsertFlow({ id: newFlowId, title: title || newFlowId, nodes, edges });
+            openFlowBackground(newFlowId);
+            // 2) aggiungi tab accanto a quella corrente nel dock tree
+            setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', type: 'flow', flowId: newFlowId }));
+          }}
+          onOpenTaskFlow={(taskFlowId, title) => {
+            // Apri la tab del task accanto a quella corrente (senza duplicati)
+            setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${taskFlowId}`, title: title || 'Task', type: 'flow', flowId: taskFlowId }));
+            openFlowBackground(taskFlowId);
+          }}
+        />
+      );
+    }
+
+    // Response Editor tab
+    if (tab.type === 'responseEditor') {
+      return (
+        <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+          <ResponseEditor
+            ddt={tab.ddt}
+            onClose={() => {
+              setDockTree(prev => closeTab(prev, tab.id));
+            }}
+            act={tab.act ? {
+              id: tab.act.id,
+              type: tab.act.type,
+              label: tab.act.label,
+              instanceId: tab.act.instanceId
+            } : undefined}
+            hideHeader={true} // Hide internal header when in docking mode
+            onToolbarUpdate={(toolbar, color) => {
+              // Update tab with toolbar and color
+              setDockTree(prev => {
+                return mapNode(prev, n => {
+                  if (n.kind === 'tabset') {
+                    const idx = n.tabs.findIndex(t => t.id === tab.id);
+                    if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
+                      const updatedTab = { ...n.tabs[idx], toolbarButtons: toolbar, headerColor: color } as DockTabResponseEditor;
+                      return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
+                    }
+                  }
+                  return n;
+                });
+              });
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Non-Interactive Editor tab
+    if (tab.type === 'nonInteractive') {
+      return (
+        <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+          <NonInteractiveResponseEditor
+            title={tab.title}
+            value={tab.value}
+            instanceId={tab.instanceId}
+            onChange={(next) => {
+              // Update tab data in place
+              setDockTree(prev => mapNode(prev, n => {
+                if (n.kind === 'tabset') {
+                  const idx = n.tabs.findIndex(t => t.id === tab.id);
+                  if (idx !== -1) {
+                    const updated = [...n.tabs];
+                    updated[idx] = { ...tab, value: next };
+                    return { ...n, tabs: updated };
+                  }
+                }
+                return n;
+              }));
+            }}
+            onClose={async () => {
+              const t0 = performance.now();
+              try {
+                const svc = await import('../services/ProjectDataService');
+                const dataSvc: any = (svc as any).ProjectDataService;
+                const pid = pdUpdate.getCurrentProjectId() || undefined;
+                if (pid && tab.instanceId) {
+                  const text = tab.value?.template || '';
+                  void dataSvc.updateInstance(pid, tab.instanceId, { message: { text } })
+                    .then(() => {
+                      try {
+                        console.log('[NI][close][PUT ok]', { instanceId: tab.instanceId, text });
+                        taskRepository.updateTaskValue(tab.instanceId, { text }, pid);
+                      } catch { }
+                    })
+                    .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
+                  try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: tab.instanceId, text } })); } catch { }
+                }
+              } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch { } }
+              setDockTree(prev => closeTab(prev, tab.id));
+              const t1 = performance.now();
+              try { console.log('[NI][close] panel closed in', Math.round(t1 - t0), 'ms'); } catch { }
+            }}
+            accentColor={tab.accentColor}
+          />
+        </div>
+      );
+    }
+
+    // Condition Editor tab
+    if (tab.type === 'conditionEditor') {
+      return (
+        <div style={{ width: '100%', height: '100%', backgroundColor: '#1e1e1e' }}>
+          <ConditionEditor
+            open={true}
+            onClose={() => {
+              setDockTree(prev => closeTab(prev, tab.id));
+              // Restore previous viewport position
+              setTimeout(() => {
+                try {
+                  document.dispatchEvent(new CustomEvent('flowchart:restoreViewport', { bubbles: true }));
+                } catch (err) {
+                  console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
+                }
+              }, 100);
+            }}
+            variables={tab.variables}
+            initialScript={tab.script}
+            variablesTree={tab.variablesTree}
+            label={tab.label}
+            dockWithinParent={false}
+            onRename={(next) => {
+              // Update tab title and label
+              setDockTree(prev => mapNode(prev, n => {
+                if (n.kind === 'tabset') {
+                  const idx = n.tabs.findIndex(t => t.id === tab.id);
+                  if (idx !== -1) {
+                    const updated = [...n.tabs];
+                    updated[idx] = { ...tab, title: next, label: next };
+                    return { ...n, tabs: updated };
+                  }
+                }
+                return n;
+              }));
+              try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
+            }}
+            onSave={(script) => {
+              // Update tab script
+              setDockTree(prev => mapNode(prev, n => {
+                if (n.kind === 'tabset') {
+                  const idx = n.tabs.findIndex(t => t.id === tab.id);
+                  if (idx !== -1) {
+                    const updated = [...n.tabs];
+                    updated[idx] = { ...tab, script };
+                    return { ...n, tabs: updated };
+                  }
+                }
+                return n;
+              }));
+              try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
+            }}
+          />
+        </div>
+      );
+    }
+
+    return <div>Unknown tab type</div>;
   };
+
+  // Memoize renderTabContent to prevent unnecessary re-renders
+  const renderTabContent = React.useCallback((tab: DockTab) => {
+    return <UnifiedTabContent tab={tab} />;
+  }, [currentPid, setDockTree]);
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
   let refreshData: () => Promise<void> = async () => { };
   try {
@@ -117,49 +298,158 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Usa ActEditor context invece di selectedDDT per unificare l'apertura editor
   const actEditorCtx = useActEditor();
-  const [nonInteractiveEditor, setNonInteractiveEditor] = useState<null | { title?: string; value: { template: string; vars?: string[]; samples?: Record<string, string> }; accentColor?: string }>(null);
-  const [niSource, setNiSource] = useState<null | { instanceId?: string }>(null);
 
-  // Listen to open event for non-interactive acts (open bottom panel like ResponseEditor)
+  // Listen to open event for non-interactive acts (open as docking tab)
   React.useEffect(() => {
     const handler = (e: any) => {
       const d = (e && e.detail) || {};
       const instanceId = d.instanceId;
 
-      // Read message text from Task
-      let template = '';
-      if (instanceId) {
-        const { taskRepository } = require('../services/TaskRepository');
-        let task = taskRepository.getTask(instanceId);
-        // Create Task if it doesn't exist (will be saved when closing)
-        if (!task) {
-          // Try to get actId from row (passed in event detail) or use 'Message' as default
-          const actId = d.actId || d.baseActId || 'Message';
-          // Map actId to action (e.g., 'Message' -> 'SayMessage')
-          const action = actId === 'Message' ? 'SayMessage' : actId;
-          task = taskRepository.createTask(action, undefined, instanceId);
-        }
-        template = task?.value?.text || '';
+      // Read message text from Task (must exist)
+      if (!instanceId) return;
+
+      const task = taskRepository.getTask(instanceId);
+
+      if (!task) {
+        // Task doesn't exist, don't open editor
+        return;
       }
 
-      setNonInteractiveEditor({ title: d.title || 'Agent message', value: { template, samples: {}, vars: [] } as any, accentColor: d.accentColor });
-      setNiSource({ instanceId });
+      const template = task.value?.text || '';
+
+      // Open as docking tab instead of fixed panel
+      const tabId = `ni_${instanceId}`;
+      setDockTree(prev => {
+        // Check if already open
+        const existing = (function findTab(n: DockNode): boolean {
+          if (n.kind === 'tabset') return n.tabs.some(t => t.id === tabId);
+          if (n.kind === 'split') return n.children.some(findTab);
+          return false;
+        })(prev);
+
+        if (existing) return prev; // Already open, don't duplicate
+
+        // Add next to active tab
+        return upsertAddNextTo(prev, 'tab_main', {
+          id: tabId,
+          title: d.title || 'Agent message',
+          type: 'nonInteractive',
+          instanceId: instanceId,
+          value: { template, samples: {}, vars: [] },
+          accentColor: d.accentColor
+        });
+      });
     };
     document.addEventListener('nonInteractiveEditor:open', handler as any);
     return () => document.removeEventListener('nonInteractiveEditor:open', handler as any);
   }, []);
 
-  // Listen for ActEditor open events (route envelope to the right editor)
+  // Listen for ActEditor open events (open as docking tab)
   React.useEffect(() => {
-    const h = (e: any) => {
+    const h = async (e: any) => {
       try {
         const d = (e && e.detail) || {};
-        const { open } = (require('./ActEditor/EditorHost/ActEditorContext') as any);
-      } catch { }
+        if (!d || !d.id || !d.type) return;
+
+        // Get instanceId from event
+        const instanceId = d.instanceId || d.id;
+
+        // Determine editor kind based on act type
+        const editorKind = resolveEditorKind({ type: d.type, id: d.id, label: d.label || d.name });
+
+        // Open as docking tab in bottom split (1/3 height)
+        const tabId = `act_${d.id}`;
+        setDockTree(prev => {
+          // Check if already open
+          const existing = (function findTab(n: DockNode): boolean {
+            if (n.kind === 'tabset') return n.tabs.some(t => t.id === tabId);
+            if (n.kind === 'split') return n.children.some(findTab);
+            return false;
+          })(prev);
+
+          if (existing) {
+            // Tab already open, just activate it
+            return activateTab(prev, tabId);
+          }
+
+          // Find the root tabset (main canvas)
+          const findRootTabset = (n: DockNode): string | null => {
+            if (n.kind === 'tabset') return n.id;
+            if (n.kind === 'split') {
+              // Prefer the first child (usually the main canvas)
+              if (n.children.length > 0) {
+                const found = findRootTabset(n.children[0]);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+
+          const rootTabsetId = findRootTabset(prev) || 'ts_main';
+
+          // Open correct editor based on editorKind
+          if (editorKind === 'message') {
+            // Open NonInteractiveResponseEditor for Message type
+            const task = taskRepository.getTask(instanceId);
+
+            if (!task) {
+              // Task doesn't exist, don't open editor
+              return prev;
+            }
+
+            // Load message text from task value
+            const messageText = task.value?.text || '';
+
+            return splitWithTab(prev, rootTabsetId, 'bottom', {
+              id: tabId,
+              title: d.label || d.name || 'Message',
+              type: 'nonInteractive',
+              instanceId: instanceId,
+              value: { template: messageText },
+              accentColor: '#059669'
+            });
+          } else if (editorKind === 'ddt') {
+            // Open ResponseEditor for DDT types (DataRequest, ProblemClassification, etc.)
+            // Load DDT from TaskRepository (must exist)
+            const task = taskRepository.getTask(instanceId);
+
+            if (!task) {
+              // Task doesn't exist, don't open editor
+              return prev;
+            }
+
+            const ddt = task.value?.ddt;
+            if (!ddt) {
+              // DDT doesn't exist in task, don't open editor
+              return prev;
+            }
+
+            return splitWithTab(prev, rootTabsetId, 'bottom', {
+              id: tabId,
+              title: d.label || d.name || 'Response Editor',
+              type: 'responseEditor',
+              ddt,
+              act: {
+                id: String(d.id),
+                type: d.type,
+                label: d.label || d.name,
+                instanceId: d.instanceId || d.id
+              },
+              headerColor: '#9a4f00', // Orange color from ResponseEditor header
+              toolbarButtons: [] // Will be updated via callback
+            });
+          } else {
+            // For other types (backend, etc.), don't open editor if not supported
+            return prev;
+          }
+        });
+      } catch (err) {
+        console.error('[ActEditor] Failed to open', err);
+      }
     };
-    // We use context in overlay; simply set a flag by dispatching through context in NodeRow
-    return () => { };
-  }, []);
+    document.addEventListener('actEditor:open', h as any);
+    return () => document.removeEventListener('actEditor:open', h as any);
+  }, [actEditorCtx, getTranslationsForDDT]);
 
   // Note: nodes/edges are read directly from window.__flowNodes by DDEBubbleChat in flow mode
   // No local state needed to avoid flickering and synchronization issues
@@ -173,11 +463,6 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
   const [debuggerWidth, setDebuggerWidth] = useState(380); // Larghezza dinamica invece di fissa
   const [isResizing, setIsResizing] = useState(false);
-  const [conditionEditorOpen, setConditionEditorOpen] = useState(false);
-  const [conditionVars, setConditionVars] = useState<Record<string, any>>({});
-  const [conditionScript, setConditionScript] = useState<string>('');
-  const [conditionVarsTree, setConditionVarsTree] = useState<any[]>([]);
-  const [conditionLabel, setConditionLabel] = useState<string>('Condition');
 
   // Handler per il resize del pannello di debug
   const handleResizeStart = React.useCallback((e: React.MouseEvent) => {
@@ -221,7 +506,7 @@ export const AppContent: React.FC<AppContentProps> = ({
     return () => document.removeEventListener('backendBuilder:open', handler);
   }, []);
 
-  // Open ConditionEditor
+  // Open ConditionEditor as docking tab
   React.useEffect(() => {
     // Helper: build static variables from all Agent Acts' DDT structure
     const buildStaticVars = (): Record<string, any> => {
@@ -318,14 +603,13 @@ export const AppContent: React.FC<AppContentProps> = ({
       const allVars = { ...staticVars, ...flowchartVars }; // ✅ NEW
 
       const finalVars = hasProvided ? provided : allVars;
-      setConditionVars(finalVars);
-      setConditionVarsTree((d as any).variablesTree || varsTree);
+      const conditionLabel = d.label || d.name || 'Condition';
+      const conditionScript = d.script || '';
+
       console.log('[LOAD_SCRIPT] 🔍 From AppContent (event)', {
-        conditionName: d.label || d.name || 'Condition',
-        scriptLength: d.script?.length || 0
+        conditionName: conditionLabel,
+        scriptLength: conditionScript?.length || 0
       });
-      setConditionScript(d.script || '');
-      setConditionLabel(d.label || d.name || 'Condition');
 
       // Scroll to node using ReactFlow viewport (if nodeId is provided)
       if (d.nodeId) {
@@ -345,25 +629,36 @@ export const AppContent: React.FC<AppContentProps> = ({
         console.log('[AppContent] No nodeId provided, skipping scroll');
       }
 
-      setConditionEditorOpen(true);
+      // Open as docking tab instead of fixed panel
+      const tabId = `cond_${d.nodeId || Date.now()}`;
+      setDockTree(prev => {
+        // Check if already open
+        const existing = (function findTab(n: DockNode): boolean {
+          if (n.kind === 'tabset') return n.tabs.some(t => t.id === tabId);
+          if (n.kind === 'split') return n.children.some(findTab);
+          return false;
+        })(prev);
+
+        if (existing) return prev; // Already open, don't duplicate
+
+        // Add next to active tab
+        return upsertAddNextTo(prev, 'tab_main', {
+          id: tabId,
+          title: conditionLabel,
+          type: 'conditionEditor',
+          variables: finalVars,
+          script: conditionScript,
+          variablesTree: (d as any).variablesTree || varsTree,
+          label: conditionLabel
+        });
+      });
     };
     document.addEventListener('conditionEditor:open', handler as any);
 
-    // ✅ NEW: Listen for flowchart variables updates
-    const varsUpdateHandler = async () => {
-      if (conditionEditorOpen) {
-        const flowchartVars = await buildFlowchartVars();
-        const staticVars = buildStaticVars();
-        setConditionVars({ ...staticVars, ...flowchartVars });
-      }
-    };
-    document.addEventListener('flowchart:variablesUpdated', varsUpdateHandler as any);
-
     return () => {
       document.removeEventListener('conditionEditor:open', handler as any);
-      document.removeEventListener('flowchart:variablesUpdated', varsUpdateHandler as any);
     };
-  }, [projectData, pdUpdate, conditionEditorOpen]);
+  }, [projectData, pdUpdate]);
 
   // Stato per gestione progetti
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
@@ -1000,25 +1295,24 @@ export const AppContent: React.FC<AppContentProps> = ({
               <div id="flow-canvas-host" style={{
                 flex: 1,
                 minHeight: 0,
-                display: 'grid',
-                gridTemplateColumns: showGlobalDebugger ? `1fr ${debuggerWidth}px` : '1fr',
-                gridTemplateRows: '1fr auto',
+                display: 'flex',
+                flexDirection: showGlobalDebugger ? 'row' : 'column',
                 position: 'relative'
               }}>
               {showBackendBuilder ? (
-                <div style={{ gridColumn: '1 / -1', flex: 1, minHeight: 0 }}>
+                <div style={{ flex: 1, minHeight: 0 }}>
                   <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
                 </div>
               ) : (
                 <>
-                  {/* Canvas - prima riga, colonna sinistra */}
-                  <div style={{ position: 'relative', gridRow: '1', gridColumn: '1' }}>
+                  {/* Canvas - occupa tutto lo spazio disponibile */}
+                  <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
                     {currentPid ? (
                       <FlowWorkspaceProvider>
                         <DockManager
                           root={dockTree}
                           setRoot={setDockTree}
-                          renderTabContent={(tab) => (<FlowTabContent tab={tab} />)}
+                          renderTabContent={renderTabContent}
                         />
                       </FlowWorkspaceProvider>
                     ) : (
@@ -1049,37 +1343,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                       />
                     )}
                   </div>
-
-                  {/* Act Editor + Condition Editor - seconda riga, colonna sinistra (solo sotto canvas) */}
-                  <div style={{ gridRow: '2', gridColumn: '1', minHeight: 0, position: 'relative' }}>
-                    <ActEditorPanel />
-                    <ConditionEditor
-                      open={conditionEditorOpen}
-                      onClose={() => {
-                        setConditionEditorOpen(false);
-                        // Restore previous viewport position
-                        setTimeout(() => {
-                          try {
-                            document.dispatchEvent(new CustomEvent('flowchart:restoreViewport', { bubbles: true }));
-                          } catch (err) {
-                            console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
-                          }
-                        }, 100);
-                      }}
-                      variables={conditionVars}
-                      initialScript={conditionScript}
-                      variablesTree={conditionVarsTree}
-                      label={conditionLabel}
-                      dockWithinParent={true}
-                      onRename={(next) => {
-                        setConditionLabel(next);
-                        try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
-                      }}
-                      onSave={(script) => {
-                        try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
-                      }}
-                    />
-                  </div>
                 </>
               )}
               {showGlobalDebugger && (
@@ -1088,15 +1351,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                   <div
                     onMouseDown={handleResizeStart}
                     style={{
-                      position: 'absolute',
-                      left: `calc(100% - ${debuggerWidth}px - 4px)`,
-                      top: 0,
-                      bottom: 0,
                       width: '8px',
                       cursor: 'col-resize',
                       backgroundColor: isResizing ? '#3b82f6' : 'transparent',
                       zIndex: 10,
-                      userSelect: 'none'
+                      userSelect: 'none',
+                      flexShrink: 0
                     }}
                     onMouseEnter={(e) => {
                       if (!isResizing) {
@@ -1110,17 +1370,15 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }}
                   />
 
-                  {/* Pannello di debug - colonna destra, span su 2 righe (tutta l'altezza) */}
+                  {/* Pannello di debug */}
                   <div
                     style={{
-                      gridRow: '1 / -1',
-                      gridColumn: '2',
+                      width: `${debuggerWidth}px`,
                       position: 'relative',
-                      width: '100%',
-                      height: '100%',
                       overflowY: 'auto',
                       overflowX: 'hidden',
-                      borderLeft: '1px solid #e5e7eb'
+                      borderLeft: '1px solid #e5e7eb',
+                      flexShrink: 0
                     }}
                   >
                     <DDEBubbleChat
@@ -1132,49 +1390,6 @@ export const AppContent: React.FC<AppContentProps> = ({
               )}
               </div>
 
-            {nonInteractiveEditor && (
-              <ResizableNonInteractiveEditor
-                title={nonInteractiveEditor.title}
-                value={nonInteractiveEditor.value}
-                instanceId={niSource?.instanceId}
-                onChange={(next) => {
-                  // Only update local draft; persist on close
-                  setNonInteractiveEditor({ title: nonInteractiveEditor.title, value: next, accentColor: (nonInteractiveEditor as any).accentColor });
-                }}
-                onClose={async () => {
-                  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  try {
-                    const svc = await import('../services/ProjectDataService');
-                    const dataSvc: any = (svc as any).ProjectDataService;
-                    const pid = pdUpdate.getCurrentProjectId() || undefined;
-                    if (pid && niSource?.instanceId) {
-                      // fire-and-forget: non bloccare la chiusura del pannello
-                      const text = nonInteractiveEditor?.value?.template || '';
-                      // Update instance in memory (already done by NonInteractiveResponseEditor via updateMessage)
-                      // Just persist to database
-                      void dataSvc.updateInstance(pid, niSource.instanceId, { message: { text } })
-                        .then(() => {
-                          try {
-                            console.log('[NI][close][PUT ok]', { instanceId: niSource?.instanceId, text });
-                            // FASE 2: Update Task (TaskRepository sincronizza automaticamente con InstanceRepository)
-                            const { taskRepository } = require('../services/TaskRepository');
-                            taskRepository.updateTaskValue(niSource.instanceId, { text }, pid);
-                          } catch { }
-                        })
-                        .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
-                      // broadcast per aggiornare la riga che ha questa istanza
-                      try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: niSource.instanceId, text } })); } catch { }
-                    }
-                  } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch { } }
-                  // chiudi SUBITO il pannello (render immediato)
-                  setNonInteractiveEditor(null);
-                  setNiSource(null);
-                  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  try { console.log('[NI][close] panel closed in', Math.round(t1 - t0), 'ms'); } catch { }
-                }}
-                accentColor={(nonInteractiveEditor as any).accentColor}
-              />
-              )}
             </div>
           </div>
         </div>
@@ -1182,36 +1397,3 @@ export const AppContent: React.FC<AppContentProps> = ({
     </div>
   );
 };
-
-// Panel that renders the ActEditorHost when an act is selected via context
-// Rendered in normal document flow (not overlay) to push canvas up
-function ActEditorPanel() {
-  const ctx = useActEditor();
-
-  // Bridge DOM event → context.open to allow callers to emit without importing the hook
-  React.useEffect(() => {
-    const handler = (e: any) => {
-      const d = (e && e.detail) || {};
-      if (d && d.id && d.type) ctx.open(d);
-    };
-    document.addEventListener('actEditor:open', handler as any);
-    return () => document.removeEventListener('actEditor:open', handler as any);
-  }, [ctx]);
-
-  if (!ctx.act) {
-    return null;
-  }
-
-  // ✅ Render normale nel flusso del documento - questo riduce automaticamente lo spazio del canvas sopra
-  // Il canvas con flex: 1 si restringerà per fare spazio a questo elemento
-  return (
-    <div style={{
-      width: '100%',
-      backgroundColor: '#0b1220',
-      flexShrink: 0, // Non si restringe, mantiene la sua altezza
-      minHeight: 0
-    }}>
-      <ResizableActEditorHost act={ctx.act} onClose={ctx.close} />
-    </div>
-  );
-}
