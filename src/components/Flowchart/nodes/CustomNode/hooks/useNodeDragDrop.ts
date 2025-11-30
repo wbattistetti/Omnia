@@ -24,6 +24,9 @@ export function useNodeDragDrop({
     // Registry per accedere ai componenti NodeRow
     const { getRowComponent } = useRowRegistry();
 
+    // Ref per salvare la posizione iniziale della riga (per verificare se è stata spostata)
+    const initialRowPositionRef = useRef<{ index: number; top: number } | null>(null);
+
     // Stato per il drag personalizzato
     const [isRowDragging, setIsRowDragging] = useState(false);
     const [draggedRowId, setDraggedRowId] = useState<string | null>(null);
@@ -118,7 +121,12 @@ export function useNodeDragDrop({
         // 3. Trova i dati della riga
         const rowData = nodeRows.find(row => row.id === id);
 
-        // 4. Aggiorna stato
+        // 4. Salva la posizione iniziale della riga per verificare se è stata spostata
+        const rowElement = originalElement.closest('.node-row-outer') as HTMLElement | null;
+        const initialTop = rowElement ? rowElement.getBoundingClientRect().top : 0;
+        initialRowPositionRef.current = { index, top: initialTop };
+
+        // 5. Aggiorna stato
         setIsRowDragging(true);
         setDraggedRowId(id);
         setDraggedRowIndex(index);
@@ -127,7 +135,7 @@ export function useNodeDragDrop({
         setDraggedRowData(rowData || null);
         setTargetNodeId(null);
 
-        // 5. Cursor
+        // 6. Cursor
         document.body.style.cursor = 'grabbing';
         document.body.style.userSelect = 'none';
     }, [getRowComponent, nodeRows]);
@@ -344,8 +352,28 @@ export function useNodeDragDrop({
                 targetIndex = r.idx + 1;
             }
 
-            // Esegui il riordinamento se necessario
-            if (targetIndex !== draggedRowIndex) {
+            // ✅ Verifica se la riga è stata effettivamente spostata
+            // 1. Verifica se l'indice è cambiato
+            const hasMovedIndex = targetIndex !== draggedRowIndex;
+
+            // 2. Verifica se la posizione Y del mouse al rilascio è vicina alla posizione originale della riga
+            const initialTop = initialRowPositionRef.current?.top ?? 0;
+            const initialIndex = initialRowPositionRef.current?.index ?? draggedRowIndex;
+
+            // Trova la posizione Y centrale della riga originale
+            const originalRowElement = elements.find(el => Number(el.dataset.index) === initialIndex);
+            const originalRowCenter = originalRowElement
+                ? originalRowElement.getBoundingClientRect().top + originalRowElement.getBoundingClientRect().height / 2
+                : initialTop;
+
+            // Calcola la distanza tra la posizione Y del mouse e la posizione originale della riga
+            const verticalDistance = Math.abs(mousePosition.y - originalRowCenter);
+            const threshold = 30; // Soglia di 30px: se il mouse è entro 30px dalla posizione originale, non spostare
+
+            // Esegui il riordinamento solo se:
+            // - L'indice è cambiato E
+            // - Il mouse si è mosso abbastanza lontano dalla posizione originale
+            if (hasMovedIndex && verticalDistance > threshold) {
                 const updatedRows = [...nodeRows];
                 const draggedRow = updatedRows[draggedRowIndex];
                 updatedRows.splice(draggedRowIndex, 1);
@@ -365,12 +393,16 @@ export function useNodeDragDrop({
                         rowComponent.highlight();
                     }
                 });
+            } else {
+                // ✅ La riga non è stata spostata - non fare nulla
+                // Rimuovi solo l'evidenziazione del nodo
+                if (targetNodeId === nodeId) {
+                    removeNodeHighlight(nodeId);
+                }
             }
 
-            // ✅ Rimuovi evidenziazione del nodo target dopo timeout (same-node)
-            if (targetNodeId === nodeId) {
-                removeNodeHighlight(nodeId);
-            }
+            // ✅ Pulisci il ref della posizione iniziale
+            initialRowPositionRef.current = null;
         }
 
         // Cleanup

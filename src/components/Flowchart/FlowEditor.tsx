@@ -24,6 +24,7 @@ import { useNodeCreationLock } from './hooks/useNodeCreationLock';
 import { useTemporaryNodes } from './hooks/useTemporaryNodes';
 import { useFlowConnect } from './hooks/useFlowConnect';
 import { useSelectionManager } from './hooks/useSelectionManager';
+import { useNodeAlignment } from './hooks/useNodeAlignment';
 import type { NodeData, EdgeData } from './types/flowTypes';
 import { useNodesWithLog } from './hooks/useNodesWithLog';
 import { useUndoRedoManager } from './hooks/useUndoRedoManager';
@@ -93,6 +94,13 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Save/restore viewport for ConditionEditor scroll
   const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick } = selection;
+
+  // Node alignment and distribution
+  const { handleAlign, handleDistribute, checkAlignmentOverlap, checkDistributionOverlap } = useNodeAlignment(
+    nodes,
+    setNodes,
+    setSelectionMenu
+  );
   // Ref per memorizzare l'ID dell'ultima edge creata (sia tra nodi esistenti che con nodo temporaneo)
   const pendingEdgeIdRef = useRef<string | null>(null);
   // Ref sempre aggiornato con edges correnti (evita closure stale nei deduce temp)
@@ -1713,6 +1721,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         <SelectionMenu
           selectedNodeIds={selectedNodeIds}
           selectionMenu={selectionMenu}
+          nodes={nodes}
           onCreateTask={() => {
             if (selectedNodeIds.length < 2) return;
 
@@ -1824,6 +1833,10 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
             console.log('🎯 [CREATE_TASK] Task node created, waiting for user input');
           }}
+          onAlign={(type) => handleAlign(type, selectedNodeIds)}
+          onDistribute={(type) => handleDistribute(type, selectedNodeIds)}
+          checkAlignmentOverlap={(type) => checkAlignmentOverlap(type, selectedNodeIds)}
+          checkDistributionOverlap={(type) => checkDistributionOverlap(type, selectedNodeIds)}
           onCancel={() => setSelectionMenu({ show: false, x: 0, y: 0 })}
         />
       )}

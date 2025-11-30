@@ -1153,16 +1153,67 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     window.addEventListener('mousemove', onMoveCloseIfFar, true);
   };
 
-  // Drag & Drop personalizzato
+  // Ref per tracciare lo stato del drag iniziale
+  const dragStartStateRef = useRef<{
+    startX: number;
+    startY: number;
+    hasMoved: boolean;
+    dragStarted: boolean;
+  } | null>(null);
+
+  // Drag & Drop personalizzato con distinzione click/drag
   const handleMouseDown = (e: React.MouseEvent) => {
     // Preveni il drag nativo
     e.preventDefault();
     e.stopPropagation();
 
-    // Avvia il drag personalizzato
-    if (onDragStart) {
-      onDragStart(row.id, index, e.clientX, e.clientY, nodeContainerRef.current as HTMLElement);
-    }
+    // Salva la posizione iniziale
+    dragStartStateRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      hasMoved: false,
+      dragStarted: false
+    };
+
+    // Handler per mousemove - controlla se il mouse si è mosso abbastanza
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!dragStartStateRef.current || !onDragStart) return;
+
+      const deltaX = Math.abs(moveEvent.clientX - dragStartStateRef.current.startX);
+      const deltaY = Math.abs(moveEvent.clientY - dragStartStateRef.current.startY);
+      const threshold = 5; // Soglia di 5px per distinguere click da drag
+
+      if (deltaX > threshold || deltaY > threshold) {
+        dragStartStateRef.current.hasMoved = true;
+
+        // Avvia il drag solo se non è già stato avviato
+        if (!dragStartStateRef.current.dragStarted) {
+          dragStartStateRef.current.dragStarted = true;
+          onDragStart(
+            row.id,
+            index,
+            dragStartStateRef.current.startX,
+            dragStartStateRef.current.startY,
+            nodeContainerRef.current as HTMLElement
+          );
+        }
+      }
+    };
+
+    // Handler per mouseup - pulisce i listener
+    const handleMouseUp = () => {
+      // Se non c'è stato movimento significativo, è stato un click normale
+      // Non avviare il drag in questo caso
+
+      // Pulisci lo stato e i listener
+      dragStartStateRef.current = null;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    // Aggiungi listener temporanei
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
   };
 
   // DISABILITATO TEMPORANEAMENTE - Vecchio sistema di drag che interferisce
