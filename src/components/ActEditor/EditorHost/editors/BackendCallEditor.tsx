@@ -4,10 +4,11 @@ import { taskRepository } from '../../../../services/TaskRepository';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
 import { getAgentActVisualsByType } from '../../../../components/Flowchart/utils/actVisuals';
 import EditorHeader from '../../../../components/common/EditorHeader';
-import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2 } from 'lucide-react';
+import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2, Table2 } from 'lucide-react';
 import { OmniaSelect } from '../../../../components/common/OmniaSelect';
 import { flowchartVariablesService } from '../../../../services/FlowchartVariablesService';
 import type { ToolbarButton } from '../../../../dock/types';
+import TableEditor from './TableEditor';
 
 // Template Globale: solo struttura (parametri interni)
 interface GlobalTemplate {
@@ -53,6 +54,12 @@ interface BackendCallConfig {
     apiField?: string; // combobox (mapping API)
     variable?: string; // combobox (variabile app)
   }>;
+  // Mock table: array di righe con valori input/output
+  mockTable?: Array<{
+    id: string;
+    inputs: Record<string, any>;  // internalName -> valore
+    outputs: Record<string, any>; // internalName -> valore
+  }>;
 }
 
 const DEFAULT_CONFIG: BackendCallConfig = {
@@ -73,6 +80,9 @@ export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideH
 
   // Show/hide API column
   const [showApiColumn, setShowApiColumn] = React.useState(true);
+
+  // Toggle between mapping view and table view
+  const [showTableView, setShowTableView] = React.useState(false);
 
   // Track editing state for inputs and outputs
   const [editingInputs, setEditingInputs] = React.useState<Set<number>>(new Set());
@@ -511,9 +521,16 @@ export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideH
         onClick: () => setShowApiColumn(prev => !prev),
         title: showApiColumn ? 'Hide API parameter mapping column' : 'Show API parameter mapping column',
         active: showApiColumn
+      },
+      {
+        icon: <Table2 size={16} />,
+        label: 'Mock Table',
+        onClick: () => setShowTableView(prev => !prev),
+        title: showTableView ? 'Show mapping editor' : 'Show mock table',
+        active: showTableView
       }
     ];
-  }, [showApiColumn]);
+  }, [showApiColumn, showTableView]);
 
   // Update toolbar when it changes (for docking mode)
   const headerColor = '#94a3b8'; // Gray color for BackendCall
@@ -539,31 +556,41 @@ export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideH
       )}
 
       <div className="flex-1 min-h-0 overflow-auto p-3">
-        {/* Endpoint Configuration - Compact */}
-        <div className="mb-3 flex gap-3 items-center">
-          <div className="flex-1">
-            <input
-              type="text"
-              value={config.endpoint.url}
-              onChange={(e) => updateEndpoint({ url: e.target.value })}
-              placeholder="https://api.example.com/endpoint"
-              className="w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        {/* Endpoint Configuration - Compact (hidden when table view is active) */}
+        {!showTableView && (
+          <div className="mb-3 flex gap-3 items-center">
+            <div className="flex-1">
+              <input
+                type="text"
+                value={config.endpoint.url}
+                onChange={(e) => updateEndpoint({ url: e.target.value })}
+                placeholder="https://api.example.com/endpoint"
+                className="w-full px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <select
+              value={config.endpoint.method}
+              onChange={(e) => updateEndpoint({ method: e.target.value as any })}
+              className="px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+              <option value="PATCH">PATCH</option>
+            </select>
           </div>
-          <select
-            value={config.endpoint.method}
-            onChange={(e) => updateEndpoint({ method: e.target.value as any })}
-            className="px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="GET">GET</option>
-            <option value="POST">POST</option>
-            <option value="PUT">PUT</option>
-            <option value="DELETE">DELETE</option>
-            <option value="PATCH">PATCH</option>
-          </select>
-        </div>
+        )}
 
-        {/* Two Column Layout: Input (left) + Output (right) - Larghezze dinamiche */}
+        {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
+        {showTableView ? (
+          <TableEditor
+            inputs={config.inputs || []}
+            outputs={config.outputs || []}
+            rows={config.mockTable || []}
+            onChange={(rows) => setConfig(prev => ({ ...prev, mockTable: rows }))}
+          />
+        ) : (
         <div className="flex gap-3 items-start">
           {/* Input - Left Column */}
           <div className="border border-slate-700 rounded bg-slate-800 flex flex-shrink-0">
@@ -987,6 +1014,7 @@ export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideH
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
