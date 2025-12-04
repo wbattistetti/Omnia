@@ -49,8 +49,16 @@ export type DockTabConditionEditor = DockTabBase & {
   label?: string;
 };
 
+// Act Editor tab - for generic act editors (BackendCall, etc.)
+export type DockTabActEditor = DockTabBase & {
+  type: 'actEditor';
+  act: { id: string; type: string; label?: string; instanceId?: string };
+  headerColor?: string;
+  toolbarButtons?: ToolbarButton[];
+};
+
 // Union type for all tab types
-export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor;
+export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabActEditor;
 
 export type SplitNode = {
   kind: 'split';

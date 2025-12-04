@@ -1,0 +1,53 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Cursor Projects\\Omnia\\VBNET\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D}|DDTEngine.Core\\DDTEngine.Core.vbproj|c:\\cursor projects\\omnia\\vbnet\\ddtengine.core\\engine\\parser.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
+      "RelativeMoniker": "D:0:0:{A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D}|DDTEngine.Core\\DDTEngine.Core.vbproj|solutionrelative:ddtengine.core\\engine\\parser.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D}|DDTEngine.Core\\DDTEngine.Core.vbproj|c:\\cursor projects\\omnia\\vbnet\\ddtengine.core\\engine\\motore.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
+      "RelativeMoniker": "D:0:0:{A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D}|DDTEngine.Core\\DDTEngine.Core.vbproj|solutionrelative:ddtengine.core\\engine\\motore.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Parser.vb",
+              "DocumentMoniker": "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine.Core\\Engine\\Parser.vb",
+              "RelativeDocumentMoniker": "DDTEngine.Core\\Engine\\Parser.vb",
+              "ToolTip": "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine.Core\\Engine\\Parser.vb",
+              "RelativeToolTip": "DDTEngine.Core\\Engine\\Parser.vb",
+              "ViewState": "AgIAAAsAAAAAAAAAAAAcwCAAAAAIAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003361|",
+              "WhenOpened": "2025-12-03T02:26:46.392Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Motore.vb",
+              "DocumentMoniker": "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine.Core\\Engine\\Motore.vb",
+              "RelativeDocumentMoniker": "DDTEngine.Core\\Engine\\Motore.vb",
+              "ToolTip": "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine.Core\\Engine\\Motore.vb",
+              "RelativeToolTip": "DDTEngine.Core\\Engine\\Motore.vb",
+              "ViewState": "AgIAABwAAAAAAAAAAAASwCgAAAAQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003361|",
+              "WhenOpened": "2025-12-01T15:09:09.081Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

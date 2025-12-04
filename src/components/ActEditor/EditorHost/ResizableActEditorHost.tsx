@@ -4,7 +4,7 @@ import ResizeHandle from '../../common/ResizeHandle';
 import { useResizablePanel } from '../../../hooks/useResizablePanel';
 import type { ActMeta } from './types';
 
-export default function ResizableActEditorHost({ act, onClose }: { act: ActMeta; onClose?: () => void }){
+export default function ResizableActEditorHost({ act, onClose, onToolbarUpdate, hideHeader }: { act: ActMeta; onClose?: () => void; onToolbarUpdate?: (toolbar: any[], color: string) => void; hideHeader?: boolean }){
   const { size, handleResize, style } = useResizablePanel({
     initialSize: 420,
     min: 260,
@@ -38,7 +38,7 @@ export default function ResizableActEditorHost({ act, onClose }: { act: ActMeta;
         inverted={true}
       />
       <div style={{ flex: 1, minHeight: 0 }}>
-        <ActEditorHost act={act} onClose={onClose} />
+        <ActEditorHost act={act} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
       </div>
     </div>
   );

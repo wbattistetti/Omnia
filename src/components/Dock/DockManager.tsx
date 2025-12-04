@@ -1,5 +1,5 @@
 import React from 'react';
-import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor } from '../../dock/types';
+import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor, DockTabActEditor } from '../../dock/types';
 import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab, removeTab } from '../../dock/ops';
 import { Workflow, FileText, Code2, GitBranch } from 'lucide-react';
 import SmartTooltip from '../SmartTooltip';
@@ -28,6 +28,7 @@ function getTabIcon(tab: DockTab) {
   switch (tab.type) {
     case 'flow': return <Workflow size={14} color="#0c4a6e" />;
     case 'responseEditor': return <FileText size={14} color="#7c3aed" />;
+    case 'actEditor': return <FileText size={14} color="#94a3b8" />;
     case 'nonInteractive': return <FileText size={14} color="#059669" />;
     case 'conditionEditor': return <Code2 size={14} color="#dc2626" />;
     default: return <GitBranch size={14} color="#0c4a6e" />;
@@ -275,10 +276,18 @@ function TabSet(props: {
         {props.tabs.map((t, i) => {
           const isActive = props.active === i;
           const isResponseEditor = t.type === 'responseEditor';
+          const isActEditor = t.type === 'actEditor';
           const responseEditorTab = isResponseEditor ? (t as DockTabResponseEditor) : null;
-          const tabColor = isActive && responseEditorTab?.headerColor ? responseEditorTab.headerColor : undefined;
-          const toolbarButtons = isActive && responseEditorTab?.toolbarButtons ? responseEditorTab.toolbarButtons : [];
-          const showToolbar = isActive && isResponseEditor && toolbarButtons.length > 0;
+          const actEditorTab = isActEditor ? (t as DockTabActEditor) : null;
+          // Get color from either responseEditor or actEditor
+          const tabColor = isActive && (responseEditorTab?.headerColor || actEditorTab?.headerColor)
+            ? (responseEditorTab?.headerColor || actEditorTab?.headerColor)
+            : undefined;
+          // Get toolbar buttons from either responseEditor or actEditor
+          const toolbarButtons = isActive && (responseEditorTab?.toolbarButtons || actEditorTab?.toolbarButtons)
+            ? (responseEditorTab?.toolbarButtons || actEditorTab?.toolbarButtons || [])
+            : [];
+          const showToolbar = isActive && (isResponseEditor || isActEditor) && toolbarButtons.length > 0;
 
           return (
             <div key={t.id}

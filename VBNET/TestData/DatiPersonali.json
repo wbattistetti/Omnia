@@ -1,0 +1,441 @@
+{
+  "isAggregate": true,
+  "introduction": {
+    "text": "Ora avrei bisogno dei dati personali del paziente"
+  },
+  "successResponse": {
+    "text": "Perfetto, ho raccolto tutti i dati personali. Grazie!"
+  },
+  "mainData": [
+    {
+      "id": "nominativo",
+      "name": "Nominativo",
+      "required": true,
+      "requiresConfirmation": true,
+      "requiresValidation": false,
+      "subData": [
+        {
+          "id": "nome",
+          "name": "Nome",
+          "required": true,
+          "requiresConfirmation": true,
+          "requiresValidation": false,
+          "responses": {
+            "start": [
+              { "text": "Qual è il nome?" }
+            ],
+            "noMatch": [
+              { "text": "Non ho capito, puoi ripetere il nome?" }
+            ],
+            "irrelevantMatch": [
+              { "text": "Mi serve il nome, non altre informazioni. Qual è il nome?" }
+            ],
+            "noInput": [
+              { "text": "Non ho ricevuto risposta, qual è il nome?" }
+            ],
+            "confirmation": [
+              { "text": "Hai detto {input}?" }
+            ],
+            "notConfirmed": [
+              { "text": "Ok, qual è il nome corretto?" }
+            ],
+            "success": [
+              { "text": "Nome registrato." }
+            ]
+          },
+          "validationConditions": []
+        },
+        {
+          "id": "cognome",
+          "name": "Cognome",
+          "required": true,
+          "requiresConfirmation": true,
+          "requiresValidation": false,
+          "responses": {
+            "start": [
+              { "text": "Qual è il cognome?" }
+            ],
+            "noMatch": [
+              { "text": "Non ho capito, puoi ripetere il cognome?" }
+            ],
+            "irrelevantMatch": [
+              { "text": "Mi serve il cognome, non altre informazioni. Qual è il cognome?" }
+            ],
+            "noInput": [
+              { "text": "Non ho ricevuto risposta, qual è il cognome?" }
+            ],
+            "confirmation": [
+              { "text": "Hai detto {input}?" }
+            ],
+            "notConfirmed": [
+              { "text": "Ok, qual è il cognome corretto?" }
+            ],
+            "success": [
+              { "text": "Cognome registrato." }
+            ]
+          },
+          "validationConditions": []
+        }
+      ],
+      "responses": {
+        "start": [
+          { "text": "Qual è il nominativo completo?" }
+        ],
+        "noMatch": [
+          { "text": "Non ho capito, puoi ripetere il nominativo?" }
+        ],
+        "irrelevantMatch": [
+          { "text": "Mi serve il nominativo, non altre informazioni. Qual è il nominativo?" }
+        ],
+        "noInput": [
+          { "text": "Non ho ricevuto risposta, qual è il nominativo?" }
+        ],
+        "confirmation": [
+          { "text": "Hai detto {input}?" }
+        ],
+        "notConfirmed": [
+          { "text": "Ok, qual è il nominativo corretto?" }
+        ],
+        "success": [
+          { "text": "Nominativo registrato." }
+        ]
+      },
+      "validationConditions": []
+    },
+    {
+      "id": "dataNascita",
+      "name": "Data di Nascita",
+      "required": true,
+      "requiresConfirmation": true,
+      "requiresValidation": false,
+      "subData": [
+        {
+          "id": "giorno",
+          "name": "Giorno",
+          "required": true,
+          "requiresConfirmation": false,
+          "requiresValidation": true,
+          "responses": {
+            "start": [
+              { "text": "Qual è il giorno di nascita? (1-31)" }
+            ],
+            "noMatch": [
+              { "text": "Non ho capito, puoi ripetere il giorno? Deve essere un numero tra 1 e 31." }
+            ],
+            "irrelevantMatch": [
+              { "text": "Mi serve il giorno di nascita, non altre informazioni. Qual è il giorno? (1-31)" }
+            ],
+            "noInput": [
+              { "text": "Non ho ricevuto risposta, qual è il giorno di nascita? (1-31)" }
+            ],
+            "invalid": [
+              { "text": "Il giorno {input} non è valido. Deve essere un numero tra 1 e 31. Guarda che {input} è maggiore di 31." }
+            ],
+            "success": [
+              { "text": "Giorno registrato: {input}." }
+            ]
+          },
+          "validationConditions": [
+            {
+              "id": "giorno_regex",
+              "type": "regex",
+              "parameters": {
+                "pattern": "^[0-9]{1,2}$"
+              },
+              "errorMessage": "Il giorno deve essere un numero"
+            },
+            {
+              "id": "giorno_range",
+              "type": "range",
+              "parameters": {
+                "min": 1,
+                "max": 31
+              },
+              "errorMessage": "Il giorno deve essere tra 1 e 31"
+            }
+          ]
+        },
+        {
+          "id": "mese",
+          "name": "Mese",
+          "required": true,
+          "requiresConfirmation": false,
+          "requiresValidation": true,
+          "responses": {
+            "start": [
+              { "text": "Qual è il mese di nascita? (1-12)" }
+            ],
+            "noMatch": [
+              { "text": "Non ho capito, puoi ripetere il mese? Deve essere un numero tra 1 e 12." }
+            ],
+            "irrelevantMatch": [
+              { "text": "Mi serve il mese di nascita, non altre informazioni. Qual è il mese? (1-12)" }
+            ],
+            "noInput": [
+              { "text": "Non ho ricevuto risposta, qual è il mese di nascita? (1-12)" }
+            ],
+            "invalid": [
+              { "text": "Il mese {input} non è valido. Deve essere un numero tra 1 e 12. Guarda che {input} è maggiore di 12." }
+            ],
+            "success": [
+              { "text": "Mese registrato: {input}." }
+            ]
+          },
+          "validationConditions": [
+            {
+              "id": "mese_regex",
+              "type": "regex",
+              "parameters": {
+                "pattern": "^[0-9]{1,2}$"
+              },
+              "errorMessage": "Il mese deve essere un numero"
+            },
+            {
+              "id": "mese_range",
+              "type": "range",
+              "parameters": {
+                "min": 1,
+                "max": 12
+              },
+              "errorMessage": "Il mese deve essere tra 1 e 12"
+            }
+          ]
+        },
+        {
+          "id": "anno",
+          "name": "Anno",
+          "required": true,
+          "requiresConfirmation": false,
+          "requiresValidation": true,
+          "responses": {
+            "start": [
+              { "text": "Qual è l'anno di nascita? (es. 1990)" }
+            ],
+            "noMatch": [
+              { "text": "Non ho capito, puoi ripetere l'anno? Deve essere un numero a 4 cifre." }
+            ],
+            "irrelevantMatch": [
+              { "text": "Mi serve l'anno di nascita, non altre informazioni. Qual è l'anno? (es. 1990)" }
+            ],
+            "noInput": [
+              { "text": "Non ho ricevuto risposta, qual è l'anno di nascita? (es. 1990)" }
+            ],
+            "invalid": [
+              { "text": "L'anno {input} non è valido. Deve essere un numero a 4 cifre tra 1900 e 2024." }
+            ],
+            "success": [
+              { "text": "Anno registrato: {input}." }
+            ]
+          },
+          "validationConditions": [
+            {
+              "id": "anno_regex",
+              "type": "regex",
+              "parameters": {
+                "pattern": "^[0-9]{4}$"
+              },
+              "errorMessage": "L'anno deve essere un numero a 4 cifre"
+            },
+            {
+              "id": "anno_range",
+              "type": "range",
+              "parameters": {
+                "min": 1900,
+                "max": 2024
+              },
+              "errorMessage": "L'anno deve essere tra 1900 e 2024"
+            }
+          ]
+        }
+      ],
+      "responses": {
+        "start": [
+          { "text": "Qual è la data di nascita completa? (giorno/mese/anno)" }
+        ],
+        "noMatch": [
+          { "text": "Non ho capito, puoi ripetere la data di nascita? (giorno/mese/anno)" }
+        ],
+        "irrelevantMatch": [
+          { "text": "Mi serve la data di nascita, non altre informazioni. Qual è la data? (giorno/mese/anno)" }
+        ],
+        "noInput": [
+          { "text": "Non ho ricevuto risposta, qual è la data di nascita? (giorno/mese/anno)" }
+        ],
+        "confirmation": [
+          { "text": "Hai detto {input}?" }
+        ],
+        "notConfirmed": [
+          { "text": "Ok, qual è la data di nascita corretta? (giorno/mese/anno)" }
+        ],
+        "success": [
+          { "text": "Data di nascita registrata." }
+        ]
+      },
+      "validationConditions": []
+    },
+    {
+      "id": "indirizzo",
+      "name": "Indirizzo",
+      "required": true,
+      "requiresConfirmation": true,
+      "requiresValidation": false,
+      "subData": [
+        {
+          "id": "tipoVia",
+          "name": "Tipo Via",
+          "required": true,
+          "requiresConfirmation": false,
+          "requiresValidation": false,
+          "responses": {
+            "start": [
+              { "text": "Qual è il tipo di via? (es. Via, Viale, Piazza)" }
+            ],
+            "noMatch": [
+              { "text": "Non ho capito, puoi ripetere il tipo di via? (es. Via, Viale, Piazza)" }
+            ],
+            "irrelevantMatch": [
+              { "text": "Mi serve il tipo di via, non altre informazioni. Qual è il tipo di via? (es. Via, Viale, Piazza)" }
+            ],
+            "noInput": [
+              { "text": "Non ho ricevuto risposta, qual è il tipo di via? (es. Via, Viale, Piazza)" }
+            ],
+            "success": [
+              { "text": "Tipo via registrato: {input}." }
+            ]
+          },
+          "validationConditions": []
+        },
+        {
+          "id": "nomeVia",
+          "name": "Nome Via",
+          "required": true,
+          "requiresConfirmation": false,
+          "requiresValidation": false,
+          "responses": {
+            "start": [
+              { "text": "Qual è il nome della via?" }
+            ],
+            "noMatch": [
+              { "text": "Non ho capito, puoi ripetere il nome della via?" }
+            ],
+            "irrelevantMatch": [
+              { "text": "Mi serve il nome della via, non altre informazioni. Qual è il nome della via?" }
+            ],
+            "noInput": [
+              { "text": "Non ho ricevuto risposta, qual è il nome della via?" }
+            ],
+            "success": [
+              { "text": "Nome via registrato: {input}." }
+            ]
+          },
+          "validationConditions": []
+        },
+        {
+          "id": "numeroCivico",
+          "name": "Numero Civico",
+          "required": true,
+          "requiresConfirmation": false,
+          "requiresValidation": true,
+          "responses": {
+            "start": [
+              { "text": "Qual è il numero civico?" }
+            ],
+            "noMatch": [
+              { "text": "Non ho capito, puoi ripetere il numero civico? Deve essere un numero." }
+            ],
+            "irrelevantMatch": [
+              { "text": "Mi serve il numero civico, non altre informazioni. Qual è il numero civico?" }
+            ],
+            "noInput": [
+              { "text": "Non ho ricevuto risposta, qual è il numero civico?" }
+            ],
+            "invalid": [
+              { "text": "Il numero civico {input} non è valido. Deve essere un numero positivo." }
+            ],
+            "success": [
+              { "text": "Numero civico registrato: {input}." }
+            ]
+          },
+          "validationConditions": [
+            {
+              "id": "civico_regex",
+              "type": "regex",
+              "parameters": {
+                "pattern": "^[0-9]+$"
+              },
+              "errorMessage": "Il numero civico deve essere un numero"
+            }
+          ]
+        }
+      ],
+      "responses": {
+        "start": [
+          { "text": "Qual è l'indirizzo completo?" }
+        ],
+        "noMatch": [
+          { "text": "Non ho capito, puoi ripetere l'indirizzo?" }
+        ],
+        "irrelevantMatch": [
+          { "text": "Mi serve l'indirizzo, non altre informazioni. Qual è l'indirizzo?" }
+        ],
+        "noInput": [
+          { "text": "Non ho ricevuto risposta, qual è l'indirizzo?" }
+        ],
+        "confirmation": [
+          { "text": "Hai detto {input}?" }
+        ],
+        "notConfirmed": [
+          { "text": "Ok, qual è l'indirizzo corretto?" }
+        ],
+        "success": [
+          { "text": "Indirizzo registrato." }
+        ]
+      },
+      "validationConditions": []
+    },
+    {
+      "id": "telefono",
+      "name": "Telefono",
+      "required": true,
+      "requiresConfirmation": true,
+      "requiresValidation": true,
+      "responses": {
+        "start": [
+          { "text": "Qual è il numero di telefono?" }
+        ],
+        "noMatch": [
+          { "text": "Non ho capito, puoi ripetere il numero di telefono? Deve contenere solo numeri." }
+        ],
+        "irrelevantMatch": [
+          { "text": "Mi serve il numero di telefono, non altre informazioni. Qual è il numero di telefono?" }
+        ],
+        "noInput": [
+          { "text": "Non ho ricevuto risposta, qual è il numero di telefono?" }
+        ],
+        "confirmation": [
+          { "text": "Hai detto {input}?" }
+        ],
+        "notConfirmed": [
+          { "text": "Ok, qual è il numero di telefono corretto?" }
+        ],
+        "invalid": [
+          { "text": "Il numero di telefono {input} non è valido. Deve contenere tra 10 e 15 cifre." }
+        ],
+        "success": [
+          { "text": "Telefono registrato: {input}." }
+        ]
+      },
+      "validationConditions": [
+        {
+          "id": "telefono_regex",
+          "type": "regex",
+          "parameters": {
+            "pattern": "^[0-9]{10,15}$"
+          },
+          "errorMessage": "Il numero di telefono deve contenere tra 10 e 15 cifre"
+        }
+      ],
+      "subData": []
+    }
+  ]
+}

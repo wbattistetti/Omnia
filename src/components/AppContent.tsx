@@ -22,7 +22,7 @@ import { FlowEditor } from './Flowchart/FlowEditor';
 import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
-import { DockNode, DockTab, DockTabResponseEditor } from '../dock/types';
+import { DockNode, DockTab, DockTabResponseEditor, DockTabActEditor } from '../dock/types';
 import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
 import { FlowWorkspaceProvider } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
@@ -271,6 +271,42 @@ export const AppContent: React.FC<AppContentProps> = ({
       );
     }
 
+    // Act Editor tab (BackendCall, etc.)
+    if (tab.type === 'actEditor') {
+      const actEditorTab = tab as DockTabActEditor;
+      return (
+        <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+          <ResizableActEditorHost
+            act={tab.act ? {
+              id: tab.act.id,
+              type: tab.act.type,
+              label: tab.act.label,
+              instanceId: tab.act.instanceId
+            } : { id: '', type: 'Message', label: '' }}
+            onClose={() => {
+              setDockTree(prev => closeTab(prev, tab.id));
+            }}
+            onToolbarUpdate={(toolbar, color) => {
+              // Update tab with toolbar and color
+              setDockTree(prev => {
+                return mapNode(prev, n => {
+                  if (n.kind === 'tabset') {
+                    const idx = n.tabs.findIndex(t => t.id === tab.id);
+                    if (idx !== -1 && n.tabs[idx].type === 'actEditor') {
+                      const updatedTab = { ...n.tabs[idx], toolbarButtons: toolbar, headerColor: color } as DockTabActEditor;
+                      return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
+                    }
+                  }
+                  return n;
+                });
+              });
+            }}
+            hideHeader={true}
+          />
+        </div>
+      );
+    }
+
     return <div>Unknown tab type</div>;
   };
 
@@ -438,8 +474,23 @@ export const AppContent: React.FC<AppContentProps> = ({
               headerColor: '#9a4f00', // Orange color from ResponseEditor header
               toolbarButtons: [] // Will be updated via callback
             });
+          } else if (editorKind === 'backend') {
+            // Open BackendCallEditor for BackendCall type
+            return splitWithTab(prev, rootTabsetId, 'bottom', {
+              id: tabId,
+              title: d.label || d.name || 'Backend Call',
+              type: 'actEditor',
+              act: {
+                id: String(d.id),
+                type: d.type,
+                label: d.label || d.name,
+                instanceId: d.instanceId || d.id
+              },
+              headerColor: '#94a3b8', // Gray color for BackendCall
+              toolbarButtons: []
+            } as DockTabActEditor);
           } else {
-            // For other types (backend, etc.), don't open editor if not supported
+            // For other types, don't open editor if not supported
             return prev;
           }
         });

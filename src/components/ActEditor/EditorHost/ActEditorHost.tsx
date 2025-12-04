@@ -4,7 +4,7 @@ import { resolveEditorKind } from './resolveKind';
 import type { EditorProps } from './types';
 import { getAgentActVisualsByType } from '../../Flowchart/utils/actVisuals';
 
-export default function ActEditorHost({ act, onClose }: EditorProps) {
+export default function ActEditorHost({ act, onClose, onToolbarUpdate, hideHeader }: EditorProps) {
   const kind = resolveEditorKind(act);
 
   const Comp = registry[kind];
@@ -17,9 +17,9 @@ export default function ActEditorHost({ act, onClose }: EditorProps) {
     return <div>No editor registered for {kind}</div>;
   }
 
-  // DDTEditor, IntentEditor e TextMessageEditor sono importati direttamente, quindi non hanno bisogno di Suspense
+  // DDTEditor, IntentEditor, TextMessageEditor e BackendCallEditor sono importati direttamente, quindi non hanno bisogno di Suspense
   // Gli altri editori usano lazy loading, quindi hanno bisogno di Suspense
-  const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message';
+  const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message' && kind !== 'backend';
 
   if (!isLazy) {
     // Render diretto per DDTEditor e IntentEditor (più veloce, no lazy loading)
@@ -27,7 +27,7 @@ export default function ActEditorHost({ act, onClose }: EditorProps) {
       <div className="h-full w-full bg-slate-900 flex flex-col">
         <div className="min-h-0 flex-1">
           {/* @ts-expect-error registry type */}
-          <Comp act={act} onClose={onClose} />
+          <Comp act={act} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
         </div>
       </div>
     );
@@ -45,7 +45,7 @@ export default function ActEditorHost({ act, onClose }: EditorProps) {
           </div>
         }>
           {/* @ts-expect-error lazy component */}
-          <Comp act={act} onClose={onClose} />
+          <Comp act={act} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
         </Suspense>
       </div>
     </div>

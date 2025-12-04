@@ -10,6 +10,10 @@ export type ActMeta = {
 export type EditorProps = {
   act: ActMeta;
   onClose?: () => void;
+  onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void;
+  hideHeader?: boolean;
 };
+
+import type { ToolbarButton } from '../../../dock/types';
 
 

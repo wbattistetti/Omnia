@@ -1,769 +1,541 @@
-# Motori - DDT Engine e Flow Orchestrator
+# Motori - DDT Engine - Implementazione
 
 ## Indice
 1. [Panoramica](#panoramica)
-2. [Architettura e Separazione](#architettura-e-separazione)
-3. [Flusso Architetturale](#flusso-architetturale)
-4. [Scalabilità e Cloud](#scalabilità-e-cloud)
-5. [Session Management e Recovery](#session-management-e-recovery)
-6. [DDT Engine - Logica Semplificata](#ddt-engine---logica-semplificata)
-7. [Pseudo-Codice Completo](#pseudo-codice-completo)
-8. [Funzioni Principali](#funzioni-principali)
-9. [Decisioni di Design](#decisioni-di-design)
+2. [DDT Engine](#ddt-engine)
+3. [Pseudo-Codice Completo](#pseudo-codice-completo)
+4. [Funzioni Principali](#funzioni-principali)
+5. [Decisioni di Design](#decisioni-di-design)
+6. [Note Implementative](#note-implementative)
 
 ---
 
 ## Panoramica
 
-Questo documento descrive la logica del **DDT Engine** e del **Flow Orchestrator**.
+Questo documento descrive l'**implementazione** del DDT Engine (DataDialogueTemplate Engine).
 
-### Principi Fondamentali
+Per l'architettura generale del sistema, vedi [Architettura Runtime.MD](./Architettura%20Runtime.MD).
 
-1. **Separazione Completa**: Frontend (React), Compilatore, DDT Engine e Flow Orchestrator sono completamente separati.
-2. **Logica Deterministica**: Il DDT Engine segue una logica lineare e deterministica
-3. **Macchina a Stati**: Ogni nodo (main data o sub-data) ha uno stato che determina quale response mostrare
-4. **Memory Centralizzata**: Tutti i valori raccolti sono salvati in un contesto globale (memory)
-5. **Multi Layer Data Retireval**: L'estrazione dei dati avviene utilizzando pareser determinstici e/o sistmei statistici (regex/rules/NER/LLM)
+### Principi di Implementazione
+
+1. **Logica Deterministica**: Il DDT Engine segue una logica lineare e deterministica
+2. **Macchina a Stati**: Ogni DataNode ha uno stato (Dialogue State) che determina quale response mostrare
+3. **Memory Centralizzata**: Tutti i valori raccolti sono salvati in un contesto globale (memory)
+4. **Multi Layer Data Retrieval**: L'estrazione dei dati avviene utilizzando parser deterministici e/o sistemi statistici (regex/rules/NER/LLM)
+
+### Terminologia
+
+**DDT (DataDialogueTemplate)**: Template che contiene:
+1. La struttura di dati che devo raccogliere (es. Dati Personali = Nominativo (Nome, Cognome), Indirizzo (Tipo Via, Nome Via, Numero Civico, ecc.))
+2. I prompt template che devo usare per chiedere i vari dati/sottodati e per rispondere ai vari stati in cui posso trovarmi: start, noMatch, noinput, confirm, not valid, success
+3. Eventuali regole di validazione
+4. Un response di introduzione (opzionale) che viene mostrato all'inizio se `isAggregate` è true
+5. Un response di success (opzionale) che viene mostrato alla fine quando tutti i dati sono completati
+
+**DataNode**: Un nodo della struttura del DDT che rappresenta un dato (main o sub). Contiene:
+- Il dato da acquisire
+- I suoi responses per ogni dialogue state
+- Le regole di validazione
+
+**Esempio di struttura DDT**:
+
+```
+Dati Personali
+  ├─ introduction: "Ora avrei bisogno dei dati personali del paziente"
+  ├─ successResponse: "Perfetto, ho raccolto tutti i dati personali. Grazie!"
+  │
+  ├─ Nominativo (mainData)
+  │   ├─ responses (start, noMatch, noInput, confirmation, success)
+  │   ├─ Nome (subData)
+  │   │   └─ responses (start, noMatch, noInput, confirmation, success)
+  │   └─ Cognome (subData)
+  │       └─ responses (start, noMatch, noInput, confirmation, success)
+  │
+  └─ Indirizzo (mainData)
+      ├─ responses (start, noMatch, noInput, confirmation, success)
+      ├─ Tipo Via (subData)
+      │   └─ responses (start, noMatch, noInput, confirmation, success)
+      ├─ Nome Via (subData)
+      │   └─ responses (start, noMatch, noInput, confirmation, success)
+      └─ Numero Civico (subData)
+          └─ responses (start, noMatch, noInput, confirmation, success)
+```
+
+Ogni DataNode (main o sub) ha i propri responses per ogni dialogue state, permettendo di gestire in modo specifico ogni fase del dialogo per quel particolare dato. Il DDTInstance può avere un `introduction` (mostrato all'inizio) e un `successResponse` (mostrato alla fine quando tutti i dati sono completati).
 
 ---
 
-## Architettura e Separazione
-
-### Separazione Completa
-
-┌─────────────────┐
-│  React Frontend │  (UI, rendering, user interaction)
-└────────┬────────┘
-         │ HTTP/WebSocket
-         │
-┌────────▼─────────────────────────────┐
-│     API Gateway / Backend Service    │
-│  ┌─────────────────────────────────┐ │
-│  │  Flow Orchestrator (VB.NET)     │ │
-│  │  ┌───────────────────────────┐  │ │
-│  │  │  Flow Compiler (VB.NET)   │  │ │
-│  │  └───────────────────────────┘  │ │
-│  │  ┌───────────────────────────┐  │ │
-│  │  │  DDT Engine (VB.NET)       │  │ │
-│  │  └───────────────────────────┘  │ │
-│  └─────────────────────────────────┘ │
-└──────────────────────────────────────┘
-DOMANDA: PERCHE IL FLOW COMPILER L'HIA MESSO DENTRO IL FLOW ORCHESTRATOR? PERCHE' L'HAI CHAIAMTO FLOW COMPILER? E' UN COMPILER GENERALE PERCHE ANCHE IL DDT VIENE COMPILATO VEDREMO COME.
-```
-
-### Vantaggi della Separazione
-
-1. **Scalabilità**: Backend scalabile indipendentemente
-2. **Riusabilità**: Logica utilizzabile da web, mobile, API
-3. **Testabilità**: Test della logica senza UI
-4. **Manutenibilità**: Cambi al frontend non impattano backend e viceversa
-5. **Deployment**: Frontend e backend deployabili separatamente
-
----
-
-## Flusso Architetturale
-
-### Logica del Flusso
-
-La logica architetturale segue questo flusso:
-
-```
-1. Dati Progetto (nodes, edges, DDT definitions)
-   ↓
-2. Flow Compiler (offline, una volta)
-   ↓
-3. Struttura Dati Compilata (lista di Task, condizioni, DDT references)
-   ↓
-4. Flow Orchestrator (runtime, per ogni sessione)
-   ├─ Legge struttura compilata
-   ├─ Esegue Task in sequenza
-   ├─ Valuta condizioni
-   └─ Chiama DDT Engine quando necessario (GetData task) DDT STA PER DATADIALOGUETEMPLATE E CONTIENE LE REGOLE E I PROMPT NECESSARI PER GESTIRE UN DIALOGO CHE HA LO SCOPO DI ACQUISIRE DEI DATI CHIESIT ALL'UTENTE
-       ↓
-5. DDT Engine
-   ├─ Esegue dialogo per raccogliere dati
-   └─ Ritorna dati raccolti al Flow Orchestrator
-```
-
-### Compilazione vs Runtime
-
-**Compilazione (offline)**:
-- Compila dati progetto in struttura ottimizzata
-- Output: lista piatta di Task con condizioni pre-valutate
-- Fatto una volta per progetto
-- Struttura cachata per performance
-
-**Runtime (per sessione)**:
-- Orchestrator legge struttura compilata
-- Esegue Task in sequenza
-- Chiama DDT Engine solo per GetData
-- Stato session in memoria/Redis
-
-### Implementazione
-
-```pseudocode
-// 1. COMPILAZIONE (offline, una volta)
-compiledStructure = FlowCompiler.compile(projectData)
-// Salva in DB/cache
-
-// 2. RUNTIME (per ogni sessione utente)
-orchestrator = new FlowOrchestrator(compiledStructure)
-orchestrator.setDDTEngine(ddtEngine)  // inietta DDT Engine 'COSA VUOL DIRE CHE INIETTA IL DDTENGINE?
-
-// 3. ESECUZIONE
-orchestrator.start()
-// Internamente:
-//   - Legge Task dalla struttura compilata
-//   - Esegue Task
-//   - Se Task è GetData → chiama ddtEngine.Execute(ddtInstance)
-//   - Continua con prossimo Task
-```
-
-### Scalabilità del Flusso
-
-Questa architettura è scalabile perché:
-- **Compilazione offline**: riduce carico a runtime
-- **Orchestrator leggero**: legge solo, non compila
-- **DDT Engine isolato**: componente riutilizzabile: LEGGE UNA STRUTTURA DATI + PROMPT E EL ESEGUE CON UNA LOGICA FISSA DETERMINSITCA.
-- **Struttura compilata**: può essere cachata e condivisa
-
-INIZIO DOCUMENTO DI ARCHITETTURA ====================================================================================================
-
-
-## Scalabilità e Cloud
-
-### Architettura Cloud-Native per Alto Traffico
-
-Per migliaia di conversazioni simultanee, usa architettura cloud-native scalabile:
-ù
-MI DEVI SPIEGARE MOLTO PIU IN DETTALGIO IN MODO SEMPLICE QUESTA ARCHITTETTURA PERCHE' IO NON SO NULLA DI ARCHIETTURA MA VOGLIO CAPIRE CON PAROLE NON TECNICHE: COS0è UN LAYER, UN GATEWAY, KOAD BALANCER, CONTAINER (AUTO SCALE) , REDIS CLUSTER , POOL
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    API Gateway / Load Balancer              │
-│              (AWS ALB, Azure Front Door, GCP LB)            │
-└───────────────────────┬─────────────────────────────────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        │               │               │
-┌───────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
-│   API Layer  │  │   API Layer│  │   API Layer│
-│  (Container) │  │ (Container)│  │ (Container)│
-│  Auto-scale  │  │  Auto-scale│  │  Auto-scale│
-└───────┬──────┘  └─────┬──────┘  └─────┬──────┘
-        │               │               │
-        └───────────────┼───────────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        │               │               │
-┌───────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
-│   Redis      │  │  Message   │  │  Compiled  │
-│  Cluster     │  │   Queue    │  │  Structure │
-│  (Sessions)  │  │  (RabbitMQ/│  │  (Cache)   │
-│              │  │   SQS)     │  │            │
-└──────────────┘  └────────────┘  └────────────┘
-        │               │               │
-        └───────────────┼───────────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        │               │               │
-┌───────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
-│  Flow        │  │  DDT       │  │  Database  │
-│  Orchestrator│  │  Engine    │  │  (NoSQL)    │
-│  (Stateless) │  │  (Pool)    │  │  (MongoDB/ │
-│              │  │            │  │   CosmosDB)│
-└──────────────┘  └────────────┘  └────────────┘
-```
-
-### Componenti Cloud
-
-**API Layer (Stateless, Auto-scaling)**:
-- Container (Docker/Kubernetes)
-- Min replicas: 3-5
-- Max replicas: 100+
-- CPU/Memory based scaling
-
-**Redis Cluster (Session State)**:
-- AWS ElastiCache / Azure Cache / GCP Memorystore
-- Session state distribuito
-- TTL automatico (1 hour)
-- AOF enabled per persistenza
-
-**Message Queue (Async Processing)**:
-- AWS SQS / Azure Service Bus / GCP Pub/Sub
-- Task asincroni
-- Decoupling
-
-**Database (Persistenza)**:
-- AWS DynamoDB / Azure CosmosDB / GCP Firestore
-- Session backup
-- Audit e analytics
-
-### Pattern: Event-Driven + Stateless
-
-```pseudocode
-┌─────────────────────────────────────────────────────────┐
-│ 1. Richiesta Utente → API Gateway                       │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│ 2. API Layer (Stateless)                                │
-│    - Valida richiesta                                   │
-│    - Recupera sessionId da header/cookie                │
-│    - Carica stato da Redis (se esiste)                  │ 'CAARICA LO STATO PER RIPRENDERE LA SESISONE EVENTUALEMTNE INTERROTTA?
-└───────────────────────┬─────────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│ 3. Flow Orchestrator (Stateless)                        │
-│    - Carica compiled structure da cache                 │
-│    - Carica session state da Redis                      │
-│    - Esegue task corrente                               │  'RIPRENDE DAL PUNTO INTERROTTO?
-└───────────────────────┬─────────────────────────────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        │               │               │
-┌───────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
-│ Task:        │  │ Task:      │  │ Task:      │  QUI IN REALTA' OCCORRONO ALTRI ESECUTORI SI TASKS COME AD ESEMSPIO: CHIUDI LA
-│ SayMessage   │  │ GetData    │  │ BackendCall│  TELEFOANTA, TRASFERISCI AD OPERATORE, INVIA EMAIL, INVIA SMS, ECC
-│ (Sync)       │  │ (Async)    │  │ (Async)    │
-└───────┬──────┘  └─────┬──────┘  └─────┬──────┘
-        │               │               │
-        └───────────────┼───────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│ 4. DDT Engine (Pool)                                    │
-│    - Chiamato solo per GetData task                     │
-│    - Può essere servizio separato                       │
-│    - Pool di worker per parallelizzazione               │ COSA E' UN POOL DI WORKER?
-└───────────────────────┬─────────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│ 5. Salvataggio Stato (Async)                            │
-│    - Aggiorna Redis (fast)                              │
-│    - Pubblica evento su Message Queue                   │  COSA E' MESSAGE QUEUE A COSA A SERVE
-│    - Worker asincrono salva su DB                       │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Performance Targets
-
-Per migliaia di conversazioni:
-- Throughput: 10,000+ req/sec
-- Latency: < 100ms (p95)
-- Availability: 99.9%+
-- Session Recovery: < 500ms
-- Auto-scaling: < 2 min response time
-
----
-
-## Session Management e Recovery
-
-### Strategia Ibrida (Raccomandato)
-
-Approccio bilanciato: in-memory + persistenza async + recovery.
-
-```
-SPIEGA IN DETTAGLIO SOTTO IN PAROLE POVERE E NON TECNICHE
-┌─────────────────────────────────────────────────────────┐
-│  Request Processing                                      │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        │               │               │
-┌───────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
-│   Redis      │  │   DB       │  │   Replica  │
-│  (Hot Cache) │  │  (Backup)  │  │  (Failover)│
-│  TTL: 1h     │  │  (Async)   │  │  AOF       │
-└───────┬──────┘  └─────┬──────┘  └─────┬──────┘
-        │               │               │
-        └───────────────┼───────────────┘
-                        │
-            ┌───────────▼───────────┐
-            │  Recovery Strategy:   │
-            │  - Redis replica       │
-            │  - DB backup          │
-            │  - Eventi critici sync│
-            └───────────────────────┘
-```
-
-### Gestione Sessioni
-
-**Redis (Primary)**:
-```pseudocode
-session:{sessionId} = {
-  state: {...},
-  currentTask: 5,
-  variables: {...},
-  lastActivity: timestamp,
-  ttl: 3600  // 1 hour
-}
-```
-
-**Persistenza (Backup)**:
-- Salvataggio ogni 30 secondi O evento critico
-- Snapshot completo ogni 5 minuti
-- Cold storage per sessioni completate
-
-**Recovery (Se Redis va giù)**:
-1. Redis replica: failover automatico (< 30s)
-2. DB backup: recovery da ultimo snapshot
-3. Eventi critici: sempre salvati sync
-
-### Eventi Critici (Sync)
-
-Questi eventi vengono salvati sincronamente:
-- Task completion
-- DDT step complete
-- User confirmation
-- Validation passed/failed
-
-### Implementazione
-
-```pseudocode
-CLASSE SessionManager:
-    redis: RedisCluster
-    db: Database
-    backupQueue: MessageQueue
-
-    METODO saveState(sessionId, state, isCritical):
-        // Sempre salva su Redis (fast)
-        redis.set(sessionId, state, ttl=3600)
-
-        SE isCritical:
-            // Eventi critici: salva sync
-            db.save(sessionId, state)
-        ALTRIMENTI:
-            // Altri eventi: salva async
-            backupQueue.enqueue(sessionId, state)
-
-    METODO recoverSession(sessionId):
-        // Prova Redis prima
-        state = redis.get(sessionId)
-        SE state ESISTE:
-            RITORNA state
-
-        // Se Redis vuoto, recupera da DB
-        state = db.load(sessionId)
-        SE state ESISTE:
-            // Ricrea in Redis
-            redis.set(sessionId, state, ttl=3600)
-            RITORNA state
-
-        // Nessuna sessione trovata
-        RITORNA null
-```
-
-### Risposta: Recovery Garantito?
-
-**Con architettura proposta (solo Redis)**: NO - se Redis va giù, le sessioni attive si perdono.
-
-**Con architettura migliorata (Redis + DB + Replica)**: SÌ - puoi riprendere:
-- **Redis replica**: failover automatico (< 30s)
-- **DB backup**: recovery da ultimo snapshot
-- **Eventi critici**: sempre salvati sync
-
-FINE DOCUMENTO DI ARCHITETTURA ======================================================================================================
-
-## DDT Engine - Logica Semplificata
+## DDT Engine
 
 ### Flusso Principale
 
-Il DDT Engine segue un flusso DETERMINSTICO
+Il DDT Engine segue un flusso DETERMINISTICO e LINEARE:
 
-1. **Execute**: Funzione principale che coordina il processo
-2. **retrieveData**: Recupera un dato singolo (main o sub)
-3. **confirmData**: Chiede conferma se necessario
-4. **validateData**: Valida il dato con le condizioni definite
+1. **Execute**: Funzione principale che coordina il processo con un ciclo semplice
+2. **GetNextData**: Trova il prossimo dato da recuperare basandosi sugli stati del dato
+3. **GetResponse**: Ottiene il response corretto in base allo stato del dialogo e al counter
+4. **ExecuteResponse**: Esegue il response e incrementa il counter
+5. **InterpretUtterance**: Esegue solo il parsing dell'input utente
+6. **SetState**: Gestisce le transizioni di stato basandosi sul risultato del parsing
 
-### Stati Disponibili
-POSSIAMO CHIAMARLI DIALOGUE STATES?
+### Dialogue States
+
+Gli stati del dialogo (Dialogue States) determinano quale response mostrare:
 
 | Stato | Descrizione | Quando si attiva |
 |-------|-------------|------------------|
 | **start** | Stato iniziale, è LA RICHESTA INIZIALE DEL dato | Quando il nodo diventa attivo |
 | **noMatch** | Input non riconosciuto | ESTRATTORE ritorna `noMatch` |
-| **absoluteNoMatch** | Match assoluto non riconosciuto | Variante di noMatch | C'E' GIA' NO MATCH NO? ASOLUTE NO MATCH NON SERVE
-| **irrelevantMatch**  Match su altro nodo |
+| **irrelevantMatch** | Match su altro nodo rispetto a quello espressamente chiesto | Match su contract di background. Esempio: Bot chiede "Quando è nato?" → Utente risponde "Io sono nato a Milano" (risponde con luogo invece di data di nascita) |
 | **noInput** | Input vuoto | Utente non inserisce nulla |
 | **confirmation** | Chiede conferma del dato | Dato recuperato e confirmation prevista |
 | **notConfirmed** | Dato non confermato | Utente risponde "no" alla confirmation |
-| **retrieved** | Dato recuperato | Dopo match o confirmation |
-| **validated** | Dato validato | Dopo tutte le validazioni passate |
+| **invalid** | Dato non valido | Validazione fallita |
+| **conditionN** | Condizione specifica fallita | Validazione specifica fallita (es. condition1, condition2) |
 | **success** | Dato completato | Dopo validated (se success response esiste) |
 
+### Stati del Dato
+
+Ogni dato (main o sub) ha uno stato interno che determina se deve essere recuperato, confermato o validato:
+
+| Stato | Descrizione |
+|-------|-------------|
+| **empty** | Dato non ancora raccolto |
+| **filled** | Dato raccolto ma non ancora confermato (se richiede conferma) |
+| **toConfirm** | Dato raccolto e in attesa di conferma |
+| **confirmed** | Dato confermato ma non ancora validato (se richiede validazione) |
+| **toValidate** | Dato confermato e in attesa di validazione |
+| **validated** | Dato validato e completato |
+| **acquisitionFailed** | Dato non acquisibile (esauriti tutti i tentativi) |
+
+### Logica di Base
+
+Il DDT Engine procede a fare domande fino a che ha tutti i dati riempiti (per la struttura del DDT in questione), confermati (opzionale) e validati (opzionale).
+
+Si ferma, ovvero esce dal `Execute(DDTInstance)`, quando ha tutto (success) oppure quando ha terminato tutti i tentativi di recovery.
+
+**Gestione dei dati non catturabili**: Se un mainData non si riesce a catturare dopo tutti i tentativi di recovery, invece di uscire completamente dal DDT, il motore potrebbe passare al prossimo dato del DDT. Alla fine, quando tutti gli altri dati sono stati raccolti, torna a richiedere il dato che non si riusciva a catturare. Questo permette di raccogliere il maggior numero possibile di informazioni prima di eventualmente trasferire all'operatore.
+
+**Nota**: Quando sono in conferma, quello che devo estrarre dalla risposta dell'utente è principalmente sì/no, ma può esserci anche una correzione implicita: "No, ho detto Roma, non Milano!".
+
 ---
-LA LOGICA DI BASE è QUESTA:
-IO DEVO PROCEDERE A FARE DOMANDE FINO A CHE HO TUTI I DATI RIEMPITI , CONFERMATI (OPZIONALE)  E VALIDATI (OPZIONALE).
-MI FERMO, OVVERO ESCO DAL EXECUTE(DATAINSTANCE), O QUANDO HO TUTTO (SUCCESS) OPPURE QUANDO HO TERMINATO TUTTI I TENTATIVI DI RECOVERY.
-QUI OVVIAMENTE SI POTREBBE ANCHE APRIRE LA POSSIBILITà DI NON USCIRE DEL TUTTO DAL DDT MA SOLO DAL MAINDATA CEH NO NSI RIESCE A COMPRENDERE.
-PER ESEMPIO POREI NON COMPRENDERE NOME E COGNOME MA PRIMA DI TRASFERIE A OPERATORE CHEIDERE TELEFONO, INDIRIZZIO ECC (STUDIARE QUESTA POSSIBILITA') AL MOMENTO ESCE AL PRIMO "ESAURIMENTO" DI TENTATIVI.
-
-QUIN SI TRATTA DI ITERARE DOMANDA (REPSONSE) - ACQUSIZIONE. IL RESPONSE DIPENDE DALLA STATO DEL DIALOGO) IN CUI VADO A TROVARMI: START, NOMATCH, DA CONFERMARE, NON VALIDO, ECC.
-
-QUINDI UN CICLO DEL TIPO:
-
-DO
-  DE HAI ESTRATTO TUTTO O HAI TERMINATO I TENTATIVI DI RECOVERY ESCI
-  ESEGUI IL RESPONSE IL DIALOGUE STATE CORRENTE
-  ESTRAI DATI DALLA RISPOSTA DELL'UTENTE
-LOOP
-
-OVVIAMENTE QUANDO SONO IN CONFERMA QUELLO CHE DEVO ESTARRE DALLA RISPOSTA DELL'UTENTE E' ANCHE IL CONTENUTO DELLA RISPOSTA SI'/NO
-
-QUESTE OSSERVAZIONI TI DOVREBBERO GUIDARE A RAFFINARE IL PSEUDO CODICE.
-
-DOBBIAMO TROVARE ANCEH UN NOME APPROPRIATO PER DDT (DATADIALOGUETEMPLATE) IN REALà NEL DDT RACCOLGI TANTE INFORMAZIONI.
-1) LA STRUTUTRA DI DATI CHE DEVO RACCOGLIERE (ie dATI PERSONALE = NOMINATIVO (NOME, COGNOME) , INDIRIZZO (TIPO VIA, NOME VIA, NUMERICO CIVICO ECC )
-2) I PROMPT TEMAPLTE CHE DEVO USARE PER CHEIDERE I VARI DATI / SOTTODATI
-3) EVENTUALI REGOLE DI VALIDAZIONE E MESSAGGI INFORMATIVI RELATIVI
-4) MESSAGGI PER IL NOMATCH E IL NO INPUT E IL SUCCESS
-
-POTREI CHIAMARLO DATA DIALOGUE TEMPLATE NON MI PARE MALE COME NOME IN EFFETTI.
-MA ALLORA NODE POSSIAMO CHAIMARLO COME DATANODE (CHE DA' L'IDEA CHE LA STRUTTURA DATI POTREBBE ESSERE UN ALBERO CON PIU MAINDADATA CIASCUN MAINDA CON SOTTODATI ) COSA NE PENSI?
-
 
 ## Pseudo-Codice Completo
 
-### Funzione Principale: Execute  IL DDT INSTANCE
+### Funzione Principale: Execute
 
 ```pseudocode
 FUNZIONE Execute(DDTInstance):
     state = 'start'
 
     SE DDTInstance.isAggregate E DDTInstance.introduction ESISTE:
-        executeResponse(DDTInstance.introduction)  'PER ESEMPIO: " Ora avrei bisogno dei dati personali del paziente"
+        executeResponse(DDTInstance.introduction)
+        // Esempio: "Ora avrei bisogno dei dati personali del paziente"
 
-    MENTRE true:  'qui parte un loop
-        dataToRetrieve = GetNextData(DDTInstance)  // primo maindata vuoto o non valido o primo subdata vuoto o non valido
+    // Ciclo principale
+    MENTRE true:
+        currDataNode = GetNextData(DDTInstance)
+        // Primo mainData vuoto o non acquirable o non valido o primo subData vuoto o non valido
+        // Oppure primo mainData/subData non confermato o non validato
 
-        SE dataToRetrieve === null:
-            // Tutti i dati completati: i dati sono già nel contesto globale
-            // Non ritorna nulla, l'esecuzione termina naturalmente
+        SE currDataNode === null:
+            // Tutti i dati completati o acquisitionFailed: i dati sono già nel contesto globale
             INTERROMPI
 
-        // 1. Retrieve
-        retrieveData(dataToRetrieve, state)  'RETRIEVEDATA SOSTANZAILMENTE FA UNA RICHIESTA (PROMPT) E INTERPRETA LA RISPOSTA E AL SUO INTERNO GESTISCE IL NO MATCH, L'IRRELEVANT MATCH, E IL NOINPUT.
+        // Ottieni il response corretto in base allo stato e al counter
+        // GetResponse ritorna sempre un response (mai null): se non ci sono più tentativi,
+        // ritorna un termination response con exit condition
+        currResponse = GetResponse(currDataNode, state)
 
-        QUI OVVIAMENTE POTREI ANCHE AVERE ESAURITO TUTTI I TENTAVI DI RECOVERY E QUIN POTREI VOLER USCIRE. UNA SOLUZIONE POTREBBE ESSERE CHE DATA RETRIVE RESTIUISCA DEI VALORI: SUCCESS, FAILED (FAILED VUOL DIRE CHE LA CONVERSAZIONE CON IL BOT è TERMINATA: O TRASFERITA ALL'OPERATORE O CHIUSA)
-        IF FAILED THEN INTERROMPI TUTTO.
+        // Esegui il response (mostra messaggio, esegue azioni, incrementa counter)
+        termination = ExecuteResponse(currResponse, state, currDataNode)
 
-        // 2. Confirm (se necessario) SE ARRIVA QUEI è PERCHE' UN DATO "CANDIDATO" E' STATO ESTRATTO
-        SE requiresConfirmation(dataToRetrieve):
-            confirmData(dataToRetrieve, state) 'CONFIRM DATA GETISCE IL RICONSICMENTO DEL SI/NO QUINDI EVENTUALMENTE CON UNA SUA RECOVERY.
+        SE termination === true:
+            // Exit condition attivata: marca il dato come acquisitionFailed
+            // e continua se ce ne sono con altri dati (partial failure)
+            markAsAcquisitionFailed(currDataNode)
+            state = 'start'  // Reset state per il prossimo dato
+            CONTINUA  // GetNextData prenderà il prossimo dato
 
-        QUI MANCA CHE SE IL DATO NON è CONFERMATO
+        // Interpreta l'input utente (solo parsing, nessuna gestione di response)
+        parseResult = InterpretUtterance(currDataNode, state)
 
-        // 3. Validate
-        SE NOT validateData(dataToRetrieve):
-            state = 'invalid'  // getResponse sa quale response prendere
-            // Loop continua: retrieveData riprenderà con state='invalid'
+        // Aggiorna lo stato basandosi sul risultato del parsing
+        // SetState gestisce sia lo stato del dialogo che lo stato del dato
+        state = SetState(parseResult, state, currDataNode)
+
+    // Dopo l'uscita dal ciclo: se esiste un success response a livello di DDT, eseguilo
+    // Questo è la chiusura finale del DDT (es. "Perfetto, ho raccolto tutti i dati personali. Grazie!")
+    SE DDTInstance.successResponse ESISTE:
+        executeResponse(DDTInstance.successResponse)
+
 ```
 
-### Funzione: retrieveData
+### Funzione: GetNextData
 
 ```pseudocode
-FUNZIONE retrieveData(dataToRetrieve, state):
-    MENTRE true:
-        currResponse = getResponse(dataToRetrieve, state)
+FUNZIONE GetNextData(DDTInstance):
+    // Stati che richiedono attenzione, in ordine di priorità
+    attentionStates = ['empty', 'invalid', 'toConfirm', 'toValidate']
 
-        SE currResponse === null:
-            INTERROMPI  // nessun response disponibile
+    // Raccogli tutti i nodi candidati (mainData e subData) escludendo quelli in acquisitionFailed
+    allCandidates = []
 
-        executeResponse(currResponse, state)
+===================================
+    devi cercare il primo maindata o subdata empty, o il primo maindata to confirm (o il sudata to confirm ma solo se il subdta ha un validation criterion) o invalid
 
-        SE currResponse.hasExitCondition:
-            INTERROMPI  // es. end call, transfer call
+    quindi devi mettere delle funzioni MainData.isEmpty
 
-        inputResult = ProcessUserInput(dataToRetrieve)
-        state = determineNextState(inputResult, state, dataToRetrieve)
+    PER OGNI mainData IN DDTInstance.mainData.where(stato <> AcqusitonFailed):
+        mainState = getDataState(mainData.id)
 
-        CASO state:
-            'absoluteNoMatch', 'irrelevantMatch', 'noInput':
-                CONTINUA  // riprova: getResponse prenderà escalation response
 
-            'Match':
-                RITORNA  // dato singolo recuperato (main o sub), esci
-```
+        // Se mainData è composito (ha subData), gestisci la logica di bubbling
+        SE mainData.subData !== null E mainData.subData.length > 0:
+            // MainData composito: è empty solo se TUTTI i subData sono empty
+            allSubsEmpty = true
+            hasSubsNeedingAttention = false
 
-### Funzione: confirmData
+            PER OGNI subData IN mainData.subData:
+                subState = getDataState(subData.id)
 
-```pseudocode
-FUNZIONE confirmData(dataToRetrieve, state):
-    MENTRE true:
-        currResponse = getResponse(dataToRetrieve, 'confirmation')
+                SE subState === 'acquisitionFailed':
+                    CONTINUA  // Salta subData falliti
 
-        SE currResponse === null:
-            RITORNA  // nessun confirmation response, salta conferma
+                SE subState !== 'empty':
+                    allSubsEmpty = false
 
-        executeResponse(currResponse, state)
+                // Se subData ha bisogno di attenzione, aggiungilo ai candidati
+                SE subState IN attentionStates:
+                    hasSubsNeedingAttention = true
+                    allCandidates.push(subData)
 
-        inputResult = ProcessUserInput(dataToRetrieve)  // Confirmed/NotConfirmed/NoMatch  'QUI è SBAGLATO PERCHè NON C'è UNA DATATORETRIEVE MA IL RICONOSCIMENTO DI SI/NO ANCEH SE POTREBBE ESSERCI UNA CORREZIONE IMPLICITA: "NO, HO DETTO ROMA, NON MILANO!"
-  LA GRAMMATICA è SEMPRE QUELLA PER TUTTI I DATI PERCHE SI TRATTA DI UNA GRAMMATICA DI CONFERMA
-  IN PARALLELO DEVE ESSERE COMUQNUE ATTIVAL A GRAMATICA DI RICATTURA DEL DATO
-
-        SE inputResult === 'Confirmed':
-            markAsConfirmed(dataToRetrieve)
-            RITORNA
-
-        ALTRIMENTI SE inputResult === 'NotConfirmed':
-        SE ESISTE UNO STEP DI NOT CONFIRMED (CI SONO RECOVERY DEFINITE) STATE=NOTCONFIRMED
-        ALTRIMENTI SE ESISTE NOMATCH STATO= NOMATCH
-           ALTRIMENTI
-            state = 'start'  // riacquisizione
-            RITORNA
-
+            // Se tutti i subData sono empty, il mainData è empty
+            SE allSubsEmpty E NOT hasSubsNeedingAttention:
+                SE 'empty' IN attentionStates:
+                    allCandidates.push(mainData)
+            // Altrimenti il mainData è parziale: i subData che necessitano attenzione sono già stati aggiunti
         ALTRIMENTI:
-            // NoMatch su yes/no - gestione errore standard
-            CONTINUA  // riprova confirmation
+            // MainData semplice: aggiungilo se ha bisogno di attenzione
+            SE mainState IN attentionStates:
+                allCandidates.push(mainData)
+
+    // Cerca il primo candidato con uno degli stati di attenzione (in ordine di priorità)
+    PER OGNI state IN attentionStates:
+        candidate = allCandidates.FirstOrDefault(n => getDataState(n.id) === state)
+        SE candidate !== null:
+            RITORNA candidate
+
+    RITORNA null  // Tutti i dati completati
 ```
 
-### Funzione: validateData
+### Funzione: GetResponse
 
 ```pseudocode
-FUNZIONE validateData(dataToRetrieve):
-    validationConditions = getValidationConditions(dataToRetrieve)
+FUNZIONE GetResponse(currDataNode, state):
+    // currDataNode è direttamente il DDTNode (DataNode) con tutte le sue proprietà
+    // Il response da attivare dipende dallo stato del dialogo
+    // Per ogni stato verifica se ci sono response specifici,
+    // se no fa un fallback a quello che c'è
 
-    PER OGNI condition IN validationConditions:
-        SE NOT executeValidation(condition, dataToRetrieve):
-            markAsInvalid(dataToRetrieve)
-            RITORNA false  // non valido
-
-    RITORNA true  // tutte le validazioni passate
-```
-
-### Funzione: getResponse (Semplificata)
-
-```pseudocode
-FUNZIONE getResponse(dataToRetrieve, state):
-
-    NON CAPISCO QUESTA LOGICA: QUI DOVRESTI ANDARE A VEDERE NELLA STRUTURA DEI DATI CHE è AL MASSIMO UN AGGREGATO DI MAINDATA, NELLA SEQUENZA:
-       IL PRIMO MAIN DATO RIEMPITO MA NON VALIDO 8VA CHIESTO DI NUOVO PERCHE' NON SI PROCEDE SOLO SE I DATRI SONO VALIDI
-       SE NON ESISTE NESSUN MAINDATO NON VALIDO, VERIFICA IL PROMO DATO NON RIEMPITO. SE IL MAINDATO HA SOTTODATI, CERCA IL PRIMO SOTTODATO VUOTO
-     OVVIAMENTE PER OGNI DATO DEVE ESSERCI UNO STATO: .EMPTY, .CONFIRMED, .VALID
-
-    QUESTA ISTRUZIONE NON MI PARE ABBIA MOLTO SENSO: node = SE dataToRetrieve.isMain ALLORA dataToRetrieve.mainData ALTRIMENTI dataToRetrieve.subData
-
-   IL RESPONSE DA ATTIVARE DIPENDE OVVIAMENTE DALLO STATO DEL DIALOGO, PER OGNI STATO VERIFICA SE CI SONO REPSONSE SPECIFICI, SE NO FA UNA FALLBACK A QUELLO CHE C'E'
     CASO state:
-        'NoMatch', 'irrelevantMatch', 'noInput':
-            SE node.responses(state).count === 0:
+        'noMatch', 'irrelevantMatch', 'noInput':
+            SE currDataNode.responses(state).count === 0:
                 state = 'start'  // fallback
 
         'confirmation', 'success':
-            SE node.responses(state).count === 0:
-                RITORNA null  'SE NON C'è NESSUN RESPONSE DI CONFIRAMTION VUOL DIRE CHE NON OCCORRE CONFERMARE IL DATO!
+            SE currDataNode.responses(state).count === 0:
+                // Se non c'è response di confirmation/success, ritorna un termination response
+                // che indica che non occorre confermare/mostrare success
+                RITORNA createTerminationResponse('noResponseNeeded')
 
         'notConfirmed':
-            SE node.responses(state).count === 0:
+            SE currDataNode.responses(state).count === 0:
+                state = 'start'  // fallback
+
+        'invalid', 'condition1', 'condition2', ...:
+            SE currDataNode.responses(state).count === 0:
                 state = 'start'  // fallback
 
     // Crop counter a maxRecovery e array length
-    counter = counters(state) 'VEDE A QUALE CONTEGGIO E' ARRIVATO PER QUELLO STATO
-    counter = min(counter, maxRecovery(state), node.responses(state).count - 1) ' E LO LIMITA AL MASSIMO INDICE (PER EVITARE LOOP INFINITO SI PUO METTERE UNA CONDIZIONE DI USCITA FORZATA ANCHE SE DA DESING DOVREBBE ESSERE ESPLICITAMENTE MESSA UNA CODIZIONE DI USCITA)
+    counter = counters(state)
+    counter = min(counter, maxRecovery(state), currDataNode.responses(state).count - 1)
 
-    RITORNA node.responses(state)[counter]
+    // Verifica che ci sia un response disponibile dopo il crop
+    SE currDataNode.responses(state).count === 0:
+        // Nessun response disponibile dopo tutti i fallback: esauriti i tentativi
+        RITORNA createTerminationResponse('noMoreAttempts')
+
+    RITORNA currDataNode.responses(state)[counter]
+```
+
+### Funzione: ExecuteResponse
+
+```pseudocode
+FUNZIONE ExecuteResponse(response, state, currDataNode):
+    SE response ESISTE:
+        // Se è un termination response con 'noResponseNeeded', non fare nulla e continua
+        SE response.hasExitCondition E response.exitType === 'noResponseNeeded':
+            RITORNA false  // Continua senza mostrare nulla
+
+        // Sostituisce placeholder {input} se presente
+        SE response.hasPlaceholder('{input}'):
+            inputValue = getFormattedValue(currDataNode)
+            response.message = replacePlaceholder(response.message, '{input}', inputValue)
+
+        // Mostra messaggio (solo se presente)
+        SE response.message !== null:
+            showMessage(response.message)
+
+        // Esegue azioni se presenti
+        // Qui praticamente deve eseguire tutta la serie di task contenuti nel response,
+        // attivando l'executor opportuno a seconda del task
+        PER OGNI action IN response.actions:
+            executeAction(action)
+            // Es. SayMessage, BackendCall, EndCall, TransferToOperator, SendEmail, SendSMS, ecc.
+
+        // Incrementa counter per questo stato (crop incluso)
+        recoveryCounter(state) = min(recoveryCounter(state) + 1, maxRecovery(state))
+
+        // Controlla se c'è una exit condition
+        SE response.hasExitCondition:
+            RITORNA true  // Termina l'esecuzione (marca dato come acquisitionFailed in Execute)
+
+    RITORNA false  // Continua l'esecuzione
+```
+
+### Funzione: InterpretUtterance
+
+```pseudocode
+FUNZIONE InterpretUtterance(currDataNode, state):
+    // currDataNode è direttamente il DDTNode con tutte le sue proprietà
+    // Carica contract: se abbiamo iniziativa mista, i contract caricati potrebbero essere:
+    // - Il contract in primo piano (quello per cui si è fatta la richiesta esplicita)
+    // - I contracts di background (capaci di catturare iniziativa mista, sidetalks, comandi, cambi di contesto, ecc.)
+    contract = loadContract(currDataNode)
+    backgroundContracts = loadBackgroundContracts(DDTInstance)
+
+    userInput = waitForUserInput()
+
+    SE userInput === null OPPURE userInput === '':
+        RITORNA { result: 'NoInput' }
+
+    // Se siamo in stato di conferma, prova prima la correzione implicita e poi sì/no
+    SE state === 'confirmation':
+        // Prima prova se è una correzione implicita
+        dataResult = contract.extract(userInput)
+        SE dataResult.status === 'match':
+            // Correzione implicita: "No, ho detto Roma, non Milano!"
+            updateMemoryFromExtraction(dataResult, currDataNode)
+            RITORNA { result: 'Confirmed' }  // Considera confermato con il nuovo valore
+
+        // Altrimenti prova sì/no
+        SE isYes(userInput):
+            RITORNA { result: 'Confirmed' }
+        ALTRIMENTI SE isNo(userInput):
+            RITORNA { result: 'NotConfirmed' }
+        ALTRIMENTI:
+            RITORNA { result: 'NoMatch' }
+
+    // Se siamo in stato di validazione, esegui le validazioni
+    SE state === 'invalid' OPPURE state IN ['condition1', 'condition2', ...]:
+        // L'utente ha già fornito un input, quindi riprova l'estrazione
+        extractionResult = contract.extract(userInput)
+        SE extractionResult.status === 'match':
+            updateMemoryFromExtraction(extractionResult, currDataNode)
+            // Esegui le validazioni
+            validationResult = executeAllValidations(currDataNode)
+            SE validationResult.valid:
+                RITORNA { result: 'Validated' }
+            ALTRIMENTI:
+                RITORNA { result: 'Invalid', conditionId: validationResult.failedConditionId }
+        ALTRIMENTI:
+            RITORNA { result: 'NoMatch' }
+
+    // Prova prima il contract in primo piano
+    extractionResult = contract.extract(userInput)
+
+    SE extractionResult.status === 'match':
+        // Match sul contract in primo piano = Match "pieno"
+        updateMemoryFromExtraction(extractionResult, currDataNode)
+        RITORNA { result: 'Match' }
+
+    // Prova i contract di background
+    PER OGNI bgContract IN backgroundContracts:
+        bgResult = bgContract.extract(userInput)
+        SE bgResult.status === 'match':
+            // Match su contract di background = Match "irrilevante"
+            updateMemoryFromExtraction(bgResult, bgResult.matchedNodeId)
+            RITORNA { result: 'irrelevantMatch' }
+
+    // Nessun match trovato
+    RITORNA { result: 'NoMatch' }
+```
+
+### Funzione: SetState
+
+```pseudocode
+FUNZIONE SetState(parseResult, currentState, currDataNode):
+    // Aggiorna sia lo stato del dialogo che lo stato del dato basandosi sul risultato del parsing
+    // currDataNode è direttamente il DDTNode con tutte le sue proprietà
+
+    CASO parseResult.result:
+        'Match':
+            // Dato recuperato: aggiorna lo stato del dato
+            markAsFilled(currDataNode)
+
+            // Se è un mainData con subData, continua a raccogliere subData
+            SE currDataNode.subData !== null E currDataNode.subData.length > 0:
+                missingSubs = findMissingRequiredSubs(currDataNode)
+                SE missingSubs.length > 0:
+                    RITORNA 'start'  // Continua a raccogliere subData, stato dato rimane 'filled'
+
+            // Se richiede conferma, passa allo stato di conferma
+            SE requiresConfirmation(currDataNode):
+                setDataState(currDataNode, 'toConfirm')
+                RITORNA 'confirmation'
+            ALTRIMENTI SE hasValidation(currDataNode):
+                // Se non richiede conferma ma ha validazione, passa direttamente alla validazione
+                setDataState(currDataNode, 'toValidate')
+                RITORNA currentState  // Lo stato del dialogo rimane invariato, la validazione verrà gestita nel prossimo ciclo
+            ALTRIMENTI:
+                // Dato completato senza conferma né validazione
+                markAsCompleted(currDataNode)
+                RITORNA currentState
+
+        'NoMatch':
+            RITORNA 'noMatch'
+
+        'irrelevantMatch':
+            RITORNA 'irrelevantMatch'
+
+        'NoInput':
+            RITORNA 'noInput'
+
+        'Confirmed':
+            // Dato confermato: aggiorna lo stato del dato
+            markAsConfirmed(currDataNode)
+
+            // Se richiede validazione, passa alla validazione
+            SE hasValidation(currDataNode):
+                setDataState(currDataNode, 'toValidate')
+                RITORNA currentState  // Lo stato del dialogo rimane invariato, la validazione verrà gestita nel prossimo ciclo
+            ALTRIMENTI:
+                // Dato completato dopo conferma
+                markAsCompleted(currDataNode)
+                RITORNA currentState
+
+        'NotConfirmed':
+            // Gestione recovery per notConfirmed
+            SE currDataNode.responses('notConfirmed').count > 0:
+                RITORNA 'notConfirmed'
+            ALTRIMENTI SE currDataNode.responses('noMatch').count > 0:
+                RITORNA 'noMatch'
+            ALTRIMENTI:
+                // Riacquisizione: fallback a 'start'
+                RITORNA 'start'
+
+        'Invalid':
+            // Validazione fallita: aggiorna lo stato del dato e ritorna lo stato della condizione fallita
+            markAsInvalid(currDataNode, parseResult.conditionId)
+            RITORNA parseResult.conditionId  // Es. 'invalid' o 'condition1', 'condition2', ecc.
+
+        'Validated':
+            // Dato validato: aggiorna lo stato del dato
+            markAsValidated(currDataNode)
+            markAsCompleted(currDataNode)
+            RITORNA 'success'  // Opzionale: mostra success response se presente
+
+        DEFAULT:
+            RITORNA 'noMatch'
 ```
 
 ---
 
 ## Funzioni Principali
 
-### GetNextData
-
-Trova il prossimo dato vuoto o non valido da recuperare.
-
-```pseudocode
-FUNZIONE GetNextData(DDTInstance):
-    PER OGNI mainData IN DDTInstance.mainData:
-        SE isEmpty(mainData) OPPURE isInvalid(mainData):
-            RITORNA { mainData, isMain: true, nodeId: mainData.id }
-
-        SE requiresConfirmation(mainData) E NOT isConfirmed(mainData): IL DATO è DA RIACQUISIRE
-            RITORNA { mainData, isMain: true, nodeId: mainData.id }
-
-        SE mainData.hasSubData():
-            missingSubs = findMissingRequiredSubs(mainData)
-            SE missingSubs.length > 0:
-                RITORNA { mainData, subData: missingSubs[0], isMain: false, nodeId: missingSubs[0].id }
-
-    RITORNA null
-```
-
-### ProcessUserInput
-
-Processa l'input utente e ritorna il risultato (Match/NoMatch/NoInput/Confirmed/NotConfirmed).
-
-```pseudocode
-FUNZIONE ProcessUserInput(dataToRetrieve):
-    node = SE dataToRetrieve.isMain ALLORA dataToRetrieve.mainData ALTRIMENTI dataToRetrieve.subData 'NON HO CPAITO QUESTA ISTRUZIONE. IL DATA TO RETRIEVE PASSARTO NON è GIA' IL NODO DA ACQUISIRE? CHE SENSO HA DISTINBGUERE TRA NODE E DATATORTRIEVE NON E' FUROVIANTE UNA DUPLICAZIONE CONCETTUALE? DEVI VEDERE COME è DEFINTIO IL DDT TEMPLATE, FORSE è GIUSOT PARALARE DI NODE PERCHE OLTRE AL TIPO DI DATO HA ASSOCIATI ANCHE I RESPONSE REALTIVI. NON SO SE NODE SIA IL TERMINE PIU' GIUSTO. FORSE CHIAMARLO DIALOGUENODE? A CUI E' ASSOCIATA LA SERIE DEI REPSONSE E IL DATA DA ACQUISIIRE? COSA NE PENSI?
-
-    contract = loadContract(node)  'QUI SE ABBIAMO LA INZIATIVA MISTA I CONTRACT CARICATI POTREBBE ESSERE IL CONTRACT IN PRIMO PIANO E I CONTRACTS DI BACKGROUND
-    IL CONTRACT IN PRIMO PIANO E' QUELLO PER CUI SI E' FATTA LA RICHEISTA ESPLICITA
-    I CONTRACTS IN SECONDO PIANO SONO QUELLI CAPACI DI CATTURARE INIZIATIVA MISTA, SIDETALKS, COMANDI, CAMBI DI CONTESTO, ECC
-
-    userInput = waitForUserInput()
-
-    SE userInput === null OPPURE userInput === '':
-        RITORNA 'NoInput'
-
-    extractionResult = contract.extract(userInput)
-
-    CASO extractionResult.status:
-        'match':
-        'QUI DOBBIAMO DISITNGUIRE TRA MATCH DEL CONCTRAC IN PRIMO PAIANO O NO. SE E' QUELLO IN PRIMO PIANO ALLORA è UN MATCH "PIENO" ALTIRMENTI E' UN MATCH "IRRILEVANTE"
-
-            // Salva valore in memory. GIUSTAMENTE I VALORI MATCHATI LI SALVA TTUTI IN MEMORY
-            'QUI NON HO CAPITO COSA FAI IL PORBLEMA DI CAPIRE COSA CHIEDERE DOPO NON DIPENDE DAL GETDATATORETIREVE VISTO PRIMA ?
-            SEI SICURO CHA VADA FATTO QUI ?  QUI DOVREBBE SOLO AGGIORNARE IL MEMORU CON QUELLO CHE MATTHCAT SE HA MATCHATO OPPURE DIRE SE NON HA MATCHATO PER NIENTE OPPURE SE HA FATTO UN IRRILEVANT MATCH
-            O QUI STAI SOLO FACENDO IL CODICE CHE FA L'UPDATE IN MEMPRY NELLE CASELLE CORRETTE?
-            SE dataToRetrieve.isMain E mainData.isComposite():
-                PER OGNI (canonicalKey, value) IN extractionResult.value:
-                    subId = getSubIdForCanonicalKey(contract, canonicalKey)
-                    updateMemory(subId, value)
-            ALTRIMENTI:
-                updateMemory(dataToRetrieve.nodeId, extractionResult.value)
-
-            SE extractionResult.matchedNodeId === dataToRetrieve.nodeId:
-                RITORNA 'Match'
-            ALTRIMENTI:
-                RITORNA 'irrelevantMatch'
-
-        'noMatch':
-            RITORNA 'NoMatch'
-
-        'noInput':
-            RITORNA 'NoInput'
-
-        DEFAULT:  'COS'E' QUESTO DEFAULT?
-            RITORNA 'NoMatch'
-```
-
-### ProcessUserInput (per Confirmation)
-
-Versione speciale per processare yes/no.
-
-```pseudocode
-FUNZIONE ProcessUserInput(dataToRetrieve) PER CONFIRMATION:
-    userInput = waitForUserInput()
-
-    SE isYes(userInput):
-        RITORNA 'Confirmed'
-    ALTRIMENTI SE isNo(userInput):
-        RITORNA 'NotConfirmed'
-    ALTRIMENTI:
-        RITORNA 'NoMatch'
-```
-
-### determineNextState
-
-Determina il prossimo stato in base al risultato dell'input.
-
-```pseudocode
-FUNZIONE determineNextState(inputResult, currentState, dataToRetrieve):
-QUESTA FUNZIONE SIAMO SICURI CHE SIA CORRETTA COSI'? E SIAMO SICURI CHE SIA MNECESSARIA NON è LO STAOT GIà RISOLTA NELLE FUNZIONI PRECEDENTI? MAGARI MI SBALGIO, RAGIONIAMOCI!!
-    CASO inputResult:
-        'Match':
-            SE dataToRetrieve.isMain:
-                mainData = dataToRetrieve.mainData
-                SE mainData.hasSubData():
-                    missingSubs = findMissingRequiredSubs(mainData)
-                    SE missingSubs.length > 0:
-                        RITORNA { state: 'start', context: 'CollectingSub', nextDataId: missingSubs[0].id }
-                RITORNA { state: 'retrieved' }
-            ALTRIMENTI:
-                mainData = dataToRetrieve.mainData
-                missingSubs = findMissingRequiredSubs(mainData)
-                SE missingSubs.length > 0:
-                    RITORNA { state: 'start', context: 'CollectingSub', nextDataId: missingSubs[0].id }
-                ALTRIMENTI:
-                    RITORNA { state: 'retrieved' }
-
-        'NoMatch':
-            RITORNA { state: 'absoluteNoMatch' }
-
-        'irrelevantMatch':
-            RITORNA { state: 'irrelevantMatch' }
-
-        'NoInput':
-            RITORNA { state: 'noInput' }
-
-        'Confirmed':
-            RITORNA { state: 'retrieved' }
-
-        'NotConfirmed':
-            RITORNA { state: 'notConfirmed' }
-
-        DEFAULT:
-            RITORNA { state: 'absoluteNoMatch' }
-```
-
-### executeResponse
-
-Esegue il response e incrementa il counter.
-
-```pseudocode
-QUI PRATICAMENTE DEVE ESEGUIRE TUTTA LA SERIE DI TASK CONTENUTI NEL REPSONSE ATTIVANTO L'EXECUTER OPPORTUNO A SECONDA DEL TASK, DICO BENE?
-FUNZIONE executeResponse(response, state):
-    SE response ESISTE:
-        // Sostituisce placeholder {input} se presente
-        SE response.hasPlaceholder('{input}'):
-            inputValue = getFormattedValue(dataToRetrieve)
-            response.message = replacePlaceholder(response.message, '{input}', inputValue)
-
-        // Mostra messaggio
-        showMessage(response.message)
-
-        // Esegue azioni se presenti
-        PER OGNI action IN response.actions:
-            executeAction(action)
-
-        // Incrementa counter per questo stato (crop incluso)
-        recoveryCounter(state) = min(recoveryCounter(state) + 1, maxRecovery(state))
-
-    RITORNA response.requiresUserInput
-```
-
 ### Funzioni Helper
 
 ```pseudocode
-FUNZIONE requiresConfirmation(dataToRetrieve):
-    node = dataToRetrieve.mainData
-    RITORNA node.responses('confirmation').count > 0
+FUNZIONE updateMemoryFromExtraction(extractionResult, currDataNode):
+    // Se è un mainData composito (con subData), aggiorna i subData
+    SE currDataNode.subData !== null E currDataNode.subData.length > 0 E currDataNode.isComposite():
+        PER OGNI (canonicalKey, value) IN extractionResult.value:
+            subId = getSubIdForCanonicalKey(contract, canonicalKey)
+            updateMemory(subId, value)
+    ALTRIMENTI:
+        updateMemory(currDataNode.id, extractionResult.value)
 
-FUNZIONE markAsConfirmed(dataToRetrieve):
-    updateMemory(dataToRetrieve.mainData.id, { confirmed: true })
+FUNZIONE requiresConfirmation(currDataNode):
+    RITORNA currDataNode.responses('confirmation').count > 0
 
-FUNZIONE getValidationConditions(dataToRetrieve):
-    mainData = dataToRetrieve.mainData
-    RITORNA mainData.validationConditions
+FUNZIONE hasValidation(currDataNode):
+    RITORNA currDataNode.validationConditions.count > 0
 
-FUNZIONE executeValidation(condition, dataToRetrieve):
-    mainData = dataToRetrieve.mainData
-    values = getMemoryValues(mainData)
+FUNZIONE getDataState(nodeId):
+    memoryEntry = getMemoryValue(nodeId)
+    SE memoryEntry === null:
+        RITORNA 'empty'
+    ALTRIMENTI:
+        RITORNA memoryEntry.state  // 'filled', 'toConfirm', 'confirmed', 'toValidate', 'validated', 'completed', 'acquisitionFailed'
+
+FUNZIONE setDataState(currDataNode, newState):
+    // Accetta currDataNode (DDTNode) e aggiorna lo stato nella memory
+    updateMemory(currDataNode.id, { state: newState })
+
+FUNZIONE markAsFilled(currDataNode):
+    setDataState(currDataNode, 'filled')
+
+FUNZIONE markAsConfirmed(currDataNode):
+    setDataState(currDataNode, 'confirmed')
+
+FUNZIONE markAsValidated(currDataNode):
+    setDataState(currDataNode, 'validated')
+
+FUNZIONE markAsCompleted(currDataNode):
+    setDataState(currDataNode, 'completed')
+
+FUNZIONE markAsInvalid(currDataNode, conditionId):
+    setDataState(currDataNode, 'invalid')
+    updateMemory(currDataNode.id, { invalidConditionId: conditionId })
+
+FUNZIONE markAsAcquisitionFailed(currDataNode):
+    setDataState(currDataNode, 'acquisitionFailed')
+
+FUNZIONE createTerminationResponse(exitType):
+    // Crea un response speciale con exit condition
+    // exitType può essere: 'noMoreAttempts' (esauriti i tentativi) o 'noResponseNeeded' (non serve response)
+    RITORNA {
+        message: null,  // Nessun messaggio da mostrare
+        actions: [],
+        hasExitCondition: true,
+        exitType: exitType  // 'noMoreAttempts' o 'noResponseNeeded'
+    }
+
+FUNZIONE executeAllValidations(currDataNode):
+    validationConditions = getValidationConditions(currDataNode)
+
+    PER OGNI condition IN validationConditions:
+        SE NOT executeValidation(condition, currDataNode):
+            RITORNA { valid: false, failedConditionId: condition.id }
+
+    RITORNA { valid: true }
+
+FUNZIONE getValidationConditions(currDataNode):
+    RITORNA currDataNode.validationConditions
+
+FUNZIONE executeValidation(condition, currDataNode):
+    values = getMemoryValues(currDataNode.id)
     result = evaluateCondition(condition.script, values, condition.variables)
     RITORNA result
 
-FUNZIONE markAsInvalid(dataToRetrieve):
-    mainData = dataToRetrieve.mainData
-    setInvalid(mainData.id)
-
-FUNZIONE findMissingRequiredSubs(mainData):
+FUNZIONE findMissingRequiredSubs(currDataNode):
+    // currDataNode è un mainData con subData
     missing = []
-    PER OGNI subData IN mainData.subData:
-        SE subData.required E isEmpty(subData.id):
+    PER OGNI subData IN currDataNode.subData:
+        SE subData.required E getDataState(subData.id) === 'empty':
             missing.push(subData)
     RITORNA missing
-
-FUNZIONE isEmpty(nodeId):
-    value = getMemoryValue(nodeId)
-    RITORNA value === null OPPURE value === undefined OPPURE value === ''
-
-FUNZIONE isInvalid(nodeId):
-    memoryEntry = getMemoryValue(nodeId)
-    RITORNA memoryEntry !== null E memoryEntry.invalid === true
-
-FUNZIONE isConfirmed(nodeId):
-    memoryEntry = getMemoryValue(nodeId)
-    RITORNA memoryEntry !== null E memoryEntry.confirmed === true
 
 FUNZIONE isYes(input):
     yesWords = ['sì', 'si', 'yes', 'ok', 'corretto', 'giusto', 'vero', 'esatto']
@@ -784,41 +556,71 @@ FUNZIONE maxRecovery(state):
 
 ## Decisioni di Design
 
-### 1. Separazione delle Responsabilità
+### 1. Logica Lineare e Semplificata
 
-- **retrieveData**: Lavora su un singolo dato (main o sub) alla volta
-- **confirmData**: Gestisce solo la conferma
-- **validateData**: Gestisce solo la validazione
-- **getResponse**: Gestisce escalation, counter, fallback in modo semplice
+- **Execute**: Ciclo principale semplice e lineare senza funzioni annidate
+- **GetNextData**: Basato sugli stati del dato (empty, toConfirm, toValidate) invece che su controlli multipli
+- **InterpretUtterance**: Solo parsing, nessuna gestione di response o transizioni di stato
+- **SetState**: Gestisce tutte le transizioni di stato (sia dialogo che dato) basandosi sul risultato del parsing
 
-### 2. Counter Management
+### 2. Separazione delle Responsabilità
 
-- Il counter viene incrementato in `executeResponse`, non in `getResponse`
+- **GetResponse**: Gestisce escalation, counter, fallback in modo semplice
+- **ExecuteResponse**: Esegue il response e incrementa il counter
+- **InterpretUtterance**: Solo parsing, nessuna logica di business
+- **SetState**: Centralizza tutte le transizioni di stato (dialogo e dato) e aggiorna la memory
+
+### 2.1. Struttura currDataNode
+
+- **currDataNode** è direttamente il DDTNode (DataNode) con tutte le sue proprietà: `id`, `responses`, `validationConditions`, `subData`, ecc.
+- Non serve più `getDialogueNode`: si accede direttamente a `currDataNode.responses`, `currDataNode.validationConditions`, ecc.
+- `GetNextData` ritorna direttamente il nodo invece di un wrapper con `{ mainData, subData, isMain, nodeId }`
+
+### 3. Stati del Dato vs Stati del Dialogo
+
+- **Stati del Dato** (filled, toConfirm, confirmed, toValidate, validated): Rappresentano lo stato interno del dato nella memory
+- **Stati del Dialogo** (start, noMatch, confirmation, invalid, ecc.): Rappresentano lo stato del dialogo e determinano quale response mostrare
+- GetNextData usa gli stati del dato per determinare quale dato recuperare
+- GetResponse usa gli stati del dialogo per determinare quale response mostrare
+
+### 4. Counter Management
+
+- Il counter viene incrementato in `ExecuteResponse`, non in `GetResponse`
 - Il counter viene croppato automaticamente a `maxRecovery(state)`
 - Non serve controllare `> maxRecovery` perché il crop è già fatto
 
-### 3. Fallback Chain
+### 5. Fallback Chain
 
 - `irrelevantMatch` → `noMatch` → `start`
-- `notConfirmed` → `start`
+- `notConfirmed` → `noMatch` → `start` (se non esiste response specifico)
 - `noMatch`/`noInput` → `start` (se non esiste response specifico)
+- `invalid`/`conditionN` → `start` (se non esiste response specifico)
 
-### 4. Validazione
+### 6. Validazione
 
 - Le validazioni vengono eseguite in sequenza
 - Se una fallisce, il dato viene marcato come non valido e lo stato diventa `'invalid'` o `'conditionN'`
-- `getResponse` sa quale response prendere per questi stati
+- `GetResponse` sa quale response prendere per questi stati
+- La validazione viene eseguita quando il dato è in stato `toValidate`
 
-### 5. Success
+### 7. Success
 
 - Non serve gestire esplicitamente il success
-- Quando lo stato è `'validated'`, `getResponse` prende automaticamente il success response se presente
+- Quando lo stato è `'validated'`, `GetResponse` prende automaticamente il success response se presente
 
-### 6. Memory
+### 8. Memory
 
 - I dati sono salvati in un contesto globale (memory)
+- Ogni dato ha uno stato interno (empty, filled, toConfirm, confirmed, toValidate, validated, completed, acquisitionFailed)
 - Non serve ritornare i dati: sono già nel contesto
-- Quando tutti i dati sono completati, l'esecuzione termina naturalmente
+- Quando tutti i dati sono completati o acquisitionFailed, l'esecuzione termina naturalmente
+
+### 9. Partial Failure
+
+- Quando un dato non può essere acquisito (esauriti tutti i tentativi), viene marcato come `'acquisitionFailed'`
+- `GetNextData` esclude automaticamente i dati con stato `'acquisitionFailed'`
+- Se tutti i dati sono `'acquisitionFailed'` o completati, `GetNextData` ritorna `null` e l'esecuzione termina
+- Questo permette di raccogliere il maggior numero possibile di informazioni prima di eventualmente trasferire all'operatore
 
 ---
 
@@ -826,17 +628,20 @@ FUNZIONE maxRecovery(state):
 
 ### Struttura Responses
 
-Ogni nodo ha `node.responses(state)` che è un array di responses per quello stato:
+Ogni DDTNode (currDataNode) ha `currDataNode.responses(state)` che è un array di responses per quello stato:
 
 ```pseudocode
-node.responses = {
+currDataNode.responses = {
     'start': [response1, response2, ...],
     'noMatch': [escalation1, escalation2, ...],
     'noInput': [escalation1, escalation2, ...],
     'confirmation': [response1],
     'notConfirmed': [escalation1, escalation2, ...],
     'success': [response1],
-    'validation': [response1, response2, ...]  // per condition1, condition2, etc.
+    'invalid': [response1, response2, ...],
+    'condition1': [response1, response2, ...],  // per validazione fallita
+    'condition2': [response1, response2, ...],
+    ...
 }
 ```
 
@@ -847,9 +652,18 @@ Ogni stato ha il suo counter:
 - `counters('noInput')` → counter per noInput
 - `counters('notConfirmed')` → counter per notConfirmed
 - `counters('start')` → counter per start (usato dopo fallback)
+- `counters('invalid')` → counter per invalid
+- `counters('conditionN')` → counter per conditionN
 
 ### Exit Conditions
 
-Le exit conditions (end call, transfer call) sono gestite solo in `retrieveData`, non in `confirmData` o `validateData`.
+Le exit conditions (end call, transfer call) sono gestite in `ExecuteResponse` e ritornano `termination = true` per terminare l'esecuzione.
+
+### Valori di Ritorno
+
+- `GetResponse` ritorna: sempre `Response` (mai `null`). Se non ci sono più tentativi, ritorna un termination response con `hasExitCondition = true` e `exitType = 'noMoreAttempts'`. Se non serve response (es. confirmation/success senza response), ritorna un termination response con `exitType = 'noResponseNeeded'`
+- `ExecuteResponse` ritorna: `true` (termination) oppure `false` (continua). Se il response ha `exitType = 'noResponseNeeded'`, ritorna `false` senza mostrare nulla
+- `InterpretUtterance` ritorna: `{ result: 'Match' | 'NoMatch' | 'NoInput' | 'Confirmed' | 'NotConfirmed' | 'Validated' | 'Invalid', conditionId?: string }`
+- `SetState` ritorna: `string` (nuovo stato del dialogo). La funzione aggiorna anche lo stato del dato nella memory (filled, toConfirm, confirmed, toValidate, validated, completed, invalid) in base al risultato del parsing
 
 ---
