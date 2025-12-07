@@ -36,7 +36,7 @@ Public Class ConditionBuilder
 
         ' First pass: separate Else edges from normal edges
         For Each edge In incomingEdges
-            If (edge.Data IsNot Nothing AndAlso edge.Data.IsElse = True) OrElse edge.Label = "Else" Then
+            If edge.Data IsNot Nothing AndAlso edge.Data.IsElse = True Then
                 elseEdges.Add(edge)
             End If
         Next
@@ -69,7 +69,7 @@ Public Class ConditionBuilder
             ' If edge has condition, add it (AND with parent executed)
             Dim conditionId As String = Nothing
             If edge.Data IsNot Nothing Then
-                conditionId = If(Not String.IsNullOrEmpty(edge.Data.ConditionId), edge.Data.ConditionId, edge.Data.Condition)
+                conditionId = edge.Data.Condition
             End If
 
             If Not String.IsNullOrEmpty(conditionId) Then
@@ -120,7 +120,7 @@ Public Class ConditionBuilder
             For Each otherEdge In otherEdgesFromSource
                 Dim otherConditionId As String = Nothing
                 If otherEdge.Data IsNot Nothing Then
-                    otherConditionId = If(Not String.IsNullOrEmpty(otherEdge.Data.ConditionId), otherEdge.Data.ConditionId, otherEdge.Data.Condition)
+                    otherConditionId = otherEdge.Data.Condition
                 End If
 
                 If Not String.IsNullOrEmpty(otherConditionId) Then
@@ -231,7 +231,7 @@ Public Class ConditionBuilder
 
         ' First pass: separate Else edges from normal edges
         For Each edge In incomingLinks
-            If (edge.Data IsNot Nothing AndAlso edge.Data.IsElse = True) OrElse edge.Label = "Else" Then
+            If edge.Data IsNot Nothing AndAlso edge.Data.IsElse = True Then
                 elseEdges.Add(edge)
             End If
         Next
@@ -257,7 +257,7 @@ Public Class ConditionBuilder
             ' Se link ha condizione, aggiungila (AND)
             Dim conditionId As String = Nothing
             If edge.Data IsNot Nothing Then
-                conditionId = If(Not String.IsNullOrEmpty(edge.Data.ConditionId), edge.Data.ConditionId, edge.Data.Condition)
+                conditionId = edge.Data.Condition
             End If
 
             If Not String.IsNullOrEmpty(conditionId) Then
@@ -299,7 +299,7 @@ Public Class ConditionBuilder
             For Each otherEdge In otherEdgesFromSource
                 Dim otherConditionId As String = Nothing
                 If otherEdge.Data IsNot Nothing Then
-                    otherConditionId = If(Not String.IsNullOrEmpty(otherEdge.Data.ConditionId), otherEdge.Data.ConditionId, otherEdge.Data.Condition)
+                    otherConditionId = otherEdge.Data.Condition
                 End If
 
                 If Not String.IsNullOrEmpty(otherConditionId) Then

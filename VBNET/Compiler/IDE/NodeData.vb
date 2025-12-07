@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Generic
+Imports Newtonsoft.Json
 
 ''' <summary>
 ''' Node data
@@ -11,17 +12,8 @@ Public Class NodeData
     ''' <summary>
     ''' Rows in the node
     ''' </summary>
+    <JsonProperty("rows")>
     Public Property Rows As List(Of RowData)
-
-    ''' <summary>
-    ''' Node label
-    ''' </summary>
-    Public Property Label As String
-
-    ''' <summary>
-    ''' Node title
-    ''' </summary>
-    Public Property Title As String
 
     Public Sub New()
         Rows = New List(Of RowData)()

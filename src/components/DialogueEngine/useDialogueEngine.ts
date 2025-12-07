@@ -186,7 +186,15 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         throw new Error(`Failed to parse backend response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
       }
 
-      // Convert taskMap from object back to Map
+      // Log original JSON from compiler
+      console.log('[FRONTEND] ✅ Compilation data received:', {
+        hasTaskGroups: !!compileData.taskGroups,
+        taskGroupsCount: compileData.taskGroups?.length || 0,
+        entryTaskGroupId: compileData.entryTaskGroupId,
+        tasksCount: compileData.tasks?.length || 0
+      });
+
+      // Convert taskMap from object back to Map (for frontend use only)
       const taskMap = new Map<string, CompiledTask>();
       if (compileData.taskMap) {
         Object.entries(compileData.taskMap).forEach(([key, value]) => {
@@ -194,10 +202,14 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         });
       }
 
+      // Create CompilationResult for frontend use (if needed)
       const compilationResult: CompilationResult = {
         tasks: compileData.tasks || [],
-        entryTaskId: compileData.entryTaskId || null,
-        taskMap
+        entryTaskId: compileData.entryTaskId || compileData.entryTaskGroupId || null, // Support both entryTaskId and entryTaskGroupId
+        taskMap,
+        // Preserve VB.NET backend fields
+        taskGroups: compileData.taskGroups || undefined,
+        entryTaskGroupId: compileData.entryTaskGroupId || null
       };
 
       // ═══════════════════════════════════════════════════════════════════════════
@@ -214,6 +226,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       console.log('   └─ Compiler: backend/runtime/compiler/compiler.ts');
       console.log('   └─ Status: COMPLETED');
       console.log('   └─ CompiledBy:', compileData.compiledBy || 'BACKEND_RUNTIME');
+      console.log('   └─ TaskGroups:', compileData.taskGroups?.length || 0);
+      console.log('   └─ EntryTaskGroupId:', compileData.entryTaskGroupId);
       console.log('');
 
       // Check if we should use backend orchestrator
@@ -271,8 +285,9 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           }
         }
 
+        // Pass original JSON from compiler directly to orchestrator (no transformation!)
         const orchestratorControl = await executeOrchestratorBackend(
-          compilationResult,
+          compileData, // ✅ Pass original JSON - preserves taskGroups, entryTaskGroupId, etc.
           allTasks,
           allDDTs,
           translations,

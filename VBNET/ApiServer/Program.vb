@@ -94,24 +94,11 @@ Module Program
                     Dim compiler = New Compiler.FlowCompiler()
                     Dim compilationResult = compiler.CompileFlow(flow)
 
-                    ' Convert dictionaries for JSON serialization
-                    Dim taskMapDict As New Dictionary(Of String, Object)()
-                    For Each kvp In compilationResult.TaskMap
-                        taskMapDict(kvp.Key) = kvp.Value
-                    Next
-
-                    Dim taskGroupMapDict As New Dictionary(Of String, Object)()
-                    For Each kvp In compilationResult.TaskGroupMap
-                        taskGroupMapDict(kvp.Key) = kvp.Value
-                    Next
-
                     ' Build response
                     result = New CompileFlowResponse() With {
                         .TaskGroups = compilationResult.TaskGroups,
-                        .TaskGroupMap = taskGroupMapDict,
                         .EntryTaskGroupId = compilationResult.EntryTaskGroupId,
-                        .Tasks = compilationResult.Tasks,
-                        .TaskMap = taskMapDict
+                        .Tasks = compilationResult.Tasks
                     }
                 Case "compile-ddt"
                     result = ExecuteCompileDDT(command)
@@ -188,9 +175,9 @@ Module Program
     Private Sub MapApiEndpoints(app As WebApplication)
         ' GET /api/health - Test endpoint
         app.MapGet("/api/health", Function() As IResult
-                                       Console.WriteLine("✅ [Health] Health check requested")
-                                       Return Results.Ok(New With {.status = "ok", .timestamp = DateTime.UtcNow.ToString("O")})
-                                   End Function)
+                                      Console.WriteLine("✅ [Health] Health check requested")
+                                      Return Results.Ok(New With {.status = "ok", .timestamp = DateTime.UtcNow.ToString("O")})
+                                  End Function)
 
         ' POST /api/runtime/compile - Read body manually to use Newtonsoft.Json (handles string->int conversion)
         app.MapPost("/api/runtime/compile", Function(context As HttpContext) As Task(Of IResult)
@@ -349,25 +336,12 @@ Module Program
 
             Console.WriteLine($"✅ [HandleCompileFlow] Compilation successful: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
 
-            ' Convert dictionaries for JSON serialization
-            Dim taskMapDict As New Dictionary(Of String, Object)()
-            For Each kvp In compilationResult.TaskMap
-                taskMapDict(kvp.Key) = kvp.Value
-            Next
-
-            Dim taskGroupMapDict As New Dictionary(Of String, Object)()
-            For Each kvp In compilationResult.TaskGroupMap
-                taskGroupMapDict(kvp.Key) = kvp.Value
-            Next
-
             ' Serialize response manually and write directly to response stream
             Try
                 Dim responseObj = New With {
                     .taskGroups = compilationResult.TaskGroups,
-                    .taskGroupMap = taskGroupMapDict,
                     .entryTaskGroupId = compilationResult.EntryTaskGroupId,
                     .tasks = compilationResult.Tasks,
-                    .taskMap = taskMapDict,
                     .compiledBy = "VB.NET_RUNTIME",
                     .timestamp = DateTime.UtcNow.ToString("O")
                 }
@@ -456,24 +430,11 @@ Module Program
 
             Console.WriteLine($"✅ [HandleCompileFlowWithModel] Compilation successful: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
 
-            ' Convert dictionaries for JSON serialization
-            Dim taskMapDict As New Dictionary(Of String, Object)()
-            For Each kvp In compilationResult.TaskMap
-                taskMapDict(kvp.Key) = kvp.Value
-            Next
-
-            Dim taskGroupMapDict As New Dictionary(Of String, Object)()
-            For Each kvp In compilationResult.TaskGroupMap
-                taskGroupMapDict(kvp.Key) = kvp.Value
-            Next
-
             ' Build response object - ASP.NET Core will serialize it using Newtonsoft.Json
             Dim responseObj = New With {
                 .taskGroups = compilationResult.TaskGroups,
-                .taskGroupMap = taskGroupMapDict,
                 .entryTaskGroupId = compilationResult.EntryTaskGroupId,
                 .tasks = compilationResult.Tasks,
-                .taskMap = taskMapDict,
                 .compiledBy = "VB.NET_RUNTIME",
                 .timestamp = DateTime.UtcNow.ToString("O")
             }
@@ -741,7 +702,7 @@ Module Program
                 If compilationResult IsNot Nothing Then
                     Console.WriteLine($"   EntryTaskGroupId: {compilationResult.EntryTaskGroupId}")
                     Console.WriteLine($"   Tasks count: {If(compilationResult.Tasks IsNot Nothing, compilationResult.Tasks.Count, 0)}")
-                    Console.WriteLine($"   TaskGroupMap count: {If(compilationResult.TaskGroupMap IsNot Nothing, compilationResult.TaskGroupMap.Count, 0)}")
+                    Console.WriteLine($"   TaskGroups count: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)}")
                 End If
             Catch deserializeEx As Exception
                 Console.WriteLine($"❌ [HandleOrchestratorSessionStart] Error deserializing CompilationResult: {deserializeEx.Message}")
@@ -1083,9 +1044,9 @@ Module Program
             })
         Catch ex As Exception
             Return Results.Problem(
-                title := "Failed to delete session",
-                detail := ex.Message,
-                statusCode := 500
+                title:="Failed to delete session",
+                detail:=ex.Message,
+                statusCode:=500
             )
         End Try
     End Function
@@ -1218,10 +1179,8 @@ End Class
 ''' </summary>
 Public Class CompileFlowResponse
     Public Property TaskGroups As List(Of Compiler.TaskGroup)
-    Public Property TaskGroupMap As Dictionary(Of String, Object)
     Public Property EntryTaskGroupId As String
     Public Property Tasks As List(Of Compiler.CompiledTask)
-    Public Property TaskMap As Dictionary(Of String, Object)
 End Class
 
 ''' <summary>

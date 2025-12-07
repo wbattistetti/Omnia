@@ -167,10 +167,17 @@ Public Class FlowOrchestrator
 
             ' Se abbiamo un EntryTaskGroupId, inizia da quello
             Dim taskGroupsToCheck As List(Of TaskGroup) = New List(Of TaskGroup)()
-            If Not String.IsNullOrEmpty(_entryTaskGroupId) AndAlso _compilationResult.TaskGroupMap.ContainsKey(_entryTaskGroupId) Then
-                ' Inizia dal TaskGroup di entry
-                taskGroupsToCheck.Add(_compilationResult.TaskGroupMap(_entryTaskGroupId))
-                Console.WriteLine($"📍 [FlowOrchestrator] Starting from entry TaskGroup: {_entryTaskGroupId}")
+            If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
+                ' Trova il TaskGroup di entry usando FirstOrDefault
+                Dim entryTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = _entryTaskGroupId)
+                If entryTaskGroup IsNot Nothing Then
+                    taskGroupsToCheck.Add(entryTaskGroup)
+                    Console.WriteLine($"📍 [FlowOrchestrator] Starting from entry TaskGroup: {_entryTaskGroupId}")
+                Else
+                    ' Entry TaskGroup non trovato, controlla tutti
+                    taskGroupsToCheck = _compilationResult.TaskGroups
+                    Console.WriteLine($"📍 [FlowOrchestrator] Entry TaskGroup not found, checking all TaskGroups")
+                End If
             Else
                 ' Altrimenti, controlla tutti i TaskGroup in ordine
                 taskGroupsToCheck = _compilationResult.TaskGroups

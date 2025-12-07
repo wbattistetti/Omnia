@@ -16,9 +16,15 @@ export interface OrchestratorCallbacks {
 /**
  * Executes orchestrator on backend via SSE
  * Uses BackendTypeContext to determine which backend to call (React/Ruby or VB.NET)
+ *
+ * @param compilationResultJson - Original JSON from compiler (preserves all fields like taskGroups)
+ * @param tasks - Tasks array
+ * @param ddts - DDTs array
+ * @param translations - Translations dictionary
+ * @param callbacks - Event callbacks
  */
 export async function executeOrchestratorBackend(
-  compilationResult: CompilationResult,
+  compilationResultJson: any, // Original JSON from compiler - don't transform it!
   tasks: any[],
   ddts: any[],
   translations: Record<string, string>,
@@ -40,9 +46,12 @@ export async function executeOrchestratorBackend(
   console.log('🚀 [ORCHESTRATOR] Frontend calling BACKEND Orchestrator via SSE');
   console.log(`📍 [ORCHESTRATOR] Backend type: ${backendType.toUpperCase()}, Base URL: ${baseUrl}`);
   console.log('═══════════════════════════════════════════════════════════════════════════');
-  console.log('[ORCHESTRATOR] Compilation result:', {
-    tasksCount: compilationResult.tasks.length,
-    entryTaskId: compilationResult.entryTaskId,
+  console.log('[ORCHESTRATOR] Compilation result (original JSON from compiler):', {
+    tasksCount: compilationResultJson.tasks?.length || 0,
+    entryTaskId: compilationResultJson.entryTaskId,
+    entryTaskGroupId: compilationResultJson.entryTaskGroupId,
+    taskGroupsCount: compilationResultJson.taskGroups?.length || 0,
+    hasTaskMap: !!compilationResultJson.taskMap,
     hasTranslations: Object.keys(translations).length > 0,
     translationsCount: Object.keys(translations).length,
     timestamp: new Date().toISOString()
@@ -58,10 +67,7 @@ export async function executeOrchestratorBackend(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        compilationResult: {
-          ...compilationResult,
-          taskMap: Object.fromEntries(compilationResult.taskMap) // Convert Map to object
-        },
+        compilationResult: compilationResultJson, // Pass original JSON from compiler - no transformation!
         tasks,
         ddts,
         translations

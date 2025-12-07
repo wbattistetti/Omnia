@@ -4,6 +4,7 @@ Option Explicit On
 Imports Compiler
 Imports DDTEngine
 Imports System.Collections.Generic
+Imports Newtonsoft.Json
 
 ''' <summary>
 ''' Esegue un task compilato
@@ -71,17 +72,43 @@ Public Class TaskExecutor
     ''' </summary>
     Private Function ExecuteSayMessage(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
         Try
+            ' Debug: log Value structure
+            Console.WriteLine($"🔍 [TaskExecutor] SayMessage task {task.Id} - Value structure:")
+            If task.Value IsNot Nothing Then
+                Console.WriteLine($"   Value keys: {String.Join(", ", task.Value.Keys)}")
+                For Each kvp In task.Value
+                    Console.WriteLine($"   - {kvp.Key}: {If(kvp.Value IsNot Nothing, kvp.Value.ToString().Substring(0, Math.Min(100, kvp.Value.ToString().Length)), "Nothing")}")
+                Next
+            Else
+                Console.WriteLine($"   Value is Nothing")
+            End If
+
             Dim messageText As String = ""
 
             ' Estrai il testo del messaggio dal Value
+            ' Prova diverse chiavi possibili
             If task.Value IsNot Nothing AndAlso task.Value.ContainsKey("text") Then
-                messageText = task.Value("text").ToString()
+                messageText = If(task.Value("text") IsNot Nothing, task.Value("text").ToString(), "")
             ElseIf task.Value IsNot Nothing AndAlso task.Value.ContainsKey("message") Then
-                messageText = task.Value("message").ToString()
+                messageText = If(task.Value("message") IsNot Nothing, task.Value("message").ToString(), "")
+            ElseIf task.Value IsNot Nothing AndAlso task.Value.ContainsKey("value") Then
+                ' Alcuni task potrebbero avere un campo "value" annidato
+                Dim valueObj = task.Value("value")
+                If valueObj IsNot Nothing Then
+                    If TypeOf valueObj Is Dictionary(Of String, Object) Then
+                        Dim valueDict = CType(valueObj, Dictionary(Of String, Object))
+                        If valueDict.ContainsKey("text") Then
+                            messageText = If(valueDict("text") IsNot Nothing, valueDict("text").ToString(), "")
+                        ElseIf valueDict.ContainsKey("message") Then
+                            messageText = If(valueDict("message") IsNot Nothing, valueDict("message").ToString(), "")
+                        End If
+                    End If
+                End If
             End If
 
             If String.IsNullOrEmpty(messageText) Then
                 Console.WriteLine($"⚠️ [TaskExecutor] SayMessage task {task.Id} has no text")
+                Console.WriteLine($"   Available keys in Value: {If(task.Value IsNot Nothing, String.Join(", ", task.Value.Keys), "Value is Nothing")}")
                 Return New TaskExecutionResult() With {
                     .Success = False,
                     .Error = "Message text is empty"
@@ -112,16 +139,93 @@ Public Class TaskExecutor
     ''' </summary>
     Private Function ExecuteGetData(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
         Try
-            ' TODO: Implementare chiamata DDT Engine
-            ' Deve estrarre il DDT dal Value e chiamare _ddtEngine.Execute()
-            Console.WriteLine($"📥 [TaskExecutor] GetData task {task.Id} - TODO: Implement DDT execution")
+            Console.WriteLine($"📥 [TaskExecutor] GetData task {task.Id} - Starting DDT execution")
 
-            ' Per ora ritorna successo
-            Return New TaskExecutionResult() With {
-                .Success = True,
-                .Output = New Dictionary(Of String, Object)()
-            }
+            ' Debug: log Value structure
+            If task.Value IsNot Nothing Then
+                Console.WriteLine($"   Value keys: {String.Join(", ", task.Value.Keys)}")
+                For Each kvp In task.Value
+                    Console.WriteLine($"   - {kvp.Key}: {If(kvp.Value IsNot Nothing, kvp.Value.GetType().Name, "Nothing")}")
+                Next
+            Else
+                Console.WriteLine($"   Value is Nothing")
+            End If
+
+            ' Estrai DDT dal Value
+            If task.Value Is Nothing OrElse Not task.Value.ContainsKey("ddt") Then
+                Console.WriteLine($"❌ [TaskExecutor] GetData task {task.Id} missing DDT in Value")
+                Return New TaskExecutionResult() With {
+                    .Success = False,
+                    .Error = "GetData task missing DDT in Value"
+                }
+            End If
+
+            Dim ddtValue = task.Value("ddt")
+            If ddtValue Is Nothing Then
+                Console.WriteLine($"❌ [TaskExecutor] GetData task {task.Id} DDT value is Nothing")
+                Return New TaskExecutionResult() With {
+                    .Success = False,
+                    .Error = "DDT value is Nothing"
+                }
+            End If
+
+            ' Serializza DDT in JSON string
+            Dim ddtJson As String = Nothing
+            Try
+                If TypeOf ddtValue Is String Then
+                    ' Se è già una stringa JSON, usala direttamente
+                    ddtJson = CStr(ddtValue)
+                Else
+                    ' Se è un oggetto, serializzalo in JSON
+                    ddtJson = JsonConvert.SerializeObject(ddtValue)
+                End If
+                Console.WriteLine($"✅ [TaskExecutor] DDT serialized: {If(ddtJson IsNot Nothing, ddtJson.Length, 0)} characters")
+            Catch jsonEx As Exception
+                Console.WriteLine($"❌ [TaskExecutor] Error serializing DDT: {jsonEx.Message}")
+                Return New TaskExecutionResult() With {
+                    .Success = False,
+                    .Error = $"Failed to serialize DDT: {jsonEx.Message}"
+                }
+            End Try
+
+            ' Carica DDTInstance da JSON
+            Dim ddtInstance As DDTInstance = Nothing
+            Try
+                ddtInstance = DDTLoader.LoadFromJsonString(ddtJson)
+                Console.WriteLine($"✅ [TaskExecutor] DDTInstance loaded: {If(ddtInstance IsNot Nothing AndAlso ddtInstance.MainDataList IsNot Nothing, ddtInstance.MainDataList.Count, 0)} mainData nodes")
+            Catch loadEx As Exception
+                Console.WriteLine($"❌ [TaskExecutor] Error loading DDTInstance: {loadEx.Message}")
+                Console.WriteLine($"   Stack trace: {loadEx.StackTrace}")
+                Return New TaskExecutionResult() With {
+                    .Success = False,
+                    .Error = $"Failed to load DDTInstance: {loadEx.Message}"
+                }
+            End Try
+
+            ' Esegui DDT Engine
+            Try
+                Console.WriteLine($"🚀 [TaskExecutor] Calling DDT Engine ExecuteDDT...")
+                _ddtEngine.ExecuteDDT(ddtInstance)
+                Console.WriteLine($"✅ [TaskExecutor] DDT Engine execution completed")
+
+                ' Il DDT Engine solleva eventi MessageToShow che vengono gestiti da FlowOrchestrator
+                ' Non possiamo aspettare qui perché ExecuteDDT è sincrono e gestisce tutto internamente
+
+                Return New TaskExecutionResult() With {
+                    .Success = True,
+                    .Output = New Dictionary(Of String, Object)()
+                }
+            Catch execEx As Exception
+                Console.WriteLine($"❌ [TaskExecutor] Error executing DDT: {execEx.Message}")
+                Console.WriteLine($"   Stack trace: {execEx.StackTrace}")
+                Return New TaskExecutionResult() With {
+                    .Success = False,
+                    .Error = $"DDT execution failed: {execEx.Message}"
+                }
+            End Try
         Catch ex As Exception
+            Console.WriteLine($"❌ [TaskExecutor] Unexpected error in ExecuteGetData: {ex.Message}")
+            Console.WriteLine($"   Stack trace: {ex.StackTrace}")
             Return New TaskExecutionResult() With {
                 .Success = False,
                 .Error = ex.Message

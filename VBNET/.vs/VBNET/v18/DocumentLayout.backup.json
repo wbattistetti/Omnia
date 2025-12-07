@@ -3,12 +3,16 @@
   "WorkspaceRootPath": "C:\\Cursor Projects\\Omnia\\VBNET\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{871CAABE-BD9B-4A3C-9BB9-DFE2550E284B}|Orchestrator\\Orchestrator.vbproj|c:\\cursor projects\\omnia\\vbnet\\orchestrator\\floworchestrator.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
+      "RelativeMoniker": "D:0:0:{871CAABE-BD9B-4A3C-9BB9-DFE2550E284B}|Orchestrator\\Orchestrator.vbproj|solutionrelative:orchestrator\\floworchestrator.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{D4A65920-E918-4B8B-84F8-C8F2450E5E1F}|ApiServer\\ApiServer.vbproj|c:\\cursor projects\\omnia\\vbnet\\apiserver\\program.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
       "RelativeMoniker": "D:0:0:{D4A65920-E918-4B8B-84F8-C8F2450E5E1F}|ApiServer\\ApiServer.vbproj|solutionrelative:apiserver\\program.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{871CAABE-BD9B-4A3C-9BB9-DFE2550E284B}|Orchestrator\\Orchestrator.vbproj|c:\\cursor projects\\omnia\\vbnet\\orchestrator\\floworchestrator.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
-      "RelativeMoniker": "D:0:0:{871CAABE-BD9B-4A3C-9BB9-DFE2550E284B}|Orchestrator\\Orchestrator.vbproj|solutionrelative:orchestrator\\floworchestrator.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}"
+      "AbsoluteMoniker": "D:0:0:{0E98DD6B-1E5E-4A29-B485-4E5B1454584A}|Compiler\\Compiler.vbproj|c:\\cursor projects\\omnia\\vbnet\\compiler\\flowcompiler.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
+      "RelativeMoniker": "D:0:0:{0E98DD6B-1E5E-4A29-B485-4E5B1454584A}|Compiler\\Compiler.vbproj|solutionrelative:compiler\\flowcompiler.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D}|DDTEngine\\DDTEngine.vbproj|c:\\cursor projects\\omnia\\vbnet\\ddtengine\\engine\\motore.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
@@ -17,10 +21,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{0E98DD6B-1E5E-4A29-B485-4E5B1454584A}|Compiler\\Compiler.vbproj|c:\\cursor projects\\omnia\\vbnet\\compiler\\ddtcompiler.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
       "RelativeMoniker": "D:0:0:{0E98DD6B-1E5E-4A29-B485-4E5B1454584A}|Compiler\\Compiler.vbproj|solutionrelative:compiler\\ddtcompiler.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0E98DD6B-1E5E-4A29-B485-4E5B1454584A}|Compiler\\Compiler.vbproj|c:\\cursor projects\\omnia\\vbnet\\compiler\\flowcompiler.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
-      "RelativeMoniker": "D:0:0:{0E98DD6B-1E5E-4A29-B485-4E5B1454584A}|Compiler\\Compiler.vbproj|solutionrelative:compiler\\flowcompiler.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{0E98DD6B-1E5E-4A29-B485-4E5B1454584A}|Compiler\\Compiler.vbproj|c:\\cursor projects\\omnia\\vbnet\\compiler\\runtime\\utils.vb||{2C015C70-C72C-11D0-88C3-00A0C9110049}",
@@ -42,36 +42,37 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 1,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "Program.vb",
               "DocumentMoniker": "C:\\Cursor Projects\\Omnia\\VBNET\\ApiServer\\Program.vb",
               "RelativeDocumentMoniker": "ApiServer\\Program.vb",
-              "ToolTip": "C:\\Cursor Projects\\Omnia\\VBNET\\ApiServer\\Program.vb*",
-              "RelativeToolTip": "ApiServer\\Program.vb*",
-              "ViewState": "AgIAAFsBAAAAAAAAAAAAAGkBAAAAAAAAAAAAAA==",
+              "ToolTip": "C:\\Cursor Projects\\Omnia\\VBNET\\ApiServer\\Program.vb",
+              "RelativeToolTip": "ApiServer\\Program.vb",
+              "ViewState": "AgIAAJcAAAAAAAAAAAAawKMAAAAMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003361|",
               "WhenOpened": "2025-12-06T13:57:34.764Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "FlowOrchestrator.vb",
               "DocumentMoniker": "C:\\Cursor Projects\\Omnia\\VBNET\\Orchestrator\\FlowOrchestrator.vb",
               "RelativeDocumentMoniker": "Orchestrator\\FlowOrchestrator.vb",
               "ToolTip": "C:\\Cursor Projects\\Omnia\\VBNET\\Orchestrator\\FlowOrchestrator.vb",
               "RelativeToolTip": "Orchestrator\\FlowOrchestrator.vb",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAA==",
+              "ViewState": "AgIAAJYAAAAAAAAAAAAawKQAAAAIAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003361|",
-              "WhenOpened": "2025-12-06T13:56:22.744Z"
+              "WhenOpened": "2025-12-06T13:56:22.744Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 3,
               "Title": "Motore.vb",
               "DocumentMoniker": "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine\\Engine\\Motore.vb",
               "RelativeDocumentMoniker": "DDTEngine\\Engine\\Motore.vb",
@@ -84,7 +85,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 4,
               "Title": "DDTCompiler.vb",
               "DocumentMoniker": "C:\\Cursor Projects\\Omnia\\VBNET\\Compiler\\DDTCompiler.vb",
               "RelativeDocumentMoniker": "Compiler\\DDTCompiler.vb",
@@ -120,15 +121,16 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 2,
               "Title": "FlowCompiler.vb",
               "DocumentMoniker": "C:\\Cursor Projects\\Omnia\\VBNET\\Compiler\\FlowCompiler.vb",
               "RelativeDocumentMoniker": "Compiler\\FlowCompiler.vb",
               "ToolTip": "C:\\Cursor Projects\\Omnia\\VBNET\\Compiler\\FlowCompiler.vb",
               "RelativeToolTip": "Compiler\\FlowCompiler.vb",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAG4AAAA3AAAAAAAAAA==",
+              "ViewState": "AgIAAG8AAAAAAAAAAAAawHkAAAAIAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003361|",
-              "WhenOpened": "2025-12-05T16:29:50.41Z"
+              "WhenOpened": "2025-12-05T16:29:50.41Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",

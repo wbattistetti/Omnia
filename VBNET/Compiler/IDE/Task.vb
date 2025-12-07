@@ -12,6 +12,7 @@ Public Class Task
     ''' <summary>
     ''' Task ID
     ''' </summary>
+    <JsonProperty("id")>
     Public Property Id As String
 
     ''' <summary>
@@ -19,12 +20,14 @@ Public Class Task
     ''' Valori: SayMessage=1, CloseSession=2, Transfer=3, GetData=4, BackendCall=5, ClassifyProblem=6
     ''' Usa ActionTypeConverter per convertire stringhe (es. "SayMessage") in Integer
     ''' </summary>
+    <JsonProperty("action")>
     <JsonConverter(GetType(ActionTypeConverter))>
     Public Property Action As Integer
 
     ''' <summary>
     ''' Task value (parameters, DDT reference, etc.)
     ''' </summary>
+    <JsonProperty("value")>
     Public Property Value As Dictionary(Of String, Object)
 
     Public Sub New()

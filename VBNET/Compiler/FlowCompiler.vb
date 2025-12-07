@@ -23,9 +23,7 @@ Public Class FlowCompiler
     Public Function CompileFlow(flow As Flow) As FlowCompilationResult
 
         Dim taskGroups As New List(Of TaskGroup)()
-        Dim taskGroupMap As New Dictionary(Of String, TaskGroup)()
         Dim allTasks As New List(Of CompiledTask)()
-        Dim taskMap As New Dictionary(Of String, CompiledTask)()
 
         ' NOTE: flow.Tasks should contain ONLY tasks referenced in node rows
         ' (not all tasks from repository). Frontend filters before sending.
@@ -108,7 +106,6 @@ Public Class FlowCompiler
 
                 ' Aggiungi anche alla lista piatta per compatibilità
                 allTasks.Add(compiledTask)
-                taskMap(compiledTask.Id) = compiledTask
 
                 ' Se task è GetData, manteniamo il DDT nel value (struttura gerarchica)
                 ' NON espandiamo il DDT - il DDT Engine gestirà tutto
@@ -116,7 +113,6 @@ Public Class FlowCompiler
 
             ' Aggiungi TaskGroup al risultato
             taskGroups.Add(taskGroup)
-            taskGroupMap(node.Id) = taskGroup
         Next
 
         ' Trova entry TaskGroup (primo nodo entry)
@@ -125,10 +121,8 @@ Public Class FlowCompiler
 
         Return New FlowCompilationResult() With {
             .TaskGroups = taskGroups,
-            .TaskGroupMap = taskGroupMap,
             .EntryTaskGroupId = entryTaskGroupId,
-            .Tasks = allTasks,
-            .TaskMap = taskMap
+            .Tasks = allTasks
         }
     End Function
 End Class

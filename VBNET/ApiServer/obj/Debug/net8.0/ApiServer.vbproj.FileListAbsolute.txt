@@ -37,3 +37,4 @@ C:\Cursor Projects\Omnia\VBNET\ApiServer\bin\Debug\net8.0\ApiServer.pdb
 C:\Cursor Projects\Omnia\VBNET\ApiServer\obj\Debug\net8.0\ApiServer.vbproj.Up2Date
 C:\Cursor Projects\Omnia\VBNET\ApiServer\obj\Debug\net8.0\ApiServer.genruntimeconfig.cache
 C:\Cursor Projects\Omnia\VBNET\ApiServer\obj\Debug\net8.0\ref\ApiServer.dll
+C:\Cursor Projects\Omnia\VBNET\ApiServer\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt

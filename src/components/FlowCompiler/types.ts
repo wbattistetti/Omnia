@@ -50,12 +50,25 @@ export interface CompiledTask {
 }
 
 /**
+ * TaskGroup: represents a node with all its tasks (rows)
+ */
+export interface TaskGroup {
+  nodeId: string;
+  execCondition?: Condition | null;
+  tasks: CompiledTask[];
+  executed?: boolean;
+}
+
+/**
  * Compilation Result: Output of compiler
  */
 export interface CompilationResult {
   tasks: CompiledTask[];
-  entryTaskId: string | null; // First task to execute
+  entryTaskId: string | null; // First task to execute (for frontend compatibility)
   taskMap: Map<string, CompiledTask>; // Fast lookup by task ID
+  // VB.NET backend fields
+  taskGroups?: TaskGroup[]; // TaskGroups (one per node) - from VB.NET compiler
+  entryTaskGroupId?: string | null; // First TaskGroup to execute - from VB.NET compiler
 }
 
 /**
