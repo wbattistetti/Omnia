@@ -9,7 +9,7 @@ Imports System.Drawing
 Imports System.IO
 Imports System.Threading
 Imports System.Linq
-Imports DDTEngine.Core
+Imports DDTEngine
 
 Namespace DDTEngine.TestUI
 
@@ -26,12 +26,12 @@ Namespace DDTEngine.TestUI
         Private _sendButton As Button
         Private _stateViewer As ListBox
         Friend WithEvents CmdRestart As Button
-        Private _ddtInstance As Global.DDTEngine.Core.DDTInstance
+        Private _ddtInstance As Global.DDTEngine.DDTInstance
         Private _engineThread As Thread
         Private _isEngineRunning As Boolean = False
 
         Public Sub New()
-            _engine = New Global.DDTEngine.Core.Motore()
+            _engine = New Global.DDTEngine.Motore()
             InitializeComponent()
 
             ' Aggancia gli eventi del Motore
@@ -138,13 +138,13 @@ Namespace DDTEngine.TestUI
                 End If
 
                 ' Carica il DDT dal JSON
-                _ddtInstance = Global.DDTEngine.Core.DDTLoader.LoadFromJson(jsonPath)
+                _ddtInstance = Global.DDTEngine.DDTLoader.LoadFromJson(jsonPath)
             Catch ex As Exception
                 ' In caso di errore, mostra messaggio e usa DDT vuoto
                 MessageBox.Show("Errore nel caricamento del DDT: " & ex.Message & vbCrLf & vbCrLf & "Stack: " & ex.StackTrace, "Errore", MessageBoxButtons.OK, MessageBoxIcon.Error)
-                _ddtInstance = New Global.DDTEngine.Core.DDTInstance() With {
+                _ddtInstance = New Global.DDTEngine.DDTInstance() With {
                     .IsAggregate = True,
-                    .MainDataList = New List(Of Global.DDTEngine.Core.DDTNode)()
+                    .MainDataList = New List(Of Global.DDTEngine.DDTNode)()
                 }
             End Try
         End Sub
@@ -180,7 +180,7 @@ Namespace DDTEngine.TestUI
             _inputBox.Clear()
 
             ' Passa l'input al Parser (sveglia WaitForUserInput)
-            Global.DDTEngine.Core.Parser.SetUserInput(userInput)
+            Global.DDTEngine.Parser.SetUserInput(userInput)
 
             ' TODO: Aggiornare state viewer
             UpdateStateViewer()
@@ -209,7 +209,7 @@ Namespace DDTEngine.TestUI
         ''' <summary>
         ''' Ottiene il valore di un nodo tramite path (es. "nominativo" o "nominativo.nome")
         ''' </summary>
-        'Private Function GetNodeValueByPath(path As String, currentDataNode As Global.DDTEngine.Core.DDTNode) As String
+        'Private Function GetNodeValueByPath(path As String, currentDataNode As Global.DDTEngine.DDTNode) As String
         '    If String.IsNullOrEmpty(path) OrElse _ddtInstance Is Nothing Then
         '        Return ""
         '    End If
@@ -220,14 +220,14 @@ Namespace DDTEngine.TestUI
         '    Dim subDataId As String = If(pathParts.Length > 1, pathParts(1), Nothing)
 
         '    ' Cerca il mainData
-        '    Dim mainDataNode As Global.DDTEngine.Core.DDTNode = _ddtInstance.MainDataList.FirstOrDefault(Function(m) m.Id = mainDataId)
+        '    Dim mainDataNode As Global.DDTEngine.DDTNode = _ddtInstance.MainDataList.FirstOrDefault(Function(m) m.Id = mainDataId)
         '    If mainDataNode Is Nothing Then
         '        Return ""
         '    End If
 
         '    ' Se c'è un subDataId, cerca il subData
         '    If Not String.IsNullOrEmpty(subDataId) Then
-        '        Dim subDataNode As Global.DDTEngine.Core.DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = subDataId)
+        '        Dim subDataNode As Global.DDTEngine.DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = subDataId)
         '        If subDataNode IsNot Nothing AndAlso subDataNode.Value IsNot Nothing Then
         '            Return subDataNode.Value.ToString()
         '        End If
@@ -238,7 +238,7 @@ Namespace DDTEngine.TestUI
         '    If mainDataNode.HasSubData() Then
         '        ' Costruisci il valore dai subData
         '        Dim valueParts As New List(Of String)()
-        '        For Each subData As Global.DDTEngine.Core.DDTNode In mainDataNode.SubData
+        '        For Each subData As Global.DDTEngine.DDTNode In mainDataNode.SubData
         '            If subData.Value IsNot Nothing Then
         '                valueParts.Add(subData.Value.ToString())
         '            End If
@@ -255,7 +255,7 @@ Namespace DDTEngine.TestUI
         ''' <summary>
         ''' Ottiene il valore di un nodo tramite path (es. "nominativo" o "nominativo.nome")
         ''' </summary>
-        Private Function GetNodeValueByPath(path As String, currentDataNode As Global.DDTEngine.Core.DDTNode) As String
+        Private Function GetNodeValueByPath(path As String, currentDataNode As Global.DDTEngine.DDTNode) As String
             If String.IsNullOrEmpty(path) OrElse _ddtInstance Is Nothing Then
                 Return ""
             End If
@@ -266,14 +266,14 @@ Namespace DDTEngine.TestUI
             Dim subDataId As String = If(pathParts.Length > 1, pathParts(1), Nothing)
 
             ' Cerca il mainData
-            Dim mainDataNode As Global.DDTEngine.Core.DDTNode = _ddtInstance.MainDataList.FirstOrDefault(Function(m) m.Id = mainDataId)
+            Dim mainDataNode As Global.DDTEngine.DDTNode = _ddtInstance.MainDataList.FirstOrDefault(Function(m) m.Id = mainDataId)
             If mainDataNode Is Nothing Then
                 Return ""
             End If
 
             ' Se c'è un subDataId, cerca il subData
             If Not String.IsNullOrEmpty(subDataId) Then
-                Dim subDataNode As Global.DDTEngine.Core.DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = subDataId)
+                Dim subDataNode As Global.DDTEngine.DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = subDataId)
                 If subDataNode IsNot Nothing AndAlso subDataNode.Value IsNot Nothing Then
                     Return subDataNode.Value.ToString()
                 End If
@@ -284,7 +284,7 @@ Namespace DDTEngine.TestUI
             If mainDataNode.HasSubData() Then
                 ' Costruisci il valore dai subData
                 Dim valueParts As New List(Of String)()
-                For Each subData As Global.DDTEngine.Core.DDTNode In mainDataNode.SubData
+                For Each subData As Global.DDTEngine.DDTNode In mainDataNode.SubData
                     If subData.Value IsNot Nothing Then
                         valueParts.Add(subData.Value.ToString())
                     End If
@@ -315,7 +315,7 @@ Namespace DDTEngine.TestUI
             _engine.Reset()
 
             ' Pulisce la coda di input
-            Global.DDTEngine.Core.Parser.ClearInputQueue()
+            Global.DDTEngine.Parser.ClearInputQueue()
 
             ' Pulisce la chat
             _chatArea.Clear()
@@ -339,7 +339,7 @@ Namespace DDTEngine.TestUI
             _engineThread = New Thread(
                 Sub()
                     Try
-                        _engine.Execute(_ddtInstance)
+                        _engine.ExecuteDDT(_ddtInstance)
                     Catch ex As Exception
                         ' Gestisci errori nel thread
                         Me.Invoke(Sub() AddChatMessage("System", "Errore nel motore: " & ex.Message))
@@ -359,7 +359,7 @@ Namespace DDTEngine.TestUI
         ''' Gestisce l'evento MessageToShow dal ResponseManager
         ''' Mostra il messaggio nella chat
         ''' </summary>
-        Private Sub OnMessageToShow(sender As Object, e As Global.DDTEngine.Core.MessageEventArgs)
+        Private Sub OnMessageToShow(sender As Object, e As Global.DDTEngine.MessageEventArgs)
             If e IsNot Nothing AndAlso Not String.IsNullOrEmpty(e.Message) Then
                 ' Usa Invoke per eseguire sul thread UI se necessario
                 If Me.InvokeRequired Then

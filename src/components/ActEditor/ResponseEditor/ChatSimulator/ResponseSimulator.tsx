@@ -3,6 +3,7 @@ import { Play, RotateCcw, Bot, Bug } from 'lucide-react';
 import { ResponseFlowEngine, FlowState } from './ResponseFlowEngine';
 import { usePanelZoom } from '../../../../hooks/usePanelZoom';
 import { useFontContext } from '../../../../context/FontContext';
+import { useBackendType } from '../../../../context/BackendTypeContext';
 
 interface ResponseSimulatorProps {
   ddt: any;
@@ -16,6 +17,7 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
   selectedNode
 }) => {
   const { combinedClass, fontSize } = useFontContext();
+  const { backendType, setBackendType } = useBackendType();
   const [flowState, setFlowState] = useState<FlowState | null>(null);
   const [engine, setEngine] = useState(() => new ResponseFlowEngine(ddt, translations, selectedNode));
   const [showDebug, setShowDebug] = useState(false);
@@ -167,7 +169,32 @@ const ResponseSimulator: React.FC<ResponseSimulatorProps> = ({
             <Bot size={16} className="text-purple-600" />
             <h3 className={`font-semibold text-gray-800 ${combinedClass}`}>Chat Simulator</h3>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <div className="flex items-center gap-1 px-2 py-1 rounded border bg-gray-50 border-gray-200">
+              <span className="text-xs text-gray-600">Backend:</span>
+              <button
+                onClick={() => setBackendType('react')}
+                className={`px-2 py-0.5 text-xs rounded ${
+                  backendType === 'react'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                }`}
+                title="Use React/Ruby backend (localhost:3100)"
+              >
+                React
+              </button>
+              <button
+                onClick={() => setBackendType('vbnet')}
+                className={`px-2 py-0.5 text-xs rounded ${
+                  backendType === 'vbnet'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                }`}
+                title="Use VB.NET backend (localhost:5000, debuggable in Visual Studio)"
+              >
+                VB.NET
+              </button>
+            </div>
             <button
               onClick={() => setShowDebug(!showDebug)}
               className={`flex items-center gap-1 px-2 py-1 rounded border ${combinedClass} ${

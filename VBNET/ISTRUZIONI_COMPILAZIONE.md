@@ -20,7 +20,7 @@ Avvia Visual Studio 2022 (o versione compatibile con .NET 6.0).
 
 ### Passo 4: Attendi il Caricamento
 Visual Studio caricherà:
-- `DDTEngine.Core` (progetto libreria)
+- `DDTEngine` (progetto libreria)
 - `DDTEngine.TestUI` (progetto Windows Forms)
 
 ### Passo 5: Rebuild Solution
@@ -36,14 +36,14 @@ Visual Studio caricherà:
 
 ```
 VBNET.sln
-├── DDTEngine.Core (net6.0)
+├── DDTEngine (net8.0)
 │   ├── Models/
 │   ├── Engine/
 │   └── Helpers/
 └── DDTEngine.TestUI (net6.0-windows)
     ├── MainForm.vb
     └── Program.vb
-    └── Riferimento a DDTEngine.Core
+    └── Riferimento a DDTEngine
 ```
 
 ## Requisiti

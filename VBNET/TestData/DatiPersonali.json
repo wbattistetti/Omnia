@@ -34,7 +34,7 @@
               { "text": "Non ho ricevuto risposta, qual è il nome?" }
             ],
             "confirmation": [
-              { "text": "Hai detto {input}?" }
+              { "text": "Hai detto [Nominativo.Nome]?" }
             ],
             "notConfirmed": [
               { "text": "Ok, qual è il nome corretto?" }
@@ -65,7 +65,7 @@
               { "text": "Non ho ricevuto risposta, qual è il cognome?" }
             ],
             "confirmation": [
-              { "text": "Hai detto {input}?" }
+              { "text": "Hai detto [Nominativo.Nome]?" }
             ],
             "notConfirmed": [
               { "text": "Ok, qual è il cognome corretto?" }
@@ -91,7 +91,7 @@
           { "text": "Non ho ricevuto risposta, qual è il nominativo?" }
         ],
         "confirmation": [
-          { "text": "Hai detto {input}?" }
+          { "text": "Hai detto [Nominativo]?" }
         ],
         "notConfirmed": [
           { "text": "Ok, qual è il nominativo corretto?" }
@@ -129,10 +129,10 @@
               { "text": "Non ho ricevuto risposta, qual è il giorno di nascita? (1-31)" }
             ],
             "invalid": [
-              { "text": "Il giorno {input} non è valido. Deve essere un numero tra 1 e 31. Guarda che {input} è maggiore di 31." }
+              { "text": "Il giorno [Data di Nascita.Giorno] non è valido. Deve essere un numero tra 1 e 31. Guarda che [Data di Nascita.Giorno] è maggiore di 31." }
             ],
             "success": [
-              { "text": "Giorno registrato: {input}." }
+              { "text": "Giorno registrato: [Data di Nascita.Giorno]." }
             ]
           },
           "validationConditions": [
@@ -175,10 +175,10 @@
               { "text": "Non ho ricevuto risposta, qual è il mese di nascita? (1-12)" }
             ],
             "invalid": [
-              { "text": "Il mese {input} non è valido. Deve essere un numero tra 1 e 12. Guarda che {input} è maggiore di 12." }
+              { "text": "Il mese [Data di Nascita.Mese] non è valido. Deve essere un numero tra 1 e 12. Guarda che [Data di Nascita.Mese] è maggiore di 12." }
             ],
             "success": [
-              { "text": "Mese registrato: {input}." }
+              { "text": "Mese registrato: [Data di Nascita.Mese]." }
             ]
           },
           "validationConditions": [
@@ -221,10 +221,10 @@
               { "text": "Non ho ricevuto risposta, qual è l'anno di nascita? (es. 1990)" }
             ],
             "invalid": [
-              { "text": "L'anno {input} non è valido. Deve essere un numero a 4 cifre tra 1900 e 2024." }
+              { "text": "L'anno [Data di Nascita.Anno] non è valido. Deve essere un numero a 4 cifre tra 1900 e 2024." }
             ],
             "success": [
-              { "text": "Anno registrato: {input}." }
+              { "text": "Anno registrato: [Data di Nascita.Anno]." }
             ]
           },
           "validationConditions": [
@@ -262,7 +262,7 @@
           { "text": "Non ho ricevuto risposta, qual è la data di nascita? (giorno/mese/anno)" }
         ],
         "confirmation": [
-          { "text": "Hai detto {input}?" }
+          { "text": "Hai detto [Data di Nascita]?" }
         ],
         "notConfirmed": [
           { "text": "Ok, qual è la data di nascita corretta? (giorno/mese/anno)" }
@@ -300,7 +300,7 @@
               { "text": "Non ho ricevuto risposta, qual è il tipo di via? (es. Via, Viale, Piazza)" }
             ],
             "success": [
-              { "text": "Tipo via registrato: {input}." }
+              { "text": "Tipo via registrato: [Indirizzo.Tipo Via]." }
             ]
           },
           "validationConditions": []
@@ -325,7 +325,7 @@
               { "text": "Non ho ricevuto risposta, qual è il nome della via?" }
             ],
             "success": [
-              { "text": "Nome via registrato: {input}." }
+              { "text": "Nome via registrato: [Indirizzo.Nome Via]." }
             ]
           },
           "validationConditions": []
@@ -350,10 +350,10 @@
               { "text": "Non ho ricevuto risposta, qual è il numero civico?" }
             ],
             "invalid": [
-              { "text": "Il numero civico {input} non è valido. Deve essere un numero positivo." }
+              { "text": "Il numero civico [Indirizzo.Numero Civico] non è valido. Deve essere un numero positivo." }
             ],
             "success": [
-              { "text": "Numero civico registrato: {input}." }
+              { "text": "Numero civico registrato: [Indirizzo.Numero Civico]." }
             ]
           },
           "validationConditions": [
@@ -382,7 +382,7 @@
           { "text": "Non ho ricevuto risposta, qual è l'indirizzo?" }
         ],
         "confirmation": [
-          { "text": "Hai detto {input}?" }
+          { "text": "Hai detto [Indirizzo]?" }
         ],
         "notConfirmed": [
           { "text": "Ok, qual è l'indirizzo corretto?" }
@@ -413,16 +413,16 @@
           { "text": "Non ho ricevuto risposta, qual è il numero di telefono?" }
         ],
         "confirmation": [
-          { "text": "Hai detto {input}?" }
+          { "text": "Hai detto [Telefono]?" }
         ],
         "notConfirmed": [
           { "text": "Ok, qual è il numero di telefono corretto?" }
         ],
         "invalid": [
-          { "text": "Il numero di telefono {input} non è valido. Deve contenere tra 10 e 15 cifre." }
+          { "text": "Il numero di telefono [Telefono] non è valido. Deve contenere tra 10 e 15 cifre." }
         ],
         "success": [
-          { "text": "Telefono registrato: {input}." }
+          { "text": "Telefono registrato: [Telefono]." }
         ]
       },
       "validationConditions": [

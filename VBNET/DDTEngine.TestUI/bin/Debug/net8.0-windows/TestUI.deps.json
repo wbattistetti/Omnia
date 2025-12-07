@@ -8,15 +8,15 @@
     ".NETCoreApp,Version=v8.0": {
       "TestUI/1.0.0": {
         "dependencies": {
-          "DDTEngine.Core": "1.0.0"
+          "DDTEngine": "1.0.0"
         },
         "runtime": {
           "TestUI.dll": {}
         }
       },
-      "DDTEngine.Core/1.0.0": {
+      "DDTEngine/1.0.0": {
         "runtime": {
-          "DDTEngine.Core.dll": {
+          "DDTEngine.dll": {
             "assemblyVersion": "1.0.0.0",
             "fileVersion": "1.0.0.0"
           }
@@ -30,7 +30,7 @@
       "serviceable": false,
       "sha512": ""
     },
-    "DDTEngine.Core/1.0.0": {
+    "DDTEngine/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

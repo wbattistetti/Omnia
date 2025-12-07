@@ -13,8 +13,8 @@ VBNET/
 ├── STRUTTURA_PROGETTO.md              # Questo file
 ├── VBNET.sln                          # Solution file per Visual Studio
 │
-├── DDTEngine.Core/                    # Core del motore
-│   ├── DDTEngine.Core.vbproj          # File di progetto
+├── DDTEngine/                          # Core del motore
+│   ├── DDTEngine.vbproj                # File di progetto
 │   ├── Models/                        # Classi di modello
 │   │   ├── DDTInstance.vb             # Istanza di DDT
 │   │   ├── DDTNode.vb                 # Nodo del DDT (mainData o subData)
@@ -95,7 +95,7 @@ VBNET/
    - Gestione Invalid → conditionId
 
 3. **ResponseManager.ExecuteResponse**: Logica completa
-   - Sostituzione placeholder {input}
+   - Sostituzione placeholder [path] usando riferimenti pre-risoluti (compile-time)
    - Mostra messaggio (interfaccia)
    - Esecuzione azioni
 

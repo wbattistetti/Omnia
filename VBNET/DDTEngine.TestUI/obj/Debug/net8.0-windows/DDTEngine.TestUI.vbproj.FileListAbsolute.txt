@@ -1,6 +1,0 @@
-C:\Cursor Projects\Omnia\VBNET\DDTEngine.TestUI\obj\Debug\net8.0-windows\DDTEngine.TestUI.vbproj.AssemblyReference.cache
-C:\Cursor Projects\Omnia\VBNET\DDTEngine.TestUI\obj\Debug\net8.0-windows\DDTEngine.TestUI.GeneratedMSBuildEditorConfig.editorconfig
-C:\Cursor Projects\Omnia\VBNET\DDTEngine.TestUI\obj\Debug\net8.0-windows\DDTEngine.TestUI.AssemblyInfoInputs.cache
-C:\Cursor Projects\Omnia\VBNET\DDTEngine.TestUI\obj\Debug\net8.0-windows\DDTEngine.TestUI.AssemblyInfo.vb
-C:\Cursor Projects\Omnia\VBNET\DDTEngine.TestUI\obj\Debug\net8.0-windows\DDTEngine.TestUI.vbproj.CoreCompileInputs.cache
-C:\Cursor Projects\Omnia\VBNET\DDTEngine.TestUI\obj\Debug\net8.0-windows\DDTEngine.TestUI.sourcelink.json

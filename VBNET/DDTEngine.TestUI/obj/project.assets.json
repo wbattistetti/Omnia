@@ -2,28 +2,28 @@
   "version": 3,
   "targets": {
     "net8.0-windows7.0": {
-      "DDTEngine.Core/1.0.0": {
+      "DDTEngine/1.0.0": {
         "type": "project",
         "framework": ".NETCoreApp,Version=v8.0",
         "compile": {
-          "bin/placeholder/DDTEngine.Core.dll": {}
+          "bin/placeholder/DDTEngine.dll": {}
         },
         "runtime": {
-          "bin/placeholder/DDTEngine.Core.dll": {}
+          "bin/placeholder/DDTEngine.dll": {}
         }
       }
     }
   },
   "libraries": {
-    "DDTEngine.Core/1.0.0": {
+    "DDTEngine/1.0.0": {
       "type": "project",
-      "path": "../DDTEngine.Core/DDTEngine.Core.vbproj",
-      "msbuildProject": "../DDTEngine.Core/DDTEngine.Core.vbproj"
+      "path": "../DDTEngine/DDTEngine.vbproj",
+      "msbuildProject": "../DDTEngine/DDTEngine.vbproj"
     }
   },
   "projectFileDependencyGroups": {
     "net8.0-windows7.0": [
-      "DDTEngine.Core >= 1.0.0"
+      "DDTEngine >= 1.0.0"
     ]
   },
   "packageFolders": {
@@ -58,8 +58,8 @@
         "net8.0-windows7.0": {
           "targetAlias": "net8.0-windows",
           "projectReferences": {
-            "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine.Core\\DDTEngine.Core.vbproj": {
-              "projectPath": "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine.Core\\DDTEngine.Core.vbproj"
+            "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine\\DDTEngine.vbproj": {
+              "projectPath": "C:\\Cursor Projects\\Omnia\\VBNET\\DDTEngine\\DDTEngine.vbproj"
             }
           }
         }

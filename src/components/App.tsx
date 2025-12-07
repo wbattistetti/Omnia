@@ -16,6 +16,7 @@ import { ActEditorProvider } from './ActEditor/EditorHost/ActEditorContext';
 import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
+import { BackendTypeProvider } from '../context/BackendTypeContext';
 import { TypeTemplateService } from '../services/TypeTemplateService';
 import { taskTemplateService } from '../services/TaskTemplateService';
 import { DialogueTemplateService } from '../services/DialogueTemplateService';
@@ -183,7 +184,9 @@ export default function App() {
                   <DDTManagerProvider>
                     <ActEditorProvider>
                       <InMemoryConditionsProvider>
-                        <AppInner />
+                        <BackendTypeProvider>
+                          <AppInner />
+                        </BackendTypeProvider>
                       </InMemoryConditionsProvider>
                     </ActEditorProvider>
                   </DDTManagerProvider>

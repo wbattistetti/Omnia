@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useDDTManager } from '../../context/DDTManagerContext';
+import { useBackendType } from '../../context/BackendTypeContext';
 import BubbleBot from './BubbleBot';
 import BubbleUser from './BubbleUser';
 import BubbleInput from './BubbleInput';
@@ -28,6 +29,7 @@ const ChatSimulator: React.FC = () => {
   const [useNewEngine, setUseNewEngine] = useState(true);
   const { selectedDDT } = useDDTManager();
   const [inputLoading, setInputLoading] = useState(false);
+  const { backendType, setBackendType } = useBackendType();
 
   // Handle sending user input asynchronously
   const handleSend = async (text: string) => {
@@ -38,7 +40,7 @@ const ChatSimulator: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={reset}>Reset</button>
         <button onClick={() => setShowDebug(d => !d)}>
           {showDebug ? 'Hide Debug' : 'Show Debug'}
@@ -46,6 +48,37 @@ const ChatSimulator: React.FC = () => {
         <button onClick={() => setUseNewEngine(v => !v)}>
           {useNewEngine ? 'Use legacy engine' : 'Use new DialogueDataEngine'}
         </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', color: '#666' }}>Backend:</span>
+          <button
+            onClick={() => setBackendType('react')}
+            style={{
+              padding: '4px 8px',
+              fontSize: '12px',
+              backgroundColor: backendType === 'react' ? '#3b82f6' : '#e5e7eb',
+              color: backendType === 'react' ? 'white' : '#374151',
+              border: '1px solid #d1d5db',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            React
+          </button>
+          <button
+            onClick={() => setBackendType('vbnet')}
+            style={{
+              padding: '4px 8px',
+              fontSize: '12px',
+              backgroundColor: backendType === 'vbnet' ? '#3b82f6' : '#e5e7eb',
+              color: backendType === 'vbnet' ? 'white' : '#374151',
+              border: '1px solid #d1d5db',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            VB.NET
+          </button>
+        </div>
       </div>
       {useNewEngine ? (
         <DDTSimulatorPreview currentDDT={selectedDDT as any} />

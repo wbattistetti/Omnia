@@ -1,0 +1,16 @@
+C:\Cursor Projects\Omnia\VBNET\Compiler\bin\Debug\net8.0\Compiler.deps.json
+C:\Cursor Projects\Omnia\VBNET\Compiler\bin\Debug\net8.0\Compiler.dll
+C:\Cursor Projects\Omnia\VBNET\Compiler\bin\Debug\net8.0\Compiler.pdb
+C:\Cursor Projects\Omnia\VBNET\Compiler\bin\Debug\net8.0\DDTEngine.dll
+C:\Cursor Projects\Omnia\VBNET\Compiler\bin\Debug\net8.0\DDTEngine.pdb
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.vbproj.AssemblyReference.cache
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.GeneratedMSBuildEditorConfig.editorconfig
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.AssemblyInfoInputs.cache
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.AssemblyInfo.vb
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.vbproj.CoreCompileInputs.cache
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.sourcelink.json
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.vbproj.Up2Date
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.dll
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\refint\Compiler.dll
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\Compiler.pdb
+C:\Cursor Projects\Omnia\VBNET\Compiler\obj\Debug\net8.0\ref\Compiler.dll

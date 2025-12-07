@@ -14,7 +14,7 @@ Questo documento fornisce istruzioni dettagliate per il Copilot quando assiste n
 ### Struttura
 ```
 VBNET/
-├── DDTEngine.Core/          # Core del motore
+├── DDTEngine/                # Core del motore
 │   ├── Models/              # Classi di modello
 │   ├── Engine/              # Logica del motore
 │   └── Helpers/             # Funzioni helper
@@ -45,7 +45,7 @@ VBNET/
 
 2. **Struttura**:
    - Ogni classe in un file separato
-   - Namespace: `DDTEngine.Core`, `DDTEngine.TestUI`, ecc.
+   - Namespace: `DDTEngine`, `DDTEngine.TestUI`, ecc.
    - Usare `Option Strict On` e `Option Explicit On`
 
 3. **LINQ**:
@@ -85,7 +85,7 @@ VBNET/
 
 **Logica**:
 - Se `exitType = 'noResponseNeeded'`, ritorna `false` (continua senza mostrare nulla)
-- Sostituisce placeholder `{input}` se presente
+- Sostituisce placeholder `[path]` usando riferimenti pre-risoluti (compile-time)
 - Mostra messaggio (da implementare con interfaccia)
 - Esegue azioni se presenti
 - Incrementa counter

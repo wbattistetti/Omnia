@@ -88,26 +88,59 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       console.log('🚀 [FRONTEND] Calling backend compiler API...');
       console.log('═══════════════════════════════════════════════════════════════════════════');
 
-      // Collect all tasks and ddts
-      const allTasks = taskRepository.getAllTasks();
-      const allDDTs: any[] = [];
+      // Collect only referenced tasks from node rows (not all tasks in repository)
+      const referencedTaskIds = new Set<string>();
+      enrichedNodes.forEach(node => {
+        const rows = node.data?.rows || [];
+        rows.forEach(row => {
+          // Use row.taskId if present, otherwise fallback to row.id
+          const taskId = row.taskId || row.id;
+          if (taskId) {
+            referencedTaskIds.add(taskId);
+          }
+        });
+      });
 
-      // Extract DDTs from GetData tasks
+      // Collect only referenced tasks from repository
+      const allTasks = Array.from(referencedTaskIds)
+        .map(taskId => taskRepository.getTask(taskId))
+        .filter(task => task !== undefined);
+
+      // Extract DDTs only from referenced GetData tasks
+      const allDDTs: any[] = [];
       allTasks.forEach(task => {
         if (task.action === 'GetData' && task.value?.ddt) {
           allDDTs.push(task.value.ddt);
         }
       });
 
+      const totalTasksInRepository = taskRepository.getAllTasks().length;
       console.log('[FRONTEND] Preparing compilation request:', {
         nodesCount: enrichedNodes.length,
         edgesCount: options.edges.length,
         tasksCount: allTasks.length,
+        referencedTaskIdsCount: referencedTaskIds.size,
+        totalTasksInRepository,
         ddtsCount: allDDTs.length
       });
 
+      if (totalTasksInRepository > allTasks.length) {
+        console.log(`[FRONTEND] ⚠️ Filtered out ${totalTasksInRepository - allTasks.length} unused tasks from repository`);
+      }
+
+      // Get base URL from localStorage (React: localhost:3100, VB.NET: localhost:5000)
+      const backendType = (() => {
+        try {
+          const stored = localStorage.getItem('omnia_backend_type');
+          return stored === 'vbnet' ? 'vbnet' : 'react';
+        } catch {
+          return 'react';
+        }
+      })();
+      const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
+
       // Call backend API (NO FALLBACK - backend only)
-      const compileResponse = await fetch('http://localhost:3100/api/runtime/compile', {
+      const compileResponse = await fetch(`${baseUrl}/api/runtime/compile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -121,12 +154,37 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         })
       });
 
+      console.log(`[FRONTEND] Response status: ${compileResponse.status} ${compileResponse.statusText}`);
+      console.log(`[FRONTEND] Response headers:`, Object.fromEntries(compileResponse.headers.entries()));
+
       if (!compileResponse.ok) {
-        const errorData = await compileResponse.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(`Backend compilation failed: ${errorData.message || errorData.error || compileResponse.statusText}`);
+        const errorText = await compileResponse.text().catch(() => 'Unable to read error response');
+        console.error(`[FRONTEND] ❌ Backend compilation failed (${compileResponse.status}):`, errorText);
+        let errorData: any = { error: 'Unknown error' };
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || 'Unknown error' };
+        }
+        throw new Error(`Backend compilation failed: ${errorData.message || errorData.error || errorData.detail || compileResponse.statusText}`);
       }
 
-      const compileData = await compileResponse.json();
+      const responseText = await compileResponse.text();
+      console.log(`[FRONTEND] Response body length: ${responseText.length} characters`);
+      console.log(`[FRONTEND] Response body preview:`, responseText.substring(0, 200));
+
+      if (!responseText || responseText.trim().length === 0) {
+        throw new Error('Backend returned empty response');
+      }
+
+      let compileData: any;
+      try {
+        compileData = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error(`[FRONTEND] ❌ Failed to parse JSON response:`, parseError);
+        console.error(`[FRONTEND] Response text:`, responseText);
+        throw new Error(`Failed to parse backend response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+      }
 
       // Convert taskMap from object back to Map
       const taskMap = new Map<string, CompiledTask>();

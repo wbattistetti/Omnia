@@ -16,7 +16,7 @@ Il DDT Engine gestisce dialoghi deterministici per l'acquisizione di dati strutt
 
 ```
 VBNET/
-├── DDTEngine.Core/          # Core del motore
+├── DDTEngine/                # Core del motore
 │   ├── Models/              # Classi di modello (DDTInstance, DDTNode, Response, ecc.)
 │   ├── Engine/              # Logica del motore (Execute, GetNextData, SetState, ecc.)
 │   └── Helpers/             # Funzioni helper  (ValidationHelper)
@@ -107,7 +107,7 @@ Prima di implementare qualsiasi funzione, consultare `Motori.MD` per:
 
 2. **Struttura**:
    - Ogni classe in un file separato
-   - Namespace: `DDTEngine.Core`, `DDTEngine.TestUI`, ecc.
+   - Namespace: `DDTEngine`, `DDTEngine.TestUI`, ecc.
    - Usare `Option Strict On` e `Option Explicit On`
 
 3. **Gestione Errori**:

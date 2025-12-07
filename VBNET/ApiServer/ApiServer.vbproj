@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <OptionStrict>On</OptionStrict>
+    <OptionExplicit>On</OptionExplicit>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>ApiServer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDTEngine\DDTEngine.vbproj" />
+    <ProjectReference Include="..\Compiler\Compiler.vbproj" />
+    <ProjectReference Include="..\Orchestrator\Orchestrator.vbproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Commands\CompileFlowCommand.vb" />
+    <Compile Include="Commands\CompileDDTCommand.vb" />
+    <Compile Include="Commands\RunDDTCommand.vb" />
+    <Compile Include="SessionManager.vb" />
+    <Compile Include="Program.vb" />
+  </ItemGroup>
+
+</Project>
+

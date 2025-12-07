@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <OptionStrict>On</OptionStrict>
+    <OptionExplicit>On</OptionExplicit>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>DDTEngine.Orchestrator</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDTEngine\DDTEngine.vbproj" />
+    <ProjectReference Include="..\Compiler\Compiler.vbproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="FlowOrchestrator.vb" />
+    <Compile Include="TaskExecutor.vb" />
+    <Compile Include="ConditionEvaluator.vb" />
+    <Compile Include="ExecutionState.vb" />
+  </ItemGroup>
+
+</Project>
+

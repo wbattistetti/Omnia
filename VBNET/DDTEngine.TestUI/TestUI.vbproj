@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDTEngine.Core\DDTEngine.Core.vbproj" />
+    <ProjectReference Include="..\DDTEngine\DDTEngine.vbproj" />
   </ItemGroup>
 
 </Project>

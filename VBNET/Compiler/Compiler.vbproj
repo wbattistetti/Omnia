@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <OptionStrict>On</OptionStrict>
+    <OptionExplicit>On</OptionExplicit>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>Compiler</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDTEngine\DDTEngine.vbproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DDT Compiler -->
+    <Compile Include="DDTCompiler.vb" />
+    <Compile Include="ContractLoader.vb" />
+
+    <!-- Flow Compiler -->
+    <Compile Include="FlowCompiler.vb" />
+    <Compile Include="ConditionBuilder.vb" />
+    <Compile Include="Flow.vb" />
+    <Compile Include="FlowUtils.vb" />
+
+    <!-- IDE Types (Input from React/TypeScript) -->
+    <Compile Include="IDE\FlowNode.vb" />
+    <Compile Include="IDE\FlowEdge.vb" />
+    <Compile Include="IDE\NodeData.vb" />
+    <Compile Include="IDE\RowData.vb" />
+    <Compile Include="IDE\EdgeData.vb" />
+    <Compile Include="IDE\Task.vb" />
+    <Compile Include="IDE\ActionTypeConverter.vb" />
+
+    <!-- Runtime Types (Output for execution) -->
+    <Compile Include="Runtime\TaskState.vb" />
+    <Compile Include="Runtime\Condition.vb" />
+    <Compile Include="Runtime\TaskSourceType.vb" />
+    <Compile Include="Runtime\TaskDebugInfo.vb" />
+    <Compile Include="Runtime\CompiledTask.vb" />
+    <Compile Include="Runtime\FlowCompilationResult.vb" />
+    <Compile Include="Runtime\TaskGroup.vb" />
+    <Compile Include="Runtime\Utils.vb" />
+  </ItemGroup>
+
+</Project>

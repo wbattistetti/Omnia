@@ -3,6 +3,7 @@ import { Home, Save, Settings, Play, Loader2, CheckCircle, AlertCircle } from 'l
 import { ProjectData } from '../types/project';
 import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
+import { useBackendType } from '../context/BackendTypeContext';
 
 export interface ToolbarProps {
   onHome: () => void;
@@ -27,6 +28,7 @@ export function Toolbar({
 }: ToolbarProps) {
   const { provider, model, setProvider, setModel, providerConfig, availableModels } = useAIProvider();
   const { fontType, fontSize, setFontType, setFontSize } = useFontStore();
+  const { backendType, setBackendType } = useBackendType();
   const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -171,6 +173,33 @@ export function Toolbar({
 
       {/* Right side - Settings and Run */}
       <div className="flex items-center space-x-3 flex-shrink-0 relative">
+        {/* Backend Type Toggle (React/VB.NET) */}
+        <div className="flex items-center gap-1 px-2 py-1 rounded border bg-slate-700 border-slate-600">
+          <span className="text-xs text-slate-400">Backend:</span>
+          <button
+            onClick={() => setBackendType('react')}
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              backendType === 'react'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+            }`}
+            title="Use React/Ruby backend (localhost:3100)"
+          >
+            React
+          </button>
+          <button
+            onClick={() => setBackendType('vbnet')}
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              backendType === 'vbnet'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+            }`}
+            title="Use VB.NET backend (localhost:5000, debuggable in Visual Studio)"
+          >
+            VB.NET
+          </button>
+        </div>
+
         <div className="relative">
           <button
             ref={settingsButtonRef}
