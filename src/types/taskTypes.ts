@@ -2,8 +2,31 @@
 // These types are added alongside existing types for gradual migration
 
 /**
+ * TaskContext: Enumerated contexts where a TaskInstance can be inserted
+ */
+export enum TaskContext {
+  NodeRow = 'NodeRow',      // Riga di nodo nel flowchart
+  Response = 'Response'     // Dentro escalation di step in DDT
+}
+
+/**
+ * TaskType: Type of task (determines behavior and editor)
+ */
+export type TaskType =
+  | 'action'        // Azioni semplici (sayMessage, sendSMS, CloseCall, ecc.)
+  | 'dataRequest'   // DataRequest (GetData)
+  | 'problem'       // ProblemClassification
+  | 'backend'       // BackendCall
+  | 'flow';         // Macrotask (porzione di flusso)
+
+/**
  * TaskTemplate: Defines a type of executable task
  * Replaces: AgentActs, Action Catalog entries
+ *
+ * TaskTemplate è riutilizzabile e organizzato per scope:
+ * - global: disponibile in tutti i progetti
+ * - industry: disponibile solo per progetti di quell'industry
+ * - client: disponibile solo nel progetto specifico
  */
 export interface TaskTemplate {
   id: string;                    // Template ID (e.g. "SayMessage", "GetData", "callBackend")
@@ -11,6 +34,8 @@ export interface TaskTemplate {
   description: string;           // Description
   icon: string;                  // Icon name (e.g. "MessageCircle", "HelpCircle")
   color: string;                 // UI color (e.g. "text-blue-500")
+  type: TaskType;                // ✅ Type of task (determines behavior)
+  contexts: TaskContext[];        // ✅ Where this template can be inserted
 
   // Signature: Input parameters schema (if needed)
   signature?: {
@@ -60,13 +85,28 @@ export interface TaskHeuristic {
 }
 
 /**
- * Task: Executable instance of a TaskTemplate
- * Replaces: ActInstance
- * Relationship: 1:1 with FlowRow (each row has one unique Task)
+ * TaskInstance: Executable instance of a TaskTemplate
+ * Replaces: ActInstance, Task (old name)
+ * Relationship: 1:1 with FlowRow (each row has one unique TaskInstance)
+ *
+ * During migration, both templateId and action are maintained for compatibility.
+ * After migration is complete, action will be removed.
+ */
+export interface TaskInstance {
+  id: string;                    // Unique TaskInstance ID (instance ID)
+  templateId: string;           // ✅ TaskTemplate ID (e.g. "SayMessage", "GetData")
+  value?: Record<string, any>;   // Generic key-value data, structured according to template's valueSchema
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+/**
+ * Task: Represents a concrete instance of a TaskTemplate
+ * @deprecated Use TaskInstance instead. This will be removed after migration.
  */
 export interface Task {
   id: string;                    // Unique Task ID (instance ID)
-  action: string;                // TaskTemplate ID (e.g. "SayMessage", "GetData")
+  templateId: string;             // ✅ TaskTemplate ID (e.g. "SayMessage", "GetData") - REQUIRED
   value?: Record<string, any>;   // Generic key-value data, structured according to template's valueSchema
   createdAt?: Date;
   updatedAt?: Date;

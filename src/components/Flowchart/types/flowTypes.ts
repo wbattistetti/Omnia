@@ -1,13 +1,20 @@
 import type { EdgeData as BaseEdgeData } from '../../hooks/useEdgeManager';
 
-// Definizione completa di NodeData senza dipendenze circolari
-export interface NodeData {
-  title: string;
-  rows: Array<{ id: string; text: string;[key: string]: any }>;
+/**
+ * Simplified FlowNode model - directly contains rows without intermediate wrapper
+ * This replaces the old NodeData wrapper for a cleaner, more direct structure
+ */
+export interface FlowNode {
+  label?: string;  // Node title (ex title)
+  rows: NodeRow[];  // Rows directly, without wrapper
+  position?: { x: number; y: number };  // ReactFlow position
+  type?: string;  // ReactFlow type
+  // UI state fields
   isTemporary?: boolean;
   hidden?: boolean;
   createdAt?: number;
   batchId?: string;
+  // Callback functions
   onDelete?: () => void;
   onUpdate?: (updates: any) => void;
   onPlayNode?: () => void;
@@ -18,6 +25,20 @@ export interface NodeData {
   focusRowId?: string;
   [key: string]: any;
 }
+
+/**
+ * NodeRow represents a single row in a FlowNode
+ * Each row corresponds to a TaskInstance via row.id === task.id (GUID)
+ */
+export interface NodeRow {
+  id: string;        // UUID della riga (topological ID)
+  text: string;      // Testo visualizzato
+  taskId?: string;   // Reference to Task (1:1)
+  included?: boolean; // true se la row è inclusa nel flusso
+  [key: string]: any;
+}
+
+// NodeData removed - use FlowNode directly
 
 export interface EdgeData extends BaseEdgeData {
   // Eventuali estensioni specifiche per flowchart

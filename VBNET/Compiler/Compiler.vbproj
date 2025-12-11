@@ -9,6 +9,12 @@
     <RootNamespace>Compiler</RootNamespace>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\DDTEngine\DDTEngine.vbproj" />
   </ItemGroup>
@@ -18,8 +24,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- DDT Compiler -->
+    <!-- DDT Compiler e Assembler -->
     <Compile Include="DDTCompiler.vb" />
+    <Compile Include="DDTAssembler.vb" />
     <Compile Include="ContractLoader.vb" />
 
     <!-- Flow Compiler -->
@@ -28,24 +35,32 @@
     <Compile Include="Flow.vb" />
     <Compile Include="FlowUtils.vb" />
 
-    <!-- IDE Types (Input from React/TypeScript) -->
-    <Compile Include="IDE\FlowNode.vb" />
-    <Compile Include="IDE\FlowEdge.vb" />
-    <Compile Include="IDE\NodeData.vb" />
-    <Compile Include="IDE\RowData.vb" />
-    <Compile Include="IDE\EdgeData.vb" />
-    <Compile Include="IDE\Task.vb" />
-    <Compile Include="IDE\ActionTypeConverter.vb" />
+    <!-- IDE Types (Input from React/TypeScript) - Flow -->
+    <Compile Include="DTO\IDE\FlowNode.vb" />
+    <Compile Include="DTO\IDE\FlowEdge.vb" />
+    <Compile Include="DTO\IDE\NodeData.vb" />
+    <Compile Include="DTO\IDE\RowData.vb" />
+    <Compile Include="DTO\IDE\EdgeData.vb" />
+    <Compile Include="DTO\IDE\Task.vb" />
+    <Compile Include="DTO\IDE\ActionTypeConverter.vb" />
+
+    <!-- IDE Types (Input from React/TypeScript) - DDT -->
+    <Compile Include="DTO\IDE\ActionParameter.vb" />
+    <Compile Include="DTO\IDE\Action.vb" />
+    <Compile Include="DTO\IDE\Escalation.vb" />
+    <Compile Include="DTO\IDE\StepGroup.vb" />
+    <Compile Include="DTO\IDE\MainDataNode.vb" />
+    <Compile Include="DTO\IDE\AssembledDDT.vb" />
 
     <!-- Runtime Types (Output for execution) -->
-    <Compile Include="Runtime\TaskState.vb" />
-    <Compile Include="Runtime\Condition.vb" />
-    <Compile Include="Runtime\TaskSourceType.vb" />
-    <Compile Include="Runtime\TaskDebugInfo.vb" />
-    <Compile Include="Runtime\CompiledTask.vb" />
-    <Compile Include="Runtime\FlowCompilationResult.vb" />
-    <Compile Include="Runtime\TaskGroup.vb" />
-    <Compile Include="Runtime\Utils.vb" />
+    <Compile Include="DTO\Runtime\TaskState.vb" />
+    <Compile Include="DTO\Runtime\Condition.vb" />
+    <Compile Include="DTO\Runtime\TaskSourceType.vb" />
+    <Compile Include="DTO\Runtime\TaskDebugInfo.vb" />
+    <Compile Include="DTO\Runtime\CompiledTask.vb" />
+    <Compile Include="DTO\Runtime\FlowCompilationResult.vb" />
+    <Compile Include="DTO\Runtime\TaskGroup.vb" />
+    <Compile Include="DTO\Runtime\Utils.vb" />
   </ItemGroup>
 
 </Project>

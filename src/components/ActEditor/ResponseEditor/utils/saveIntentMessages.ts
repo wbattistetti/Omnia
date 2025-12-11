@@ -38,21 +38,36 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
   }
 
   // Helper per creare una escalation con un messaggio
-  const createEscalation = (text: string): any => ({
-    escalationId: uuidv4(),
-    actions: [
-      {
-        actionId: 'sayMessage',
-        actionInstanceId: uuidv4(),
-        parameters: [
+  const createEscalation = (text: string): any => {
+    const taskId = uuidv4();
+    return {
+      escalationId: uuidv4(),
+      tasks: [  // ✅ New field
+        {
+          templateId: 'sayMessage',  // ✅ Renamed from actionId
+          taskId: taskId,            // ✅ Renamed from actionInstanceId
+          parameters: [
           {
             parameterId: 'text',
             value: text, // Direct text value (no textKey per semplicità iniziale)
           },
         ],
-      },
-    ],
-  });
+      }
+      ],
+      actions: [  // ✅ Legacy alias for backward compatibility
+        {
+          actionId: 'sayMessage',
+          actionInstanceId: taskId,
+          parameters: [
+            {
+              parameterId: 'text',
+              value: text
+            }
+          ]
+        }
+      ]
+    };
+  };
 
   // Helper per creare uno step con escalations
   const createStep = (type: string, messageList: string[]): any => ({

@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
 import { Node, Edge } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
-import type { NodeData, EdgeData } from '../types/flowTypes';
+import type { FlowNode, EdgeData } from '../types/flowTypes';
 
 export function useTemporaryNodes(
-  setNodes: React.Dispatch<React.SetStateAction<Node<NodeData>[]>>,
+      setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>,
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>,
   reactFlowInstance: any,
   connectionMenuRef: React.MutableRefObject<any>,
@@ -59,12 +59,12 @@ export function useTemporaryNodes(
       const position = { x: posFlow.x - (realNodeWidth / 2), y: posFlow.y };
 
       // Crea nodo temporaneo HIDDEN
-      const tempNode: Node<NodeData> = {
+      const tempNode: Node<FlowNode> = {
         id: tempNodeId,
         type: 'custom',
         position,
         data: {
-          title: '',
+          label: '',
           rows: [],
           isTemporary: true,
           hidden: true, // ✅ NODO INVISIBILE

@@ -1,4 +1,5 @@
 import type { NodeRowData } from '../types/project';
+import type { Task, TaskInstance } from '../types/taskTypes';
 import { taskRepository } from '../services/TaskRepository';
 // FASE 4: InstanceRepository import removed - TaskRepository handles synchronization internally
 import { generateId } from './idGenerator';
@@ -7,6 +8,75 @@ import { generateId } from './idGenerator';
  * Helper functions for Task/Instance migration
  * These functions provide backward-compatible access to Task IDs
  */
+
+// ============================================================================
+// ✅ MIGRATION HELPERS: Universal helpers for Task → TaskInstance migration
+// ============================================================================
+
+/**
+ * ✅ HELPER UNIVERSALE: Usa SEMPRE questo per ottenere templateId
+ * Garantisce uniformità durante la migrazione
+ *
+ * Priority: templateId (new) > action (legacy)
+ *
+ * @param task - Task or TaskInstance
+ * @returns Template ID (string)
+ * @throws Error if neither templateId nor action is present
+ */
+export function getTemplateId(task: Task | TaskInstance | null | undefined): string {
+  if (!task) {
+    throw new Error('Task is null or undefined');
+  }
+
+  // ✅ templateId is now required (action removed)
+  if ('templateId' in task && task.templateId) {
+    return task.templateId;
+  }
+
+  throw new Error(`Task ${task.id} has no templateId`);
+}
+
+/**
+ * ✅ VALIDATION: Verifica che il Task sia valido
+ *
+ * @param task - Task or TaskInstance to validate
+ * @throws Error if task is invalid
+ */
+export function validateTask(task: Task | TaskInstance | null | undefined): void {
+  if (!task) {
+    throw new Error('Task is null or undefined');
+  }
+
+  if (!task.id || task.id.trim() === '') {
+    throw new Error('Task has invalid id');
+  }
+
+  const templateId = getTemplateId(task);
+  if (!templateId || templateId.trim() === '') {
+    throw new Error(`Task ${task.id} has invalid templateId: "${templateId}"`);
+  }
+}
+
+/**
+ * ✅ HELPER: Normalizza Task a TaskInstance
+ * Assicura che templateId sia presente
+ *
+ * @param task - Task to normalize
+ * @returns TaskInstance with templateId
+ */
+export function normalizeTask(task: Task): TaskInstance {
+  validateTask(task);
+
+  const templateId = getTemplateId(task);
+
+  return {
+    id: task.id,
+    templateId: templateId,
+    value: task.value,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt
+  };
+}
 
 /**
  * Get Task ID from a row
@@ -114,6 +184,7 @@ export function createRowWithTask(
 
 /**
  * Update row's Task when action changes (e.g., from Intellisense selection)
+ * ✅ MIGRATION: Uses templateId instead of action
  *
  * @param row - NodeRowData row to update
  * @param newAction - New action ID (template ID)
@@ -126,8 +197,8 @@ export function updateRowTaskAction(
 ): void {
   const taskId = getTaskIdFromRow(row);
 
-  // Update Task's action
-  taskRepository.updateTask(taskId, { action: newAction }, projectId);
+  // ✅ MIGRATION: Update Task's templateId (TaskRepository will sync action automatically)
+  taskRepository.updateTask(taskId, { templateId: newAction }, projectId);
 
   // FASE 4: TaskRepository.updateTask already updates InstanceRepository internally
   // No need to update it separately - TaskRepository handles synchronization
@@ -136,6 +207,7 @@ export function updateRowTaskAction(
 /**
  * Get row data (message text, DDT, intents, etc.)
  * Uses TaskRepository (new model)
+ * ✅ MIGRATION: Uses getTemplateId() helper
  *
  * @param row - NodeRowData row
  * @returns Row data object with message, ddt, intents, etc.
@@ -144,17 +216,19 @@ export function getRowData(row: NodeRowData): {
   message?: { text: string };
   ddt?: any;
   intents?: any[];
-  action?: string;
+  action?: string;  // ✅ Legacy field name, contains templateId
 } {
   const taskId = getTaskIdFromRow(row);
   const task = taskRepository.getTask(taskId);
 
   if (task) {
+    // ✅ MIGRATION: Use getTemplateId() helper
+    const templateId = getTemplateId(task);
     return {
       message: task.value?.text ? { text: task.value.text } : undefined,
       ddt: task.value?.ddt,
       intents: task.value?.intents,
-      action: task.action
+      action: templateId  // ✅ Returns templateId (legacy field name maintained for compatibility)
     };
   }
 

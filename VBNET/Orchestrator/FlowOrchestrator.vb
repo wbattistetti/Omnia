@@ -121,14 +121,14 @@ Public Class FlowOrchestrator
                 Exit While
             End If
 
-            Console.WriteLine($"▶️ [FlowOrchestrator] Executing task: {nextTask.Id}, Action: {nextTask.Action}")
+            Console.WriteLine($"▶️ [FlowOrchestrator] Executing task: {nextTask.Id}, Action: {nextTask.Type}")
 
             ' Esegui task
             ' Imposta callback per messaggi
             _taskExecutor.SetMessageCallback(Sub(text, stepType, escalationNumber)
-                Console.WriteLine($"📨 [FlowOrchestrator] Message callback called: {text.Substring(0, Math.Min(100, text.Length))}")
-                RaiseEvent MessageToShow(Me, text)
-            End Sub)
+                                                 Console.WriteLine($"📨 [FlowOrchestrator] Message callback called: {text.Substring(0, Math.Min(100, text.Length))}")
+                                                 RaiseEvent MessageToShow(Me, text)
+                                             End Sub)
 
             Dim result As TaskExecutionResult = _taskExecutor.ExecuteTask(nextTask, _state)
 
@@ -200,7 +200,7 @@ Public Class FlowOrchestrator
                     If canExecute Then
                         ' Trova il primo task non eseguito nel TaskGroup
                         For Each task In taskGroup.Tasks
-                            Console.WriteLine($"🔍 [FlowOrchestrator] Checking task: {task.Id}, Action: {task.Action}, Already executed: {_state.ExecutedTaskIds.Contains(task.Id)}")
+                            Console.WriteLine($"🔍 [FlowOrchestrator] Checking task: {task.Id}, Action: {task.Type}, Already executed: {_state.ExecutedTaskIds.Contains(task.Id)}")
 
                             If Not _state.ExecutedTaskIds.Contains(task.Id) Then
                                 ' Valuta condizione del task
@@ -211,7 +211,7 @@ Public Class FlowOrchestrator
                                 End If
 
                                 If taskCanExecute Then
-                                    Console.WriteLine($"✅ [FlowOrchestrator] Found executable task: {task.Id}, Action: {task.Action}")
+                                    Console.WriteLine($"✅ [FlowOrchestrator] Found executable task: {task.Id}, Action: {task.Type}")
                                     Return task
                                 End If
                             End If

@@ -83,7 +83,14 @@ function ensureStepsForNode(node: any): any {
     built[k] = {
       escalations: [
         {
-          actions: [
+          tasks: [  // ✅ New field
+            {
+              templateId: 'sayMessage',
+              taskId: '',  // Will be set when task is created
+              parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [],
+            }
+          ],
+          actions: [  // ✅ Legacy alias for backward compatibility
             {
               actionId: 'sayMessage',
               parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [],

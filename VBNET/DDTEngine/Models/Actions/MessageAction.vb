@@ -38,7 +38,7 @@ Public Class MessageAction
 
     Public Overrides ReadOnly Property ActionId As String
         Get
-            Return ActionType.SayMessage.ToString()
+            Return TaskTypes.SayMessage.ToString()
         End Get
     End Property
 

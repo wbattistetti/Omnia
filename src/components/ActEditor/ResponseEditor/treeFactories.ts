@@ -7,7 +7,7 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
   if (!translations || Object.keys(translations).length === 0) {
   }
   const nodes: TreeNodeProps[] = [];
-  
+
   // Supporta nuova struttura: steps è un array
   if (Array.isArray(ddt.steps)) {
     ddt.steps.forEach((stepGroup: any) => {
@@ -26,17 +26,20 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
             level: 0,
             included: true,
           });
-          (escalation.actions || []).forEach((action: any) => {
-            if (action.actionInstanceId) {
-              const actionInstanceId = action.actionInstanceId;
+          // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+          const taskRefs = escalation.tasks || escalation.actions || [];
+          taskRefs.forEach((taskRef: any) => {
+            // ✅ Support both taskId (new) and actionInstanceId (legacy)
+            const taskId = taskRef.taskId || taskRef.actionInstanceId;
+            if (taskId) {
               const ddtId = ddt.id || ddt._id;
-              const key = action.parameters && action.parameters[0] && action.parameters[0].value;
+              const key = taskRef.parameters && taskRef.parameters[0] && taskRef.parameters[0].value;
               const testo = translations[key];
               const text = testo || '';
               if (text === '') {
               }
               nodes.push({
-                id: actionInstanceId,
+                id: taskId,
                 text,
                 type: stepKey,
                 level: 1,
@@ -85,7 +88,7 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
       }
     }
   }
-  
+
   return nodes;
 };
 
@@ -117,4 +120,4 @@ export function removeNodePure(nodes: TreeNodeProps[], id: string, removeChildre
 // Aggiunge un nodo in fondo
 export function addNode(nodes: TreeNodeProps[], node: TreeNodeProps) {
   return [...nodes, node];
-} 
+}

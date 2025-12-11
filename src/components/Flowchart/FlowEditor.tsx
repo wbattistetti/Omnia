@@ -25,7 +25,7 @@ import { useTemporaryNodes } from './hooks/useTemporaryNodes';
 import { useFlowConnect } from './hooks/useFlowConnect';
 import { useSelectionManager } from './hooks/useSelectionManager';
 import { useNodeAlignment } from './hooks/useNodeAlignment';
-import type { NodeData, EdgeData } from './types/flowTypes';
+import type { FlowNode, EdgeData } from './types/flowTypes';
 import { useNodesWithLog } from './hooks/useNodesWithLog';
 import { useUndoRedoManager } from './hooks/useUndoRedoManager';
 import { useEdgeLabelScheduler } from './hooks/useEdgeLabelScheduler';
@@ -49,13 +49,13 @@ const edgeTypes = { custom: CustomEdge };
 interface FlowEditorProps {
   flowId?: string;
   onPlayNode: (nodeId: string, nodeRows: any[]) => void;
-  nodes: Node<NodeData>[];
-  setNodes: React.Dispatch<React.SetStateAction<Node<NodeData>[]>>;
+  nodes: Node<FlowNode>[];
+  setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>;
   edges: Edge<EdgeData>[];
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>;
   currentProject: any;
   setCurrentProject: (project: any) => void;
-  onCreateTaskFlow?: (flowId: string, title: string, nodes: Node<NodeData>[], edges: Edge<EdgeData>[]) => void;
+  onCreateTaskFlow?: (flowId: string, title: string, nodes: Node<FlowNode>[], edges: Edge<EdgeData>[]) => void;
   onOpenTaskFlow?: (flowId: string, title: string) => void;
 }
 
@@ -256,7 +256,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   }, [deleteNode]);
 
   // ✅ Definire addNodeAtPosition wrapper
-  const addNodeAtPosition = useCallback((node: Node<NodeData>, x: number, y: number) => {
+  const addNodeAtPosition = useCallback((node: Node<FlowNode>, x: number, y: number) => {
     originalAddNodeAtPosition(node, x, y);
   }, [originalAddNodeAtPosition]);
 
@@ -498,12 +498,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
     const focusRowId = initialRow ? initialRow.id : `${newNodeId}-${Math.random().toString(36).substr(2, 9)}`;
 
-    const node: Node<NodeData> = {
+    const node: Node<FlowNode> = {
       id: newNodeId,
       type: 'custom',
       position: { x, y },
       data: {
-        title: '',
+        label: '',
         rows: initialRow ? [initialRow] : [],
         onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
@@ -731,7 +731,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     const incDy = curY - ctx.rootLast.y;
     if (incDx === 0 && incDy === 0) return;
 
-    setNodes((nds: Node<NodeData>[]) => nds.map(n => {
+    setNodes((nds: Node<FlowNode>[]) => nds.map(n => {
       if (!ctx.ids.has(n.id)) return n;
       if (n.id === draggedNode.id) return draggedNode;
       const pos = n.position as any;
@@ -747,7 +747,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       const finalDx = (rootNow.position as any).x - ctx.rootLast.x;
       const finalDy = (rootNow.position as any).y - ctx.rootLast.y;
       if (finalDx !== 0 || finalDy !== 0) {
-        setNodes((nds: Node<NodeData>[]) => nds.map(n => {
+        setNodes((nds: Node<FlowNode>[]) => nds.map(n => {
           if (!ctx.ids.has(n.id)) return n;
           if (n.id === ctx.rootId) return n;
           const pos = n.position as any;
@@ -1602,7 +1602,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
               e.preventDefault();
               e.stopPropagation();
               const flowId = (node.data as any)?.flowId || node.id;
-              const title = (node.data as any)?.title || 'Task';
+              const title = (node.data as any)?.label || 'Task';
               if (onOpenTaskFlow) onOpenTaskFlow(flowId, title);
             }
           }}
@@ -1763,7 +1763,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
               type: 'task',
               position: { x: avgX, y: avgY },
               data: {
-                title: '', // Vuoto all'inizio, sarà editato dall'utente
+                label: '', // Vuoto all'inizio, sarà editato dall'utente
                 flowId: newFlowId,
                 editingToken, // Token immutabile per triggare editing immediato
                 onUpdate: (updates: any) => {

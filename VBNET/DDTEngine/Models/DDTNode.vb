@@ -2,9 +2,14 @@ Option Strict On
 Option Explicit On
 
 ''' <summary>
-''' Rappresenta un nodo del DDT (mainData o subData)
+''' Rappresenta un nodo del DDT (mainData o subData) - Struttura Runtime
+''' Contiene sia i campi design-time (dal frontend MainDataNode) che i campi runtime
 ''' </summary>
 Public Class DDTNode
+    ' ============================================================
+    ' CAMPI DESIGN-TIME (dal frontend MainDataNode)
+    ' ============================================================
+
     ''' <summary>
     ''' ID univoco del nodo
     ''' </summary>
@@ -16,20 +21,49 @@ Public Class DDTNode
     Public Property Name As String
 
     ''' <summary>
-    ''' FullLabel: path completo dall'ancestor root alla leaf (es. "Nominativo.Nome", "Data di Nascita.Giorno")
+    ''' Label leggibile del nodo
+    ''' </summary>
+    Public Property Label As String
+
+    ''' <summary>
+    ''' Tipo di dato (es. "date", "email", "text")
+    ''' </summary>
+    Public Property Type As String
+
+    ''' <summary>
+    ''' Condizione di attivazione del nodo
+    ''' </summary>
+    Public Property Condition As String
+
+    ''' <summary>
+    ''' Sinonimi per il riconoscimento NLP
+    ''' </summary>
+    Public Property Synonyms As List(Of String)
+
+    ''' <summary>
+    ''' Constraints di validazione
+    ''' </summary>
+    Public Property Constraints As List(Of Object)
+
+    Public Property Required As Boolean
+
+    Public Property SubData As List(Of DDTNode)
+
+    ' ============================================================
+    ' CAMPI RUNTIME (calcolati/usati durante esecuzione)
+    ' ============================================================
+
+    ''' <summary>
+    ''' FullLabel: path completo dall'ancestor root alla leaf (es. "Nominativo.Nome")
     ''' Calcolato a compile-time quando il DDT viene caricato
     ''' </summary>
     Public Property FullLabel As String
-
-    Public Property Required As Boolean
 
     Public Property Steps As List(Of DialogueStep)
 
     Public Property ValidationConditions As List(Of ValidationCondition)
 
     Public Property ParentData As DDTNode
-
-    Public Property SubData As List(Of DDTNode)
 
     Public Property RequiresConfirmation As Boolean
 
@@ -51,6 +85,8 @@ Public Class DDTNode
     Public Property NlpContract As NLPContract
 
     Public Sub New()
+        Synonyms = New List(Of String)()
+        Constraints = New List(Of Object)()
         Steps = New List(Of DialogueStep)()
         ValidationConditions = New List(Of ValidationCondition)()
         SubData = New List(Of DDTNode)()

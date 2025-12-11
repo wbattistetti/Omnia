@@ -1,12 +1,12 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Node } from 'reactflow';
-import type { NodeData } from '../types/flowTypes';
+import type { FlowNode } from '../types/flowTypes';
 
 export interface SelectionMenuProps {
   selectedNodeIds: string[];
   selectionMenu: { show: boolean; x: number; y: number };
-  nodes: Node<NodeData>[];
+  nodes: Node<FlowNode>[];
   onCreateTask: () => void;
   onAlign: (type: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;
   onDistribute: (type: 'horizontal' | 'vertical') => void;

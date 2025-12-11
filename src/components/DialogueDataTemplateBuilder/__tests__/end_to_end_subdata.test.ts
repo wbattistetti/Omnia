@@ -159,9 +159,13 @@ describe('DDT Builder End-to-End SubData Test', () => {
     expect(yearStartStep.escalations).toHaveLength(1);
 
     // Verifica che le traduzioni contengano i messaggi specifici
-    const dayParameterValue = dayStartStep.escalations[0].actions[0].parameters[0].value;
-    const monthParameterValue = monthStartStep.escalations[0].actions[0].parameters[0].value;
-    const yearParameterValue = yearStartStep.escalations[0].actions[0].parameters[0].value;
+    // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+    const dayTask = dayStartStep.escalations[0].tasks?.[0] || dayStartStep.escalations[0].actions?.[0];
+    const monthTask = monthStartStep.escalations[0].tasks?.[0] || monthStartStep.escalations[0].actions?.[0];
+    const yearTask = yearStartStep.escalations[0].tasks?.[0] || yearStartStep.escalations[0].actions?.[0];
+    const dayParameterValue = dayTask?.parameters?.[0]?.value;
+    const monthParameterValue = monthTask?.parameters?.[0]?.value;
+    const yearParameterValue = yearTask?.parameters?.[0]?.value;
 
     expect(result.translations[dayParameterValue]).toContain('What day were you born?');
     expect(result.translations[monthParameterValue]).toContain('What month were you born?');
@@ -204,4 +208,4 @@ describe('DDT Builder End-to-End SubData Test', () => {
     expect(result.mainData.subData).toHaveLength(0);
     expect(result.mainData.steps).toHaveLength(5); // start, noMatch, noInput, confirmation, success
   });
-}); 
+});

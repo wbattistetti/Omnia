@@ -2,14 +2,14 @@
 
 import type { Condition } from './types';
 import type { Node, Edge } from 'reactflow';
-import type { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
+import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 
 /**
  * Builds condition for first row of a node
  */
 export function buildFirstRowCondition(
   nodeId: string,
-  nodes: Node<NodeData>[],
+  nodes: Node<FlowNode>[],
   edges: Edge<EdgeData>[]
 ): Condition | null {
   // Find incoming edges

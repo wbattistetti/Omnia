@@ -48,14 +48,15 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
         escalationsCount: escs.length,
         escalations: escs.map((esc, idx) => ({
           idx,
-          hasActions: !!(esc.actions && Array.isArray(esc.actions)),
-          actionsCount: esc.actions ? esc.actions.length : 0,
-          firstAction: esc.actions?.[0] ? {
-            actionId: esc.actions[0].actionId,
-            hasParameters: !!(esc.actions[0].parameters && Array.isArray(esc.actions[0].parameters)),
-            textKey: esc.actions[0].parameters?.find((p: any) => p.parameterId === 'text')?.value,
-            hasText: !!(esc.actions[0].text && esc.actions[0].text.length > 0),
-            text: esc.actions[0].text
+          // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+          hasActions: !!((esc.tasks || esc.actions) && Array.isArray(esc.tasks || esc.actions)),
+          actionsCount: (esc.tasks || esc.actions) ? (esc.tasks || esc.actions).length : 0,
+          firstAction: (esc.tasks?.[0] || esc.actions?.[0]) ? {
+            actionId: (esc.tasks?.[0] || esc.actions?.[0])?.templateId || (esc.tasks?.[0] || esc.actions?.[0])?.actionId,
+            hasParameters: !!((esc.tasks?.[0] || esc.actions?.[0])?.parameters && Array.isArray((esc.tasks?.[0] || esc.actions?.[0])?.parameters)),
+            textKey: (esc.tasks?.[0] || esc.actions?.[0])?.parameters?.find((p: any) => p.parameterId === 'text')?.value,
+            hasText: !!((esc.tasks?.[0] || esc.actions?.[0])?.text && (esc.tasks?.[0] || esc.actions?.[0])?.text.length > 0),
+            text: (esc.tasks?.[0] || esc.actions?.[0])?.text
           } : null
         })),
         fullStep: node.steps[stepKey]
@@ -149,7 +150,10 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
     });
 
     return [
-      { actions: [{ actionId: 'sayMessage', text, textKey }] }
+      {
+        tasks: [{ templateId: 'sayMessage', taskId: '', parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [] }],  // ✅ New field
+        actions: [{ actionId: 'sayMessage', text, textKey }]  // ✅ Legacy alias
+      }
     ];
   }
   // Last‑resort: derive from translation keys (runtime.*) containing node label and stepKey

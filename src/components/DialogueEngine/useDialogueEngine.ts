@@ -2,13 +2,14 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { Node, Edge } from 'reactflow';
-import type { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
+import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import type { CompiledTask, CompilationResult, ExecutionState } from '../FlowCompiler/types';
 // Frontend DialogueEngine removed - backend orchestrator is now default
 import { taskRepository } from '../../services/TaskRepository';
+import { getTemplateId } from '../../utils/taskHelpers';
 
 interface UseDialogueEngineOptions {
-  nodes: Node<NodeData>[];
+  nodes: Node<FlowNode>[];
   edges: Edge<EdgeData>[];
   getTask: (taskId: string) => any;
   getDDT?: (taskId: string) => any;
@@ -107,9 +108,11 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         .filter(task => task !== undefined);
 
       // Extract DDTs only from referenced GetData tasks
+      // ✅ MIGRATION: Use getTemplateId() helper
       const allDDTs: any[] = [];
       allTasks.forEach(task => {
-        if (task.action === 'GetData' && task.value?.ddt) {
+        const templateId = getTemplateId(task);
+        if (templateId === 'GetData' && task.value?.ddt) {
           allDDTs.push(task.value.ddt);
         }
       });

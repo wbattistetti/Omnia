@@ -82,13 +82,13 @@ Module Program
                         Throw New Exception("No nodes provided")
                     End If
 
-                    ' Create Flow structure
-                    Dim flow As New Compiler.Flow() With {
-                        .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
-                        .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-                        .Tasks = If(request.Tasks, New List(Of Compiler.Task)()),
-                        .DDTs = If(request.DDTs, New List(Of Object)())
-                    }
+        ' Create Flow structure
+        Dim flow As New Compiler.Flow() With {
+            .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
+            .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
+            .Tasks = If(request.Tasks, New List(Of Compiler.Task)()),
+            .DDTs = If(request.DDTs, New List(Of Compiler.AssembledDDT)())
+        }
 
                     ' Compile flow
                     Dim compiler = New Compiler.FlowCompiler()
@@ -322,13 +322,13 @@ Module Program
                 Return Results.BadRequest(New With {.error = "No nodes provided"})
             End If
 
-            ' Create Flow structure
-            Dim flow As New Compiler.Flow() With {
-                .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
-                .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-                .Tasks = If(request.Tasks, New List(Of Compiler.Task)()),
-                .DDTs = If(request.DDTs, New List(Of Object)())
-            }
+        ' Create Flow structure
+        Dim flow As New Compiler.Flow() With {
+            .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
+            .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
+            .Tasks = If(request.Tasks, New List(Of Compiler.Task)()),
+            .DDTs = If(request.DDTs, New List(Of Compiler.AssembledDDT)())
+        }
 
             ' Compile flow
             Dim compiler = New Compiler.FlowCompiler()
@@ -416,13 +416,13 @@ Module Program
                 Return Results.BadRequest(New With {.error = "No nodes provided"})
             End If
 
-            ' Create Flow structure
-            Dim flow As New Compiler.Flow() With {
-                .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
-                .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-                .Tasks = If(request.Tasks, New List(Of Compiler.Task)()),
-                .DDTs = If(request.DDTs, New List(Of Object)())
-            }
+        ' Create Flow structure
+        Dim flow As New Compiler.Flow() With {
+            .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
+            .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
+            .Tasks = If(request.Tasks, New List(Of Compiler.Task)()),
+            .DDTs = If(request.DDTs, New List(Of Compiler.AssembledDDT)())
+        }
 
             ' Compile flow
             Dim compiler = New Compiler.FlowCompiler()
@@ -1171,7 +1171,7 @@ Public Class CompileFlowRequest
     Public Property Nodes As List(Of Compiler.FlowNode)
     Public Property Edges As List(Of Compiler.FlowEdge)
     Public Property Tasks As List(Of Compiler.Task)
-    Public Property DDTs As List(Of Object)
+    Public Property DDTs As List(Of Compiler.AssembledDDT)
 End Class
 
 ''' <summary>
@@ -1208,7 +1208,7 @@ End Class
 Public Class OrchestratorSessionStartRequest
     Public Property CompilationResult As Object
     Public Property Tasks As List(Of Object)
-    Public Property DDTs As List(Of Object)
+    Public Property DDTs As List(Of Compiler.AssembledDDT)
     Public Property Translations As Dictionary(Of String, String)
 End Class
 

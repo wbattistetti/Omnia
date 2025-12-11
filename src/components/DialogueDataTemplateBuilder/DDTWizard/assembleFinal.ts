@@ -210,13 +210,18 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
             escalations: [
               {
                 escalationId: `e_${uuidv4()}`,
-                actions: [
+                tasks: [  // ✅ Renamed from actions
                   {
-                    actionId: 'sayMessage',
-                    actionInstanceId: uuidv4(),
+                    templateId: 'sayMessage',  // ✅ Renamed from actionId
+                    taskId: uuidv4(),          // ✅ Renamed from actionInstanceId
                     parameters: [{ parameterId: 'text', value: r1Key }]
                   }
-                ]
+                ],
+                actions: [{  // ✅ Legacy alias for backward compatibility
+                  actionId: 'sayMessage',
+                  actionInstanceId: uuidv4(),
+                  parameters: [{ parameterId: 'text', value: r1Key }]
+                }]
               }
             ]
           };
@@ -225,13 +230,18 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
             escalations: [
               {
                 escalationId: `e_${uuidv4()}`,
-                actions: [
+                tasks: [  // ✅ Renamed from actions
                   {
-                    actionId: 'sayMessage',
-                    actionInstanceId: uuidv4(),
+                    templateId: 'sayMessage',  // ✅ Renamed from actionId
+                    taskId: uuidv4(),          // ✅ Renamed from actionInstanceId
                     parameters: [{ parameterId: 'text', value: r2Key }]
                   }
-                ]
+                ],
+                actions: [{  // ✅ Legacy alias for backward compatibility
+                  actionId: 'sayMessage',
+                  actionInstanceId: uuidv4(),
+                  parameters: [{ parameterId: 'text', value: r2Key }]
+                }]
               }
             ]
           };
@@ -250,13 +260,18 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
           escalations: [
             {
               escalationId: `e_${uuidv4()}`,
-              actions: [
+              tasks: [  // ✅ Renamed from actions
                 {
-                  actionId: 'sayMessage',
-                  actionInstanceId: uuidv4(),
+                  templateId: 'sayMessage',  // ✅ Renamed from actionId
+                  taskId: uuidv4(),          // ✅ Renamed from actionInstanceId
                   parameters: [{ parameterId: 'text', value: r1Key }]
                 }
-              ]
+              ],
+              actions: [{  // ✅ Legacy alias for backward compatibility
+                actionId: 'sayMessage',
+                actionInstanceId: uuidv4(),
+                parameters: [{ parameterId: 'text', value: r1Key }]
+              }]
             }
           ]
         };
@@ -265,13 +280,18 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
           escalations: [
             {
               escalationId: `e_${uuidv4()}`,
-              actions: [
+              tasks: [  // ✅ Renamed from actions
                 {
-                  actionId: 'sayMessage',
-                  actionInstanceId: uuidv4(),
+                  templateId: 'sayMessage',  // ✅ Renamed from actionId
+                  taskId: uuidv4(),          // ✅ Renamed from actionInstanceId
                   parameters: [{ parameterId: 'text', value: r2Key }]
                 }
-              ]
+              ],
+              actions: [{  // ✅ Legacy alias for backward compatibility
+                actionId: 'sayMessage',
+                actionInstanceId: uuidv4(),
+                parameters: [{ parameterId: 'text', value: r2Key }]
+              }]
             }
           ]
         };
@@ -473,16 +493,21 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
           }
         }
 
-        const baseAction = {
-          actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
-          actionInstanceId: actionInstanceId,
+        const baseTask = {
+          templateId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',  // ✅ Renamed from actionId
+          taskId: actionInstanceId,  // ✅ Renamed from actionInstanceId
           parameters: [{ parameterId: 'text', value: actionInstanceId }]
         };
 
         const escalation = {
           escalationId: `e_${uuidv4()}`,
-          actions: [{
-            ...baseAction,
+          tasks: [{  // ✅ Renamed from actions
+            ...baseTask,
+            parameters: [{ parameterId: 'text', value: actionInstanceId }]
+          }],
+          actions: [{  // ✅ Legacy alias for backward compatibility
+            actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
+            actionInstanceId: actionInstanceId,
             parameters: [{ parameterId: 'text', value: actionInstanceId }]
           }]
         };
@@ -495,11 +520,13 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         return escalation;
       });
 
-      // The main message uses the first escalation's actionInstanceId
-      if (escalations.length > 0 && escalations[0].actions?.[0]?.actionInstanceId) {
-        const firstEscalationActionInstanceId = escalations[0].actions[0].actionInstanceId;
+      // The main message uses the first escalation's taskId
+      // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+      const firstTask = escalations[0]?.tasks?.[0] || escalations[0]?.actions?.[0];
+      if (escalations.length > 0 && firstTask?.taskId) {
+        const firstEscalationTaskId = firstTask.taskId || firstTask.actionInstanceId;  // ✅ Support both
         const firstEscalationTemplateKey = (escalations[0] as any).__templateKey;
-        assembled.messages[stepKey] = { textKey: firstEscalationActionInstanceId };
+        assembled.messages[stepKey] = { textKey: firstEscalationTaskId };
         // Also store template key if present in first escalation
         if (firstEscalationTemplateKey) {
           (assembled.messages[stepKey] as any).__templateKey = firstEscalationTemplateKey;
@@ -507,10 +534,10 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         console.log('[assembleFinalDDT] Main message key set from first escalation', {
           path,
           stepKey,
-          firstEscalationActionInstanceId,
+          firstEscalationTaskId,
           firstEscalationTemplateKey,
-          escalationActionInstanceId: escalations[0].actions[0].actionInstanceId,
-          keysMatch: firstEscalationActionInstanceId === escalations[0].actions[0].actionInstanceId
+          escalationTaskId: firstTask.taskId || firstTask.actionInstanceId,
+          keysMatch: firstEscalationTaskId === (firstTask.taskId || firstTask.actionInstanceId)
         });
       } else {
         // Fallback: use chosenKey if no escalations (should not happen)

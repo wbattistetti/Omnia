@@ -2,6 +2,7 @@
 // These functions centralize the logic for determining interactivity and retrieving DDTs
 
 import { taskRepository } from '../../../services/TaskRepository';
+import { getTemplateId } from '../../../utils/taskHelpers';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 
 /**
@@ -15,8 +16,10 @@ function getInstanceFromTask(taskId: string): { message?: { text?: string }; ddt
   // Convert Task to Instance format
   const instance: { message?: { text?: string }; ddt?: any } = {};
 
+  // ✅ MIGRATION: Use getTemplateId() helper
   // Map task.value.text → instance.message.text (for Message actions)
-  if (task.action === 'Message' || task.action === 'SayMessage') {
+  const templateId = getTemplateId(task);
+  if (templateId === 'Message' || templateId === 'SayMessage') {
     instance.message = {
       text: task.value?.text || ''
     };

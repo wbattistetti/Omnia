@@ -5,6 +5,7 @@ import { isDDTEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
+import { getTemplateId } from '../../../utils/taskHelpers';
 import Sidebar from './Sidebar';
 import StepsStrip from './StepsStrip';
 import StepEditor from './StepEditor';
@@ -128,7 +129,20 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     const handleProjectSave = () => {
       if (act?.id || (act as any)?.instanceId) {
         const key = ((act as any)?.instanceId || act?.id) as string;
-        taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
+        // ✅ MIGRATION: Use getTemplateId() helper
+        // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'GetData'
+        const task = taskRepository.getTask(key);
+        const hasDDT = localDDT && Object.keys(localDDT).length > 0 && localDDT.mainData && localDDT.mainData.length > 0;
+        if (hasDDT && task) {
+          const currentTemplateId = getTemplateId(task);
+          if (currentTemplateId !== 'GetData') {
+            taskRepository.updateTask(key, { templateId: 'GetData', value: { ...task.value, ddt: localDDT } }, currentProjectId || undefined);
+          } else {
+            taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
+          }
+        } else {
+          taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
+        }
       }
     };
 
@@ -145,7 +159,20 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
       if (act?.id || (act as any)?.instanceId) {
         const key = ((act as any)?.instanceId || act?.id) as string;
-        taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
+        // ✅ MIGRATION: Use getTemplateId() helper
+        // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'GetData'
+        const task = taskRepository.getTask(key);
+        const hasDDT = localDDT && Object.keys(localDDT).length > 0 && localDDT.mainData && localDDT.mainData.length > 0;
+        if (hasDDT && task) {
+          const currentTemplateId = getTemplateId(task);
+          if (currentTemplateId !== 'GetData') {
+            taskRepository.updateTask(key, { templateId: 'GetData', value: { ...task.value, ddt: localDDT } }, currentProjectId || undefined);
+          } else {
+            taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
+          }
+        } else {
+          taskRepository.updateTaskValue(key, { ddt: localDDT }, currentProjectId || undefined);
+        }
 
       }
 
@@ -518,8 +545,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     const mainStartStep = Array.isArray(main?.steps) ? main.steps.find((s: any) => s?.type === 'start') : null;
     const areStartStepsSame = subStartStep === mainStartStep;
 
-    // DEBUG: Get the actual action object to inspect its structure
-    const subStartAction = subStartStep?.escalations?.[0]?.actions?.[0];
+    // DEBUG: Get the actual task object to inspect its structure
+    // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+    const subStartAction = subStartStep?.escalations?.[0]?.tasks?.[0] || subStartStep?.escalations?.[0]?.actions?.[0];
     const subStartActionKeys = subStartAction ? Object.keys(subStartAction) : [];
     const subStartActionFull = subStartAction ? JSON.stringify(subStartAction).substring(0, 300) : 'null';
 
@@ -860,8 +888,24 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                 // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
                 if (act?.id || (act as any)?.instanceId) {
                   const key = ((act as any)?.instanceId || act?.id) as string;
-                  // FIX: Salva con projectId per garantire persistenza nel database
-                  taskRepository.updateTaskValue(key, { ddt: updatedDDT }, currentProjectId || undefined);
+                  // ✅ MIGRATION: Use getTemplateId() helper
+                  // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'GetData'
+                  const task = taskRepository.getTask(key);
+                  const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
+                  if (hasDDT && task) {
+                    const currentTemplateId = getTemplateId(task);
+                    if (currentTemplateId !== 'GetData') {
+                      taskRepository.updateTask(key, { templateId: 'GetData', value: { ...task.value, ddt: updatedDDT } }, currentProjectId || undefined);
+                    } else {
+                      taskRepository.updateTaskValue(key, { ddt: updatedDDT }, currentProjectId || undefined);
+                    }
+                  } else if (hasDDT) {
+                    // Task doesn't exist, create it with GetData templateId
+                    taskRepository.createTask('GetData', { ddt: updatedDDT }, key, currentProjectId || undefined);
+                  } else {
+                    // FIX: Salva con projectId per garantire persistenza nel database
+                    taskRepository.updateTaskValue(key, { ddt: updatedDDT }, currentProjectId || undefined);
+                  }
 
                   // ✅ FIX: Notifica il parent (DDTHostAdapter) che il DDT è stato aggiornato
                   onWizardComplete?.(updatedDDT);

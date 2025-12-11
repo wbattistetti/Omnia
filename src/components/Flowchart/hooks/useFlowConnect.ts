@@ -1,18 +1,18 @@
 import { useCallback } from 'react';
 import { Connection, Node, Edge } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
-import type { NodeData, EdgeData } from '../types/flowTypes';
+import type { FlowNode, EdgeData } from '../types/flowTypes';
 
 export function useFlowConnect(
   reactFlowInstance: any,
   connectionMenuRef: React.MutableRefObject<any>,
-  setNodes: React.Dispatch<React.SetStateAction<Node<NodeData>[]>>,
+  setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>,
   setEdges: React.Dispatch<React.SetStateAction<Edge<EdgeData>[]>>,
-  nodesRef: React.MutableRefObject<Node<NodeData>[]>,
+  nodesRef: React.MutableRefObject<Node<FlowNode>[]>,
   closeMenu: () => void,
   onDeleteEdge: (edgeId?: string) => void,
   deleteNodeWithLog: (nodeId: string) => void,
-  updateNode: (nodeId: string, updates: Partial<NodeData>) => void,
+  updateNode: (nodeId: string, updates: Partial<FlowNode>) => void,
   createAgentAct: () => void,
   createBackendCall: () => void,
   createTask: () => void,
@@ -80,12 +80,12 @@ export function useFlowConnect(
         y: connectionMenuRef.current.position.y - 20
       });
 
-    const newNode: Node<NodeData> = {
+    const newNode: Node<FlowNode> = {
       id: newNodeId,
       type: 'custom',
       position,
       data: {
-        title: '',
+        label: '',
         rows: [],
         onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),

@@ -3,7 +3,7 @@
 
 import type { Task } from '../../types/taskTypes';
 import type { Node, Edge } from 'reactflow';
-import type { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
+import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 
 /**

@@ -1,12 +1,14 @@
 // Flow Compiler: Transforms flowchart + DDT into flat list of Tasks with conditions
 
 import type { Node, Edge } from 'reactflow';
-import type { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
+import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type { CompiledTask, CompilationResult, DDTExpansion } from './types';
 import { buildFirstRowCondition, buildSequentialCondition } from './conditionBuilder';
 import { expandDDT } from './ddtExpander';
 import { taskRepository } from '../../services/TaskRepository';
+import { getTemplateId } from '../../utils/taskHelpers';
+import { templateIdToVBAction } from '../../utils/vbnetAdapter';
 
 interface CompilerOptions {
   getTask: (taskId: string) => any; // Function to resolve Task from taskId
@@ -17,7 +19,7 @@ interface CompilerOptions {
  * Compiles flowchart and DDT into flat list of tasks with conditions
  */
 export function compileFlow(
-  nodes: Node<NodeData>[],
+  nodes: Node<FlowNode>[],
   edges: Edge<EdgeData>[],
   options: CompilerOptions
 ): CompilationResult {
@@ -93,16 +95,19 @@ export function compileFlow(
           rowId: row.id,
           rowText: row.text,
           rowTaskId: row.taskId,
-          allTasksInMemory: taskRepository.getAllTasks().map(t => ({ id: t.id, action: t.action }))
+          allTasksInMemory: taskRepository.getAllTasks().map(t => ({ id: t.id, templateId: getTemplateId(t) }))
         });
         throw new Error(`[Compiler] Task not found: ${taskId} in node ${node.id}, row ${row.id}. Task must exist in memory.`);
       }
+
+      // ✅ MIGRATION: Use getTemplateId() helper instead of direct task.action access
+      const templateId = getTemplateId(task);
 
       console.log('[Compiler] ✅ Task found', {
         taskId: task.id,
         rowId: row.id,
         rowText: row.text,
-        taskAction: task.action
+        templateId: templateId
       });
 
       // Build condition
@@ -118,11 +123,14 @@ export function compileFlow(
         condition = buildSequentialCondition(prevTaskId);
       }
 
+      // ✅ MIGRATION: Use getTemplateId() helper instead of direct task.action access
+      const templateId = getTemplateId(task);
+
       // Create compiled task
       // Use row.id directly (which equals task.id) - no need to generate new ID
       const compiledTask: CompiledTask = {
         id: row.id, // row.id === task.id (GUID)
-        action: task.action,
+        action: templateId,  // ✅ Use templateId (CompiledTask.action is still string for now)
         value: task.value || {},
         condition,
         state: 'UnExecuted',
@@ -136,15 +144,16 @@ export function compileFlow(
       tasks.push(compiledTask);
       taskMap.set(compiledTask.id, compiledTask);
 
+      // ✅ MIGRATION: Use templateId instead of task.action
       // If task is GetData, expand DDT
-      if (task.action === 'GetData' && task.value?.ddt && options.getDDT) {
+      if (templateId === 'GetData' && task.value?.ddt && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(
             ddt,
             node.id,
             options.getTask,
-            task.action // Pass parent row action type
+            templateId // ✅ Pass templateId instead of task.action
           );
 
           // Add DDT tasks to main list
@@ -157,15 +166,16 @@ export function compileFlow(
         }
       }
 
+      // ✅ MIGRATION: Use templateId instead of task.action
       // If task is ClassifyProblem, expand DDT
-      if (task.action === 'ClassifyProblem' && task.value?.ddt && options.getDDT) {
+      if (templateId === 'ClassifyProblem' && task.value?.ddt && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(
             ddt,
             node.id,
             options.getTask,
-            task.action // Pass parent row action type
+            templateId // ✅ Pass templateId instead of task.action
           );
 
           // Add DDT tasks to main list
@@ -211,9 +221,9 @@ export function compileFlow(
  * If multiple, returns all (UI should prompt user to choose)
  */
 export function findEntryNodes(
-  nodes: Node<NodeData>[],
+  nodes: Node<FlowNode>[],
   edges: Edge<EdgeData>[]
-): Node<NodeData>[] {
+): Node<FlowNode>[] {
   return nodes.filter(n => !edges.some(e => e.target === n.id));
 }
 

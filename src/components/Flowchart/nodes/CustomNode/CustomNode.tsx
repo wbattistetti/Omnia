@@ -21,14 +21,14 @@ import { useNodeExecutionHighlight } from '../../executionHighlight/useExecution
 
 /**
  * Dati custom per un nodo del flowchart
- * @property title - titolo del nodo
+ * @property label - titolo del nodo (ex title)
  * @property rows - array di righe (azioni/step)
  * @property isTemporary - true se nodo temporaneo
  * @property onDelete - callback per eliminare il nodo
  * @property onUpdate - callback per aggiornare i dati del nodo
  */
 export interface CustomNodeData {
-  title: string;
+  label?: string;  // Node title (ex title)
   rows: NodeRowData[];
   isTemporary?: boolean;
   onDelete?: () => void;

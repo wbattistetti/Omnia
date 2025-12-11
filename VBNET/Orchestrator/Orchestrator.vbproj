@@ -9,6 +9,12 @@
     <RootNamespace>DDTEngine.Orchestrator</RootNamespace>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\DDTEngine\DDTEngine.vbproj" />
     <ProjectReference Include="..\Compiler\Compiler.vbproj" />

@@ -39,8 +39,8 @@ export function getEscalationActions(node: any, stepType: string, level: number)
 export function resolveActionText(action: any, dict: Record<string, string>): string | undefined {
   console.log('[DDTAdapter][resolveActionText] 🔍 Starting resolution', {
     hasAction: !!action,
-    actionId: action?.actionId,
-    actionInstanceId: action?.actionInstanceId,
+    actionId: action?.templateId || action?.actionId,  // ✅ Support both
+    actionInstanceId: action?.taskId || action?.actionInstanceId,  // ✅ Support both
     hasActionText: !!action?.text,
     actionText: action?.text ? String(action.text).substring(0, 50) : undefined,
     hasDict: !!dict,

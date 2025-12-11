@@ -1,5 +1,6 @@
-import type { Task } from '../types/taskTypes';
+import type { Task, TaskInstance } from '../types/taskTypes';
 import { generateId } from '../utils/idGenerator';
+import { getTemplateId } from '../utils/taskHelpers';
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -36,15 +37,24 @@ class TaskRepository {
 
   /**
    * Create a new Task
+   *
+   * @param templateId - Template ID (e.g. "SayMessage", "GetData")
+   * @param value - Task value
+   * @param taskId - Optional task ID (generates if not provided)
+   * @param projectId - Optional project ID
+   * @returns Task with templateId
    */
-  createTask(action: string, value?: Record<string, any>, taskId?: string, projectId?: string): Task {
+  createTask(templateId: string, value?: Record<string, any>, taskId?: string, projectId?: string): Task {
+    if (!templateId || templateId.trim().length === 0) {
+      throw new Error('templateId is required');
+    }
+
     const finalTaskId = taskId || generateId();
     const finalProjectId = projectId || this.getCurrentProjectId();
 
-    // Create Task in internal storage
     const task: Task = {
       id: finalTaskId,
-      action,
+      templateId: templateId,  // ✅ Required field
       value: value || undefined,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -188,10 +198,16 @@ class TaskRepository {
       const processStart = performance.now();
       this.tasks.clear();
       for (const item of items) {
-        // Map database document to Task (remove MongoDB _id, keep id field)
+        // Map database document to Task
+        // templateId is required - no fallback on action
+        if (!item.templateId) {
+          console.warn('[TaskRepository] Task without templateId (skipping):', item.id);
+          continue;
+        }
+
         const task: Task = {
           id: item.id,
-          action: item.action,
+          templateId: item.templateId,
           value: item.value,
           createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
@@ -248,11 +264,14 @@ class TaskRepository {
       }
 
       // Prepare items for bulk save
-      const items = allTasks.map(task => ({
-        id: task.id,
-        action: task.action,
-        value: task.value || {}
-      }));
+      const items = allTasks.map(task => {
+        const templateId = getTemplateId(task);
+        return {
+          id: task.id,
+          templateId: templateId,
+          value: task.value || {}
+        };
+      });
 
       const response = await fetch(`/api/projects/${finalProjectId}/tasks/bulk`, {
         method: 'POST',
@@ -278,12 +297,14 @@ class TaskRepository {
    */
   private async saveTaskToDatabase(task: Task, projectId: string): Promise<boolean> {
     try {
+      const templateId = getTemplateId(task);
+
       const response = await fetch(`/api/projects/${projectId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: task.id,
-          action: task.action,
+          templateId: templateId,
           value: task.value || {}
         })
       });

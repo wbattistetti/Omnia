@@ -66,29 +66,29 @@ export function expandDDT(
 
       expansion.recoveryNodes.set(recoveryId, recoveryId);
 
-      // Process actions in recovery
-      const actions = escalation.actions || [];
+      // Process tasks in recovery (renamed from actions)
+      // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+      const taskRefs = escalation.tasks || escalation.actions || [];
 
-      for (let actionIndex = 0; actionIndex < actions.length; actionIndex++) {
-        const action = actions[actionIndex] as Action;
-        const actionId = action.actionInstanceId || action.actionId || `action-${recoveryId}-${actionIndex + 1}`;
+      for (let taskIndex = 0; taskIndex < taskRefs.length; taskIndex++) {
+        const taskRef = taskRefs[taskIndex] as any;
+        // ✅ MIGRATION: Support both taskId (new) and actionInstanceId (legacy)
+        const taskId = taskRef.taskId || taskRef.actionInstanceId || taskRef.templateId || taskRef.actionId || `task-${recoveryId}-${taskIndex + 1}`;
 
-        // Resolve task from action
-        // Actions typically have actionId that maps to a Task
-        const taskId = action.actionId || actionId;
+        // Resolve task from taskId
         const task = getTask(taskId);
 
         if (!task) {
-          console.warn(`[DDTExpander] Task not found for action: ${taskId}`);
+          console.warn(`[DDTExpander] Task not found for taskId: ${taskId}`);
           continue;
         }
 
-        expansion.actionTasks.set(actionId, taskId);
+        expansion.actionTasks.set(taskId, taskId);
 
-        // Build condition for action
+        // Build condition for task
         let condition;
-        if (actionIndex === 0) {
-          // First action: step activated + retrieval state
+        if (taskIndex === 0) {
+          // First task: step activated + retrieval state
           condition = {
             type: 'And',
             conditions: [
@@ -97,10 +97,10 @@ export function expandDDT(
             ]
           };
         } else {
-          // Subsequent actions: previous action completed
-          const prevAction = actions[actionIndex - 1] as Action;
-          const prevActionTaskId = prevAction.actionId || prevAction.actionInstanceId || `action-${recoveryId}-${actionIndex}`;
-          condition = buildRecoverySequentialCondition(prevActionTaskId);
+          // Subsequent tasks: previous task completed
+          const prevTaskRef = taskRefs[taskIndex - 1] as any;
+          const prevTaskId = prevTaskRef.taskId || prevTaskRef.actionInstanceId || prevTaskRef.templateId || prevTaskRef.actionId || `task-${recoveryId}-${taskIndex}`;
+          condition = buildRecoverySequentialCondition(prevTaskId);
         }
 
         // Create compiled task

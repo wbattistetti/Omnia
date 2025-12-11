@@ -99,10 +99,11 @@ export function playDDT(
           type: startStep.type,
           escalationsCount: startStep.escalations?.length || 0,
           firstEscalation: startStep.escalations?.[0] ? {
-            actionsCount: startStep.escalations[0].actions?.length || 0,
-            firstAction: startStep.escalations[0].actions?.[0] ? {
-              actionId: startStep.escalations[0].actions[0].actionId,
-              parameters: startStep.escalations[0].actions[0].parameters
+            // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+            actionsCount: (startStep.escalations[0].tasks || startStep.escalations[0].actions)?.length || 0,
+            firstAction: (startStep.escalations[0].tasks?.[0] || startStep.escalations[0].actions?.[0]) ? {
+              actionId: (startStep.escalations[0].tasks?.[0] || startStep.escalations[0].actions?.[0])?.templateId || (startStep.escalations[0].tasks?.[0] || startStep.escalations[0].actions?.[0])?.actionId,
+              parameters: (startStep.escalations[0].tasks?.[0] || startStep.escalations[0].actions?.[0])?.parameters
             } : null
           } : null
         } : null,

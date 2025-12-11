@@ -4,7 +4,9 @@ Option Explicit On
 Imports Compiler
 Imports DDTEngine
 Imports System.Collections.Generic
+Imports System.Linq
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
 
 ''' <summary>
 ''' Esegue un task compilato
@@ -29,32 +31,32 @@ Public Class TaskExecutor
     ''' </summary>
     Public Function ExecuteTask(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
         Try
-            Console.WriteLine($"🔧 [TaskExecutor] Executing task: {task.Id}, Action: {task.Action}")
+            Console.WriteLine($"🔧 [TaskExecutor] Executing task: {task.Id}, Action: {task.Type}")
 
-            Select Case task.Action
-                Case ActionType.SayMessage
+            Select Case task.Type
+                Case TaskTypes.SayMessage
                     Return ExecuteSayMessage(task, state)
 
-                Case ActionType.GetData
+                Case TaskTypes.GetData
                     Return ExecuteGetData(task, state)
 
-                Case ActionType.BackendCall
+                Case TaskTypes.BackendCall
                     Return ExecuteBackendCall(task, state)
 
-                Case ActionType.ClassifyProblem
+                Case TaskTypes.ClassifyProblem
                     Return ExecuteClassifyProblem(task, state)
 
-                Case ActionType.CloseSession
+                Case TaskTypes.CloseSession
                     Return ExecuteCloseSession(task, state)
 
-                Case ActionType.Transfer
+                Case TaskTypes.Transfer
                     Return ExecuteTransfer(task, state)
 
                 Case Else
-                    Console.WriteLine($"⚠️ [TaskExecutor] Unknown action type: {task.Action}")
+                    Console.WriteLine($"⚠️ [TaskExecutor] Unknown action type: {task.Type}")
                     Return New TaskExecutionResult() With {
                         .Success = False,
-                        .Error = $"Unknown action type: {task.Action}"
+                        .Error = $"Unknown action type: {task.Type}"
                     }
             End Select
         Catch ex As Exception
@@ -141,16 +143,6 @@ Public Class TaskExecutor
         Try
             Console.WriteLine($"📥 [TaskExecutor] GetData task {task.Id} - Starting DDT execution")
 
-            ' Debug: log Value structure
-            If task.Value IsNot Nothing Then
-                Console.WriteLine($"   Value keys: {String.Join(", ", task.Value.Keys)}")
-                For Each kvp In task.Value
-                    Console.WriteLine($"   - {kvp.Key}: {If(kvp.Value IsNot Nothing, kvp.Value.GetType().Name, "Nothing")}")
-                Next
-            Else
-                Console.WriteLine($"   Value is Nothing")
-            End If
-
             ' Estrai DDT dal Value
             If task.Value Is Nothing OrElse Not task.Value.ContainsKey("ddt") Then
                 Console.WriteLine($"❌ [TaskExecutor] GetData task {task.Id} missing DDT in Value")
@@ -169,29 +161,19 @@ Public Class TaskExecutor
                 }
             End If
 
-            ' Serializza DDT in JSON string
-            Dim ddtJson As String = Nothing
-            Try
-                If TypeOf ddtValue Is String Then
-                    ' Se è già una stringa JSON, usala direttamente
-                    ddtJson = CStr(ddtValue)
-                Else
-                    ' Se è un oggetto, serializzalo in JSON
-                    ddtJson = JsonConvert.SerializeObject(ddtValue)
-                End If
-                Console.WriteLine($"✅ [TaskExecutor] DDT serialized: {If(ddtJson IsNot Nothing, ddtJson.Length, 0)} characters")
-            Catch jsonEx As Exception
-                Console.WriteLine($"❌ [TaskExecutor] Error serializing DDT: {jsonEx.Message}")
-                Return New TaskExecutionResult() With {
-                    .Success = False,
-                    .Error = $"Failed to serialize DDT: {jsonEx.Message}"
-                }
-            End Try
-
-            ' Carica DDTInstance da JSON
+            ' Carica DDTInstance
             Dim ddtInstance As DDTInstance = Nothing
             Try
-                ddtInstance = DDTLoader.LoadFromJsonString(ddtJson)
+                If TypeOf ddtValue Is DDTInstance Then
+                    ' Se è già un DDTInstance, usalo direttamente
+                    ddtInstance = DDTLoader.LoadFromObject(CType(ddtValue, DDTInstance))
+                ElseIf TypeOf ddtValue Is String Then
+                    ' Se è una stringa JSON, deserializza
+                    ddtInstance = DDTLoader.LoadFromJsonString(CStr(ddtValue))
+                Else
+                    Throw New InvalidOperationException($"Tipo ddtValue non supportato: {ddtValue.GetType().Name}. Atteso: DDTInstance o String JSON")
+                End If
+
                 Console.WriteLine($"✅ [TaskExecutor] DDTInstance loaded: {If(ddtInstance IsNot Nothing AndAlso ddtInstance.MainDataList IsNot Nothing, ddtInstance.MainDataList.Count, 0)} mainData nodes")
             Catch loadEx As Exception
                 Console.WriteLine($"❌ [TaskExecutor] Error loading DDTInstance: {loadEx.Message}")

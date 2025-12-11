@@ -8,7 +8,7 @@ import { getStepColor } from './chatSimulatorUtils';
 import { useMessageEditing } from './hooks/useMessageEditing';
 import { useNewFlowOrchestrator } from './hooks/useNewFlowOrchestrator';
 import { Node, Edge } from 'reactflow';
-import { NodeData, EdgeData } from '../Flowchart/types/flowTypes';
+import { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import { extractTranslations, resolveActionText } from './DDTAdapter';
 import { adaptCurrentToV2 } from '../DialogueDataEngine/model/adapters/currentToV2';
 import { useDDTSimulator } from '../DialogueDataEngine/useSimulator';
@@ -25,7 +25,7 @@ interface DDEBubbleChatProps {
   onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
   // Flow mode props
   mode?: 'single-ddt' | 'flow';
-  nodes?: Node<NodeData>[]; // For flow mode
+  nodes?: Node<FlowNode>[]; // For flow mode
   edges?: Edge<EdgeData>[]; // For flow mode
 }
 
@@ -699,13 +699,14 @@ export default function DDEBubbleChat({
         const startStep = mainData?.steps?.start;
         if (startStep && Array.isArray(startStep.escalations) && startStep.escalations.length > 0) {
           const firstEscalation = startStep.escalations[0];
-          const firstAction = firstEscalation?.actions?.[0];
+          // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+          const firstAction = firstEscalation?.tasks?.[0] || firstEscalation?.actions?.[0];
 
           console.log('[DDEBubbleChat] firstAction check', {
             hasFirstEscalation: !!firstEscalation,
             hasFirstAction: !!firstAction,
-            actionId: firstAction?.actionId,
-            actionInstanceId: firstAction?.actionInstanceId,
+            actionId: firstAction?.templateId || firstAction?.actionId,  // ✅ Support both
+            actionInstanceId: firstAction?.taskId || firstAction?.actionInstanceId,  // ✅ Support both
             hasParameters: !!firstAction?.parameters,
             parametersCount: firstAction?.parameters?.length || 0
           });
@@ -742,8 +743,8 @@ export default function DDEBubbleChat({
               return;
             } else {
               console.warn('[DDEBubbleChat] ❌ resolveActionText returned empty', {
-                actionId: firstAction.actionId,
-                actionInstanceId: firstAction.actionInstanceId,
+                actionId: firstAction.templateId || firstAction.actionId,  // ✅ Support both
+                actionInstanceId: firstAction.taskId || firstAction.actionInstanceId,  // ✅ Support both
                 hasText: !!firstAction.text,
                 parameters: firstAction.parameters
               });

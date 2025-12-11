@@ -12,7 +12,7 @@ Option Explicit On
 
         Public Overrides ReadOnly Property ActionId As String
             Get
-                Return ActionType.CloseSession.ToString()
+                Return TaskTypes.CloseSession.ToString()
             End Get
         End Property
 

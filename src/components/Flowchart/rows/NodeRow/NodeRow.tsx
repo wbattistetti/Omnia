@@ -32,7 +32,7 @@ import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useRowExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
-import { getTaskIdFromRow, updateRowTaskAction, createRowWithTask } from '../../../../utils/taskHelpers';
+import { getTaskIdFromRow, updateRowTaskAction, createRowWithTask, getTemplateId } from '../../../../utils/taskHelpers';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -967,16 +967,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     try {
       const itemCategoryType = (item as any)?.categoryType;
       const itemType = (item as any)?.type;
+      // ✅ MIGRATION: Use getTemplateId() helper instead of direct task.action access
       // FASE 4: Get row type from Task (since we removed it from NodeRowData)
       const rowTask = taskRepository.getTask(row.id);
-      // Map action back to actId (reverse mapping)
+      // Map templateId back to actId (reverse mapping)
       const actionToActId: Record<string, string> = {
         'SayMessage': 'Message',
         'GetData': 'DataRequest',
         'ClassifyProblem': 'ProblemClassification',
         'callBackend': 'BackendCall'
       };
-      const rowType = rowTask?.action ? (actionToActId[rowTask.action] || rowTask.action) : undefined;
+      const rowType = rowTask ? (actionToActId[getTemplateId(rowTask)] || getTemplateId(rowTask)) : undefined;
 
       const isProblemClassification = itemCategoryType === 'agentActs' &&
         (itemType === 'ProblemClassification' || rowType === 'ProblemClassification');

@@ -1,16 +1,15 @@
 import { useCallback, Dispatch, SetStateAction } from 'react';
 import { Node } from 'reactflow';
-import { NodeData } from '../components/Flowchart/types/flowTypes';
+import { FlowNode } from '../components/Flowchart/types/flowTypes';
 
-// Rimuovi la definizione duplicata di NodeData e usa quella importata
 export function useNodeManager(
-  setNodes: Dispatch<SetStateAction<Node<NodeData>[]>>,
+  setNodes: Dispatch<SetStateAction<Node<FlowNode>[]>>,
   setNodeIdCounter: Dispatch<SetStateAction<number>>
 ) {
   /**
    * Aggiungi un nodo
    */
-  const addNode = useCallback((node: Node<NodeData>) => {
+  const addNode = useCallback((node: Node<FlowNode>) => {
     setNodes((nds) => [...nds, node]);
     setNodeIdCounter((prev) => prev + 1);
   }, [setNodes, setNodeIdCounter]);
@@ -25,7 +24,7 @@ export function useNodeManager(
   /**
    * Aggiorna un nodo per id
    */
-  const updateNode = useCallback((nodeId: string, updates: Partial<NodeData>) => {
+  const updateNode = useCallback((nodeId: string, updates: Partial<FlowNode>) => {
     // Removed verbose log
 
     setNodes((nds) => {
@@ -56,7 +55,7 @@ export function useNodeManager(
   /**
    * Aggiungi un nodo a una posizione specifica
    */
-  const addNodeAtPosition = useCallback((node: Node<NodeData>, x: number, y: number) => {
+  const addNodeAtPosition = useCallback((node: Node<FlowNode>, x: number, y: number) => {
     setNodes((nds) => [
       ...nds,
       { ...node, position: { x, y } }

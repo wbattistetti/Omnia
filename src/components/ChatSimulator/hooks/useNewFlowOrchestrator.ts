@@ -2,10 +2,11 @@
 
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { Node, Edge } from 'reactflow';
-import type { NodeData, EdgeData } from '../../Flowchart/types/flowTypes';
+import type { FlowNode, EdgeData } from '../../Flowchart/types/flowTypes';
 import { useDialogueEngine } from '../../DialogueEngine';
 // Frontend taskExecutors removed - backend orchestrator handles all task execution
 import { taskRepository } from '../../../services/TaskRepository';
+import { getTemplateId } from '../../../utils/taskHelpers';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type { PlayedMessage } from './flowRowPlayer';
 import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
@@ -16,7 +17,7 @@ import { loadContract } from '../../DialogueDataEngine/contracts/contractLoader'
 import { extractWithContractSync } from '../../DialogueDataEngine/contracts/contractExtractor';
 
 interface UseNewFlowOrchestratorProps {
-  nodes: Node<NodeData>[];
+  nodes: Node<FlowNode>[];
   edges: Edge<EdgeData>[];
   onMessage?: (message: PlayedMessage) => void;
   onDDTStart?: (ddt: AssembledDDT) => void;
@@ -73,10 +74,13 @@ export function useNewFlowOrchestrator({
     return task;
   }, []);
 
+  // ✅ MIGRATION: Use getTemplateId() helper
   // Get DDT from task (for GetData tasks)
   const getDDT = useCallback((taskId: string): AssembledDDT | null => {
     const task = taskRepository.getTask(taskId);
-    if (!task || task.action !== 'GetData') {
+    if (!task) return null;
+    const templateId = getTemplateId(task);
+    if (templateId !== 'GetData') {
       return null;
     }
     return task.value?.ddt || null;
@@ -186,8 +190,10 @@ export function useNewFlowOrchestrator({
   const handleTaskExecuteWithDDT = useCallback(async (task: any) => {
     const result = await handleTaskExecute(task);
 
+    // ✅ MIGRATION: Use getTemplateId() helper
     // Track DDT state (task is already marked as WaitingUserInput by executor)
-    if (task.action === 'GetData' && result.ddt) {
+    const templateId = getTemplateId(task);
+    if (templateId === 'GetData' && result.ddt) {
       setCurrentDDTState(result.ddt);
     }
 

@@ -2,21 +2,24 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Generic
+Imports System.Text.Json
 Imports DDTEngine
 
 ''' <summary>
-''' Compilatore DDT: carica e prepara DDTInstance per il runtime
-''' - Carica DDT da JSON
-''' - Carica nlpContract per ogni nodo (da JSON o DB)
+''' Compilatore DDT: trasforma strutture IDE in strutture Runtime
+''' - Deserializza JSON in AssembledDDT (IDE)
+''' - Trasforma AssembledDDT in DDTInstance (Runtime)
+''' - Carica nlpContract per ogni nodo
 ''' - Valida struttura
 ''' - Pre-compila regex
-''' - Calcola FullLabel (già fatto da DDTLoader)
 ''' </summary>
 Public Class DDTCompiler
     Private ReadOnly _contractLoader As ContractLoader
+    Private ReadOnly _assembler As DDTAssembler
 
     Public Sub New()
         _contractLoader = New ContractLoader()
+        _assembler = New DDTAssembler()
     End Sub
 
     ''' <summary>
@@ -27,13 +30,25 @@ Public Class DDTCompiler
             Throw New ArgumentException("DDT JSON cannot be null or empty", NameOf(ddtJson))
         End If
 
-        ' 1. Carica DDT base da JSON string
-        Dim instance As DDTInstance = DDTLoader.LoadFromJsonString(ddtJson)
+        ' 1. Deserializza JSON in AssembledDDT (struttura IDE tipizzata)
+        Dim options As New JsonSerializerOptions() With {
+            .PropertyNameCaseInsensitive = True,
+            .ReadCommentHandling = JsonCommentHandling.Skip,
+            .AllowTrailingCommas = True
+        }
 
-        ' 2. Carica nlpContract per tutti i nodi
+        Dim assembled As Compiler.AssembledDDT = JsonSerializer.Deserialize(Of Compiler.AssembledDDT)(ddtJson, options)
+        If assembled Is Nothing Then
+            Throw New InvalidOperationException("Impossibile deserializzare AssembledDDT dal JSON")
+        End If
+
+        ' 2. Trasforma AssembledDDT (IDE) → DDTInstance (Runtime)
+        Dim instance As DDTInstance = _assembler.ToRuntime(assembled)
+
+        ' 3. Carica nlpContract per tutti i nodi
         LoadContractsForAllNodes(instance)
 
-        ' 3. Valida struttura (placeholder, regex, ecc.)
+        ' 4. Valida struttura (placeholder, regex, ecc.)
         Dim validationErrors As List(Of String) = ValidateInstance(instance)
 
         Dim result As New DDTCompilationResult()
@@ -94,7 +109,7 @@ Public Class DDTCompiler
         If node.Steps IsNot Nothing Then
             For Each dstep As DialogueStep In node.Steps
                 If dstep.Escalations IsNot Nothing Then
-                    For Each escalation As Escalation In dstep.Escalations
+                    For Each escalation As DDTEngine.Escalation In dstep.Escalations
                         If escalation.Actions IsNot Nothing Then
                             For Each action As IAction In escalation.Actions
                                 If TypeOf action Is MessageAction Then

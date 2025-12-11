@@ -2,12 +2,12 @@
 
 import React from 'react';
 import type { Node, Edge } from 'reactflow';
-import type { NodeData, EdgeData } from '../../Flowchart/types/flowTypes';
+import type { FlowNode, EdgeData } from '../../Flowchart/types/flowTypes';
 import { useFlowOrchestrator } from './useFlowOrchestrator';
 import { useNewFlowOrchestrator } from './useNewFlowOrchestrator';
 
 interface FlowOrchestratorWrapperProps {
-  nodes: Node<NodeData>[];
+  nodes: Node<FlowNode>[];
   edges: Edge<EdgeData>[];
   mode: 'single-ddt' | 'flow';
   children: (orchestrator: ReturnType<typeof useFlowOrchestrator>) => React.ReactNode;

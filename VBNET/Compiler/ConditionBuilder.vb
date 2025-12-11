@@ -7,6 +7,7 @@ Imports System.Linq
 ''' <summary>
 ''' Condition Builder: Constructs conditions from flowchart topology
 ''' Trasforma condizioni IDE (Edge) in condizioni Runtime (Condition)
+''' qui dovrebe in realta costruite la condizione per il taskgrupo che contiente tutte le righe di flownode ciasucna delle quali punta ad un istnza di task. Il nome piu corretto non dovrebbe essere TaskGroupConditionBuilder?
 ''' </summary>
 Public Class ConditionBuilder
     ''' <summary>

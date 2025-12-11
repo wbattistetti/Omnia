@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
 import { Node } from 'reactflow';
-import type { NodeData } from '../types/flowTypes';
+import type { FlowNode } from '../types/flowTypes';
 
 const NODE_WIDTH = 280; // Standard node width
 
-const getNodeHeight = (node: Node<NodeData>): number => {
+const getNodeHeight = (node: Node<FlowNode>): number => {
   const baseHeight = 40;
   const rowHeight = 24;
   const padding = 20;
@@ -13,8 +13,8 @@ const getNodeHeight = (node: Node<NodeData>): number => {
 };
 
 export function useNodeAlignment(
-  nodes: Node<NodeData>[],
-  setNodes: React.Dispatch<React.SetStateAction<Node<NodeData>[]>>,
+  nodes: Node<FlowNode>[],
+  setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>,
   setSelectionMenu: (menu: { show: boolean; x: number; y: number }) => void
 ) {
   const handleAlign = useCallback((type: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom', selectedNodeIds: string[]) => {

@@ -41,7 +41,7 @@ export function useNodeInitialization(nodeId: string, data: any) {
         return {
             ...data,
             rows: displayRows,
-            title: data.title || '',
+            label: data.label || '',
             isTemporary: data.isTemporary || false
         };
     }, [data, displayRows]);

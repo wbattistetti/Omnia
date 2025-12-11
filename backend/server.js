@@ -1642,8 +1642,9 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
 app.post('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
   const payload = req.body || {};
-  if (!payload.id || !payload.action) {
-    return res.status(400).json({ error: 'id_and_action_required' });
+  const templateId = payload.templateId;
+  if (!payload.id || !templateId) {
+    return res.status(400).json({ error: 'id_and_templateId_required' });
   }
   const client = new MongoClient(uri);
   try {
@@ -1653,7 +1654,7 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     const task = {
       projectId,
       id: payload.id,
-      action: payload.action,
+      templateId: templateId,
       value: payload.value || {},
       updatedAt: now
     };
@@ -1672,7 +1673,7 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     logInfo('Tasks.post', {
       projectId,
       taskId: payload.id,
-      action: payload.action,
+      templateId: templateId,
       upserted: result.upsertedCount > 0,
       modified: result.modifiedCount > 0
     });
@@ -1702,7 +1703,11 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
     }
 
     const update = { updatedAt: new Date() };
-    if (payload.action !== undefined) update.action = payload.action;
+
+    if (payload.templateId !== undefined) {
+      update.templateId = payload.templateId;
+    }
+
     if (payload.value !== undefined) update.value = payload.value;
 
     await projDb.collection('tasks').updateOne(
@@ -1756,12 +1761,12 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
     // ✅ OPTIMIZATION: Use bulkWrite instead of sequential findOne + updateOne/insertOne
     // This reduces 2*N database calls to just 1 bulk operation!
     const bulkOps = items
-      .filter(item => item.id && item.action)
+      .filter(item => item.id && item.templateId)
       .map(item => {
         const task = {
           projectId,
           id: item.id,
-          action: item.action,
+          templateId: item.templateId,
           value: item.value || {},
           updatedAt: now
         };
@@ -2482,8 +2487,14 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    // ✅ Load data templates from Task_Templates (filter by type: 'data' instead of obsolete 'name' field)
-    const ddt = await db.collection('Task_Templates').find({ type: 'data' }).toArray();
+    // ✅ MIGRATION: Load data templates from Task_Templates (filter by type: 'dataRequest' after migration)
+    // Support both old 'data' and new 'dataRequest' for backward compatibility
+    const ddt = await db.collection('Task_Templates').find({
+      $or: [
+        { type: 'dataRequest' },  // ✅ NEW: After migration
+        { type: 'data' }           // ✅ LEGACY: For backward compatibility
+      ]
+    }).toArray();
     try { console.log('>>> LOAD /api/factory/dialogue-templates count =', Array.isArray(ddt) ? ddt.length : 0); } catch { }
     res.json(ddt);
   } catch (err) {

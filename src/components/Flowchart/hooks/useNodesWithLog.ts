@@ -1,6 +1,6 @@
 import { useRef, useCallback } from 'react';
 import type { Node } from 'reactflow';
-import type { NodeData } from '../types/flowTypes';
+import type { FlowNode } from '../types/flowTypes';
 
 export function useNodesWithLog(setNodes: (updater: any) => void) {
   const isCreatingTempNode = useRef(false);
@@ -21,7 +21,7 @@ export function useNodesWithLog(setNodes: (updater: any) => void) {
     isCreatingTempNode.current = true;
 
     if (typeof updater === 'function') {
-      setNodes((currentNodes: Node<NodeData>[]) => {
+      setNodes((currentNodes: Node<FlowNode>[]) => {
         const newNodes = updater(currentNodes);
 
         // Check if this is a stabilization update (removing isTemporary flag)

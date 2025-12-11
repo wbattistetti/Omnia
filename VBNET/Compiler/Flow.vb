@@ -25,15 +25,15 @@ Public Class Flow
     Public Property Tasks As List(Of Task)
 
     ''' <summary>
-    ''' DDTs disponibili
+    ''' DDTs disponibili (mondo IDE - struttura tipizzata identica al frontend)
     ''' </summary>
-    Public Property DDTs As List(Of Object)
+    Public Property DDTs As List(Of Compiler.AssembledDDT)
 
     Public Sub New()
         Nodes = New List(Of FlowNode)()
         Edges = New List(Of FlowEdge)()
         Tasks = New List(Of Task)()
-        DDTs = New List(Of Object)()
+        DDTs = New List(Of AssembledDDT)()
     End Sub
 End Class
 

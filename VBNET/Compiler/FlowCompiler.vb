@@ -77,9 +77,9 @@ Public Class FlowCompiler
                 End If
 
                 ' Converti Action (Integer) in ActionType enum (cast diretto)
-                Dim actionType As ActionType
+                Dim actionType As TaskTypes
                 Try
-                    actionType = CType(task.Action, ActionType)
+                    actionType = CType(task.Action, TaskTypes)
                 Catch ex As Exception
                     Throw New Exception($"Invalid action type value '{task.Action}' in task {taskId} (node {node.Id}, row {row.Id}). " &
                                         "Valid values: SayMessage=1, CloseSession=2, Transfer=3, GetData=4, BackendCall=5, ClassifyProblem=6")
@@ -89,7 +89,7 @@ Public Class FlowCompiler
                 ' Condition può essere Nothing o avere una condizione a design time
                 Dim compiledTask As New CompiledTask() With {
                     .Id = row.Id,
-                    .Action = actionType,
+                    .Type = actionType,
                     .Value = task.Value,
                     .Condition = Nothing,  ' La condizione principale è sul TaskGroup, ma può essere aggiunta a design time
                     .State = TaskState.UnExecuted,

@@ -846,7 +846,7 @@ export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideH
                     : output.internalName;
                   const isHovered = hoveredOutputRow === index;
 
-                  return (
+  return (
                     <div
                       key={index}
                       className="flex gap-1.5 items-center p-1 bg-slate-900 rounded"

@@ -121,7 +121,9 @@ export interface NodeRowData {
 export interface MacrotaskPayloadNode {
   id: string;
   position: { x: number; y: number };
-  data: { title: string; rows: NodeRowData[] };
+  label?: string;  // Node title (ex data.title)
+  rows: NodeRowData[];  // Rows directly (ex data.rows)
+  type?: string;  // ReactFlow type
 }
 
 export interface MacrotaskPayloadEdge {

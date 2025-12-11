@@ -14,7 +14,7 @@ Public Class OrchestratorSession
     Public Property SessionId As String
     Public Property CompilationResult As FlowCompilationResult
     Public Property Tasks As List(Of Object)
-    Public Property DDTs As List(Of Object)
+    Public Property DDTs As List(Of Compiler.AssembledDDT)
     Public Property Translations As Dictionary(Of String, String)
     Public Property Orchestrator As DDTEngine.Orchestrator.FlowOrchestrator
     Public Property Messages As New List(Of Object)
@@ -76,7 +76,7 @@ Public Class SessionManager
         sessionId As String,
         compilationResult As FlowCompilationResult,
         tasks As List(Of Object),
-        ddts As List(Of Object),
+        ddts As List(Of Compiler.AssembledDDT),
         translations As Dictionary(Of String, String)
     ) As OrchestratorSession
         SyncLock _lock

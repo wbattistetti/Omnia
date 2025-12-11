@@ -36,7 +36,7 @@ Option Explicit On
 
         Public Overrides ReadOnly Property ActionId As String
             Get
-                Return ActionType.Transfer.ToString()
+                Return TaskTypes.Transfer.ToString()
             End Get
         End Property
 

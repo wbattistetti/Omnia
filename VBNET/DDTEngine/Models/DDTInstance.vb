@@ -5,11 +5,35 @@ Option Strict On
 Option Explicit On
 
     ''' <summary>
-    ''' Rappresenta un'istanza di un DataDialogueTemplate (DDT)
+    ''' Rappresenta un'istanza di un DataDialogueTemplate (DDT) - Struttura Runtime
+    ''' Contiene sia i campi design-time (dal frontend) che i campi runtime
     ''' </summary>
     Public Class DDTInstance
+        ' ============================================================
+        ' CAMPI DESIGN-TIME (dal frontend AssembledDDT)
+        ' ============================================================
+
         ''' <summary>
-        ''' Indica se il DDT è aggregato (ha introduction e successResponse)
+        ''' ID univoco del DDT
+        ''' </summary>
+        Public Property Id As String
+
+        ''' <summary>
+        ''' Label/nome del DDT
+        ''' </summary>
+        Public Property Label As String
+
+        ''' <summary>
+        ''' Traduzioni (chiave → testo tradotto)
+        ''' </summary>
+        Public Property Translations As Dictionary(Of String, String)
+
+        ' ============================================================
+        ' CAMPI RUNTIME
+        ' ============================================================
+
+        ''' <summary>
+        ''' Indica se il DDT è aggregato (ha introduction)
         ''' </summary>
         Public Property IsAggregate As Boolean
 
@@ -32,6 +56,7 @@ Option Explicit On
         ''' Costruttore
         ''' </summary>
         Public Sub New()
+            Translations = New Dictionary(Of String, String)()
             MainDataList = New List(Of DDTNode)()
         End Sub
 

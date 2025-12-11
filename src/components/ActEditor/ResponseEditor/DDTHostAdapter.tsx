@@ -4,6 +4,7 @@ import ResponseEditor from './index';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { flowchartVariablesService } from '../../../services/FlowchartVariablesService';
+import { getTemplateId } from '../../../utils/taskHelpers';
 
 export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -84,8 +85,19 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
         // ✅ Se il Task esiste ma ha DDT con kind sbagliato, correggilo
         if (task && instanceDDT && !hasCorrectKind) {
-          // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-          taskRepository.updateTaskValue(instanceKey, { ddt: newDDT }, currentProjectId || undefined);
+          // ✅ MIGRATION: Use getTemplateId() helper
+          // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'GetData'
+          const hasDDT = newDDT && Object.keys(newDDT).length > 0 && newDDT.mainData && newDDT.mainData.length > 0;
+          if (hasDDT && task) {
+            const currentTemplateId = getTemplateId(task);
+            if (currentTemplateId !== 'GetData') {
+              // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+              taskRepository.updateTask(instanceKey, { templateId: 'GetData', value: { ...task.value, ddt: newDDT } }, currentProjectId || undefined);
+            } else {
+              // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
+              taskRepository.updateTaskValue(instanceKey, { ddt: newDDT }, currentProjectId || undefined);
+            }
+          }
         }
 
         return newDDT;
@@ -165,8 +177,23 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
   const handleComplete = React.useCallback(async (finalDDT: any) => {
-    // FASE 3: Salva il DDT nel Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceKey, { ddt: finalDDT }, currentProjectId || undefined);
+    // ✅ MIGRATION: Use getTemplateId() helper
+    // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'GetData'
+    const task = taskRepository.getTask(instanceKey);
+    const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.mainData && finalDDT.mainData.length > 0;
+    if (hasDDT && task) {
+      const currentTemplateId = getTemplateId(task);
+      if (currentTemplateId !== 'GetData') {
+        // FASE 3: Salva il DDT nel Task e aggiorna il templateId (TaskRepository syncs with InstanceRepository automatically)
+        taskRepository.updateTask(instanceKey, { templateId: 'GetData', value: { ...task.value, ddt: finalDDT } }, currentProjectId || undefined);
+      } else {
+        // TemplateId is already 'GetData', just update value
+        taskRepository.updateTaskValue(instanceKey, { ddt: finalDDT }, currentProjectId || undefined);
+      }
+    } else {
+      // FASE 3: Salva il DDT nel Task (TaskRepository syncs with InstanceRepository automatically)
+      taskRepository.updateTaskValue(instanceKey, { ddt: finalDDT }, currentProjectId || undefined);
+    }
 
     // ✅ NEW: Extract variables from DDT structure
     try {

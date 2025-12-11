@@ -1,8 +1,9 @@
 // DDT Expander: Expands DDT structure into flat tasks
 
-import type { AssembledDDT, StepGroup, Escalation, Action } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledDDT, StepGroup, Escalation, TaskReference } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type { CompiledTask, DDTExpansion } from './types';
 import { buildStepCondition, buildRecoveryFirstActionCondition, buildRecoverySequentialCondition } from './conditionBuilder';
+import { getTemplateId } from '../../utils/taskHelpers';
 
 /**
  * Expands DDT into compiled tasks
@@ -49,29 +50,29 @@ export function expandDDT(
 
       expansion.recoveryNodes.set(recoveryId, recoveryId);
 
-      // Process actions in recovery
-      const actions = escalation.actions || [];
+      // Process tasks in recovery (renamed from actions)
+      // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+      const taskRefs = escalation.tasks || escalation.actions || [];
 
-      for (let actionIndex = 0; actionIndex < actions.length; actionIndex++) {
-        const action = actions[actionIndex];
-        const actionId = action.actionInstanceId || action.actionId || `action-${recoveryId}-${actionIndex + 1}`;
+      for (let taskIndex = 0; taskIndex < taskRefs.length; taskIndex++) {
+        const taskRef = taskRefs[taskIndex];
+        // ✅ MIGRATION: Support both taskId (new) and actionInstanceId (legacy)
+        const taskId = taskRef.taskId || taskRef.actionInstanceId || taskRef.templateId || taskRef.actionId || `task-${recoveryId}-${taskIndex + 1}`;
 
-        // Resolve task from action
-        // Actions typically have actionId that maps to a Task
-        const taskId = action.actionId || actionId;
+        // Resolve task from taskId
         const task = getTask(taskId);
 
         if (!task) {
-          console.warn(`[DDTExpander] Task not found for action: ${taskId}`);
+          console.warn(`[DDTExpander] Task not found for taskId: ${taskId}`);
           continue;
         }
 
-        expansion.actionTasks.set(actionId, taskId);
+        expansion.actionTasks.set(taskId, taskId);
 
-        // Build condition for action
+        // Build condition for task
         let condition;
-        if (actionIndex === 0) {
-          // First action: step activated + retrieval state
+        if (taskIndex === 0) {
+          // First task: step activated + retrieval state
           condition = {
             type: 'And',
             conditions: [
@@ -80,17 +81,20 @@ export function expandDDT(
             ]
           };
         } else {
-          // Subsequent actions: previous action completed
-          const prevAction = actions[actionIndex - 1];
-          const prevActionTaskId = prevAction.actionId || prevAction.actionInstanceId || `action-${recoveryId}-${actionIndex}`;
-          condition = buildRecoverySequentialCondition(prevActionTaskId);
+          // Subsequent tasks: previous task completed
+          const prevTaskRef = taskRefs[taskIndex - 1];
+          const prevTaskId = prevTaskRef.taskId || prevTaskRef.actionInstanceId || prevTaskRef.templateId || prevTaskRef.actionId || `task-${recoveryId}-${taskIndex}`;
+          condition = buildRecoverySequentialCondition(prevTaskId);
         }
+
+        // ✅ MIGRATION: Use getTemplateId() helper instead of direct task.action access
+        const templateId = getTemplateId(task);
 
         // Create compiled task
         // Use task.id directly (GUID) - no need to generate new ID
         const compiledTask: CompiledTask = {
           id: task.id, // Use task.id directly (GUID)
-          action: task.action,
+          action: templateId,  // ✅ Use templateId (CompiledTask.action is still string for now)
           value: task.value || {},
           condition,
           state: 'UnExecuted',
@@ -99,8 +103,8 @@ export function expandDDT(
             nodeId: parentNodeId, // ✅ Add nodeId so currentNodeId can be tracked for highlighting
             stepType,
             recoveryId,
-            actionId,
-            parentRowAction // Store parent row action type
+            actionId: taskId,  // ✅ Use taskId instead of actionId
+            parentRowAction // Store parent row action type (templateId)
           }
         };
 

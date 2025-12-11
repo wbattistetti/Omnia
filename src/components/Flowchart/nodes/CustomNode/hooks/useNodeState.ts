@@ -12,7 +12,7 @@ interface UseNodeStateProps {
 export function useNodeState({ data }: UseNodeStateProps) {
   // Title editing state
   const [isEditingNode, setIsEditingNode] = useState(false);
-  const [nodeTitle, setNodeTitle] = useState(data.title || '');
+  const [nodeTitle, setNodeTitle] = useState(data.label || '');
 
   // Hover state
   const [isHoveredNode, setIsHoveredNode] = useState(false);
@@ -48,10 +48,10 @@ export function useNodeState({ data }: UseNodeStateProps) {
   }, []);
 
 
-  // Sync nodeTitle with data.title when data changes
+  // Sync nodeTitle with data.label when data changes
   useEffect(() => {
-    setNodeTitle(data.title || '');
-  }, [data.title]);
+    setNodeTitle(data.label || '');
+  }, [data.label]);
 
   // Se il drag globale termina, resetta la modalità toolbar
   useEffect(() => {

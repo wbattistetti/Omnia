@@ -47,7 +47,7 @@ export function useNodeEventHandlers({
   const handleTitleUpdate = (newTitle: string) => {
     setNodeTitle(newTitle);
     if (typeof data.onUpdate === 'function') {
-      data.onUpdate({ title: newTitle });
+      data.onUpdate({ label: newTitle });
     }
   };
 

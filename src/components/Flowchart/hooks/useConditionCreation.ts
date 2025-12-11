@@ -4,7 +4,7 @@ import { useProjectDataUpdate, useProjectData } from '../../../context/ProjectDa
 import { ProjectDataService } from '../../../services/ProjectDataService';
 import { v4 as uuidv4 } from 'uuid';
 import type { Node, Edge } from 'reactflow';
-import type { NodeData, EdgeData } from '../types/flowTypes';
+import type { FlowNode, EdgeData } from '../types/flowTypes';
 
 export function useConditionCreation(
   setEdges: any,
@@ -113,21 +113,21 @@ export function useConditionCreation(
             finalPosition: nodesRef.current.find((n: any) => n.id === tempNodeId)?.position,
             nodeData: nodesRef.current.find((n: any) => n.id === tempNodeId)?.data
           });
-          
+
           console.log('[🔍 STABILIZE_NODE] Stabilizing temporary node', {
             tempNodeId,
             tempEdgeId,
             conditionName: name,
             timestamp: Date.now()
           });
-          
+
           // ✅ FIX: Marca il nodo come stabilizzato per evitare riposizionamento
           tempFlags.stabilizedTempNodes.current.add(tempNodeId);
-          
+
           // ✅ FIX: Rimuovi il flag di creazione in corso
           tempFlags.creatingTempNodes.current.delete(tempNodeId);
-          
-          setNodesWithLog((nds: Node<NodeData>[]) => nds.map((n: Node<NodeData>) => {
+
+          setNodesWithLog((nds: Node<FlowNode>[]) => nds.map((n: Node<FlowNode>) => {
             if (n.id === tempNodeId) {
               const oldPosition = n.position;
               const updatedNode = {
@@ -162,12 +162,12 @@ export function useConditionCreation(
             y: connectionMenuRef.current.position.y - 20
           });
           const newEdgeId = uuidv4();
-          const newNode: Node<NodeData> = {
+          const newNode: Node<FlowNode> = {
             id: newNodeId,
             type: 'custom',
             position,
             data: {
-              title: '',
+              label: '',
               rows: [],
               onDelete: () => deleteNodeWithLog(newNodeId),
               onUpdate: (updates: any) => updateNode(newNodeId, updates),

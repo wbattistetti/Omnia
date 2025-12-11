@@ -32,21 +32,25 @@ describe('DDT Builder - SubData parsing test (Day)', () => {
     const startStep = daySubData.steps.find(s => s.type === 'start');
     expect(startStep).toBeDefined();
     expect(startStep.escalations.length).toBeGreaterThan(0);
-    
+
     // Verifica che le traduzioni contengano i messaggi specifici (come nel test mainData)
-    const startParameterValue = startStep.escalations[0].actions[0].parameters[0].value;
+    // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+    const startTask = startStep.escalations[0].tasks?.[0] || startStep.escalations[0].actions?.[0];
+    const startParameterValue = startTask?.parameters?.[0]?.value;
     expect(result.translations[startParameterValue]).toContain("What day?");
 
     const noMatchStep = daySubData.steps.find(s => s.type === 'noMatch');
     expect(noMatchStep).toBeDefined();
     expect(noMatchStep.escalations.length).toBeGreaterThan(0);
-    const noMatchParameterValue = noMatchStep.escalations[0].actions[0].parameters[0].value;
+    const noMatchTask = noMatchStep.escalations[0].tasks?.[0] || noMatchStep.escalations[0].actions?.[0];
+    const noMatchParameterValue = noMatchTask?.parameters?.[0]?.value;
     expect(result.translations[noMatchParameterValue]).toContain("I didn't understand that. Please enter a day between 1 and 31.");
 
     const successStep = daySubData.steps.find(s => s.type === 'success');
     expect(successStep).toBeDefined();
     expect(successStep.escalations.length).toBeGreaterThan(0);
-    const successParameterValue = successStep.escalations[0].actions[0].parameters[0].value;
+    const successTask = successStep.escalations[0].tasks?.[0] || successStep.escalations[0].actions?.[0];
+    const successParameterValue = successTask?.parameters?.[0]?.value;
     expect(result.translations[successParameterValue]).toContain("Day saved successfully.");
   });
-}); 
+});

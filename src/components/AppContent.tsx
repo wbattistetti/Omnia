@@ -9,7 +9,7 @@ import LibraryLabel from './Sidebar/LibraryLabel';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
 import { Node, Edge } from 'reactflow';
-import { NodeData, EdgeData } from './Flowchart/types/flowTypes';
+import { FlowNode, EdgeData } from './Flowchart/types/flowTypes';
 import { ProjectInfo } from '../types/project';
 import { useEffect } from 'react';
 import { ProjectService } from '../services/ProjectService';
@@ -446,18 +446,25 @@ export const AppContent: React.FC<AppContentProps> = ({
             });
           } else if (editorKind === 'ddt') {
             // Open ResponseEditor for DDT types (DataRequest, ProblemClassification, etc.)
-            // Load DDT from TaskRepository (must exist)
-            const task = taskRepository.getTask(instanceId);
+            // Load DDT from TaskRepository, create empty DDT if not exists
+            let task = taskRepository.getTask(instanceId);
 
             if (!task) {
-              // Task doesn't exist, don't open editor
-              return prev;
+              // Task doesn't exist, create it with empty DDT
+              const action = d.type === 'DataRequest' ? 'GetData' :
+                            d.type === 'Message' ? 'SayMessage' :
+                            d.type === 'ProblemClassification' ? 'ClassifyProblem' :
+                            d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
+              task = taskRepository.createTask(action, { ddt: { label: d.label || 'New DDT', mainData: [] } }, instanceId);
             }
 
-            const ddt = task.value?.ddt;
+            // Get DDT from task, or create empty DDT if not exists
+            let ddt = task.value?.ddt;
             if (!ddt) {
-              // DDT doesn't exist in task, don't open editor
-              return prev;
+              // DDT doesn't exist, create empty one
+              ddt = { label: d.label || 'New DDT', mainData: [] };
+              // Update task with empty DDT
+              taskRepository.updateTaskValue(instanceId, { ddt }, pdUpdate?.getCurrentProjectId());
             }
 
             return splitWithTab(prev, rootTabsetId, 'bottom', {

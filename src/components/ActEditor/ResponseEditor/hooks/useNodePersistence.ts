@@ -62,8 +62,12 @@ export function useNodePersistence(
         const escs = Array.isArray(group.escalations) ? [...group.escalations] : [];
         // Aggiorna solo gli indici presenti in normalized
         normalized.forEach((esc: any, i: number) => {
-          if (!escs[i]) escs[i] = { actions: [] };
-          escs[i] = { actions: esc.actions };
+          if (!escs[i]) escs[i] = { tasks: [], actions: [] };  // ✅ Support both
+          // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+          escs[i] = {
+            tasks: esc.tasks || esc.actions || [],  // ✅ New field
+            actions: esc.actions || esc.tasks || []  // ✅ Legacy alias
+          };
         });
         group.escalations = escs;
         arr[idx] = { ...group, type: selectedStepKey };
@@ -74,8 +78,12 @@ export function useNodePersistence(
         const group = { ...(obj[selectedStepKey] || { type: selectedStepKey, escalations: [] }) };
         const escs = Array.isArray(group.escalations) ? [...group.escalations] : [];
         normalized.forEach((esc: any, i: number) => {
-          if (!escs[i]) escs[i] = { actions: [] };
-          escs[i] = { actions: esc.actions };
+          if (!escs[i]) escs[i] = { tasks: [], actions: [] };  // ✅ Support both
+          // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+          escs[i] = {
+            tasks: esc.tasks || esc.actions || [],  // ✅ New field
+            actions: esc.actions || esc.tasks || []  // ✅ Legacy alias
+          };
         });
         obj[selectedStepKey] = { ...group, escalations: escs, type: selectedStepKey };
         return { ...(node || {}), steps: obj };

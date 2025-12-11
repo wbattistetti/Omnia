@@ -12,7 +12,7 @@ const taskDbg = () => {
 const tlog = (...args: any[]) => { if (taskDbg()) { try { console.log('[TaskDbg]', ...args); } catch { } } };
 
 export interface TaskNodeData {
-  title: string;
+  label?: string;  // Node title (ex title)
   onUpdate?: (updates: any) => void;
   editingToken?: string;
   onCommitTitle?: (title: string) => void;
@@ -20,7 +20,7 @@ export interface TaskNodeData {
 }
 
 export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ id, data, selected, isConnectable }) => {
-  const [title, setTitle] = React.useState<string>(data?.title ?? '');
+  const [title, setTitle] = React.useState<string>(data?.label ?? '');
   const [editing, setEditing] = React.useState<boolean>(Boolean(data?.editOnMount));
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -45,7 +45,7 @@ export const TaskNode: React.FC<NodeProps<TaskNodeData>> = ({ id, data, selected
     setEditing(false);
     if (typeof data?.onUpdate === 'function') {
       // rimuovi editingToken così non va più in edit al reload
-      data.onUpdate({ title: next, editOnMount: false, editingToken: undefined, showGuide: false });
+      data.onUpdate({ label: next, editOnMount: false, editingToken: undefined, showGuide: false });
     }
     try { (data as any)?.onCommitTitle?.(next); } catch { }
   };
