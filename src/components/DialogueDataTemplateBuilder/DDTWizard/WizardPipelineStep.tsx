@@ -293,6 +293,10 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
       <div style={{ fontWeight: 600, fontSize: 20, color: '#fff', marginBottom: 12, textAlign: 'left', paddingLeft: 4 }}>
         {`Creating "${mainData?.label || detectedType || 'data'}" data dialog:`}
       </div>
+      {/* Friendly message during message creation */}
+      <div style={{ fontSize: '16px', color: '#94a3b8', marginBottom: 12, textAlign: 'left', paddingLeft: 4, fontStyle: 'italic' }}>
+        Sto creando i messaggi necessari, solo un momento...
+      </div>
       {/* Blue processing label */}
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#0ea5e9', background: '#0ea5e933', border: '1px solid #0ea5e9', borderRadius: 8, padding: '6px 10px', marginBottom: 10, marginLeft: 4 }}>
         <Hourglass size={18} color="#0ea5e9" />

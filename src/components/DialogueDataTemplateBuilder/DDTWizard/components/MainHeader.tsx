@@ -33,6 +33,7 @@ interface MainHeaderProps {
   getStatusMessage: (fieldId: string) => string;
   onRetryField?: (fieldId: string) => void;
   onCreateManually?: () => void;
+  compact?: boolean; // ✅ Modalità compatta
 }
 
 const iconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' };
@@ -63,6 +64,7 @@ export default function MainHeader({
   getStatusMessage,
   onRetryField,
   onCreateManually,
+  compact = false,
 }: MainHeaderProps) {
   const { combinedClass } = useFontContext();
   const labelRef = useRef<HTMLDivElement>(null);
@@ -100,15 +102,15 @@ export default function MainHeader({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        padding: 12,
-        gap: 6,
+        padding: compact ? 4 : 12,
+        gap: compact ? 2 : 6,
         minWidth: labelWidth ? `fit-content` : undefined
       }}
       onMouseEnter={() => setHoverHeader(true)}
       onMouseLeave={() => setHoverHeader(false)}
     >
       {/* 📐 Riga 1: Label + Percentuale inline */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 4 : 10, minWidth: 0 }}>
         {!isEditingMain ? (
           <>
             <div ref={labelRef} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>

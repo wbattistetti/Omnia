@@ -1556,96 +1556,56 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             const displayMains = schemaMains.length > 0 ? schemaMains : mains0;
             const displayRoot = schemaRootLabel || root;
 
-            // ✅ Estrai GUID dai stepPrompts per debug traduzioni
-            const allGuidsFromMains: string[] = [];
-            displayMains.forEach((m: any) => {
-              if (m.stepPrompts) {
-                Object.values(m.stepPrompts).forEach((guids: any) => {
-                  if (Array.isArray(guids)) {
-                    guids.forEach((guid: string) => {
-                      if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                        allGuidsFromMains.push(guid);
-                      }
-                    });
-                  }
-                });
-              }
-              if (m.subData) {
-                m.subData.forEach((s: any) => {
-                  if (s.stepPrompts) {
-                    Object.values(s.stepPrompts).forEach((guids: any) => {
-                      if (Array.isArray(guids)) {
-                        guids.forEach((guid: string) => {
-                          if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                            allGuidsFromMains.push(guid);
-                          }
-                        });
-                      }
-                    });
-                  }
-                });
-              }
-            });
-
-            console.log('[DDT][Wizard][heuristic-confirm] 🔍 GUID estratti dai stepPrompts:', {
-              totalGuids: allGuidsFromMains.length,
-              uniqueGuids: [...new Set(allGuidsFromMains)].length,
-              guids: [...new Set(allGuidsFromMains)]
-            });
+            // ✅ Estrai GUID dai stepPrompts per debug traduzioni (solo una volta, in useMemo)
+            // ✅ RIMOSSO: Log infinito - l'estrazione GUID non è più necessaria qui
+            // (viene fatta quando necessario, non ad ogni render)
 
             return (
-              <div style={{ padding: 16 }}>
-                {/* Pannello principale con bordino arrotondato */}
-                <div style={{
-                  border: '1px solid #334155',
-                  borderRadius: 12,
-                  padding: 20,
-                  background: '#1e293b'
+              <div style={{ padding: 8 }}>
+                {/* Layout compatto senza pannello esterno */}
+                {/* Header compatto */}
+                <p style={{
+                  color: '#e2e8f0',
+                  marginBottom: 8,
+                  fontSize: 14,
+                  fontWeight: 500
                 }}>
-                  {/* Header semplificato */}
-                  <p style={{
-                    color: '#e2e8f0',
-                    marginBottom: 16,
-                    fontSize: 16,
-                    fontWeight: 500
-                  }}>
-                    I guess you want to retrieve this kind of data:
-                  </p>
+                  I guess you want to retrieve this kind of data:
+                </p>
 
-                  {/* Struttura dati con bordino arrotondato */}
-                  <div style={{
-                    border: '1px solid #475569',
-                    borderRadius: 8,
-                    padding: 16,
-                    marginBottom: 16,
-                    background: '#0f172a'
-                  }}>
-                    <MainDataCollection
-                      rootLabel={displayRoot}
-                      mains={displayMains}
-                      onChangeMains={setSchemaMains}
-                      onAddMain={handleAddMain}
-                      progressByPath={{ ...taskProgress, __root__: rootProgress }}
-                      fieldProcessingStates={fieldProcessingStates}
-                      selectedIdx={selectedIdx}
-                      onSelect={setSelectedIdx}
-                      autoEditIndex={autoEditIndex}
-                      onChangeEvent={handleChangeEvent}
-                      onAutoMap={autoMapFieldStructure}
-                      onRetryField={handleRetryField}
-                      onCreateManually={handleCreateManually}
-                    />
-                  </div>
+                {/* Struttura dati compatta senza bordo esterno */}
+                <div style={{
+                  marginBottom: 12,
+                  background: 'transparent'
+                }}>
+                  <MainDataCollection
+                    rootLabel={displayRoot}
+                    mains={displayMains}
+                    onChangeMains={setSchemaMains}
+                    onAddMain={handleAddMain}
+                    progressByPath={{ ...taskProgress, __root__: rootProgress }}
+                    fieldProcessingStates={fieldProcessingStates}
+                    selectedIdx={selectedIdx}
+                    onSelect={setSelectedIdx}
+                    autoEditIndex={autoEditIndex}
+                    onChangeEvent={handleChangeEvent}
+                    onAutoMap={autoMapFieldStructure}
+                    onRetryField={handleRetryField}
+                    onCreateManually={handleCreateManually}
+                    compact={true}
+                  />
+                </div>
 
-                  {/* Bottoni in basso a destra */}
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    gap: 12
-                  }}>
+                {/* Bottoni compatti */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 8
+                }}>
                     <button
                       onClick={async () => {
-                        console.log('🔵 [YES_BUTTON] Click ricevuto');
+                        const t0 = performance.now();
+                        console.log('🔵 [YES_BUTTON] Click ricevuto', { timestamp: new Date().toISOString() });
 
                         const { schema, icon, mains0, root } = pendingHeuristicMatch;
                         setPendingHeuristicMatch(null);
@@ -1786,30 +1746,53 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                               }))
                             });
 
-                            // Load translations from database using GUIDs
+                            const t1 = performance.now();
+                            console.log(`⏱️ [YES_BUTTON] Tempo fino a caricamento traduzioni: ${(t1 - t0).toFixed(2)}ms`);
+
+                            // ✅ SUPER-OTTIMIZZAZIONE: Usa DDT pre-assemblato se disponibile (ISTANTANEO!)
+                            const preAssembledDDT = (initialDDT as any)?._inferenceResult?.ai?.preAssembledDDT;
+                            if (preAssembledDDT) {
+                              const t2 = performance.now();
+                              console.log(`⏱️ [YES_BUTTON] ✅ DDT pre-assemblato trovato - ISTANTANEO! Tempo: ${(t2 - t0).toFixed(2)}ms`);
+
+                              // Set schema for consistency
+                              setSchemaRootLabel(root);
+                              setSchemaMains(mains0);
+
+                              // ✅ Usa il DDT già assemblato in background!
+                              handleClose(preAssembledDDT, {});
+
+                              const tAfterClose = performance.now();
+                              console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE (pre-assembled) - Tempo: ${(tAfterClose - t0).toFixed(2)}ms`);
+                              return; // ✅ FATTO! Nessun assembly necessario
+                            }
+
+                            // ✅ Altrimenti: assembly normale con traduzioni pre-caricate
+                            // Se il match locale ha già caricato le traduzioni, usale direttamente
+                            // Altrimenti carica dal database (caso legacy o AI)
                             let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
-                            if (translationGuids.length > 0) {
+
+                            // ✅ Controlla se inferenceResult ha già le traduzioni pre-caricate
+                            const preloadedTranslations = (initialDDT as any)?._inferenceResult?.ai?.templateTranslations;
+                            if (preloadedTranslations && Object.keys(preloadedTranslations).length > 0) {
+                              templateTranslations = preloadedTranslations;
+                              const t2 = performance.now();
+                              console.log(`⏱️ [YES_BUTTON] ✅ Traduzioni pre-caricate ISTANTANEE - Tempo: ${(t2 - t0).toFixed(2)}ms`, {
+                                loadedGuids: Object.keys(templateTranslations).length
+                              });
+                            } else if (translationGuids.length > 0) {
                               try {
                                 const uniqueGuids = [...new Set(translationGuids)];
-                                console.log('[DEBUG][WIZARD] Loading translations for', uniqueGuids.length, 'unique GUIDs', { guids: uniqueGuids });
+                                console.log(`⏱️ [YES_BUTTON] ⏳ Caricando traduzioni dal database (fallback)... ${uniqueGuids.length} GUIDs`);
+                                const tFetchStart = performance.now();
                                 templateTranslations = await getTemplateTranslations(uniqueGuids);
-                                console.log('[DEBUG][WIZARD] Loaded translations from factory', {
+                                const tFetchEnd = performance.now();
+                                console.log(`⏱️ [YES_BUTTON] ✅ Traduzioni caricate dal database - Tempo fetch: ${(tFetchEnd - tFetchStart).toFixed(2)}ms, Tempo totale: ${(tFetchEnd - t0).toFixed(2)}ms`, {
                                   requestedGuids: uniqueGuids.length,
-                                  loadedGuids: Object.keys(templateTranslations).length,
-                                  loadedGuidsList: Object.keys(templateTranslations),
-                                  missingGuids: uniqueGuids.filter(g => !(g in templateTranslations)),
-                                  sampleTranslations: Object.entries(templateTranslations).slice(0, 3).map(([k, v]) => ({
-                                    guid: k,
-                                    hasEn: !!v.en,
-                                    hasIt: !!v.it,
-                                    hasPt: !!v.pt,
-                                    enValue: v.en ? v.en.substring(0, 30) : undefined,
-                                    itValue: v.it ? v.it.substring(0, 30) : undefined,
-                                    ptValue: v.pt ? v.pt.substring(0, 30) : undefined
-                                  }))
+                                  loadedGuids: Object.keys(templateTranslations).length
                                 });
                               } catch (err) {
-                                console.error('[DEBUG][WIZARD] Failed to load template translations:', err);
+                                console.error('[DEBUG][WIZARD] ❌ Errore caricamento traduzioni dal database:', err);
                               }
                             } else {
                               console.warn('[DEBUG][WIZARD] No GUIDs extracted from stepPrompts!', {
@@ -1822,6 +1805,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 } : null
                               });
                             }
+
+                            const t3 = performance.now();
+                            console.log(`⏱️ [YES_BUTTON] Prima di assembleFinalDDT - Tempo: ${(t3 - t0).toFixed(2)}ms`);
 
                             // Set schema for assembly
                             setSchemaRootLabel(root);
@@ -1844,6 +1830,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             // ✅ assembleFinalDDT now adds translations to global table via addTranslations callback
                             // Translations are NOT stored in finalDDT.translations anymore
                             // Translations will be saved to database only on explicit save
+                            const tAssemblyStart = performance.now();
+                            console.log(`⏱️ [YES_BUTTON] Inizio assembleFinalDDT - Tempo: ${(tAssemblyStart - t0).toFixed(2)}ms`);
+
                             const finalDDT = await assembleFinalDDT(
                               root || 'Data',
                               mains0,
@@ -1855,6 +1844,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 addTranslations: addTranslationsToGlobal // ✅ Add translations to global table
                               }
                             );
+
+                            const tAssemblyEnd = performance.now();
+                            console.log(`⏱️ [YES_BUTTON] Fine assembleFinalDDT - Tempo assembly: ${(tAssemblyEnd - tAssemblyStart).toFixed(2)}ms, Tempo totale: ${(tAssemblyEnd - t0).toFixed(2)}ms`);
 
                             // ✅ Translations are now in global table, not in finalDDT.translations
                             // action.text will be resolved from global table when needed (in Chat Simulator, etc.)
@@ -1881,11 +1873,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                               return;
                             }
 
+                            const tBeforeClose = performance.now();
+                            console.log(`⏱️ [YES_BUTTON] Prima di handleClose - Tempo totale: ${(tBeforeClose - t0).toFixed(2)}ms`);
                             console.log('[DDT][Wizard][heuristicMatch] ✅ DDT structure verified, calling handleClose');
 
                             // Call onComplete to open Response Editor directly
                             // ❌ REMOVED: finalDDT.translations - translations are now in global table
                             handleClose(finalDDT, {});
+
+                            const tAfterClose = performance.now();
+                            console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE - Tempo totale: ${(tAfterClose - t0).toFixed(2)}ms`);
                           } catch (err) {
                             console.error('[DDT][Wizard][heuristicMatch] Failed to assemble DDT:', err);
                             error('DDT_WIZARD', 'Failed to assemble DDT with stepPrompts', err);
@@ -1918,8 +1915,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           setPartialResults({});
                           setSelectedIdx(0);
 
+                          // ✅ IMPORTANTE: Non chiudere il wizard quando si passa a pipeline
+                          // Il wizard rimane aperto durante tutto il processo pipeline
+                          // Solo quando il pipeline completa, verrà chiamato handleClose
                           console.log('🔵 [YES_BUTTON] Settando step=pipeline, mains=', finalMains.length);
                           setStep('pipeline');
+                          // ✅ NON chiamare handleClose qui - il wizard deve rimanere aperto
                         }
                       }}
                       style={{
@@ -1955,7 +1956,6 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       No
                     </button>
                   </div>
-                </div>
               </div>
             );
           })()}

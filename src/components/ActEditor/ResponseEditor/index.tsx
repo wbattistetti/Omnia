@@ -55,6 +55,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   const [inferenceResult, setInferenceResult] = React.useState<any>(null);
   const inferenceAttemptedRef = React.useRef<string | null>(null); // Track which act.label we've already tried
 
+  // ✅ Cache globale per DDT pre-assemblati (per templateId)
+  // Key: templateId (es. "723a1aa9-a904-4b55-82f3-a501dfbe0351")
+  // Value: { ddt, _templateTranslations }
+  const preAssembledDDTCache = React.useRef<Map<string, { ddt: any; _templateTranslations: Record<string, { en: string; it: string; pt: string }> }>>(new Map());
+
   const { ideTranslations, dataDialogueTranslations, replaceSelectedDDT } = useDDTManager();
   const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
 
@@ -221,7 +226,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     if (firstMain?.kind === 'intent') {
       return false;
     }
-    return isDDTEmpty(localDDT);
+    // ✅ NON aprire il wizard subito - aspetta che il match locale venga eseguito
+    // Il wizard verrà aperto dall'useEffect dopo il match locale o l'inferenza
+    return false;
   });
   const { Icon, color: iconColor } = getAgentActVisualsByType(actType, !!localDDT);
   // Priority: _sourceAct.label (preserved act info) > act.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
@@ -257,7 +264,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     const empty = isDDTEmpty(localDDT);
 
     // ✅ IMPORTANTE: Non aprire wizard se l'inferenza è in corso
-    if (empty && !wizardOwnsDataRef.current && !isInferring) {
+    // ✅ IMPORTANTE: Non aprire wizard se è già aperto (showWizard === true)
+    if (empty && !wizardOwnsDataRef.current && !isInferring && !showWizard) {
       // ✅ Se c'è act.label, fai inferenza PRIMA di aprire il wizard
       const actLabel = act?.label?.trim();
       const shouldInfer = actLabel && actLabel.length >= 3 && inferenceAttemptedRef.current !== actLabel;
@@ -268,28 +276,25 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         return; // ✅ IMPORTANTE: esci dall'useEffect, non continuare
       }
 
-      // ✅ SECONDO: Se abbiamo già un risultato, apri il wizard direttamente
-      if (inferenceResult) {
-        setShowWizard(true);
-        wizardOwnsDataRef.current = true;
-        try {
-          info('RESPONSE_EDITOR', 'Wizard ON (inference result available)', { mains: Array.isArray(inferenceResult?.ai?.schema?.mainData) ? inferenceResult.ai.schema.mainData.length : 0 });
-        } catch { }
-        return;
-      }
-
-      // ✅ TERZO: Se deve inferire E non sta già inferendo E non abbiamo ancora risultato, avvia inferenza
+      // ✅ SECONDO: Se deve inferire E non sta già inferendo E non abbiamo ancora risultato, avvia inferenza
       if (shouldInfer && !inferenceResult) {
-        // ✅ Fai inferenza PRIMA di aprire il wizard
-        setIsInferring(true);
         inferenceAttemptedRef.current = actLabel;
 
-        // ✅ Funzione per matching locale (istantaneo, usa cache precaricata)
-        const tryLocalPatternMatch = (text: string): any | null => {
+        // ✅ IIFE async per gestire il caricamento traduzioni
+        (async () => {
+          // ✅ Funzione per matching locale (ISTANTANEO, sincrono)
+          const tryLocalPatternMatch = (text: string): any | null => {
           try {
-            // ✅ Usa cache precaricata (istantaneo, no fetch!)
+            // ✅ Usa cache precaricata (istantaneo, sincrono, no fetch!)
+            // La cache dovrebbe essere già caricata all'avvio dell'app (App.tsx)
+            if (!DialogueTemplateService.isCacheLoaded()) {
+              console.log('[ResponseEditor] ⚠️ Cache template non caricata, match locale non disponibile');
+              return null; // Cache non disponibile, non fare match locale
+            }
+
             const templates = DialogueTemplateService.getAllTemplates();
             if (templates.length === 0) {
+              console.log('[ResponseEditor] ⚠️ Cache template vuota');
               return null;
             }
             const textLower = text.toLowerCase().trim();
@@ -396,7 +401,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                       mainData.push(mainInstance);
                     }
 
-                    // ✅ Estrai tutti i GUID dai stepPrompts per il caricamento traduzioni
+                    // ✅ Estrai tutti i GUID dai stepPrompts (ma NON caricare le traduzioni ancora!)
                     const allGuids: string[] = [];
                     mainData.forEach((m: any) => {
                       if (m.stepPrompts) {
@@ -427,7 +432,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                       }
                     });
 
-
+                    // ✅ Ritorna schema + lista GUID (senza caricare traduzioni ancora)
+                    // Le traduzioni saranno caricate in background dopo l'apertura del wizard
                     return {
                       ai: {
                         schema: {
@@ -436,7 +442,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                           // Include stepPrompts a livello schema se presente
                           stepPrompts: template.stepPrompts || undefined
                         },
-                        icon: template.icon || 'Calendar'
+                        icon: template.icon || 'Calendar',
+                        // ✅ Includi solo i GUID, le traduzioni saranno caricate in background
+                        translationGuids: [...new Set(allGuids)]
                       }
                     };
                   }
@@ -453,23 +461,114 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           }
         };
 
-        // Chiama l'inferenza
-        const performInference = async () => {
-          try {
-            // ✅ PRIMA: Prova matching locale (istantaneo, sincrono, usa cache)
-            const localMatch = tryLocalPatternMatch(actLabel);
-            if (localMatch) {
-              // ✅ FIX: Setta risultato E apri wizard DIRETTAMENTE (non aspettare useEffect)
-              setInferenceResult(localMatch);
-              setIsInferring(false);
-              setShowWizard(true);
-              wizardOwnsDataRef.current = true;
-              return; // ✅ Match locale trovato, non chiamare API
+          // ✅ PRIMA: Prova matching locale (ISTANTANEO, sincrono, cache già caricata)
+          console.log('[ResponseEditor] 🔍 Eseguendo match locale per:', actLabel);
+          console.log('[ResponseEditor] 🔍 Cache caricata?', DialogueTemplateService.isCacheLoaded());
+          console.log('[ResponseEditor] 🔍 Template disponibili:', DialogueTemplateService.getTemplateCount());
+
+          const localMatch = tryLocalPatternMatch(actLabel);
+          if (localMatch) {
+            // ✅ Match locale trovato ISTANTANEAMENTE → apri wizard subito
+            console.log('[ResponseEditor] ✅ Match locale trovato ISTANTANEO - apertura wizard immediata');
+            setInferenceResult(localMatch);
+            setShowWizard(true);
+            wizardOwnsDataRef.current = true;
+
+            // ✅ Carica traduzioni + PRE-ASSEMBLY IN BACKGROUND (mentre wizard mostra Yes/No)
+            const translationGuids = localMatch?.ai?.translationGuids || [];
+            const schema = localMatch?.ai?.schema;
+            const templateId = schema?.mainData?.[0]?.templateId; // ✅ ID del template per cache
+
+            if (translationGuids.length > 0 && schema) {
+              // ✅ CONTROLLA CACHE PRIMA!
+              if (templateId && preAssembledDDTCache.current.has(templateId)) {
+                const cached = preAssembledDDTCache.current.get(templateId)!;
+                console.log('[ResponseEditor] ✅ DDT trovato in cache (templateId:', templateId, ') - ISTANTANEO!');
+                setInferenceResult((prev: any) => ({
+                  ...prev,
+                  ai: {
+                    ...prev?.ai,
+                    templateTranslations: cached._templateTranslations,
+                    preAssembledDDT: cached.ddt
+                  }
+                }));
+              } else {
+                // ✅ Pre-assembly solo se NON in cache
+                console.log('[ResponseEditor] ⏳ Pre-assemblaggio in background (traduzioni + DDT)...', translationGuids.length, 'GUIDs', templateId ? `(templateId: ${templateId})` : '');
+                (async () => {
+                  try {
+                    const t0 = performance.now();
+
+                    // 1. Carica traduzioni
+                    const { getTemplateTranslations } = await import('../../../services/ProjectDataService');
+                    const templateTranslations = await getTemplateTranslations(translationGuids);
+                    const t1 = performance.now();
+                    console.log(`[ResponseEditor] ✅ Traduzioni caricate: ${(t1 - t0).toFixed(0)}ms`);
+
+                    // 2. PRE-ASSEMBLY del DDT (in background!)
+                    const { assembleFinalDDT } = await import('../../DialogueDataTemplateBuilder/DDTWizard/assembleFinal');
+                    const { buildArtifactStore } = await import('../../DialogueDataTemplateBuilder/DDTWizard/artifactStore');
+
+                    const emptyStore = buildArtifactStore([]);
+                    const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
+
+                    const preAssembledDDT = await assembleFinalDDT(
+                      schema.label || 'Data',
+                      schema.mainData || [],
+                      emptyStore,
+                      {
+                        escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
+                        templateTranslations: templateTranslations,
+                        projectLocale: projectLang,
+                        addTranslations: () => {} // Idempotente
+                      }
+                    );
+
+                    const t2 = performance.now();
+                    console.log(`[ResponseEditor] ✅ PRE-ASSEMBLY completato: ${(t2 - t1).toFixed(0)}ms, TOTALE: ${(t2 - t0).toFixed(0)}ms`);
+
+                    // ✅ SALVA IN CACHE!
+                    if (templateId) {
+                      preAssembledDDTCache.current.set(templateId, {
+                        ddt: preAssembledDDT,
+                        _templateTranslations: templateTranslations
+                      });
+                      console.log('[ResponseEditor] 💾 DDT salvato in cache (templateId:', templateId, ')');
+                    }
+
+                    // ✅ Aggiorna inferenceResult con traduzioni + DDT pre-assemblato
+                    setInferenceResult((prev: any) => ({
+                      ...prev,
+                      ai: {
+                        ...prev?.ai,
+                        templateTranslations: templateTranslations,
+                        preAssembledDDT: preAssembledDDT
+                      }
+                    }));
+                  } catch (err) {
+                    console.error('[ResponseEditor] ❌ Errore pre-assemblaggio in background:', err);
+                  }
+                })();
+              }
             }
 
-            // ✅ SECONDO: Se non c'è match locale, chiama API
+            return; // ✅ Match locale trovato, non chiamare API
+          }
 
-            const response = await fetch('/step2-with-provider', {
+          console.log('[ResponseEditor] ⚠️ Match locale NON trovato per:', actLabel);
+
+          // ✅ SECONDO: Se non c'è match locale, mostra messaggio amichevole e chiama API
+          console.log('[ResponseEditor] ⏳ Nessun match locale, chiamando API...');
+          setIsInferring(true); // ✅ Mostra messaggio amichevole solo durante chiamata API
+
+          // ✅ Chiama API con timeout
+          const performAPICall = async () => {
+          try {
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error('Inference timeout')), 10000); // 10 secondi
+            });
+
+            const fetchPromise = fetch('/step2-with-provider', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -479,22 +578,36 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               }),
             });
 
+            const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+
             if (response.ok) {
               const result = await response.json();
-              // ✅ FIX: Setta risultato E apri wizard DIRETTAMENTE (non aspettare useEffect)
+              // ✅ API success → apri wizard con risultato (step 'heuristic-confirm')
+              console.log('[ResponseEditor] ✅ Risultato API ricevuto');
               setInferenceResult(result);
+              setShowWizard(true);
+              wizardOwnsDataRef.current = true;
+            } else {
+              console.warn('[ResponseEditor] ⚠️ API response non OK:', response.status);
+              // ✅ API fallita → apri wizard con step 'input' ("Describe in detail...")
+              setInferenceResult(null);
               setShowWizard(true);
               wizardOwnsDataRef.current = true;
             }
           } catch (error) {
-            // Silent fail
+            console.error('[ResponseEditor] ❌ Errore inferenza API:', error);
+            // ✅ API fallita → apri wizard con step 'input' ("Describe in detail...")
+            setInferenceResult(null);
+            setShowWizard(true);
+            wizardOwnsDataRef.current = true;
           } finally {
             setIsInferring(false);
           }
-        };
+          };
 
-        performInference();
-        return; // ✅ NON aprire il wizard ancora, aspetta il risultato
+          performAPICall();
+        })(); // ✅ Fine IIFE async
+        return; // ✅ IMPORTANTE: esci dall'useEffect dopo aver avviato l'inferenza
       }
 
       // ✅ QUARTO: Se non era necessaria l'inferenza (testo troppo corto o già tentato), apri il wizard
@@ -505,16 +618,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           info('RESPONSE_EDITOR', 'Wizard ON (DDT empty, no inference needed)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
         } catch { }
       }
-    } else if (!empty && wizardOwnsDataRef.current) {
-      // DDT is complete and wizard had ownership → close wizard and release ownership
+    } else if (!empty && wizardOwnsDataRef.current && showWizard) {
+      // DDT is complete and wizard had ownership → close wizard
       setShowWizard(false);
-      // Don't release ownership immediately - let the onComplete handler do it after a delay
-      // wizardOwnsDataRef.current = false;
-          try {
-            info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
-          } catch { }
-        }
-      }, [localDDT, mainList, act, isInferring, inferenceResult, selectedProvider, selectedModel]); // ✅ Aggiunte dipendenze per inferenza
+      try {
+        info('RESPONSE_EDITOR', 'Wizard OFF (DDT filled)', { mains: Array.isArray(localDDT?.mainData) ? localDDT.mainData.length : 0 });
+      } catch { }
+    }
+  }, [localDDT, mainList, act, isInferring, inferenceResult, selectedProvider, selectedModel, showWizard]); // ✅ Aggiunte dipendenze
 
   // Nodo selezionato: root se selectedRoot, altrimenti main/sub in base agli indici
   const selectedNode = useMemo(() => {
@@ -763,11 +874,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             </div>
           </div>
         ) : isInferring ? (
-          /* Mostra loading durante inferenza pre-wizard */
+          /* Mostra loading durante ricerca modello */
           <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e2e8f0' }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '18px', marginBottom: '16px' }}>🔮 Inferenza in corso...</div>
-              <div style={{ fontSize: '14px', color: '#94a3b8' }}>Analizzando "{act?.label}" per pre-compilare il wizard...</div>
+              <div style={{ fontSize: '18px', marginBottom: '16px' }}>🔍 Sto cercando se ho già un modello per il tipo di dato che ti serve.</div>
+              <div style={{ fontSize: '14px', color: '#94a3b8' }}>Un attimo solo...</div>
             </div>
           </div>
         ) : showWizard ? (
@@ -775,19 +886,25 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           /* ✅ FIX: Non montare wizard se dovrebbe avere inferenceResult ma non ce l'ha ancora */
           (() => {
             // Se abbiamo act.label e dovremmo aver fatto inferenza, aspetta inferenceResult
+            // ✅ MA solo se l'inferenza è ancora in corso (isInferring === true)
+            // ✅ Se l'inferenza è finita ma non c'è risultato, apri comunque il wizard
             const actLabel = act?.label?.trim();
             const shouldHaveInference = actLabel && actLabel.length >= 3;
 
-            if (shouldHaveInference && !inferenceResult) {
+            // ✅ Mostra loading solo se l'inferenza è ancora in corso
+            if (shouldHaveInference && !inferenceResult && isInferring) {
               return (
                 <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e2e8f0' }}>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '18px', marginBottom: '16px' }}>🔮 Preparazione wizard...</div>
-                    <div style={{ fontSize: '14px', color: '#94a3b8' }}>Caricamento risultato inferenza...</div>
+                    <div style={{ fontSize: '18px', marginBottom: '16px' }}>🔍 Sto cercando se ho già un modello per il tipo di dato che ti serve.</div>
+                    <div style={{ fontSize: '14px', color: '#94a3b8' }}>Un attimo solo...</div>
                   </div>
                 </div>
               );
             }
+
+            // ✅ Se l'inferenza è finita ma non c'è risultato, apri comunque il wizard
+            // (l'inferenza potrebbe essere fallita o non necessaria)
 
             return (
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -797,7 +914,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     id: localDDT?.id || `temp_ddt_${act?.id}`,
                     label: inferenceResult.ai.schema.label || act?.label || 'Data',
                     mainData: inferenceResult.ai.schema.mainData || [],
-                    _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento
+                    _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
                   } : localDDT}
               onCancel={onClose || (() => { })}
               onComplete={(finalDDT, messages) => {
@@ -822,12 +939,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                   isEmpty: isDDTEmpty(coerced)
                 });
 
-                // Set flag to prevent auto-reopen
+                // Set flag to prevent auto-reopen IMMEDIATELY (before any state updates)
                 wizardOwnsDataRef.current = true;
 
                 // Update local DDT state first (ALWAYS do this)
                 setLocalDDT(coerced);
-                console.log('[WIZARD_FLOW] ResponseEditor: localDDT updated');
+                console.log('[WIZARD_FLOW] ResponseEditor: localDDT updated', {
+                  ddtId: coerced?.id,
+                  mainsCount: Array.isArray(coerced?.mainData) ? coerced.mainData.length : 0,
+                  hasSteps: coerced?.mainData?.[0]?.steps ? Object.keys(coerced.mainData[0].steps).length > 0 : false
+                });
 
                 try {
                   replaceSelectedDDT(coerced);
@@ -836,32 +957,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                   console.error('[WIZARD_FLOW] ResponseEditor: replaceSelectedDDT FAILED', err);
                 }
 
-                // Close wizard and reset UI to show StepEditor (ALWAYS do this)
+                // ✅ IMPORTANTE: Chiudi SEMPRE il wizard quando onComplete viene chiamato
+                // Il wizard ha già assemblato il DDT, quindi non deve riaprirsi
+                // Non controllare isEmpty qui perché potrebbe causare race conditions
                 setShowWizard(false);
-                console.log('[WIZARD_FLOW] ResponseEditor: wizard closed');
+                console.log('[WIZARD_FLOW] ResponseEditor: wizard closed (onComplete called)');
 
                 setRightMode('actions'); // Force show ActionList
                 setSelectedStepKey('start'); // Start with first step
 
-                // Release ownership after a delay to allow useEffect to see the new DDT
-                // But ensure the DDT is valid first
-                setTimeout(() => {
-                  const isEmpty = isDDTEmpty(coerced);
-                  console.log('[WIZARD_FLOW] ResponseEditor: Checking DDT after delay', {
-                    isEmpty,
-                    mainsCount: Array.isArray(coerced?.mainData) ? coerced.mainData.length : 0,
-                    hasSteps: coerced?.mainData?.[0]?.steps ? Object.keys(coerced.mainData[0].steps).length > 0 : false
-                  });
-
-                  if (!isEmpty) {
-                    wizardOwnsDataRef.current = false;
-                    console.log('[WIZARD_FLOW] ResponseEditor: wizard ownership released (DDT valid)');
-                  } else {
-                    console.warn('[WIZARD_FLOW] ResponseEditor: DDT still empty after delay, keeping wizard ownership');
-                    // Keep wizard open if DDT is still empty
-                    setShowWizard(true);
-                  }
-                }, 300);
+                // ✅ CRITICO: NON RILASCIARE MAI wizardOwnsDataRef.current dopo onComplete
+                // Il setTimeout che rilasciava l'ownership era il problema - causava la riapertura del wizard
+                console.log('[WIZARD_FLOW] ResponseEditor: wizardOwnsDataRef.current mantenu to true FOREVER');
 
                 // If parent provided onWizardComplete, notify it after updating UI
                 // (but don't close the overlay - let user see the editor)

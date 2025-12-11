@@ -22,13 +22,14 @@ interface MainDataWizardProps {
   onRequestOpen?: () => void;
   onRetryField?: (fieldId: string) => void;
   onCreateManually?: () => void;
+  compact?: boolean; // ✅ Modalità compatta per conferma
 }
 
 
 const MainDataWizard: React.FC<MainDataWizardProps & {
   progressByPath?: Record<string, number>;
   fieldProcessingStates?: Record<string, FieldProcessingState>;
-}> = ({ node, onChange, onRemove, progressByPath, fieldProcessingStates, selected, autoEdit, pathPrefix = '', onChangeEvent, onRequestOpen, onRetryField, onCreateManually }) => {
+}> = ({ node, onChange, onRemove, progressByPath, fieldProcessingStates, selected, autoEdit, pathPrefix = '', onChangeEvent, onRequestOpen, onRetryField, onCreateManually, compact = false }) => {
   // Ensure open on demand (e.g., pencil click) in addition to selection
   const [forceOpen, setForceOpen] = useState(false);
   const [hoverHeader, setHoverHeader] = useState(false);
@@ -105,13 +106,13 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
   return (
     <div
       style={{
-        border: selected ? '4px solid #fff' : '1px solid #7c2d12',
-        borderRadius: 10,
-        marginBottom: 10,
-        background: '#0b1220',
+        border: compact ? 'none' : (selected ? '4px solid #fff' : '1px solid #7c2d12'),
+        borderRadius: compact ? 0 : 10,
+        marginBottom: compact ? 4 : 10,
+        background: compact ? 'transparent' : '#0b1220',
         boxSizing: 'border-box',
         transition: 'border 0.15s',
-        minWidth: 280,
+        minWidth: compact ? 'auto' : 280,
       }}
     >
       <MainHeader
@@ -151,13 +152,13 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
         return null;
       })()}
       {open && (
-        <div style={{ padding: 12, paddingTop: 0 }}>
+        <div style={{ padding: compact ? 4 : 12, paddingTop: 0 }}>
           {/* Constraints for main node */}
           {node.constraints && (
             <div
               onMouseEnter={() => setHoverMainConstraints(true)}
               onMouseLeave={() => setHoverMainConstraints(false)}
-              style={{ marginBottom: 8 }}
+              style={{ marginBottom: compact ? 4 : 8 }}
             >
               <ConstraintsList
                 constraints={Array.isArray(node.constraints) ? node.constraints : []}
@@ -200,6 +201,7 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
             getStatusMessage={getStatusMessage}
             onRetryField={onRetryField}
             onCreateManually={onCreateManually}
+            compact={compact}
           />
         </div>
       )}

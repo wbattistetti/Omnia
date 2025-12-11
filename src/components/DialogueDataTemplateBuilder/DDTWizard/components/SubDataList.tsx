@@ -31,6 +31,7 @@ interface SubDataListProps {
   getStatusMessage: (fieldId: string) => string;
   onRetryField?: (fieldId: string) => void;
   onCreateManually?: () => void;
+  compact?: boolean; // ✅ Modalità compatta
 }
 
 const iconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' };
@@ -60,6 +61,7 @@ export default function SubDataList({
   getStatusMessage,
   onRetryField,
   onCreateManually,
+  compact = false,
 }: SubDataListProps) {
   if (!Array.isArray(node.subData) || node.subData.length === 0) {
     return <div style={{ opacity: 0.8, fontStyle: 'italic', marginTop: 6 }}>No sub fields yet.</div>;
@@ -70,7 +72,7 @@ export default function SubDataList({
       {node.subData.map((s, i) => (
         <div
           key={i}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}
+          style={{ display: 'flex', alignItems: 'center', gap: compact ? 4 : 8, marginTop: compact ? 2 : 8 }}
           onMouseEnter={() => setHoverSubIdx(i)}
           onMouseLeave={() => setHoverSubIdx(curr => (curr === i ? null : curr))}
         >

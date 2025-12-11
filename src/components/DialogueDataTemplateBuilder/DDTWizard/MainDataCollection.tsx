@@ -36,9 +36,10 @@ interface MainDataCollectionProps {
   fieldProcessingStates?: Record<string, any>;
   onRetryField?: (fieldId: string) => void;
   onCreateManually?: () => void;
+  compact?: boolean; // ✅ Modalità compatta per conferma
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap, onRetryField, onCreateManually }) => {
+const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap, onRetryField, onCreateManually, compact = false }) => {
   const { combinedClass } = useFontContext();
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
@@ -54,30 +55,38 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
 
   // const showRootLabel = mains.length > 1;
   return (
-    <div style={{ background: '#0f172a', borderRadius: 12, padding: 16, color: '#e2e8f0', marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 12 }}>
-        {/* Pulsante Add data più piccolo e in alto */}
-        <button
-          onClick={onAddMain}
-          title="Add data"
-          className={combinedClass}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            background: 'transparent',
-            border: '1px solid #7c3aed',
-            color: '#7c3aed',
-            padding: '4px 8px',
-            borderRadius: 999,
-            cursor: 'pointer',
-            fontSize: 12
-          }}
-        >
-          <Plus size={12} />
-          <span>Add data</span>
-        </button>
-      </div>
+    <div style={{
+      background: compact ? 'transparent' : '#0f172a',
+      borderRadius: compact ? 0 : 12,
+      padding: compact ? 0 : 16,
+      color: '#e2e8f0',
+      marginTop: compact ? 0 : 16
+    }}>
+      {!compact && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 12 }}>
+          {/* Pulsante Add data più piccolo e in alto */}
+          <button
+            onClick={onAddMain}
+            title="Add data"
+            className={combinedClass}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              background: 'transparent',
+              border: '1px solid #7c3aed',
+              color: '#7c3aed',
+              padding: '4px 8px',
+              borderRadius: 999,
+              cursor: 'pointer',
+              fontSize: 12
+            }}
+          >
+            <Plus size={12} />
+            <span>Add data</span>
+          </button>
+        </div>
+      )}
       {mains.length > 1 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
           {/* 📐 Riga 1: Label + Percentuale inline */}
