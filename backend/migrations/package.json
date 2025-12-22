@@ -1,0 +1,20 @@
+{
+  "name": "omnia-migrations",
+  "version": "1.0.0",
+  "description": "Migration scripts for Omnia DB",
+  "scripts": {
+    "step1": "node step1_setup_collections.js",
+    "step2": "node step2_copy_data.js",
+    "step3": "node step3_seed_builtins.js",
+    "all": "npm run step1 && npm run step2 && npm run step3",
+    "verify": "node verify_migration.js"
+  },
+  "dependencies": {
+    "mongodb": "^6.0.0"
+  }
+}
+
+
+
+
+

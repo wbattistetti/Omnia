@@ -3,7 +3,8 @@ import { Link2Off as LinkOff } from 'lucide-react';
 import { IntellisenseMenu } from '../../Intellisense/IntellisenseMenu';
 import { IntellisenseItem } from '../../Intellisense/IntellisenseTypes';
 import { useProjectData } from '../../../context/ProjectDataContext';
-import { findAgentAct } from '../utils/actVisuals';
+// ✅ RIMOSSO: findAgentAct - non esiste più il concetto di Act
+import { taskRepository } from '../../../services/TaskRepository';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../../utils/fontSizeUtils';
 
@@ -157,9 +158,19 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
         try { const raw = localStorage.getItem(key); payload = raw ? JSON.parse(raw) : null; } catch { }
         let intentsSrc: any[] = Array.isArray(payload?.intents) ? payload.intents : [];
         if (intentsSrc.length === 0) {
-          // fallback: scan projectData
-          const act = findAgentAct(projectData as any, r);
-          if (act && Array.isArray((act as any)?.problem?.intents)) intentsSrc = (act as any).problem.intents as any[];
+          // ✅ RIMOSSO: findAgentAct - gli intents sono nel task.intents (campi diretti)
+          // ✅ Fallback: recupera intents dal task se esiste
+          try {
+            const taskId = r?.taskId || r?.id;
+            if (taskId) {
+              const task = taskRepository.getTask(taskId);
+              if (task?.intents && Array.isArray(task.intents)) {
+                intentsSrc = task.intents;
+              }
+            }
+          } catch (err) {
+            // Ignore
+          }
         }
         const actLabel = String(r?.text || r?.label || 'problem').trim();
         const varName = `${actLabel.replace(/\s+/g, '_').toLowerCase()}.variable`;

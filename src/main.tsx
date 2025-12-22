@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './components/App.tsx';
 import './index.css';
+// Import status checker for TaskTemplatesV2
+import './utils/showTaskTemplatesV2Status';
 
 // 🚀 ENTERPRISE LOGGING SYSTEM
 import { logger } from './utils/logger';

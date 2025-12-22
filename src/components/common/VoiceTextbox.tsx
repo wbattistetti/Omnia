@@ -153,9 +153,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
 
   // Handle mouse down - start long press timer
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    console.log('🎤 [MOUSE_DOWN] Event received, isSupported:', isSupported);
     if (!isSupported) {
-      console.log('🎤 [MOUSE_DOWN] ❌ Not supported, returning');
       return;
     }
 
@@ -164,17 +162,14 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
 
     // Clear any existing timeout
     if (longPressTimeoutRef.current) {
-      console.log('🎤 [MOUSE_DOWN] Clearing existing timeout');
       clearTimeout(longPressTimeoutRef.current);
     }
 
     isLongPressActiveRef.current = false;
     setIsLongPressing(false);
-    console.log('🎤 [MOUSE_DOWN] Starting 300ms timer...');
 
     // Start timer for long press (300ms)
     longPressTimeoutRef.current = setTimeout(() => {
-      console.log('🎤 [LONG_PRESS] 300ms timer fired, starting dictation');
       isLongPressActiveRef.current = true;
       setIsLongPressing(true); // Show visual feedback (microphone cursor, green border)
       startDictation();
@@ -183,23 +178,17 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
 
   // Handle mouse up - check if it was a short click or long press release
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    console.log('🎤 [MOUSE_UP] Event received, isListening:', isListening, 'hasTimeout:', !!longPressTimeoutRef.current);
-
     // Stop propagation to prevent canvas click interference
     e.stopPropagation();
 
     // Clear long press timer if it hasn't fired yet (short click)
     if (longPressTimeoutRef.current) {
-      console.log('🎤 [MOUSE_UP] Clearing timeout (was short click)');
       clearTimeout(longPressTimeoutRef.current);
       longPressTimeoutRef.current = null;
-    } else {
-      console.log('🎤 [MOUSE_UP] No timeout to clear (long press was active)');
     }
 
     // If dictation was active, stop it and simulate Enter to finalize
     if (isListening) {
-      console.log('🎤 [MOUSE_UP] Stopping dictation and simulating Enter to finalize');
       stopDictation();
 
       // Wait a bit for the recognition to finalize, then simulate Enter
@@ -230,7 +219,6 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
             type: 'keydown',
           } as React.KeyboardEvent<HTMLTextAreaElement>;
 
-          console.log('🎤 [MOUSE_UP] Simulating Enter keydown event');
           onKeyDown(enterEvent);
         }
       }, 100); // Small delay to ensure recognition has finalized
@@ -418,7 +406,6 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
 
   // Also handle pointer events (works for both mouse and touch)
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
-    console.log('🎤 [POINTER_DOWN] Event received');
     e.stopPropagation();
     // Convert to mouse event format for our handler
     const mouseEvent = e as unknown as React.MouseEvent<HTMLTextAreaElement>;
@@ -426,7 +413,6 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
   }, [handleMouseDown]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
-    console.log('🎤 [POINTER_UP] Event received');
     e.stopPropagation();
     // Convert to mouse event format for our handler
     const mouseEvent = e as unknown as React.MouseEvent<HTMLTextAreaElement>;
@@ -435,19 +421,15 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
 
   // Combine pointer handlers with external ones
   const combinedPointerDown = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
-    console.log('🎤 [COMBINED_POINTER_DOWN] Called');
     handlePointerDown(e);
     if (rest.onPointerDown) {
-      console.log('🎤 [COMBINED_POINTER_DOWN] Calling external handler');
       rest.onPointerDown(e);
     }
   }, [handlePointerDown, rest.onPointerDown]);
 
   const combinedPointerUp = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
-    console.log('🎤 [COMBINED_POINTER_UP] Called');
     handlePointerUp(e);
     if (rest.onPointerUp) {
-      console.log('🎤 [COMBINED_POINTER_UP] Calling external handler');
       rest.onPointerUp(e);
     }
   }, [handlePointerUp, rest.onPointerUp]);
@@ -455,23 +437,19 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
   // Combine internal handlers with external ones from props
   // IMPORTANT: Call our handler FIRST, then external one
   const combinedMouseDown = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    console.log('🎤 [COMBINED_MOUSE_DOWN] Called');
     // Call our handler FIRST - it will stop propagation
     handleMouseDown(e);
     // Then call external handler if it exists
     if (rest.onMouseDown) {
-      console.log('🎤 [COMBINED_MOUSE_DOWN] Calling external handler');
       rest.onMouseDown(e);
     }
   }, [handleMouseDown, rest.onMouseDown]);
 
   const combinedMouseUp = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    console.log('🎤 [COMBINED_MOUSE_UP] Called');
     // Call our handler FIRST - it will stop propagation
     handleMouseUp(e);
     // Then call external handler if it exists
     if (rest.onMouseUp) {
-      console.log('🎤 [COMBINED_MOUSE_UP] Calling external handler');
       rest.onMouseUp(e);
     }
   }, [handleMouseUp, rest.onMouseUp]);

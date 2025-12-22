@@ -95,7 +95,12 @@ export function expandDDT(
         const compiledTask: CompiledTask = {
           id: task.id, // Use task.id directly (GUID)
           action: templateId,  // ✅ Use templateId (CompiledTask.action is still string for now)
-          value: task.value || {},
+          // ✅ Campi diretti (niente wrapper value)
+          ...Object.fromEntries(
+            Object.entries(task).filter(([key]) =>
+              !['id', 'templateId', 'createdAt', 'updatedAt'].includes(key)
+            )
+          ),
           condition,
           state: 'UnExecuted',
           source: {

@@ -16,6 +16,7 @@ interface NodeRowActionsOverlayProps {
   iconSize?: number;
   hasDDT?: boolean;
   gearColor?: string;
+  gearDisabled?: boolean; // ✅ Disabilita ingranaggio se tipo UNDEFINED e nessun template match
   isCondition?: boolean;
   onWrenchClick?: () => void;
   onOpenDDT?: () => void;
@@ -44,6 +45,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   iconSize,
   hasDDT,
   gearColor,
+  gearDisabled,
   isCondition,
   onWrenchClick,
   onOpenDDT,
@@ -237,7 +239,15 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            onOpenDDT && onOpenDDT();
+            if (!gearDisabled && onOpenDDT) {
+              onOpenDDT();
+            }
+          }}
+          disabled={gearDisabled} // ✅ Disabilita se tipo UNDEFINED e nessun template match
+          style={{
+            opacity: gearDisabled ? 0.5 : 1,
+            cursor: gearDisabled ? 'not-allowed' : 'pointer',
+            pointerEvents: gearDisabled ? 'none' : 'auto'
           }}
         >
           <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
@@ -258,8 +268,6 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
             }}
             className="text-slate-300 hover:text-amber-300 transition-colors hover:opacity-100 hover:scale-110 nodrag"
             style={{
-              background: 'none',
-              border: 'none',
               padding: 2,
               cursor: 'pointer',
               opacity: 0.9,

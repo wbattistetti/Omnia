@@ -89,7 +89,7 @@ export default function IntentListEditor({
 
     const updatedIntents = [...intents, newIntent];
     // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
 
     return newIntent.id;
@@ -102,14 +102,14 @@ export default function IntentListEditor({
         : intent
     );
     // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
   };
 
   const handleDelete = (id: string) => {
     const updatedIntents = intents.filter(intent => intent.id !== id && intent.name !== id);
     // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
   };
 
@@ -127,13 +127,13 @@ export default function IntentListEditor({
 
     const updatedIntents = [...intents, ...newIntents];
     // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
   };
 
   const handleClearAll = () => {
     // FASE 6: Use TaskRepository (already migrated in previous phases)
-    taskRepository.updateTaskValue(instanceId, { intents: [] });
+    taskRepository.updateTask(instanceId, { intents: [] });
     onIntentChange?.([]);
   };
 
@@ -260,7 +260,7 @@ export default function IntentListEditor({
             return pi;
           });
           // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
 
           await new Promise(resolve => setTimeout(resolve, 200));
         } catch (err) {
@@ -312,7 +312,7 @@ export default function IntentListEditor({
           return i;
         });
         // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
         onIntentChange?.(updatedIntents);
         alert(`Importate ${values.length} frasi per l'intento "${intent.name}"`);
       }
@@ -329,7 +329,7 @@ export default function IntentListEditor({
         }
       }));
       // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
       onIntentChange?.(updatedIntents);
       alert(`Importate ${values.length} frasi per tutti gli ${intents.length} intenti`);
     }
@@ -365,7 +365,7 @@ export default function IntentListEditor({
             return i;
           });
           // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
           onIntentChange?.(updatedIntents);
           alert(`Importate ${values.length} frasi per l'intento "${intent.name}"`);
         }
@@ -382,7 +382,7 @@ export default function IntentListEditor({
           }
         }));
         // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
         onIntentChange?.(updatedIntents);
         alert(`Importate ${values.length} frasi per tutti gli ${intents.length} intenti`);
       }
@@ -404,7 +404,7 @@ export default function IntentListEditor({
         : intent
     );
     // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-    taskRepository.updateTaskValue(instanceId, { intents: updatedIntents });
+    taskRepository.updateTask(instanceId, { intents: updatedIntents });
     onIntentChange?.(updatedIntents);
   };
 

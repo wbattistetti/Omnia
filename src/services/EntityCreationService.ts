@@ -4,10 +4,10 @@ import { modeToType, typeToMode } from '../utils/normalizers';
 import { classifyScopeFromLabel, Scope, Industry } from './ScopeClassificationService';
 
 export interface EntityCreationConfig {
-  entityType: 'agentActs' | 'backendActions' | 'macrotasks' | 'conditions';
+  entityType: 'taskTemplates' | 'backendActions' | 'macrotasks' | 'conditions';
   defaultCategoryName: string;
   ddtEditorType: 'agentAct' | 'backendAction' | 'macrotask';
-  sidebarEventType: 'agentActs' | 'backendActions' | 'macrotasks' | 'conditions';
+  sidebarEventType: 'taskTemplates' | 'backendActions' | 'macrotasks' | 'conditions';
 }
 
 export interface CreatedEntity {
@@ -35,11 +35,11 @@ export interface EntityCreationOptions {
 }
 
 const ENTITY_CONFIGS: Record<string, EntityCreationConfig> = {
-  agentActs: {
-    entityType: 'agentActs',
-    defaultCategoryName: 'Default Agent Acts',
+  taskTemplates: {
+    entityType: 'taskTemplates',
+    defaultCategoryName: 'Default Task Templates',
     ddtEditorType: 'agentAct',
-    sidebarEventType: 'agentActs'
+    sidebarEventType: 'taskTemplates'
   },
   backendActions: {
     entityType: 'backendActions',
@@ -129,7 +129,7 @@ export class EntityCreationService {
         version: '1.0.0',
         isInMemory: true,
         factoryId: null,
-        ...(entityType === 'agentActs' && (() => {
+        ...(entityType === 'taskTemplates' && (() => {
           const providedType = (options as any)?.type as any;
           const providedMode = (options as any)?.mode as any;
           const inferredMode = providedMode || classifyActMode(options.name);
@@ -154,7 +154,7 @@ export class EntityCreationService {
       categoryType: config.entityType,
       actId: newItem.id,
       factoryId: null, // Nessun ID factory ancora
-      ...(entityType === 'agentActs' && (() => {
+      ...(entityType === 'taskTemplates' && (() => {
         const t = (newItem as any)?.type as any;
         const m = (newItem as any)?.mode as any;
         const finalType = t || modeToType(m) || 'Message';
@@ -200,7 +200,7 @@ export class EntityCreationService {
 
     // Mappa i tipi di entità agli endpoint
     const endpointMap: { [key: string]: string } = {
-      'agentActs': 'http://localhost:8000/api/agent-acts-from-cache',
+      'taskTemplates': '/api/factory/task-templates-v2',
       'backendActions': '/api/factory/backend-calls',
       'macrotasks': '/api/factory/macrotasks'
     };
@@ -227,7 +227,7 @@ export class EntityCreationService {
       category: 'Default',
       createdAt: new Date(),
       updatedAt: new Date(),
-      ...(entityType === 'agentActs' && {
+      ...(entityType === 'taskTemplates' && {
         mode: classifyActMode(name),
         data: {},
         prompts: {},
@@ -343,8 +343,8 @@ export class EntityCreationService {
     projectData: any
   ): any {
     const inferredMode = classifyActMode(name);
-    const finalType = originalEntityType === 'agentActs' ? modeToType(inferredMode) : undefined;
-    const finalMode = originalEntityType === 'agentActs' ? typeToMode((finalType as any) || 'Message') : undefined;
+    const finalType = originalEntityType === 'taskTemplates' ? modeToType(inferredMode) : undefined;
+    const finalMode = originalEntityType === 'taskTemplates' ? typeToMode((finalType as any) || 'Message') : undefined;
     const newItemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newItem = {
       id: newItemId,
@@ -357,7 +357,7 @@ export class EntityCreationService {
       version: '1.0.0',
       isInMemory: true,
       factoryId: null,
-      ...(originalEntityType === 'agentActs' && { type: finalType, mode: finalMode, ddtId: undefined, testPassed: false })
+      ...(originalEntityType === 'taskTemplates' && { type: finalType, mode: finalMode, ddtId: undefined, testPassed: false })
     };
 
     // Aggiungi l'elemento alla categoria nel projectData
@@ -464,10 +464,10 @@ export class EntityCreationService {
   }
 
   /**
-   * Factory method per creare Agent Act
+   * Factory method per creare Task Template
    */
-  static createAgentAct(options: EntityCreationOptions): CreatedEntity | null {
-    return this.createEntity('agentActs', options);
+  static createTaskTemplate(options: EntityCreationOptions): CreatedEntity | null {
+    return this.createEntity('taskTemplates', options);
   }
 
   /**

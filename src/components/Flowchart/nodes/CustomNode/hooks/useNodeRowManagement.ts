@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
 import { typeToMode } from '../../../../../utils/normalizers';
-import { createRowWithTask, getTaskIdFromRow, updateRowData } from '../../../../../utils/taskHelpers';
+import { createRowWithTask, getTaskIdFromRow, updateRowData, deriveTaskTypeFromTemplateId } from '../../../../../utils/taskHelpers';
 import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
 import { taskRepository } from '../../../../../services/TaskRepository';
+import DDTTemplateMatcherService from '../../../../../services/DDTTemplateMatcherService';
 
 // ✅ Traccia il contenuto originale quando inizi a editare una riga esistente
 interface RowOriginalContent {
@@ -58,19 +59,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     // Migration: Now creates Task in TaskRepository (dual mode)
     const appendEmptyRow = useCallback((rows: NodeRowData[]) => {
         const newRowId = makeRowId();
-        console.log('[appendEmptyRow] 🔍 Creating new row with task', {
-            newRowId,
-            tasksInMemoryBefore: taskRepository.getAllTasks().length
-        });
         // Create row with Task (dual mode: Task + InstanceRepository)
-        const newRow = createRowWithTask(newRowId, 'Message', '');
-        console.log('[appendEmptyRow] ✅ Row created', {
-            rowId: newRow.id,
-            rowTaskId: newRow.taskId,
-            rowHasTaskId: !!newRow.taskId,
-            tasksInMemoryAfter: taskRepository.getAllTasks().length,
-            taskExistsInRepo: !!taskRepository.getTask(newRow.id)
-        });
+        // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
+        const newRow = createRowWithTask(newRowId, 'UNDEFINED', '');
         return { nextRows: [...rows, newRow], newRowId };
     }, [makeRowId]);
 
@@ -101,13 +92,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             originalText,
             wasNew
         };
-
-        console.log('💾 [SAVE_ORIGINAL] Salvato contenuto originale', {
-            rowId,
-            originalText,
-            wasNew,
-            timestamp: Date.now()
-        });
     }, [nodeRows]);
 
     // Gestione aggiornamento riga
@@ -117,36 +101,14 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         categoryType?: EntityType,
         meta?: Partial<NodeRowData>
     ) => {
-        console.log('🎯 [HANDLE_UPDATE_ROW][START]', {
-            rowId,
-            newText,
-            newTextLength: newText?.length,
-            categoryType,
-            meta,
-            metaKeys: meta ? Object.keys(meta) : [],
-            currentRowsCount: nodeRows.length,
-            timestamp: Date.now()
-        });
-
         const prev = nodeRows;
         const idx = prev.findIndex(r => r.id === rowId);
         if (idx === -1) {
-            console.log('🎯 [HANDLE_UPDATE_ROW][ROW_NOT_FOUND]', { rowId, prevRowsCount: prev.length });
             return;
         }
 
         const wasEmpty = !(prev[idx].text || '').trim();
         const nowFilled = (newText || '').trim().length > 0;
-
-        console.log('🎯 [HANDLE_UPDATE_ROW][BEFORE_UPDATE]', {
-            rowId,
-            idx,
-            oldText: prev[idx].text,
-            newText,
-            wasEmpty,
-            nowFilled,
-            timestamp: Date.now()
-        });
 
         let updatedRows = prev.map(row => {
             if (row.id !== rowId) return row as any;
@@ -155,15 +117,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             const finalType: any = (typeof incoming.type !== 'undefined') ? incoming.type : existingType;
             const existingMode: any = (row as any).mode;
             const finalMode: any = (typeof incoming.mode !== 'undefined') ? incoming.mode : (existingMode || (finalType ? typeToMode(finalType as any) : undefined));
-
-            console.log('[🔍 CUSTOM_NODE] handleUpdateRow', {
-                rowId,
-                incomingInstanceId: incoming.instanceId,
-                existingInstanceId: (row as any).instanceId,
-                hasMeta: !!meta,
-                metaKeys: meta ? Object.keys(meta) : [],
-                timestamp: Date.now()
-            });
 
             // Preserva flag isUndefined se presente (per nodi undefined con punto interrogativo)
             const preserveIsUndefined = (incoming as any)?.isUndefined !== undefined
@@ -187,14 +140,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 isUndefined: preserveIsUndefined
             } as any;
 
-            console.log('🎯 [HANDLE_UPDATE_ROW][ROW_UPDATED]', {
-                rowId,
-                oldText: row.text,
-                newText: updatedRow.text,
-                textsMatch: updatedRow.text === newText,
-                timestamp: Date.now()
-            });
-
             return updatedRow;
         });
 
@@ -203,10 +148,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         // ✅ Se una riga nuova viene riempita, aggiorna originalContentRef per marcarla come "non nuova"
         if (nowFilled && originalContentRef.current?.rowId === rowId && originalContentRef.current.wasNew) {
             originalContentRef.current.wasNew = false;
-            console.log('✅ [HANDLE_UPDATE_ROW] Riga nuova riempita, marcata come esistente', {
-                rowId,
-                timestamp: Date.now()
-            });
         }
 
         // ✅ Logica migliorata: auto-append se stai editando l'ultima riga, era vuota e ora è piena
@@ -215,24 +156,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         // Quando aggiungiamo una nuova riga vuota, quella diventa l'ultima, quindi l'auto-append continua
         const shouldAutoAppend = isLast && wasEmpty && nowFilled;
 
-        console.log('🔍 [AUTO_APPEND] Checking conditions', {
-            nodeId,
-            rowId,
-            isLast,
-            wasEmpty,
-            nowFilled,
-            isEmpty,
-            shouldAutoAppend,
-            timestamp: Date.now()
-        });
-
         if (shouldAutoAppend) {
-            console.log('✅ [AUTO_APPEND] Adding new row', {
-                nodeId,
-                currentRowsCount: updatedRows.length,
-                isEmpty,
-                timestamp: Date.now()
-            });
 
             // ✅ AVVIA GUARD PRIMA del batch (fondamentale!)
             beginAutoAppendGuard();
@@ -248,54 +172,90 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 const textareas = document.querySelectorAll('.node-row-input');
                 const newTextarea = textareas[textareas.length - 1] as HTMLTextAreaElement;
                 if (newTextarea) {
-                    console.log('✅ [AUTO_APPEND] Focus impostato sulla nuova riga');
                     newTextarea.focus();
                     newTextarea.select();
-                } else {
-                    console.warn('⚠️ [AUTO_APPEND] Textarea non trovato');
                 }
             });
         }
 
-        console.log('🎯 [HANDLE_UPDATE_ROW][BEFORE_SET_NODE_ROWS]', {
-            rowId,
-            updatedRowsCount: updatedRows.length,
-            targetRowText: updatedRows.find(r => r.id === rowId)?.text,
-            newText,
-            timestamp: Date.now()
-        });
-
         setNodeRows(updatedRows);
-
-        console.log('🎯 [HANDLE_UPDATE_ROW][AFTER_SET_NODE_ROWS]', {
-            rowId,
-            timestamp: Date.now()
-        });
 
         const finalRow = updatedRows.find(r => r.id === rowId);
 
         // Migration: row.text is the task name/label (not the message content)
-        // task.value.text contains the actual message content (saved in instance)
+        // task.text contains the actual message content (saved in instance)
         // When row.text is updated, it's updating the task name, not the message content
         // The message content is updated separately when editing the task in ResponseEditor
-
-        console.log('🎯 [HANDLE_UPDATE_ROW][CALLING_ON_UPDATE]', {
-            rowId,
-            finalRowText: finalRow?.text,
-            newText,
-            textsMatch: finalRow?.text === newText,
-            hasOnUpdate: !!normalizedData.onUpdate,
-            timestamp: Date.now()
-        });
 
         // ❌ RIMOSSO - isEmpty si aggiorna SOLO in exitEditing() per mantenere auto-append continuo
         // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
         normalizedData.onUpdate?.({ rows: updatedRows, isTemporary: normalizedData.isTemporary });
 
-        console.log('🎯 [HANDLE_UPDATE_ROW][AFTER_ON_UPDATE]', {
-            rowId,
-            timestamp: Date.now()
-        });
+        // ✅ EURISTICA 2: Se la riga è stata riempita, cerca template DDT
+        // Esegui anche se il tipo è Message (default), perché potrebbe essere un DataRequest
+        if (nowFilled && newText.trim().length >= 3) {
+            const taskId = getTaskIdFromRow(finalRow);
+            if (taskId) {
+                const task = taskRepository.getTask(taskId);
+                // ✅ Deriva il tipo dal templateId (Task non ha campo type, solo templateId)
+                const currentType = deriveTaskTypeFromTemplateId(task?.templateId) || (finalRow as any)?.type;
+
+                // ✅ Esegui Euristica 2 se:
+                // 1. Tipo è UNDEFINED (nessun match da Euristica 1)
+                // 2. Tipo è Message (default, potrebbe essere sovrascritto se troviamo un DataRequest)
+                // 3. Tipo non è già DataRequest (evita loop)
+                const shouldRunHeuristic2 =
+                    !currentType ||
+                    currentType === 'UNDEFINED' ||
+                    currentType === 'Message';
+
+                if (shouldRunHeuristic2) {
+                    (async () => {
+                        try {
+                            // ✅ Passa 'UNDEFINED' o 'Message' al servizio (entrambi sono modificabili)
+                            const typeForMatch = currentType === 'Message' ? 'UNDEFINED' : currentType;
+                            const match = await DDTTemplateMatcherService.findDDTTemplate(newText.trim(), typeForMatch);
+                            if (match) {
+                                // Ottieni projectId
+                                let projectId: string | undefined = undefined;
+                                try {
+                                    projectId = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined);
+                                } catch { }
+
+                                // Aggiorna task con GetData (campi diretti, niente wrapper value)
+                                if (task) {
+                                    taskRepository.updateTask(taskId, {
+                                        templateId: 'GetData'
+                                    }, projectId);
+                                } else {
+                                    // Crea nuovo task con GetData
+                                    taskRepository.createTask('GetData', undefined, taskId, projectId);
+                                }
+
+                                // Aggiorna anche la riga con il tipo corretto
+                                const updatedMeta = {
+                                    ...meta,
+                                    type: 'DataRequest',
+                                    mode: 'GetData'
+                                };
+
+                                // Aggiorna le righe con il nuovo tipo
+                                const rowsWithUpdatedType = updatedRows.map(r =>
+                                    r.id === rowId ? { ...r, ...updatedMeta, type: 'DataRequest', mode: 'GetData' } : r
+                                );
+
+                                normalizedData.onUpdate?.({
+                                    rows: rowsWithUpdatedType,
+                                    isTemporary: normalizedData.isTemporary
+                                });
+                            }
+                        } catch (err) {
+                            console.error('[useNodeRowManagement] Errore Euristica 2:', err);
+                        }
+                    })();
+                }
+            }
+        }
     }, [nodeRows, isEmpty, nodeId, appendEmptyRow, normalizedData, saveOriginalContent]);
 
     // Gestione eliminazione riga
@@ -345,11 +305,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
         // ✅ Se l'ultima riga è vuota, eliminala prima di inserire la nuova
         if (lastRowIsEmpty) {
-            console.log('🗑️ [INSERT_ROW] Eliminando riga vuota auto-appendata prima di inserire nuova riga', {
-                lastRowId: lastRow.id,
-                insertIndex: index,
-                timestamp: Date.now()
-            });
 
             // Elimina l'ultima riga vuota
             updatedRows = updatedRows.filter(r => r.id !== lastRow.id);
@@ -395,7 +350,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
         const newRowId = makeRowId();
         // Create row with Task (dual mode: Task + InstanceRepository)
-        const newRow = createRowWithTask(newRowId, 'Message', '');
+        // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
+        const newRow = createRowWithTask(newRowId, 'UNDEFINED', '');
         (newRow as any).isNew = true; // Preserve isNew flag
 
         updatedRows.splice(adjustedIndex, 0, newRow);
@@ -409,7 +365,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     // Gestione exit editing
     const handleExitEditing = useCallback((rowIdToCheck?: string | null) => {
         if (inAutoAppend()) {
-            console.log('🔍 [EXIT_EDITING] Soppresso durante auto-append');
             return;
         }
 
@@ -437,20 +392,11 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         if (originalContent?.wasNew) {
             if (isEmpty) {
                 // Riga nuova vuota + blur = ESC → ELIMINA
-                console.log('🗑️ [EXIT_EDITING] Riga nuova vuota → ESC → Eliminata', {
-                    rowId: rowIdToCheck,
-                    timestamp: Date.now()
-                });
                 handleDeleteRow(rowIdToCheck);
                 originalContentRef.current = null;
                 return;
             } else {
                 // Riga nuova con contenuto + blur = ENTER → CONFERMA
-                console.log('✅ [EXIT_EDITING] Riga nuova con contenuto → ENTER → Confermata', {
-                    rowId: rowIdToCheck,
-                    content: currentText,
-                    timestamp: Date.now()
-                });
                 // La riga è già stata aggiornata da handleUpdateRow, quindi basta uscire
                 setEditingRowId(null);
                 setIsEmpty(computeIsEmpty(nodeRows));
@@ -462,12 +408,6 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         // ✅ CASO 2: Riga ESISTENTE (già riempita)
         // Blur = ESC → RIPRISTINA contenuto originale
         if (originalContent && originalContent.originalText !== currentText) {
-            console.log('↩️ [EXIT_EDITING] Riga esistente modificata → ESC → Ripristina originale', {
-                rowId: rowIdToCheck,
-                originalText: originalContent.originalText,
-                currentText: currentText,
-                timestamp: Date.now()
-            });
 
             // Ripristina il contenuto originale
             setNodeRows(prev => prev.map(r =>

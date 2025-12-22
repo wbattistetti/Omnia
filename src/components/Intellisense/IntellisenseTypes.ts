@@ -5,7 +5,7 @@ export interface IntellisenseItem {
   name: string;
   description: string;
   category: string;
-  categoryType: 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
+  categoryType: 'taskTemplates' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
   // Underlying entity identifiers
   actId?: string; // original item.id
   factoryId?: string; // optional backend _id
@@ -28,7 +28,7 @@ export interface IntellisenseItem {
 export interface IntellisenseCategory {
   id: string;
   name: string;
-  type: 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
+  type: 'taskTemplates' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
   items: IntellisenseItem[];
   icon?: React.ReactNode;
   color?: string;

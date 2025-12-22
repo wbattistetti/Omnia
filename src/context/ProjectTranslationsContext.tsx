@@ -194,7 +194,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     isDirty
   };
 
-  // Expose saveAllTranslations on window for explicit save from AppContent
+  // Expose saveAllTranslations, addTranslations, and loadAllTranslations on window for explicit save from AppContent and ddtMergeUtils
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).__projectTranslationsContext = {
@@ -205,6 +205,12 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
             console.log('[ProjectTranslations] No changes to save (isDirty: false)');
           }
         },
+        addTranslations: (newTranslations: Record<string, string>) => {
+          addTranslations(newTranslations);
+        },
+        loadAllTranslations: async () => {
+          await loadAllTranslations();
+        },
         isDirty,
         translationsCount: Object.keys(translations).length
       };
@@ -214,7 +220,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
         delete (window as any).__projectTranslationsContext;
       }
     };
-  }, [saveAllTranslations, isDirty, translations]);
+  }, [saveAllTranslations, addTranslations, loadAllTranslations, isDirty, translations]);
 
   return (
     <ProjectTranslationsContext.Provider value={value}>

@@ -50,7 +50,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
     const el = itemsRef.current;
     if (!el) return;
     const handler = (ev: any) => {
-      if (entityType !== 'agentActs') return;
+      if (entityType !== 'taskTemplates') return;
       const d = ev?.detail || {};
       if (!d.anchorId) return;
       setInlineBuilderForId(d.anchorId);
@@ -149,7 +149,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
               const trimmed = String(name || '').trim();
               if (!trimmed) { setAdding(false); return; }
               // Infer interactivity when creating a new Agent Act
-              if (entityType === 'agentActs') {
+              if (entityType === 'taskTemplates') {
                 try {
                   const inferred = classifyActInteractivity(trimmed);
                   if (typeof inferred === 'boolean') {
@@ -186,7 +186,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
                   highlightTimer.current = window.setTimeout(() => setLastAddedName(null), 1600);
                 }
               }}
-              style={{ ['--ddt-accent' as any]: (entityType === 'agentActs' ? (((item as any)?.mode === 'DataRequest') ? '#3b82f6' : ((item as any)?.mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')) : undefined), background: isNew ? 'rgba(99,102,241,0.18)' : undefined, border: isNew ? '1px solid rgba(99,102,241,0.55)' : undefined, borderRadius: isNew ? 6 : undefined }}
+              style={{ ['--ddt-accent' as any]: (entityType === 'taskTemplates' ? (((item as any)?.mode === 'DataRequest') ? '#3b82f6' : ((item as any)?.mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')) : undefined), background: isNew ? 'rgba(99,102,241,0.18)' : undefined, border: isNew ? '1px solid rgba(99,102,241,0.55)' : undefined, borderRadius: isNew ? 6 : undefined }}
             >
               <SidebarItem
                 item={item}
@@ -198,7 +198,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
                 onUpdate={(updates: Partial<ProjectEntityItem>) => onUpdateItem(item.id, updates)}
                 onDelete={() => onDeleteItem(item.id)}
               />
-              {entityType === 'agentActs' && inlineBuilderForId === item.id && (
+              {entityType === 'taskTemplates' && inlineBuilderForId === item.id && (
                 <div className="mt-2 mb-2" style={{ padding: 0 }}>
                   <DDTBuilder
                     initialDDT={inlineInitialDDT || undefined}

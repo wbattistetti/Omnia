@@ -37,14 +37,31 @@ Public Class EventEmitter
     End Sub
 
     Public Sub Emit(eventName As String, data As Object)
+        Console.WriteLine($"📢 [EventEmitter] Emitting event: {eventName}, Listeners count: {If(_listeners.ContainsKey(eventName), _listeners(eventName).Count, 0)}")
+        System.Diagnostics.Debug.WriteLine($"📢 [EventEmitter] Emitting event: {eventName}, Listeners count: {If(_listeners.ContainsKey(eventName), _listeners(eventName).Count, 0)}")
+        Console.Out.Flush()
         If _listeners.ContainsKey(eventName) Then
             For Each handler In _listeners(eventName)
                 Try
+                    Console.WriteLine($"   [EventEmitter] Calling handler for {eventName}...")
+                    System.Diagnostics.Debug.WriteLine($"   [EventEmitter] Calling handler for {eventName}...")
+                    Console.Out.Flush()
                     handler(data)
+                    Console.WriteLine($"   [EventEmitter] Handler for {eventName} completed")
+                    System.Diagnostics.Debug.WriteLine($"   [EventEmitter] Handler for {eventName} completed")
+                    Console.Out.Flush()
                 Catch ex As Exception
                     Console.WriteLine($"❌ [EventEmitter] Error in handler for {eventName}: {ex.Message}")
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                    System.Diagnostics.Debug.WriteLine($"❌ [EventEmitter] Error in handler for {eventName}: {ex.Message}")
+                    System.Diagnostics.Debug.WriteLine($"   Stack trace: {ex.StackTrace}")
+                    Console.Out.Flush()
                 End Try
             Next
+        Else
+            Console.WriteLine($"⚠️ [EventEmitter] No listeners registered for event: {eventName}")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [EventEmitter] No listeners registered for event: {eventName}")
+            Console.Out.Flush()
         End If
     End Sub
 
@@ -154,33 +171,59 @@ Public Class SessionManager
             _sessions(sessionId) = session
             Console.WriteLine($"✅ [SessionManager] Session stored in dictionary: {sessionId}")
 
-            ' Avvia orchestrator in background
+            ' Avvia orchestrator in background (con piccolo delay per permettere al SSE stream di connettersi)
             Console.WriteLine($"🚀 [SessionManager] Starting orchestrator in background for session: {sessionId}")
-            System.Threading.Tasks.Task.Run(Async Function()
+            System.Diagnostics.Debug.WriteLine($"🚀 [SessionManager] Starting orchestrator in background for session: {sessionId}")
+            Console.Out.Flush()
+            Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function()
                 Try
+                    ' Piccolo delay per permettere al SSE stream handler di connettersi e registrare i listener
+                    Console.WriteLine($"⏳ [SessionManager] Waiting 500ms for SSE stream to connect...")
+                    System.Diagnostics.Debug.WriteLine($"⏳ [SessionManager] Waiting 500ms for SSE stream to connect...")
+                    Console.Out.Flush()
+                    Await System.Threading.Tasks.Task.Delay(500)
+
                     Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                     Console.WriteLine($"🚀 [SessionManager] Background task started for session: {sessionId}")
+                    System.Diagnostics.Debug.WriteLine($"🚀 [SessionManager] Background task started for session: {sessionId}")
                     Console.WriteLine($"   Orchestrator is Nothing: {session.Orchestrator Is Nothing}")
+                    Console.WriteLine($"   EventEmitter listeners - message: {session.EventEmitter.ListenerCount("message")}, stateUpdate: {session.EventEmitter.ListenerCount("stateUpdate")}")
+                    System.Diagnostics.Debug.WriteLine($"   Orchestrator is Nothing: {session.Orchestrator Is Nothing}")
+                    System.Diagnostics.Debug.WriteLine($"   EventEmitter listeners - message: {session.EventEmitter.ListenerCount("message")}, stateUpdate: {session.EventEmitter.ListenerCount("stateUpdate")}")
+                    Console.Out.Flush()
                     If session.Orchestrator IsNot Nothing Then
-                        Console.WriteLine($"   Calling session.Orchestrator.StartAsync()...")
-                        Await session.Orchestrator.StartAsync()
-                        Console.WriteLine($"✅ [SessionManager] Orchestrator.StartAsync() completed for session: {sessionId}")
+                        Console.WriteLine($"   Calling session.Orchestrator.ExecuteDialogueAsync()...")
+                        System.Diagnostics.Debug.WriteLine($"   Calling session.Orchestrator.ExecuteDialogueAsync()...")
+                        Console.Out.Flush()
+                        Await session.Orchestrator.ExecuteDialogueAsync()
+                        Console.WriteLine($"✅ [SessionManager] Orchestrator.ExecuteDialogueAsync() completed for session: {sessionId}")
+                        System.Diagnostics.Debug.WriteLine($"✅ [SessionManager] Orchestrator.ExecuteDialogueAsync() completed for session: {sessionId}")
+                        Console.Out.Flush()
                     Else
                         Console.WriteLine($"❌ [SessionManager] Orchestrator is Nothing, cannot start!")
+                        System.Diagnostics.Debug.WriteLine($"❌ [SessionManager] Orchestrator is Nothing, cannot start!")
+                        Console.Out.Flush()
                     End If
                     Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.Out.Flush()
                 Catch ex As Exception
                     Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                     Console.WriteLine($"❌ [SessionManager] Orchestrator error for session {sessionId}: {ex.Message}")
                     Console.WriteLine($"Stack trace: {ex.StackTrace}")
+                    System.Diagnostics.Debug.WriteLine($"❌ [SessionManager] Orchestrator error for session {sessionId}: {ex.Message}")
+                    System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}")
                     If ex.InnerException IsNot Nothing Then
                         Console.WriteLine($"Inner exception: {ex.InnerException.Message}")
                         Console.WriteLine($"Inner stack trace: {ex.InnerException.StackTrace}")
+                        System.Diagnostics.Debug.WriteLine($"Inner exception: {ex.InnerException.Message}")
+                        System.Diagnostics.Debug.WriteLine($"Inner stack trace: {ex.InnerException.StackTrace}")
                     End If
                     Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.Out.Flush()
                 End Try
             End Function)
-            Console.WriteLine($"✅ [SessionManager] Background task scheduled for session: {sessionId}")
+            Console.WriteLine($"✅ [SessionManager] Background task scheduled for session: {sessionId}, Task ID: {backgroundTask.Id}")
+            Console.Out.Flush()
 
             Return session
         End SyncLock

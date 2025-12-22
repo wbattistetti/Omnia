@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { EditorProps } from '../../EditorHost/types';
 import EditorHeader from '../../../common/EditorHeader';
-import { getAgentActVisualsByType } from '../../../Flowchart/utils/actVisuals';
+import { getTaskVisualsByType } from '../../../Flowchart/utils/taskVisuals';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../../context/ProjectDataContext';
 
@@ -21,7 +21,7 @@ export default function TextMessageEditor({ act, onClose }: EditorProps) {
       const projectId = pdUpdate?.getCurrentProjectId() || undefined;
       task = taskRepository.createTask(action, undefined, instanceId, projectId);
     }
-    return task?.value?.text || '';
+    return task?.text || '';
   });
 
   // FIX: Reload text from Task when instanceId changes or when Task is updated
@@ -30,15 +30,15 @@ export default function TextMessageEditor({ act, onClose }: EditorProps) {
 
     // Check if Task exists and has different text (only on mount or instanceId change)
     const task = taskRepository.getTask(instanceId);
-    if (task?.value?.text !== undefined) {
+    if (task?.text !== undefined) {
       setText(prevText => {
-        if (prevText !== task.value.text) {
+        if (prevText !== task.text) {
           console.log('[TextMessageEditor] Reloading text from Task', {
             instanceId,
             oldText: prevText.substring(0, 50),
-            newText: task.value.text.substring(0, 50)
+            newText: task.text?.substring(0, 50) || ''
           });
-          return task.value.text;
+          return task.text || '';
         }
         return prevText;
       });
@@ -50,14 +50,14 @@ export default function TextMessageEditor({ act, onClose }: EditorProps) {
       if (updatedInstanceId === instanceId) {
         // Task was updated, reload text
         const updatedTask = taskRepository.getTask(instanceId);
-        if (updatedTask?.value?.text !== undefined) {
+        if (updatedTask?.text !== undefined) {
           setText(prevText => {
-            if (prevText !== updatedTask.value.text) {
+            if (prevText !== updatedTask.text) {
               console.log('[TextMessageEditor] Task updated, reloading text', {
                 instanceId,
-                newText: updatedTask.value.text.substring(0, 50)
+                newText: updatedTask.text?.substring(0, 50) || ''
               });
-              return updatedTask.value.text;
+              return updatedTask.text || '';
             }
             return prevText;
           });
@@ -77,7 +77,7 @@ export default function TextMessageEditor({ act, onClose }: EditorProps) {
     if (instanceId && text !== undefined) {
       // FIX: Pass projectId to save to database immediately
       const projectId = pdUpdate?.getCurrentProjectId() || undefined;
-      taskRepository.updateTaskValue(instanceId, { text }, projectId);
+      taskRepository.updateTask(instanceId, { text }, projectId);
     }
   }, [text, instanceId, pdUpdate]);
 
@@ -102,7 +102,7 @@ export default function TextMessageEditor({ act, onClose }: EditorProps) {
     <div className="h-full bg-white flex flex-col min-h-0">
       {(() => {
         const type = String(act?.type || 'Message') as any;
-        const { Icon, color } = getAgentActVisualsByType(type, false);
+        const { Icon, color } = getTaskVisualsByType(type, false);
         return (
           <EditorHeader
             icon={<Icon size={18} style={{ color }} />}

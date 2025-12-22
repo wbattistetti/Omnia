@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectData, useProjectDataUpdate } from '../../../context/ProjectDataContext';
-import { findAgentAct } from '../utils/actVisuals';
+// ✅ RIMOSSO: findAgentAct - non esiste più il concetto di Act
 import { createRowWithTask } from '../../../utils/taskHelpers';
 
 export function useIntellisenseHandlers(
@@ -34,9 +34,17 @@ export function useIntellisenseHandlers(
     if (isProblemClassification && item.value) {
       actId = item.value; // L'ID del template
 
-      // Cerca il template nel projectData per recuperare gli intents
-      const templateAct = projectData ? findAgentAct(projectData, { actId }) : null;
-      const initialIntents = templateAct?.problem?.intents || [];
+      // ✅ RIMOSSO: findAgentAct - gli intents sono nel task.intents (campi diretti)
+      // ✅ Recupera gli intents dal task se esiste già
+      const initialIntents: any[] = [];
+      try {
+        const task = taskRepository.getTask(actId);
+        if (task?.intents) {
+          initialIntents.push(...task.intents);
+        }
+      } catch (err) {
+        // Ignore
+      }
 
       // FASE 6C: Crea Task nel TaskRepository (createRowWithTask gestisce anche InstanceRepository per compatibilità)
       if (!actId) {
@@ -52,7 +60,7 @@ export function useIntellisenseHandlers(
 
       // Se ci sono intents iniziali, aggiorna il Task
       if (initialIntents.length > 0) {
-        taskRepository.updateTaskValue(instanceId, { intents: initialIntents }, projectId);
+        taskRepository.updateTask(instanceId, { intents: initialIntents }, projectId);
       }
 
       console.log("✅ [INTELLISENSE] Created Task for ProblemClassification:", {

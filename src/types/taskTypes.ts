@@ -10,32 +10,58 @@ export enum TaskContext {
 }
 
 /**
- * TaskType: Type of task (determines behavior and editor)
+ * TaskType: Enum numerato per i tipi di task (allineato con VB.NET TaskTypes)
+ * Determina il comportamento del task e quale editor usare
  */
-export type TaskType =
-  | 'action'        // Azioni semplici (sayMessage, sendSMS, CloseCall, ecc.)
-  | 'dataRequest'   // DataRequest (GetData)
-  | 'problem'       // ProblemClassification
-  | 'backend'       // BackendCall
-  | 'flow';         // Macrotask (porzione di flusso)
+export enum TaskType {
+  SayMessage = 0,      // TaskTypes.SayMessage
+  CloseSession = 1,    // TaskTypes.CloseSession
+  Transfer = 2,        // TaskTypes.Transfer
+  GetData = 3,         // TaskTypes.GetData
+  BackendCall = 4,     // TaskTypes.BackendCall
+  ClassifyProblem = 5  // TaskTypes.ClassifyProblem
+}
 
 /**
- * TaskTemplate: Defines a type of executable task
+ * Helper: Deriva il tipo di editor da TaskType
+ */
+export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' {
+  switch (type) {
+    case TaskType.SayMessage:
+    case TaskType.CloseSession:
+    case TaskType.Transfer:
+      return 'message';
+    case TaskType.GetData:
+      return 'ddt';
+    case TaskType.ClassifyProblem:
+      return 'problem';
+    case TaskType.BackendCall:
+      return 'backend';
+    default:
+      return 'simple';
+  }
+}
+
+/**
+ * TaskCatalog: Defines a type of executable task (catalog entry)
  * Replaces: AgentActs, Action Catalog entries
  *
- * TaskTemplate è riutilizzabile e organizzato per scope:
+ * TaskCatalog è organizzato per scope:
  * - global: disponibile in tutti i progetti
  * - industry: disponibile solo per progetti di quell'industry
  * - client: disponibile solo nel progetto specifico
+ *
+ * ✅ REFACTORED: id è GUID (univoco), type è enum numerato, editor derivabile da type
  */
-export interface TaskTemplate {
-  id: string;                    // Template ID (e.g. "SayMessage", "GetData", "callBackend")
+export interface TaskCatalog {
+  id: string;                    // ✅ GUID univoco (permette più catalog entries dello stesso tipo)
   label: string;                 // Display label
   description: string;           // Description
   icon: string;                  // Icon name (e.g. "MessageCircle", "HelpCircle")
   color: string;                 // UI color (e.g. "text-blue-500")
-  type: TaskType;                // ✅ Type of task (determines behavior)
-  contexts: TaskContext[];        // ✅ Where this template can be inserted
+  type: TaskType;                // ✅ Enum numerato (comportamento: GetData, SayMessage, ecc.)
+  name?: string;                 // ✅ Nome semantico (opzionale, per built-in: "GetData", "SayMessage")
+  contexts: TaskContext[];        // ✅ Where this catalog entry can be inserted
 
   // Signature: Input parameters schema (if needed)
   signature?: {
@@ -50,9 +76,9 @@ export interface TaskTemplate {
     };
   };
 
-  // ValueSchema: Defines the structure of Task.value and which editor to use
+  // ValueSchema: Defines the structure of Task.value
+  // ❌ REMOVED: editor (derivabile da type con getEditorFromTaskType())
   valueSchema: {                 // Defines Task.value structure
-    editor: 'message' | 'ddt' | 'problem' | 'backend' | 'simple';  // Which editor to open
     keys: {                        // Valid keys in Task.value
       [key: string]: {
         type: 'string' | 'object' | 'array' | 'ddt' | 'problem';
@@ -68,7 +94,7 @@ export interface TaskTemplate {
     };
   };
 
-  scope?: 'global' | 'industry' | 'client';  // Scope del template
+  scope?: 'global' | 'industry' | 'client';  // Scope del catalog entry
   industry?: string;             // Industry specifico (se scope='industry')
   createdAt?: Date;
   updatedAt?: Date;
@@ -85,32 +111,48 @@ export interface TaskHeuristic {
 }
 
 /**
- * TaskInstance: Executable instance of a TaskTemplate
- * Replaces: ActInstance, Task (old name)
- * Relationship: 1:1 with FlowRow (each row has one unique TaskInstance)
+ * Task: Unified structure for all tasks
  *
- * During migration, both templateId and action are maintained for compatibility.
- * After migration is complete, action will be removed.
+ * - templateId = null → Task standalone (non referenzia altri Task)
+ * - templateId = GUID → Task che referenzia un altro Task (per ereditare struttura/contratti)
+ *
+ * Esempi:
+ * - Task DDT standalone: { id: "guid", templateId: null, label: "...", mainData: [...] }
+ * - Task DDT che referenzia: { id: "guid", templateId: "guid-altro-task", label: "...", mainData: [...] }
+ *
+ * Per altri tipi di task (SayMessage, BackendCall, ecc.):
+ * - Task standalone: { id: "guid", templateId: null, text: "Ciao!", ... }
+ * - Task che referenzia: { id: "guid", templateId: "guid-altro-task", text: "Ciao!", ... }
  */
-export interface TaskInstance {
-  id: string;                    // Unique TaskInstance ID (instance ID)
-  templateId: string;           // ✅ TaskTemplate ID (e.g. "SayMessage", "GetData")
-  value?: Record<string, any>;   // Generic key-value data, structured according to template's valueSchema
+export interface Task {
+  id: string;                    // Unique Task ID
+  templateId: string | null;     // ✅ null = Task standalone, GUID = referenzia un altro Task
+  // ✅ Campi diretti (niente wrapper value):
+  // Per GetData/DDT:
+  label?: string;                // Label del DDT
+  mainData?: any[];              // Main data array
+  stepPrompts?: any;             // Step prompts
+  constraints?: any[];           // Constraints
+  examples?: any[];              // Examples
+  // Per SayMessage:
+  text?: string;                 // Message text
+  // Per ClassifyProblem:
+  intents?: any[];               // Intents array
+  // Per BackendCall:
+  endpoint?: string;             // API endpoint
+  method?: string;              // HTTP method
+  params?: Record<string, any>;  // Parameters
+  // Generic fields:
+  [key: string]: any;           // Allow additional fields
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 /**
- * Task: Represents a concrete instance of a TaskTemplate
- * @deprecated Use TaskInstance instead. This will be removed after migration.
+ * TaskInstance: Alias for Task (for backward compatibility during migration)
+ * @deprecated Use Task instead
  */
-export interface Task {
-  id: string;                    // Unique Task ID (instance ID)
-  templateId: string;             // ✅ TaskTemplate ID (e.g. "SayMessage", "GetData") - REQUIRED
-  value?: Record<string, any>;   // Generic key-value data, structured according to template's valueSchema
-  createdAt?: Date;
-  updatedAt?: Date;
-}
+export type TaskInstance = Task;
 
 /**
  * FlowRow: Topological element in the flowchart

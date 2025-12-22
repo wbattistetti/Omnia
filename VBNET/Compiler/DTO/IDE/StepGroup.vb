@@ -2,7 +2,7 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Generic
-Imports System.Text.Json.Serialization
+Imports Newtonsoft.Json
 
 ''' <summary>
 ''' StepGroup: corrisponde ESATTAMENTE a StepGroup TypeScript del frontend
@@ -11,17 +11,16 @@ Public Class StepGroup
         ''' <summary>
         ''' Tipo di step: 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success' | 'introduction'
         ''' </summary>
-        <JsonPropertyName("type")>
+        <JsonProperty("type")>
         Public Property Type As String
 
     ''' <summary>
     ''' Lista di escalation per questo step
     ''' </summary>
-    <JsonPropertyName("escalations")>
+    <JsonProperty("escalations")>
     Public Property Escalations As List(Of Compiler.Escalation)
 
         Public Sub New()
             Escalations = New List(Of Escalation)()
         End Sub
     End Class
-

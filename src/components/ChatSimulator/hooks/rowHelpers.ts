@@ -17,17 +17,23 @@ function getInstanceFromTask(taskId: string): { message?: { text?: string }; ddt
   const instance: { message?: { text?: string }; ddt?: any } = {};
 
   // ✅ MIGRATION: Use getTemplateId() helper
-  // Map task.value.text → instance.message.text (for Message actions)
+  // ✅ Map task.text → instance.message.text (for Message actions)
   const templateId = getTemplateId(task);
   if (templateId === 'Message' || templateId === 'SayMessage') {
     instance.message = {
-      text: task.value?.text || ''
+      text: task.text || ''
     };
   }
 
-  // Map task.value.ddt → instance.ddt (for GetData/DataRequest actions)
-  if (task.value?.ddt) {
-    instance.ddt = task.value.ddt;
+  // ✅ Map task DDT fields → instance.ddt (for GetData/DataRequest actions)
+  if (task.mainData && task.mainData.length > 0) {
+    instance.ddt = {
+      label: task.label,
+      mainData: task.mainData,
+      stepPrompts: task.stepPrompts,
+      constraints: task.constraints,
+      examples: task.examples
+    };
   }
 
   return instance;

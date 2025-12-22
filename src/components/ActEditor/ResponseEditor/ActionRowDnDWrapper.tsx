@@ -4,11 +4,11 @@ import { Action } from './types';
 
 export interface ActionRowDnDWrapperProps {
   escalationIdx: number;
-  actionIdx: number;
+  actionIdx: number; // ✅ Legacy name, but represents taskIdx
   action: Action;
-  onMoveAction: (fromEscIdx: number, fromActIdx: number, toEscIdx: number, toActIdx: number, position: 'before' | 'after') => void;
-  onDropAction?: (from: { escalationIdx: number; actionIdx: number; action: Action }, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
-  onDropNewAction?: (action: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => void;
+  onMoveAction: (fromEscIdx: number, fromTaskIdx: number, toEscIdx: number, toTaskIdx: number, position: 'before' | 'after') => void;
+  onDropAction?: (from: { escalationIdx: number; taskIdx: number; action: Action }, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void;
+  onDropNewAction?: (action: any, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void;
   children: React.ReactNode;
   allowViewerDrop?: boolean;
   isEditing?: boolean; // Disable drag when editing
@@ -92,11 +92,11 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
           onMoveAction(item.escalationIdx, item.actionIdx, escalationIdx, actionIdx, position);
         }
         if (onDropAction) {
-          onDropAction(item, { escalationIdx, actionIdx }, position);
+          onDropAction(item, { escalationIdx, taskIdx: actionIdx }, position);
         }
       } else if (allowViewerDrop && item.type === DND_TYPE_VIEWER) {
         if (onDropNewAction) {
-          onDropNewAction(item.action, { escalationIdx, actionIdx }, position);
+          onDropNewAction(item.action, { escalationIdx, taskIdx: actionIdx }, position);
         } else {
           console.warn('[DnD][drop] onDropNewAction NOT PROVIDED!');
         }

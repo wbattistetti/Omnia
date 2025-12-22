@@ -25,7 +25,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
   const [hovered, setHovered] = useState(false);
   const { data: projectData } = useProjectData();
 
-  const isAgentAct = categoryType === 'agentActs' || (item as any)?.type === 'agent_act' || (item as any)?.categoryType === 'agentActs';
+  const isAgentAct = categoryType === 'taskTemplates' || (item as any)?.type === 'agent_act' || (item as any)?.categoryType === 'taskTemplates';
   const mode: 'DataRequest' | 'DataConfirmation' | 'Message' = (isAgentAct ? ((item as any)?.mode || 'Message') : 'Message');
   const isInteractive = mode === 'DataRequest' || mode === 'DataConfirmation'; // Keep for backward compatibility
   const nameColor = isAgentAct
@@ -125,7 +125,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
             </button>
 
             {/* Agent Acts gear/wrench */}
-            {categoryType === 'agentActs' && (
+            {categoryType === 'taskTemplates' && (
               <button
                 className="p-1"
                 title={isInteractive

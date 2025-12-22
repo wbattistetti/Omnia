@@ -2,143 +2,89 @@ import { HeuristicType, Inference, InferOptions, Lang } from './types';
 import { getLanguageOrder, getRuleSet } from './registry';
 import { isCacheLoaded, getPatternCache, waitForCache } from './patternLoader';
 
+/**
+ * ============================================================
+ * EURISTICA 1: DETERMINAZIONE TIPO DI TASK (CATEGORIA)
+ * ============================================================
+ * Funzione: classify (esportata come inferActType)
+ * Scopo: Determina il tipo di task dalla label della riga di nodo
+ *        (Message, GetData/REQUEST_DATA, BackendCall, AIAgent, ecc.)
+ * Pattern da: Task_Types (categorie generiche: DataRequest, Message, ecc.)
+ * Usata in: NodeRow.tsx quando l'utente digita una nuova riga
+ * Output: HeuristicType (es. 'REQUEST_DATA', 'MESSAGE', 'AI_AGENT')
+ * ============================================================
+ */
 export async function classify(label: string, opts?: InferOptions): Promise<Inference> {
   const txt = (label || '').trim();
   if (!txt) return { type: 'MESSAGE', reason: 'empty' };
 
   // Verifica e aspetta che la cache sia caricata
   if (!isCacheLoaded()) {
-    console.log('[ACT_TYPE_CLASSIFY] ⏳ Cache not loaded yet, waiting...');
     try {
       await waitForCache();
-      console.log('[ACT_TYPE_CLASSIFY] ✅ Cache loaded successfully');
     } catch (error) {
-      console.error('[ACT_TYPE_CLASSIFY] ❌ Failed to load cache:', error);
+      console.error('[ACT_TYPE_CLASSIFY] Failed to load cache:', error);
       return { type: 'MESSAGE', reason: 'cache_load_failed' };
     }
   }
 
   const langs = getLanguageOrder(opts?.languageOrder);
 
-  console.log('[ACT_TYPE_CLASSIFY] 🔍 Classifying text:', { text: txt, languages: langs, cacheSize: getPatternCache().size });
-
   // Test in ordine di priorità (primo match vince)
   for (const L of langs) {
     const RS = getRuleSet(L as Lang);
     if (!RS) {
-      console.log(`[ACT_TYPE_CLASSIFY] ⚠️ No RuleSet found for language: ${L}`);
       continue;
     }
 
-    console.log(`[ACT_TYPE_CLASSIFY] 📋 Testing language: ${L}`, {
-      hasAI_AGENT: RS.AI_AGENT?.length || 0,
-      hasNEGOTIATION: RS.NEGOTIATION?.length || 0,
-      hasPROBLEM_SPEC_DIRECT: RS.PROBLEM_SPEC_DIRECT?.length || 0,
-      hasPROBLEM_REASON: RS.PROBLEM_REASON?.length || 0,
-      hasBACKEND_CALL: RS.BACKEND_CALL?.length || 0,
-      hasREQUEST_DATA: RS.REQUEST_DATA?.length || 0,
-      hasSUMMARY: RS.SUMMARY?.length || 0,
-      hasMESSAGE: RS.MESSAGE?.length || 0,
-      hasPROBLEM: !!RS.PROBLEM && RS.PROBLEM !== null
-    });
-
     // 0. AI_AGENT (priorità massima - riconosce "AI:" o "AI :" all'inizio)
-    if (RS.AI_AGENT?.some(r => {
-      const match = r.test(txt);
-      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ AI_AGENT match! Pattern: ${r.source}, Text: "${txt}"`);
-      return match;
-    })) {
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: AI_AGENT (lang: ${L})`);
+    if (RS.AI_AGENT?.some(r => r.test(txt))) {
       return { type: 'AI_AGENT', lang: L, reason: 'AI_AGENT' };
     }
 
     // 1. NEGOTIATION (priorità massima)
-    if (RS.NEGOTIATION?.some(r => {
-      const match = r.test(txt);
-      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ NEGOTIATION match! Pattern: ${r.source}, Text: "${txt}"`);
-      return match;
-    })) {
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: NEGOTIATION (lang: ${L})`);
+    if (RS.NEGOTIATION?.some(r => r.test(txt))) {
       return { type: 'NEGOTIATION', lang: L, reason: 'NEGOTIATION' };
     }
 
     // 2. PROBLEM_SPEC_DIRECT
-    if (RS.PROBLEM_SPEC_DIRECT?.some(r => {
-      const match = r.test(txt);
-      if (match) {
-        console.log(`[ACT_TYPE_CLASSIFY] ✅ PROBLEM_SPEC_DIRECT match! Pattern: ${r.source}, Text: "${txt}"`);
-        console.log(`[ACT_TYPE_CLASSIFY] 🔍 Full regex: ${r.toString()}`);
-      }
-      return match;
-    })) {
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: PROBLEM_SPEC (lang: ${L}, reason: PROBLEM_SPEC_DIRECT)`);
+    if (RS.PROBLEM_SPEC_DIRECT?.some(r => r.test(txt))) {
       return { type: 'PROBLEM_SPEC', lang: L, reason: 'PROBLEM_SPEC_DIRECT' };
     }
 
     // 3. PROBLEM_REASON
-    if (RS.PROBLEM_REASON?.some(r => {
-      const match = r.test(txt);
-      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ PROBLEM_REASON match! Pattern: ${r.source}`);
-      return match;
-    })) {
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: PROBLEM_SPEC (lang: ${L}, reason: PROBLEM_REASON)`);
+    if (RS.PROBLEM_REASON?.some(r => r.test(txt))) {
       return { type: 'PROBLEM_SPEC', lang: L, reason: 'PROBLEM_REASON' };
     }
 
     // 4. BACKEND_CALL
-    if (RS.BACKEND_CALL?.some(r => {
-      const match = r.test(txt);
-      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ BACKEND_CALL match! Pattern: ${r.source}`);
-      return match;
-    })) {
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: BACKEND_CALL (lang: ${L})`);
+    if (RS.BACKEND_CALL?.some(r => r.test(txt))) {
       return { type: 'BACKEND_CALL', lang: L, reason: 'BACKEND_CALL' };
     }
 
     // 5. REQUEST_DATA
-    if (RS.REQUEST_DATA?.some(r => {
-      console.log(`[ACT_TYPE_CLASSIFY] 🔍 Testing REQUEST_DATA pattern: ${r.source} against "${txt}"`);
-      const match = r.test(txt);
-      console.log(`[ACT_TYPE_CLASSIFY] ${match ? '✅ MATCH!' : '❌ No match'}`);
-      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ REQUEST_DATA match! Pattern: ${r.source}`);
-      return match;
-    })) {
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: REQUEST_DATA (lang: ${L})`);
+    if (RS.REQUEST_DATA?.some(r => r.test(txt))) {
       return { type: 'REQUEST_DATA', lang: L, reason: 'REQUEST_DATA' };
     }
 
     // 6. SUMMARY
-    if (RS.SUMMARY?.some(r => {
-      const match = r.test(txt);
-      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ SUMMARY match! Pattern: ${r.source}`);
-      return match;
-    })) {
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: SUMMARY (lang: ${L})`);
+    if (RS.SUMMARY?.some(r => r.test(txt))) {
       return { type: 'SUMMARY', lang: L, reason: 'SUMMARY' };
     }
 
     // 7. MESSAGE
-    if (RS.MESSAGE?.some(r => {
-      const match = r.test(txt);
-      if (match) console.log(`[ACT_TYPE_CLASSIFY] ✅ MESSAGE match! Pattern: ${r.source}`);
-      return match;
-    })) {
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: MESSAGE (lang: ${L})`);
+    if (RS.MESSAGE?.some(r => r.test(txt))) {
       return { type: 'MESSAGE', lang: L, reason: 'MESSAGE' };
     }
 
     // 8. PROBLEM (generico) - solo se esiste un pattern valido (non null)
     if (RS.PROBLEM && RS.PROBLEM.test(txt)) {
-      console.log(`[ACT_TYPE_CLASSIFY] ✅ PROBLEM match! Pattern: ${RS.PROBLEM.source}`);
-      console.log(`[ACT_TYPE_CLASSIFY] 🎯 RESULT: PROBLEM_SPEC (lang: ${L}, reason: PROBLEM)`);
       return { type: 'PROBLEM_SPEC', lang: L, reason: 'PROBLEM' };
     }
-
-    console.log(`[ACT_TYPE_CLASSIFY] ❌ No match found for language: ${L}`);
   }
 
   // Fallback: se nessun match, ritorna UNDEFINED (nodo con punto interrogativo)
-  console.log(`[ACT_TYPE_CLASSIFY] ⚠️ FALLBACK: No match found, returning UNDEFINED`);
+  // NOTA: L'euristica 2 (tryLocalPatternMatch) può inferire il tipo se trova un template DDT
   return { type: 'UNDEFINED', reason: 'no_match' };
 }
 

@@ -12,6 +12,7 @@ interface Props {
   dataNode?: { name?: string; subData?: string[] };
   onAutoDetect?: (userDesc: string) => void; // Nuovo prop per auto-rilevamento
   onTemplateSelect?: (template: any) => void; // Callback quando viene selezionato un template
+  taskType?: string; // ✅ Tipo task per filtrare template (DataRequest, ProblemClassification, UNDEFINED)
 }
 
 const WizardInputStep: React.FC<Props> = ({
@@ -21,7 +22,8 @@ const WizardInputStep: React.FC<Props> = ({
   onCancel,
   dataNode,
   onAutoDetect,
-  onTemplateSelect
+  onTemplateSelect,
+  taskType
 }) => {
   const { combinedClass } = useFontContext();
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -40,14 +42,36 @@ const WizardInputStep: React.FC<Props> = ({
         const allTemplates = await getAllDialogueTemplates();
         console.log('[WIZARD_INPUT][LOAD] Raw templates from API:', allTemplates);
 
+        // ✅ Filtra template per tipo se Euristica 1 ha trovato un tipo
+        let filtered = Array.isArray(allTemplates) ? [...allTemplates] : [];
+
+        if (taskType && taskType !== 'UNDEFINED') {
+          // Se Euristica 1 ha trovato un tipo, filtra i template
+          if (taskType === 'DataRequest') {
+            // DataRequest: mostra solo template DDT normali (non intent)
+            filtered = filtered.filter(t => {
+              // I template DDT normali non hanno kind === 'intent'
+              // Verifica se il template ha kind o se è un template DDT standard
+              const kind = t.kind || t.name || t.type || '';
+              return kind !== 'intent';
+            });
+          } else if (taskType === 'ProblemClassification') {
+            // ProblemClassification: mostra solo template con kind === 'intent'
+            filtered = filtered.filter(t => {
+              const kind = t.kind || t.name || t.type || '';
+              return kind === 'intent';
+            });
+          }
+          // Altri tipi: mostra tutti (o nessuno, a seconda della logica)
+        }
+        // Se taskType è UNDEFINED o non specificato, mostra tutti i template
+
         // Sort templates alphabetically by label
-        const sorted = Array.isArray(allTemplates)
-          ? [...allTemplates].sort((a, b) => {
-              const labelA = (a.label || a.name || '').toLowerCase();
-              const labelB = (b.label || b.name || '').toLowerCase();
-              return labelA.localeCompare(labelB);
-            })
-          : [];
+        const sorted = filtered.sort((a, b) => {
+          const labelA = (a.label || a.name || '').toLowerCase();
+          const labelB = (b.label || b.name || '').toLowerCase();
+          return labelA.localeCompare(labelB);
+        });
 
         console.log('[WIZARD_INPUT][LOAD] Sorted templates:', sorted.map(t => ({
           id: t._id || t.id || t.name,

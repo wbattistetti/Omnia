@@ -157,7 +157,7 @@ export function useNodeRendering({
             console.log("🎯 [CustomNode] ROW INTELLISENSE CLOSED", { nodeId: id });
             closeIntellisense();
         },
-        filterCategoryTypes: ['agentActs', 'userActs', 'backendActions']
+        filterCategoryTypes: ['taskTemplates', 'userActs', 'backendActions']
     }), [
         showIntellisense,
         editingRowId,

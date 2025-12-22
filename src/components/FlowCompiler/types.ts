@@ -34,7 +34,8 @@ export type Condition =
  */
 export interface CompiledTask {
   id: string; // Task.id (GUID) - same as row.id for flowchart tasks
-  action: string; // Task.action (e.g., 'SayMessage', 'GetData')
+  action: string; // ✅ DEPRECATED: Use templateId instead. Kept for backward compatibility.
+  templateId?: string; // Task.templateId (e.g., 'SayMessage', 'GetData') - preferred field
   value: Record<string, any>; // Task.value
   condition: Condition | null; // Execution condition
   state: TaskState; // Current execution state

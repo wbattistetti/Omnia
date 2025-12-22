@@ -38,18 +38,20 @@
     <!-- IDE Types (Input from React/TypeScript) - Flow -->
     <Compile Include="DTO\IDE\FlowNode.vb" />
     <Compile Include="DTO\IDE\FlowEdge.vb" />
-    <Compile Include="DTO\IDE\NodeData.vb" />
+    <!-- NodeData.vb removed - FlowNode now has Label and Rows directly -->
     <Compile Include="DTO\IDE\RowData.vb" />
     <Compile Include="DTO\IDE\EdgeData.vb" />
     <Compile Include="DTO\IDE\Task.vb" />
-    <Compile Include="DTO\IDE\ActionTypeConverter.vb" />
+    <!-- ActionTypeConverter.vb removed - Task now uses templateId (string) directly -->
 
     <!-- IDE Types (Input from React/TypeScript) - DDT -->
     <Compile Include="DTO\IDE\ActionParameter.vb" />
     <Compile Include="DTO\IDE\Action.vb" />
     <Compile Include="DTO\IDE\Escalation.vb" />
     <Compile Include="DTO\IDE\StepGroup.vb" />
+    <Compile Include="DTO\IDE\StepGroupListConverter.vb" />
     <Compile Include="DTO\IDE\MainDataNode.vb" />
+    <Compile Include="DTO\IDE\MainDataNodeListConverter.vb" />
     <Compile Include="DTO\IDE\AssembledDDT.vb" />
 
     <!-- Runtime Types (Output for execution) -->
@@ -57,7 +59,10 @@
     <Compile Include="DTO\Runtime\Condition.vb" />
     <Compile Include="DTO\Runtime\TaskSourceType.vb" />
     <Compile Include="DTO\Runtime\TaskDebugInfo.vb" />
+    <Compile Include="DTO\Runtime\TaskTypesConverter.vb" />
     <Compile Include="DTO\Runtime\CompiledTask.vb" />
+    <Compile Include="DTO\Runtime\CompiledTaskConverter.vb" />
+    <Compile Include="DTO\Runtime\CompiledTaskListConverter.vb" />
     <Compile Include="DTO\Runtime\FlowCompilationResult.vb" />
     <Compile Include="DTO\Runtime\TaskGroup.vb" />
     <Compile Include="DTO\Runtime\Utils.vb" />

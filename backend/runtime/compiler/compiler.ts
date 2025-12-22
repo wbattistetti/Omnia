@@ -100,10 +100,13 @@ export function compileFlow(
 
       // Create compiled task
       // Use row.id directly (which equals task.id) - no need to generate new ID
+      // ✅ Fields directly on task (no value wrapper) - copy all fields except id, templateId, createdAt, updatedAt
+      const { id, templateId, createdAt, updatedAt, ...taskFields } = task;
+
       const compiledTask: CompiledTask = {
         id: row.id, // row.id === task.id (GUID)
-        action: task.action,
-        value: task.value || {},
+        action: task.action || task.templateId,
+        value: taskFields, // ✅ All fields directly (no wrapper)
         condition,
         state: 'UnExecuted',
         source: {
@@ -117,7 +120,8 @@ export function compileFlow(
       taskMap.set(compiledTask.id, compiledTask);
 
       // If task is GetData, expand DDT
-      if (task.action === 'GetData' && task.value?.ddt && options.getDDT) {
+      // ✅ Check if task has DDT (mainData indicates DDT)
+      if (task.action === 'GetData' && task.mainData && task.mainData.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(
@@ -138,7 +142,8 @@ export function compileFlow(
       }
 
       // If task is ClassifyProblem, expand DDT
-      if (task.action === 'ClassifyProblem' && task.value?.ddt && options.getDDT) {
+      // ✅ Check if task has DDT (mainData indicates DDT)
+      if (task.action === 'ClassifyProblem' && task.mainData && task.mainData.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(

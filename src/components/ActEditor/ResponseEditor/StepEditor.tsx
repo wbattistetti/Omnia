@@ -22,17 +22,9 @@ type Props = {
 type EscalationModel = { actions: Array<{ actionId: string; text?: string; textKey?: string; icon?: string; label?: string; color?: string }> };
 
 function buildModel(node: any, stepKey: string, translations: Record<string, string>): EscalationModel[] {
-  // Always log to diagnose message display issues
+  // Removed verbose logging
   const shape = Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none');
   const keys = node?.steps && !Array.isArray(node.steps) ? Object.keys(node.steps) : (Array.isArray(node?.steps) ? (node.steps as any[]).map((g: any) => g?.type) : []);
-
-  console.log('[STEP_EDITOR][buildModel] Building model', {
-    stepKey,
-    shape,
-    availableSteps: keys,
-    translationsCount: Object.keys(translations).length,
-    sampleTranslationKeys: Object.keys(translations).slice(0, 5)
-  });
 
   // Case A: steps as object { start: { escalations: [...] } }
   if (node?.steps && !Array.isArray(node.steps) && node.steps[stepKey] && Array.isArray(node.steps[stepKey].escalations)) {
@@ -40,7 +32,8 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
 
     // ✅ CRITICAL: Log per sub-data start
     if (stepKey === 'start' && node.label && node.label !== node.label?.toUpperCase()) {
-      console.log('🔴 [CRITICAL] STEP_EDITOR - SUB-DATA START', {
+      // Removed verbose logging
+      if (false) console.log('🔴 [CRITICAL] STEP_EDITOR - SUB-DATA START', {
         nodeLabel: node.label,
         stepKey,
         hasSteps: !!node.steps,
@@ -63,47 +56,115 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
       });
     }
 
-    console.log('[STEP_EDITOR][buildModel] Case A: steps as object', {
+    // Removed verbose logging
+    if (false) console.log('[STEP_EDITOR][buildModel] Case A: steps as object', {
       stepKey,
       escalationsCount: escs.length
     });
 
-    return escs.map((esc, escIdx) => ({
-      actions: (esc.actions || []).map((a: any, actionIdx: number) => {
-        const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
-        const textKey = p?.value;
-        const hasDirectText = typeof a.text === 'string' && a.text.length > 0;
-        const translationValue = typeof textKey === 'string' ? translations[textKey] : undefined;
-        const text = hasDirectText
-          ? a.text
-          : (typeof textKey === 'string' ? (translationValue || textKey) : undefined);
+    console.log('[StepEditor][buildModel] 🔍 Processing escalations', {
+      stepKey,
+      nodeLabel: node?.label,
+      escalationsCount: escs.length,
+      translationsCount: Object.keys(translations).length,
+      hasTasks: escs.some((e: any) => e.tasks && e.tasks.length > 0),
+      hasActions: escs.some((e: any) => e.actions && e.actions.length > 0),
+      firstEscalation: escs[0] ? {
+        hasTasks: !!escs[0].tasks,
+        tasksCount: escs[0].tasks?.length || 0,
+        hasActions: !!escs[0].actions,
+        actionsCount: escs[0].actions?.length || 0,
+        firstTask: escs[0].tasks?.[0] ? {
+          taskId: escs[0].tasks[0].taskId,
+          templateId: escs[0].tasks[0].templateId,
+          hasParameters: !!escs[0].tasks[0].parameters,
+          textParam: escs[0].tasks[0].parameters?.find((p: any) => p.parameterId === 'text')?.value
+        } : null,
+        firstAction: escs[0].actions?.[0] ? {
+          actionId: escs[0].actions[0].actionId,
+          actionInstanceId: escs[0].actions[0].actionInstanceId,
+          hasParameters: !!escs[0].actions[0].parameters,
+          textParam: escs[0].actions[0].parameters?.find((p: any) => p.parameterId === 'text')?.value
+        } : null
+      } : null
+    });
 
-        // DEBUG: Log specifico quando non trova la translation
-        if (textKey && !translationValue && !hasDirectText) {
-          const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
-          console.warn('[DEBUG][STEP_EDITOR] ❌ Translation NOT FOUND', {
+    return escs.map((esc, escIdx) => {
+      // ✅ Support both tasks (new) and actions (legacy)
+      const taskRefs = esc.tasks || esc.actions || [];
+
+      console.log(`[StepEditor][buildModel] 🔍 Processing escalation ${escIdx}`, {
+        stepKey,
+        nodeLabel: node?.label,
+        escIdx,
+        hasTasks: !!esc.tasks,
+        tasksCount: esc.tasks?.length || 0,
+        hasActions: !!esc.actions,
+        actionsCount: esc.actions?.length || 0,
+        taskRefsCount: taskRefs.length,
+        firstTaskRef: taskRefs[0] ? {
+          taskId: taskRefs[0].taskId,
+          templateId: taskRefs[0].templateId,
+          actionId: taskRefs[0].actionId,
+          actionInstanceId: taskRefs[0].actionInstanceId,
+          hasParameters: !!taskRefs[0].parameters,
+          textParam: taskRefs[0].parameters?.find((p: any) => p.parameterId === 'text')?.value
+        } : null
+      });
+
+      return {
+        actions: taskRefs.map((task: any, taskIdx: number) => {
+          const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
+          const textKey = p?.value || task.taskId; // ✅ Use taskId as fallback if no text parameter
+          const hasDirectText = typeof task.text === 'string' && task.text.length > 0;
+          const translationValue = typeof textKey === 'string' ? translations[textKey] : undefined;
+          const text = hasDirectText
+            ? task.text
+            : (typeof textKey === 'string' ? (translationValue || textKey) : undefined);
+
+          console.log(`[StepEditor][buildModel] 🔍 Processing task ${taskIdx}`, {
             stepKey,
             nodeLabel: node?.label,
             escIdx,
-            actionIdx,
+            taskIdx,
+            taskId: task.taskId,
+            templateId: task.templateId,
             textKey,
-            isGuid,
-            actionInstanceId: a.actionInstanceId,
-            hasActionText: hasDirectText,
+            hasDirectText,
+            hasTranslation: !!translationValue,
+            translationValue: translationValue ? translationValue.substring(0, 50) : null,
+            finalText: text ? text.substring(0, 50) : null,
+            textKeyInTranslations: textKey in translations,
             translationsDictKeysCount: Object.keys(translations).length,
-            textKeyInDict: textKey in translations,
-            sampleDictKeys: Object.keys(translations).slice(0, 5),
-            matchingGuidsInDict: isGuid ? Object.keys(translations).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).slice(0, 5) : [],
-            finalText: text,
-            // Mostra se il GUID è presente nei stepPrompts del node
-            nodeStepPrompts: node?.stepPrompts ? Object.keys(node.stepPrompts) : null,
-            nodeHasStepPrompts: !!node?.stepPrompts
+            sampleTranslationsKeys: Object.keys(translations).slice(0, 5)
           });
-        }
 
-        return { actionId: a.actionId, text, textKey, color: a.color };
-      })
-    }));
+          // DEBUG: Log specifico quando non trova la translation
+          if (textKey && !translationValue && !hasDirectText) {
+            const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
+            console.warn('[StepEditor][buildModel] ❌ Translation NOT FOUND', {
+              stepKey,
+              nodeLabel: node?.label,
+              escIdx,
+              taskIdx,
+              textKey,
+              isGuid,
+              taskId: task.taskId,
+              templateId: task.templateId,
+              hasTaskText: hasDirectText,
+              translationsDictKeysCount: Object.keys(translations).length,
+              textKeyInDict: textKey in translations,
+              sampleDictKeys: Object.keys(translations).slice(0, 10),
+              matchingGuidsInDict: isGuid ? Object.keys(translations).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)).slice(0, 10) : [],
+              finalText: text,
+              allTranslationsKeys: Object.keys(translations)
+            });
+          }
+
+          return { actionId: task.templateId || task.actionId, text, textKey, color: task.color };
+        })
+      };
+    });
   }
 
   // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
@@ -141,7 +202,8 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
     const translationValue = translations[textKey];
     const text = translationValue || textKey;
 
-    console.log('[STEP_EDITOR][buildModel] Fallback from messages', {
+    // Removed verbose logging
+    if (false) console.log('[STEP_EDITOR][buildModel] Fallback from messages', {
       stepKey,
       textKey,
       hasTranslation: !!translationValue,
@@ -250,7 +312,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       console.error('[StepEditor][commitUp] ERROR calling onModelChange', error);
     }
   }, [onModelChange, stepKey, node]);
-  const { editAction, deleteAction, moveAction, dropFromViewer, appendAction } = useActionCommands(setLocalModel as any, commitUp as any);
+  const { editTask, deleteTask, moveTask, dropTaskFromViewer, appendTask } = useActionCommands(setLocalModel as any, commitUp as any);
 
   // Priorità: a.text (UI-local) > translations[a.textKey] (persisted)
   const getText = (a: any) => (a.text || (typeof a.textKey === 'string' ? translations[a.textKey] : '') || '');
@@ -279,18 +341,18 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
     });
   }, []);
 
-  // Wrapper per editAction che resetta autoEditTarget quando l'edit è completato
-  const handleEdit = React.useCallback((escalationIdx: number, actionIdx: number, newText: string) => {
-    editAction(escalationIdx, actionIdx, newText);
+  // Wrapper per editTask che resetta autoEditTarget quando l'edit è completato
+  const handleEdit = React.useCallback((escalationIdx: number, taskIdx: number, newText: string) => {
+    editTask(escalationIdx, taskIdx, newText);
     // Reset autoEditTarget se corrisponde all'azione editata
     if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === actionIdx) {
       setAutoEditTarget(null);
     }
-  }, [editAction, autoEditTarget, stepKey, node, localModel]);
+  }, [editTask, autoEditTarget, stepKey, node, localModel]);
 
-  // Wrapper per deleteAction che resetta autoEditTarget quando l'azione viene eliminata
-  const handleDelete = React.useCallback((escalationIdx: number, actionIdx: number) => {
-    deleteAction(escalationIdx, actionIdx);
+  // Wrapper per deleteTask che resetta autoEditTarget quando il task viene eliminato
+  const handleDelete = React.useCallback((escalationIdx: number, taskIdx: number) => {
+    deleteTask(escalationIdx, taskIdx);
     // Reset se l'azione eliminata era il target
     if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === actionIdx) {
       setAutoEditTarget(null);
@@ -299,7 +361,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
     else if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx > actionIdx) {
       setAutoEditTarget({ ...autoEditTarget, actIdx: autoEditTarget.actIdx - 1 });
     }
-  }, [deleteAction, autoEditTarget]);
+  }, [deleteTask, autoEditTarget]);
 
   const handleAppend = React.useCallback((escIdx: number, action: any) => {
     // Validate: for introduction step, only allow playJingle and sayMessage
@@ -310,24 +372,24 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
         return; // Reject the action
       }
     }
-    const currentLen = (localModel?.[escIdx]?.actions?.length) || 0;
-    appendAction(escIdx, action);
+    const currentLen = (localModel?.[escIdx]?.tasks?.length || localModel?.[escIdx]?.actions?.length) || 0;
+    appendTask(escIdx, action);
     setAutoEditTarget({ escIdx, actIdx: currentLen });
-  }, [appendAction, localModel, allowedActions]);
+  }, [appendTask, localModel, allowedActions]);
 
-  const handleDropFromViewer = React.useCallback((incoming: any, to: { escalationIdx: number; actionIdx: number }, position: 'before' | 'after') => {
+  const handleDropFromViewer = React.useCallback((incoming: any, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => {
     // Validate: for introduction step, only allow playJingle and sayMessage
     if (allowedActions && allowedActions.length > 0) {
       const actionId = incoming?.actionId || incoming?.id || '';
       if (!allowedActions.includes(actionId)) {
-        console.warn('[StepEditor] Action not allowed in introduction step:', actionId, 'Allowed:', allowedActions);
+        console.warn('[StepEditor] Task not allowed in introduction step:', actionId, 'Allowed:', allowedActions);
         return; // Reject the drop
       }
     }
-    const targetIdx = position === 'after' ? to.actionIdx + 1 : to.actionIdx;
-    dropFromViewer(incoming, to, position);
+    const targetIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
+    dropTaskFromViewer(incoming, to, position);
     setAutoEditTarget({ escIdx: to.escalationIdx, actIdx: targetIdx });
-  }, [dropFromViewer, allowedActions]);
+  }, [dropTaskFromViewer, allowedActions]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -348,7 +410,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
                 escalationIdx={0}
                 actionIdx={j}
                 action={a}
-                onMoveAction={moveAction}
+                onMoveAction={moveTask}
                 onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
                 allowViewerDrop={true}
                 isEditing={isEditing}

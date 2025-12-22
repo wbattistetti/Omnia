@@ -222,7 +222,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
 
   if (allResults.length === 0) {
     // Solo pulsanti: per i nodi mostra i tipi di Agent Act; per condizioni usa il flusso esistente
-    const isForNodes = filterCategoryTypes.includes('agentActs') || filterCategoryTypes.includes('backendActions');
+    const isForNodes = filterCategoryTypes.includes('taskTemplates') || filterCategoryTypes.includes('backendActions');
     const context = isForNodes ? 'nodes' : 'conditions';
     return (
       <div className="p-2">

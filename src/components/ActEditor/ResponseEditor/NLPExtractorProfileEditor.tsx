@@ -248,13 +248,13 @@ export default function NLPExtractorProfileEditor({
 
     if (testPhraseMode === 'all-training') {
       // Tutte le frasi di training di tutti gli intenti
-      phrases = task.value.intents.flatMap((pi: ProblemIntent) =>
+      phrases = task.intents?.flatMap((pi: ProblemIntent) =>
         (pi.phrases?.matching || []).map((p: any) => p.text)
-      );
+      ) || [];
     } else if (testPhraseMode === 'selected-training') {
       // Solo frasi dell'intento selezionato
       if (intentSelected) {
-        const intent = task.value.intents.find(
+        const intent = task.intents?.find(
           (pi: ProblemIntent) => pi.id === intentSelected || pi.name === intentSelected
         );
         phrases = (intent?.phrases?.matching || []).map((p: any) => p.text);

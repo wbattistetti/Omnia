@@ -38,7 +38,7 @@ Public Class MessageAction
 
     Public Overrides ReadOnly Property ActionId As String
         Get
-            Return TaskTypes.SayMessage.ToString()
+            Return "SayMessage"  ' ✅ Simplified: Direct string, no enum conversion
         End Get
     End Property
 

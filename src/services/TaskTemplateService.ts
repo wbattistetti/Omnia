@@ -1,14 +1,14 @@
-import type { TaskTemplate } from '../types/taskTypes';
+import type { TaskCatalog } from '../types/taskTypes';
 
 /**
- * Service for managing TaskTemplates
- * Converts Action Catalog entries to TaskTemplate format
+ * Service for managing TaskCatalog entries
+ * Converts Action Catalog entries to TaskCatalog format
  *
  * This service is added alongside existing Action Catalog usage
  * for gradual migration - existing code continues to work
  */
 class TaskTemplateService {
-  private templates: Map<string, TaskTemplate> = new Map();
+  private templates: Map<string, TaskCatalog> = new Map();
   private initialized = false;
   private initializationPromise: Promise<void> | null = null;
 
@@ -35,9 +35,9 @@ class TaskTemplateService {
         const factoryTemplates = await factoryResponse.json();
         if (Array.isArray(factoryTemplates) && factoryTemplates.length > 0) {
           factoryTemplates.forEach((template: any) => {
-            // Map database document to TaskTemplate
+            // Map database document to TaskCatalog
             const templateId = template.id || template._id;
-            const mapped: TaskTemplate = {
+            const mapped: TaskCatalog = {
               id: templateId,
               label: template.label || '',
               description: template.description || '',
@@ -110,7 +110,7 @@ class TaskTemplateService {
 
       const actionsCatalog = await response.json();
 
-      // Convert Action Catalog entries to TaskTemplates
+      // Convert Action Catalog entries to TaskCatalog entries
       (actionsCatalog as any[]).forEach((action: any) => {
         const template = this.convertActionToTemplate(action);
         this.templates.set(template.id, template);
@@ -144,7 +144,7 @@ class TaskTemplateService {
 
       // Merge project templates (override factory templates with same ID)
       projectTemplates.forEach((template: any) => {
-        const mapped: TaskTemplate = {
+        const mapped: TaskCatalog = {
           id: template.id || template._id,
           label: template.label || '',
           description: template.description || '',
@@ -168,9 +168,9 @@ class TaskTemplateService {
   }
 
   /**
-   * Convert Action Catalog entry to TaskTemplate
+   * Convert Action Catalog entry to TaskCatalog
    */
-  private convertActionToTemplate(action: any): TaskTemplate {
+  private convertActionToTemplate(action: any): TaskCatalog {
     // Map action ID to new naming convention
     const templateId = this.mapActionIdToTemplateId(action.id);
 
@@ -194,7 +194,7 @@ class TaskTemplateService {
   }
 
   /**
-   * Map Action Catalog ID to TaskTemplate ID (new naming)
+   * Map Action Catalog ID to TaskCatalog ID (new naming)
    */
   private mapActionIdToTemplateId(actionId: string): string {
     const mapping: Record<string, string> = {
@@ -231,11 +231,11 @@ class TaskTemplateService {
   /**
    * Build valueSchema based on action params and editor type
    */
-  private buildValueSchema(action: any, editorType: 'message' | 'ddt' | 'problem' | 'backend' | 'simple'): TaskTemplate['valueSchema'] {
+  private buildValueSchema(action: any, editorType: 'message' | 'ddt' | 'problem' | 'backend' | 'simple'): TaskCatalog['valueSchema'] {
     const keys: Record<string, any> = {};
 
     if (editorType === 'message') {
-      // SayMessage: value.text
+      // SayMessage: text (fields directly on task, no value wrapper)
       keys.text = {
         type: 'string',
         required: true,
@@ -246,8 +246,8 @@ class TaskTemplateService {
         }
       };
     } else if (editorType === 'ddt') {
-      // GetData: value.ddt
-      keys.ddt = {
+      // GetData: mainData, label, stepPrompts, etc. (fields directly on task, no value wrapper)
+      keys.mainData = {
         type: 'ddt',
         required: true,
         ideMapping: {
@@ -256,7 +256,7 @@ class TaskTemplateService {
         }
       };
     } else if (editorType === 'backend') {
-      // callBackend: value.config
+      // callBackend: config (fields directly on task, no value wrapper)
       keys.config = {
         type: 'object',
         required: true,
@@ -282,7 +282,6 @@ class TaskTemplateService {
     }
 
     return {
-      editor: editorType,
       keys
     };
   }
@@ -472,23 +471,34 @@ class TaskTemplateService {
   /**
    * Get all templates (async)
    */
-  async getAllTemplates(): Promise<TaskTemplate[]> {
+  async getAllTemplates(): Promise<TaskCatalog[]> {
     await this.initialize();
     return Array.from(this.templates.values());
   }
 
   /**
-   * Get template by ID (async)
+   * Get template by ID (async, CASE-INSENSITIVE)
    */
-  async getTemplate(templateId: string): Promise<TaskTemplate | null> {
+  async getTemplate(templateId: string): Promise<TaskCatalog | null> {
     await this.initialize();
-    return this.templates.get(templateId) || null;
+    if (!templateId) return null;
+    // Try exact match first
+    const exact = this.templates.get(templateId);
+    if (exact) return exact;
+    // Try case-insensitive match
+    const normalized = templateId.toLowerCase().trim();
+    for (const [key, template] of this.templates.entries()) {
+      if (key.toLowerCase() === normalized) {
+        return template;
+      }
+    }
+    return null;
   }
 
   /**
    * Get template by action ID (for backward compatibility, async)
    */
-  async getTemplateByActionId(actionId: string): Promise<TaskTemplate | null> {
+  async getTemplateByActionId(actionId: string): Promise<TaskCatalog | null> {
     await this.initialize();
     const templateId = this.mapActionIdToTemplateId(actionId);
     return this.templates.get(templateId) || null;
@@ -506,15 +516,26 @@ class TaskTemplateService {
    * Synchronous getter (returns cached templates, may be empty if not initialized)
    * Use for cases where async is not possible
    */
-  getAllTemplatesSync(): TaskTemplate[] {
+  getAllTemplatesSync(): TaskCatalog[] {
     return Array.from(this.templates.values());
   }
 
   /**
-   * Synchronous getter (returns cached template, may be null if not initialized)
+   * Synchronous getter (returns cached template, may be null if not initialized, CASE-INSENSITIVE)
    */
-  getTemplateSync(templateId: string): TaskTemplate | null {
-    return this.templates.get(templateId) || null;
+  getTemplateSync(templateId: string): TaskCatalog | null {
+    if (!templateId) return null;
+    // Try exact match first
+    const exact = this.templates.get(templateId);
+    if (exact) return exact;
+    // Try case-insensitive match
+    const normalized = templateId.toLowerCase().trim();
+    for (const [key, template] of this.templates.entries()) {
+      if (key.toLowerCase() === normalized) {
+        return template;
+      }
+    }
+    return null;
   }
 }
 

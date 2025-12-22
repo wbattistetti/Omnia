@@ -43,22 +43,22 @@ export const TestFocusManager: React.FC = () => {
         <strong>Focus State:</strong>
         <pre>{JSON.stringify(focusState, null, 2)}</pre>
       </div>
-      
+
       <div style={{ marginTop: '10px' }}>
         <strong>Row State:</strong>
         <pre>{JSON.stringify(rowState, null, 2)}</pre>
       </div>
-      
+
       <div style={{ marginTop: '10px' }}>
         <strong>Node State:</strong>
         <pre>{JSON.stringify(nodeState, null, 2)}</pre>
       </div>
-      
+
       <div style={{ marginTop: '10px' }}>
         <strong>Intellisense State:</strong>
         <pre>{JSON.stringify(intellisenseState, null, 2)}</pre>
       </div>
-      
+
       <div style={{ marginTop: '10px' }}>
         <button onClick={() => focusActions.setFocus('row-1')}>
           Set Focus Row 1
@@ -109,7 +109,7 @@ export const TestFocusManager: React.FC = () => {
           Close Intellisense
         </button>
         <button onClick={() => intellisenseActions.setItems([
-          { id: '1', name: 'Test Item 1', categoryType: 'agentActs', type: 'agentAct' },
+          { id: '1', name: 'Test Item 1', categoryType: 'taskTemplates', type: 'agentAct' },
           { id: '2', name: 'Test Item 2', categoryType: 'backendActions', type: 'backendCall' }
         ])}>
           Set Test Items

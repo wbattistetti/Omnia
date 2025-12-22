@@ -105,10 +105,13 @@ export function expandDDT(
 
         // Create compiled task
         // Use task.id directly (GUID) - no need to generate new ID
+        // ✅ Fields directly on task (no value wrapper) - copy all fields except id, templateId, createdAt, updatedAt
+        const { id, templateId, createdAt, updatedAt, ...taskFields } = task;
+
         const compiledTask: CompiledTask = {
           id: task.id, // Use task.id directly (GUID)
-          action: task.action,
-          value: task.value || {},
+          action: task.action || task.templateId,
+          value: taskFields, // ✅ All fields directly (no wrapper)
           condition,
           state: 'UnExecuted',
           source: {

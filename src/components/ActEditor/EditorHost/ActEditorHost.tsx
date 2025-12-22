@@ -2,7 +2,7 @@ import React, { Suspense } from 'react';
 import { registry } from './editorRegistry';
 import { resolveEditorKind } from './resolveKind';
 import type { EditorProps } from './types';
-import { getAgentActVisualsByType } from '../../Flowchart/utils/actVisuals';
+// ✅ RIMOSSO: getAgentActVisualsByType - non più usato in questo file
 
 export default function ActEditorHost({ act, onClose, onToolbarUpdate, hideHeader }: EditorProps) {
   const kind = resolveEditorKind(act);

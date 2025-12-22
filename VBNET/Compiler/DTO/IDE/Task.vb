@@ -7,6 +7,7 @@ Imports Newtonsoft.Json
 ''' <summary>
 ''' Task definition
 ''' Tipi del mondo IDE - usati solo per deserializzazione JSON
+''' Simplified: Uses templateId (string) directly, no conversion needed
 ''' </summary>
 Public Class Task
     ''' <summary>
@@ -16,13 +17,11 @@ Public Class Task
     Public Property Id As String
 
     ''' <summary>
-    ''' Task action type (valore numerico dell'enum ActionType)
-    ''' Valori: SayMessage=1, CloseSession=2, Transfer=3, GetData=4, BackendCall=5, ClassifyProblem=6
-    ''' Usa ActionTypeConverter per convertire stringhe (es. "SayMessage") in Integer
+    ''' Task template ID (string, e.g., "SayMessage", "GetData")
+    ''' Direct mapping from IDE to Runtime - no conversion needed
     ''' </summary>
-    <JsonProperty("action")>
-    <JsonConverter(GetType(ActionTypeConverter))>
-    Public Property Action As Integer
+    <JsonProperty("templateId")>
+    Public Property TemplateId As String
 
     ''' <summary>
     ''' Task value (parameters, DDT reference, etc.)

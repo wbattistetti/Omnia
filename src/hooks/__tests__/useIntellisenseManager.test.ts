@@ -3,7 +3,7 @@ import { useIntellisenseManager } from '../useIntellisenseManager';
 import { IntellisenseItem } from '../../components/Intellisense/IntellisenseTypes';
 
 const mockItems: IntellisenseItem[] = [
-  { id: '1', name: 'Test Item 1', categoryType: 'agentActs', type: 'agentAct' },
+  { id: '1', name: 'Test Item 1', categoryType: 'taskTemplates', type: 'agentAct' },
   { id: '2', name: 'Test Item 2', categoryType: 'backendActions', type: 'backendCall' }
 ];
 

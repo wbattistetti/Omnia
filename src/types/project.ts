@@ -1,4 +1,4 @@
-export type EntityType = 'agentActs' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
+export type EntityType = 'taskTemplates' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
 
 // New explicit Agent Act types (authoritative)
 export type ActType =
@@ -30,18 +30,21 @@ export interface Category<T = ProjectEntityItem> {
 }
 
 /**
- * Rappresenta un agent act, che può avere userActs associati (se interattivo)
+ * Rappresenta un task catalog entry (sostituisce AgentActItem)
  */
-export interface AgentActItem extends ProjectEntityItem {
+export interface TaskTemplateItem extends ProjectEntityItem {
   // Authoritative type for visuals/behavior
   type?: ActType;
   // Optional category name; undefined means shown at root in the sidebar
   category?: string;
   // List of user acts for interactive acts (kept for compatibility)
   userActs?: string[];
-  // ProblemClassification payload (act-owned). Present only when type === 'ProblemClassification'
+  // ProblemClassification payload (template-owned). Present only when type === 'ProblemClassification'
   problem?: ProblemPayload;
 }
+
+// Backward compatibility alias (deprecated)
+export type AgentActItem = TaskTemplateItem;
 
 export type ProjectData = {
   id?: string;
@@ -50,7 +53,7 @@ export type ProjectData = {
   clientName?: string;
   ownerCompany?: string; // Owner del progetto lato azienda (chi lo costruisce)
   ownerClient?: string; // Owner del progetto lato cliente (chi lo commissiona)
-  agentActs?: { id?: string; name?: string; items: AgentActItem[] }[];
+  taskTemplates?: { id?: string; name?: string; items: TaskTemplateItem[] }[];
   userActs?: any[];
   backendActions?: any[];
   conditions?: any[];

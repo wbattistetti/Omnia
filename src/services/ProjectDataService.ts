@@ -1,4 +1,4 @@
-import { ProjectData, EntityType, Category, ProjectEntityItem, AgentActItem, Macrotask, MacrotaskPayloadNode, MacrotaskPayloadEdge } from '../types/project';
+import { ProjectData, EntityType, Category, ProjectEntityItem, TaskTemplateItem, Macrotask, MacrotaskPayloadNode, MacrotaskPayloadEdge } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 // import { getLabelColor } from '../utils/labelColor';
@@ -32,7 +32,7 @@ const templateData = {
 let projectData: ProjectData = {
   name: '',
   industry: '',
-  agentActs: [],
+  taskTemplates: [],
   userActs: [],
   backendActions: [],
   conditions: [],
@@ -40,8 +40,8 @@ let projectData: ProjectData = {
   macrotasks: []
 };
 
-// Funzione specifica per agent acts
-const convertAgentActsToCategories = <T extends AgentActItem>(templateArray: any[]): Category<T>[] => {
+// Funzione specifica per task templates
+const convertTaskTemplatesToCategories = <T extends TaskTemplateItem>(templateArray: any[]): Category<T>[] => {
   if (!Array.isArray(templateArray)) {
     console.warn("Expected an array for template data, but received:", templateArray);
     return [];
@@ -67,7 +67,7 @@ const convertAgentActsToCategories = <T extends AgentActItem>(templateArray: any
       mode: item.mode || 'Message',
       shortLabel: item.shortLabel,
       data: item.data,
-      categoryType: 'agentActs'
+      categoryType: 'taskTemplates'
     } as unknown) as T);
   });
   return Object.values(categoriesMap);
@@ -172,7 +172,7 @@ export const ProjectDataService = {
     projectData = {
       name: projectData.name || '',
       industry: projectData.industry || '',
-      agentActs: this.convertToCategories(items, 'agentActs'),
+      taskTemplates: this.convertToCategories(items, 'taskTemplates'),
       userActs: [],
       backendActions: [],
       conditions: this.convertToCategories(conditions, 'conditions'),
@@ -190,56 +190,70 @@ export const ProjectDataService = {
       totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`
     });
   },
-  async loadActsFromFactory(projectIndustry?: string): Promise<void> {
-    console.log('[ProjectDataService] loadActsFromFactory CALLED with industry:', projectIndustry, typeof projectIndustry);
+  async loadTaskTemplatesFromFactory(projectIndustry?: string, projectId?: string): Promise<void> {
+    console.log('[ProjectDataService] loadTaskTemplatesFromFactory CALLED with industry:', projectIndustry, 'projectId:', projectId);
 
     try {
-      // If industry is undefined (value or string), load GLOBAL agent acts
-      if (projectIndustry === 'undefined' || projectIndustry === undefined) {
-        console.log('[ProjectDataService] Loading GLOBAL agent acts for undefined industry');
-        // Procedi normalmente a caricare la cache - NON return early!
+      const { taskTemplateServiceV2 } = await import('./TaskTemplateServiceV2');
+
+      // Costruisci scopes
+      // IMPORTANTE: Include sempre "general" per template built-in e generali
+      const scopes = ['general'];
+      if (projectIndustry && projectIndustry !== 'undefined') {
+        scopes.push(`industry:${projectIndustry}`);
       }
 
-      console.log('[ProjectDataService] DOPO IF - proceeding to cache load');
-      console.log('[ProjectDataService] Loading acts from FastAPI cache...');
+      // Aggiungi scope client se projectId è fornito
+      if (projectId) {
+        scopes.push(`client:${projectId}`);
+      }
 
-      // Use FastAPI cache instead of Express factory
-      console.log('[ProjectDataService] Step 1 - Before fetch');
-      const res = await fetch(`http://localhost:8000/api/agent-acts-from-cache`);
-      console.log('[ProjectDataService] Step 2 - After fetch, status:', res.status);
+      console.log('[ProjectDataService] Scopes to load:', scopes);
 
-      if (!res.ok) throw new Error('Failed to load cached agent acts');
+      // Carica templates
+      const templates = await taskTemplateServiceV2.loadTaskTemplates(
+        scopes,
+        'NodeRow', // Context per Intellisense
+        projectId, // projectId per includere template client-specific
+        projectIndustry && projectIndustry !== 'undefined' ? projectIndustry : undefined
+      );
 
-      console.log('[ProjectDataService] Step 3 - Before json()');
-      const json = await res.json();
-      console.log('[ProjectDataService] Step 4 - After json(), status:', json.status);
+      console.log('[ProjectDataService] Templates loaded:', templates.length);
 
-      // Extract agent acts from cache response
-      const items = json.status === 'success' && Array.isArray(json.agent_acts) ? json.agent_acts : [];
-      console.log('[ProjectDataService] Step 5 - Items extracted, count:', items.length);
+      // Converti al formato IntellisenseItem
+      const intellisenseItems = taskTemplateServiceV2.convertToIntellisenseFormat(templates);
 
-      console.log('[ProjectDataService] Loaded from cache:', {
-        status: json.status,
-        count: items.length,
-        sampleItem: items[0]
-      });
+      console.log('[ProjectDataService] Converted to IntellisenseItems:', intellisenseItems.length);
+      if (intellisenseItems.length > 0) {
+        console.log('[ProjectDataService] Sample IntellisenseItem:', {
+          id: intellisenseItems[0].id,
+          label: intellisenseItems[0].label,
+          type: intellisenseItems[0].type,
+          mode: intellisenseItems[0].mode,
+          templateId: intellisenseItems[0].templateId
+        });
+      }
 
-      console.log('[ProjectDataService] Step 6 - Before convertToCategories');
       projectData = {
         name: projectData.name || '',
         industry: projectData.industry || '',
-        agentActs: this.convertToCategories(items, 'agentActs'),
+        taskTemplates: this.convertToCategories(intellisenseItems, 'taskTemplates'),
         userActs: [],
         backendActions: [],
         conditions: [],
         tasks: [],
         macrotasks: []
       };
-      console.log('[ProjectDataService] Step 7 - Method completed successfully');
+
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log(`✅ [ProjectDataService] TaskTemplates loaded successfully!`);
+      console.log(`   Categories: ${projectData.taskTemplates.length}`);
+      console.log(`   Total items: ${intellisenseItems.length}`);
+      console.log('═══════════════════════════════════════════════════════════════════════════');
 
     } catch (error) {
-      console.error('[ProjectDataService] loadActsFromFactory FAILED:', error);
-      throw error; // Rilancia per far vedere l'errore in AppContent
+      console.error('[ProjectDataService] loadTaskTemplatesFromFactory FAILED:', error);
+      throw error;
     }
   },
 
@@ -294,8 +308,8 @@ export const ProjectDataService = {
       };
 
       // Load from each collection separately
-      const [agentActsRes, backendCallsRes, conditionsRes, tasksRes, macroTasksRes] = await Promise.all([
-        fetch('http://localhost:8000/api/agent-acts-from-cache'),
+      const [taskTemplatesRes, backendCallsRes, conditionsRes, tasksRes, macroTasksRes] = await Promise.all([
+        fetch(`/api/factory/task-templates-v2?scopes=general${projectIndustry && projectIndustry !== 'undefined' ? `,industry:${projectIndustry}` : ''}`),
         fetch('/api/factory/backend-calls', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -318,9 +332,8 @@ export const ProjectDataService = {
         })
       ]);
 
-      // Process agent acts from cache
-      const agentActsJson = await agentActsRes.json();
-      const agentActsItems = agentActsJson.status === 'success' && Array.isArray(agentActsJson.agent_acts) ? agentActsJson.agent_acts : [];
+      // Process task templates
+      const taskTemplatesItems = taskTemplatesRes.ok ? await taskTemplatesRes.json() : [];
 
       const [backendCalls, conditions, tasks, macroTasks] = await Promise.all([
         backendCallsRes.ok ? backendCallsRes.json() : [],
@@ -329,9 +342,9 @@ export const ProjectDataService = {
         macroTasksRes.ok ? macroTasksRes.json() : []
       ]);
 
-      const totalItems = agentActsItems.length + backendCalls.length + conditions.length + tasks.length + macroTasks.length;
+      const totalItems = taskTemplatesItems.length + backendCalls.length + conditions.length + tasks.length + macroTasks.length;
       console.log('>>> [ProjectDataService] Received items:', {
-        agentActs: agentActsItems.length,
+        taskTemplates: taskTemplatesItems.length,
         backendCalls: backendCalls.length,
         conditions: conditions.length,
         tasks: tasks.length,
@@ -348,7 +361,7 @@ export const ProjectDataService = {
         const allMacrotasks = [...tasksCategories, ...macroTasksCategories];
 
         const groupedData = {
-          agentActs: this.convertToCategories(agentActsItems, 'agentActs'),
+          taskTemplates: this.convertToCategories(taskTemplatesItems, 'taskTemplates'),
           userActs: [],
           backendActions: this.convertToCategories(backendCalls, 'backendActions'),
           conditions: this.convertToCategories(conditions, 'conditions'),
@@ -376,7 +389,7 @@ export const ProjectDataService = {
       projectData = {
         name: '',
         industry: projectIndustry || templateName,
-        agentActs: [],
+        taskTemplates: [],
         userActs: [],
         backendActions: [],
         conditions: [],
@@ -392,7 +405,7 @@ export const ProjectDataService = {
       projectData = {
         name: '',
         industry: projectIndustry || templateName,
-        agentActs: [],
+        taskTemplates: [],
         userActs: [],
         backendActions: [],
         conditions: [],
@@ -406,7 +419,7 @@ export const ProjectDataService = {
     projectData = {
       name: '',
       industry: projectIndustry || templateName,
-      agentActs: convertAgentActsToCategories<AgentActItem>(languageData.agentActs),
+      taskTemplates: convertTaskTemplatesToCategories<TaskTemplateItem>(languageData.agentActs),
       userActs: convertTemplateDataToCategories(languageData.userActs),
       backendActions: convertTemplateDataToCategories(languageData.backendActions),
       conditions: convertTemplateDataToCategories(languageData.conditions),
@@ -421,7 +434,7 @@ export const ProjectDataService = {
   // Helper method to group catalog items by type
   groupCatalogItemsByType(catalogItems: any[]): { [key: string]: Category[] } {
     const result = {
-      agentActs: [] as Category[],
+      taskTemplates: [] as Category[],
       userActs: [] as Category[],
       backendActions: [] as Category[],
       conditions: [] as Category[],
@@ -653,11 +666,11 @@ export const ProjectDataService = {
     if (item) {
       Object.assign(item, updates);
       // If we updated an agent act with embedded DDT, try saving to factory DB (best-effort)
-      if (type === 'agentActs') {
+      if (type === 'taskTemplates') {
         try {
           const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, type: (item as any)?.type, mode: (item as any)?.mode || 'Message', shortLabel: (item as any)?.shortLabel, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} };
-          await fetch(`/api/factory/agent-acts/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        } catch (e) { console.warn('[ProjectDataService] save agent act failed', e); }
+          await fetch(`/api/factory/task-templates-v2/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        } catch (e) { console.warn('[ProjectDataService] save task template failed', e); }
       }
     }
   },
@@ -666,10 +679,10 @@ export const ProjectDataService = {
     return JSON.stringify(projectData, null, 2);
   },
 
-  /** Update the ProblemClassification payload for an Agent Act by actId (in-memory only) */
-  setAgentActProblemById(actId: string, problem: any | null): void {
+  /** Update the ProblemClassification payload for a Task Template by templateId (in-memory only) */
+  setTaskTemplateProblemById(templateId: string, problem: any | null): void {
     try {
-      const cats: any[] = (projectData as any)?.agentActs || [];
+      const cats: any[] = (projectData as any)?.taskTemplates || [];
       for (const c of cats) {
         const items: any[] = c?.items || [];
         for (const it of items) {
@@ -682,11 +695,11 @@ export const ProjectDataService = {
     } catch { }
   },
 
-  /** Persist Agent Acts created in-memory into the project's DB (idempotent upsert). Called only on explicit Save. */
-  async saveProjectActsToDb(projectId: string, data?: ProjectData): Promise<void> {
+  /** Persist Task Templates created in-memory into the project's DB (idempotent upsert). Called only on explicit Save. */
+  async saveProjectTaskTemplatesToDb(projectId: string, data?: ProjectData): Promise<void> {
     try {
       const pd: any = data || projectData;
-      const categories: any[] = Array.isArray(pd?.agentActs) ? pd.agentActs : [];
+      const categories: any[] = Array.isArray(pd?.taskTemplates) ? pd.taskTemplates : [];
       const itemsToPersist: any[] = [];
       for (const cat of categories) {
         const items: any[] = Array.isArray(cat?.items) ? cat.items : [];
@@ -794,74 +807,35 @@ export const ProjectDataService = {
     }
   },
 
-  /** Persist current in-memory AgentActs into Factory DB (idempotent upsert) */
-  async saveAgentActsToFactory(): Promise<{ saved: number }> {
-    const actsCategories: any[] = (projectData as any)?.agentActs || [];
+  /** Persist current in-memory Task Templates into Factory DB (idempotent upsert) */
+  async saveTaskTemplatesToFactory(): Promise<{ saved: number }> {
+    const templateCategories: any[] = (projectData as any)?.taskTemplates || [];
     let count = 0;
-    for (const cat of actsCategories) {
+    for (const cat of templateCategories) {
       for (const item of (cat.items || [])) {
         try {
           const payload = {
-            _id: item._id || item.id,
-            type: 'agent_act',
+            id: item._id || item.id,
             label: item.name,
             description: item.description || '',
             category: cat.name,
-            actType: (item as any)?.type,
-            mode: item.mode || 'Message',
-            shortLabel: item.shortLabel,
-            data: item.data || {},
-            ddt: item.ddt || null
+            type: (item as any)?.type,
+            templateId: (item as any)?.templateId || (item as any)?.type,
+            defaultValue: item.data || {},
+            scope: 'general'
           };
-          const res = await fetch(`/api/factory/agent-acts/${encodeURIComponent(payload._id)}`, {
+          const res = await fetch(`/api/factory/task-templates-v2/${encodeURIComponent(payload.id)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
           });
           if (res.ok) count += 1;
         } catch (e) {
-          console.warn('[ProjectDataService] saveAgentActsToFactory failed for', item?.id, e);
+          console.warn('[ProjectDataService] saveTaskTemplatesToFactory failed for', item?.id, e);
         }
       }
     }
     return { saved: count };
-  },
-
-  async loadFactoryData(projectData: any): Promise<void> {
-    if (!projectData) {
-      projectData = {
-        name: '',
-        industry: '',
-        agentActs: [],
-        userActs: [],
-        backendActions: [],
-        conditions: [],
-        tasks: [],
-        macrotasks: []
-      };
-      return;
-    }
-
-    console.log('[ProjectDataService] Loading factory data from FastAPI cache...');
-
-    // Use FastAPI cache instead of Express factory
-    const res = await fetch(`http://localhost:8000/api/agent-acts-from-cache`);
-    if (!res.ok) throw new Error('Failed to load cached agent acts');
-    const json = await res.json();
-
-    // Extract agent acts from cache response
-    const items = json.status === 'success' && Array.isArray(json.agent_acts) ? json.agent_acts : [];
-
-    projectData = {
-      name: projectData.name || '',
-      industry: projectData.industry || '',
-      agentActs: this.convertToCategories(items, 'agentActs'),
-      userActs: [],
-      backendActions: [],
-      conditions: [],
-      tasks: [],
-      macrotasks: []
-    };
   }
 };
 

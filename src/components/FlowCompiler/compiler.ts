@@ -8,7 +8,7 @@ import { buildFirstRowCondition, buildSequentialCondition } from './conditionBui
 import { expandDDT } from './ddtExpander';
 import { taskRepository } from '../../services/TaskRepository';
 import { getTemplateId } from '../../utils/taskHelpers';
-import { templateIdToVBAction } from '../../utils/vbnetAdapter';
+// ✅ REMOVED: templateIdToVBAction - no longer needed, VB.NET uses templateId (string) directly
 
 interface CompilerOptions {
   getTask: (taskId: string) => any; // Function to resolve Task from taskId
@@ -130,8 +130,14 @@ export function compileFlow(
       // Use row.id directly (which equals task.id) - no need to generate new ID
       const compiledTask: CompiledTask = {
         id: row.id, // row.id === task.id (GUID)
-        action: templateId,  // ✅ Use templateId (CompiledTask.action is still string for now)
-        value: task.value || {},
+        action: templateId,  // ✅ DEPRECATED: Kept for backward compatibility
+        templateId: templateId,  // ✅ Preferred field - matches VB.NET model
+        // ✅ Campi diretti (niente wrapper value) - copia tutti i campi tranne id, templateId, createdAt, updatedAt
+        ...Object.fromEntries(
+          Object.entries(task).filter(([key]) =>
+            !['id', 'templateId', 'createdAt', 'updatedAt'].includes(key)
+          )
+        ),
         condition,
         state: 'UnExecuted',
         source: {
@@ -145,8 +151,9 @@ export function compileFlow(
       taskMap.set(compiledTask.id, compiledTask);
 
       // ✅ MIGRATION: Use templateId instead of task.action
-      // If task is GetData, expand DDT
-      if (templateId === 'GetData' && task.value?.ddt && options.getDDT) {
+      // ✅ CASE-INSENSITIVE: If task is GetData, expand DDT
+      // ✅ Check if task has DDT (mainData indicates DDT)
+      if (templateId && templateId.toLowerCase() === 'getdata' && task.mainData && task.mainData.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(
@@ -168,7 +175,9 @@ export function compileFlow(
 
       // ✅ MIGRATION: Use templateId instead of task.action
       // If task is ClassifyProblem, expand DDT
-      if (templateId === 'ClassifyProblem' && task.value?.ddt && options.getDDT) {
+      // ✅ CASE-INSENSITIVE
+      // ✅ Check if task has DDT (mainData indicates DDT)
+      if (templateId && templateId.toLowerCase() === 'classifyproblem' && task.mainData && task.mainData.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(

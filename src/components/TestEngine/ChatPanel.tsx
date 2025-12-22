@@ -18,7 +18,7 @@ interface ChatPanelProps {
 export const ChatPanel: React.FC<ChatPanelProps> = ({ testNodeId, userReplies, setUserReplies, inputValue, setInputValue, onSend, onClear, showChat, nodeRows }) => {
   if (showChat === false) return null;
   // Filtra solo le row agent
-  const agentRows = nodeRows.filter(row => row.categoryType === 'agentActs');
+  const agentRows = nodeRows.filter(row => row.categoryType === 'taskTemplates');
 
   // Calcola quali prompt mostrare: tutti fino al prossimo che aspetta risposta
   let shownIndices: number[] = [];
@@ -97,4 +97,4 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ testNodeId, userReplies, s
       ))}
     </div>
   );
-}; 
+};

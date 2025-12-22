@@ -1,7 +1,7 @@
 [
   {
     "ContainingType": "ApiServer.Program\u002B_Closure$__",
-    "Method": "_Lambda$__3-0",
+    "Method": "_Lambda$__2-0",
     "RelativePath": "api/health",
     "HttpMethod": "GET",
     "IsController": false,
@@ -17,7 +17,7 @@
   },
   {
     "ContainingType": "ApiServer.Program\u002B_Closure$__",
-    "Method": "_Lambda$__3-5",
+    "Method": "_Lambda$__2-5",
     "RelativePath": "api/runtime/orchestrator/session/{id}",
     "HttpMethod": "DELETE",
     "IsController": false,
@@ -39,7 +39,7 @@
   },
   {
     "ContainingType": "ApiServer.Program\u002B_Closure$__",
-    "Method": "_Lambda$__3-4",
+    "Method": "_Lambda$__2-4",
     "RelativePath": "api/runtime/orchestrator/session/{id}/input",
     "HttpMethod": "POST",
     "IsController": false,
@@ -61,7 +61,7 @@
   },
   {
     "ContainingType": "ApiServer.Program\u002B_Closure$__",
-    "Method": "_Lambda$__3-3",
+    "Method": "_Lambda$__2-3",
     "RelativePath": "api/runtime/orchestrator/session/{id}/stream",
     "HttpMethod": "GET",
     "IsController": false,

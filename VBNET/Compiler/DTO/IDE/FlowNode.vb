@@ -1,11 +1,13 @@
 Option Strict On
 Option Explicit On
 
+Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' Flow node (equivalent to reactflow Node)
+''' Flow node (simplified structure - no data wrapper)
 ''' Tipi del mondo IDE - usati solo per deserializzazione JSON
+''' Structure: { id, label, rows: [...] } - NO data wrapper
 ''' </summary>
 Public Class FlowNode
     ''' <summary>
@@ -15,10 +17,20 @@ Public Class FlowNode
     Public Property Id As String
 
     ''' <summary>
-    ''' Node data (rows, label, etc.)
+    ''' Node label (optional title)
     ''' </summary>
-    <JsonProperty("data")>
-    Public Property Data As NodeData
+    <JsonProperty("label")>
+    Public Property Label As String
+
+    ''' <summary>
+    ''' Rows in the node (directly, no wrapper)
+    ''' </summary>
+    <JsonProperty("rows")>
+    Public Property Rows As List(Of RowData)
+
+    Public Sub New()
+        Rows = New List(Of RowData)()
+    End Sub
 End Class
 
 

@@ -35,15 +35,6 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
     handleIntellisenseSelect(item);
   };
 
-  // Move log to useEffect to avoid logging on every render
-  React.useEffect(() => {
-    if (showIntellisense && isEditing && nodeOverlayPosition) {
-      console.log("🎯 [NodeRowIntellisense] INDIVIDUAL ROW INTELLISENSE OPENED", {
-        query: intellisenseQuery,
-        timestamp: Date.now()
-      });
-    }
-  }, [showIntellisense, isEditing, nodeOverlayPosition, intellisenseQuery]);
 
   return (
     <>
@@ -56,11 +47,10 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
             referenceElement={inputRef.current}
             onSelect={handleIntellisenseSelect}
             onClose={() => {
-              console.log("🎯 [NodeRowIntellisense] INDIVIDUAL ROW INTELLISENSE CLOSED");
               handleIntellisenseClose();
             }}
             allowCreatePicker={!!allowCreatePicker}
-            filterCategoryTypes={['agentActs', 'backendActions', 'macrotasks']}
+            filterCategoryTypes={['taskTemplates', 'backendActions', 'macrotasks']}
             onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
               return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);
             } : undefined}

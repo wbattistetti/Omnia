@@ -52,7 +52,7 @@ Public Class ConditionBuilder
             Dim parentNode = nodes.FirstOrDefault(Function(n) n.Id = edge.Source)
             If parentNode Is Nothing Then Continue For
 
-            Dim rows = If(parentNode.Data?.Rows, New List(Of RowData)())
+            Dim rows = If(parentNode.Rows, New List(Of RowData)())
             If rows.Count = 0 Then Continue For
 
             ' Get last row's taskId
@@ -101,7 +101,7 @@ Public Class ConditionBuilder
             Dim parentNode = nodes.FirstOrDefault(Function(n) n.Id = elseEdge.Source)
             If parentNode Is Nothing Then Continue For
 
-            Dim rows = If(parentNode.Data?.Rows, New List(Of RowData)())
+            Dim rows = If(parentNode.Rows, New List(Of RowData)())
             If rows.Count = 0 Then Continue For
 
             ' Get last row's taskId

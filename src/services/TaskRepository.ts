@@ -38,24 +38,20 @@ class TaskRepository {
   /**
    * Create a new Task
    *
-   * @param templateId - Template ID (e.g. "SayMessage", "GetData")
-   * @param value - Task value
+   * @param templateId - Template ID (null for template, GUID for instance)
+   * @param fields - Task fields (label, mainData, text, etc.)
    * @param taskId - Optional task ID (generates if not provided)
    * @param projectId - Optional project ID
-   * @returns Task with templateId
+   * @returns Task
    */
-  createTask(templateId: string, value?: Record<string, any>, taskId?: string, projectId?: string): Task {
-    if (!templateId || templateId.trim().length === 0) {
-      throw new Error('templateId is required');
-    }
-
+  createTask(templateId: string | null, fields?: Partial<Task>, taskId?: string, projectId?: string): Task {
     const finalTaskId = taskId || generateId();
     const finalProjectId = projectId || this.getCurrentProjectId();
 
     const task: Task = {
       id: finalTaskId,
-      templateId: templateId,  // ✅ Required field
-      value: value || undefined,
+      templateId: templateId,  // null = template, GUID = instance
+      ...(fields || {}),        // ✅ Campi diretti (niente wrapper value)
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -84,35 +80,18 @@ class TaskRepository {
       return false;
     }
 
-    // Update in internal storage
+    // Update in internal storage (merge fields directly, no value wrapper)
     const updatedTask: Task = {
       ...existingTask,
       ...updates,
-      updatedAt: updates.updatedAt || new Date(),
-      // Merge value: if updates.value is undefined, keep existingTask.value
-      // If updates.value is defined, do deep merge
-      value: updates.value !== undefined
-        ? { ...(existingTask.value || {}), ...updates.value }
-        : existingTask.value
+      updatedAt: updates.updatedAt || new Date()
     };
     this.tasks.set(taskId, updatedTask);
 
-    // Save to database if projectId is available
-    const finalProjectId = projectId || this.getCurrentProjectId();
-    if (finalProjectId) {
-      this.saveTaskToDatabase(updatedTask, finalProjectId).catch(err => {
-        console.error('[TaskRepository] Failed to save task to database:', err);
-      });
-    }
+    // ✅ NO automatic save to database - user must click "Save" explicitly
+    // The save will happen when user clicks the Save button in the UI
 
     return true;
-  }
-
-  /**
-   * Update Task value (convenience method)
-   */
-  updateTaskValue(taskId: string, value: Record<string, any>, projectId?: string): boolean {
-    return this.updateTask(taskId, { value, updatedAt: new Date() }, projectId);
   }
 
   /**
@@ -205,10 +184,15 @@ class TaskRepository {
           continue;
         }
 
+        // ✅ Load task with fields directly (no value wrapper)
+        // ✅ If item has value wrapper (old format), flatten it for backward compatibility
+        // ✅ Otherwise, use fields directly
+        const { id, templateId, createdAt, updatedAt, projectId: _projectId, value, ...directFields } = item;
         const task: Task = {
           id: item.id,
-          templateId: item.templateId,
-          value: item.value,
+          templateId: item.templateId ?? null,
+          ...(value || {}),  // ✅ Backward compatibility: flatten value if present
+          ...directFields,   // ✅ Use direct fields (mainData, label, stepPrompts, ecc.)
           createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         };
@@ -263,13 +247,14 @@ class TaskRepository {
         return true; // Nothing to save
       }
 
-      // Prepare items for bulk save
+      // ✅ Prepare items for bulk save (fields directly, no value wrapper)
       const items = allTasks.map(task => {
-        const templateId = getTemplateId(task);
+        // Extract all fields except id, templateId, createdAt, updatedAt
+        const { id, templateId, createdAt, updatedAt, ...fields } = task;
         return {
           id: task.id,
-          templateId: templateId,
-          value: task.value || {}
+          templateId: task.templateId ?? null,
+          ...fields  // ✅ Save fields directly
         };
       });
 
@@ -297,15 +282,16 @@ class TaskRepository {
    */
   private async saveTaskToDatabase(task: Task, projectId: string): Promise<boolean> {
     try {
-      const templateId = getTemplateId(task);
+      // ✅ Extract all fields except id, templateId, createdAt, updatedAt
+      const { id, templateId, createdAt, updatedAt, ...fields } = task;
 
       const response = await fetch(`/api/projects/${projectId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: task.id,
-          templateId: templateId,
-          value: task.value || {}
+          templateId: task.templateId ?? null,
+          ...fields  // ✅ Save fields directly (no value wrapper)
         })
       });
 

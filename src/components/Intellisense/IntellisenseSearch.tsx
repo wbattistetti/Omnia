@@ -189,7 +189,7 @@ export function groupAndSortResults(results: IntellisenseResult[]): Map<string, 
   const grouped = new Map<string, IntellisenseResult[]>();
 
   // Define category priority order
-  const categoryOrder = ['agentActs', 'userActs', 'backendActions', 'conditions', 'macrotasks'];
+  const categoryOrder = ['taskTemplates', 'userActs', 'backendActions', 'conditions', 'macrotasks'];
 
   results.forEach(result => {
     const category = result.item.categoryType;

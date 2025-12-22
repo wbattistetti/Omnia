@@ -1,5 +1,5 @@
 export const sidebarTheme = {
-  agentActs: {
+  taskTemplates: {
     color: '#34d399',
     icon: 'user',
   },
@@ -47,7 +47,7 @@ export function getLightTone(hex: string, amount: number = 0.85): string {
 export const SIDEBAR_TYPE_COLORS = sidebarTheme;
 
 export const SIDEBAR_TYPE_ICONS = {
-  agentActs: 'bot',
+  taskTemplates: 'bot',
   userActs: 'user',
   backendActions: 'database',
   conditions: 'gitBranch',

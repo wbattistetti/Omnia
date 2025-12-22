@@ -23,8 +23,10 @@ Public Class FlowCompilationResult
 
     ''' <summary>
     ''' List of all compiled tasks (flat list for compatibility)
+    ''' ✅ Usa CompiledTaskListConverter per deserializzare le classi polimorfiche
     ''' </summary>
     <JsonProperty("tasks")>
+    <JsonConverter(GetType(CompiledTaskListConverter))>
     Public Property Tasks As List(Of CompiledTask)
 
     Public Sub New()

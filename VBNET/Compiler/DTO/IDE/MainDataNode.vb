@@ -2,42 +2,44 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Generic
-Imports System.Text.Json.Serialization
+Imports Newtonsoft.Json
 
 ''' <summary>
 ''' MainDataNode: corrisponde ESATTAMENTE a MainDataNode TypeScript del frontend
-''' 'NOTA DA TOGLIERE: che un data sia maindata dipende da come è strutturato il DDT de una dato ha filgi allora è un maindata altrimenti e un data. Non ha molto senso la lcasse MAINDATA perchè il significato MAIN o sub dipende dla contesto id annidmaento. QUindio probaiblmente è sbaglaito. 
-''' 
+''' steps puÃ² essere:
+''' - Array: [{ type: "start", escalations: [...] }, ...]
+''' - Oggetto (Record): { "start": { escalations: [...] }, "noMatch": {...} }
 ''' </summary>
 Public Class MainDataNode
-        <JsonPropertyName("id")>
+        <JsonProperty("id")>
         Public Property Id As String
 
-        <JsonPropertyName("name")>
+        <JsonProperty("name")>
         Public Property Name As String
 
-        <JsonPropertyName("label")>
+        <JsonProperty("label")>
         Public Property Label As String
 
-        <JsonPropertyName("type")>
+        <JsonProperty("type")>
         Public Property Type As String
 
-        <JsonPropertyName("required")>
+        <JsonProperty("required")>
         Public Property Required As Boolean
 
-        <JsonPropertyName("condition")>
+        <JsonProperty("condition")>
         Public Property Condition As String
 
-    <JsonPropertyName("steps")>
-    Public Property Steps As List(Of Compiler.StepGroup)
+        <JsonProperty("steps")>
+        <JsonConverter(GetType(StepGroupListConverter))>
+        Public Property Steps As List(Of Compiler.StepGroup)
 
-    <JsonPropertyName("subData")>
-    Public Property SubData As List(Of Compiler.MainDataNode)
+        <JsonProperty("subData")>
+        Public Property SubData As List(Of Compiler.MainDataNode)
 
-        <JsonPropertyName("synonyms")>
+        <JsonProperty("synonyms")>
         Public Property Synonyms As List(Of String)
 
-        <JsonPropertyName("constraints")>
+        <JsonProperty("constraints")>
         Public Property Constraints As List(Of Object)
 
         Public Sub New()
@@ -47,4 +49,3 @@ Public Class MainDataNode
             Constraints = New List(Of Object)()
         End Sub
     End Class
-

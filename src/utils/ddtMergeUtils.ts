@@ -1,0 +1,917 @@
+import type { Task } from '../types/taskTypes';
+import { DialogueTaskService } from '../services/DialogueTaskService';
+import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * Build complete DDT from template (reference) and instance (steps + overrides)
+ *
+ * Rules:
+ * - label, steps: Always from instance (always editable)
+ * - mainData structure: Replicated in instance (for allowing additions), but contracts/constraints come from template (reference)
+ * - constraints, examples, nlpContract: From template (reference), unless overridden in instance
+ *
+ * Structure:
+ * - Nodes with templateId !== null: Structure from template, steps cloned with new task IDs, contracts from template
+ * - Nodes with templateId === null: Complete structure from instance (added nodes)
+ */
+export async function buildDDTFromTemplate(instance: Task | null): Promise<any | null> {
+  if (!instance) return null;
+
+  // If no templateId, this is a template or standalone instance (has full structure)
+  if (!instance.templateId) {
+    return {
+      label: instance.label,
+      mainData: instance.mainData || [],
+      constraints: instance.constraints,
+      examples: instance.examples
+    };
+  }
+
+  // Load template from DialogueTaskService
+  const template = DialogueTaskService.getTemplate(instance.templateId);
+  if (!template) {
+    // Template not found, return instance as-is (fallback)
+    console.warn('[ddtMergeUtils] Template not found:', instance.templateId);
+    return {
+      label: instance.label,
+      mainData: instance.mainData || [],
+      constraints: instance.constraints,
+      examples: instance.examples
+    };
+  }
+
+  console.log('[ddtMergeUtils] Template found:', {
+    id: template.id || template._id,
+    label: template.label,
+    hasMainData: !!template.mainData,
+    mainDataLength: template.mainData?.length || 0,
+    hasSubDataIds: !!template.subDataIds,
+    subDataIdsLength: template.subDataIds?.length || 0,
+    subDataIds: template.subDataIds
+  });
+
+  // ✅ Build template structure for reference (to get contracts/constraints)
+  const { mainData: templateMainData, guidMapping: templateGuidMapping } = buildMainDataFromTemplate(template);
+
+  console.log('[ddtMergeUtils] Built templateMainData:', {
+    length: templateMainData.length,
+    firstMain: templateMainData[0],
+    firstMainSubDataLength: templateMainData[0]?.subData?.length || 0
+  });
+
+  // ✅ ITERATE ON instance.mainData (not templateMainData) to include added nodes
+  const instanceMainData = instance.mainData || [];
+
+  // If instance has no mainData, build from template
+  if (instanceMainData.length === 0) {
+    const allGuidMappings = new Map<string, string>(templateGuidMapping);
+    const enrichedMainData = templateMainData.map((templateNode: any) => {
+      // Clone main node steps (if not already cloned by buildMainDataFromTemplate)
+      let clonedMainSteps = templateNode.steps;
+      if (templateNode.steps) {
+        const { cloned, guidMapping } = cloneStepsWithNewTaskIds(templateNode.steps);
+        guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+        clonedMainSteps = cloned;
+      }
+
+      // Clone sub-data steps (if not already cloned by buildMainDataFromTemplate)
+      const enrichedSubData = (templateNode.subData || []).map((subNode: any) => {
+        if (subNode.steps) {
+          const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(subNode.steps);
+          subGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+          return {
+            ...subNode,
+            steps: cloned
+          };
+        }
+        return subNode;
+      });
+
+      return {
+        ...templateNode,
+        steps: clonedMainSteps,
+        subData: enrichedSubData
+      };
+    });
+
+    const result = {
+      label: instance.label ?? template.label,
+      mainData: enrichedMainData,
+      constraints: instance.constraints ?? template.dataContracts ?? template.constraints ?? undefined,
+      examples: instance.examples ?? template.examples ?? undefined,
+      nlpContract: instance.nlpContract ?? template.nlpContract ?? undefined
+    };
+
+    // ✅ Copy translations for cloned steps (only on first instance creation)
+    const isFirstTimeCreation = (!instance.mainData || instance.mainData.length === 0) && !instance.steps;
+    if (isFirstTimeCreation && allGuidMappings.size > 0) {
+      await copyTranslationsForClonedSteps(result, template.id || template._id, allGuidMappings);
+    }
+
+    return result;
+  }
+
+  // ✅ Build enriched mainData from instance.mainData
+  const enrichedMainData = instanceMainData.map((instanceNode: any) => {
+    if (instanceNode.templateId) {
+      // ✅ NODE FROM TEMPLATE: get structure from template, apply prompts from instance, contracts from template
+      const templateNode = findTemplateNodeByTemplateId(templateMainData, instanceNode.templateId);
+
+      if (templateNode) {
+        // ✅ Use structure from template (label, type, icon, constraints, examples, nlpContract)
+        // ✅ Clone steps from template with new task IDs, or use steps from instance if modified
+        const steps = instanceNode.steps ?? (templateNode.steps ? cloneStepsWithNewTaskIds(templateNode.steps) : undefined);
+
+        return {
+          ...templateNode,  // ✅ Structure from template (includes contracts/constraints)
+          steps: steps,  // ✅ Clone steps with new task IDs
+          // ✅ Enrich subData recursively
+          subData: enrichSubDataFromInstance(instanceNode.subData || [], templateNode.subData || [])
+        };
+      } else {
+        // Template node not found, use instance node as-is (fallback)
+        return instanceNode;
+      }
+    } else {
+      // ✅ NODE ADDED IN INSTANCE (templateId === null): use complete structure from instance
+      return instanceNode;  // ✅ Complete structure copied
+    }
+  });
+
+  // Root level: use instance if present (override), otherwise template
+  const result = {
+    label: instance.label ?? template.label,
+    mainData: enrichedMainData,
+    constraints: instance.constraints ?? template.dataContracts ?? template.constraints ?? undefined,
+    examples: instance.examples ?? template.examples ?? undefined,
+    nlpContract: instance.nlpContract ?? template.nlpContract ?? undefined
+  };
+
+  // ✅ Copy translations for cloned steps (only on first instance creation)
+  // Check if instance has already been initialized (has mainData or steps)
+  const isFirstTimeCreation = (!instance.mainData || instance.mainData.length === 0) && !instance.steps;
+  if (isFirstTimeCreation) {
+    await copyTranslationsForClonedSteps(result, template.id || template._id);
+  }
+
+  return result;
+}
+
+/**
+ * Clone steps structure with new task IDs (for instance creation)
+ * Copies the structure but generates new IDs for all tasks
+ * Returns both cloned steps and a mapping of old GUID -> new GUID
+ */
+function cloneStepsWithNewTaskIds(steps: any): { cloned: any; guidMapping: Map<string, string> } {
+  if (!steps || typeof steps !== 'object') {
+    return { cloned: {}, guidMapping: new Map() };
+  }
+
+  const cloned: any = {};
+  const guidMapping = new Map<string, string>();
+
+  // Handle both object format { start: { escalations: [...] } } and array format [{ type: 'start', escalations: [...] }]
+  if (Array.isArray(steps)) {
+    const clonedArray = steps.map((step: any) => ({
+      ...step,
+      escalations: (step.escalations || []).map((esc: any) => cloneEscalationWithNewTaskIds(esc, guidMapping))
+    }));
+    return { cloned: clonedArray, guidMapping };
+  }
+
+  for (const [stepKey, stepValue] of Object.entries(steps)) {
+    if (stepValue && typeof stepValue === 'object') {
+      if (Array.isArray((stepValue as any).escalations)) {
+        // Format: { start: { escalations: [...] } }
+        cloned[stepKey] = {
+          ...stepValue,
+          escalations: ((stepValue as any).escalations || []).map((esc: any) => cloneEscalationWithNewTaskIds(esc, guidMapping))
+        };
+      } else if ((stepValue as any).type) {
+        // Format: { start: { type: 'start', escalations: [...] } }
+        cloned[stepKey] = {
+          ...stepValue,
+          escalations: ((stepValue as any).escalations || []).map((esc: any) => cloneEscalationWithNewTaskIds(esc, guidMapping))
+        };
+      } else {
+        cloned[stepKey] = stepValue;
+      }
+    } else {
+      cloned[stepKey] = stepValue;
+    }
+  }
+
+  return { cloned, guidMapping };
+}
+
+/**
+ * Clone escalation with new task IDs
+ * Maintains mapping of old GUID -> new GUID for translation copying
+ */
+function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string, string>): any {
+  if (!escalation) return escalation;
+
+  const cloned = {
+    ...escalation,
+    escalationId: escalation.escalationId ? `e_${uuidv4()}` : undefined,
+    tasks: (escalation.tasks || escalation.actions || []).map((task: any) => {
+      const oldGuid = task.taskId || task.actionInstanceId;
+      const newGuid = uuidv4();
+      if (oldGuid) {
+        guidMapping.set(oldGuid, newGuid);
+      }
+      return {
+        ...task,
+        taskId: newGuid,  // ✅ New ID for task instance
+        // Keep templateId, parameters, etc. from original
+      };
+    }),
+    actions: (escalation.actions || []).map((action: any) => {
+      const oldGuid = action.actionInstanceId || action.taskId;
+      const newGuid = uuidv4();
+      if (oldGuid) {
+        guidMapping.set(oldGuid, newGuid);
+      }
+      return {
+        ...action,
+        actionInstanceId: newGuid,  // ✅ New ID for action instance (legacy)
+        // Keep actionId, parameters, etc. from original
+      };
+    })
+  };
+
+  return cloned;
+}
+
+
+/**
+ * Build mainData structure from template (reference structure)
+ * Checks if template has mainData with steps, otherwise builds from subDataIds
+ * Returns both mainData and guidMapping for translation copying
+ */
+function buildMainDataFromTemplate(template: any): { mainData: any[]; guidMapping: Map<string, string> } {
+  const allGuidMappings = new Map<string, string>();
+
+  // ✅ Check if template has mainData with steps already assembled
+  if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
+    // Template has mainData with steps - clone with new IDs and collect mappings
+    const mainData = template.mainData.map((mainNode: any) => {
+      let clonedMainSteps = mainNode.steps;
+      if (mainNode.steps) {
+        const { cloned, guidMapping } = cloneStepsWithNewTaskIds(mainNode.steps);
+        guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+        clonedMainSteps = cloned;
+      }
+
+      const subData = (mainNode.subData || []).map((subNode: any) => {
+        let clonedSubSteps = subNode.steps;
+        if (subNode.steps) {
+          const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(subNode.steps);
+          subGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+          clonedSubSteps = cloned;
+        }
+        return {
+          ...subNode,
+          steps: clonedSubSteps
+        };
+      });
+
+      return {
+        ...mainNode,
+        steps: clonedMainSteps,
+        subData: subData
+      };
+    });
+
+    return { mainData, guidMapping: allGuidMappings };
+  }
+
+  // ✅ Build from subDataIds (composite template)
+  const subDataIds = template.subDataIds || [];
+
+  if (subDataIds.length > 0) {
+    // Template composito: crea UN SOLO mainData con subData[]
+    const subDataInstances: any[] = [];
+    for (const subId of subDataIds) {
+      console.log('[buildMainDataFromTemplate] Looking for sub-template:', {
+        subId,
+        cacheSize: DialogueTaskService.getTemplateCount(),
+        cacheLoaded: DialogueTaskService.isCacheLoaded()
+      });
+      const subTemplate = DialogueTaskService.getTemplate(subId);
+      console.log('[buildMainDataFromTemplate] Sub-template result:', {
+        subId,
+        found: !!subTemplate,
+        subTemplateLabel: subTemplate?.label
+      });
+      if (subTemplate) {
+        // ✅ Check if subTemplate has mainData with steps
+        let subSteps = undefined;
+        if (subTemplate.mainData && Array.isArray(subTemplate.mainData) && subTemplate.mainData.length > 0) {
+          subSteps = subTemplate.mainData[0].steps;
+        } else if (subTemplate.steps) {
+          subSteps = subTemplate.steps;
+        }
+
+        // Clone sub steps and collect mappings
+        let clonedSubSteps = subSteps;
+        if (subSteps) {
+          const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(subSteps);
+          subGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+          clonedSubSteps = cloned;
+        }
+
+        subDataInstances.push({
+          id: subTemplate.id || subTemplate._id,
+          label: subTemplate.label || subTemplate.name || 'Sub',
+          type: subTemplate.type,
+          icon: subTemplate.icon || 'FileText',
+          steps: clonedSubSteps,
+          constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+          examples: subTemplate.examples || [],
+          nlpContract: subTemplate.nlpContract || undefined,
+          subData: [],
+          templateId: subTemplate.id || subTemplate._id,
+          kind: subTemplate.name || subTemplate.type || 'generic'
+        });
+      }
+    }
+
+    console.log('[buildMainDataFromTemplate] Built subDataInstances:', {
+      count: subDataInstances.length,
+      labels: subDataInstances.map((s: any) => s.label)
+    });
+
+    // ✅ Check if template has steps at root level
+    let mainSteps = undefined;
+    if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
+      mainSteps = template.mainData[0].steps;
+    } else if (template.steps) {
+      mainSteps = template.steps;
+    }
+
+    // Clone main steps and collect mappings
+    let clonedMainSteps = mainSteps;
+    if (mainSteps) {
+      const { cloned, guidMapping: mainGuidMapping } = cloneStepsWithNewTaskIds(mainSteps);
+      mainGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+      clonedMainSteps = cloned;
+    }
+
+    const result = [{
+      id: template.id || template._id,
+      label: template.label || template.name || 'Data',
+      type: template.type,
+      icon: template.icon || 'Calendar',
+      steps: clonedMainSteps,
+      constraints: template.dataContracts || template.constraints || [],
+      examples: template.examples || [],
+      nlpContract: template.nlpContract || undefined,
+      subData: subDataInstances,
+      templateId: template.id || template._id,
+      kind: template.name || template.type || 'generic'
+    }];
+
+    console.log('[buildMainDataFromTemplate] Returning composite template result:', {
+      length: result.length,
+      firstLabel: result[0]?.label,
+      firstSubDataLength: result[0]?.subData?.length || 0,
+      guidMappingSize: allGuidMappings.size
+    });
+
+    return { mainData: result, guidMapping: allGuidMappings };
+  } else {
+    // Template semplice
+    // ✅ Check if template has steps at root level
+    let mainSteps = undefined;
+    if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
+      mainSteps = template.mainData[0].steps;
+    } else if (template.steps) {
+      mainSteps = template.steps;
+    }
+
+    // Clone main steps and collect mappings
+    let clonedMainSteps = mainSteps;
+    if (mainSteps) {
+      const { cloned, guidMapping: mainGuidMapping } = cloneStepsWithNewTaskIds(mainSteps);
+      mainGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+      clonedMainSteps = cloned;
+    }
+
+    return {
+      mainData: [{
+        id: template.id || template._id,
+        label: template.label || template.name || 'Data',
+        type: template.type,
+        icon: template.icon || 'Calendar',
+        steps: clonedMainSteps,
+        constraints: template.dataContracts || template.constraints || [],
+        examples: template.examples || [],
+        nlpContract: template.nlpContract || undefined,
+        subData: [],
+        templateId: template.id || template._id,
+        kind: template.name || template.type || 'generic'
+      }],
+      guidMapping: allGuidMappings
+    };
+  }
+}
+
+/**
+ * Copy translations for cloned steps
+ * Uses guidMapping to map old GUIDs (from template) to new GUIDs (in instance)
+ * Loads translations for old GUIDs and saves them for new GUIDs
+ */
+async function copyTranslationsForClonedSteps(ddt: any, templateId: string, guidMapping: Map<string, string>): Promise<void> {
+  try {
+    if (!guidMapping || guidMapping.size === 0) {
+      return; // No mappings to process
+    }
+
+    // Get old GUIDs (from template) - these have translations in the database
+    const oldGuids = Array.from(guidMapping.keys());
+
+    console.log('[copyTranslationsForClonedSteps] Mapping translations:', {
+      oldGuidsCount: oldGuids.length,
+      sampleOldGuids: oldGuids.slice(0, 5)
+    });
+
+    // Load template translations for OLD GUIDs (these exist in the database)
+    const { getTemplateTranslations } = await import('../services/ProjectDataService');
+    const templateTranslations = await getTemplateTranslations(oldGuids);
+
+    console.log('[copyTranslationsForClonedSteps] Template translations loaded:', {
+      oldGuidsCount: oldGuids.length,
+      translationsCount: Object.keys(templateTranslations).length,
+      sampleTranslations: Object.entries(templateTranslations).slice(0, 3).map(([guid, trans]) => ({
+        oldGuid: guid,
+        text: typeof trans === 'object' ? (trans as any).it || (trans as any).en : trans
+      }))
+    });
+
+    // Get project locale
+    const projectLocale = (localStorage.getItem('project.lang') || 'it') as 'en' | 'it' | 'pt';
+
+    // Build translations dictionary for instance (NEW GUIDs -> text from template)
+    // Map: oldGuid -> newGuid -> text
+    const instanceTranslations: Record<string, string> = {};
+    for (const oldGuid of oldGuids) {
+      const newGuid = guidMapping.get(oldGuid);
+      if (!newGuid) continue;
+
+      const templateTrans = templateTranslations[oldGuid];
+      if (templateTrans) {
+        // Extract text for project locale
+        const text = typeof templateTrans === 'object'
+          ? (templateTrans[projectLocale] || templateTrans.en || templateTrans.it || templateTrans.pt || '')
+          : String(templateTrans);
+
+        if (text) {
+          instanceTranslations[newGuid] = text; // ✅ Use NEW GUID as key
+        }
+      }
+    }
+
+    console.log('[copyTranslationsForClonedSteps] Instance translations to add:', {
+      count: Object.keys(instanceTranslations).length,
+      sampleTranslations: Object.entries(instanceTranslations).slice(0, 3).map(([newGuid, text]) => {
+        const oldGuid = Array.from(guidMapping.entries()).find(([_, ng]) => ng === newGuid)?.[0];
+        return { oldGuid, newGuid, text };
+      })
+    });
+
+    // Add translations to global table via window context (in memory) AND save to database
+    if (Object.keys(instanceTranslations).length > 0) {
+      // Try to add to in-memory context first
+      const translationsContext = (window as any).__projectTranslationsContext;
+      if (translationsContext && translationsContext.addTranslations) {
+        translationsContext.addTranslations(instanceTranslations);
+        console.log('[copyTranslationsForClonedSteps] ✅ Added translations to global table (in memory)');
+      } else {
+        console.warn('[copyTranslationsForClonedSteps] ProjectTranslationsContext not available, will save to DB only');
+      }
+
+      // ✅ Always save directly to database (even if context is not available)
+      try {
+        // Try multiple methods to get project ID
+        let projectId: string | null = null;
+        try {
+          projectId = localStorage.getItem('currentProjectId');
+        } catch {}
+        if (!projectId) {
+          try {
+            const runtime = await import('../state/runtime');
+            projectId = runtime.getCurrentProjectId();
+          } catch {}
+        }
+        if (!projectId) {
+          projectId = (window as any).currentProjectId || (window as any).__currentProjectId || null;
+        }
+
+        if (projectId) {
+          const { saveProjectTranslations } = await import('../services/ProjectDataService');
+          const projectLocale = (localStorage.getItem('project.lang') || 'it') as 'en' | 'it' | 'pt';
+
+          const translationsToSave = Object.entries(instanceTranslations).map(([guid, text]) => ({
+            guid,
+            language: projectLocale,
+            text: text as string,
+            type: 'Instance'
+          }));
+
+          await saveProjectTranslations(projectId, translationsToSave);
+          console.log('[copyTranslationsForClonedSteps] ✅ Saved translations to database:', {
+            projectId,
+            count: translationsToSave.length,
+            sample: translationsToSave.slice(0, 3).map(t => ({ guid: t.guid, text: t.text.substring(0, 30) }))
+          });
+
+          // ✅ Reload translations in context if available (to ensure UI sees the new translations)
+          const translationsContext = (window as any).__projectTranslationsContext;
+          if (translationsContext && translationsContext.loadAllTranslations) {
+            try {
+              await translationsContext.loadAllTranslations();
+              console.log('[copyTranslationsForClonedSteps] ✅ Reloaded translations in context');
+            } catch (reloadErr) {
+              console.warn('[copyTranslationsForClonedSteps] Failed to reload translations in context:', reloadErr);
+            }
+          }
+        } else {
+          console.warn('[copyTranslationsForClonedSteps] No project ID available, cannot save to database');
+        }
+      } catch (saveErr) {
+        console.error('[copyTranslationsForClonedSteps] Error saving translations to database:', saveErr);
+      }
+    }
+  } catch (err) {
+    console.error('[copyTranslationsForClonedSteps] Error copying translations:', err);
+  }
+}
+
+/**
+ * Extract task GUIDs from steps structure
+ */
+function extractTaskGuidsFromSteps(steps: any, output: string[]): void {
+  if (!steps || typeof steps !== 'object') return;
+
+  // Handle object format: { start: { escalations: [...] } }
+  if (!Array.isArray(steps)) {
+    for (const stepValue of Object.values(steps)) {
+      if (stepValue && typeof stepValue === 'object') {
+        const escalations = (stepValue as any).escalations;
+        if (Array.isArray(escalations)) {
+          for (const esc of escalations) {
+            const tasks = esc.tasks || esc.actions || [];
+            for (const task of tasks) {
+              const guid = task.taskId || task.actionInstanceId;
+              if (guid && typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+                output.push(guid);
+              }
+            }
+          }
+        }
+      }
+    }
+  } else {
+    // Handle array format: [{ type: 'start', escalations: [...] }]
+    for (const step of steps) {
+      if (step.escalations && Array.isArray(step.escalations)) {
+        for (const esc of step.escalations) {
+          const tasks = esc.tasks || esc.actions || [];
+          for (const task of tasks) {
+            const guid = task.taskId || task.actionInstanceId;
+            if (guid && typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+              output.push(guid);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Find template node by templateId
+ */
+function findTemplateNodeByTemplateId(templateMainData: any[], templateId: string): any | null {
+  for (const mainNode of templateMainData) {
+    if (mainNode.templateId === templateId) {
+      return mainNode;
+    }
+    // Check subData
+    if (mainNode.subData && Array.isArray(mainNode.subData)) {
+      for (const subNode of mainNode.subData) {
+        if (subNode.templateId === templateId) {
+          return subNode;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Enrich subData from instance (apply instance prompts, but keep template contracts)
+ */
+function enrichSubDataFromInstance(instanceSubData: any[], templateSubData: any[]): any[] {
+  return instanceSubData.map((instanceSub: any) => {
+    if (instanceSub.templateId) {
+      // ✅ SUB-DATA FROM TEMPLATE: get structure from template, apply prompts from instance
+      const templateSub = templateSubData.find((t: any) => t.templateId === instanceSub.templateId);
+
+      if (templateSub) {
+        // ✅ Clone steps from template with new task IDs, or use steps from instance if modified
+        const subSteps = instanceSub.steps ?? (templateSub.steps ? cloneStepsWithNewTaskIds(templateSub.steps) : undefined);
+
+        return {
+          ...templateSub,  // ✅ Structure from template (includes contracts/constraints)
+          steps: subSteps  // ✅ Clone steps with new task IDs
+        };
+      } else {
+        // Template sub not found, use instance as-is (fallback)
+        return instanceSub;
+      }
+    } else {
+      // ✅ SUB-DATA ADDED IN INSTANCE (templateId === null): use complete structure from instance
+      return instanceSub;  // ✅ Complete structure copied
+    }
+  });
+}
+
+/**
+ * Find corresponding instance node for a template node (to get overrides)
+ * @deprecated Use findTemplateNodeByTemplateId instead
+ */
+function findInstanceNode(instance: Task, templateNode: any): any | null {
+  if (!instance.mainData || !Array.isArray(instance.mainData)) {
+    return null;
+  }
+
+  // Try to match by templateId
+  if (templateNode.templateId) {
+    const found = instance.mainData.find((n: any) => n.templateId === templateNode.templateId);
+    if (found) return found;
+  }
+
+  // Try to match by label
+  if (templateNode.label) {
+    const found = instance.mainData.find((n: any) => n.label === templateNode.label);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+/**
+ * Find corresponding instance subNode for a template subNode (to get overrides)
+ * @deprecated Use enrichSubDataFromInstance instead
+ */
+function findInstanceSubNode(instance: Task, templateMainNode: any, templateSubNode: any): any | null {
+  const instanceMainNode = findInstanceNode(instance, templateMainNode);
+  if (!instanceMainNode || !instanceMainNode.subData || !Array.isArray(instanceMainNode.subData)) {
+    return null;
+  }
+
+  // Try to match by templateId
+  if (templateSubNode.templateId) {
+    const found = instanceMainNode.subData.find((n: any) => n.templateId === templateSubNode.templateId);
+    if (found) return found;
+  }
+
+  // Try to match by label
+  if (templateSubNode.label) {
+    const found = instanceMainNode.subData.find((n: any) => n.label === templateSubNode.label);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+
+/**
+ * Check if data contracts (constraints/examples/nlpContract) have been modified in instance
+ * Returns true if instance has overrides (data contracts are present in instance)
+ */
+export function hasDataContractOverrides(instance: Task | null): boolean {
+  if (!instance) return false;
+
+  // Check root level
+  if (instance.constraints || instance.examples || instance.nlpContract) {
+    return true;
+  }
+
+  // Check mainData nodes
+  if (instance.mainData && Array.isArray(instance.mainData)) {
+    for (const mainNode of instance.mainData) {
+      if (mainNode.constraints || mainNode.examples || mainNode.nlpContract) {
+        return true;
+      }
+      // Check subData nodes
+      if (mainNode.subData && Array.isArray(mainNode.subData)) {
+        for (const subNode of mainNode.subData) {
+          if (subNode.constraints || subNode.examples || subNode.nlpContract) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Extract only modified fields from DDT (compared to template)
+ * Returns DDT with only fields that differ from template (label, steps always included)
+ * constraints/examples/nlpContract only included if they differ from template
+ */
+export async function extractModifiedDDTFields(instance: Task | null, localDDT: any): Promise<Partial<Task>> {
+  if (!instance || !localDDT) {
+    return localDDT || {};
+  }
+
+  // If no templateId, this is a template or standalone instance - save everything
+  if (!instance.templateId) {
+    return {
+      label: localDDT.label,
+      mainData: localDDT.mainData,
+      constraints: localDDT.constraints,
+      examples: localDDT.examples,
+      nlpContract: localDDT.nlpContract
+    };
+  }
+
+  // Load template to compare
+  const template = DialogueTaskService.getTemplate(instance.templateId);
+  if (!template) {
+    // Template not found, save everything
+    return {
+      label: localDDT.label,
+      mainData: localDDT.mainData,
+      constraints: localDDT.constraints,
+      examples: localDDT.examples,
+      nlpContract: localDDT.nlpContract
+    };
+  }
+
+  // Always save label and steps (always editable)
+  // ✅ mainData structure is NOT saved (it's from template reference)
+  // Only save overrides (steps, constraints, examples, nlpContract) per node
+  const result: Partial<Task> = {
+    label: localDDT.label
+    // ✅ mainData is NOT saved - it comes from template
+  };
+
+  // ✅ Build template structure to compare
+  const templateMainData = buildMainDataFromTemplate(template);
+
+  // ✅ Save mainData only if it contains overrides (stepPrompts, constraints, examples, nlpContract)
+  // Structure is not saved, only overrides
+  if (localDDT.mainData && Array.isArray(localDDT.mainData) && templateMainData.length > 0) {
+    const mainDataOverrides: any[] = [];
+
+    for (let i = 0; i < localDDT.mainData.length; i++) {
+      const mainNode = localDDT.mainData[i];
+      const templateNode = templateMainData[i] || templateMainData[0]; // Fallback to first
+
+      const templateNodeConstraints = templateNode?.dataContracts || templateNode?.constraints || [];
+      const templateNodeExamples = templateNode?.examples || [];
+      const templateNodeNlpContract = templateNode?.nlpContract;
+
+      // Check if node has any overrides
+      const hasStepsOverride = mainNode.steps && JSON.stringify(mainNode.steps) !== JSON.stringify(templateNode?.steps);
+      const hasConstraintsOverride = JSON.stringify(mainNode.constraints || []) !== JSON.stringify(templateNodeConstraints);
+      const hasExamplesOverride = JSON.stringify(mainNode.examples || []) !== JSON.stringify(templateNodeExamples);
+      const hasNlpContractOverride = JSON.stringify(mainNode.nlpContract) !== JSON.stringify(templateNodeNlpContract);
+
+      if (hasStepsOverride || hasConstraintsOverride || hasExamplesOverride || hasNlpContractOverride) {
+        const overrideNode: any = {
+          templateId: mainNode.templateId || templateNode.templateId,
+          label: mainNode.label
+        };
+
+        if (hasStepsOverride) overrideNode.steps = mainNode.steps;
+        if (hasConstraintsOverride) overrideNode.constraints = mainNode.constraints;
+        if (hasExamplesOverride) overrideNode.examples = mainNode.examples;
+        if (hasNlpContractOverride) overrideNode.nlpContract = mainNode.nlpContract;
+
+        // Check subData overrides
+        if (mainNode.subData && Array.isArray(mainNode.subData) && templateNode.subData && Array.isArray(templateNode.subData)) {
+          const subDataOverrides: any[] = [];
+          for (const subNode of mainNode.subData) {
+            const templateSubNode = templateNode.subData.find((s: any) =>
+              s.templateId === subNode.templateId || s.label === subNode.label
+            );
+
+            if (templateSubNode) {
+              const templateSubConstraints = templateSubNode.dataContracts || templateSubNode.constraints || [];
+              const templateSubExamples = templateSubNode.examples || [];
+              const templateSubNlpContract = templateSubNode.nlpContract;
+
+              const hasSubStepsOverride = subNode.steps && JSON.stringify(subNode.steps) !== JSON.stringify(templateSubNode.steps);
+              const hasSubConstraintsOverride = JSON.stringify(subNode.constraints || []) !== JSON.stringify(templateSubConstraints);
+              const hasSubExamplesOverride = JSON.stringify(subNode.examples || []) !== JSON.stringify(templateSubExamples);
+              const hasSubNlpContractOverride = JSON.stringify(subNode.nlpContract) !== JSON.stringify(templateSubNlpContract);
+
+              if (hasSubStepsOverride || hasSubConstraintsOverride || hasSubExamplesOverride || hasSubNlpContractOverride) {
+                const overrideSubNode: any = {
+                  templateId: subNode.templateId || templateSubNode.templateId,
+                  label: subNode.label
+                };
+
+                if (hasSubStepsOverride) overrideSubNode.steps = subNode.steps;
+                if (hasSubConstraintsOverride) overrideSubNode.constraints = subNode.constraints;
+                if (hasSubExamplesOverride) overrideSubNode.examples = subNode.examples;
+                if (hasSubNlpContractOverride) overrideSubNode.nlpContract = subNode.nlpContract;
+
+                subDataOverrides.push(overrideSubNode);
+              }
+            }
+          }
+          if (subDataOverrides.length > 0) {
+            overrideNode.subData = subDataOverrides;
+          }
+        }
+
+        mainDataOverrides.push(overrideNode);
+      }
+    }
+
+    if (mainDataOverrides.length > 0) {
+      result.mainData = mainDataOverrides;
+    }
+  }
+
+  // Compare root level constraints/examples/nlpContract
+  const templateConstraints = template.dataContracts || template.constraints || [];
+  const templateExamples = template.examples || [];
+  const templateNlpContract = template.nlpContract;
+
+  if (JSON.stringify(localDDT.constraints) !== JSON.stringify(templateConstraints)) {
+    result.constraints = localDDT.constraints;
+  }
+
+  if (JSON.stringify(localDDT.examples) !== JSON.stringify(templateExamples)) {
+    result.examples = localDDT.examples;
+  }
+
+  if (JSON.stringify(localDDT.nlpContract) !== JSON.stringify(templateNlpContract)) {
+    result.nlpContract = localDDT.nlpContract;
+  }
+
+  // Compare mainData nodes
+  if (localDDT.mainData && Array.isArray(localDDT.mainData)) {
+    result.mainData = localDDT.mainData.map((mainNode: any, mainIdx: number) => {
+      const templateNode = findTemplateNode(template, mainNode);
+      const templateNodeConstraints = templateNode?.dataContracts || templateNode?.constraints || [];
+      const templateNodeExamples = templateNode?.examples || [];
+      const templateNodeNlpContract = templateNode?.nlpContract;
+
+      const modifiedMainNode: any = {
+        ...mainNode
+      };
+
+      // Remove constraints/examples/nlpContract if they match template
+      if (JSON.stringify(mainNode.constraints) === JSON.stringify(templateNodeConstraints)) {
+        delete modifiedMainNode.constraints;
+      }
+      if (JSON.stringify(mainNode.examples) === JSON.stringify(templateNodeExamples)) {
+        delete modifiedMainNode.examples;
+      }
+      if (JSON.stringify(mainNode.nlpContract) === JSON.stringify(templateNodeNlpContract)) {
+        delete modifiedMainNode.nlpContract;
+      }
+
+      // Compare subData nodes
+      if (mainNode.subData && Array.isArray(mainNode.subData)) {
+        modifiedMainNode.subData = mainNode.subData.map((subNode: any) => {
+          const templateSubNode = findTemplateSubNode(template, mainNode, subNode);
+          const templateSubConstraints = templateSubNode?.dataContracts || templateSubNode?.constraints || [];
+          const templateSubExamples = templateSubNode?.examples || [];
+          const templateSubNlpContract = templateSubNode?.nlpContract;
+
+          const modifiedSubNode: any = {
+            ...subNode
+          };
+
+          if (JSON.stringify(subNode.constraints) === JSON.stringify(templateSubConstraints)) {
+            delete modifiedSubNode.constraints;
+          }
+          if (JSON.stringify(subNode.examples) === JSON.stringify(templateSubExamples)) {
+            delete modifiedSubNode.examples;
+          }
+          if (JSON.stringify(subNode.nlpContract) === JSON.stringify(templateSubNlpContract)) {
+            delete modifiedSubNode.nlpContract;
+          }
+
+          return modifiedSubNode;
+        });
+      }
+
+      return modifiedMainNode;
+    });
+  }
+
+  return result;
+}
+

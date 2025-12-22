@@ -83,7 +83,17 @@ export function useNewFlowOrchestrator({
     if (templateId !== 'GetData') {
       return null;
     }
-    return task.value?.ddt || null;
+    // ✅ DDT è nei campi diretti del task (mainData indica che è un DDT)
+    if (task?.mainData && task.mainData.length > 0) {
+      return {
+        label: task.label,
+        mainData: task.mainData,
+        stepPrompts: task.stepPrompts,
+        constraints: task.constraints,
+        examples: task.examples
+      };
+    }
+    return null;
   }, []);
 
   // Track current DDT

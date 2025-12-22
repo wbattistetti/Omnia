@@ -64,7 +64,8 @@ export class IntellisenseService {
         }
 
         // FASE 7A: Prendi gli intent dal Task
-        const intents = task.value?.intents || [];
+        // ✅ Fields directly on task (no value wrapper)
+        const intents = task.intents || [];
 
         // Converti gli intent in IntellisenseItem
         return intents.map((intent: any) => ({

@@ -6,6 +6,7 @@ import { useSidebarState } from './SidebarState';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { useDDTManager } from '../../context/DDTManagerContext';
 import { saveDataDialogueTranslations } from '../../services/ProjectDataService';
+import { TemplateTranslationsService } from '../../services/TemplateTranslationsService';
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
@@ -61,7 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   // When inline builder completes under an Agent Act, embed DDT into the act item and persist later
   const handleCreateEmbeddedDDT = async (categoryId: string, itemId: string, newDDT: any) => {
     // Find the act in local project data and embed
-    const category = (data?.agentActs || []).find((c: any) => c.id === categoryId);
+    const category = (data?.taskTemplates || []).find((c: any) => c.id === categoryId);
     const item = category?.items.find((i: any) => i.id === itemId);
     if (!item) return;
     const version = (item.ddt?.version || 0) + 1;
@@ -94,7 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     try { console.log('[AgentAct][embed.ddt]', { act: item.name, version }); } catch { }
     // Persist via regular updateItem flow (will call Factory PUT best-effort)
     try {
-      await updateItem('agentActs', categoryId, itemId, { ddt: snapshot } as any);
+      await updateItem('taskTemplates', categoryId, itemId, { ddt: snapshot } as any);
     } catch (e) { }
 
     // Immediately open Response Editor from the freshly embedded snapshot
@@ -273,6 +274,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       if (!res.ok) {
         throw new Error('Server error: unable to save DDT');
       }
+
+      // ✅ Aggiorna cache traduzioni label per ogni template salvato
+      const projectLang = (localStorage.getItem('project.lang') || 'it') as 'it' | 'en' | 'pt';
+      (ddtList || []).forEach((ddt: any) => {
+        const templateId = ddt.id || ddt._id?.toString();
+        const label = ddt.label;
+        if (templateId && label) {
+          TemplateTranslationsService.addLabel(templateId, label, projectLang);
+        }
+      });
+
       // Nota: non ricarichiamo da backend per evitare flicker; la lista è già la sorgente del payload
       // ensure spinner is visible at least 600ms
       const elapsed = Date.now() - startedAt;
@@ -384,7 +396,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     }
     // Industry 'undefined' => optional empty dictionaries; keep acts by default (industryFilter 'all')
     if (industryFilter === 'undefined') {
-      next.agentActs = [];
+      next.taskTemplates = [];
       next.conditions = [];
     }
     return next;
@@ -404,12 +416,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   }, []);
 
   const speechActsCats = React.useMemo(() => {
-    const acts = (filteredData as any)?.agentActs || [];
+      const acts = (filteredData as any)?.taskTemplates || [];
     return buildFilteredActs(acts, (it: any) => (it?.type || '') !== 'BackendCall');
   }, [filteredData, buildFilteredActs, forceTick]);
 
   const backendCallCats = React.useMemo(() => {
-    const acts = (filteredData as any)?.agentActs || [];
+      const acts = (filteredData as any)?.taskTemplates || [];
     return buildFilteredActs(acts, (it: any) => (it?.type || '') === 'BackendCall');
   }, [filteredData, buildFilteredActs, forceTick]);
 
@@ -445,25 +457,25 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         {/* Speech Acts (Agent Acts except Backend Call) */}
         <EntityAccordion
           key="speechActs"
-          entityKey={'agentActs' as any}
+          entityKey={'taskTemplates' as any}
           title="Speech Acts"
-          icon={ICON_MAP[sidebarTheme['agentActs'].icon]}
+          icon={ICON_MAP[sidebarTheme['taskTemplates'].icon]}
           data={speechActsCats}
           isOpen={openAccordion === 'speechActs'}
           onToggle={() => setOpenAccordion(openAccordion === 'speechActs' ? '' : 'speechActs')}
-          onAddCategory={name => addCategory('agentActs', name)}
-          onDeleteCategory={categoryId => deleteCategory('agentActs', categoryId)}
-          onUpdateCategory={(categoryId, updates) => updateCategory('agentActs', categoryId, updates)}
+          onAddCategory={name => addCategory('taskTemplates', name)}
+          onDeleteCategory={categoryId => deleteCategory('taskTemplates', categoryId)}
+          onUpdateCategory={(categoryId, updates) => updateCategory('taskTemplates', categoryId, updates)}
           onAddItem={async (categoryId, name, desc) => {
-            await addItem('agentActs', categoryId, name, desc);
+            await addItem('taskTemplates', categoryId, name, desc);
           }}
-          onDeleteItem={(categoryId, itemId) => deleteItem('agentActs', categoryId, itemId)}
-          onUpdateItem={(categoryId, itemId, updates) => updateItem('agentActs', categoryId, itemId, updates)}
+          onDeleteItem={(categoryId, itemId) => deleteItem('taskTemplates', categoryId, itemId)}
+          onUpdateItem={(categoryId, itemId, updates) => updateItem('taskTemplates', categoryId, itemId, updates)}
           onBuildFromItem={handleBuildFromItem}
           hasDDTFor={hasDDTFor}
           onCreateDDT={handleCreateEmbeddedDDT}
           onOpenEmbedded={(categoryId, itemId) => {
-            const category = (data?.agentActs || []).find((c: any) => c.id === categoryId);
+            const category = (data?.taskTemplates || []).find((c: any) => c.id === categoryId);
             const item = category?.items.find((i: any) => i.id === itemId);
             if (item) handleOpenEmbedded(categoryId, item);
           }}
@@ -478,22 +490,22 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           data={backendCallCats}
           isOpen={openAccordion === 'backendCalls'}
           onToggle={() => setOpenAccordion(openAccordion === 'backendCalls' ? '' : 'backendCalls')}
-          onAddCategory={name => addCategory('agentActs', name)}
-          onDeleteCategory={categoryId => deleteCategory('agentActs', categoryId)}
-          onUpdateCategory={(categoryId, updates) => updateCategory('agentActs', categoryId, updates)}
+          onAddCategory={name => addCategory('taskTemplates', name)}
+          onDeleteCategory={categoryId => deleteCategory('taskTemplates', categoryId)}
+          onUpdateCategory={(categoryId, updates) => updateCategory('taskTemplates', categoryId, updates)}
           onAddItem={async (categoryId, name, desc) => {
-            await addItem('agentActs', categoryId, name, desc);
+            await addItem('taskTemplates', categoryId, name, desc);
             // Mark as BackendCall if created here (optional - can be set in quick-create flow)
             try {
-              const cat = (data?.agentActs || []).find((c: any) => c.id === categoryId);
+              const cat = (data?.taskTemplates || []).find((c: any) => c.id === categoryId);
               const last = cat?.items?.find((i: any) => (i?.name || '') === name);
               if (last) {
-                await updateItem('agentActs', categoryId, last.id, { type: 'BackendCall' } as any);
+                await updateItem('taskTemplates', categoryId, last.id, { type: 'BackendCall' } as any);
               }
             } catch { }
           }}
-          onDeleteItem={(categoryId, itemId) => deleteItem('agentActs', categoryId, itemId)}
-          onUpdateItem={(categoryId, itemId, updates) => updateItem('agentActs', categoryId, itemId, updates)}
+          onDeleteItem={(categoryId, itemId) => deleteItem('taskTemplates', categoryId, itemId)}
+          onUpdateItem={(categoryId, itemId, updates) => updateItem('taskTemplates', categoryId, itemId, updates)}
         />
 
         {/* Conditions and Tasks */}

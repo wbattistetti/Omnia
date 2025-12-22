@@ -93,7 +93,12 @@ export function prepareTaskForVBNet(task: { id: string; templateId: string; valu
     id: task.id,
     templateId,
     action: templateIdToVBAction(templateId),  // ✅ Aggiunge action per VB.NET
-    value: task.value
+    // ✅ Fields directly on task (no value wrapper) - copy all fields except id, templateId, createdAt, updatedAt
+    ...Object.fromEntries(
+      Object.entries(task).filter(([key]) =>
+        !['id', 'templateId', 'createdAt', 'updatedAt'].includes(key)
+      )
+    )
   };
 }
 

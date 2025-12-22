@@ -29,7 +29,7 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
   const { refreshData, updateDataDirectly } = projectDataUpdateContext;
 
   const createEntity = useCallback((
-    entityType: 'agentActs' | 'backendActions' | 'macrotasks' | 'conditions',
+    entityType: 'taskTemplates' | 'backendActions' | 'macrotasks' | 'conditions',
     name: string,
     onRowUpdate?: (item: any) => void,
     scope?: 'global' | 'industry',
@@ -49,8 +49,8 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
 
     let result;
     switch (entityType) {
-      case 'agentActs':
-        result = EntityCreationService.createAgentAct(options);
+      case 'taskTemplates':
+        result = EntityCreationService.createTaskTemplate(options);
         break;
       case 'backendActions':
         result = EntityCreationService.createBackendCall(options);
@@ -77,7 +77,7 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
   }, [projectData, updateDataDirectly]);
 
   const createAgentAct = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: string) => {
-    createEntity('agentActs', name, onRowUpdate, scope, categoryName, type);
+    createEntity('taskTemplates', name, onRowUpdate, scope, categoryName, type);
   }, [createEntity]);
 
   const createBackendCall = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {

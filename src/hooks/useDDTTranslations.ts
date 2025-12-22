@@ -22,55 +22,62 @@ export function useDDTTranslations(ddt: any | null | undefined): Record<string, 
 
   return useMemo(() => {
     if (!ddt) {
+      console.log('[useDDTTranslations] ❌ No DDT provided');
       return {};
     }
 
     const guids = extractGUIDsFromDDT(ddt);
     if (guids.length === 0) {
+      console.log('[useDDTTranslations] ⚠️ No GUIDs extracted from DDT', {
+        ddtId: ddt.id,
+        hasMainData: !!ddt.mainData,
+        mainDataLength: ddt.mainData?.length || 0
+      });
       return {};
     }
+
+    console.log('[useDDTTranslations] 🔍 Looking for translations', {
+      ddtId: ddt.id,
+      requestedGuids: guids.length,
+      globalTranslationsCount: Object.keys(globalTranslations).length,
+      sampleRequestedGuids: guids.slice(0, 10),
+      sampleGlobalGuids: Object.keys(globalTranslations).slice(0, 10)
+    });
 
     // Extract translations from global table (already filtered by project locale)
     const translationsFromGlobal: Record<string, string> = {};
     const foundGuids: string[] = [];
     const missingGuids: string[] = [];
+    const foundTranslations: Array<{ guid: string; text: string }> = [];
 
     guids.forEach(guid => {
       const translation = globalTranslations[guid];
       if (translation) {
         translationsFromGlobal[guid] = translation;
         foundGuids.push(guid);
+        foundTranslations.push({ guid, text: translation.substring(0, 50) });
       } else {
         missingGuids.push(guid);
       }
     });
 
-    // 🎨 [HIGHLIGHT] Log only when values change significantly or there are missing translations
-    const prev = prevStateRef.current;
-    const current = {
+    // ✅ Always log detailed info
+    console.log('[useDDTTranslations] ✅ Translation lookup complete', {
+      ddtId: ddt.id,
+      requestedGuids: guids.length,
+      foundTranslations: foundGuids.length,
+      missingGuids: missingGuids.length,
+      globalTranslationsTotal: Object.keys(globalTranslations).length,
+      sampleFound: foundTranslations.slice(0, 5),
+      sampleMissing: missingGuids.slice(0, 10),
+      allMissingGuids: missingGuids
+    });
+
+    prevStateRef.current = {
       foundCount: foundGuids.length,
       missingCount: missingGuids.length,
       ddtId: ddt.id
     };
-
-    if (
-      prev.foundCount !== current.foundCount ||
-      prev.missingCount !== current.missingCount ||
-      prev.ddtId !== current.ddtId ||
-      current.missingCount > 0 // Always log if there are missing translations
-    ) {
-      // Only log if there are missing translations or significant changes
-      if (current.missingCount > 0 || prev.ddtId !== current.ddtId) {
-        console.log('[useDDTTranslations] ✅ Loaded translations', {
-          ddtId: current.ddtId,
-          requestedGuids: guids.length,
-          foundTranslations: current.foundCount,
-          missingGuids: current.missingCount,
-          sampleMissing: missingGuids.slice(0, 5)
-        });
-      }
-      prevStateRef.current = current;
-    }
 
     return translationsFromGlobal;
   }, [ddt, globalTranslations]);

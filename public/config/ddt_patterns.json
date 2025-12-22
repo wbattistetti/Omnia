@@ -1,0 +1,117 @@
+{
+  "Date": {
+    "IT": [
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(data|data\\s+di\\s+nascita|data\\s+paziente|data\\s+del\\s+paziente|data\\s+nascita|giorno\\s+di\\s+nascita)",
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(la\\s+)?data",
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(quando|quando\\s+è\\s+nato)",
+      "data\\s+(di\\s+)?nascita",
+      "data\\s+paziente",
+      "quando\\s+è\\s+nato"
+    ],
+    "EN": [
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(date|date\\s+of\\s+birth|birth\\s+date|patient\\s+date)",
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(when|when\\s+born)",
+      "date\\s+of\\s+birth",
+      "birth\\s+date",
+      "when\\s+born"
+    ],
+    "PT": [
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(data|data\\s+de\\s+nascimento|data\\s+do\\s+paciente)",
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(quando|quando\\s+nasceu)",
+      "data\\s+de\\s+nascimento",
+      "data\\s+do\\s+paciente",
+      "quando\\s+nasceu"
+    ]
+  },
+  "Name": {
+    "IT": [
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(nome|nome\\s+completo|nome\\s+e\\s+cognome|cognome)",
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(il\\s+)?nome",
+      "nome\\s+completo",
+      "nome\\s+e\\s+cognome",
+      "come\\s+ti\\s+chiami"
+    ],
+    "EN": [
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(name|full\\s+name|first\\s+name|last\\s+name)",
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(your|the)\\s+name",
+      "full\\s+name",
+      "first\\s+and\\s+last\\s+name",
+      "what\\s+is\\s+your\\s+name"
+    ],
+    "PT": [
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(nome|nome\\s+completo|primeiro\\s+nome|sobrenome)",
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(o\\s+)?nome",
+      "nome\\s+completo",
+      "primeiro\\s+e\\s+último\\s+nome",
+      "qual\\s+é\\s+seu\\s+nome"
+    ]
+  },
+  "Phone": {
+    "IT": [
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(telefono|numero\\s+di\\s+telefono|cellulare|numero\\s+di\\s+cellulare)",
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(il\\s+)?(telefono|cellulare)",
+      "numero\\s+di\\s+telefono",
+      "numero\\s+di\\s+cellulare",
+      "numero\\s+telefono"
+    ],
+    "EN": [
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(phone|phone\\s+number|telephone|mobile|cell\\s+phone)",
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(your|the)\\s+phone",
+      "phone\\s+number",
+      "telephone\\s+number",
+      "mobile\\s+number"
+    ],
+    "PT": [
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(telefone|número\\s+de\\s+telefone|celular|número\\s+de\\s+celular)",
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(o\\s+)?(telefone|celular)",
+      "número\\s+de\\s+telefone",
+      "número\\s+de\\s+celular",
+      "telefone\\s+celular"
+    ]
+  },
+  "Email": {
+    "IT": [
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(email|indirizzo\\s+email|mail|e-mail)",
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(l\\s+)?(email|mail)",
+      "indirizzo\\s+email",
+      "indirizzo\\s+mail",
+      "e-mail"
+    ],
+    "EN": [
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(email|email\\s+address|e-mail|mail)",
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(your|the)\\s+email",
+      "email\\s+address",
+      "e-mail\\s+address"
+    ],
+    "PT": [
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(email|endereço\\s+de\\s+email|e-mail|correio)",
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(o\\s+)?email",
+      "endereço\\s+de\\s+email",
+      "endereço\\s+e-mail"
+    ]
+  },
+  "Address": {
+    "IT": [
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(indirizzo|residenza|domicilio|via|indirizzo\\s+di\\s+residenza)",
+      "^(chiedi|richiedi|domanda|acquisisci|raccogli|invita)\\s+(l\\s+)?indirizzo",
+      "indirizzo\\s+di\\s+residenza",
+      "indirizzo\\s+domicilio",
+      "dove\\s+abiti"
+    ],
+    "EN": [
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(address|home\\s+address|residence|street\\s+address)",
+      "^(ask|request|get|collect|acquire)\\s+(for\\s+)?(your|the)\\s+address",
+      "home\\s+address",
+      "street\\s+address",
+      "where\\s+do\\s+you\\s+live"
+    ],
+    "PT": [
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(endereço|residência|domicílio|rua)",
+      "^(pedir|solicitar|obter|coletar|adquirir)\\s+(o\\s+)?endereço",
+      "endereço\\s+de\\s+residência",
+      "endereço\\s+domicílio",
+      "onde\\s+você\\s+mora"
+    ]
+  }
+}
+

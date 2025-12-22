@@ -66,173 +66,117 @@ Public Class FlowOrchestrator
         _taskExecutor = New TaskExecutor(ddtEngine)
         _state = New ExecutionState()
 
-        Console.WriteLine($"🔧 [FlowOrchestrator] Created with {If(_compiledTasks IsNot Nothing, _compiledTasks.Count, 0)} tasks, EntryTaskGroupId: {_entryTaskGroupId}")
-
         ' Collega eventi DDT Engine
         AddHandler _ddtEngine.MessageToShow, AddressOf OnDDTMessage
     End Sub
 
     ''' <summary>
-    ''' Avvia l'esecuzione del flow
+    ''' Executes the entire dialogue flow
+    ''' Finds and executes tasks sequentially until completion or error
     ''' </summary>
-    Public Async Function StartAsync() As System.Threading.Tasks.Task
-        If _isRunning Then
-            Console.WriteLine($"⚠️ [FlowOrchestrator] Already running, ignoring StartAsync call")
-            Return
-        End If
+    Public Async Function ExecuteDialogueAsync() As System.Threading.Tasks.Task
+        If _isRunning Then Return
 
         _isRunning = True
-        Console.WriteLine($"🚀 [FlowOrchestrator] Starting execution...")
 
         Try
-            ' Notifica stato iniziale
+            Console.WriteLine($"🚀 [FlowOrchestrator] Starting dialogue with {If(_compiledTasks IsNot Nothing, _compiledTasks.Count, 0)} tasks")
             RaiseEvent StateUpdated(Me, _state)
 
-            ' Loop principale: trova e esegue task
-            Await RunLoopAsync()
+            Dim iterationCount As Integer = 0
+            While _isRunning
+                iterationCount += 1
+                Dim nextTask As CompiledTask = FindNextExecutableTask()
 
-            Console.WriteLine($"✅ [FlowOrchestrator] Execution completed")
+                If nextTask Is Nothing Then Exit While
+
+                _taskExecutor.SetMessageCallback(Sub(text, stepType, escalationNumber)
+                                                     RaiseEvent MessageToShow(Me, text)
+                                                 End Sub)
+
+                Dim result = _taskExecutor.ExecuteTask(nextTask, _state)
+
+                If Not result.Success Then
+                    Throw New Exception($"Task execution failed: {result.Error}")
+                End If
+
+                _state.ExecutedTaskIds.Add(nextTask.Id)
+                _state.CurrentNodeId = nextTask.Id
+                RaiseEvent StateUpdated(Me, _state)
+
+                Await System.Threading.Tasks.Task.Delay(10)
+            End While
+
+            Console.WriteLine($"✅ [FlowOrchestrator] Dialogue completed after {iterationCount} iterations")
             RaiseEvent ExecutionCompleted(Me, Nothing)
+
         Catch ex As Exception
-            Console.WriteLine($"❌ [FlowOrchestrator] Execution error: {ex.Message}")
-            Console.WriteLine($"Stack trace: {ex.StackTrace}")
+            Console.WriteLine($"❌ [FlowOrchestrator] Error: {ex.Message}")
             RaiseEvent ExecutionError(Me, ex)
+            Throw
         Finally
             _isRunning = False
-            Console.WriteLine($"🛑 [FlowOrchestrator] Execution stopped")
         End Try
-    End Function
-
-    ''' <summary>
-    ''' Loop principale di esecuzione
-    ''' </summary>
-    Private Async Function RunLoopAsync() As System.Threading.Tasks.Task
-        Dim iterationCount As Integer = 0
-        While _isRunning
-            iterationCount += 1
-            Console.WriteLine($"🔄 [FlowOrchestrator] Loop iteration {iterationCount}")
-
-            ' Trova prossimo task eseguibile
-            Dim nextTask As CompiledTask = FindNextExecutableTask()
-
-            If nextTask Is Nothing Then
-                ' Nessun task eseguibile, completa
-                Console.WriteLine($"✅ [FlowOrchestrator] No more executable tasks, completing execution")
-                Exit While
-            End If
-
-            Console.WriteLine($"▶️ [FlowOrchestrator] Executing task: {nextTask.Id}, Action: {nextTask.Type}")
-
-            ' Esegui task
-            ' Imposta callback per messaggi
-            _taskExecutor.SetMessageCallback(Sub(text, stepType, escalationNumber)
-                                                 Console.WriteLine($"📨 [FlowOrchestrator] Message callback called: {text.Substring(0, Math.Min(100, text.Length))}")
-                                                 RaiseEvent MessageToShow(Me, text)
-                                             End Sub)
-
-            Dim result As TaskExecutionResult = _taskExecutor.ExecuteTask(nextTask, _state)
-
-            If Not result.Success Then
-                Console.WriteLine($"❌ [FlowOrchestrator] Task execution failed: {result.Error}")
-                Throw New Exception($"Task execution failed: {result.Error}")
-            End If
-
-            Console.WriteLine($"✅ [FlowOrchestrator] Task executed successfully: {nextTask.Id}")
-
-            ' Aggiorna stato
-            _state.ExecutedTaskIds.Add(nextTask.Id)
-            _state.CurrentNodeId = nextTask.Id ' TODO: Usare il NodeId corretto dal TaskGroup
-
-            ' Se il task ha output, aggiungilo al variableStore
-            If result.Output IsNot Nothing Then
-                ' TODO: Estrarre variabili dall'output e aggiungerle al variableStore
-            End If
-
-            RaiseEvent StateUpdated(Me, _state)
-
-            ' Piccola pausa per evitare loop infiniti
-            Await System.Threading.Tasks.Task.Delay(10)
-        End While
-
-        Console.WriteLine($"🏁 [FlowOrchestrator] RunLoop completed after {iterationCount} iterations")
     End Function
 
     ''' <summary>
     ''' Trova il prossimo task eseguibile (condizione = true, non ancora eseguito)
     ''' </summary>
     Private Function FindNextExecutableTask() As CompiledTask
-        ' Se abbiamo un CompilationResult, usa la struttura TaskGroup
         If _compilationResult IsNot Nothing Then
-            Console.WriteLine($"🔍 [FlowOrchestrator] Finding next executable task. EntryTaskGroupId: {_entryTaskGroupId}, TaskGroups count: {_compilationResult.TaskGroups.Count}")
+            Dim taskGroupsToCheck As New List(Of TaskGroup)()
 
-            ' Se abbiamo un EntryTaskGroupId, inizia da quello
-            Dim taskGroupsToCheck As List(Of TaskGroup) = New List(Of TaskGroup)()
+            ' Check entry TaskGroup first if it exists
             If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
-                ' Trova il TaskGroup di entry usando FirstOrDefault
                 Dim entryTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = _entryTaskGroupId)
-                If entryTaskGroup IsNot Nothing Then
+                If entryTaskGroup IsNot Nothing AndAlso Not entryTaskGroup.Executed Then
                     taskGroupsToCheck.Add(entryTaskGroup)
-                    Console.WriteLine($"📍 [FlowOrchestrator] Starting from entry TaskGroup: {_entryTaskGroupId}")
-                Else
-                    ' Entry TaskGroup non trovato, controlla tutti
-                    taskGroupsToCheck = _compilationResult.TaskGroups
-                    Console.WriteLine($"📍 [FlowOrchestrator] Entry TaskGroup not found, checking all TaskGroups")
                 End If
+
+                For Each tg In _compilationResult.TaskGroups
+                    If tg.NodeId <> _entryTaskGroupId Then
+                        taskGroupsToCheck.Add(tg)
+                    End If
+                Next
             Else
-                ' Altrimenti, controlla tutti i TaskGroup in ordine
                 taskGroupsToCheck = _compilationResult.TaskGroups
-                Console.WriteLine($"📍 [FlowOrchestrator] No entry TaskGroup, checking all TaskGroups")
             End If
 
-            ' Trova il primo TaskGroup non eseguito con condizione soddisfatta
+            ' Find first non-executed TaskGroup with satisfied condition
             For Each taskGroup In taskGroupsToCheck
-                Console.WriteLine($"🔍 [FlowOrchestrator] Checking TaskGroup: {taskGroup.NodeId}, Executed: {taskGroup.Executed}, Tasks count: {taskGroup.Tasks.Count}")
-
                 If Not taskGroup.Executed Then
-                    ' Valuta condizione del TaskGroup
                     Dim canExecute As Boolean = True
                     If taskGroup.ExecCondition IsNot Nothing Then
-                        ' TODO: Valutare condizione usando ConditionEvaluator
-                        ' Per ora assumiamo che sia sempre true
+                        ' TODO: Evaluate condition using ConditionEvaluator
                         canExecute = True
                     End If
 
                     If canExecute Then
-                        ' Trova il primo task non eseguito nel TaskGroup
                         For Each task In taskGroup.Tasks
-                            Console.WriteLine($"🔍 [FlowOrchestrator] Checking task: {task.Id}, Action: {task.Type}, Already executed: {_state.ExecutedTaskIds.Contains(task.Id)}")
-
                             If Not _state.ExecutedTaskIds.Contains(task.Id) Then
-                                ' Valuta condizione del task
                                 Dim taskCanExecute As Boolean = True
                                 If task.Condition IsNot Nothing Then
-                                    ' TODO: Valutare condizione del task
+                                    ' TODO: Evaluate task condition
                                     taskCanExecute = True
                                 End If
 
                                 If taskCanExecute Then
-                                    Console.WriteLine($"✅ [FlowOrchestrator] Found executable task: {task.Id}, Action: {task.Type}")
                                     Return task
                                 End If
                             End If
                         Next
 
-                        ' Se tutti i task del TaskGroup sono eseguiti, marca come eseguito
                         taskGroup.Executed = True
-                        Console.WriteLine($"✅ [FlowOrchestrator] TaskGroup {taskGroup.NodeId} completed")
                     End If
                 End If
             Next
-
-            Console.WriteLine($"⚠️ [FlowOrchestrator] No executable task found")
         Else
-            ' Fallback: cerca nella lista flat di task
+            ' Fallback: flat list search
             For Each task In _compiledTasks
                 If Not _state.ExecutedTaskIds.Contains(task.Id) Then
-                    ' Valuta condizione
                     Dim canExecute As Boolean = True
                     If task.Condition IsNot Nothing Then
-                        ' TODO: Valutare condizione
+                        ' TODO: Evaluate condition
                         canExecute = True
                     End If
 

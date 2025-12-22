@@ -313,7 +313,7 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
         ) : (
           <h3
             className="text-white font-semibold cursor-text hover:text-amber-100 transition-colors truncate flex-1"
-            style={{ fontSize: fontSizes.nodeTitle }}
+            style={{ fontSize: fontSizes.nodeTitle, display: 'inline-block' }}
             onMouseDown={(e) => {
               // Approximate caret index from click X over title width
               try {
@@ -327,7 +327,6 @@ export const NodeHeader: React.FC<NodeHeaderProps> = (props) => {
               handleTitleEdit();
             }}
             title="Modifica titolo"
-            style={{ display: 'inline-block' }}
           >
             {leftIcon && <span className="mr-1 align-middle inline-flex">{leftIcon}</span>}
             {title}

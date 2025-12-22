@@ -23,8 +23,10 @@ Public Class TaskGroup
 
     ''' <summary>
     ''' Lista di task (righe) da eseguire in sequenza
+    ''' ✅ Usa CompiledTaskListConverter per deserializzare le classi polimorfiche
     ''' </summary>
     <JsonProperty("tasks")>
+    <JsonConverter(GetType(CompiledTaskListConverter))>
     Public Property Tasks As List(Of CompiledTask)
 
     ''' <summary>

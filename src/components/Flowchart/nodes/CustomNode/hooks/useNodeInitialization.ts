@@ -25,14 +25,14 @@ function initRows(nodeId: string, rows?: NodeRowData[], nodeData?: any): NodeRow
 /**
  * Hook per gestire l'inizializzazione dei dati del nodo
  * Centralizza la logica di setup iniziale e validazione
- * Migration: Enriches rows with taskId and syncs text from Task.value.text
+ * Migration: Enriches rows with taskId and syncs text from Task.text
  */
 export function useNodeInitialization(nodeId: string, data: any) {
     // Inizializzazione delle righe con memoization
     // Migration: Enrich rows with taskId and sync text from Task
     const displayRows = useMemo(() => {
         const initialRows = initRows(nodeId, data.rows, data);
-        // Enrich with taskId and sync text from task.value.text (Task is source of truth)
+        // Enrich with taskId and sync text from task.text (Task is source of truth)
         return enrichRowsWithTaskId(initialRows);
     }, [nodeId, data.rows, data.focusRowId]);
 

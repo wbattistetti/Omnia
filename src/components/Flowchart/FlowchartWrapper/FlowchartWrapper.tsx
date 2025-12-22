@@ -95,19 +95,23 @@ export const FlowchartWrapper: React.FC<FlowchartWrapperProps> = ({
     }, []);
 
     // Gestione scroll con mouse wheel
+    // Nota: preventDefault non funziona con event listener passivi, quindi gestiamo lo scroll senza bloccare il default
     const handleWheel = useCallback((e: React.WheelEvent) => {
-        e.preventDefault();
-
+        // Non chiamare preventDefault - React usa event listener passivi per wheel events
+        // Gestiamo lo scroll manualmente senza bloccare il comportamento di default
         const deltaX = e.deltaX;
         const deltaY = e.deltaY;
 
-        setScrollPosition(prev => {
-            const newX = Math.max(0, Math.min(maxScrollX, prev.x + deltaX));
-            const newY = Math.max(0, Math.min(maxScrollY, prev.y + deltaY));
+        // Solo se c'è movimento significativo, aggiorna la posizione
+        if (Math.abs(deltaX) > 0 || Math.abs(deltaY) > 0) {
+            setScrollPosition(prev => {
+                const newX = Math.max(0, Math.min(maxScrollX, prev.x + deltaX));
+                const newY = Math.max(0, Math.min(maxScrollY, prev.y + deltaY));
 
-            updatePanelPosition(newX, newY);
-            return { x: newX, y: newY };
-        });
+                updatePanelPosition(newX, newY);
+                return { x: newX, y: newY };
+            });
+        }
     }, [maxScrollX, maxScrollY, updatePanelPosition]);
 
     // Gestione drag delle scrollbar

@@ -71,7 +71,6 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
       // Only hide inserter if hovering near the row that is being edited
       // Allow dividers to show between other rows
       if (editingRowIndex !== -1 && (hoveredInserter === editingRowIndex || hoveredInserter === editingRowIndex + 1)) {
-        try { if (localStorage.getItem('debug.inserter') === '1') console.log('[Inserter][autoHide:onEdit]', { editingRowId, hoveredInserter }); } catch { }
         setHoveredInserter(null);
       }
     }
@@ -103,7 +102,6 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onKeyDown={onKeyDown}
             onDragStart={onDragStart}
             onMoveRow={(from, to) => {
-              try { console.log('[RowDnD][moveImmediate]', { from, to }); } catch { }
               const boundedTo = Math.max(0, Math.min(totalRows - 1, to));
               if (from !== boundedTo) {
                 // Implementa il riordinamento immediato
@@ -113,8 +111,6 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
 
                 // Aggiorna le righe tramite callback
                 if (onUpdate) {
-                  // Notifica il parent del cambio
-                  console.log('[RowDnD][moveImmediate] Rows reordered', { from, to: boundedTo, newRows });
                   // Chiama onUpdate per ogni riga per aggiornare l'ordine
                   newRows.forEach((row, index) => {
                     onUpdate(row, row.text);
@@ -123,7 +119,6 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
               }
             }}
             onDropRow={() => {
-              console.log('[RowDnD][dropRow] Drop completed');
               // Il drop è gestito dal sistema di drag & drop globale
             }}
             index={idx}

@@ -229,18 +229,38 @@ async function loadTemplatesFromDB() {
     const client = new MongoClient(uri);
     await client.connect();
     const db = client.db('factory');
-    const collection = db.collection('Task_Types');
 
-    const templates = await collection.find({}).toArray();
+    // ✅ FIX: Carica da Task_Templates (dialogue templates), non da Task_Types (data types)
+    // Cerca in entrambe le collection per backward compatibility
+    const query = {
+      $or: [
+        { type: 3 },                              // ✅ Enum numeric (TaskType.GetData = 3)
+        { type: { $regex: /^datarequest$/i } },   // ✅ String type
+        { type: { $regex: /^data$/i } },          // ✅ Legacy
+        { name: { $regex: /^(datarequest|getdata|data)$/i } }
+      ]
+    };
+
+    const [templates1, templates2] = await Promise.all([
+      db.collection('Task_Templates').find(query).toArray(),
+      db.collection('task_templates').find(query).toArray()
+    ]);
+
     await client.close();
 
-    // Converti in oggetto per accesso rapido
+    // Unisci i risultati e converti in oggetto per accesso rapido
+    const allTemplates = [...templates1, ...templates2];
     templateCache = {};
-    templates.forEach(template => {
-      if (template._id) {
-        delete template._id;
+    allTemplates.forEach(template => {
+      const key = template.name || template.label || template.id || template._id?.toString();
+      if (key) {
+        // Crea una copia senza _id per compatibilità
+        const templateCopy = { ...template };
+        if (templateCopy._id) {
+          delete templateCopy._id;
+        }
+        templateCache[key] = templateCopy;
       }
-      templateCache[template.name] = template;
     });
 
     cacheLoaded = true;
@@ -518,9 +538,42 @@ app.delete('/api/projects/catalog/:id', async (req, res) => {
     await client.connect();
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
+
+    // Trova il progetto prima di cancellarlo per ottenere il nome del database
+    const project = await coll.findOne({ $or: [{ _id: id }, { projectId: id }] });
+
+    // Elimina dal catalogo
     const result = await coll.deleteOne({ $or: [{ _id: id }, { projectId: id }] });
+
+    // ✅ NUOVO: Elimina anche il database MongoDB del progetto
+    if (result?.deletedCount > 0 && project) {
+      // Il database può essere: project_{id} o t_{tenant}__p_{project}__{hash}
+      // Prova entrambi i pattern
+      const possibleDbNames = [
+        `project_${id}`,
+        `project_${project.projectId || id}`,
+        project.dbName // Se esiste un campo dbName nel progetto
+      ].filter(Boolean);
+
+      for (const dbName of possibleDbNames) {
+        try {
+          const projectDb = client.db(dbName);
+          // Verifica che il database esista
+          const collections = await projectDb.listCollections().toArray();
+          if (collections.length > 0) {
+            await projectDb.dropDatabase();
+            logInfo('Projects.delete', { projectId: id, dbName, deleted: true });
+          }
+        } catch (dbError) {
+          // Database non esiste o errore - continua
+          logWarn('Projects.delete', { projectId: id, dbName, error: dbError.message });
+        }
+      }
+    }
+
     res.json({ ok: true, deleted: result?.deletedCount || 0 });
   } catch (e) {
+    logError('Projects.delete', e, { projectId: id });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -1643,19 +1696,25 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
   const payload = req.body || {};
   const templateId = payload.templateId;
-  if (!payload.id || !templateId) {
-    return res.status(400).json({ error: 'id_and_templateId_required' });
+  // ✅ Accept null as valid value for templateId (indicates standalone task)
+  if (!payload.id || (templateId !== null && !templateId)) {
+    return res.status(400).json({ error: 'id_required_and_templateId_must_be_string_or_null' });
   }
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const now = new Date();
+
+    // ✅ Extract all fields except id, templateId, createdAt, updatedAt
+    // ✅ Save fields directly (no value wrapper)
+    const { id, templateId: _templateId, createdAt, updatedAt, ...fields } = payload;
+
     const task = {
       projectId,
       id: payload.id,
       templateId: templateId,
-      value: payload.value || {},
+      ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
       updatedAt: now
     };
 
@@ -1675,7 +1734,9 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
       taskId: payload.id,
       templateId: templateId,
       upserted: result.upsertedCount > 0,
-      modified: result.modifiedCount > 0
+      modified: result.modifiedCount > 0,
+      hasMainData: !!saved?.mainData,
+      mainDataLength: saved?.mainData?.length || 0
     });
     res.json(saved);
   } catch (e) {
@@ -1702,13 +1763,14 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
       return res.status(404).json({ error: 'task_not_found' });
     }
 
-    const update = { updatedAt: new Date() };
+    // ✅ Extract all fields except id, createdAt, updatedAt
+    // ✅ Update fields directly (no value wrapper)
+    const { id, createdAt, updatedAt, ...fields } = payload;
 
-    if (payload.templateId !== undefined) {
-      update.templateId = payload.templateId;
-    }
-
-    if (payload.value !== undefined) update.value = payload.value;
+    const update = {
+      ...fields,  // ✅ Update all fields directly (mainData, label, stepPrompts, ecc.)
+      updatedAt: new Date()
+    };
 
     await projDb.collection('tasks').updateOne(
       { projectId, id: taskId },
@@ -1716,7 +1778,13 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
     );
 
     const updated = await projDb.collection('tasks').findOne({ projectId, id: taskId });
-    logInfo('Tasks.put', { projectId, taskId, updatedFields: Object.keys(update) });
+    logInfo('Tasks.put', {
+      projectId,
+      taskId,
+      updatedFields: Object.keys(update),
+      hasMainData: !!updated?.mainData,
+      mainDataLength: updated?.mainData?.length || 0
+    });
     res.json(updated);
   } catch (e) {
     logError('Tasks.put', e, { projectId, taskId });
@@ -1763,11 +1831,15 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
     const bulkOps = items
       .filter(item => item.id && item.templateId)
       .map(item => {
+        // ✅ Extract all fields except id, templateId, createdAt, updatedAt
+        // ✅ Save fields directly (no value wrapper)
+        const { id, templateId, createdAt, updatedAt, ...fields } = item;
+
         const task = {
           projectId,
           id: item.id,
           templateId: item.templateId,
-          value: item.value || {},
+          ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
           updatedAt: now
         };
 
@@ -1911,120 +1983,250 @@ function deriveIsInteractiveFromMode(mode) {
 }
 
 // --- FACTORY ENDPOINTS ---
-// Agent Acts (embedded DDT 1:1)
-app.get('/api/factory/agent-acts', async (req, res) => {
+// DEPRECATED: Legacy AgentActs endpoints removed - use /api/factory/task-templates-v2 instead
+
+// -----------------------------
+// ✅ STEP 4: Task Templates V2 (NEW - Dual Mode)
+// Endpoint per caricare task_templates con scope filtering
+// Mantiene compatibilità con formato AgentActs per il frontend
+// -----------------------------
+app.get('/api/factory/task-templates-v2', async (req, res) => {
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('AgentActs');
-    let acts = await coll.find({}).toArray();
-    // Auto-seed on first call if empty
-    if (!Array.isArray(acts) || acts.length === 0) {
-      try {
-        const seedPath = path.resolve(__dirname, '../data/templates/utility_gas/agent_acts/en.json');
-        const raw = fs.readFileSync(seedPath, 'utf8');
-        const json = JSON.parse(raw);
-        const now = new Date().toISOString();
-        const docs = (json || []).map((it) => ({
-          _id: it.id || it._id,
-          type: 'agent_act',
-          label: it.label || it.name || 'Unnamed',
-          description: it.description || '',
-          category: it.category || 'Uncategorized',
-          tags: it.tags || [],
-          isInteractive: Boolean(it.isInteractive),
-          data: it.data || {},
-          ddt: null,
-          createdAt: now,
-          updatedAt: now,
-        }));
-        if (docs.length > 0) {
-          await coll.insertMany(docs, { ordered: false });
-          acts = await coll.find({}).toArray();
-          console.log('>>> AgentActs seeded:', acts.length);
-        }
-      } catch (e) {
-        console.warn('Seed AgentActs failed:', e.message);
-      }
-    }
-    // Normalize returned objects with mode and isInteractive
-    console.log('>>> GET /api/factory/agent-acts - Raw acts count:', acts.length);
-    if (acts.length > 0) {
-      console.log('>>> First act sample:', JSON.stringify({
-        _id: acts[0]._id,
-        label: acts[0].label,
-        mode: acts[0].mode
-      }, null, 2));
+
+    // Parametri query per scope filtering
+    const { scopes, context, projectId, industry } = req.query;
+
+    // Costruisci array di scope da cercare
+    const scopeArray = [];
+    if (scopes) {
+      // Se scopes è una stringa, splitta per virgola
+      const scopesList = typeof scopes === 'string' ? scopes.split(',') : scopes;
+      scopeArray.push(...scopesList);
+    } else {
+      // Default: general
+      scopeArray.push('general');
     }
 
-    const normalizedActs = acts.map(act => {
-      const derivedMode = deriveModeFromDoc(act);
-      const derivedIsInteractive = deriveIsInteractiveFromMode(derivedMode);
-      return {
-        ...act,
-        mode: derivedMode,
-        isInteractive: derivedIsInteractive
+    // Aggiungi scope client se projectId è fornito
+    if (projectId) {
+      scopeArray.push(`client:${projectId}`);
+    }
+
+    // Aggiungi scope industry se industry è fornito
+    if (industry) {
+      scopeArray.push(`industry:${industry}`);
+    }
+
+    // Query per task_templates
+    // IMPORTANTE: Include anche template senza campo contexts (backward compatibility)
+    if (context) {
+      // Se context è fornito, cerca template con scope corretto E (contexts match O contexts mancante)
+      query = {
+        scope: { $in: scopeArray },
+        $or: [
+          { contexts: { $in: [context] } },
+          { contexts: { $exists: false } },  // Template senza contexts (migrati)
+          { contexts: null }                 // Template con contexts null
+        ]
       };
-    });
-
-    console.log('>>> Normalized acts count:', normalizedActs.length);
-    if (normalizedActs.length > 0) {
-      console.log('>>> First normalized act sample:', JSON.stringify({
-        _id: normalizedActs[0]._id,
-        label: normalizedActs[0].label,
-        mode: normalizedActs[0].mode
-      }, null, 2));
+    } else {
+      // Se context non è fornito, cerca solo per scope
+      query = {
+        scope: { $in: scopeArray }
+      };
     }
 
-    res.json(normalizedActs);
-  } catch (err) {
-    res.status(500).json({ error: err.message, stack: err.stack });
+    console.log(`[TaskTemplatesV2] Query:`, JSON.stringify(query, null, 2));
+
+    // Carica task templates
+    const templates = await db.collection('task_templates')
+      .find(query)
+      .toArray();
+
+    console.log(`[TaskTemplatesV2] Found ${templates.length} templates`);
+
+    // No fallback - return empty array if no templates found
+
+    // Converti template al formato compatibile con frontend
+    const formatted = templates.map(tmpl => ({
+      id: tmpl.id,
+      label: tmpl.label,
+      description: tmpl.description || '',
+      scope: tmpl.scope,
+      type: tmpl.type,
+      templateId: tmpl.templateId || tmpl.type,
+      defaultValue: tmpl.defaultValue || {},
+      category: tmpl.category,
+      isBuiltIn: tmpl.isBuiltIn || false,
+      contexts: tmpl.contexts || ['NodeRow'],
+      icon: tmpl.icon,
+      color: tmpl.color
+    }));
+
+    res.json(formatted);
+
+  } catch (error) {
+    console.error('[TaskTemplatesV2] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch task templates' });
   } finally {
     await client.close();
   }
 });
 
-// Agent Acts - POST (with scope filtering)
-app.post('/api/factory/agent-acts', async (req, res) => {
+// Helper per mappare mode a built-in templateId (CASE-INSENSITIVE)
+function mapModeToBuiltIn(mode) {
+  if (!mode || typeof mode !== 'string') return 'SayMessage';
+  const normalized = mode.toLowerCase().trim();
+  const mapping = {
+    'datarequest': 'GetData',
+    'getdata': 'GetData',
+    'data': 'GetData',
+    'message': 'SayMessage',
+    'saymessage': 'SayMessage',
+    'say': 'SayMessage',
+    'problemclassification': 'ClassifyProblem',
+    'classifyproblem': 'ClassifyProblem',
+    'problem': 'ClassifyProblem',
+    'backendcall': 'callBackend',
+    'callbackend': 'callBackend',
+    'backend': 'callBackend'
+  };
+  return mapping[normalized] || 'SayMessage';
+}
+
+// -----------------------------
+// ✅ STEP 4: DDT Library V2 (NEW)
+// Endpoint per caricare DDT da ddt_library con scope filtering
+// -----------------------------
+app.get('/api/factory/ddt-library-v2', async (req, res) => {
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('AgentActs');
 
-    const { industry, scope } = req.body;
+    // Parametri query per scope filtering
+    const { scopes, ddtId, projectId, industry } = req.query;
 
-    // Build query based on scope filtering
-    const query = {};
-
-    if (scope && Array.isArray(scope)) {
-      const scopeConditions = [];
-
-      if (scope.includes('global')) {
-        scopeConditions.push({ scope: 'global' });
+    // Se ddtId è fornito, carica quel DDT specifico
+    if (ddtId) {
+      const ddt = await db.collection('ddt_library').findOne({ id: ddtId });
+      if (!ddt) {
+        return res.status(404).json({ error: 'DDT not found' });
       }
-
-      if (scope.includes('industry') && industry) {
-        scopeConditions.push({
-          scope: 'industry',
-          industry: industry
-        });
-      }
-
-      if (scopeConditions.length > 0) {
-        query.$or = scopeConditions;
-      }
+      return res.json(ddt);
     }
 
-    console.log('>>> AgentActs query:', JSON.stringify(query, null, 2));
+    // Costruisci array di scope da cercare
+    const scopeArray = [];
+    if (scopes) {
+      const scopesList = typeof scopes === 'string' ? scopes.split(',') : scopes;
+      scopeArray.push(...scopesList);
+    } else {
+      scopeArray.push('general');
+    }
 
-    const docs = await coll.find(query).toArray();
-    console.log(`>>> Found ${docs.length} AgentActs with scope filtering`);
-    res.json(docs);
+    // Aggiungi scope client se projectId è fornito
+    if (projectId) {
+      scopeArray.push(`client:${projectId}`);
+    }
+
+    // Aggiungi scope industry se industry è fornito
+    if (industry) {
+      scopeArray.push(`industry:${industry}`);
+    }
+
+    // Query per ddt_library
+    const query = {
+      scope: { $in: scopeArray }
+    };
+
+    console.log(`[DDTLibraryV2] Query:`, JSON.stringify(query, null, 2));
+
+    // Carica DDT
+    const ddts = await db.collection('ddt_library')
+      .find(query)
+      .toArray();
+
+    console.log(`[DDTLibraryV2] Found ${ddts.length} DDTs`);
+
+    res.json(ddts);
+
   } catch (error) {
-    console.error('Error fetching agent acts with scope filtering:', error);
-    res.status(500).json({ error: 'Failed to fetch agent acts' });
+    console.error('[DDTLibraryV2] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch DDT library' });
+  } finally {
+    await client.close();
+  }
+});
+
+// -----------------------------
+// ✅ STEP 4: Resolve DDT (NEW)
+// Risolve un DDT composito ricorsivamente
+// -----------------------------
+app.post('/api/factory/ddt-resolve', async (req, res) => {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+
+    const { ddtId } = req.body;
+
+    if (!ddtId) {
+      return res.status(400).json({ error: 'ddtId is required' });
+    }
+
+    // Funzione ricorsiva per risolvere DDT composito
+    async function resolveDDT(id) {
+      const ddtDef = await db.collection('ddt_library').findOne({ id });
+
+      if (!ddtDef) {
+        throw new Error(`DDT not found: ${id}`);
+      }
+
+      // Se non è composito, ritorna direttamente
+      if (!ddtDef.composition) {
+        return ddtDef.ddt;
+      }
+
+      // Risolvi ricorsivamente gli includes
+      const resolved = {
+        mainData: [],
+        steps: []
+      };
+
+      for (const includedId of ddtDef.composition.includes || []) {
+        const included = await resolveDDT(includedId);
+        if (included.mainData) {
+          resolved.mainData.push(...included.mainData);
+        }
+        if (included.steps) {
+          resolved.steps.push(...included.steps);
+        }
+      }
+
+      // Aggiungi extends (campi custom)
+      if (ddtDef.composition.extends) {
+        if (ddtDef.composition.extends.mainData) {
+          resolved.mainData.push(...ddtDef.composition.extends.mainData);
+        }
+        if (ddtDef.composition.extends.steps) {
+          resolved.steps.push(...ddtDef.composition.extends.steps);
+        }
+      }
+
+      return resolved;
+    }
+
+    const resolvedDDT = await resolveDDT(ddtId);
+
+    res.json({ ddtId, ddt: resolvedDDT });
+
+  } catch (error) {
+    console.error('[DDTResolve] Error:', error);
+    res.status(500).json({ error: error.message || 'Failed to resolve DDT' });
   } finally {
     await client.close();
   }
@@ -2400,7 +2602,9 @@ app.post('/api/factory/macro-tasks', async (req, res) => {
   }
 });
 
+// DEPRECATED: Legacy AgentActs PUT endpoint removed - use /api/factory/task-templates-v2/:id instead
 app.put('/api/factory/agent-acts/:id', async (req, res) => {
+  res.status(410).json({ error: 'This endpoint is deprecated. Use /api/factory/task-templates-v2/:id instead' });
   const id = req.params.id;
   const payload = req.body || {};
   const client = new MongoClient(uri);
@@ -2463,8 +2667,14 @@ app.get('/api/factory/actions', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    // Actions sono ora in Task_Templates con taskType='Action', non più in Actions
-    const actions = await db.collection('Task_Templates').find({ taskType: 'Action' }).toArray();
+    // ✅ CASE-INSENSITIVE: Actions sono ora in Task_Templates con taskType='Action', non più in Actions
+    const actions = await db.collection('Task_Templates').find({
+      $or: [
+        { taskType: { $regex: /^action$/i } },
+        { type: { $regex: /^action$/i } },
+        { name: { $regex: /^action$/i } }
+      ]
+    }).toArray();
     // Convert to old format for backward compatibility
     const formattedActions = actions.map(action => ({
       id: action.id?.replace('-template', '') || action._id?.replace('-template', ''),
@@ -2487,15 +2697,28 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    // ✅ MIGRATION: Load data templates from Task_Templates (filter by type: 'dataRequest' after migration)
-    // Support both old 'data' and new 'dataRequest' for backward compatibility
-    const ddt = await db.collection('Task_Templates').find({
-      $or: [
-        { type: 'dataRequest' },  // ✅ NEW: After migration
-        { type: 'data' }           // ✅ LEGACY: For backward compatibility
-      ]
-    }).toArray();
-    try { console.log('>>> LOAD /api/factory/dialogue-templates count =', Array.isArray(ddt) ? ddt.length : 0); } catch { }
+
+    // ✅ Carica TUTTI i template dalla collection Task_Templates
+    // Non filtrare per tipo - serve tutta la cache per risolvere i reference (subDataIds)
+    const query = {}; // ✅ Query vuota = carica tutto
+
+    // ✅ Cerca in entrambe le collection (Task_Templates e task_templates)
+    const [ddt1, ddt2] = await Promise.all([
+      db.collection('Task_Templates').find(query).toArray(),
+      db.collection('task_templates').find(query).toArray()
+    ]);
+
+    // Unisci i risultati, evitando duplicati per ID
+    const templateMap = new Map();
+    [...ddt1, ...ddt2].forEach(t => {
+      const id = t.id || t._id?.toString();
+      if (id && !templateMap.has(id)) {
+        templateMap.set(id, t);
+      }
+    });
+
+    const ddt = Array.from(templateMap.values());
+    console.log('>>> LOAD /api/factory/dialogue-templates count =', ddt.length);
     res.json(ddt);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
@@ -2579,11 +2802,10 @@ app.post('/api/factory/template-translations', async (req, res) => {
 
     const merged = {};
 
-    // Query for GUIDs (new format): guid field, type = 'Template'
+    // Query for GUIDs (new format): guid field (type rimosso - GUID identifica già l'oggetto)
     if (guidKeys.length > 0) {
       const guidDocs = await coll.find({
-        guid: { $in: guidKeys },
-        type: 'Template'
+        guid: { $in: guidKeys }
       }).toArray();
 
       console.log('[TEMPLATE_TRANSLATIONS] Found', guidDocs.length, 'translations for GUIDs');
@@ -2668,10 +2890,9 @@ app.post('/api/projects/:pid/translations/load', async (req, res) => {
     const projDb = await getProjectDb(client, projectId);
     const projColl = projDb.collection('Translations');
 
-    // Query: guid in guids AND type = 'Template' (projectId can be anything or null)
+    // Query: guid in guids (type rimosso - GUID identifica già l'oggetto)
     const projectQuery = {
-      guid: { $in: guids },
-      type: 'Template'
+      guid: { $in: guids }
     };
     console.log(`[PROJECT_TRANSLATIONS] Project query:`, JSON.stringify(projectQuery));
 
@@ -2690,10 +2911,9 @@ app.post('/api/projects/:pid/translations/load', async (req, res) => {
     const factoryDb = client.db(dbFactory);
     const factoryColl = factoryDb.collection('Translations');
 
-    // Query: guid in guids AND type = 'Template' AND (projectId = null OR projectId doesn't exist)
+    // Query: guid in guids AND (projectId = null OR projectId doesn't exist) (type rimosso)
     const factoryQuery = {
       guid: { $in: guids },
-      type: 'Template',
       $or: [
         { projectId: null },
         { projectId: { $exists: false } }
@@ -2780,17 +3000,14 @@ app.get('/api/projects/:pid/translations/all', async (req, res) => {
     const factoryDb = client.db(dbFactory);
     const factoryColl = factoryDb.collection('Translations');
 
-    // Prepare queries
+    // ✅ APPROCCIO SEMPLIFICATO: Carica TUTTE le traduzioni dalla collection Translations del progetto
+    // Non filtrare per GUID specifici - carica tutto quello che c'è nel progetto
     const projectQuery = {
-      $or: [
-        { type: 'Instance' },
-        { type: 'Template' }
-      ],
       language: projectLocale
     };
 
+    // Per il factory, carica solo le traduzioni dei template (senza projectId)
     const factoryQuery = {
-      type: 'Template',
       language: projectLocale,
       $or: [
         { projectId: null },
@@ -2866,8 +3083,7 @@ app.post('/api/projects/:pid/translations', async (req, res) => {
       .map(trans => {
         const filter = {
           guid: trans.guid,
-          language: trans.language,
-          type: trans.type || 'Instance'
+          language: trans.language
         };
 
         const update = {
@@ -2875,7 +3091,6 @@ app.post('/api/projects/:pid/translations', async (req, res) => {
             guid: trans.guid,
             language: trans.language,
             text: trans.text,
-            type: trans.type || 'Instance',
             updatedAt: now
           },
           $setOnInsert: {
@@ -3170,26 +3385,62 @@ app.get('/api/factory/task-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    // Task templates sono in Task_Templates, non task_templates
-    const coll = db.collection('Task_Templates');
+
+    // ✅ FIX: Cerca in entrambe le collection (Task_Templates e task_templates)
+    //    per backward compatibility durante la migration
+    const coll1 = db.collection('Task_Templates');
+    const coll2 = db.collection('task_templates');
 
     const { industry, scope, taskType } = req.query;
 
-    // Build query based on scope filtering and taskType
+    // Build query based on scope filtering and taskType (CASE-INSENSITIVE)
     const query = {};
+    const conditions = [];
+
+    // Scope filtering
     if (scope && industry) {
-      query.$or = [
-        { scope: 'global' },
-        { scope: 'industry', industry }
-      ];
-    }
-    // Filter by taskType if provided (e.g., 'Action' for actions palette)
-    if (taskType) {
-      query.taskType = taskType;
+      conditions.push({
+        $or: [
+          { scope: { $regex: new RegExp(`^global$`, 'i') } },
+          { scope: { $regex: new RegExp(`^industry$`, 'i') }, industry: { $regex: new RegExp(`^${industry}$`, 'i') } }
+        ]
+      });
     }
 
-    const templates = await coll.find(query).toArray();
-    logInfo('TaskTemplates.get', { count: templates.length, industry, scope, taskType });
+    // ✅ CASE-INSENSITIVE: Filter by taskType if provided (e.g., 'Action' for actions palette)
+    if (taskType) {
+      const taskTypeRegex = new RegExp(`^${taskType}$`, 'i');
+      conditions.push({
+        $or: [
+          { taskType: taskTypeRegex },
+          { type: taskTypeRegex },
+          { name: taskTypeRegex }
+        ]
+      });
+    }
+
+    // Combina tutte le condizioni con $and
+    if (conditions.length > 0) {
+      query.$and = conditions;
+    }
+
+    // ✅ Cerca in entrambe le collection e unisci i risultati
+    const [templates1, templates2] = await Promise.all([
+      coll1.find(query).toArray(),
+      coll2.find(query).toArray()
+    ]);
+
+    // Unisci i risultati, evitando duplicati per ID
+    const templateMap = new Map();
+    [...templates1, ...templates2].forEach(t => {
+      const id = t.id || t._id?.toString();
+      if (id && !templateMap.has(id)) {
+        templateMap.set(id, t);
+      }
+    });
+
+    const templates = Array.from(templateMap.values());
+    logInfo('TaskTemplates.get', { count: templates.length, industry, scope, taskType, fromTask_Templates: templates1.length, fromtask_templates: templates2.length });
     res.json(templates);
   } catch (e) {
     logError('TaskTemplates.get', e);
@@ -4346,8 +4597,15 @@ app.post('/api/runtime/compile', async (req, res) => {
     const getDDT = (taskId) => {
       // Find DDT associated with task
       const task = getTask(taskId);
-      if (task && task.value && task.value.ddt) {
-        return task.value.ddt;
+      // ✅ DDT fields directly on task (no value wrapper)
+      if (task && task.mainData && task.mainData.length > 0) {
+        return {
+          label: task.label,
+          mainData: task.mainData,
+          stepPrompts: task.stepPrompts,
+          constraints: task.constraints,
+          examples: task.examples
+        };
       }
       // Try to find by taskId in ddts
       return ddtMap.get(taskId) || null;
@@ -5041,8 +5299,15 @@ app.get('/api/runtime/orchestrator/session/:id/stream', (req, res) => {
       try {
         // Get the task from compilation result to find its DDT
         const waitingTask = session.compilationResult.tasks.find(t => t.id === session.waitingForInput.taskId);
-        if (waitingTask && waitingTask.value?.ddt) {
-          ddtForEvent = waitingTask.value.ddt;
+        if (waitingTask && waitingTask.mainData && waitingTask.mainData.length > 0) {
+          // ✅ DDT fields directly on task (no value wrapper)
+          ddtForEvent = {
+            label: waitingTask.label,
+            mainData: waitingTask.mainData,
+            stepPrompts: waitingTask.stepPrompts,
+            constraints: waitingTask.constraints,
+            examples: waitingTask.examples
+          };
         }
       } catch (e) {
         console.warn('[API] Could not get DDT for waitingForInput event', e);
@@ -5189,22 +5454,22 @@ app.get('/api/runtime/orchestrator/session/:id/status', async (req, res) => {
       });
     }
 
-      if (!status.session) {
-        return res.status(404).json({
-          error: 'Session not found'
-        });
-      }
-
-      res.json({
-        session: {
-          id: status.session.id,
-          isRunning: status.session.isRunning,
-          isComplete: status.session.isComplete,
-          messages: status.session.messages,
-          executionState: status.session.executionState,
-          error: status.session.error ? status.session.error.message : undefined
-        }
+    if (!status.session) {
+      return res.status(404).json({
+        error: 'Session not found'
       });
+    }
+
+    res.json({
+      session: {
+        id: status.session.id,
+        isRunning: status.session.isRunning,
+        isComplete: status.session.isComplete,
+        messages: status.session.messages,
+        executionState: status.session.executionState,
+        error: status.session.error ? status.session.error.message : undefined
+      }
+    });
   } catch (error) {
     console.error('❌ [API] GET /api/runtime/orchestrator/session/:id/status - ERROR', error);
     res.status(500).json({
@@ -5259,6 +5524,67 @@ app.use((err, req, res, next) => {
   }
 });
 
+// Template label translations (for heuristic matching)
+app.get('/api/factory/template-label-translations', async (req, res) => {
+  const language = req.query.language || 'it';
+  const client = new MongoClient(uri);
+
+  try {
+    await client.connect();
+    const db = client.db(dbFactory);
+
+    // Ottieni tutti gli ID dei template DDT
+    const templatesQuery = {
+      $or: [
+        { type: 3 },
+        { type: { $regex: /^datarequest$/i } },
+        { type: { $regex: /^data$/i } },
+        { name: { $regex: /^(datarequest|getdata|data)$/i } },
+        { taskType: { $regex: /^(datarequest|getdata|data)$/i } }
+      ]
+    };
+
+    const [templates1, templates2] = await Promise.all([
+      db.collection('Task_Templates').find(templatesQuery).toArray(),
+      db.collection('task_templates').find(templatesQuery).toArray()
+    ]);
+
+    const templateMap = new Map();
+    [...templates1, ...templates2].forEach(t => {
+      const id = t.id || t._id?.toString();
+      if (id && !templateMap.has(id)) {
+        templateMap.set(id, t);
+      }
+    });
+
+    const templateIds = Array.from(templateMap.keys());
+
+    // Carica traduzioni per questi template nella lingua specificata
+    const translations = await db.collection('Translations').find({
+      guid: { $in: templateIds },
+      language: language
+    }).toArray();
+
+    // Costruisci oggetto: { templateId: translatedLabel }
+    const result = {};
+    translations.forEach(t => {
+      if (t.guid && t.text) {
+        result[t.guid] = t.text;
+      }
+    });
+
+    console.log(`[API] Template label translations: ${Object.keys(result).length} traduzioni per lingua ${language}`);
+    res.json(result);
+
+  } catch (err) {
+    console.error('[API] Errore caricamento traduzioni label:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    await client.close();
+  }
+});
+
 app.listen(3100, () => {
   console.log('Backend API pronta su http://localhost:3100');
 });
+

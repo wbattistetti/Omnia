@@ -19,7 +19,8 @@ import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext
 import { BackendTypeProvider } from '../context/BackendTypeContext';
 import { TypeTemplateService } from '../services/TypeTemplateService';
 import { taskTemplateService } from '../services/TaskTemplateService';
-import { DialogueTemplateService } from '../services/DialogueTemplateService';
+import { DialogueTaskService } from '../services/DialogueTaskService';
+import { TemplateTranslationsService } from '../services/TemplateTranslationsService';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -94,10 +95,15 @@ function AppInner() {
 
   // ✅ Precarica tutte le cache in parallelo all'avvio (non blocca il rendering)
   React.useEffect(() => {
+    // Ottieni lingua del progetto corrente
+    const projectLang = (localStorage.getItem('project.lang') || 'it') as 'it' | 'en' | 'pt';
+
     Promise.all([
       TypeTemplateService.loadTemplates().catch(() => null),
-      DialogueTemplateService.loadTemplates().catch(() => []),
-      taskTemplateService.getAllTemplates().catch(() => null)
+      DialogueTaskService.loadTemplates().catch(() => []),
+      taskTemplateService.getAllTemplates().catch(() => null),
+      TemplateTranslationsService.loadForLanguage(projectLang).catch(() => null),
+      import('../services/DDTPatternService').then(module => module.DDTPatternService.loadPatterns().catch(() => ({})))
     ]).catch(() => {
       // Silently handle errors - cache preload is non-critical
     });

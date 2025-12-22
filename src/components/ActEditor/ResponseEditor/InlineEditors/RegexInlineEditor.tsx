@@ -581,14 +581,13 @@ export default function RegexInlineEditor({
           }}
         >
           <div style={{
-            flex: 3,
+            flex: 1,
             position: 'relative',
             minWidth: 0,
             flexShrink: 1,
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            flex: 1,
             minHeight: 0,
             maxHeight: '100%',
           }}>

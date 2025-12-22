@@ -46,7 +46,7 @@ export default function NonInteractiveResponseEditor({ value, onChange, onClose,
   // FASE 3: Update Task when template changes (TaskRepository syncs with InstanceRepository automatically)
   React.useEffect(() => {
     if (instanceId && template !== undefined) {
-      taskRepository.updateTaskValue(instanceId, { text: template });
+      taskRepository.updateTask(instanceId, { text: template });
     }
   }, [template, instanceId]);
 

@@ -112,8 +112,16 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       const allDDTs: any[] = [];
       allTasks.forEach(task => {
         const templateId = getTemplateId(task);
-        if (templateId === 'GetData' && task.value?.ddt) {
-          allDDTs.push(task.value.ddt);
+        // ✅ CASE-INSENSITIVE
+        // ✅ Check if task has DDT (mainData indicates DDT)
+        if (templateId && templateId.toLowerCase() === 'getdata' && task.mainData && task.mainData.length > 0) {
+          allDDTs.push({
+            label: task.label,
+            mainData: task.mainData,
+            stepPrompts: task.stepPrompts,
+            constraints: task.constraints,
+            examples: task.examples
+          });
         }
       });
 
@@ -142,6 +150,53 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       })();
       const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
 
+      // Transform nodes from ReactFlow structure (data.rows) to simplified structure (rows directly)
+      // VB.NET backend expects: { id, label, rows: [...] } (no data wrapper)
+      const { transformNodesToSimplified } = await import('../../flows/flowTransformers');
+
+      // 🔍 DEBUG: Log all rows before transformation
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log('🔍 [FRONTEND] Nodes BEFORE transformation:');
+      enrichedNodes.forEach((node, idx) => {
+        const rows = node.data?.rows || [];
+        console.log(`  Node[${idx}]:`, {
+          nodeId: node.id,
+          label: node.data?.label || '',
+          rowsCount: rows.length,
+          rows: rows.map((r: any) => ({
+            id: r.id,
+            text: r.text,
+            included: r.included,
+            taskId: r.taskId,
+            type: r.type,
+            mode: r.mode
+          }))
+        });
+      });
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+
+      const simplifiedNodes = transformNodesToSimplified(enrichedNodes);
+
+      // 🔍 DEBUG: Log all rows after transformation
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+      console.log('🔍 [FRONTEND] Nodes AFTER transformation:');
+      simplifiedNodes.forEach((node, idx) => {
+        console.log(`  Node[${idx}]:`, {
+          nodeId: node.id,
+          label: node.label || '',
+          rowsCount: node.rows?.length || 0,
+          rows: node.rows?.map((r: any) => ({
+            id: r.id,
+            text: r.text,
+            included: r.included,
+            taskId: r.taskId,
+            type: r.type,
+            mode: r.mode
+          })) || []
+        });
+      });
+      console.log('═══════════════════════════════════════════════════════════════════════════');
+
       // Call backend API (NO FALLBACK - backend only)
       const compileResponse = await fetch(`${baseUrl}/api/runtime/compile`, {
         method: 'POST',
@@ -149,7 +204,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          nodes: enrichedNodes,
+          nodes: simplifiedNodes,  // ✅ Use simplified structure (rows directly, no data wrapper)
           edges: options.edges,
           tasks: allTasks,
           ddts: allDDTs,

@@ -197,7 +197,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                     .then(() => {
                       try {
                         console.log('[NI][close][PUT ok]', { instanceId: tab.instanceId, text });
-                        taskRepository.updateTaskValue(tab.instanceId, { text }, pid);
+                        taskRepository.updateTask(tab.instanceId, { text }, pid);
                       } catch { }
                     })
                     .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
@@ -351,7 +351,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         return;
       }
 
-      const template = task.value?.text || '';
+      const template = task.text || '';
 
       // Open as docking tab instead of fixed panel
       const tabId = `ni_${instanceId}`;
@@ -395,6 +395,86 @@ export const AppContent: React.FC<AppContentProps> = ({
 
         // Open as docking tab in bottom split (1/3 height)
         const tabId = `act_${d.id}`;
+
+        // ✅ Prepare DDT BEFORE calling setDockTree (all async work here)
+        let preparedDDT: any = null;
+
+        if (editorKind === 'ddt') {
+          // Open ResponseEditor for DDT types (DataRequest, ProblemClassification, etc.)
+          // ✅ PRIORITÀ: Usa DDT dall'evento se presente (copia del template già costruita)
+          let ddt = d.ddt; // ✅ Usa DDT dall'evento (se presente)
+
+          if (ddt) {
+            // ✅ DDT presente nell'evento: salvalo nel task per persistenza
+            // Assicurati che il task esista
+            let task = taskRepository.getTask(instanceId);
+            if (!task) {
+              const action = d.type === 'DataRequest' ? 'GetData' :
+                            d.type === 'Message' ? 'SayMessage' :
+                            d.type === 'ProblemClassification' ? 'ClassifyProblem' :
+                            d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
+              task = taskRepository.createTask(action, undefined, instanceId);
+            }
+            // ✅ Salva DDT nel task (campi diretti, niente wrapper)
+            taskRepository.updateTask(instanceId, {
+              ...ddt,  // Spread: label, mainData, stepPrompts, ecc.
+              templateId: d.templateId || task.templateId  // Mantieni templateId se presente
+            }, pdUpdate?.getCurrentProjectId());
+            preparedDDT = ddt;
+          } else {
+            // Se non presente nell'evento, carica dal task
+            let task = taskRepository.getTask(instanceId);
+
+            if (!task) {
+              // Task doesn't exist, create it with empty DDT
+              const action = d.type === 'DataRequest' ? 'GetData' :
+                            d.type === 'Message' ? 'SayMessage' :
+                            d.type === 'ProblemClassification' ? 'ClassifyProblem' :
+                            d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
+              // ✅ Crea task con DDT vuoto (campi diretti, niente wrapper)
+              task = taskRepository.createTask(action, {
+                label: d.label || 'New DDT',
+                mainData: []
+              }, instanceId);
+            }
+
+            // ✅ Load DDT async (if task has templateId, build from template)
+            if (task && task.templateId) {
+              try {
+                const { buildDDTFromTemplate } = await import('../utils/ddtMergeUtils');
+                ddt = await buildDDTFromTemplate(task);
+              } catch (err) {
+                console.error('[AppContent] Error loading DDT from template:', err);
+              }
+            }
+
+            // ✅ Fallback: if no DDT loaded, build from task or create empty
+            if (!ddt) {
+              if (task?.mainData && task.mainData.length > 0) {
+                // Task has mainData (old format or standalone)
+                ddt = {
+                  label: task.label || d.label || 'New DDT',
+                  mainData: task.mainData,
+                  stepPrompts: task.stepPrompts,
+                  constraints: task.constraints,
+                  examples: task.examples
+                };
+              } else {
+                // DDT doesn't exist, create empty one
+                ddt = { label: d.label || 'New DDT', mainData: [] };
+                // Update task with empty DDT (campi diretti)
+                taskRepository.updateTask(instanceId, {
+                  label: ddt.label,
+                  mainData: ddt.mainData
+                }, pdUpdate?.getCurrentProjectId());
+              }
+            }
+
+            preparedDDT = ddt;
+          }
+        }
+
+        // ✅ Now call setDockTree with prepared data (synchronous function)
         setDockTree(prev => {
           // Check if already open
           const existing = (function findTab(n: DockNode): boolean {
@@ -434,7 +514,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             }
 
             // Load message text from task value
-            const messageText = task.value?.text || '';
+            const messageText = task.text || '';
 
             return splitWithTab(prev, rootTabsetId, 'bottom', {
               id: tabId,
@@ -445,33 +525,12 @@ export const AppContent: React.FC<AppContentProps> = ({
               accentColor: '#059669'
             });
           } else if (editorKind === 'ddt') {
-            // Open ResponseEditor for DDT types (DataRequest, ProblemClassification, etc.)
-            // Load DDT from TaskRepository, create empty DDT if not exists
-            let task = taskRepository.getTask(instanceId);
-
-            if (!task) {
-              // Task doesn't exist, create it with empty DDT
-              const action = d.type === 'DataRequest' ? 'GetData' :
-                            d.type === 'Message' ? 'SayMessage' :
-                            d.type === 'ProblemClassification' ? 'ClassifyProblem' :
-                            d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
-              task = taskRepository.createTask(action, { ddt: { label: d.label || 'New DDT', mainData: [] } }, instanceId);
-            }
-
-            // Get DDT from task, or create empty DDT if not exists
-            let ddt = task.value?.ddt;
-            if (!ddt) {
-              // DDT doesn't exist, create empty one
-              ddt = { label: d.label || 'New DDT', mainData: [] };
-              // Update task with empty DDT
-              taskRepository.updateTaskValue(instanceId, { ddt }, pdUpdate?.getCurrentProjectId());
-            }
-
+            // ✅ Use prepared DDT (all async work done above)
             return splitWithTab(prev, rootTabsetId, 'bottom', {
               id: tabId,
               title: d.label || d.name || 'Response Editor',
               type: 'responseEditor',
-              ddt,
+              ddt: preparedDDT,
               act: {
                 id: String(d.id),
                 type: d.type,
@@ -571,7 +630,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       const vars: Record<string, any> = {};
       const data = projectData as any;
       try {
-        const categories: any[] = (data?.agentActs || []) as any[];
+        const categories: any[] = (data?.taskTemplates || []) as any[];
         for (const cat of categories) {
           const items: any[] = (cat?.items || []) as any[];
           for (const it of items) {
@@ -605,9 +664,9 @@ export const AppContent: React.FC<AppContentProps> = ({
       const acts: any[] = [];
       const data = projectData as any;
       try {
-        const categories: any[] = (data?.agentActs || []) as any[];
-        const actColor = (SIDEBAR_TYPE_COLORS as any)?.agentActs?.color || '#34d399';
-        const iconKey = (SIDEBAR_TYPE_ICONS as any)?.agentActs;
+        const categories: any[] = (data?.taskTemplates || []) as any[];
+        const actColor = (SIDEBAR_TYPE_COLORS as any)?.taskTemplates?.color || '#34d399';
+        const iconKey = (SIDEBAR_TYPE_ICONS as any)?.taskTemplates;
         const Icon = (SIDEBAR_ICON_COMPONENTS as any)?.[iconKey];
         for (const cat of categories) {
           const items: any[] = (cat?.items || []) as any[];
@@ -664,27 +723,18 @@ export const AppContent: React.FC<AppContentProps> = ({
       const conditionLabel = d.label || d.name || 'Condition';
       const conditionScript = d.script || '';
 
-      console.log('[LOAD_SCRIPT] 🔍 From AppContent (event)', {
-        conditionName: conditionLabel,
-        scriptLength: conditionScript?.length || 0
-      });
-
       // Scroll to node using ReactFlow viewport (if nodeId is provided)
       if (d.nodeId) {
-        console.log('[AppContent] Emitting scroll to node event', { nodeId: d.nodeId });
         setTimeout(() => {
           try {
             document.dispatchEvent(new CustomEvent('flowchart:scrollToNode', {
               detail: { nodeId: d.nodeId },
               bubbles: true
             }));
-            console.log('[AppContent] Scroll event dispatched');
           } catch (err) {
             console.warn('[ConditionEditor] Failed to emit scroll event', err);
           }
         }, 100);
-      } else {
-        console.log('[AppContent] No nodeId provided, skipping scroll');
       }
 
       // Open as docking tab instead of fixed panel
@@ -832,7 +882,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         industry: projectInfo.industry || 'utility_gas',
         ownerCompany: projectInfo.ownerCompany || null,
         ownerClient: projectInfo.ownerClient || null,
-        agentActs: data.agentActs,
+        taskTemplates: data.taskTemplates,
         userActs: data.userActs,
         backendActions: data.backendActions,
         conditions: data.conditions,
@@ -973,7 +1023,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         industry: meta.industry || 'utility_gas',
         ownerCompany: meta.ownerCompany || null,
         ownerClient: meta.ownerClient || null,
-        agentActs: data.agentActs,
+        taskTemplates: data.taskTemplates,
         userActs: data.userActs,
         backendActions: data.backendActions,
         conditions: data.conditions,
@@ -1218,7 +1268,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                       const tStart = performance.now();
                       try {
                         console.log('[Save][5-acts-conditions] 🚀 START');
-                        const actsCount = projectData?.agentActs?.flatMap((cat: any) => cat.items || []).length || 0;
+                        const actsCount = projectData?.taskTemplates?.flatMap((cat: any) => cat.items || []).length || 0;
                         const conditionsCount = projectData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0;
                         console.log('[Save][5-acts-conditions] 📊 Items to save', { actsCount, conditionsCount });
 

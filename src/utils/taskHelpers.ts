@@ -72,7 +72,12 @@ export function normalizeTask(task: Task): TaskInstance {
   return {
     id: task.id,
     templateId: templateId,
-    value: task.value,
+    // ✅ Campi diretti (niente wrapper value) - copia tutti i campi tranne id, templateId, createdAt, updatedAt
+    ...Object.fromEntries(
+      Object.entries(task).filter(([key]) =>
+        !['id', 'templateId', 'createdAt', 'updatedAt'].includes(key)
+      )
+    ),
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   };
@@ -100,7 +105,8 @@ export function getTaskIdFromRow(row: NodeRowData): string {
   }
 
   // Create Task for row without taskId
-  const newTask = taskRepository.createTask('Message', row.text ? { text: row.text } : undefined, row.id);
+  // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
+  const newTask = taskRepository.createTask('UNDEFINED', row.text ? { text: row.text } : undefined, row.id);
   (row as any).taskId = newTask.id;
   return newTask.id;
 }
@@ -128,11 +134,47 @@ export function getInstanceIdFromRow(row: NodeRowData): string {
 }
 
 /**
+ * Map actId (from Intellisense) to templateId (for Task)
+ * actId: "DataRequest" -> templateId: "GetData"
+ * actId: "Message" -> templateId: "SayMessage"
+ */
+function mapActIdToTemplateId(actId: string): string {
+  const mapping: Record<string, string> = {
+    'DataRequest': 'GetData',
+    'Message': 'SayMessage',
+    'UNDEFINED': 'UNDEFINED', // ✅ Support for UNDEFINED type
+    'ProblemClassification': 'ClassifyProblem',
+    'BackendCall': 'callBackend'
+  };
+  return mapping[actId] || actId; // Fallback to actId if no mapping
+}
+
+/**
+ * Deriva il tipo di task dal templateId
+ * @param templateId - Template ID (es. 'SayMessage', 'GetData', 'UNDEFINED')
+ * @returns Tipo di task (es. 'Message', 'DataRequest', 'UNDEFINED')
+ */
+export function deriveTaskTypeFromTemplateId(templateId: string | undefined | null): string | undefined {
+  if (!templateId) return undefined;
+
+  const normalized = templateId.toLowerCase().trim();
+
+  // Mapping inverso: templateId -> type
+  if (normalized === 'getdata' || normalized === 'datarequest') return 'DataRequest';
+  if (normalized === 'saymessage' || normalized === 'message') return 'Message';
+  if (normalized === 'undefined') return 'UNDEFINED';
+  if (normalized === 'classifyproblem' || normalized === 'problemclassification') return 'ProblemClassification';
+  if (normalized === 'callbackend' || normalized === 'backendcall') return 'BackendCall';
+
+  return undefined; // Tipo sconosciuto
+}
+
+/**
  * Create a new row with Task (dual mode: Task + InstanceRepository)
  * This is the new way to create rows - creates both Task and InstanceRepository entry
  *
  * @param rowId - Topological ID for the row (if not provided, generates one)
- * @param action - Action ID (template ID) - defaults to 'Message'
+ * @param action - Action ID (can be actId like "DataRequest" or templateId like "GetData") - defaults to 'Message'
  * @param initialText - Initial text for the row
  * @param projectId - Optional project ID
  * @returns NodeRowData with taskId set
@@ -145,13 +187,16 @@ export function createRowWithTask(
 ): NodeRowData {
   const finalRowId = rowId || generateId();
 
+  // Map actId to templateId if needed
+  const templateId = mapActIdToTemplateId(action);
+
   // Check if Task already exists (shouldn't happen, but safety check)
   if (taskRepository.hasTask(finalRowId)) {
     const existingTask = taskRepository.getTask(finalRowId);
     if (existingTask) {
       return {
         id: finalRowId,
-        text: initialText || existingTask.value?.text || '',
+        text: initialText || existingTask.text || '',
         included: true,
         taskId: existingTask.id,
         mode: 'Message' as const
@@ -159,10 +204,10 @@ export function createRowWithTask(
     }
   }
 
-  // Create Task in TaskRepository
+  // ✅ Create Task in TaskRepository with correct templateId (campi diretti, niente wrapper)
   const task = taskRepository.createTask(
-    action,
-    action === 'Message' ? { text: initialText } : undefined,
+    templateId,
+    templateId === 'SayMessage' ? { text: initialText } : undefined,  // Campi diretti
     finalRowId, // Use same ID for Task and Instance (1:1 relationship)
     projectId
   );
@@ -187,7 +232,7 @@ export function createRowWithTask(
  * ✅ MIGRATION: Uses templateId instead of action
  *
  * @param row - NodeRowData row to update
- * @param newAction - New action ID (template ID)
+ * @param newAction - New action ID (can be actId like "DataRequest" or templateId like "GetData")
  * @param projectId - Optional project ID
  */
 export function updateRowTaskAction(
@@ -197,8 +242,11 @@ export function updateRowTaskAction(
 ): void {
   const taskId = getTaskIdFromRow(row);
 
+  // Map actId to templateId if needed
+  const templateId = mapActIdToTemplateId(newAction);
+
   // ✅ MIGRATION: Update Task's templateId (TaskRepository will sync action automatically)
-  taskRepository.updateTask(taskId, { templateId: newAction }, projectId);
+  taskRepository.updateTask(taskId, { templateId }, projectId);
 
   // FASE 4: TaskRepository.updateTask already updates InstanceRepository internally
   // No need to update it separately - TaskRepository handles synchronization
@@ -225,9 +273,15 @@ export function getRowData(row: NodeRowData): {
     // ✅ MIGRATION: Use getTemplateId() helper
     const templateId = getTemplateId(task);
     return {
-      message: task.value?.text ? { text: task.value.text } : undefined,
-      ddt: task.value?.ddt,
-      intents: task.value?.intents,
+      message: task.text ? { text: task.text } : undefined,
+      ddt: (task.mainData && task.mainData.length > 0) ? {
+        label: task.label,
+        mainData: task.mainData,
+        stepPrompts: task.stepPrompts,
+        constraints: task.constraints,
+        examples: task.examples
+      } : undefined,
+      intents: task.intents,
       action: templateId  // ✅ Returns templateId (legacy field name maintained for compatibility)
     };
   }
@@ -255,19 +309,25 @@ export function updateRowData(
 ): void {
   const taskId = getTaskIdFromRow(row);
 
-  const taskValue: Record<string, any> = {};
+  // ✅ Update task con campi direttamente (niente wrapper value)
+  const taskUpdates: Record<string, any> = {};
   if (data.message?.text !== undefined) {
-    taskValue.text = data.message.text;
+    taskUpdates.text = data.message.text;
   }
   if (data.ddt !== undefined) {
-    taskValue.ddt = data.ddt;
+    // ✅ Spread DDT fields directly into task
+    taskUpdates.label = data.ddt.label;
+    taskUpdates.mainData = data.ddt.mainData;
+    taskUpdates.stepPrompts = data.ddt.stepPrompts;
+    taskUpdates.constraints = data.ddt.constraints;
+    taskUpdates.examples = data.ddt.examples;
   }
   if (data.intents !== undefined) {
-    taskValue.intents = data.intents;
+    taskUpdates.intents = data.intents;
   }
 
-  if (Object.keys(taskValue).length > 0) {
-    taskRepository.updateTaskValue(taskId, taskValue, projectId);
+  if (Object.keys(taskUpdates).length > 0) {
+    taskRepository.updateTask(taskId, taskUpdates, projectId);
   }
 
   console.log('[updateRowData] Updated row data', {
@@ -286,8 +346,8 @@ export function updateRowData(
  * Auto-creates Task if missing (migration helper)
  *
  * IMPORTANT: row.text is a descriptive label written by the user in the node row
- * It remains fixed and is NOT synchronized with task.value.text
- * task.value.text is the message content (saved in instance, edited in ResponseEditor)
+ * It remains fixed and is NOT synchronized with task.text
+ * task.text is the message content (saved in instance, edited in ResponseEditor)
  * These are completely separate - row.text is just a label for the flowchart
  *
  * @param rows - Array of NodeRowData rows to enrich
@@ -311,7 +371,7 @@ export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
     }
 
     // Row has a corresponding Task, add taskId
-    // row.text remains unchanged - it's the user's label, not synced with task.value.text
+    // row.text remains unchanged - it's the user's label, not synced with task.text
     return {
       ...row,
       taskId: task.id

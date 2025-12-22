@@ -56,9 +56,9 @@ export default function IntentEditorInlineEditor({
     const instanceId = (act as any)?.instanceId || act.id;
     const task = taskRepository.getTask(instanceId);
 
-    if (task?.value?.intents) {
+    if (task?.intents) {
       // Convert ProblemIntent[] to useIntentStore format
-      const intents = toEditorState(task.value.intents);
+      const intents = toEditorState(task.intents || []);
       useIntentStore.setState({ intents });
 
       console.log('[IntentEditorInlineEditor][SYNC] Synced intents from Task to useIntentStore', {
@@ -93,7 +93,7 @@ export default function IntentEditorInlineEditor({
           }));
 
           // FASE 3: Update Task (TaskRepository syncs with InstanceRepository automatically)
-          taskRepository.updateTaskValue(instanceId, { intents: problemIntents });
+          taskRepository.updateTask(instanceId, { intents: problemIntents });
 
           console.log('[IntentEditorInlineEditor][SYNC_TO_TASK] Synced intents from useIntentStore to Task', {
             instanceId,

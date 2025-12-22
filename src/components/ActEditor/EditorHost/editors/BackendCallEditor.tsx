@@ -2,7 +2,7 @@ import React from 'react';
 import type { EditorProps } from '../../EditorHost/types';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useProjectDataUpdate, useProjectData } from '../../../../context/ProjectDataContext';
-import { getAgentActVisualsByType } from '../../../../components/Flowchart/utils/actVisuals';
+import { getTaskVisualsByType } from '../../../../components/Flowchart/utils/taskVisuals';
 import EditorHeader from '../../../../components/common/EditorHeader';
 import { Server, Plus, X, Eye, EyeOff, Pencil, Check, Trash2, Table2 } from 'lucide-react';
 import { OmniaSelect } from '../../../../components/common/OmniaSelect';
@@ -162,8 +162,8 @@ export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideH
   React.useEffect(() => {
     if (!instanceId) return;
     const task = taskRepository.getTask(instanceId);
-    if (task?.value?.config) {
-      const loaded = task.value.config;
+    if (task?.config) {
+      const loaded = task.config;
       // Ensure at least one empty row exists
       if (!loaded.inputs || loaded.inputs.length === 0) {
         loaded.inputs = [{ internalName: '', apiParam: '', variable: '' }];
@@ -226,7 +226,7 @@ export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideH
   // Save config to Task when it changes
   React.useEffect(() => {
     if (instanceId && config) {
-      taskRepository.updateTaskValue(instanceId, { config }, projectId);
+      taskRepository.updateTask(instanceId, { config }, projectId);
     }
   }, [config, instanceId, projectId]);
 
@@ -541,7 +541,7 @@ export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideH
   }, [hideHeader, toolbarButtons, onToolbarUpdate, headerColor]);
 
   const type = String(act?.type || 'BackendCall') as any;
-  const { Icon, color } = getAgentActVisualsByType(type, false);
+  const { Icon, color } = getTaskVisualsByType(type, false);
 
   return (
     <div className="h-full bg-slate-900 flex flex-col min-h-0" style={{ color: '#e5e7eb' }}>

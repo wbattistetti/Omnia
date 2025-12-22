@@ -48,7 +48,7 @@ const EntityAccordion: React.FC<EntityAccordionProps> = ({
       title={
         <span className="flex items-center gap-2">
           {title}
-          {entityKey === 'agentActs' && (
+          {entityKey === 'taskTemplates' && (
             (() => {
               const totals = (data || []).reduce((acc: { total: number; built: number }, cat: any) => {
                 const items = Array.isArray(cat?.items) ? cat.items : [];

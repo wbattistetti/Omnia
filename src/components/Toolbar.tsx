@@ -34,12 +34,19 @@ export function Toolbar({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Verifica se il progetto è vuoto (non ha contenuti)
+  // Controlla sia i dati del progetto che i nodes/edges del flowchart
+  const hasFlowchartContent = typeof window !== 'undefined' && (
+    ((window as any).__flowNodes && (window as any).__flowNodes.length > 0) ||
+    ((window as any).__flows?.main?.nodes && (window as any).__flows.main.nodes.length > 0)
+  );
+
   const isProjectEmpty = !currentProject ||
-    (!currentProject.agentActs?.length &&
+    (!currentProject.taskTemplates?.length &&
      !currentProject.userActs?.length &&
      !currentProject.backendActions?.length &&
      !currentProject.conditions?.length &&
-     !currentProject.macrotasks?.length);
+     !currentProject.macrotasks?.length &&
+     !hasFlowchartContent);
 
   // Chiudi dropdown quando si clicca fuori
   useEffect(() => {

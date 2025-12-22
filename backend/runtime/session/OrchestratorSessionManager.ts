@@ -87,8 +87,15 @@ export class OrchestratorSessionManager {
 
     const getDDT = (taskId: string) => {
       const task = getTask(taskId);
-      if (task && task.value && task.value.ddt) {
-        return task.value.ddt;
+      // ✅ DDT fields directly on task (no value wrapper)
+      if (task && task.mainData && task.mainData.length > 0) {
+        return {
+          label: task.label,
+          mainData: task.mainData,
+          stepPrompts: task.stepPrompts,
+          constraints: task.constraints,
+          examples: task.examples
+        };
       }
       return ddtMap.get(taskId) || null;
     };
@@ -166,7 +173,14 @@ export class OrchestratorSessionManager {
           eventEmitter.emit('waitingForInput', {
             taskId: task.id,
             nodeId,
-            ddt: ddtParam || task.value?.ddt // Include DDT in event
+            // ✅ DDT fields directly on task (no value wrapper)
+            ddt: ddtParam || (task.mainData && task.mainData.length > 0 ? {
+              label: task.label,
+              mainData: task.mainData,
+              stepPrompts: task.stepPrompts,
+              constraints: task.constraints,
+              examples: task.examples
+            } : null) // Include DDT in event
           });
 
           return new Promise((resolve, reject) => {
@@ -181,14 +195,21 @@ export class OrchestratorSessionManager {
             nodeId: node?.id,
             taskId: task.id,
             nodeLabel: node?.label,
-            hasDDT: !!task.value?.ddt,
+            hasDDT: !!(task.mainData && task.mainData.length > 0),
             hasNodeContract: !!node?.nlpContract
           });
           console.log('═══════════════════════════════════════════════════════════════════════════');
 
           // Check if we're in confirmation state - if so, return match directly
           // The DDT engine will handle yes/no detection in processUserInput
-          const ddt = task.value?.ddt;
+          // ✅ DDT fields directly on task (no value wrapper)
+          const ddt = (task.mainData && task.mainData.length > 0) ? {
+            label: task.label,
+            mainData: task.mainData,
+            stepPrompts: task.stepPrompts,
+            constraints: task.constraints,
+            examples: task.examples
+          } : null;
           if (ddt) {
             // Use backend DDT contract extraction
             try {

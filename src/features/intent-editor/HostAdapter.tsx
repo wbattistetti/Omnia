@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import EditorHeader from '../../components/common/EditorHeader';
-import { getAgentActVisualsByType } from '../../components/Flowchart/utils/actVisuals';
+import { getTaskVisualsByType } from '../../components/Flowchart/utils/taskVisuals';
 import EmbeddingEditorShell, { EmbeddingEditorShellRef } from './EmbeddingEditorShell';
 import { useIntentStore } from './state/intentStore';
 import { useTestStore } from './state/testStore';
@@ -68,7 +68,7 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           threshold: it.threshold,
           phrases: it.phrases
         }));
-        taskRepository.updateTaskValue(instanceId, { intents: problemIntents }, pid || undefined);
+        taskRepository.updateTask(instanceId, { intents: problemIntents }, pid || undefined);
       }
     } catch (err) {
       console.warn('[IntentEditor] Could not update TaskRepository:', err);
@@ -121,7 +121,7 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
                 } : null
               });
 
-              taskRepository.updateTaskValue(instanceId, { intents: problemIntents }, pid || undefined);
+              taskRepository.updateTask(instanceId, { intents: problemIntents }, pid || undefined);
 
               console.log('[IntentEditor][UPDATE_TASK_REPO][RESULT]', {
                 instanceId,
@@ -162,7 +162,7 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
                 threshold: it.threshold,
                 phrases: it.phrases
               }));
-              taskRepository.updateTaskValue(instanceId, { intents: problemIntents }, pid || undefined);
+              taskRepository.updateTask(instanceId, { intents: problemIntents }, pid || undefined);
             }
           } catch (err) {
             console.warn('[IntentEditor] Could not update TaskRepository:', err);
@@ -173,7 +173,7 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
     return () => { unsubA(); unsubB(); clearTimeout(t); };
   }, [props.act?.id]);
   const type = String(props.act?.type || 'ProblemClassification') as any;
-  const { Icon, color } = getAgentActVisualsByType(type, true);
+  const { Icon, color } = getTaskVisualsByType(type, true);
 
   const editorRef = useRef<EmbeddingEditorShellRef>(null);
   const [trainState, setTrainState] = useState({ training: false, modelReady: false, canTrain: false });

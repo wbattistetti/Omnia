@@ -1,7 +1,16 @@
-let pendingPayload: { pid: string; flowId: string; nodes: any[]; edges: any[] } | null = null;
+import type { Node } from 'reactflow';
+import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
+import { transformNodesToSimplified, transformEdgesToSimplified } from '../flows/flowTransformers';
+
+let pendingPayload: { pid: string; flowId: string; nodes: Node<FlowNode>[]; edges: any[] } | null = null;
 let timer: any = null;
 
-export function queueFlowPersist(pid: string, flowId: string, nodes: any[], edges: any[], delayMs: number = 120) {
+/**
+ * Queue flow persistence - transforms ReactFlow nodes to simplified structure before saving
+ * Receives: Node<FlowNode>[] with data wrapper (ReactFlow format)
+ * Saves: { id, label, rows, ... } (simplified)
+ */
+export function queueFlowPersist(pid: string, flowId: string, nodes: Node<FlowNode>[], edges: any[], delayMs: number = 120) {
   pendingPayload = { pid, flowId, nodes, edges };
   if (timer) clearTimeout(timer);
   try {
@@ -19,6 +28,10 @@ export function queueFlowPersist(pid: string, flowId: string, nodes: any[], edge
     timer = null;
     if (!p) return;
     try {
+      // Transform from ReactFlow format to simplified structure
+      const simplifiedNodes = transformNodesToSimplified(p.nodes);
+      const simplifiedEdges = transformEdgesToSimplified(p.edges);
+
       console.log('[Flow][Persist][send]', {
         pid: p.pid,
         flowId: p.flowId,
@@ -26,7 +39,9 @@ export function queueFlowPersist(pid: string, flowId: string, nodes: any[], edge
         edges: Array.isArray(p.edges) ? p.edges.length : 0
       });
       await fetch(`/api/projects/${encodeURIComponent(p.pid)}/flow?flowId=${encodeURIComponent(p.flowId)}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: p.nodes, edges: p.edges })
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges })
       });
       try { console.log('[Flow][Persist][ok]', { pid: p.pid, flowId: p.flowId }); } catch {}
     } catch (e) {
@@ -51,8 +66,15 @@ export function flushFlowPersist() {
       edges: Array.isArray(p.edges) ? p.edges.length : 0
     });
   } catch {}
+
+  // Transform from ReactFlow format to simplified structure
+  const simplifiedNodes = transformNodesToSimplified(p.nodes);
+  const simplifiedEdges = transformEdgesToSimplified(p.edges);
+
   return fetch(`/api/projects/${encodeURIComponent(p.pid)}/flow?flowId=${encodeURIComponent(p.flowId)}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes: p.nodes, edges: p.edges })
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nodes: simplifiedNodes, edges: simplifiedEdges })
   }).then(() => { try { console.log('[Flow][Persist][flush-ok]', { pid: p.pid, flowId: p.flowId }); } catch {} })
     .catch((e) => { try { console.warn('[Flow][Persist][flush-error]', e); } catch {} });
 }

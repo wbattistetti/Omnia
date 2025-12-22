@@ -31,10 +31,15 @@ Public Class DDTAssembler
             .IsAggregate = (assembled.Introduction IsNot Nothing)
         }
 
-        ' Normalizza cardinalità: mainData (singolo) → MainDataList (lista)
+        ' ✅ FIX: mainData è ora sempre una lista (normalizzata dal converter)
+        ' Gestisce sia oggetto singolo che array
         If assembled.MainData IsNot Nothing Then
-            Dim mainNode = ConvertNode(assembled.MainData, Nothing)
-            instance.MainDataList.Add(mainNode)
+            For Each mainDataNode In assembled.MainData
+                If mainDataNode IsNot Nothing Then
+                    Dim mainNode = ConvertNode(mainDataNode, Nothing)
+                    instance.MainDataList.Add(mainNode)
+                End If
+            Next
         End If
 
         ' Converti Introduction (StepGroup → Response)

@@ -18,7 +18,7 @@ import { debug, error } from '../../../utils/logger';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 import { getTemplateTranslations } from '../../../services/ProjectDataService';
-import { DialogueTemplateService } from '../../../services/DialogueTemplateService';
+import { DialogueTaskService } from '../../../services/DialogueTaskService';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // 🚀 NEW: Interface for field processing state
@@ -175,7 +175,7 @@ class AutoMappingService {
 
 const autoMappingService = new AutoMappingService();
 
-const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean; onSeePrompts?: () => void }> = ({ onCancel, onComplete, initialDDT, startOnStructure, onSeePrompts }) => {
+const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean; onSeePrompts?: () => void; taskType?: string }> = ({ onCancel, onComplete, initialDDT, startOnStructure, onSeePrompts, taskType }) => {
   const API_BASE = '';
   // Ensure accent is inherited in nested components
   React.useEffect(() => {
@@ -1332,7 +1332,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       // ✅ PRIMA: Costruisci array di subData instances
       // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
       const subDataInstances: any[] = [];
-      const allTemplates = DialogueTemplateService.getAllTemplates();
+      const allTemplates = DialogueTaskService.getAllTemplates();
 
       for (const subId of subDataIds) {
         // ✅ Cerca template per ID (può essere _id, id, name, o label)
@@ -1544,6 +1544,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             dataNode={stableDataNode || undefined}
             onAutoDetect={initialDDT?._inferenceResult ? undefined : handleAutoDetect}
             onTemplateSelect={handleTemplateSelect}
+            taskType={taskType} // ✅ Passa tipo task per filtrare template
           />
         </div>
       )}

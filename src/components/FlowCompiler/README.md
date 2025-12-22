@@ -30,9 +30,15 @@ const engine = new DialogueEngine(result, {
     // Esegui task
     switch (task.action) {
       case 'SayMessage':
-        return await sendMessage(task.value.text);
+        return await sendMessage(task.text);
       case 'GetData':
-        return await startDataCollection(task.value.ddt);
+        return await startDataCollection({
+          label: task.label,
+          mainData: task.mainData,
+          stepPrompts: task.stepPrompts,
+          constraints: task.constraints,
+          examples: task.examples
+        });
       // ...
     }
   },

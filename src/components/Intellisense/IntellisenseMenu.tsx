@@ -86,7 +86,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   // ❌ RIMUOVI: const [query, setQuery] = useState(''); // query è già una prop!
 
   // Include 'conditions' by default so condition items are not filtered out
-  const defaultCats = ['agentActs', 'userActs', 'backendActions', 'conditions', 'macrotasks'];
+  const defaultCats = ['taskTemplates', 'userActs', 'backendActions', 'conditions', 'macrotasks'];
   const [activeCats, setActiveCats] = useState<string[]>(filterCategoryTypes && filterCategoryTypes.length ? filterCategoryTypes : defaultCats);
   const loggedThisOpenRef = useRef(false);
 
@@ -598,7 +598,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   // ✅ Per il caso standalone (edge), mostra sempre perché c'è la textbox
   if (mode !== 'standalone' && noResults) {
     // Controlla se ci sono pulsanti di creazione da mostrare
-    const isForNodes = filterCategoryTypes?.includes('agentActs') || filterCategoryTypes?.includes('backendActions');
+    const isForNodes = filterCategoryTypes?.includes('taskTemplates') || filterCategoryTypes?.includes('backendActions');
     const hasCreateButtons = allowCreatePicker && query.trim() && (
       (isForNodes) || // Per nodi mostra sempre i pulsanti se c'è query
       (!isForNodes && (onCreateNew || onCreateAgentAct || onCreateBackendCall || onCreateTask)) // Per condizioni mostra se ci sono callback
@@ -640,8 +640,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             fuzzyResults={fuzzyResults}
             semanticResults={semanticResults}
             selectedIndex={selectedIndex}
-            layoutConfig={{ showCategories: true, maxItems: 10 }}
-            categoryConfig={{}}
             query={query}
             onItemSelect={(result) => {
               onSelect(result.item);
@@ -667,8 +665,6 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             fuzzyResults={fuzzyResults}
             semanticResults={semanticResults}
             selectedIndex={selectedIndex}
-            layoutConfig={{ showCategories: true, maxItems: 10 }}
-            categoryConfig={{}}
             query={query}
             onItemSelect={(result) => {
               onSelect(result.item);

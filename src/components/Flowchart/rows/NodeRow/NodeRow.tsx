@@ -25,7 +25,7 @@ import { useRowState } from './hooks/useRowState';
 import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
-import { getAgentActVisualsByType, findAgentAct, resolveActMode, resolveActType, hasActDDT } from '../../utils/actVisuals';
+import { getTaskVisualsByType, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
 import { inferActType, heuristicToInternal } from '../../../../nlp/actType';
 import { modeToType, typeToMode } from '../../../../utils/normalizers';
 import { idMappingService } from '../../../../services/IdMappingService';
@@ -373,7 +373,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             (row as any).taskId = newTask.taskId;
           } else {
             // Row already has Task, update it
-            taskRepository.updateTaskValue(row.taskId, { text: label }, projectId);
+            taskRepository.updateTask(row.taskId, { text: label }, projectId);
           }
 
           console.log('[Message][SAVE][CREATED_AND_UPDATED]', {
@@ -385,13 +385,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           // FASE 4: Aggiorna il messaggio nel Task esistente
           console.log('[Message][SAVE][UPDATE_IN_MEMORY]', {
             instanceId,
-            oldText: task.value?.text?.substring(0, 50) || 'N/A',
+            oldText: task.text?.substring(0, 50) || 'N/A',
             newText: label.substring(0, 50)
           });
 
           // FASE 4: Update Task (TaskRepository internally updates InstanceRepository)
           const taskId = getTaskIdFromRow(row);
-          taskRepository.updateTaskValue(taskId, { text: label }, getProjectId?.() || undefined);
+          taskRepository.updateTask(taskId, { text: label }, getProjectId?.() || undefined);
         }
 
         // FASE 4: Verifica dopo l'aggiornamento
@@ -533,35 +533,67 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         try { inputRef.current?.blur(); } catch { }
         return;
       }
-      // Heuristica multilingua: IT/EN/PT con fallback a UNDEFINED
+      // ✅ FLUSSO SEMPLIFICATO: Euristica 1 → Euristica 2 → Crea Task
       try {
+        // 1️⃣ EURISTICA 1: interpreta la label e decide il TaskType
         const inf = await inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
-        const internal = heuristicToInternal(inf.type as any);
+        let taskType = inf.type; // 'REQUEST_DATA', 'MESSAGE', 'UNDEFINED', etc.
 
-        // Se il tipo è UNDEFINED, passa un flag speciale
-        if (inf.type === 'UNDEFINED') {
-          // Crea un task Message ma con flag isUndefined per mostrare icona punto interrogativo
-          const projectId = getProjectId?.() || undefined;
-          if (!row.taskId) {
-            const task = createRowWithTask(row.id, 'Message', q, projectId);
-            (row as any).taskId = task.id;
-          }
-          // Aggiorna la row con flag isUndefined e tipo Message per permettere cambio tipo
-          const updatedRow = {
-            ...row,
-            text: q,
-            type: 'Message' as any,
-            mode: 'Message' as any,
-            isUndefined: true // Flag per icona punto interrogativo
-          };
-          // onUpdate richiede (row, newText) - passa entrambi i parametri
-          onUpdate(updatedRow as any, q);
-          setIsEditing(false);
-          return;
+        // 2️⃣ EURISTICA 2: cerca template DDT
+        const DDTTemplateMatcherService = (await import('../../../../services/DDTTemplateMatcherService')).default;
+        const typeForMatch = (taskType === 'REQUEST_DATA') ? 'DataRequest' :
+                            (taskType === 'UNDEFINED') ? 'UNDEFINED' : null;
+
+        let matchedTemplate = null;
+        if (typeForMatch) {
+          matchedTemplate = await DDTTemplateMatcherService.findDDTTemplate(q, typeForMatch);
         }
 
-        if (dbg) { }
-        await handlePickType(internal);
+        // 3️⃣ Se Euristica 2 trova match E Euristica 1 era UNDEFINED → override tipo con DataRequest
+        if (matchedTemplate && taskType === 'UNDEFINED') {
+          taskType = 'REQUEST_DATA';
+        }
+
+        // 4️⃣ CREA TASK
+        const projectId = getProjectId?.() || undefined;
+        const internal = heuristicToInternal(taskType as any);
+        const action = internal === 'DataRequest' ? 'GetData' :
+                      internal === 'Message' ? 'Message' : internal;
+
+        if (!row.taskId) {
+          const task = createRowWithTask(row.id, action, q, projectId);
+          (row as any).taskId = task.id;
+
+          // Se c'è template matchato, salva SOLO il templateId (mainData sarà costruito da buildDDTFromTemplate)
+          if (matchedTemplate) {
+            taskRepository.updateTask(task.id, {
+              label: q,
+              templateId: matchedTemplate.templateId,  // ✅ Solo reference al template
+              mainData: []  // ✅ Esplicitamente vuoto per indicare che la struttura viene dal template
+            }, projectId);
+          }
+        } else {
+          // Aggiorna task esistente
+          if (matchedTemplate) {
+            taskRepository.updateTask(row.taskId, {
+              label: q,
+              templateId: matchedTemplate.templateId,
+              mainData: []  // ✅ Esplicitamente vuoto per indicare che la struttura viene dal template
+            }, projectId);
+          }
+        }
+
+        // 5️⃣ AGGIORNA RIGA
+        const updatedRow = {
+          ...row,
+          text: q,
+          type: internal as any,
+          mode: internal as any,
+          isUndefined: taskType === 'UNDEFINED' && !matchedTemplate // Solo se UNDEFINED E nessun match
+        };
+
+        onUpdate(updatedRow as any, q);
+        setIsEditing(false);
         return;
       } catch (err) {
         try { console.warn('[Heuristics] failed, fallback to picker', err); } catch { }
@@ -659,12 +691,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       console.log('🎯 [CHANGE_TYPE][CALLING_UPDATE]', {
         rowId: row.id,
         label: row.text,
-        categoryType: 'agentActs',
+        categoryType: 'taskTemplates',
         meta: updateMeta,
         isUndefinedRemoved: true
       });
 
-      (onUpdateWithCategory as any)(row, row.text, 'agentActs', updateMeta);
+      (onUpdateWithCategory as any)(row, row.text, 'taskTemplates', updateMeta);
 
       console.log('🎯 [CHANGE_TYPE][COMPLETE]', {
         rowId: row.id,
@@ -753,10 +785,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             console.log('🎯 [TEMPLATE_CREATION][CALLING_ON_UPDATE_WITH_CATEGORY]', {
               rowId: row.id,
               label,
-              categoryType: 'agentActs',
+              categoryType: 'taskTemplates',
               meta: updateMeta
             });
-            (onUpdateWithCategory as any)(row, label, 'agentActs', updateMeta);
+            (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
             console.log('🎯 [TEMPLATE_CREATION][AFTER_ON_UPDATE_WITH_CATEGORY]', {
               rowId: row.id,
               label,
@@ -817,7 +849,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // ✅ Fallback: comportamento originale se onCreateAgentAct non è disponibile
     const immediate = (patch: any) => {
       if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, label, 'agentActs', patch);
+        (onUpdateWithCategory as any)(row, label, 'taskTemplates', patch);
       } else {
         onUpdate(row, label);
       }
@@ -916,12 +948,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         itemActId: item.actId,
         itemCategoryType: item.categoryType,
         hasActId: !!item.actId,
-        hasCategoryType: item.categoryType === 'agentActs',
-        willCreateInstance: pid && item.actId && item.categoryType === 'agentActs'
+        hasCategoryType: item.categoryType === 'taskTemplates',
+        willCreateInstance: pid && item.actId && item.categoryType === 'taskTemplates'
       });
 
       let backendInstanceId: string | undefined = undefined;
-      if (pid && item.actId && item.categoryType === 'agentActs') {
+      if (pid && item.actId && item.categoryType === 'taskTemplates') {
         // Avoid require in browser; import mapping helpers at top-level
         const chosenType = (item as any)?.type || modeToType((item as any)?.mode);
         const modeFromType = typeToMode(chosenType);
@@ -979,7 +1011,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       };
       const rowType = rowTask ? (actionToActId[getTemplateId(rowTask)] || getTemplateId(rowTask)) : undefined;
 
-      const isProblemClassification = itemCategoryType === 'agentActs' &&
+      const isProblemClassification = itemCategoryType === 'taskTemplates' &&
         (itemType === 'ProblemClassification' || rowType === 'ProblemClassification');
 
       console.log('[🔍 INTELLISENSE] Checking if should create instance', {
@@ -989,7 +1021,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         rowType,
         rowInstanceId: row.id, // row.id IS the instanceId now
         itemActId: item.actId,
-        categoryMatch: itemCategoryType === 'agentActs',
+        categoryMatch: itemCategoryType === 'taskTemplates',
         typeMatch: itemType === 'ProblemClassification' || rowType === 'ProblemClassification',
         timestamp: Date.now()
       });
@@ -1009,15 +1041,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
         // TaskRepository handles all task operations
 
-        // Try to find the template act to get intents
+        // ✅ RIMOSSO: findAgentAct - non esiste più il concetto di Act
+        // ✅ Gli intents sono nel task.intents (campi diretti)
         let initialIntents: any[] = [];
         try {
-          if (projectDataCtx) {
-            const { findAgentAct } = await import('../../utils/actVisuals');
-            const templateAct = findAgentAct(projectDataCtx, { actId: actIdToUse });
-            if (templateAct?.problem?.intents) {
-              initialIntents = templateAct.problem.intents;
-            }
+          const task = taskRepository.getTask(actIdToUse);
+          if (task?.intents) {
+            initialIntents = task.intents;
           }
         } catch (err) {
           console.warn('[🔍 INTELLISENSE] Could not load template intents:', err);
@@ -1033,7 +1063,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           const task = createRowWithTask(instanceId, actIdToUse, row.text || '', projectId);
           // FASE 4: Update Task with intents if ProblemClassification
           if (initialIntents.length > 0) {
-            taskRepository.updateTaskValue(task.id, { intents: initialIntents }, projectId);
+            taskRepository.updateTask(task.id, { intents: initialIntents }, projectId);
           }
           (row as any).taskId = task.id;
         } else {
@@ -1356,15 +1386,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   let iconColor = '#94a3b8'; // Default grigio per l'icona
 
   // Icona e colore coerenti con la sidebar
-  const { data: projectData } = useProjectData();
-  let resolvedCategoryType: string | undefined = (row as any).categoryType;
-  let actFound: any = null;
-  if ((row as any).actId || (row as any).baseActId || (row as any).factoryId) {
-    actFound = findAgentAct(projectData, row);
-    if (actFound) resolvedCategoryType = 'agentActs';
-  }
-
-  const isAgentAct = resolvedCategoryType === 'agentActs';
+  // ✅ NUOVO: Usa solo TaskRepository, non più AgentAct
 
   let Icon: React.ComponentType<any> | null = null;
   let currentTypeForPicker: string | undefined = undefined;
@@ -1372,17 +1394,29 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Check if this is an undefined node (no heuristic match found)
   const isUndefined = (row as any)?.isUndefined === true;
 
-  if (isAgentAct) {
-    const typeResolved = resolveActType(row as any, actFound) as any;
-    currentTypeForPicker = typeResolved;
-    const has = hasActDDT(row as any, actFound);
+  // ✅ NUOVO: Usa solo TaskRepository (taskId già dichiarato sopra per useRowExecutionHighlight)
+  if (taskId) {
+    try {
+      const task = taskRepository.getTask(taskId);
+      if (task) {
+        const taskType = resolveTaskType(row);
+        if (taskType) {
+          const has = hasTaskDDT(row);
+          const visuals = getTaskVisualsByType(taskType, has);
+          currentTypeForPicker = taskType;
+          // Se è undefined, usa icona punto interrogativo invece dell'icona normale
+          Icon = isUndefined ? HelpCircle : visuals.Icon;
+          labelTextColor = isUndefined ? '#94a3b8' : visuals.labelColor;
+          iconColor = isUndefined ? '#94a3b8' : visuals.iconColor;
+        }
+      }
+    } catch (err) {
+      console.error('[NodeRow] Errore recupero task:', err);
+    }
+  }
 
-    const visuals = getAgentActVisualsByType(typeResolved, has);
-    // Se è undefined, usa icona punto interrogativo invece dell'icona normale
-    Icon = isUndefined ? HelpCircle : visuals.Icon;
-    labelTextColor = isUndefined ? '#94a3b8' : visuals.labelColor; // Label: grigio se undefined, altrimenti colore del tipo
-    iconColor = isUndefined ? '#94a3b8' : visuals.iconColor; // Icona: sempre grigio se undefined
-  } else {
+  // ✅ Se non c'è task o non è stato possibile determinare il tipo
+  if (!Icon) {
     // Since we removed categoryType and userActs from NodeRowData, use defaults
     labelTextColor = (typeof propTextColor === 'string' ? propTextColor : '#111');
     if (!labelTextColor) {
@@ -1390,13 +1424,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       labelTextColor = colorObj.text;
     }
     // Se è undefined, mostra icona punto interrogativo
-    // NON impostare currentTypeForPicker per undefined, così nessuna voce sarà selezionata nel picker
     if (isUndefined) {
       Icon = HelpCircle;
       labelTextColor = '#94a3b8'; // Grigio per undefined
       iconColor = '#94a3b8';
-      // Lascia currentTypeForPicker undefined così il picker non mostra nessuna voce selezionata
-      // Il picker funzionerà comunque per permettere cambio tipo
     } else {
       Icon = null;
     }
@@ -1504,28 +1535,54 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             bgColor={bgColor}
             labelTextColor={labelTextColor}
             iconColor={iconColor}
-            hasDDT={isUndefined ? false : hasActDDT(row as any, actFound)} // Se undefined, non mostrare DDT gear
+            hasDDT={isUndefined ? false : hasTaskDDT(row)} // ✅ Usa hasTaskDDT senza actFound
             gearColor={isUndefined ? '#94a3b8' : labelTextColor} // Se undefined, gear grigio
-            onOpenDDT={async () => {
+            // ✅ Disabilita ingranaggio se tipo UNDEFINED e non c'è template match (nessun DDT salvato)
+            gearDisabled={isUndefined && !hasTaskDDT(row)} // Disabilitato se undefined e nessun DDT
+            onOpenDDT={isUndefined && !hasTaskDDT(row) ? undefined : async () => {
               try {
-                // Open ActEditorHost (envelope) which routes to the correct sub-editor by ActType
-                const baseId = (row as any).baseActId || (row as any).actId || (row as any).factoryId || row.id;
-                const type = resolveActType(row as any, actFound) as any;
+                // ✅ Deriva il tipo dal task invece di usare resolveActType con actFound
+                const taskIdForType = (row as any)?.taskId || row.id;
+                const taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
 
-                // Host present → open deterministically
-                actEditorCtx.open({ id: String(baseId), type, label: row.text, instanceId: row.id });
+                const type = taskForType
+                  ? resolveTaskType({ taskId: taskIdForType, ...row })
+                  : 'Message';
 
-                // Get DDT from actFound, or create empty DDT if not found
-                const ddt = actFound?.ddt || { label: row.text || 'New DDT', mainData: [] };
+                actEditorCtx.open({ id: String(taskIdForType), type: type as any, label: row.text, instanceId: row.id });
+
+                // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste)
+                let ddt: any = null;
+                if (taskForType?.templateId) {
+                  // ✅ Use buildDDTFromTemplate to build DDT from template reference
+                  const { buildDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                  ddt = await buildDDTFromTemplate(taskForType);
+                  if (!ddt) {
+                    // Fallback: create empty DDT
+                    ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
+                  }
+                } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
+                  // Fallback: task senza templateId ma con mainData (vecchio formato o standalone)
+                  ddt = {
+                    label: taskForType.label || row.text || 'New DDT',
+                    mainData: taskForType.mainData,
+                    stepPrompts: taskForType.stepPrompts,
+                    constraints: taskForType.constraints,
+                    examples: taskForType.examples
+                  };
+                } else {
+                  ddt = { label: row.text || 'New DDT', mainData: [] };
+                }
 
                 // Emit event with DDT data so AppContent can open it as docking tab
                 const event = new CustomEvent('actEditor:open', {
                   detail: {
-                    id: String(baseId),
+                    id: String(taskIdForType),
                     type,
                     label: row.text,
                     ddt: ddt,
-                    instanceId: row.id // Pass instanceId from row
+                    instanceId: row.id, // Pass instanceId from row
+                    templateId: taskForType?.templateId || undefined
                   },
                   bubbles: true
                 });

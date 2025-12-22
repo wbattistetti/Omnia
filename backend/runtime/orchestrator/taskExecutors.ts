@@ -17,25 +17,29 @@ export interface TaskExecutionResult {
 /**
  * Normalizes action ID to action type
  */
-function normalizeActionType(action: string, value?: Record<string, any>): string {
+function normalizeActionType(action: string, task?: any): string {
   const standardTypes = ['SayMessage', 'Message', 'GetData', 'ClassifyProblem', 'ProblemClassification', 'callBackend', 'BackendCall', 'AIAgent'];
   if (standardTypes.includes(action)) {
     return action;
   }
 
-  if (value) {
-    if (value.ddt !== undefined) {
-      return 'GetData';
-    }
-    if (value.text !== undefined) {
-      return 'SayMessage';
-    }
-    if (value.intents !== undefined || value.problem !== undefined) {
-      return 'ClassifyProblem';
-    }
-    if (value.config !== undefined || value.endpoint !== undefined) {
-      return 'BackendCall';
-    }
+  // ✅ Fields directly on task (no value wrapper)
+  const hasDDT = task?.mainData && task.mainData.length > 0;
+  const hasText = task?.text !== undefined;
+  const hasIntents = task?.intents && task.intents.length > 0;
+  const hasConfig = task?.config !== undefined;
+
+  if (hasDDT) {
+    return 'GetData';
+  }
+  if (hasText) {
+    return 'SayMessage';
+  }
+  if (hasIntents) {
+    return 'ClassifyProblem';
+  }
+  if (hasConfig) {
+    return 'BackendCall';
   }
 
   if (action.startsWith('item_')) {
@@ -64,12 +68,12 @@ export async function executeTask(
   console.log('[BACKEND][TaskExecutor] Executing task:', {
     taskId: task.id,
     action: task.action,
-    normalizedAction: normalizeActionType(task.action, task.value),
+    normalizedAction: normalizeActionType(task.action, task),
     location: 'BACKEND'
   });
 
   try {
-    const normalizedAction = normalizeActionType(task.action, task.value);
+    const normalizedAction = normalizeActionType(task.action, task);
 
     switch (normalizedAction) {
       case 'SayMessage':
@@ -122,7 +126,8 @@ async function executeSayMessage(
     translations?: Record<string, string>;
   }
 ): Promise<TaskExecutionResult> {
-  let text = task.value?.text || '';
+  // ✅ Fields directly on task (no value wrapper)
+  let text = task.text || '';
 
   // Resolve GUID/text key using translations
   if (text) {
@@ -194,7 +199,14 @@ async function executeGetData(
     taskAction: task.action
   });
 
-  const ddt = task.value?.ddt;
+  // ✅ DDT fields directly on task (no value wrapper)
+  const ddt = (task.mainData && task.mainData.length > 0) ? {
+    label: task.label,
+    mainData: task.mainData,
+    stepPrompts: task.stepPrompts,
+    constraints: task.constraints,
+    examples: task.examples
+  } : null;
 
   if (!ddt) {
     console.error('[BACKEND][TaskExecutor][executeGetData] GetData task missing DDT', {
@@ -272,8 +284,15 @@ async function executeClassifyProblem(
   task: CompiledTask,
   callbacks: { onProblemClassify?: (intents: any[], ddt: AssembledDDT) => Promise<any> }
 ): Promise<TaskExecutionResult> {
-  const intents = task.value?.intents || [];
-  const ddt = task.value?.ddt;
+  // ✅ Fields directly on task (no value wrapper)
+  const intents = task.intents || [];
+  const ddt = (task.mainData && task.mainData.length > 0) ? {
+    label: task.label,
+    mainData: task.mainData,
+    stepPrompts: task.stepPrompts,
+    constraints: task.constraints,
+    examples: task.examples
+  } : null;
 
   if (!ddt) {
     return {
@@ -306,7 +325,8 @@ async function executeBackendCall(
   task: CompiledTask,
   callbacks: { onBackendCall?: (config: any) => Promise<any> }
 ): Promise<TaskExecutionResult> {
-  const config = task.value?.config || task.value;
+  // ✅ Fields directly on task (no value wrapper)
+  const config = task.config;
 
   if (!callbacks.onBackendCall) {
     return {

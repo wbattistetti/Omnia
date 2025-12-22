@@ -251,8 +251,8 @@ export class DialogueEngine {
       taskId: task.id,
       action: task.action,
       currentState: task.state,
-      hasValue: !!task.value,
-      valueKeys: task.value ? Object.keys(task.value) : []
+      hasFields: true, // ✅ Fields directly on task (no value wrapper)
+      fieldKeys: Object.keys(task).filter(k => !['id', 'action', 'condition', 'state', 'source'].includes(k))
     });
 
     // ✅ Update currentNodeId IMMEDIATELY when task starts executing (for highlighting)
