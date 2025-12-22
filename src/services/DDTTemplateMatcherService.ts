@@ -107,14 +107,12 @@ export class DDTTemplateMatcherService {
     try {
       // ✅ STEP 1: Verifica cache template
       if (!DialogueTaskService.isCacheLoaded()) {
-        console.log('[DDTTemplateMatcherService] ⚠️ Cache template non caricata');
         return null;
       }
 
       // ✅ STEP 2: Se il tipo è già DataRequest, non cercare (già corretto)
       // ✅ Accetta anche UNDEFINED e Message (Message è il default, può essere sovrascritto)
       if (currentTaskType && currentTaskType !== 'UNDEFINED' && currentTaskType !== 'DataRequest' && currentTaskType !== 'Message') {
-        console.log('[DDTTemplateMatcherService] ⚠️ Tipo task:', currentTaskType, '- skip template DDT (non modificabile)');
         return null;
       }
 
@@ -123,10 +121,8 @@ export class DDTTemplateMatcherService {
       const translationsLoaded = TemplateTranslationsService.isLoaded(projectLang);
 
       if (!translationsLoaded) {
-        console.log('[DDTTemplateMatcherService] ⚠️ Cache traduzioni label NON caricata - caricamento in corso...');
         try {
           await TemplateTranslationsService.loadForLanguage(projectLang);
-          console.log('[DDTTemplateMatcherService] ✅ Cache traduzioni label caricata con successo');
         } catch (err) {
           console.error('[DDTTemplateMatcherService] ❌ Errore caricamento traduzioni:', err);
           return null;
@@ -135,7 +131,6 @@ export class DDTTemplateMatcherService {
 
       let templates = DialogueTaskService.getAllTemplates();
       if (templates.length === 0) {
-        console.log('[DDTTemplateMatcherService] ⚠️ Cache template vuota');
         return null;
       }
 

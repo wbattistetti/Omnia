@@ -30,28 +30,15 @@ export const ICON_KEYS = [
 
 export type IconKey = typeof ICON_KEYS[number] | string;
 
-export interface ActionBase {
-  actionId: string;
-  text?: string;
-  textKey?: string;
-  icon?: IconKey;
-  color?: string;
-  label?: string;
+// ✅ TaskReference: Reference to a TaskInstance in an escalation
+// Replaces: Action (old ambiguous name)
+export interface TaskReference {
+  templateId: string;  // TaskTemplate ID (e.g. "SayMessage", "GetData")
+  taskId: string;     // TaskInstance ID (GUID)
+  parameters?: Array<{ parameterId: string; value: string }>;
+  text?: string;       // Direct text override (optional)
+  color?: string;      // Color override (optional)
 }
-
-export interface SayMessageAction extends ActionBase {
-  actionId: 'sayMessage';
-}
-
-export interface AskQuestionAction extends ActionBase {
-  actionId: 'askQuestion';
-}
-
-export interface CustomAction extends ActionBase {
-  actionId: string; // any other id
-}
-
-export type Action = SayMessageAction | AskQuestionAction | CustomAction;
 
 export interface Constraint {
   id: string;
@@ -68,11 +55,11 @@ export interface Parameter {
 }
 
 export interface Escalation {
-  actions: Action[];
+  tasks: TaskReference[];  // ✅ Only tasks, no actions
 }
 
 export interface TranslationsContextType {
   translationsByDDT: { [ddtKey: string]: any };
   setTranslationsForDDT: (ddtKey: string, translations: any) => void;
   getTranslationsForDDT: (ddtKey: string) => any;
-} 
+}

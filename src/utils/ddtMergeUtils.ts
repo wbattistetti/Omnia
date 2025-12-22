@@ -40,24 +40,8 @@ export async function buildDDTFromTemplate(instance: Task | null): Promise<any |
     };
   }
 
-  console.log('[ddtMergeUtils] Template found:', {
-    id: template.id || template._id,
-    label: template.label,
-    hasMainData: !!template.mainData,
-    mainDataLength: template.mainData?.length || 0,
-    hasSubDataIds: !!template.subDataIds,
-    subDataIdsLength: template.subDataIds?.length || 0,
-    subDataIds: template.subDataIds
-  });
-
   // ✅ Build template structure for reference (to get contracts/constraints)
   const { mainData: templateMainData, guidMapping: templateGuidMapping } = buildMainDataFromTemplate(template);
-
-  console.log('[ddtMergeUtils] Built templateMainData:', {
-    length: templateMainData.length,
-    firstMain: templateMainData[0],
-    firstMainSubDataLength: templateMainData[0]?.subData?.length || 0
-  });
 
   // ✅ ITERATE ON instance.mainData (not templateMainData) to include added nodes
   const instanceMainData = instance.mainData || [];
@@ -293,17 +277,7 @@ function buildMainDataFromTemplate(template: any): { mainData: any[]; guidMappin
     // Template composito: crea UN SOLO mainData con subData[]
     const subDataInstances: any[] = [];
     for (const subId of subDataIds) {
-      console.log('[buildMainDataFromTemplate] Looking for sub-template:', {
-        subId,
-        cacheSize: DialogueTaskService.getTemplateCount(),
-        cacheLoaded: DialogueTaskService.isCacheLoaded()
-      });
       const subTemplate = DialogueTaskService.getTemplate(subId);
-      console.log('[buildMainDataFromTemplate] Sub-template result:', {
-        subId,
-        found: !!subTemplate,
-        subTemplateLabel: subTemplate?.label
-      });
       if (subTemplate) {
         // ✅ Check if subTemplate has mainData with steps
         let subSteps = undefined;
@@ -337,11 +311,6 @@ function buildMainDataFromTemplate(template: any): { mainData: any[]; guidMappin
       }
     }
 
-    console.log('[buildMainDataFromTemplate] Built subDataInstances:', {
-      count: subDataInstances.length,
-      labels: subDataInstances.map((s: any) => s.label)
-    });
-
     // ✅ Check if template has steps at root level
     let mainSteps = undefined;
     if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
@@ -371,13 +340,6 @@ function buildMainDataFromTemplate(template: any): { mainData: any[]; guidMappin
       templateId: template.id || template._id,
       kind: template.name || template.type || 'generic'
     }];
-
-    console.log('[buildMainDataFromTemplate] Returning composite template result:', {
-      length: result.length,
-      firstLabel: result[0]?.label,
-      firstSubDataLength: result[0]?.subData?.length || 0,
-      guidMappingSize: allGuidMappings.size
-    });
 
     return { mainData: result, guidMapping: allGuidMappings };
   } else {
@@ -431,23 +393,9 @@ async function copyTranslationsForClonedSteps(ddt: any, templateId: string, guid
     // Get old GUIDs (from template) - these have translations in the database
     const oldGuids = Array.from(guidMapping.keys());
 
-    console.log('[copyTranslationsForClonedSteps] Mapping translations:', {
-      oldGuidsCount: oldGuids.length,
-      sampleOldGuids: oldGuids.slice(0, 5)
-    });
-
     // Load template translations for OLD GUIDs (these exist in the database)
     const { getTemplateTranslations } = await import('../services/ProjectDataService');
     const templateTranslations = await getTemplateTranslations(oldGuids);
-
-    console.log('[copyTranslationsForClonedSteps] Template translations loaded:', {
-      oldGuidsCount: oldGuids.length,
-      translationsCount: Object.keys(templateTranslations).length,
-      sampleTranslations: Object.entries(templateTranslations).slice(0, 3).map(([guid, trans]) => ({
-        oldGuid: guid,
-        text: typeof trans === 'object' ? (trans as any).it || (trans as any).en : trans
-      }))
-    });
 
     // Get project locale
     const projectLocale = (localStorage.getItem('project.lang') || 'it') as 'en' | 'it' | 'pt';
@@ -472,21 +420,12 @@ async function copyTranslationsForClonedSteps(ddt: any, templateId: string, guid
       }
     }
 
-    console.log('[copyTranslationsForClonedSteps] Instance translations to add:', {
-      count: Object.keys(instanceTranslations).length,
-      sampleTranslations: Object.entries(instanceTranslations).slice(0, 3).map(([newGuid, text]) => {
-        const oldGuid = Array.from(guidMapping.entries()).find(([_, ng]) => ng === newGuid)?.[0];
-        return { oldGuid, newGuid, text };
-      })
-    });
-
     // Add translations to global table via window context (in memory) AND save to database
     if (Object.keys(instanceTranslations).length > 0) {
       // Try to add to in-memory context first
       const translationsContext = (window as any).__projectTranslationsContext;
       if (translationsContext && translationsContext.addTranslations) {
         translationsContext.addTranslations(instanceTranslations);
-        console.log('[copyTranslationsForClonedSteps] ✅ Added translations to global table (in memory)');
       } else {
         console.warn('[copyTranslationsForClonedSteps] ProjectTranslationsContext not available, will save to DB only');
       }
@@ -520,18 +459,12 @@ async function copyTranslationsForClonedSteps(ddt: any, templateId: string, guid
           }));
 
           await saveProjectTranslations(projectId, translationsToSave);
-          console.log('[copyTranslationsForClonedSteps] ✅ Saved translations to database:', {
-            projectId,
-            count: translationsToSave.length,
-            sample: translationsToSave.slice(0, 3).map(t => ({ guid: t.guid, text: t.text.substring(0, 30) }))
-          });
 
           // ✅ Reload translations in context if available (to ensure UI sees the new translations)
           const translationsContext = (window as any).__projectTranslationsContext;
           if (translationsContext && translationsContext.loadAllTranslations) {
             try {
               await translationsContext.loadAllTranslations();
-              console.log('[copyTranslationsForClonedSteps] ✅ Reloaded translations in context');
             } catch (reloadErr) {
               console.warn('[copyTranslationsForClonedSteps] Failed to reload translations in context:', reloadErr);
             }

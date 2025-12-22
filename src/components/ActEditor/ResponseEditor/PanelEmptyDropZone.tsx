@@ -1,11 +1,11 @@
 import React from 'react';
 import { useDrop } from 'react-dnd';
 import { DND_TYPE_VIEWER } from './ActionRowDnDWrapper';
-import { normalizeActionFromViewer } from './utils/normalize';
-import { Action } from './types';
+import { normalizeTaskFromViewer } from './utils/normalize';
+import { TaskReference } from './types';
 
 interface PanelEmptyDropZoneProps {
-  onDropAction: (action: Action) => void;
+  onDropAction: (task: TaskReference) => void;
   color?: string;
 }
 
@@ -13,7 +13,7 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({ onDropAction, c
   const [{ isOver }, drop] = useDrop(() => ({
     accept: [DND_TYPE_VIEWER],
     drop: (item: any) => {
-      const normalized = normalizeActionFromViewer(item);
+      const normalized = normalizeTaskFromViewer(item);
       onDropAction(normalized);
     },
     collect: (monitor) => ({ isOver: monitor.isOver({ shallow: true }) })
@@ -33,7 +33,7 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({ onDropAction, c
         justifyContent: 'center'
       }}
     >
-      {isOver ? 'Drop to add first action' : ''}
+      {isOver ? 'Drop to add first task' : ''}
     </div>
   );
 };

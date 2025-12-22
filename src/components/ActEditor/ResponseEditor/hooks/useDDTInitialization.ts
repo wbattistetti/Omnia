@@ -143,6 +143,9 @@ export function useDDTInitialization(
   // Local editable copies (initialize with coerced phone kind)
   const [localDDT, setLocalDDT] = useState<any>(() => coercePhoneKind(ddt));
 
+  // Track last DDT ID to avoid unnecessary resets
+  const lastDDTIdRef = useRef<string | null>(null);
+
   // Synchronize from prop when DDT changes
   useEffect(() => {
     // Don't sync from prop if wizard owns the data
@@ -164,9 +167,14 @@ export function useDDTInitialization(
       setLocalDDT(enriched);
     }
 
-    // Reset selection when a different DDT is opened (new session)
-    if (!isSameDDT && onSelectionReset) {
+    // Reset selection ONLY when a different DDT is opened (not on every render)
+    const ddtIdString = nextId || 'no-id';
+    if (lastDDTIdRef.current !== ddtIdString && !isSameDDT && onSelectionReset) {
+      lastDDTIdRef.current = ddtIdString;
       onSelectionReset();
+    } else if (lastDDTIdRef.current === null && nextId) {
+      // First load - track the ID but don't reset (selection is already initialized)
+      lastDDTIdRef.current = ddtIdString;
     }
   }, [ddt, localDDT, wizardOwnsDataRef, onSelectionReset]);
 

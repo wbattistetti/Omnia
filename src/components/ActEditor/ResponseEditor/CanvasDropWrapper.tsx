@@ -1,11 +1,11 @@
 import React from 'react';
 import { useDrop } from 'react-dnd';
 import { DND_TYPE_VIEWER } from './ActionRowDnDWrapper';
-import { normalizeActionFromViewer } from './utils/normalize';
-import { Action } from './types';
+import { normalizeTaskFromViewer } from './utils/normalize';
+import { TaskReference } from './types';
 
 interface CanvasDropWrapperProps {
-  onDropAction: (action: Action) => void;
+  onDropAction: (task: TaskReference) => void;
   color?: string;
   children: React.ReactNode;
 }
@@ -14,7 +14,7 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropAction, col
   const [{ isOver }, drop] = useDrop(() => ({
     accept: [DND_TYPE_VIEWER],
     drop: (item: any) => {
-      const normalized = normalizeActionFromViewer(item);
+      const normalized = normalizeTaskFromViewer(item);
       onDropAction(normalized);
     },
     collect: (monitor) => ({ isOver: monitor.isOver({ shallow: true }) })

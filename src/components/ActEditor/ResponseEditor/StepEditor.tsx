@@ -19,7 +19,7 @@ type Props = {
   onModelChange?: (next: EscalationModel[]) => void;
 };
 
-type EscalationModel = { actions: Array<{ actionId: string; text?: string; textKey?: string; icon?: string; label?: string; color?: string }> };
+type EscalationModel = { tasks: Array<{ templateId: string; taskId?: string; text?: string; textKey?: string; icon?: string; label?: string; color?: string }> };
 
 function buildModel(node: any, stepKey: string, translations: Record<string, string>): EscalationModel[] {
   // Removed verbose logging
@@ -62,58 +62,16 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
       escalationsCount: escs.length
     });
 
-    console.log('[StepEditor][buildModel] 🔍 Processing escalations', {
-      stepKey,
-      nodeLabel: node?.label,
-      escalationsCount: escs.length,
-      translationsCount: Object.keys(translations).length,
-      hasTasks: escs.some((e: any) => e.tasks && e.tasks.length > 0),
-      hasActions: escs.some((e: any) => e.actions && e.actions.length > 0),
-      firstEscalation: escs[0] ? {
-        hasTasks: !!escs[0].tasks,
-        tasksCount: escs[0].tasks?.length || 0,
-        hasActions: !!escs[0].actions,
-        actionsCount: escs[0].actions?.length || 0,
-        firstTask: escs[0].tasks?.[0] ? {
-          taskId: escs[0].tasks[0].taskId,
-          templateId: escs[0].tasks[0].templateId,
-          hasParameters: !!escs[0].tasks[0].parameters,
-          textParam: escs[0].tasks[0].parameters?.find((p: any) => p.parameterId === 'text')?.value
-        } : null,
-        firstAction: escs[0].actions?.[0] ? {
-          actionId: escs[0].actions[0].actionId,
-          actionInstanceId: escs[0].actions[0].actionInstanceId,
-          hasParameters: !!escs[0].actions[0].parameters,
-          textParam: escs[0].actions[0].parameters?.find((p: any) => p.parameterId === 'text')?.value
-        } : null
-      } : null
-    });
+    // ✅ Removed verbose logging - enable with debug.stepEditor flag if needed
 
     return escs.map((esc, escIdx) => {
       // ✅ Support both tasks (new) and actions (legacy)
       const taskRefs = esc.tasks || esc.actions || [];
 
-      console.log(`[StepEditor][buildModel] 🔍 Processing escalation ${escIdx}`, {
-        stepKey,
-        nodeLabel: node?.label,
-        escIdx,
-        hasTasks: !!esc.tasks,
-        tasksCount: esc.tasks?.length || 0,
-        hasActions: !!esc.actions,
-        actionsCount: esc.actions?.length || 0,
-        taskRefsCount: taskRefs.length,
-        firstTaskRef: taskRefs[0] ? {
-          taskId: taskRefs[0].taskId,
-          templateId: taskRefs[0].templateId,
-          actionId: taskRefs[0].actionId,
-          actionInstanceId: taskRefs[0].actionInstanceId,
-          hasParameters: !!taskRefs[0].parameters,
-          textParam: taskRefs[0].parameters?.find((p: any) => p.parameterId === 'text')?.value
-        } : null
-      });
+      // ✅ Removed verbose logging
 
       return {
-        actions: taskRefs.map((task: any, taskIdx: number) => {
+        tasks: taskRefs.map((task: any, taskIdx: number) => {
           const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
           const textKey = p?.value || task.taskId; // ✅ Use taskId as fallback if no text parameter
           const hasDirectText = typeof task.text === 'string' && task.text.length > 0;
@@ -122,22 +80,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
             ? task.text
             : (typeof textKey === 'string' ? (translationValue || textKey) : undefined);
 
-          console.log(`[StepEditor][buildModel] 🔍 Processing task ${taskIdx}`, {
-            stepKey,
-            nodeLabel: node?.label,
-            escIdx,
-            taskIdx,
-            taskId: task.taskId,
-            templateId: task.templateId,
-            textKey,
-            hasDirectText,
-            hasTranslation: !!translationValue,
-            translationValue: translationValue ? translationValue.substring(0, 50) : null,
-            finalText: text ? text.substring(0, 50) : null,
-            textKeyInTranslations: textKey in translations,
-            translationsDictKeysCount: Object.keys(translations).length,
-            sampleTranslationsKeys: Object.keys(translations).slice(0, 5)
-          });
+          // ✅ Removed verbose logging
 
           // DEBUG: Log specifico quando non trova la translation
           if (textKey && !translationValue && !hasDirectText) {
@@ -161,7 +104,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
             });
           }
 
-          return { actionId: task.templateId || task.actionId, text, textKey, color: task.color };
+          return { templateId: task.templateId || task.actionId, taskId: task.taskId, text, textKey, color: task.color };
         })
       };
     });
@@ -173,21 +116,21 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
     if (group && Array.isArray(group.escalations)) {
       // Removed verbose log
       return (group.escalations as any[]).map((esc: any) => ({
-        actions: (esc.actions || []).map((a: any) => {
+        tasks: (esc.tasks || esc.actions || []).map((task: any) => {
           const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
           const textKey = p?.value;
 
           // Removed verbose log
 
-          // PRIORITY: Always use action.text if present (this is the edited text, saved directly on the action)
-          // Only fallback to translations[textKey] if action.text is not available
+          // PRIORITY: Always use task.text if present (this is the edited text, saved directly on the task)
+          // Only fallback to translations[textKey] if task.text is not available
           // This ensures that sub-data use their own edited text, not the main's textKey translations
-          const text = (typeof a.text === 'string' && a.text.length > 0)
-            ? a.text
+          const text = (typeof task.text === 'string' && task.text.length > 0)
+            ? task.text
             : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
 
           // Removed verbose log
-          return { actionId: a.actionId, text, textKey, color: a.color };
+          return { templateId: task.templateId || task.actionId, taskId: task.taskId, text, textKey, color: task.color };
         })
       }));
     } else {
@@ -213,8 +156,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
 
     return [
       {
-        tasks: [{ templateId: 'sayMessage', taskId: '', parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [] }],  // ✅ New field
-        actions: [{ actionId: 'sayMessage', text, textKey }]  // ✅ Legacy alias
+        tasks: [{ templateId: 'sayMessage', taskId: `task-${Date.now()}`, parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [], text, textKey }]
       }
     ];
   }
@@ -227,7 +169,7 @@ function buildModel(node: any, stepKey: string, translations: Record<string, str
       // Removed verbose log
       return [
         {
-          actions: matches.map(k => ({ actionId: 'sayMessage', text: translations[k] || k, textKey: k }))
+          tasks: matches.map(k => ({ templateId: 'sayMessage', taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, text: translations[k] || k, textKey: k }))
         }
       ];
     }
@@ -282,17 +224,19 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   React.useEffect(() => {
     // Confronta sia struttura che testo per rilevare cambiamenti esterni
     const localSnapshot = JSON.stringify(localModel.map(e => ({
-      actions: e.actions.map(a => ({
-        actionId: a.actionId,
-        textKey: a.textKey,
-        text: a.text // Include text to detect external changes (e.g., from Chat Simulator)
+      tasks: (e.tasks || e.actions || []).map(t => ({
+        templateId: t.templateId || t.actionId,
+        taskId: t.taskId,
+        textKey: t.textKey,
+        text: t.text // Include text to detect external changes (e.g., from Chat Simulator)
       }))
     })));
     const modelSnapshot = JSON.stringify(model.map(e => ({
-      actions: e.actions.map(a => ({
-        actionId: a.actionId,
-        textKey: a.textKey,
-        text: a.text
+      tasks: (e.tasks || e.actions || []).map(t => ({
+        templateId: t.templateId || t.actionId,
+        taskId: t.taskId,
+        textKey: t.textKey,
+        text: t.text
       }))
     })));
     if (localSnapshot !== modelSnapshot) {
@@ -314,8 +258,8 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   }, [onModelChange, stepKey, node]);
   const { editTask, deleteTask, moveTask, dropTaskFromViewer, appendTask } = useActionCommands(setLocalModel as any, commitUp as any);
 
-  // Priorità: a.text (UI-local) > translations[a.textKey] (persisted)
-  const getText = (a: any) => (a.text || (typeof a.textKey === 'string' ? translations[a.textKey] : '') || '');
+  // Priorità: task.text (UI-local) > translations[task.textKey] (persisted)
+  const getText = (task: any) => (task.text || (typeof task.textKey === 'string' ? translations[task.textKey] : '') || '');
 
   // const handleQuickAdd = () => {
   //   // Azione base: sayMessage vuota
@@ -373,7 +317,15 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       }
     }
     const currentLen = (localModel?.[escIdx]?.tasks?.length || localModel?.[escIdx]?.actions?.length) || 0;
-    appendTask(escIdx, action);
+    // ✅ Convert Action-like object to TaskReference
+    const taskRef = {
+      templateId: action.actionId || action.templateId || 'sayMessage',
+      taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      parameters: action.textKey ? [{ parameterId: 'text', value: action.textKey }] : [],
+      text: action.text,
+      color: action.color
+    };
+    appendTask(escIdx, taskRef);
     setAutoEditTarget({ escIdx, actIdx: currentLen });
   }, [appendTask, localModel, allowedActions]);
 
@@ -400,30 +352,31 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       )}
       {['start', 'success', 'introduction'].includes(stepKey) ? (
         // Per start/success: canvas droppabile per append; i row wrapper non accettano drop dal viewer
-        <CanvasDropWrapper onDropAction={(action) => handleAppend(0, action)} color={color}>
-          {localModel[0]?.actions?.map((a, j) => {
+        <CanvasDropWrapper onDropAction={(task) => handleAppend(0, task)} color={color}>
+          {(localModel[0]?.tasks || localModel[0]?.actions || []).map((task: any, j: number) => {
             const editingKey = `0-${j}`;
             const isEditing = editingRows.has(editingKey);
+            const templateId = task.templateId || task.actionId || 'sayMessage';
             return (
               <ActionRowDnDWrapper
                 key={j}
                 escalationIdx={0}
                 actionIdx={j}
-                action={a}
+                action={task}
                 onMoveAction={moveTask}
-                onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
+                onDropNewAction={(task, to, pos) => handleDropFromViewer(task, to, pos)}
                 allowViewerDrop={true}
                 isEditing={isEditing}
               >
                 <ActionRow
-                  icon={getActionIconNode(a.actionId, ensureHexColor(a.color))}
-                  text={getText(a)}
+                  icon={getActionIconNode(templateId, ensureHexColor(task.color))}
+                  text={getText(task)}
                   color={color}
                   draggable
                   selected={false}
-                  actionId={a.actionId}
-                  label={getActionLabel(a.actionId)}
-                  onEdit={a.actionId === 'sayMessage' ? (newText) => handleEdit(0, j, newText) : undefined}
+                  actionId={templateId}
+                  label={getActionLabel(templateId)}
+                  onEdit={templateId === 'sayMessage' ? (newText) => handleEdit(0, j, newText) : undefined}
                   onDelete={() => handleDelete(0, j)}
                   autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === 0 && autoEditTarget.actIdx === j)}
                   onEditingChange={handleEditingChange(0, j)}
@@ -444,32 +397,33 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
               )}
             </div>
             <div style={{ padding: 10 }}>
-              {esc.actions.length === 0 ? (
-                <PanelEmptyDropZone color={color} onDropAction={(action) => handleAppend(idx, action)} />
+              {(esc.tasks || esc.actions || []).length === 0 ? (
+                <PanelEmptyDropZone color={color} onDropAction={(task) => handleAppend(idx, task)} />
               ) : (
-                esc.actions.map((a, j) => {
+                (esc.tasks || esc.actions || []).map((task: any, j: number) => {
                   const editingKey = `${idx}-${j}`;
                   const isEditing = editingRows.has(editingKey);
+                  const templateId = task.templateId || task.actionId || 'sayMessage';
                   return (
                     <ActionRowDnDWrapper
                       key={j}
                       escalationIdx={idx}
                       actionIdx={j}
-                      action={a}
-                      onMoveAction={moveAction}
-                      onDropNewAction={(action, to, pos) => handleDropFromViewer(action, to, pos)}
+                      action={task}
+                      onMoveAction={moveTask}
+                      onDropNewAction={(task, to, pos) => handleDropFromViewer(task, to, pos)}
                       allowViewerDrop={true}
                       isEditing={isEditing}
                     >
                       <ActionRow
-                        icon={getActionIconNode(a.actionId, ensureHexColor(a.color))}
-                        text={getText(a)}
+                        icon={getActionIconNode(templateId, ensureHexColor(task.color))}
+                        text={getText(task)}
                         color={color}
                         draggable
                         selected={false}
-                        actionId={a.actionId}
-                        label={getActionLabel(a.actionId)}
-                        onEdit={a.actionId === 'sayMessage' ? (newText) => handleEdit(idx, j, newText) : undefined}
+                        actionId={templateId}
+                        label={getActionLabel(templateId)}
+                        onEdit={templateId === 'sayMessage' ? (newText) => handleEdit(idx, j, newText) : undefined}
                         onDelete={() => handleDelete(idx, j)}
                         autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === idx && autoEditTarget.actIdx === j)}
                         onEditingChange={handleEditingChange(idx, j)}

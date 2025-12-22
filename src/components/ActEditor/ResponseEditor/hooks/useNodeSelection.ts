@@ -14,18 +14,31 @@ export function useNodeSelection(initialMainIndex = 0) {
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   const handleSelectMain = useCallback((idx: number) => {
+    const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.nodeSelection') === '1') console.log(...args); } catch {} };
+    dbg('[useNodeSelection][handleSelectMain]', { idx, currentMainIndex: selectedMainIndex });
     setSelectedMainIndex(idx);
     setSelectedSubIndex(undefined);
     setSelectedRoot(false);
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-  }, []);
+  }, [selectedMainIndex]);
 
-  const handleSelectSub = useCallback((subIdx: number | undefined) => {
-    // subIdx is relative to the currently selected main
+  const handleSelectSub = useCallback((subIdx: number | undefined, mainIdx?: number) => {
+    const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.nodeSelection') === '1') console.log(...args); } catch {} };
+    dbg('[useNodeSelection][handleSelectSub]', { subIdx, mainIdx, currentMainIndex: selectedMainIndex, currentSubIndex: selectedSubIndex });
+    // subIdx is relative to the main (either provided mainIdx or currently selected main)
     setSelectedRoot(false);
-    setSelectedSubIndex(subIdx);
+    if (mainIdx !== undefined && mainIdx !== selectedMainIndex) {
+      // If mainIdx is provided and different from current, select both atomically
+      dbg('[useNodeSelection][handleSelectSub] Setting both main and sub', { mainIdx, subIdx });
+      setSelectedMainIndex(mainIdx);
+      setSelectedSubIndex(subIdx);
+    } else {
+      // Otherwise, just update sub index (main is already correct)
+      dbg('[useNodeSelection][handleSelectSub] Setting only sub', { subIdx });
+      setSelectedSubIndex(subIdx);
+    }
     setTimeout(() => { sidebarRef.current?.focus(); }, 0);
-  }, []);
+  }, [selectedMainIndex, selectedSubIndex]);
 
   const handleSelectAggregator = useCallback(() => {
     setSelectedRoot(true);

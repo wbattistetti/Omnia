@@ -57,25 +57,6 @@ export class DialogueTaskService {
       this.cache = Array.isArray(data) ? data : [];
       this.cacheLoaded = true;
 
-    // Log task names for debugging
-    console.log('[DialogueTaskService] Task caricati:', this.cache.length);
-    console.log('[DialogueTaskService] Nomi task:', this.cache.map(t => ({
-      name: t.name,
-      label: t.label,
-      id: t.id,
-      _id: t._id,
-      _idType: typeof t._id,
-      _idToString: t._id ? (typeof t._id === 'object' && t._id.toString ? t._id.toString() : String(t._id)) : null,
-      type: t.type
-    })).slice(0, 10));
-    console.log('[DialogueTaskService] Sample _id formats:', this.cache.slice(0, 5).map(t => ({
-      label: t.label,
-      _id: t._id,
-      _idType: typeof t._id,
-      _idIsObject: typeof t._id === 'object',
-      _idHasToString: t._id && typeof t._id === 'object' && typeof t._id.toString === 'function'
-    })));
-
       return this.cache;
     } catch (error) {
       console.error('[DialogueTaskService] Errore nel caricamento dei task:', error);

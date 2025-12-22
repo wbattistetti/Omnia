@@ -12,7 +12,7 @@ interface SidebarProps {
   selectedMainIndex: number;
   onSelectMain: (idx: number) => void;
   selectedSubIndex?: number | null;
-  onSelectSub?: (idx: number | undefined) => void;
+  onSelectSub?: (idx: number | undefined, mainIdx?: number) => void;
   aggregated?: boolean;
   rootLabel?: string;
   onSelectAggregator?: () => void;
@@ -78,8 +78,8 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
           onSelectMain(next.mainIdx);
           onSelectSub && onSelectSub(undefined);
         } else {
-          onSelectMain(next.mainIdx);
-          onSelectSub && onSelectSub(next.subIdx!);
+          // ✅ Select both main and sub atomically
+          onSelectSub && onSelectSub(next.subIdx!, next.mainIdx);
         }
         handled = true;
       }
@@ -90,8 +90,8 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
           onSelectMain(prev.mainIdx);
           onSelectSub && onSelectSub(undefined);
         } else {
-          onSelectMain(prev.mainIdx);
-          onSelectSub && onSelectSub(prev.subIdx!);
+          // ✅ Select both main and sub atomically
+          onSelectSub && onSelectSub(prev.subIdx!, prev.mainIdx);
         }
         handled = true;
       }
@@ -348,7 +348,13 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                         try { e.preventDefault(); } catch {}
                       }}
                       onDragEnd={() => { dragStateRef.current = { mainIdx: null, fromIdx: null }; }}
-                      onClick={(e) => { onSelectSub && onSelectSub(sidx); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
+                      onClick={(e) => {
+                        e.stopPropagation(); // ✅ Prevent event bubbling
+                        // ✅ Select both main and sub atomically to prevent race condition
+                        onSelectSub && onSelectSub(sidx, idx);
+                        (e.currentTarget as HTMLButtonElement).blur();
+                        ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus();
+                      }}
                       onMouseEnter={(ev) => {
                         setHoverSub({ mainIdx: idx, subIdx: sidx });
                         const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();

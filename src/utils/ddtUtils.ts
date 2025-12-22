@@ -108,18 +108,19 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
   ddt.mainData.forEach((main: any) => processNode(main));
 
   const result = Array.from(guids);
-  console.log('[extractGUIDsFromDDT] ✅ Extracted GUIDs', {
-    totalGuids: result.length,
-    fromMessages: debugInfo.fromMessages.length,
-    fromTaskIds: debugInfo.fromTaskIds.length,
-    fromTextParams: debugInfo.fromTextParams.length,
-    nodesProcessed: debugInfo.nodesProcessed,
-    escalationsProcessed: debugInfo.escalationsProcessed,
-    tasksProcessed: debugInfo.tasksProcessed,
-    sampleGuids: result.slice(0, 10),
-    sampleFromTaskIds: debugInfo.fromTaskIds.slice(0, 5),
-    sampleFromTextParams: debugInfo.fromTextParams.slice(0, 5)
-  });
+
+  // ✅ Log only if debug flag is set
+  try {
+    if (localStorage.getItem('debug.ddtUtils') === '1') {
+      console.log('[extractGUIDsFromDDT] ✅ Extracted GUIDs', {
+        totalGuids: result.length,
+        fromMessages: debugInfo.fromMessages.length,
+        fromTaskIds: debugInfo.fromTaskIds.length,
+        fromTextParams: debugInfo.fromTextParams.length,
+        sampleGuids: result.slice(0, 5)
+      });
+    }
+  } catch {}
 
   return result;
 }

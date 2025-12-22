@@ -103,6 +103,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   useEffect(() => {
     try { localStorage.setItem('debug.responseEditor', '1'); } catch { }
     try { localStorage.setItem('debug.reopen', '1'); } catch { }
+    try { localStorage.setItem('debug.nodeSelection', '1'); } catch { }
   }, []);
   // Get project language from localStorage (set when project is created/loaded)
   const projectLocale = useMemo<'en' | 'it' | 'pt'>(() => {
@@ -679,14 +680,27 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     }
   }, [localDDT, act, isInferring, inferenceResult, selectedProvider, selectedModel, showWizard]); // ✅ Rimosso mainList dalle dipendenze
 
+  // Track introduction separately to avoid recalculating selectedNode when localDDT changes
+  const introduction = useMemo(() => localDDT?.introduction, [localDDT?.introduction]);
+
+  // Create stable key for mainList to prevent unnecessary recalculations
+  const mainListStableKey = useMemo(() => {
+    if (!mainList || mainList.length === 0) return 'empty';
+    return mainList.map((m: any, idx: number) => {
+      const label = m?.label || '';
+      const subCount = getSubDataList(m)?.length || 0;
+      return `${idx}:${label}:${subCount}`;
+    }).join('|');
+  }, [mainList]);
+
   // Nodo selezionato: root se selectedRoot, altrimenti main/sub in base agli indici
   const selectedNode = useMemo(() => {
     // If root is selected, return the root DDT structure with introduction step
     if (selectedRoot) {
       if (!localDDT) return null;
       // Always include introduction step (even if empty) so StepEditor can work with it
-      const introStep = localDDT.introduction
-        ? { type: 'introduction', escalations: localDDT.introduction.escalations }
+      const introStep = introduction
+        ? { type: 'introduction', escalations: introduction.escalations }
         : { type: 'introduction', escalations: [] };
       return { ...localDDT, steps: [introStep] };
     }
@@ -696,28 +710,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     }
     if (selectedSubIndex == null) {
       // Main selected
-      // Removed verbose log
       return main;
     }
     const subList = getSubDataList(main);
     const sub = subList[selectedSubIndex] || main;
-
-    // DEBUG: Log per verificare la struttura del sub
-    const areStepsSameAsMain = main?.steps === sub?.steps;
-    const subStartStep = Array.isArray(sub?.steps) ? sub.steps.find((s: any) => s?.type === 'start') : null;
-    const mainStartStep = Array.isArray(main?.steps) ? main.steps.find((s: any) => s?.type === 'start') : null;
-    const areStartStepsSame = subStartStep === mainStartStep;
-
-    // DEBUG: Get the actual task object to inspect its structure
-    // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
-    const subStartAction = subStartStep?.escalations?.[0]?.tasks?.[0] || subStartStep?.escalations?.[0]?.actions?.[0];
-    const subStartActionKeys = subStartAction ? Object.keys(subStartAction) : [];
-    const subStartActionFull = subStartAction ? JSON.stringify(subStartAction).substring(0, 300) : 'null';
-
-    // Removed verbose log
-
     return sub;
-  }, [mainList, selectedMainIndex, selectedSubIndex, selectedRoot, localDDT]);
+  }, [mainListStableKey, selectedMainIndex, selectedSubIndex, selectedRoot, introduction, mainList]);
 
   // Step keys per il nodo selezionato: se root selezionato, sempre 'introduction' (anche se vuoto, per permettere creazione)
   const stepKeys = useMemo(() => {

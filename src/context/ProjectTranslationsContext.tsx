@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { useProjectDataUpdate } from './ProjectDataContext';
 import { loadProjectTranslations, saveProjectTranslations, loadAllProjectTranslations } from '../services/ProjectDataService';
 
@@ -94,9 +94,6 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       return;
     }
 
-    const startTime = performance.now();
-    console.log(`[PERF][${new Date().toISOString()}] 🌐 START loadAllTranslations`, { projectId: currentProjectId, locale: projectLocale });
-
     try {
       const allTranslations = await loadAllProjectTranslations(currentProjectId, projectLocale);
       setTranslations(allTranslations);
@@ -104,18 +101,8 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       setOriginalTranslations(JSON.parse(JSON.stringify(allTranslations)));
       setAllGuids(new Set(Object.keys(allTranslations)));
       setIsDirty(false);
-
-      const duration = performance.now() - startTime;
-      console.log(`[PERF][${new Date().toISOString()}] ✅ END loadAllTranslations`, {
-        duration: `${duration.toFixed(2)}ms`,
-        translationsCount: Object.keys(allTranslations).length
-      });
     } catch (err) {
-      const duration = performance.now() - startTime;
-      console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTranslations`, {
-        duration: `${duration.toFixed(2)}ms`,
-        error: err
-      });
+      console.error('[ProjectTranslations] ❌ ERROR loadAllTranslations:', err);
     }
   }, [currentProjectId, projectLocale]);
 
@@ -127,7 +114,6 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
 
     if (!isDirty) {
-      console.log('[ProjectTranslations] No changes to save (isDirty: false)');
       return;
     }
 
@@ -149,12 +135,9 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       });
 
       if (modifiedTranslations.length === 0) {
-        console.log('[ProjectTranslations] No modified translations to save');
         setIsDirty(false);
         return;
       }
-
-      console.log(`[ProjectTranslations] Saving ${modifiedTranslations.length} modified translations (out of ${Object.keys(translations).length} total)`);
 
       await saveProjectTranslations(currentProjectId, modifiedTranslations);
 
@@ -184,7 +167,8 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     }
   }, [currentProjectId, loadAllTranslations]);
 
-  const value: ProjectTranslationsContextType = {
+  // Memoize context value to prevent unnecessary re-renders
+  const value: ProjectTranslationsContextType = useMemo(() => ({
     translations,
     addTranslation,
     addTranslations,
@@ -192,7 +176,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     loadAllTranslations,
     saveAllTranslations,
     isDirty
-  };
+  }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isDirty]);
 
   // Expose saveAllTranslations, addTranslations, and loadAllTranslations on window for explicit save from AppContent and ddtMergeUtils
   useEffect(() => {
@@ -201,8 +185,6 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
         saveAllTranslations: async () => {
           if (isDirty) {
             await saveAllTranslations();
-          } else {
-            console.log('[ProjectTranslations] No changes to save (isDirty: false)');
           }
         },
         addTranslations: (newTranslations: Record<string, string>) => {

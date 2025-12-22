@@ -1,14 +1,14 @@
 import React from 'react';
 import { useDrag, useDrop } from 'react-dnd';
-import { Action } from './types';
+import { TaskReference } from './types';
 
 export interface ActionRowDnDWrapperProps {
   escalationIdx: number;
   actionIdx: number; // ✅ Legacy name, but represents taskIdx
-  action: Action;
+  action: TaskReference | any; // ✅ Accept TaskReference or legacy Action-like object
   onMoveAction: (fromEscIdx: number, fromTaskIdx: number, toEscIdx: number, toTaskIdx: number, position: 'before' | 'after') => void;
-  onDropAction?: (from: { escalationIdx: number; taskIdx: number; action: Action }, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void;
-  onDropNewAction?: (action: any, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void;
+  onDropAction?: (from: { escalationIdx: number; taskIdx: number; task: TaskReference }, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void;
+  onDropNewAction?: (task: any, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void;
   children: React.ReactNode;
   allowViewerDrop?: boolean;
   isEditing?: boolean; // Disable drag when editing
@@ -96,7 +96,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
         }
       } else if (allowViewerDrop && item.type === DND_TYPE_VIEWER) {
         if (onDropNewAction) {
-          onDropNewAction(item.action, { escalationIdx, taskIdx: actionIdx }, position);
+          onDropNewAction(item.task || item.action, { escalationIdx, taskIdx: actionIdx }, position);
         } else {
           console.warn('[DnD][drop] onDropNewAction NOT PROVIDED!');
         }
