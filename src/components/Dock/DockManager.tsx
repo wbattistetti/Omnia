@@ -267,9 +267,25 @@ function TabSet(props: {
       ref={hostRef}
       className="relative w-full h-full rounded min-h-0"
       style={{ border: '1px solid #38bdf8', backgroundColor: '#e0f2fe' }}
-      onDragOver={(e) => { e.preventDefault(); const r = computeRegion(e); setRegion(r); props.onHover(props.nodeId, r); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        // Only show overlay when dragging dock tabs, not other elements like tasks
+        const isTabDrag = e.dataTransfer.types.includes('text/plain');
+        if (isTabDrag) {
+          const r = computeRegion(e);
+          setRegion(r);
+          props.onHover(props.nodeId, r);
+        }
+      }}
       onDragLeave={() => { setRegion(null); props.onHover(props.nodeId, 'center'); }}
-      onDrop={(e) => { const r = region || 'center'; props.onDrop(props.nodeId, r); setRegion(null); }}
+      onDrop={(e) => {
+        const isTabDrag = e.dataTransfer.types.includes('text/plain');
+        if (isTabDrag) {
+          const r = region || 'center';
+          props.onDrop(props.nodeId, r);
+        }
+        setRegion(null);
+      }}
     >
       <div className="flex items-center gap-1 px-2 border-b"
            style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>

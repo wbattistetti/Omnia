@@ -9,241 +9,156 @@ export default function useActionCommands(
   setLocalModel: React.Dispatch<React.SetStateAction<Escalation[]>>,
   onCommit?: (next: Escalation[]) => void
 ) {
+  // ⚠️ IMPORTANTE: Usa un ref per onCommit per evitare che i callback vengano ricreati
+  // quando onCommit cambia. Questo previene chiamate multiple al drop handler.
+  const onCommitRef = React.useRef(onCommit);
+  React.useEffect(() => {
+    onCommitRef.current = onCommit;
+  }, [onCommit]);
+
   const editTask = React.useCallback((escalationIdx: number, taskIdx: number, newText: string) => {
     setLocalModel(prev => {
-      // ✅ Always use tasks (migrate legacy actions if needed)
-      const next = prev.map(esc => {
-        if (esc.tasks) {
-          return { ...esc, tasks: [...esc.tasks] };
-        } else if (esc.actions) {
-          // Migrate legacy actions to tasks
-          const migratedTasks = esc.actions.map((oldAction: any) => ({
-            templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-            taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            parameters: oldAction.textKey ? [{ parameterId: 'text', value: oldAction.textKey }] : [],
-            text: oldAction.text,
-            color: oldAction.color
-          }));
-          return { ...esc, tasks: migratedTasks };
-        } else {
-          return { ...esc, tasks: [] };
-        }
-      });
+      // ✅ Always use tasks
+      const next = prev.map(esc => ({
+        ...esc,
+        tasks: [...(esc.tasks || [])]
+      }));
 
       const targetEsc = next[escalationIdx];
-      if (targetEsc.tasks) {
-        // ✅ Update task text parameter
-        const task = targetEsc.tasks[taskIdx];
-        if (task) {
-          const textParam = task.parameters?.find((p: any) => p.parameterId === 'text');
-          if (textParam) {
-            textParam.value = newText;
-          } else {
-            task.parameters = [...(task.parameters || []), { parameterId: 'text', value: newText }];
-          }
-        }
-      } else {
-        // Legacy support: convert to tasks if actions exist
-        if (targetEsc.actions && targetEsc.actions[taskIdx]) {
-          const oldAction = targetEsc.actions[taskIdx];
-          targetEsc.tasks = targetEsc.tasks || [];
-          targetEsc.tasks[taskIdx] = {
-            templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-            taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            parameters: oldAction.textKey ? [{ parameterId: 'text', value: newText }] : [],
-            text: newText,
-            color: oldAction.color
-          };
-          delete targetEsc.actions;
+      // ✅ Update task text parameter
+      const task = targetEsc.tasks[taskIdx];
+      if (task) {
+        const textParam = task.parameters?.find((p: any) => p.parameterId === 'text');
+        if (textParam) {
+          textParam.value = newText;
+        } else {
+          task.parameters = [...(task.parameters || []), { parameterId: 'text', value: newText }];
         }
       }
 
       try { info('RESPONSE_EDITOR', 'editTask', { escalationIdx, taskIdx, newTextLen: newText?.length || 0 }); } catch { }
-      try { onCommit?.(next); } catch { }
+      try { onCommitRef.current?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel, onCommit]);
+  }, [setLocalModel]);
 
   const deleteTask = React.useCallback((escalationIdx: number, taskIdx: number) => {
     setLocalModel(prev => {
-      // ✅ Always use tasks (migrate legacy actions if needed)
-      const next = prev.map(esc => {
-        if (esc.tasks) {
-          return { ...esc, tasks: [...esc.tasks] };
-        } else if (esc.actions) {
-          // Migrate legacy actions to tasks
-          const migratedTasks = esc.actions.map((oldAction: any) => ({
-            templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-            taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            parameters: oldAction.textKey ? [{ parameterId: 'text', value: oldAction.textKey }] : [],
-            text: oldAction.text,
-            color: oldAction.color
-          }));
-          return { ...esc, tasks: migratedTasks };
-        } else {
-          return { ...esc, tasks: [] };
-        }
-      });
+      // ✅ Always use tasks
+      const next = prev.map(esc => ({
+        ...esc,
+        tasks: [...(esc.tasks || [])]
+      }));
 
       const targetEsc = next[escalationIdx];
-      if (targetEsc.tasks) {
-        targetEsc.tasks.splice(taskIdx, 1);
-      } else if (targetEsc.actions) {
-        // Legacy support: convert to tasks
-        targetEsc.tasks = targetEsc.tasks || [];
-        targetEsc.actions.splice(taskIdx, 1);
-        if (targetEsc.actions.length === 0) {
-          delete targetEsc.actions;
-        }
-      }
+      targetEsc.tasks.splice(taskIdx, 1);
 
       try { info('RESPONSE_EDITOR', 'deleteTask', { escalationIdx, taskIdx }); } catch { }
-      try { onCommit?.(next); } catch { }
+      try { onCommitRef.current?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel, onCommit]);
+  }, [setLocalModel]);
 
   const moveTask = React.useCallback((fromEscIdx: number, fromTaskIdx: number, toEscIdx: number, toTaskIdx: number, position: Position) => {
     setLocalModel(prev => {
-      // ✅ Always use tasks (migrate legacy actions if needed)
-      const next = prev.map(esc => {
-        if (esc.tasks) {
-          return { ...esc, tasks: [...esc.tasks] };
-        } else if (esc.actions) {
-          // Migrate legacy actions to tasks
-          const migratedTasks = esc.actions.map((oldAction: any) => ({
-            templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-            taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            parameters: oldAction.textKey ? [{ parameterId: 'text', value: oldAction.textKey }] : [],
-            text: oldAction.text,
-            color: oldAction.color
-          }));
-          return { ...esc, tasks: migratedTasks };
-        } else {
-          return { ...esc, tasks: [] };
-        }
-      });
+      // ✅ Always use tasks
+      const next = prev.map(esc => ({
+        ...esc,
+        tasks: [...(esc.tasks || [])]
+      }));
 
       const fromEsc = next[fromEscIdx];
       const toEsc = next[toEscIdx];
 
-      let item: any;
-      if (fromEsc.tasks) {
-        item = fromEsc.tasks[fromTaskIdx];
-        fromEsc.tasks.splice(fromTaskIdx, 1);
-      } else if (fromEsc.actions) {
-        // Legacy support: convert action to task
-        const oldAction = fromEsc.actions[fromTaskIdx];
-        item = {
-          templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-          taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          parameters: oldAction.textKey ? [{ parameterId: 'text', value: oldAction.textKey }] : [],
-          text: oldAction.text,
-          color: oldAction.color
-        };
-        fromEsc.actions.splice(fromTaskIdx, 1);
-        if (fromEsc.actions.length === 0) {
-          delete fromEsc.actions;
-        }
-      }
+      const item = fromEsc.tasks[fromTaskIdx];
+      fromEsc.tasks.splice(fromTaskIdx, 1);
 
       let insertIdx = toTaskIdx;
       if (fromEscIdx === toEscIdx && fromTaskIdx < toTaskIdx) insertIdx--;
       if (position === 'after') insertIdx++;
 
-      if (toEsc.tasks) {
-        toEsc.tasks.splice(insertIdx, 0, item);
-      } else {
-        // Legacy support: convert to tasks
-        toEsc.tasks = toEsc.tasks || [];
-        if (toEsc.actions) {
-          // Migrate existing actions to tasks
-          toEsc.actions.forEach((oldAction: any) => {
-            toEsc.tasks!.push({
-              templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-              taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              parameters: oldAction.textKey ? [{ parameterId: 'text', value: oldAction.textKey }] : [],
-              text: oldAction.text,
-              color: oldAction.color
-            });
-          });
-          delete toEsc.actions;
-        }
-        toEsc.tasks.splice(insertIdx, 0, item);
-      }
+      toEsc.tasks.splice(insertIdx, 0, item);
 
       try { info('RESPONSE_EDITOR', 'moveTask', { fromEscIdx, fromTaskIdx, toEscIdx, toTaskIdx, position }); } catch { }
-      try { onCommit?.(next); } catch { }
+      try { onCommitRef.current?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel, onCommit]);
+  }, [setLocalModel]);
+
+  // Ref per tracciare se un drop è già in corso (per prevenire esecuzioni multiple della funzione updater)
+  // Usa un Set per tracciare le chiavi dei drop in corso
+  const dropInProgressRef = React.useRef<Set<string>>(new Set());
 
   const dropTaskFromViewer = React.useCallback((incoming: any, to: { escalationIdx: number; taskIdx: number }, position: Position) => {
-    setLocalModel(prev => {
+    // Crea una chiave unica per questo drop (senza timestamp per raggruppare chiamate duplicate)
+    const dropKey = `${to.escalationIdx}-${to.taskIdx}-${position}-${incoming?.templateId || incoming?.actionId || incoming?.id || 'unknown'}`;
 
-      // ✅ Support both tasks (new) and actions (legacy)
-      const next = prev.map(esc => {
-        // Preserve tasks if they exist, otherwise use actions
-        if (esc.tasks) {
-          return { ...esc, tasks: [...esc.tasks] };
-        } else {
-          return { ...esc, actions: [...(esc.actions || [])] };
-        }
-      });
+    // Assicurati che il Set esista
+    if (!dropInProgressRef.current) {
+      dropInProgressRef.current = new Set();
+    }
+
+    // Se c'è già un drop in corso con la stessa chiave, ignora questa chiamata
+    if (dropInProgressRef.current.has(dropKey)) {
+      return;
+    }
+
+    // Marca questo drop come in corso
+    dropInProgressRef.current.add(dropKey);
+
+    // Pulisci il flag dopo un breve delay
+    setTimeout(() => {
+      dropInProgressRef.current.delete(dropKey);
+    }, 200);
+
+    setLocalModel(prev => {
+      // Guard dentro la funzione updater per prevenire esecuzioni multiple
+      // Assicurati che il Set esista
+      if (!dropInProgressRef.current) {
+        dropInProgressRef.current = new Set();
+      }
+
+      // Usa delete per rimuovere la chiave in modo atomico: ritorna true solo se la chiave esisteva
+      const wasInSet = dropInProgressRef.current.delete(dropKey);
+
+      if (!wasInSet) {
+        // La chiave non era nel Set, significa che questa esecuzione è già stata processata
+        return prev; // Return previous state unchanged
+      }
+
+      // ✅ Always use tasks
+      const next = prev.map(esc => ({
+        ...esc,
+        tasks: [...(esc.tasks || [])]
+      }));
 
       const normalized = normalizeTaskFromViewer(incoming);
 
       let insertIdx = to.taskIdx;
       if (position === 'after') insertIdx++;
 
-      // ✅ Always use tasks (convert legacy actions if needed)
+      // ✅ Always use tasks
       const targetEsc = next[to.escalationIdx];
       if (!targetEsc.tasks) {
-        // Migrate legacy actions to tasks
         targetEsc.tasks = [];
-        if (targetEsc.actions) {
-          targetEsc.actions.forEach((oldAction: any) => {
-            targetEsc.tasks!.push({
-              templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-              taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              parameters: oldAction.textKey ? [{ parameterId: 'text', value: oldAction.textKey }] : [],
-              text: oldAction.text,
-              color: oldAction.color
-            });
-          });
-          delete targetEsc.actions;
-        }
       }
 
       targetEsc.tasks.splice(insertIdx, 0, normalized);
 
-      try { info('RESPONSE_EDITOR', 'dropTaskFromViewer', { to, position, insertIdx, actionId: (newAction as any)?.actionId }); } catch { }
-      try { onCommit?.(next); } catch { }
+      try { info('RESPONSE_EDITOR', 'dropTaskFromViewer', { to, position, insertIdx }); } catch { }
+      try { onCommitRef.current?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel, onCommit]);
+  }, [setLocalModel]);
 
   const appendTask = React.useCallback((escalationIdx: number, task: TaskReference | any) => {
 
     setLocalModel(prev => {
-      // ✅ Always use tasks (migrate legacy actions if needed)
-      const next = prev.map(esc => {
-        if (esc.tasks) {
-          return { ...esc, tasks: [...esc.tasks] };
-        } else if (esc.actions) {
-          // Migrate legacy actions to tasks
-          const migratedTasks = esc.actions.map((oldAction: any) => ({
-            templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-            taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            parameters: oldAction.textKey ? [{ parameterId: 'text', value: oldAction.textKey }] : [],
-            text: oldAction.text,
-            color: oldAction.color
-          }));
-          return { ...esc, tasks: migratedTasks };
-        } else {
-          return { ...esc, tasks: [] };
-        }
-      });
+      // ✅ Always use tasks
+      const next = prev.map(esc => ({
+        ...esc,
+        tasks: [...(esc.tasks || [])]
+      }));
 
       if (!next[escalationIdx]) {
         // crea escalation mancante
@@ -253,19 +168,6 @@ export default function useActionCommands(
       const targetEsc = next[escalationIdx];
       if (!targetEsc.tasks) {
         targetEsc.tasks = [];
-        // Migrate legacy actions if they exist
-        if (targetEsc.actions) {
-          targetEsc.actions.forEach((oldAction: any) => {
-            targetEsc.tasks!.push({
-              templateId: oldAction.actionId || oldAction.templateId || 'sayMessage',
-              taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              parameters: oldAction.textKey ? [{ parameterId: 'text', value: oldAction.textKey }] : [],
-              text: oldAction.text,
-              color: oldAction.color
-            });
-          });
-          delete targetEsc.actions;
-        }
       }
 
       // ✅ Ensure task has required fields
@@ -274,16 +176,17 @@ export default function useActionCommands(
         taskId: task.taskId || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         parameters: task.parameters || (task.textKey ? [{ parameterId: 'text', value: task.textKey }] : []),
         text: task.text,
-        color: task.color
+        color: task.color,
+        label: task.label
       };
 
       targetEsc.tasks.push(newTask);
 
       try { info('RESPONSE_EDITOR', 'appendTask', { escalationIdx, templateId: newTask.templateId }); } catch { }
-      try { onCommit?.(next); } catch { }
+      try { onCommitRef.current?.(next); } catch { }
       return next;
     });
-  }, [setLocalModel, onCommit]);
+  }, [setLocalModel]);
 
   return { editTask, deleteTask, moveTask, dropTaskFromViewer, appendTask };
 }

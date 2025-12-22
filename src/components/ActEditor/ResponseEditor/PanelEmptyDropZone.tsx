@@ -5,36 +5,33 @@ import { normalizeTaskFromViewer } from './utils/normalize';
 import { TaskReference } from './types';
 
 interface PanelEmptyDropZoneProps {
-  onDropAction: (task: TaskReference) => void;
+  onDropTask: (task: TaskReference) => void;
   color?: string;
+  // Legacy prop for backward compatibility
+  onDropAction?: (task: TaskReference) => void; // @deprecated Use onDropTask instead
 }
 
-const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({ onDropAction, color = '#7c3aed' }) => {
-  const [{ isOver }, drop] = useDrop(() => ({
+const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({ onDropTask, onDropAction }) => {
+  const handleDrop = onDropTask ?? onDropAction;
+  const [, drop] = useDrop(() => ({
     accept: [DND_TYPE_VIEWER],
     drop: (item: any) => {
       const normalized = normalizeTaskFromViewer(item);
-      onDropAction(normalized);
+      handleDrop?.(normalized);
     },
-    collect: (monitor) => ({ isOver: monitor.isOver({ shallow: true }) })
-  }), [onDropAction]);
+    collect: () => ({}) // No visual feedback
+  }), [handleDrop]);
 
   return (
     <div
       ref={drop}
       style={{
-        minHeight: 120,
-        border: `2px dashed ${isOver ? color : 'transparent'}`,
-        borderRadius: 10,
-        background: isOver ? `${color}10` : 'transparent',
-        color,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
+        minHeight: 0,
+        border: 'none',
+        background: 'transparent',
+        padding: 0
       }}
-    >
-      {isOver ? 'Drop to add first task' : ''}
-    </div>
+    />
   );
 };
 

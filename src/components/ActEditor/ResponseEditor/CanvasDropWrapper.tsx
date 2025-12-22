@@ -5,39 +5,44 @@ import { normalizeTaskFromViewer } from './utils/normalize';
 import { TaskReference } from './types';
 
 interface CanvasDropWrapperProps {
-  onDropAction: (task: TaskReference) => void;
+  onDropTask: (task: TaskReference) => void;
   color?: string;
   children: React.ReactNode;
+  // Legacy prop for backward compatibility
+  onDropAction?: (task: TaskReference) => void; // @deprecated Use onDropTask instead
 }
 
-const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropAction, color = '#2563eb', children }) => {
-  const [{ isOver }, drop] = useDrop(() => ({
+const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDropAction, children }) => {
+  const handleDrop = onDropTask ?? onDropAction;
+  const debugDrop = () => {
+    try { return localStorage.getItem('debug.drop') === '1'; } catch { return false; }
+  };
+
+  const [, drop] = useDrop(() => ({
     accept: [DND_TYPE_VIEWER],
-    drop: (item: any) => {
+    drop: (item: any, monitor) => {
+      // Only handle drop if it wasn't handled by a child (ActionRowDnDWrapper)
+      const didDrop = monitor.didDrop();
+      if (debugDrop()) {
+        console.log('[DROP_DEBUG][CanvasDropWrapper] Drop received', { didDrop, itemType: item?.type });
+      }
+      if (didDrop) {
+        // A child handled the drop, don't process it here
+        if (debugDrop()) console.log('[DROP_DEBUG][CanvasDropWrapper] ⏭️ Skipping - child handled drop');
+        return;
+      }
+      if (debugDrop()) {
+        console.log('[DROP_DEBUG][CanvasDropWrapper] ✅ Processing drop (no child handled it)');
+      }
       const normalized = normalizeTaskFromViewer(item);
-      onDropAction(normalized);
+      handleDrop?.(normalized);
     },
-    collect: (monitor) => ({ isOver: monitor.isOver({ shallow: true }) })
-  }), [onDropAction]);
+    collect: () => ({}) // No visual feedback - completely invisible
+  }), [handleDrop]);
 
   return (
-    <div style={{ position: 'relative' }}>
-      <div>{children}</div>
-      <div
-        ref={drop}
-        style={{
-          marginTop: 12,
-          height: 140,
-          border: isOver ? `2px dashed ${color}` : '2px dashed transparent',
-          borderRadius: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color,
-          background: isOver ? `${color}12` : 'transparent',
-          transition: 'background 0.15s, border 0.15s',
-        }}
-      >
-        {isOver ? 'Drop to append' : ''}
-      </div>
+    <div ref={drop} style={{ position: 'relative' }}>
+      {children}
     </div>
   );
 };

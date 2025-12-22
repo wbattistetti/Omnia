@@ -65,13 +65,10 @@ export function useNodeUpdate(
             delete next.introduction;
           }
         }
-        // FIX: Postpone replaceSelectedDDT to avoid setState during render
+        // ✅ Chiamata sincrona diretta - no setTimeout
         if (notifyProvider) {
           try {
-            // Use setTimeout to defer the call until after render
-            setTimeout(() => {
-              replaceSelectedDDT(next);
-            }, 0);
+            replaceSelectedDDT(next);
           } catch { }
         }
         return next;
@@ -122,13 +119,10 @@ export function useNodeUpdate(
         } catch { }
       } catch { }
 
-      // FIX: Postpone replaceSelectedDDT to avoid setState during render
+      // ✅ Chiamata sincrona diretta - no setTimeout
       if (notifyProvider) {
         try {
-          // Use setTimeout to defer the call until after render
-          setTimeout(() => {
-            replaceSelectedDDT(next);
-          }, 0);
+          replaceSelectedDDT(next);
         } catch { }
       }
       return next;

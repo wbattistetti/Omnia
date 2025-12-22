@@ -38,6 +38,7 @@ export interface TaskReference {
   parameters?: Array<{ parameterId: string; value: string }>;
   text?: string;       // Direct text override (optional)
   color?: string;      // Color override (optional)
+  label?: string;      // Label override (optional, preserves label from dragged item)
 }
 
 export interface Constraint {
