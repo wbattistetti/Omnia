@@ -126,10 +126,8 @@ export function useNodeEffects({
     useEffect(() => {
         if (inAutoAppend()) return; // evita transizioni spurie durante auto-append
 
-        setIsEmpty(prev => {
-            const next = computeIsEmpty(nodeRows);
-            return next === prev ? prev : next;
-        });
+        const next = computeIsEmpty(nodeRows);
+        setIsEmpty(next);
     }, [nodeRows, inAutoAppend, computeIsEmpty, setIsEmpty]);
 
     // Focus per nodi nuovi (semplificato) - NON per nodi hidden!
@@ -181,7 +179,7 @@ export function useNodeEffects({
         return () => document.removeEventListener('rowMessage:update', handler as any);
     }, [setNodeRows, normalizedData]);
 
-    // Canvas click semplificato - solo exit editing, niente cancellazione automatica
+    // Canvas click: exit editing e elimina righe vuote
     useEffect(() => {
         const onCanvasClick = () => {
             console.log("🎯 [CANVAS_CLICK] Canvas click detected", {
@@ -191,13 +189,23 @@ export function useNodeEffects({
                 timestamp: Date.now()
             });
 
+            // Elimina tutte le righe vuote
+            const emptyRows = nodeRows.filter(row => !row.text || row.text.trim() === '');
+            if (emptyRows.length > 0) {
+                console.log(`[useNodeEffects] Deleting ${emptyRows.length} empty rows on canvas click`);
+                const cleanedRows = nodeRows.filter(row => row.text && row.text.trim().length > 0);
+                setNodeRows(cleanedRows);
+                setIsEmpty(computeIsEmpty(cleanedRows));
+                normalizedData.onUpdate?.({ rows: cleanedRows });
+            }
+
             // Esci dall'editing e stabilizza il nodo se è temporaneo
             exitEditing();
         };
 
         window.addEventListener('flow:canvas:click', onCanvasClick as any);
         return () => window.removeEventListener('flow:canvas:click', onCanvasClick as any);
-    }, [editingRowId, id, nodeRows, normalizedData, exitEditing]);
+    }, [editingRowId, id, nodeRows, normalizedData, exitEditing, setNodeRows, setIsEmpty, computeIsEmpty]);
 
     return {
         nextPointerTargetRef,

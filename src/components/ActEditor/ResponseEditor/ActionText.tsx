@@ -7,9 +7,10 @@ interface ActionTextProps {
   editValue: string;
   onChange: (v: string) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  onBlur?: (e: React.FocusEvent) => void;
 }
 
-const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editValue, onChange, onKeyDown }) => {
+const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editValue, onChange, onKeyDown, onBlur }) => {
   if (!editing) {
     return text ? (
       <span style={{ color: '#fff', fontWeight: 500 }}>{text}</span>
@@ -23,6 +24,7 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
       value={editValue}
       onChange={e => onChange(e.target.value)}
       onKeyDown={onKeyDown}
+      onBlur={onBlur}
       style={{
         fontWeight: 500,
         padding: '6px 10px',

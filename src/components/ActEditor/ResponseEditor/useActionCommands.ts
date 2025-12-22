@@ -17,6 +17,33 @@ export default function useActionCommands(
   }, [onCommit]);
 
   const editTask = React.useCallback((escalationIdx: number, taskIdx: number, newText: string) => {
+    const trimmedText = (newText || '').trim();
+
+    // If text is empty, delete the task instead of editing it
+    if (trimmedText.length === 0) {
+      setLocalModel(prev => {
+        const next = prev.map(esc => ({
+          ...esc,
+          tasks: [...(esc.tasks || [])]
+        }));
+
+        const targetEsc = next[escalationIdx];
+        if (targetEsc && targetEsc.tasks) {
+          targetEsc.tasks.splice(taskIdx, 1);
+
+          // If escalation becomes empty, remove it
+          if (targetEsc.tasks.length === 0) {
+            next.splice(escalationIdx, 1);
+          }
+        }
+
+        try { info('RESPONSE_EDITOR', 'editTask (empty -> delete)', { escalationIdx, taskIdx }); } catch { }
+        try { onCommitRef.current?.(next); } catch { }
+        return next;
+      });
+      return;
+    }
+
     setLocalModel(prev => {
       // ✅ Always use tasks
       const next = prev.map(esc => ({
@@ -30,13 +57,13 @@ export default function useActionCommands(
       if (task) {
         const textParam = task.parameters?.find((p: any) => p.parameterId === 'text');
         if (textParam) {
-          textParam.value = newText;
+          textParam.value = trimmedText;
         } else {
-          task.parameters = [...(task.parameters || []), { parameterId: 'text', value: newText }];
+          task.parameters = [...(task.parameters || []), { parameterId: 'text', value: trimmedText }];
         }
       }
 
-      try { info('RESPONSE_EDITOR', 'editTask', { escalationIdx, taskIdx, newTextLen: newText?.length || 0 }); } catch { }
+      try { info('RESPONSE_EDITOR', 'editTask', { escalationIdx, taskIdx, newTextLen: trimmedText.length }); } catch { }
       try { onCommitRef.current?.(next); } catch { }
       return next;
     });
@@ -51,7 +78,14 @@ export default function useActionCommands(
       }));
 
       const targetEsc = next[escalationIdx];
-      targetEsc.tasks.splice(taskIdx, 1);
+      if (targetEsc && targetEsc.tasks) {
+        targetEsc.tasks.splice(taskIdx, 1);
+
+        // If escalation becomes empty, remove it
+        if (targetEsc.tasks.length === 0) {
+          next.splice(escalationIdx, 1);
+        }
+      }
 
       try { info('RESPONSE_EDITOR', 'deleteTask', { escalationIdx, taskIdx }); } catch { }
       try { onCommitRef.current?.(next); } catch { }

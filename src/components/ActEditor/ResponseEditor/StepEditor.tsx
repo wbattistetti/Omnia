@@ -134,13 +134,73 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
     }
   }, [model]);
 
+
   // ✅ commitUp: salva il model che stiamo committando e chiama onModelChange
+  // Filtra automaticamente escalation vuote per evitare "fantasmi"
   const commitUp = React.useCallback((next: EscalationModel[]) => {
-    pendingCommitRef.current = next;
-    onModelChange?.(next);
+    // Filter out empty escalations before committing
+    const filtered = next.filter(esc => (esc.tasks || []).length > 0);
+    pendingCommitRef.current = filtered;
+    onModelChange?.(filtered);
   }, [onModelChange]);
 
   const { editTask, deleteTask, moveTask, dropTaskFromViewer, appendTask } = useActionCommands(setLocalModel as any, commitUp as any);
+
+  // Effect 3: Elimina escalation vuote quando si perde il focus o si clicca fuori
+  // Questo previene "fantasmi" (escalation vuote che rimangono)
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const cleanupEmptyRows = () => {
+      setLocalModel(prev => {
+        // Remove empty tasks from each escalation
+        const cleaned = prev.map(esc => {
+          const tasks = (esc.tasks || []).filter((task: any) => {
+            const taskText = task.text || '';
+            const textKey = task.textKey || '';
+            // Keep task if it has text or a valid textKey (GUID)
+            return taskText.trim().length > 0 || (textKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey));
+          });
+          return { ...esc, tasks };
+        });
+
+        // Remove escalations that have no tasks
+        const filtered = cleaned.filter(esc => (esc.tasks || []).length > 0);
+
+        if (filtered.length !== prev.length || cleaned.some((esc, idx) => (esc.tasks || []).length !== (prev[idx]?.tasks || []).length)) {
+          // If we removed anything, commit the change
+          commitUp(filtered);
+          return filtered;
+        }
+        return prev;
+      });
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        // Small delay to allow blur handlers to complete first
+        setTimeout(() => {
+          cleanupEmptyRows();
+        }, 150);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      setTimeout(() => {
+        cleanupEmptyRows();
+      }, 150);
+    };
+
+    // Listen for clicks outside the component
+    document.addEventListener('mousedown', handleClickOutside);
+    // Listen for window blur (when user switches tabs)
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [commitUp]);
 
   const getText = (task: any) => (task.text || (typeof task.textKey === 'string' ? translations[task.textKey] : '') || '');
 
@@ -159,6 +219,54 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
       return next;
     });
   }, []);
+
+  // Effect 4: Elimina tutte le righe vuote quando si clicca sul canvas
+  React.useEffect(() => {
+    const handleCanvasClick = () => {
+      setLocalModel(prev => {
+        // Remove empty tasks from each escalation
+        const cleaned = prev.map((esc, escIdx) => {
+          const tasks = (esc.tasks || []).filter((task: any, taskIdx: number) => {
+            const taskText = task.text || '';
+            const textKey = task.textKey || '';
+            const trimmedText = taskText.trim();
+            const hasValidTextKey = textKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
+
+            // Keep task if it has text or a valid textKey (GUID)
+            const keep = trimmedText.length > 0 || hasValidTextKey;
+
+            if (!keep) {
+              // Remove from editingRows
+              const key = `${escIdx}-${taskIdx}`;
+              setEditingRows(prevRows => {
+                const nextRows = new Set(prevRows);
+                nextRows.delete(key);
+                return nextRows;
+              });
+            }
+
+            return keep;
+          });
+          return { ...esc, tasks };
+        });
+
+        // Remove escalations that have no tasks
+        const filtered = cleaned.filter(esc => (esc.tasks || []).length > 0);
+
+        // If we removed anything, commit the change
+        if (filtered.length !== prev.length || cleaned.some((esc, idx) => (esc.tasks || []).length !== (prev[idx]?.tasks || []).length)) {
+          commitUp(filtered);
+          return filtered;
+        }
+
+        return prev;
+      });
+    };
+
+    // Listen for canvas click events
+    window.addEventListener('flow:canvas:click', handleCanvasClick as any);
+    return () => window.removeEventListener('flow:canvas:click', handleCanvasClick as any);
+  }, [commitUp]);
 
   const handleEdit = React.useCallback((escalationIdx: number, taskIdx: number, newText: string) => {
     editTask(escalationIdx, taskIdx, newText);
@@ -212,7 +320,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   }, [dropTaskFromViewer, allowedActions]);
 
   return (
-    <div className="step-editor" style={{ padding: '1rem' }}>
+    <div ref={containerRef} className="step-editor" style={{ padding: '1rem' }}>
       {localModel.length === 0 ? (
         <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
           No escalations
