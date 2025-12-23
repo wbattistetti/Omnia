@@ -2,7 +2,6 @@ import React from 'react';
 import EditorPanel, { type CustomLanguage } from '../../../CodeEditor/EditorPanel';
 import TestValuesColumn, { type TestResult } from './shared/TestValuesColumn';
 import EditorHeader from './shared/EditorHeader';
-import { useTestValues } from '../hooks/useTestValues';
 import { useEditorMode } from '../hooks/useEditorMode';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
 
@@ -153,7 +152,9 @@ interface RegexInlineEditorProps {
   onClose: () => void;
   node?: any; // Optional: node with subData for AI regex generation
   kind?: string; // Optional: kind for AI regex generation
-  profile?: NLPProfile; // Profile for accessing testCases
+  profile?: NLPProfile; // Profile for accessing other fields
+  testCases?: string[]; // ✅ Test cases passed directly from useProfileState
+  setTestCases?: (cases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void; // Callback to update profile
 }
 
@@ -168,6 +169,8 @@ export default function RegexInlineEditor({
   node,
   kind,
   profile,
+  testCases: testCasesProp,
+  setTestCases: setTestCasesProp,
   onProfileUpdate,
 }: RegexInlineEditorProps) {
   const [regexAiMode, setRegexAiMode] = React.useState(false);
@@ -179,25 +182,21 @@ export default function RegexInlineEditor({
   const [shouldShowValidation, setShouldShowValidation] = React.useState(false);
 
   // Debounce timer for profile updates to avoid too many calls
-  const profileUpdateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const profileUpdateTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 🔍 LOG: Verifica profile ricevuto come prop
-  React.useEffect(() => {
-    console.log('[RegexInlineEditor] 📥 Profile prop received:', {
-      nodeLabel: node?.label,
-      hasProfile: !!profile,
-      profileKeys: profile ? Object.keys(profile) : [],
-      testCasesInProfile: profile ? (Array.isArray(profile.testCases) ? profile.testCases.length : 'not array or missing') : 'no profile',
-      testCasesValue: profile?.testCases,
-      profileTestCasesType: profile ? typeof profile.testCases : 'no profile',
-    });
-  }, [profile, node?.label]);
 
-  // 🆕 Use shared hook for test cases
-  const { testCases, setTestCases } = useTestValues(
-    profile || { slotId: '', locale: 'it-IT', kind: kind || 'generic', synonyms: [] },
-    onProfileUpdate || (() => { })
-  );
+  // ✅ Usa testCases da props se disponibili, altrimenti fallback a profile
+  const testCases = testCasesProp || profile?.testCases || [];
+
+  const setTestCases = React.useCallback((cases: string[]) => {
+    // ✅ Usa setter diretto se disponibile
+    if (setTestCasesProp) {
+      setTestCasesProp(cases);
+    } else if (onProfileUpdate && profile) {
+      // Fallback: aggiorna tramite onProfileUpdate
+      onProfileUpdate({ ...profile, testCases: cases });
+    }
+  }, [setTestCasesProp, profile, onProfileUpdate]);
 
   // Cleanup debounce timer on unmount
   React.useEffect(() => {
@@ -209,27 +208,9 @@ export default function RegexInlineEditor({
     };
   }, []);
 
-  // Debug: Log test cases to verify they're being passed
-  React.useEffect(() => {
-    console.log('[RegexInlineEditor] 🔍 Test cases hook result:', {
-      testCasesCount: testCases?.length || 0,
-      testCasesValue: testCases,
-      hasProfile: !!profile,
-      profileTestCases: profile?.testCases,
-    });
-
-    if (testCases && testCases.length > 0) {
-      console.log('[RegexInlineEditor] ✅ Test cases loaded:', testCases.length, 'cases');
-      console.log('[RegexInlineEditor] ✅ Test cases values:', testCases);
-    } else if (profile?.testCases && profile.testCases.length > 0) {
-      console.log('[RegexInlineEditor] ⚠️ Profile has testCases but hook returned empty:', profile.testCases);
-    } else {
-      console.log('[RegexInlineEditor] ℹ️ No test cases available yet');
-    }
-  }, [testCases, profile?.testCases]);
 
   // Use unified editor mode hook
-  const { currentValue: currentRegexValue, setCurrentValue: setCurrentRegexValue, isCreateMode, getButtonLabel } = useEditorMode({
+  const { currentValue: currentRegexValue, setCurrentValue: setCurrentRegexValue, getButtonLabel } = useEditorMode({
     initialValue: regex,
     templateValue: '',
     hasUserEdited,
@@ -604,56 +585,41 @@ export default function RegexInlineEditor({
               }}
             >
               {/* Spinner overlay durante generazione */}
-              {(() => {
-                console.log('[AI Regex] 🎨 Rendering spinner check - generatingRegex:', generatingRegex);
-                return generatingRegex;
-              })() && (
+              {generatingRegex && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0, 0, 0, 0.85)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 99999,
+                    gap: 16,
+                    pointerEvents: 'none',
+                  }}
+                >
                   <div
                     style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      background: 'rgba(0, 0, 0, 0.85)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 99999,
-                      gap: 16,
-                      pointerEvents: 'none',
+                      width: 48,
+                      height: 48,
+                      border: '4px solid #3b82f6',
+                      borderTopColor: 'transparent',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite',
                     }}
-                  >
-                    <div
-                      style={{
-                        width: 48,
-                        height: 48,
-                        border: '4px solid #3b82f6',
-                        borderTopColor: 'transparent',
-                        borderRadius: '50%',
-                        animation: 'spin 0.8s linear infinite',
-                      }}
-                    />
-                    <div style={{ color: '#fff', fontWeight: 500 }}>
-                      Generating regex...
-                    </div>
+                  />
+                  <div style={{ color: '#fff', fontWeight: 500 }}>
+                    Generating regex...
                   </div>
-                )}
+                </div>
+              )}
               <EditorPanel
-                code={(() => {
-                  const codeValue = regexAiMode
-                    ? regexAiPrompt
-                    : currentRegexValue;
-                  console.log('[AI Regex] 🎨 EditorPanel code value:', {
-                    regexAiMode,
-                    regexAiPrompt,
-                    currentRegexValue,
-                    finalValue: codeValue,
-                    codeLength: codeValue?.length || 0
-                  });
-                  return codeValue;
-                })()}
+                code={regexAiMode ? regexAiPrompt : currentRegexValue}
                 onChange={(v: string) => {
                   if (regexAiMode && !generatingRegex) {
                     setRegexAiPrompt(v || '');

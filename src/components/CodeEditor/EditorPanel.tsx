@@ -110,7 +110,7 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                 try {
                   const retryAction = editor.getAction('editor.action.formatDocument');
                   if (retryAction) retryAction.run();
-                } catch {}
+                } catch { }
               }, 100);
             }
           }
@@ -138,18 +138,11 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
 
     const checkMonaco = () => {
       const monaco = (window as any).monaco;
-      console.log(`[EditorPanel] 🔍 Checking Monaco availability (attempt ${retryCount + 1}/${maxRetries})`, {
-        monacoExists: !!monaco,
-        hasLanguages: !!(monaco && monaco.languages),
-        hasEditor: !!(monaco && monaco.editor)
-      });
 
       if (!monaco || !monaco.languages) {
         retryCount++;
         if (retryCount < maxRetries) {
           setTimeout(checkMonaco, 50);
-        } else {
-          console.error('[EditorPanel] ❌ Monaco not available after max retries');
         }
         return;
       }
@@ -280,7 +273,7 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                 style.textContent = `.monaco-editor .suggest-widget{z-index:99999 !important}.monaco-editor .context-view{z-index:99999 !important}`;
                 document.head.appendChild(style);
               }
-            } catch {}
+            } catch { }
 
 
             // Register custom language FIRST, before anything else
@@ -426,7 +419,7 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
                   editor.setValue(TEMPLATE);
                   onChange(TEMPLATE);
                 }
-              } catch {}
+              } catch { }
             }
 
             // No custom folding provider needed when regions are removed
@@ -435,14 +428,14 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
             // Skip completion providers for custom languages (like regex)
             if (!customLanguage && (language === 'javascript' || language === 'typescript')) {
               const buildFallback = (range: any) => {
-                const jsKeywords = ['if','else','return','const','let','var','function','try','catch','switch','case','for','while','do','break','continue','true','false','null','undefined'];
+                const jsKeywords = ['if', 'else', 'return', 'const', 'let', 'var', 'function', 'try', 'catch', 'switch', 'case', 'for', 'while', 'do', 'break', 'continue', 'true', 'false', 'null', 'undefined'];
                 return [
                   { label: 'vars["<key>"]', kind: monaco.languages.CompletionItemKind.Text, insertText: 'vars["<key>"]', detail: 'Insert OMNIA variable access', range },
                   ...jsKeywords.map((kw: string) => ({ label: kw, kind: monaco.languages.CompletionItemKind.Keyword, insertText: kw, range }))
                 ];
               };
-              try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch {}
-              try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch {}
+              try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch { }
+              try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch { }
               const registerFor = (lang: string) => monaco.languages.registerCompletionItemProvider(lang, {
                 triggerCharacters: ['"', '\'', '`', '.', '['],
                 provideCompletionItems: (model: any, position: any) => {
@@ -583,8 +576,8 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
               // ✅ Cleanup on dispose
               editor.onDidDispose(() => {
                 if (dom) {
-                  try { dom.removeEventListener('contextmenu', onCtx as any, { capture: true } as any); } catch {}
-                  try { dom.removeEventListener('mouseup', onMouseUp as any, { capture: true } as any); } catch {}
+                  try { dom.removeEventListener('contextmenu', onCtx as any, { capture: true } as any); } catch { }
+                  try { dom.removeEventListener('mouseup', onMouseUp as any, { capture: true } as any); } catch { }
                 }
               });
             }
@@ -594,11 +587,11 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
             // Cleanup on dispose to avoid leaks
             editor.onDidDispose(() => {
               if (!customLanguage && (language === 'javascript' || language === 'typescript')) {
-                try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch {}
-                try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch {}
+                try { (window as any).__omniaVarCompletionDispJS?.dispose?.(); } catch { }
+                try { (window as any).__omniaVarCompletionDispTS?.dispose?.(); } catch { }
               }
             });
-          } catch {}
+          } catch { }
         }}
         height="100%"
       />

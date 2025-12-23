@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { getMainDataList, getSubDataList } from '../ddtSelectors';
 
 /**
@@ -21,64 +21,65 @@ export function useNodeUpdate(
   selectedSubIndex: number | undefined,
   replaceSelectedDDT: (ddt: any) => void
 ) {
+  // Use ref to track pending DDT updates to avoid calling replaceSelectedDDT during render
+  const pendingDDTRef = useRef<{ ddt: any; notify: boolean } | null>(null);
+
+  // Effect to persist DDT changes after render
+  useEffect(() => {
+    if (pendingDDTRef.current) {
+      const { ddt, notify } = pendingDDTRef.current;
+      pendingDDTRef.current = null;
+      if (notify) {
+        try {
+          replaceSelectedDDT(ddt);
+        } catch { }
+      }
+    }
+  }, [localDDT, replaceSelectedDDT]);
+
   const updateSelectedNode = useCallback((
     updater: (node: any) => any,
     notifyProvider: boolean = true
   ) => {
     setLocalDDT((prev: any) => {
       if (!prev) return prev;
-      const next = JSON.parse(JSON.stringify(prev));
 
       // If root is selected, update introduction
       if (selectedRoot) {
-        // Build a node structure with introduction step for updater
+        // Shallow copy only what we need
         const introStep = prev.introduction
           ? { type: 'introduction', escalations: prev.introduction.escalations }
           : { type: 'introduction', escalations: [] };
         const nodeForUpdate = { ...prev, steps: [introStep] };
         const updated = updater(nodeForUpdate) || nodeForUpdate;
 
-        // Extract introduction from updated steps
-        if (updated && updated.steps && Array.isArray(updated.steps)) {
-          const updatedIntroStep = updated.steps.find((s: any) => s.type === 'introduction');
-          if (updatedIntroStep && updatedIntroStep.escalations && updatedIntroStep.escalations.length > 0) {
-            // Check if there are any actions in escalations
-            const hasActions = updatedIntroStep.escalations.some((esc: any) =>
-              esc?.actions && Array.isArray(esc.actions) && esc.actions.length > 0
-            );
-            if (hasActions) {
-              next.introduction = {
-                type: 'introduction',
-                escalations: updatedIntroStep.escalations || []
-              };
-            } else {
-              delete next.introduction;
-            }
-          } else {
-            delete next.introduction;
-          }
+        // Check if introduction actually changed
+        const newIntroStep = updated?.steps?.find((s: any) => s.type === 'introduction');
+        const hasActions = newIntroStep?.escalations?.some((esc: any) =>
+          esc?.actions && Array.isArray(esc.actions) && esc.actions.length > 0
+        );
+        const introChanged = JSON.stringify(prev.introduction) !== JSON.stringify(newIntroStep?.escalations);
+
+        if (!introChanged) return prev; // No change, return same reference
+
+        // Only create new DDT if introduction changed
+        const next = { ...prev };
+        if (hasActions) {
+          next.introduction = {
+            type: 'introduction',
+            escalations: newIntroStep.escalations || []
+          };
         } else {
-          // If steps structure is missing, check if introduction was directly modified
-          if (updated.introduction) {
-            next.introduction = updated.introduction;
-          } else if (!prev.introduction && updated.introduction === undefined) {
-            delete next.introduction;
-          }
+          delete next.introduction;
         }
-        // ✅ Chiamata sincrona diretta - no setTimeout
-        if (notifyProvider) {
-          try {
-            replaceSelectedDDT(next);
-          } catch { }
-        }
+        pendingDDTRef.current = { ddt: next, notify: notifyProvider };
         return next;
       }
 
-      // Normal update for main/sub nodes
-      const mains = getMainDataList(next);
+      // Normal update for main/sub nodes - use shallow copy for efficiency
+      const mains = getMainDataList(prev);
       const main = mains[selectedMainIndex];
       if (!main) return prev;
-      const beforeKind = selectedSubIndex == null ? main?.kind : getSubDataList(main)[selectedSubIndex]?.kind;
 
       if (selectedSubIndex == null) {
         // Main node update
@@ -86,7 +87,13 @@ export function useNodeUpdate(
         const updated = updater(main) || main;
         const after = JSON.stringify(updated);
         if (before === after) return prev; // no content change
-        mains[selectedMainIndex] = updated;
+
+        // Shallow copy: only copy mainData array and the specific main node
+        const newMainData = [...mains];
+        newMainData[selectedMainIndex] = updated;
+        const next = { ...prev, mainData: newMainData };
+        pendingDDTRef.current = { ddt: next, notify: notifyProvider };
+        return next;
       } else {
         // Sub node update
         const subList = getSubDataList(main);
@@ -99,33 +106,17 @@ export function useNodeUpdate(
         const after = JSON.stringify(updated);
 
         if (before === after) return prev; // no content change
-        main.subData[subIdx] = updated;
+
+        // Shallow copy: only copy what's necessary
+        const newSubData = [...(main.subData || [])];
+        newSubData[subIdx] = updated;
+        const newMain = { ...main, subData: newSubData };
+        const newMainData = [...mains];
+        newMainData[selectedMainIndex] = newMain;
+        const next = { ...prev, mainData: newMainData };
+        pendingDDTRef.current = { ddt: next, notify: notifyProvider };
+        return next;
       }
-
-      next.mainData = mains;
-
-      // Log kind changes
-      try {
-        const afterMain = mains[selectedMainIndex];
-        const afterKind = selectedSubIndex == null ? afterMain?.kind : getSubDataList(afterMain)[selectedSubIndex]?.kind;
-        // Log kind changes (if needed, can use info from logger)
-        // info('RESPONSE_EDITOR', 'updateSelectedNode', { ... });
-        try {
-          const mainsKinds = (getMainDataList(next) || []).map((m: any) => ({
-            label: m?.label,
-            kind: m?.kind,
-            manual: (m as any)?._kindManual
-          }));
-        } catch { }
-      } catch { }
-
-      // ✅ Chiamata sincrona diretta - no setTimeout
-      if (notifyProvider) {
-        try {
-          replaceSelectedDDT(next);
-        } catch { }
-      }
-      return next;
     });
   }, [
     localDDT,

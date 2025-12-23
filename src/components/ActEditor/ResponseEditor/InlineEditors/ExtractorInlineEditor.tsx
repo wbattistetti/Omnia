@@ -3,13 +3,14 @@ import EditorPanel from '../../../CodeEditor/EditorPanel';
 import EditorHeader from './shared/EditorHeader';
 import TestValuesColumn, { type TestResult } from './shared/TestValuesColumn';
 import { useEditorMode } from '../hooks/useEditorMode';
-import { useTestValues } from '../hooks/useTestValues';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
 
 interface ExtractorInlineEditorProps {
   onClose: () => void;
   node?: any;
   profile?: NLPProfile;
+  testCases?: string[]; // ✅ Test cases passed directly from useProfileState
+  setTestCases?: (cases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void;
 }
 
@@ -43,17 +44,26 @@ export default function ExtractorInlineEditor({
   onClose,
   node,
   profile,
+  testCases: testCasesProp,
+  setTestCases: setTestCasesProp,
   onProfileUpdate,
 }: ExtractorInlineEditorProps) {
   const [extractorCode, setExtractorCode] = React.useState<string>(TEMPLATE_CODE);
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [generating, setGenerating] = React.useState<boolean>(false);
 
-  // Use unified test values hook
-  const { testCases, setTestCases } = useTestValues(
-    profile || { slotId: '', locale: 'it-IT', kind: 'generic', synonyms: [] },
-    onProfileUpdate || (() => {})
-  );
+  // ✅ Usa testCases da props se disponibili, altrimenti fallback a profile
+  const testCases = testCasesProp || profile?.testCases || [];
+
+  const setTestCases = React.useCallback((cases: string[]) => {
+    // ✅ Usa setter diretto se disponibile
+    if (setTestCasesProp) {
+      setTestCasesProp(cases);
+    } else if (onProfileUpdate && profile) {
+      // Fallback: aggiorna tramite onProfileUpdate
+      onProfileUpdate({ ...profile, testCases: cases });
+    }
+  }, [setTestCasesProp, profile, onProfileUpdate]);
 
   // Use unified editor mode hook
   const { currentValue, setCurrentValue, isCreateMode } = useEditorMode({

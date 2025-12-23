@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { info } from '../../../utils/logger';
 import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
 import { isDDTEmpty } from '../../../utils/ddt';
@@ -48,7 +48,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
 
   // ✅ Get translations from global table (filtered by project locale)
-  const { translations: globalTranslations, getTranslation } = useProjectTranslations();
+  const { translations: globalTranslations } = useProjectTranslations();
   // Font centralizzato dal Context
   const { combinedClass } = useFontContext();
   // ✅ AI Provider per inferenza pre-wizard
@@ -344,139 +344,139 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             const template = match.template;
 
             // ✅ FASE 2: Costruisci istanza DDT dal template
-                    // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
-                    // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
-                    // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
-                    // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
-                    const subDataIds = template.subDataIds || [];
+            // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
+            // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
+            // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
+            // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
+            const subDataIds = template.subDataIds || [];
 
-                    let mainData: any[] = [];
+            let mainData: any[] = [];
 
-                    if (subDataIds.length > 0) {
-                      // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
+            if (subDataIds.length > 0) {
+              // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
 
-                      // ✅ PRIMA: Costruisci array di subData instances
-                      // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
-                      const subDataInstances: any[] = [];
+              // ✅ PRIMA: Costruisci array di subData instances
+              // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
+              const subDataInstances: any[] = [];
 
-                      for (const subId of subDataIds) {
-                        // ✅ Cerca template per ID (può essere _id, id, name, o label)
-                        const subTemplate = DialogueTaskService.getTemplate(subId);
-                        if (subTemplate) {
-                          // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
-                          // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
-                          const filteredStepPrompts: any = {};
-                          if (subTemplate.stepPrompts) {
-                            if (subTemplate.stepPrompts.start) {
-                              filteredStepPrompts.start = subTemplate.stepPrompts.start;
-                            }
-                            if (subTemplate.stepPrompts.noInput) {
-                              filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
-                            }
-                            if (subTemplate.stepPrompts.noMatch) {
-                              filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
-                            }
-                            // ❌ Ignoriamo: confirmation, notConfirmed, success
-                          }
-
-                          // ✅ Usa la label del template trovato (non l'ID!)
-                          subDataInstances.push({
-                            label: subTemplate.label || subTemplate.name || 'Sub',
-                            type: subTemplate.type,
-                            icon: subTemplate.icon || 'FileText',
-                            stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : undefined,
-                            constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-                            examples: subTemplate.examples || [],
-                            subData: [],
-                            // ✅ Copia anche nlpContract, templateId e kind dal sub-template (saranno adattati in assembleFinal)
-                            nlpContract: subTemplate.nlpContract || undefined,
-                            templateId: subTemplate.id || subTemplate._id, // ✅ GUID del template per lookup
-                            kind: subTemplate.name || subTemplate.type || 'generic'
-                          });
-                        }
-                      }
-
-                      // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
-                      // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
-                      const mainInstance = {
-                        label: template.label || template.name || 'Data',
-                        type: template.type,
-                        icon: template.icon || 'Calendar',
-                        stepPrompts: template.stepPrompts || undefined, // ✅ Tutti e 6 i tipi per main
-                        constraints: template.dataContracts || template.constraints || [],
-                        examples: template.examples || [],
-                        subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in mainData[]
-                        // ✅ Copia anche nlpContract, templateId e kind dal template (saranno adattati in assembleFinal)
-                        nlpContract: template.nlpContract || undefined,
-                        templateId: template.id || template._id, // ✅ GUID del template per lookup
-                        kind: template.name || template.type || 'generic'
-                      };
-
-                      mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
-                    } else {
-                      // ✅ Template semplice: crea istanza dal template root
-                      const mainInstance = {
-                        label: template.label || template.name || 'Data',
-                        type: template.type,
-                        icon: template.icon || 'Calendar',
-                        stepPrompts: template.stepPrompts || undefined,
-                        constraints: template.dataContracts || template.constraints || [],
-                        examples: template.examples || [],
-                        subData: [],
-                        // ✅ Copia anche nlpContract, templateId e kind dal template (saranno adattati in assembleFinal)
-                        nlpContract: template.nlpContract || undefined,
-                        templateId: template.id || template._id, // ✅ GUID del template per lookup
-                        kind: template.name || template.type || 'generic'
-                      };
-                      mainData.push(mainInstance);
+              for (const subId of subDataIds) {
+                // ✅ Cerca template per ID (può essere _id, id, name, o label)
+                const subTemplate = DialogueTaskService.getTemplate(subId);
+                if (subTemplate) {
+                  // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
+                  // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
+                  const filteredStepPrompts: any = {};
+                  if (subTemplate.stepPrompts) {
+                    if (subTemplate.stepPrompts.start) {
+                      filteredStepPrompts.start = subTemplate.stepPrompts.start;
                     }
+                    if (subTemplate.stepPrompts.noInput) {
+                      filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
+                    }
+                    if (subTemplate.stepPrompts.noMatch) {
+                      filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
+                    }
+                    // ❌ Ignoriamo: confirmation, notConfirmed, success
+                  }
 
-                    // ✅ Estrai tutti i GUID dai stepPrompts (ma NON caricare le traduzioni ancora!)
-                    const allGuids: string[] = [];
-                    mainData.forEach((m: any) => {
-                      if (m.stepPrompts) {
-                        Object.values(m.stepPrompts).forEach((guids: any) => {
-                          if (Array.isArray(guids)) {
-                            guids.forEach((guid: string) => {
-                              if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                                allGuids.push(guid);
-                              }
-                            });
-                          }
-                        });
+                  // ✅ Usa la label del template trovato (non l'ID!)
+                  subDataInstances.push({
+                    label: subTemplate.label || subTemplate.name || 'Sub',
+                    type: subTemplate.type,
+                    icon: subTemplate.icon || 'FileText',
+                    stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : undefined,
+                    constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+                    examples: subTemplate.examples || [],
+                    subData: [],
+                    // ✅ Copia anche nlpContract, templateId e kind dal sub-template (saranno adattati in assembleFinal)
+                    nlpContract: subTemplate.nlpContract || undefined,
+                    templateId: subTemplate.id || subTemplate._id, // ✅ GUID del template per lookup
+                    kind: subTemplate.name || subTemplate.type || 'generic'
+                  });
+                }
+              }
+
+              // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
+              // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+              const mainInstance = {
+                label: template.label || template.name || 'Data',
+                type: template.type,
+                icon: template.icon || 'Calendar',
+                stepPrompts: template.stepPrompts || undefined, // ✅ Tutti e 6 i tipi per main
+                constraints: template.dataContracts || template.constraints || [],
+                examples: template.examples || [],
+                subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in mainData[]
+                // ✅ Copia anche nlpContract, templateId e kind dal template (saranno adattati in assembleFinal)
+                nlpContract: template.nlpContract || undefined,
+                templateId: template.id || template._id, // ✅ GUID del template per lookup
+                kind: template.name || template.type || 'generic'
+              };
+
+              mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
+            } else {
+              // ✅ Template semplice: crea istanza dal template root
+              const mainInstance = {
+                label: template.label || template.name || 'Data',
+                type: template.type,
+                icon: template.icon || 'Calendar',
+                stepPrompts: template.stepPrompts || undefined,
+                constraints: template.dataContracts || template.constraints || [],
+                examples: template.examples || [],
+                subData: [],
+                // ✅ Copia anche nlpContract, templateId e kind dal template (saranno adattati in assembleFinal)
+                nlpContract: template.nlpContract || undefined,
+                templateId: template.id || template._id, // ✅ GUID del template per lookup
+                kind: template.name || template.type || 'generic'
+              };
+              mainData.push(mainInstance);
+            }
+
+            // ✅ Estrai tutti i GUID dai stepPrompts (ma NON caricare le traduzioni ancora!)
+            const allGuids: string[] = [];
+            mainData.forEach((m: any) => {
+              if (m.stepPrompts) {
+                Object.values(m.stepPrompts).forEach((guids: any) => {
+                  if (Array.isArray(guids)) {
+                    guids.forEach((guid: string) => {
+                      if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+                        allGuids.push(guid);
                       }
-                      if (m.subData) {
-                        m.subData.forEach((s: any) => {
-                          if (s.stepPrompts) {
-                            Object.values(s.stepPrompts).forEach((guids: any) => {
-                              if (Array.isArray(guids)) {
-                                guids.forEach((guid: string) => {
-                                  if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                                    allGuids.push(guid);
-                                  }
-                                });
-                              }
-                            });
+                    });
+                  }
+                });
+              }
+              if (m.subData) {
+                m.subData.forEach((s: any) => {
+                  if (s.stepPrompts) {
+                    Object.values(s.stepPrompts).forEach((guids: any) => {
+                      if (Array.isArray(guids)) {
+                        guids.forEach((guid: string) => {
+                          if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
+                            allGuids.push(guid);
                           }
                         });
                       }
                     });
+                  }
+                });
+              }
+            });
 
-                    // ✅ Ritorna schema + lista GUID (senza caricare traduzioni ancora)
-                    // Le traduzioni saranno caricate in background dopo l'apertura del wizard
-                    return {
-                      ai: {
-                        schema: {
-                          label: template.label || template.name || 'Data',
-                          mainData: mainData,
-                          // Include stepPrompts a livello schema se presente
-                          stepPrompts: template.stepPrompts || undefined
-                        },
-                        icon: template.icon || 'Calendar',
-                        // ✅ Includi solo i GUID, le traduzioni saranno caricate in background
-                        translationGuids: [...new Set(allGuids)]
-                      }
-                    };
+            // ✅ Ritorna schema + lista GUID (senza caricare traduzioni ancora)
+            // Le traduzioni saranno caricate in background dopo l'apertura del wizard
+            return {
+              ai: {
+                schema: {
+                  label: template.label || template.name || 'Data',
+                  mainData: mainData,
+                  // Include stepPrompts a livello schema se presente
+                  stepPrompts: template.stepPrompts || undefined
+                },
+                icon: template.icon || 'Calendar',
+                // ✅ Includi solo i GUID, le traduzioni saranno caricate in background
+                translationGuids: [...new Set(allGuids)]
+              }
+            };
           } catch (error) {
             console.error('[ResponseEditor] ❌ [EURISTICA] Errore in findDDTTemplate:', error);
             return null;
@@ -493,53 +493,53 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           inferenceStartedRef.current = inferenceKey;
           const localMatch = await findDDTTemplate(actLabel);
           if (localMatch) {
-          // ✅ Euristica trovata ISTANTANEAMENTE → apri wizard subito (NON avviare inferenza AI)
+            // ✅ Euristica trovata ISTANTANEAMENTE → apri wizard subito (NON avviare inferenza AI)
 
-          // ✅ Se Euristica 1 ha trovato UNDEFINED (nessun match), Euristica 2 inferisce il tipo dal template DDT
+            // ✅ Se Euristica 1 ha trovato UNDEFINED (nessun match), Euristica 2 inferisce il tipo dal template DDT
 
-          if (act?.instanceId && act.type === 'UNDEFINED') {
-            try {
-              const instanceKey = act.instanceId;
-              let task = taskRepository.getTask(instanceKey);
+            if (act?.instanceId && act.type === 'UNDEFINED') {
+              try {
+                const instanceKey = act.instanceId;
+                let task = taskRepository.getTask(instanceKey);
 
-              if (task) {
-              }
-
-              if (task) {
-                // Aggiorna il task per impostare templateId = 'GetData' e type = DataRequest
-                const currentTemplateId = getTemplateId(task);
-                if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
-                  taskRepository.updateTask(instanceKey, {
-                    templateId: 'GetData',
-                    // ✅ Fields directly on task (no value wrapper) - copy all fields except id, templateId, createdAt, updatedAt
-                    ...Object.fromEntries(
-                      Object.entries(task).filter(([key]) =>
-                        !['id', 'templateId', 'createdAt', 'updatedAt'].includes(key)
-                      )
-                    )
-                  }, currentProjectId || undefined);
-
-                  // Verifica aggiornamento
-                  const updatedTask = taskRepository.getTask(instanceKey);
-                } else {
+                if (task) {
                 }
-              } else {
-                // Crea nuovo task con GetData
-                taskRepository.createTask('GetData', undefined, instanceKey, currentProjectId || undefined);
 
-                // Verifica creazione
-                const newTask = taskRepository.getTask(instanceKey);
+                if (task) {
+                  // Aggiorna il task per impostare templateId = 'GetData' e type = DataRequest
+                  const currentTemplateId = getTemplateId(task);
+                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+                    taskRepository.updateTask(instanceKey, {
+                      templateId: 'GetData',
+                      // ✅ Fields directly on task (no value wrapper) - copy all fields except id, templateId, createdAt, updatedAt
+                      ...Object.fromEntries(
+                        Object.entries(task).filter(([key]) =>
+                          !['id', 'templateId', 'createdAt', 'updatedAt'].includes(key)
+                        )
+                      )
+                    }, currentProjectId || undefined);
+
+                    // Verifica aggiornamento
+                    const updatedTask = taskRepository.getTask(instanceKey);
+                  } else {
+                  }
+                } else {
+                  // Crea nuovo task con GetData
+                  taskRepository.createTask('GetData', undefined, instanceKey, currentProjectId || undefined);
+
+                  // Verifica creazione
+                  const newTask = taskRepository.getTask(instanceKey);
+                }
+              } catch (err) {
+                console.error('[ResponseEditor] Errore aggiornamento task:', err);
               }
-            } catch (err) {
-              console.error('[ResponseEditor] Errore aggiornamento task:', err);
+            } else {
             }
-          } else {
-          }
 
 
-          setInferenceResult(localMatch);
-          setShowWizard(true);
-          wizardOwnsDataRef.current = true;
+            setInferenceResult(localMatch);
+            setShowWizard(true);
+            wizardOwnsDataRef.current = true;
 
             // ✅ Carica traduzioni + PRE-ASSEMBLY IN BACKGROUND (mentre wizard mostra Yes/No)
             const translationGuids = localMatch?.ai?.translationGuids || [];
@@ -581,7 +581,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                         escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
                         templateTranslations: templateTranslations,
                         projectLocale: projectLang,
-                        addTranslations: () => {} // Idempotente
+                        addTranslations: () => { } // Idempotente
                       }
                     );
 
@@ -617,50 +617,50 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
           // ✅ IIFE async per gestire inferenza AI
           (async () => {
-          // ✅ Chiama API con timeout
-          const performAPICall = async () => {
-          try {
-            const timeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('Inference timeout')), 10000); // 10 secondi
-            });
+            // ✅ Chiama API con timeout
+            const performAPICall = async () => {
+              try {
+                const timeoutPromise = new Promise((_, reject) => {
+                  setTimeout(() => reject(new Error('Inference timeout')), 10000); // 10 secondi
+                });
 
-            const fetchPromise = fetch('/step2-with-provider', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                userDesc: actLabel,
-                provider: selectedProvider.toLowerCase(),
-                model: selectedModel
-              }),
-            });
+                const fetchPromise = fetch('/step2-with-provider', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    userDesc: actLabel,
+                    provider: selectedProvider.toLowerCase(),
+                    model: selectedModel
+                  }),
+                });
 
-            const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+                const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
 
-            if (response.ok) {
-              const result = await response.json();
-              // ✅ API success → apri wizard con risultato (step 'heuristic-confirm')
-              setInferenceResult(result);
-              setShowWizard(true);
-              wizardOwnsDataRef.current = true;
-            } else {
-              // ✅ API fallita → apri wizard con step 'input' ("Describe in detail...")
-              setInferenceResult(null);
-              setShowWizard(true);
-              wizardOwnsDataRef.current = true;
-            }
-          } catch (error) {
-            console.error('[ResponseEditor] Errore inferenza API:', error);
-            // ✅ API fallita → apri wizard con step 'input' ("Describe in detail...")
-            setInferenceResult(null);
-            setShowWizard(true);
-            wizardOwnsDataRef.current = true;
-          } finally {
-            setIsInferring(false);
-          }
-          };
+                if (response.ok) {
+                  const result = await response.json();
+                  // ✅ API success → apri wizard con risultato (step 'heuristic-confirm')
+                  setInferenceResult(result);
+                  setShowWizard(true);
+                  wizardOwnsDataRef.current = true;
+                } else {
+                  // ✅ API fallita → apri wizard con step 'input' ("Describe in detail...")
+                  setInferenceResult(null);
+                  setShowWizard(true);
+                  wizardOwnsDataRef.current = true;
+                }
+              } catch (error) {
+                console.error('[ResponseEditor] Errore inferenza API:', error);
+                // ✅ API fallita → apri wizard con step 'input' ("Describe in detail...")
+                setInferenceResult(null);
+                setShowWizard(true);
+                wizardOwnsDataRef.current = true;
+              } finally {
+                setIsInferring(false);
+              }
+            };
 
-          performAPICall();
-        })(); // ✅ Fine IIFE async per inferenza AI
+            performAPICall();
+          })(); // ✅ Fine IIFE async per inferenza AI
         })(); // ✅ Fine IIFE esterna per euristica
         return; // ✅ IMPORTANTE: esci dall'useEffect dopo aver avviato l'inferenza
       }
@@ -683,39 +683,164 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   // Track introduction separately to avoid recalculating selectedNode when localDDT changes
   const introduction = useMemo(() => localDDT?.introduction, [localDDT?.introduction]);
 
-  // Create stable key for mainList to prevent unnecessary recalculations
-  const mainListStableKey = useMemo(() => {
-    if (!mainList || mainList.length === 0) return 'empty';
-    return mainList.map((m: any, idx: number) => {
-      const label = m?.label || '';
-      const subCount = getSubDataList(m)?.length || 0;
-      return `${idx}:${label}:${subCount}`;
-    }).join('|');
-  }, [mainList]);
+  // ✅ RISCRITTURA PULITA: selectedNode è uno stato diretto, non una derivazione
+  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [selectedNodePath, setSelectedNodePath] = useState<{
+    mainIndex: number;
+    subIndex?: number;
+  } | null>(null);
 
-  // Nodo selezionato: root se selectedRoot, altrimenti main/sub in base agli indici
-  const selectedNode = useMemo(() => {
-    // If root is selected, return the root DDT structure with introduction step
-    if (selectedRoot) {
-      if (!localDDT) return null;
-      // Always include introduction step (even if empty) so StepEditor can work with it
-      const introStep = introduction
-        ? { type: 'introduction', escalations: introduction.escalations }
-        : { type: 'introduction', escalations: [] };
-      return { ...localDDT, steps: [introStep] };
+  // Inizializza selectedNode quando mainList è pronto
+  useEffect(() => {
+    if (!selectedNode && mainList.length > 0) {
+      // Usa gli indici attuali da useNodeSelection
+      const node = selectedSubIndex == null
+        ? mainList[selectedMainIndex]
+        : getSubDataList(mainList[selectedMainIndex])?.[selectedSubIndex];
+
+      if (node) {
+        setSelectedNode(node);
+        setSelectedNodePath({
+          mainIndex: selectedMainIndex,
+          subIndex: selectedSubIndex
+        });
+      }
     }
-    const main = mainList[selectedMainIndex];
-    if (!main) {
-      return null;
+  }, [mainList, selectedNode, selectedMainIndex, selectedSubIndex]);
+
+  // Aggiorna selectedNode quando cambiano gli indici di selezione
+  useEffect(() => {
+    if (mainList.length > 0) {
+      if (selectedRoot) {
+        // Root selected
+        const introStep = introduction
+          ? { type: 'introduction', escalations: introduction.escalations }
+          : { type: 'introduction', escalations: [] };
+        const newNode = { ...localDDT, steps: [introStep] };
+
+        try {
+          if (localStorage.getItem('debug.responseEditor') === '1') {
+            console.log('[selectedNode] Updated (root)', {
+              hasTestCases: !!newNode.nlpProfile?.testCases,
+              testCasesCount: (newNode.nlpProfile?.testCases || []).length
+            });
+          }
+        } catch { }
+
+        setSelectedNode(newNode);
+        setSelectedNodePath(null);
+      } else {
+        // Main or sub selected
+        const node = selectedSubIndex == null
+          ? mainList[selectedMainIndex]
+          : getSubDataList(mainList[selectedMainIndex])?.[selectedSubIndex];
+
+        if (node) {
+          try {
+            if (localStorage.getItem('debug.responseEditor') === '1') {
+              console.log('[selectedNode] Updated', {
+                nodeLabel: node.label,
+                hasNlpProfile: !!node.nlpProfile,
+                hasTestCases: !!node.nlpProfile?.testCases,
+                testCasesCount: (node.nlpProfile?.testCases || []).length,
+                testCases: node.nlpProfile?.testCases
+              });
+            }
+          } catch { }
+
+          setSelectedNode(node);
+          setSelectedNodePath({
+            mainIndex: selectedMainIndex,
+            subIndex: selectedSubIndex
+          });
+        }
+      }
     }
-    if (selectedSubIndex == null) {
-      // Main selected
-      return main;
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, localDDT, introduction]); // ✅ Rimosso mainList per evitare sovrascrittura
+
+  // ✅ Aggiorna selectedNode quando mainList cambia (per sincronizzare dopo handleProfileUpdate)
+  useEffect(() => {
+    if (mainList.length > 0 && !selectedRoot && selectedNodePath) {
+      const node = selectedSubIndex == null
+        ? mainList[selectedMainIndex]
+        : getSubDataList(mainList[selectedMainIndex])?.[selectedSubIndex];
+
+      if (node) {
+        // ✅ Aggiorna solo se nlpProfile è diverso (evita loop infiniti)
+        const currentNodeNlpProfile = JSON.stringify(selectedNode?.nlpProfile || {});
+        const newNodeNlpProfile = JSON.stringify(node.nlpProfile || {});
+
+        if (currentNodeNlpProfile !== newNodeNlpProfile) {
+          setSelectedNode(node);
+        }
+      }
     }
-    const subList = getSubDataList(main);
-    const sub = subList[selectedSubIndex] || main;
-    return sub;
-  }, [mainListStableKey, selectedMainIndex, selectedSubIndex, selectedRoot, introduction, mainList]);
+  }, [mainList]); // ✅ Solo quando mainList cambia (dopo aggiornamento localDDT)
+
+  // ✅ handleProfileUpdate: aggiorna IMMEDIATAMENTE sia selectedNode che localDDT
+  const handleProfileUpdate = useCallback((partialProfile: any) => {
+    // ✅ Aggiorna selectedNode IMMEDIATAMENTE per feedback UI istantaneo
+    setSelectedNode((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        nlpProfile: {
+          ...(prev.nlpProfile || {}),
+          ...partialProfile
+        }
+      };
+    });
+
+    // ✅ Aggiorna localDDT per persistenza
+    setLocalDDT((prev: any) => {
+      if (!prev || !selectedNodePath) return prev;
+
+      const mains = getMainDataList(prev);
+      const { mainIndex, subIndex } = selectedNodePath;
+
+      if (mainIndex >= mains.length) return prev;
+
+      const main = mains[mainIndex];
+
+      // Caso MAIN node
+      if (subIndex === undefined) {
+        const updatedMain = {
+          ...main,
+          nlpProfile: {
+            ...(main.nlpProfile || {}),
+            ...partialProfile
+          }
+        };
+
+        const newMainData = [...mains];
+        newMainData[mainIndex] = updatedMain;
+
+        return { ...prev, mainData: newMainData };
+      }
+
+      // Caso SUB node
+      const subList = main.subData || [];
+      if (subIndex >= subList.length) return prev;
+
+      const updatedSub = {
+        ...subList[subIndex],
+        nlpProfile: {
+          ...(subList[subIndex].nlpProfile || {}),
+          ...partialProfile
+        }
+      };
+
+      const newSubData = [...subList];
+      newSubData[subIndex] = updatedSub;
+
+      const updatedMain = { ...main, subData: newSubData };
+
+      const newMainData = [...mains];
+      newMainData[mainIndex] = updatedMain;
+
+      return { ...prev, mainData: newMainData };
+    });
+  }, [selectedNodePath]);
 
   // Step keys per il nodo selezionato: se root selezionato, sempre 'introduction' (anche se vuoto, per permettere creazione)
   const stepKeys = useMemo(() => {
@@ -848,16 +973,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   return (
     <div ref={rootRef} className={combinedClass} style={{ height: '100%', maxHeight: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onKeyDown={handleGlobalKeyDown}>
 
-        {/* Header sempre visibile (minimale durante wizard, completo dopo) - nascosto quando in docking mode */}
-        {!hideHeader && (
-          <EditorHeader
-            icon={<Icon size={18} style={{ color: iconColor }} />}
-            title={headerTitle}
-            toolbarButtons={toolbarButtons}
-            onClose={handleEditorClose}
-            color="orange"
-          />
-        )}
+      {/* Header sempre visibile (minimale durante wizard, completo dopo) - nascosto quando in docking mode */}
+      {!hideHeader && (
+        <EditorHeader
+          icon={<Icon size={18} style={{ color: iconColor }} />}
+          title={headerTitle}
+          toolbarButtons={toolbarButtons}
+          onClose={handleEditorClose}
+          color="orange"
+        />
+      )}
 
       {/* Contenuto */}
       {(() => {
@@ -967,43 +1092,43 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     mainData: inferenceResult.ai.schema.mainData || [],
                     _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
                   } : localDDT}
-              onCancel={onClose || (() => { })}
-              onComplete={(finalDDT, messages) => {
-                if (!finalDDT) {
-                  console.error('[ResponseEditor] onComplete called with null/undefined finalDDT');
-                  return;
-                }
+                  onCancel={onClose || (() => { })}
+                  onComplete={(finalDDT, messages) => {
+                    if (!finalDDT) {
+                      console.error('[ResponseEditor] onComplete called with null/undefined finalDDT');
+                      return;
+                    }
 
-                const coerced = coercePhoneKind(finalDDT);
+                    const coerced = coercePhoneKind(finalDDT);
 
-                // Set flag to prevent auto-reopen IMMEDIATELY (before any state updates)
-                wizardOwnsDataRef.current = true;
+                    // Set flag to prevent auto-reopen IMMEDIATELY (before any state updates)
+                    wizardOwnsDataRef.current = true;
 
-                // Update local DDT state first (ALWAYS do this)
-                setLocalDDT(coerced);
+                    // Update local DDT state first (ALWAYS do this)
+                    setLocalDDT(coerced);
 
-                try {
-                  replaceSelectedDDT(coerced);
-                } catch (err) {
-                  console.error('[ResponseEditor] replaceSelectedDDT FAILED', err);
-                }
+                    try {
+                      replaceSelectedDDT(coerced);
+                    } catch (err) {
+                      console.error('[ResponseEditor] replaceSelectedDDT FAILED', err);
+                    }
 
-                // ✅ IMPORTANTE: Chiudi SEMPRE il wizard quando onComplete viene chiamato
-                // Il wizard ha già assemblato il DDT, quindi non deve riaprirsi
-                // Non controllare isEmpty qui perché potrebbe causare race conditions
-                setShowWizard(false);
-                inferenceStartedRef.current = null; // Reset quando il wizard viene completato
+                    // ✅ IMPORTANTE: Chiudi SEMPRE il wizard quando onComplete viene chiamato
+                    // Il wizard ha già assemblato il DDT, quindi non deve riaprirsi
+                    // Non controllare isEmpty qui perché potrebbe causare race conditions
+                    setShowWizard(false);
+                    inferenceStartedRef.current = null; // Reset quando il wizard viene completato
 
-                setRightMode('actions'); // Force show ActionList
-                setSelectedStepKey('start'); // Start with first step
+                    setRightMode('actions'); // Force show ActionList
+                    setSelectedStepKey('start'); // Start with first step
 
-                // If parent provided onWizardComplete, notify it after updating UI
-                // (but don't close the overlay - let user see the editor)
-                if (onWizardComplete) {
-                  onWizardComplete(coerced);
-                }
-              }}
-              startOnStructure={false}
+                    // If parent provided onWizardComplete, notify it after updating UI
+                    // (but don't close the overlay - let user see the editor)
+                    if (onWizardComplete) {
+                      onWizardComplete(coerced);
+                    }
+                  }}
+                  startOnStructure={false}
                 />
               </div>
             );
@@ -1028,26 +1153,26 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                   if (hasDDT && task) {
                     const currentTemplateId = getTemplateId(task);
                     // ✅ CASE-INSENSITIVE
-          // ✅ Update task con campi DDT direttamente (niente wrapper value)
-          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
-            taskRepository.updateTask(key, {
-              templateId: 'GetData',
-              ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
-            }, currentProjectId || undefined);
-          } else {
-            taskRepository.updateTask(key, {
-              ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
-            }, currentProjectId || undefined);
-          }
-        } else if (hasDDT) {
-          // Task doesn't exist, create it with GetData templateId
-          taskRepository.createTask('GetData', updatedDDT, key, currentProjectId || undefined);
-        } else {
-          // FIX: Salva con projectId per garantire persistenza nel database
-          taskRepository.updateTask(key, {
-            ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
-          }, currentProjectId || undefined);
-        }
+                    // ✅ Update task con campi DDT direttamente (niente wrapper value)
+                    if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+                      taskRepository.updateTask(key, {
+                        templateId: 'GetData',
+                        ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
+                      }, currentProjectId || undefined);
+                    } else {
+                      taskRepository.updateTask(key, {
+                        ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
+                      }, currentProjectId || undefined);
+                    }
+                  } else if (hasDDT) {
+                    // Task doesn't exist, create it with GetData templateId
+                    taskRepository.createTask('GetData', updatedDDT, key, currentProjectId || undefined);
+                  } else {
+                    // FIX: Salva con projectId per garantire persistenza nel database
+                    taskRepository.updateTask(key, {
+                      ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
+                    }, currentProjectId || undefined);
+                  }
 
                   // ✅ FIX: Notifica il parent (DDTHostAdapter) che il DDT è stato aggiornato
                   onWizardComplete?.(updatedDDT);
@@ -1078,142 +1203,142 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             )}
             {mainList[0]?.kind !== 'intent' && (
               <Sidebar
-              ref={sidebarRef}
-              mainList={mainList}
-              selectedMainIndex={selectedMainIndex}
-              onSelectMain={handleSelectMain}
-              selectedSubIndex={selectedSubIndex}
-              onSelectSub={handleSelectSub}
-              aggregated={isAggregatedAtomic}
-              rootLabel={localDDT?.label || 'Data'}
-              onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
-                // Persist required flag on the exact sub (by indices), independent of current selection
-                setLocalDDT((prev: any) => {
-                  if (!prev) return prev;
-                  const next = JSON.parse(JSON.stringify(prev));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return prev;
-                  const subList = Array.isArray(main.subData) ? main.subData : [];
-                  if (sIdx < 0 || sIdx >= subList.length) return prev;
-                  subList[sIdx] = { ...subList[sIdx], required };
-                  main.subData = subList;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try {
-                    const subs = getSubDataList(main) || [];
-                    const target = subs[sIdx];
-                    if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
-                  } catch { }
-                  try { replaceSelectedDDT(next); } catch { }
-                  return next;
-                });
-              }}
-              onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
-                setLocalDDT((prev: any) => {
-                  if (!prev) return prev;
-                  const next = JSON.parse(JSON.stringify(prev));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return prev;
-                  const subList = Array.isArray(main.subData) ? main.subData : [];
-                  if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return prev;
-                  const [moved] = subList.splice(fromIdx, 1);
-                  subList.splice(toIdx, 0, moved);
-                  main.subData = subList;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
-                  try { replaceSelectedDDT(next); } catch { }
-                  return next;
-                });
-              }}
-              onAddMain={(label: string) => {
-                setLocalDDT((prev: any) => {
-                  if (!prev) return prev;
-                  const next = JSON.parse(JSON.stringify(prev));
-                  const mains = getMainDataList(next);
-                  mains.push({ label, subData: [] });
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                  return next;
-                });
-              }}
-              onRenameMain={(mIdx: number, label: string) => {
-                setLocalDDT((prev: any) => {
-                  if (!prev) return prev;
-                  const next = JSON.parse(JSON.stringify(prev));
-                  const mains = getMainDataList(next);
-                  if (!mains[mIdx]) return prev;
-                  mains[mIdx].label = label;
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                  return next;
-                });
-              }}
-              onDeleteMain={(mIdx: number) => {
-                setLocalDDT((prev: any) => {
-                  if (!prev) return prev;
-                  const next = JSON.parse(JSON.stringify(prev));
-                  const mains = getMainDataList(next);
-                  if (mIdx < 0 || mIdx >= mains.length) return prev;
-                  mains.splice(mIdx, 1);
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                  return next;
-                });
-              }}
-              onAddSub={(mIdx: number, label: string) => {
-                setLocalDDT((prev: any) => {
-                  if (!prev) return prev;
-                  const next = JSON.parse(JSON.stringify(prev));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return prev;
-                  const list = Array.isArray(main.subData) ? main.subData : [];
-                  list.push({ label, required: true });
-                  main.subData = list;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                  return next;
-                });
-              }}
-              onRenameSub={(mIdx: number, sIdx: number, label: string) => {
-                setLocalDDT((prev: any) => {
-                  if (!prev) return prev;
-                  const next = JSON.parse(JSON.stringify(prev));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return prev;
-                  const list = Array.isArray(main.subData) ? main.subData : [];
-                  if (sIdx < 0 || sIdx >= list.length) return prev;
-                  list[sIdx] = { ...(list[sIdx] || {}), label };
-                  main.subData = list;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                  return next;
-                });
-              }}
-              onDeleteSub={(mIdx: number, sIdx: number) => {
-                setLocalDDT((prev: any) => {
-                  if (!prev) return prev;
-                  const next = JSON.parse(JSON.stringify(prev));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return prev;
-                  const list = Array.isArray(main.subData) ? main.subData : [];
-                  if (sIdx < 0 || sIdx >= list.length) return prev;
-                  list.splice(sIdx, 1);
-                  main.subData = list;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                  return next;
-                });
-              }}
-              onSelectAggregator={handleSelectAggregator}
+                ref={sidebarRef}
+                mainList={mainList}
+                selectedMainIndex={selectedMainIndex}
+                onSelectMain={handleSelectMain}
+                selectedSubIndex={selectedSubIndex}
+                onSelectSub={handleSelectSub}
+                aggregated={isAggregatedAtomic}
+                rootLabel={localDDT?.label || 'Data'}
+                onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
+                  // Persist required flag on the exact sub (by indices), independent of current selection
+                  setLocalDDT((prev: any) => {
+                    if (!prev) return prev;
+                    const next = JSON.parse(JSON.stringify(prev));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return prev;
+                    const subList = Array.isArray(main.subData) ? main.subData : [];
+                    if (sIdx < 0 || sIdx >= subList.length) return prev;
+                    subList[sIdx] = { ...subList[sIdx], required };
+                    main.subData = subList;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try {
+                      const subs = getSubDataList(main) || [];
+                      const target = subs[sIdx];
+                      if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
+                    } catch { }
+                    try { replaceSelectedDDT(next); } catch { }
+                    return next;
+                  });
+                }}
+                onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
+                  setLocalDDT((prev: any) => {
+                    if (!prev) return prev;
+                    const next = JSON.parse(JSON.stringify(prev));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return prev;
+                    const subList = Array.isArray(main.subData) ? main.subData : [];
+                    if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return prev;
+                    const [moved] = subList.splice(fromIdx, 1);
+                    subList.splice(toIdx, 0, moved);
+                    main.subData = subList;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
+                    try { replaceSelectedDDT(next); } catch { }
+                    return next;
+                  });
+                }}
+                onAddMain={(label: string) => {
+                  setLocalDDT((prev: any) => {
+                    if (!prev) return prev;
+                    const next = JSON.parse(JSON.stringify(prev));
+                    const mains = getMainDataList(next);
+                    mains.push({ label, subData: [] });
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                    return next;
+                  });
+                }}
+                onRenameMain={(mIdx: number, label: string) => {
+                  setLocalDDT((prev: any) => {
+                    if (!prev) return prev;
+                    const next = JSON.parse(JSON.stringify(prev));
+                    const mains = getMainDataList(next);
+                    if (!mains[mIdx]) return prev;
+                    mains[mIdx].label = label;
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                    return next;
+                  });
+                }}
+                onDeleteMain={(mIdx: number) => {
+                  setLocalDDT((prev: any) => {
+                    if (!prev) return prev;
+                    const next = JSON.parse(JSON.stringify(prev));
+                    const mains = getMainDataList(next);
+                    if (mIdx < 0 || mIdx >= mains.length) return prev;
+                    mains.splice(mIdx, 1);
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                    return next;
+                  });
+                }}
+                onAddSub={(mIdx: number, label: string) => {
+                  setLocalDDT((prev: any) => {
+                    if (!prev) return prev;
+                    const next = JSON.parse(JSON.stringify(prev));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return prev;
+                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    list.push({ label, required: true });
+                    main.subData = list;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                    return next;
+                  });
+                }}
+                onRenameSub={(mIdx: number, sIdx: number, label: string) => {
+                  setLocalDDT((prev: any) => {
+                    if (!prev) return prev;
+                    const next = JSON.parse(JSON.stringify(prev));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return prev;
+                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    if (sIdx < 0 || sIdx >= list.length) return prev;
+                    list[sIdx] = { ...(list[sIdx] || {}), label };
+                    main.subData = list;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                    return next;
+                  });
+                }}
+                onDeleteSub={(mIdx: number, sIdx: number) => {
+                  setLocalDDT((prev: any) => {
+                    if (!prev) return prev;
+                    const next = JSON.parse(JSON.stringify(prev));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return prev;
+                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    if (sIdx < 0 || sIdx >= list.length) return prev;
+                    list.splice(sIdx, 1);
+                    main.subData = list;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                    return next;
+                  });
+                }}
+                onSelectAggregator={handleSelectAggregator}
               />
             )}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -1249,7 +1374,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                               node={selectedNode}
                               actType={actType}
                               locale={'it-IT'}
-                              intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining : undefined}
+                              intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
                               act={act}
                               onChange={(profile) => {
                                 // Only log if debug flag is set to avoid console spam
@@ -1259,18 +1384,17 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                                       nodeLabel: (selectedNode as any)?.label,
                                       profileKind: profile?.kind,
                                       examples: (profile?.examples || []).length,
+                                      testCases: (profile?.testCases || []).length,
                                     });
                                   }
-                                } catch {}
+                                } catch { }
 
 
-                                updateSelectedNode((node) => {
-                                  const next: any = { ...(node || {}), nlpProfile: profile };
-                                  if (profile.kind && profile.kind !== 'auto') { next.kind = profile.kind; (next as any)._kindManual = profile.kind; }
-                                  if (Array.isArray(profile.synonyms)) next.synonyms = profile.synonyms;
-                                  // Ensure testCases are persisted to node.nlpProfile
-
-                                  return next;
+                                // ✅ Usa handleProfileUpdate invece di updateSelectedNode
+                                handleProfileUpdate({
+                                  ...profile,
+                                  // Assicura che kind e synonyms siano aggiornati anche in node root
+                                  ...(profile.kind && profile.kind !== 'auto' ? { _kindManual: profile.kind } : {}),
                                 });
                               }}
                             />

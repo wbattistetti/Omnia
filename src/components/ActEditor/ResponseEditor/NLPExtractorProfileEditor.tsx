@@ -112,6 +112,8 @@ export default function NLPExtractorProfileEditor({
     waitingEsc2,
     setWaitingEsc2,
     jsonError,
+    testCases,
+    setTestCases,
     profile,
   } = useProfileState(node, locale, onChange);
 
@@ -217,7 +219,7 @@ export default function NLPExtractorProfileEditor({
     }
   });
   React.useEffect(() => {
-    try { localStorage.setItem('nlpEndpointBase', endpointBase || ''); } catch {}
+    try { localStorage.setItem('nlpEndpointBase', endpointBase || ''); } catch { }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -561,7 +563,7 @@ export default function NLPExtractorProfileEditor({
                   </button>
                 )}
               </div>
-                </div>
+            </div>
           )}
           {activeTab === 'extractor' && (
             <NLPCompactEditor
@@ -722,6 +724,8 @@ export default function NLPExtractorProfileEditor({
               node={node}
               kind={kind}
               profile={profile}
+              testCases={testCases}
+              setTestCases={setTestCases}
               onProfileUpdate={(updatedProfile) => {
                 // Update profile via onChange callback
                 onChange?.(updatedProfile);
@@ -734,6 +738,8 @@ export default function NLPExtractorProfileEditor({
               onClose={closeEditor}
               node={node}
               profile={profile}
+              testCases={testCases}
+              setTestCases={setTestCases}
               onProfileUpdate={(updatedProfile) => {
                 onChange?.(updatedProfile);
               }}
@@ -745,6 +751,8 @@ export default function NLPExtractorProfileEditor({
               onClose={closeEditor}
               node={node}
               profile={profile}
+              testCases={testCases}
+              setTestCases={setTestCases}
               onProfileUpdate={(updatedProfile) => {
                 onChange?.(updatedProfile);
               }}
@@ -756,6 +764,8 @@ export default function NLPExtractorProfileEditor({
               onClose={closeEditor}
               node={node}
               profile={profile}
+              testCases={testCases}
+              setTestCases={setTestCases}
               onProfileUpdate={(updatedProfile) => {
                 onChange?.(updatedProfile);
               }}

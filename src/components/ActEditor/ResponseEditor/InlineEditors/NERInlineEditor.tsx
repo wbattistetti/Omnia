@@ -2,13 +2,14 @@ import React from 'react';
 import EditorHeader from './shared/EditorHeader';
 import TestValuesColumn, { type TestResult } from './shared/TestValuesColumn';
 import { useEditorMode } from '../hooks/useEditorMode';
-import { useTestValues } from '../hooks/useTestValues';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
 
 interface NERInlineEditorProps {
   onClose: () => void;
   node?: any;
   profile?: NLPProfile;
+  testCases?: string[]; // ✅ Test cases passed directly from useProfileState
+  setTestCases?: (cases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void;
 }
 
@@ -20,18 +21,29 @@ export default function NERInlineEditor({
   onClose,
   node,
   profile,
+  testCases: testCasesProp,
+  setTestCases: setTestCasesProp,
   onProfileUpdate,
 }: NERInlineEditorProps) {
   const [nerConfig, setNerConfig] = React.useState<string>('{}'); // JSON config placeholder
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [generating, setGenerating] = React.useState<boolean>(false);
 
-  // Use unified test values hook
-  const { testCases, setTestCases } = useTestValues(
-    profile || { slotId: '', locale: 'it-IT', kind: 'generic', synonyms: [] },
-    onProfileUpdate || (() => {})
-  );
+  // ✅ Usa testCases da props se disponibili, altrimenti fallback a profile
+  const testCases = testCasesProp || profile?.testCases || [];
 
+  const setTestCases = React.useCallback((cases: string[]) => {
+    // ✅ Usa setter diretto se disponibile
+    if (setTestCasesProp) {
+      setTestCasesProp(cases);
+    } else if (onProfileUpdate && profile) {
+      // Fallback: aggiorna tramite onProfileUpdate
+      onProfileUpdate({ ...profile, testCases: cases });
+    }
+  }, [setTestCasesProp, profile, onProfileUpdate]);
+
+  // Use unified test values hook
+  // No local state - read directly from profile (single source of truth)
   // Use unified editor mode hook
   const { currentValue, setCurrentValue, isCreateMode } = useEditorMode({
     initialValue: nerConfig,
@@ -59,7 +71,7 @@ export default function NERInlineEditor({
     try {
       // Placeholder: NER testing logic to be implemented
       // For now, return a simple match check
-      const matched = value && value.trim().length > 0;
+      const matched = Boolean(value && value.trim().length > 0);
       return {
         matched,
         fullMatch: matched ? value : undefined,
