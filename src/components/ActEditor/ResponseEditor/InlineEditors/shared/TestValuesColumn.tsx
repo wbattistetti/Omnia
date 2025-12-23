@@ -241,11 +241,10 @@ export default function TestValuesColumn({
           flexDirection: 'column',
           gap: 12,
           background: '#1e1e1e',
-          flexShrink: 1,
+          flexShrink: 0, // ✅ Non si restringe nel layout a due colonne
           minWidth: 150,
           maxWidth: typeof window !== 'undefined' ? `${Math.min(800, window.innerWidth * 0.5)}px` : '50%',
-          width: testColumnWidth > 0 ? `${Math.min(testColumnWidth, typeof window !== 'undefined' ? window.innerWidth * 0.5 : 800)}px` : 'auto',
-          flex: 1,
+          width: testColumnWidth > 0 ? `${Math.min(testColumnWidth, typeof window !== 'undefined' ? window.innerWidth * 0.5 : 800)}px` : '280px',
           minHeight: 0,
           maxHeight: '100%',
           height: '100%',
@@ -255,45 +254,60 @@ export default function TestValuesColumn({
       >
         {/* Header - Fixed */}
         <div style={{ flexShrink: 0 }}>
-          <div style={{ fontWeight: 600, color: '#f1f5f9', marginBottom: 8 }}>
-            Test Values
-          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 8
+          }}>
+            {/* Titolo "Test Values" */}
+            <div style={{
+              fontWeight: 600,
+              color: '#f1f5f9',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}>
+              Test Values
+            </div>
 
-          {/* Input for adding new test cases - Fixed */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input
-              type="text"
-              value={newTestCase}
-              onChange={(e) => setNewTestCase(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newTestCase.trim()) {
-                  handleAddTestCase();
-                }
-              }}
-              placeholder="Aggiungi frase..."
-              style={{
-                flex: 1,
-                padding: '6px 8px',
-                border: '1px solid #334155',
-                borderRadius: 4,
-                background: '#0f172a',
-                color: '#f1f5f9',
-              }}
-            />
-            <button
-              onClick={handleAddTestCase}
-              disabled={!newTestCase.trim()}
-              style={{
-                padding: '4px 8px',
-                border: '1px solid #334155',
-                borderRadius: 4,
-                background: newTestCase.trim() ? '#3b82f6' : '#334155',
-                color: '#fff',
-                cursor: newTestCase.trim() ? 'pointer' : 'not-allowed',
-              }}
-            >
-              +
-            </button>
+            {/* Input for adding new test cases - Sulla stessa riga del titolo */}
+            <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 0 }}>
+              <input
+                type="text"
+                value={newTestCase}
+                onChange={(e) => setNewTestCase(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newTestCase.trim()) {
+                    handleAddTestCase();
+                  }
+                }}
+                placeholder="Aggiungi frase..."
+                style={{
+                  flex: 1,
+                  padding: '6px 8px',
+                  border: '1px solid #334155',
+                  borderRadius: 4,
+                  background: '#0f172a',
+                  color: '#f1f5f9',
+                  minWidth: 0,
+                }}
+              />
+              <button
+                onClick={handleAddTestCase}
+                disabled={!newTestCase.trim()}
+                style={{
+                  padding: '4px 8px',
+                  border: '1px solid #334155',
+                  borderRadius: 4,
+                  background: newTestCase.trim() ? '#3b82f6' : '#334155',
+                  color: '#fff',
+                  cursor: newTestCase.trim() ? 'pointer' : 'not-allowed',
+                  flexShrink: 0,
+                }}
+              >
+                +
+              </button>
+            </div>
           </div>
         </div>
 

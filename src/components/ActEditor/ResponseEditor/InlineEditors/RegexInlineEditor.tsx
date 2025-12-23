@@ -1,6 +1,6 @@
 import React from 'react';
 import EditorPanel, { type CustomLanguage } from '../../../CodeEditor/EditorPanel';
-import TestValuesColumn, { type TestResult } from './shared/TestValuesColumn';
+// TestValuesColumn rimosso - ora è unico in NLPExtractorProfileEditor
 import EditorHeader from './shared/EditorHeader';
 import { useEditorMode } from '../hooks/useEditorMode';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
@@ -489,7 +489,7 @@ export default function RegexInlineEditor({
       }}
     >
       <EditorHeader
-        title="🪄 Edit Regex"
+        title=""
         extractorType="regex"
         isCreateMode={overrideIsCreateMode}
         isGenerating={generatingRegex}
@@ -548,157 +548,98 @@ export default function RegexInlineEditor({
         maxHeight: '100%',
         height: '100%',
       }}>
-        <div
-          style={{
-            display: 'flex',
-            gap: 0,
-            alignItems: 'stretch',
-            width: '100%',
-            maxWidth: '100%',
-            overflow: 'hidden',
-            flex: 1,
-            minHeight: 0,
-            maxHeight: '100%',
-          }}
-        >
-          <div style={{
-            flex: 1,
-            position: 'relative',
-            minWidth: 0,
-            flexShrink: 1,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 0,
-            maxHeight: '100%',
-          }}>
-            <div
-              style={{
-                flex: 1,
-                minHeight: 0,
-                maxHeight: '100%',
-                height: '100%',
-                border: regexAiMode ? '2px solid #3b82f6' : '1px solid #334155',
-                borderRadius: 8,
-                overflow: 'hidden',
-                position: 'relative',
-              }}
-            >
-              {/* Spinner overlay durante generazione */}
-              {generatingRegex && (
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          minWidth: 0,
+          flexShrink: 1,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          maxHeight: '100%',
+        }}>
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              maxHeight: '100%',
+              height: '100%',
+              border: regexAiMode ? '2px solid #3b82f6' : '1px solid #334155',
+              borderRadius: 8,
+              overflow: 'hidden',
+              position: 'relative',
+            }}
+          >
+            {/* Spinner overlay durante generazione */}
+            {generatingRegex && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'rgba(0, 0, 0, 0.85)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 99999,
+                  gap: 16,
+                  pointerEvents: 'none',
+                }}
+              >
                 <div
                   style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(0, 0, 0, 0.85)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 99999,
-                    gap: 16,
-                    pointerEvents: 'none',
+                    width: 48,
+                    height: 48,
+                    border: '4px solid #3b82f6',
+                    borderTopColor: 'transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite',
                   }}
-                >
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      border: '4px solid #3b82f6',
-                      borderTopColor: 'transparent',
-                      borderRadius: '50%',
-                      animation: 'spin 0.8s linear infinite',
-                    }}
-                  />
-                  <div style={{ color: '#fff', fontWeight: 500 }}>
-                    Generating regex...
-                  </div>
+                />
+                <div style={{ color: '#fff', fontWeight: 500 }}>
+                  Generating regex...
                 </div>
-              )}
-              <EditorPanel
-                code={regexAiMode ? regexAiPrompt : currentRegexValue}
-                onChange={(v: string) => {
-                  if (regexAiMode && !generatingRegex) {
-                    setRegexAiPrompt(v || '');
-                  } else if (!generatingRegex) {
-                    const newValue = v || '';
-                    setCurrentRegexValue(newValue);
-                    setRegex(newValue);
-                    // Mark as edited if different from original value
-                    if (newValue !== regex) {
-                      setHasUserEdited(true);
-                    }
-                    // ✅ Debounce profile update to avoid too many calls and prevent editor freezing
-                    if (profileUpdateTimeoutRef.current) {
-                      clearTimeout(profileUpdateTimeoutRef.current);
-                    }
-                    profileUpdateTimeoutRef.current = setTimeout(() => {
-                      if (onProfileUpdate && profile) {
-                        const updatedProfile = {
-                          ...profile,
-                          regex: newValue || undefined
-                        };
-                        onProfileUpdate(updatedProfile);
-                      }
-                      profileUpdateTimeoutRef.current = null;
-                    }, 500); // 500ms debounce - wait for user to stop typing
+              </div>
+            )}
+            <EditorPanel
+              code={regexAiMode ? regexAiPrompt : currentRegexValue}
+              onChange={(v: string) => {
+                if (regexAiMode && !generatingRegex) {
+                  setRegexAiPrompt(v || '');
+                } else if (!generatingRegex) {
+                  const newValue = v || '';
+                  setCurrentRegexValue(newValue);
+                  setRegex(newValue);
+                  // Mark as edited if different from original value
+                  if (newValue !== regex) {
+                    setHasUserEdited(true);
                   }
-                }}
-                language={regexAiMode ? 'plaintext' : undefined}
-                customLanguage={regexAiMode ? undefined : regexCustomLanguage}
-                useTemplate={false}
-                fontSize={13}
-              />
-            </div>
-          </div>
-
-          {/* 🆕 Right: Test Cases Column - Using shared component */}
-          <TestValuesColumn
-            testCases={testCases}
-            onTestCasesChange={setTestCases}
-            testFunction={(value: string): TestResult => {
-              if (!currentRegexValue || !currentRegexValue.trim()) {
-                return { matched: false, error: 'Regex vuoto' };
-              }
-
-              try {
-                const regexObj = new RegExp(currentRegexValue, 'g');
-                const match = value.match(regexObj);
-                if (match) {
-                  const groups = match.slice(1).filter((g) => g !== undefined && g !== null);
-                  const extracted: Record<string, string> = {};
-
-                  // Map groups to sub-data if available
-                  if (node && (node.subData || node.subSlots) && groups.length > 0) {
-                    const allSubs = [...(node.subData || []), ...(node.subSlots || [])];
-                    groups.forEach((group, i) => {
-                      if (i < allSubs.length) {
-                        const sub = allSubs[i];
-                        const label = String(sub?.label || sub?.name || `group${i + 1}`).toLowerCase();
-                        extracted[label] = group;
-                      }
-                    });
+                  // ✅ Debounce profile update to avoid too many calls and prevent editor freezing
+                  if (profileUpdateTimeoutRef.current) {
+                    clearTimeout(profileUpdateTimeoutRef.current);
                   }
-
-                  return {
-                    matched: true,
-                    fullMatch: match[0],
-                    groups,
-                    extracted: Object.keys(extracted).length > 0 ? extracted : undefined,
-                  };
+                  profileUpdateTimeoutRef.current = setTimeout(() => {
+                    if (onProfileUpdate && profile) {
+                      const updatedProfile = {
+                        ...profile,
+                        regex: newValue || undefined
+                      };
+                      onProfileUpdate(updatedProfile);
+                    }
+                    profileUpdateTimeoutRef.current = null;
+                  }, 500); // 500ms debounce - wait for user to stop typing
                 }
-                return { matched: false };
-              } catch (e) {
-                return { matched: false, error: 'Regex non valido' };
-              }
-            }}
-            extractorType="regex"
-            node={node}
-            enabled={true}
-          />
+              }}
+              language={regexAiMode ? 'plaintext' : undefined}
+              customLanguage={regexAiMode ? undefined : regexCustomLanguage}
+              useTemplate={false}
+              fontSize={13}
+            />
+          </div>
         </div>
       </div>
     </div>

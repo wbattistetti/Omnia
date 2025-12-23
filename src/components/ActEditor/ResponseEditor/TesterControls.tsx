@@ -167,8 +167,8 @@ export default function TesterControls({
 
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-      {/* Input for new example */}
-      <input
+      {/* Input for new example - HIDDEN: moved to TesterGrid header */}
+      {/* <input
         value={newExample}
         onChange={(e) => setNewExample(e.target.value)}
         onKeyDown={(e) => {
@@ -181,7 +181,6 @@ export default function TesterControls({
         style={{ flex: 1, padding: 10, border: '1px solid #4b5563', background: '#111827', color: '#e5e7eb', borderRadius: 8 }}
       />
 
-      {/* Add button */}
       <button
         title="Aggiungi"
         onClick={handleAddExample}
@@ -195,7 +194,7 @@ export default function TesterControls({
         }}
       >
         <Plus size={14} />
-      </button>
+      </button> */}
 
       {/* Run all button */}
       <button

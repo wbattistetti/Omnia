@@ -1,7 +1,8 @@
 import React from 'react';
 import EditorPanel from '../../../CodeEditor/EditorPanel';
 import EditorHeader from './shared/EditorHeader';
-import TestValuesColumn, { type TestResult } from './shared/TestValuesColumn';
+// TestValuesColumn rimosso - ora è unico in NLPExtractorProfileEditor
+import { type TestResult } from './shared/TestValuesColumn';
 import { useEditorMode } from '../hooks/useEditorMode';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
 
@@ -158,7 +159,7 @@ export default function LLMInlineEditor({
       }}
     >
       <EditorHeader
-        title="🪄 Configure LLM"
+        title=""
         extractorType="llm"
         isCreateMode={isCreateMode}
         isGenerating={generating}
@@ -167,79 +168,51 @@ export default function LLMInlineEditor({
         onClose={onClose}
       />
 
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'row',
-          gap: 0,
-          width: '100%',
-          maxWidth: '100%',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Monaco Editor for LLM Prompt */}
-        <div
-          style={{
-            flex: 3,
-            minWidth: 0,
-            flexShrink: 1,
-            overflow: 'hidden',
-          }}
-        >
-          {generating ? (
+      {/* Monaco Editor for LLM Prompt */}
+      <div>
+        {generating ? (
+          <div
+            style={{
+              height: 500,
+              border: '1px solid #334155',
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#1e1e1e',
+              flexDirection: 'column',
+              gap: 12
+            }}
+          >
             <div
               style={{
-                height: 500,
-                border: '1px solid #334155',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: '#1e1e1e',
-                flexDirection: 'column',
-                gap: 12
+                width: 32,
+                height: 32,
+                border: '3px solid #3b82f6',
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
               }}
-            >
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  border: '3px solid #3b82f6',
-                  borderTopColor: 'transparent',
-                  borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite',
-                }}
-              />
-              <span style={{ color: '#f1f5f9' }}>
-                {isCreateMode ? '🪄 Generating LLM prompt...' : '🔄 Refining LLM prompt...'}
-              </span>
-            </div>
-          ) : (
-            <div style={{ height: 500, border: '1px solid #334155', borderRadius: 8, overflow: 'hidden' }}>
-              <EditorPanel
-                code={llmPrompt}
-                onChange={(newPrompt) => {
-                  setLlmPrompt(newPrompt);
-                  setCurrentValue(newPrompt);
-                  if (!hasUserEdited) setHasUserEdited(true);
-                }}
-                fontSize={13}
-                varKeys={[]}
-                language="markdown"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Test Values Column */}
-        <TestValuesColumn
-          testCases={testCases}
-          onTestCasesChange={setTestCases}
-          testFunction={testLLM}
-          extractorType="llm"
-          node={node}
-          enabled={true}
-        />
+            />
+            <span style={{ color: '#f1f5f9' }}>
+              {isCreateMode ? '🪄 Generating LLM prompt...' : '🔄 Refining LLM prompt...'}
+            </span>
+          </div>
+        ) : (
+          <div style={{ height: 500, border: '1px solid #334155', borderRadius: 8, overflow: 'hidden' }}>
+            <EditorPanel
+              code={llmPrompt}
+              onChange={(newPrompt) => {
+                setLlmPrompt(newPrompt);
+                setCurrentValue(newPrompt);
+                if (!hasUserEdited) setHasUserEdited(true);
+              }}
+              fontSize={13}
+              varKeys={[]}
+              language="markdown"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

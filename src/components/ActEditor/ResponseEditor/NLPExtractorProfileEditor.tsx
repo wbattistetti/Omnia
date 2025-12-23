@@ -25,18 +25,14 @@ import NoteDisplay from './CellNote/NoteDisplay';
 import NoteSeparator from './CellNote/NoteSeparator';
 
 // ✏️ Inline Editors
-import RegexInlineEditor from './InlineEditors/RegexInlineEditor';
-import ExtractorInlineEditor from './InlineEditors/ExtractorInlineEditor';
-import NERInlineEditor from './InlineEditors/NERInlineEditor';
-import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
 import IntentEditorInlineEditor from './InlineEditors/IntentEditorInlineEditor';
 
 // 📊 Tester Components
 import TesterGrid from './TesterGrid';
 import TesterControls from './TesterControls';
 
+
 // 🔧 Utilities
-import { saveNLPProfileToGlobal } from './utils/nlpProfileUtils';
 
 export interface NLPProfile {
   slotId: string;
@@ -122,6 +118,7 @@ export default function NLPExtractorProfileEditor({
   const [baselineStats, setBaselineStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [lastStats, setLastStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
   const [activeTab, setActiveTab] = React.useState<'regex' | 'extractor' | 'post' | null>(null);
+  const [reportOpen, setReportOpen] = React.useState<boolean>(false);
 
   // ✅ State per modalità di visualizzazione frasi nel Tester (solo per kind === 'intent')
   const [testPhraseMode, setTestPhraseMode] = React.useState<'all-training' | 'selected-training' | 'test-phrases'>('all-training');
@@ -304,23 +301,8 @@ export default function NLPExtractorProfileEditor({
     };
   }, [act?.instanceId, nodeKind, updateExamplesList]);
 
-  // Function to save current config to global database
-  const saveToGlobal = async () => {
-    try {
-      const success = await saveNLPProfileToGlobal(profile);
-      if (success) {
-        alert('Configuration saved to global database!');
-      } else {
-        alert('Failed to save configuration.');
-      }
-    } catch (error: any) {
-      console.error('Error saving to global:', error);
-      alert('Error saving configuration: ' + (error?.message || 'Unknown error'));
-    }
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
       {/* Header compatto + tab editor */}
       <div style={{ padding: 12 }}>
         {/* ✅ Quando kind === "intent", mostra solo Waiting LLM con messaggio diverso */}
@@ -579,9 +561,8 @@ export default function NLPExtractorProfileEditor({
         </div>
       </div>
 
-      {/* Tester section - hidden when inline editor is active */}
-      {!activeEditor && (
-        <div style={{ border: '2px solid #9ca3af', borderRadius: 12, padding: 12 }}>
+      {/* Tester section - sempre visibile, l'editor si sovrappone alla griglia */}
+      <div style={{ border: '2px solid #9ca3af', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           {/* Header con Tester e toolbar per kind === 'intent' */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ fontWeight: 700 }}>Tester</div>
@@ -635,36 +616,10 @@ export default function NLPExtractorProfileEditor({
               </div>
             )}
           </div>
-          {/* Controls toolbar */}
-          <TesterControls
-            newExample={newExample}
-            setNewExample={setNewExample}
-            examplesList={examplesList}
-            setExamplesList={setExamplesList}
-            selectedRow={selectedRow}
-            setSelectedRow={setSelectedRow}
-            runRowTest={runRowTest}
-            runAllRows={runAllRows}
-            cancelTesting={cancelTesting}
-            testing={testing}
-            kind={kind}
-            locale={locale}
-            synonymsText={synonymsText}
-            formatText={formatText}
-            regex={regex}
-            postProcessText={postProcessText}
-            rowResults={rowResults}
-            cellOverrides={cellOverrides}
-            expectedKeysForKind={expectedKeysForKind}
-            setSynonymsText={setSynonymsText}
-            setFormatText={setFormatText}
-            setRegex={setRegex}
-            setPostProcessText={setPostProcessText}
-            baselineStats={baselineStats}
-            lastStats={lastStats}
-          />
-          {/* 🎨 Grid - already hidden by parent !activeEditor condition */}
-          <TesterGrid
+          {/* Controls toolbar - RIMOSSO: pulsanti spostati nella colonna verticale della griglia */}
+          {/* 🎨 Grid - sempre visibile, l'editor si sovrappone quando attivo */}
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <TesterGrid
             examplesList={examplesList}
             rowResults={rowResults}
             selectedRow={selectedRow}
@@ -692,119 +647,78 @@ export default function NLPExtractorProfileEditor({
             activeEditor={activeEditor}
             toggleEditor={toggleEditor}
             mode={testMode}
-          />
+            newExample={newExample}
+            setNewExample={setNewExample}
+            setExamplesList={setExamplesList}
+            onCloseEditor={closeEditor}
+            editorProps={{
+              regex,
+              setRegex,
+              node,
+              kind,
+              profile,
+              testCases,
+              setTestCases,
+              onProfileUpdate: (updatedProfile) => {
+                onChange?.(updatedProfile);
+              },
+            }}
+            runAllRows={runAllRows}
+            testing={testing}
+            reportOpen={reportOpen}
+            setReportOpen={setReportOpen}
+            baselineStats={baselineStats}
+            lastStats={lastStats}
+            />
+          </div>
         </div>
-      )}
 
-      {/* 🎨 Inline Editors - shown in place of Tester when activeEditor is set */}
-      {/* 📐 Full-height container for inline editors */}
-      {activeEditor && (
+      {/* Editor senza Test Values: embeddings, post */}
+      {activeEditor === 'embeddings' && (
         <div style={{
           border: '1px solid #e5e7eb',
           borderRadius: 12,
           padding: 12,
-          height: '100%',
-          maxHeight: '100%',
-          width: '100%',
-          maxWidth: '100%',
+          flex: 1,
+          minHeight: 0,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          flex: 1,
-          minHeight: 0,
         }}>
-          {activeEditor === 'regex' && (
-            <RegexInlineEditor
-              regex={regex}
-              setRegex={setRegex}
-              onClose={closeEditor}
-              node={node}
-              kind={kind}
-              profile={profile}
-              testCases={testCases}
-              setTestCases={setTestCases}
-              onProfileUpdate={(updatedProfile) => {
-                // Update profile via onChange callback
-                onChange?.(updatedProfile);
-              }}
-            />
-          )}
+          <IntentEditorInlineEditor
+            onClose={closeEditor}
+            node={node}
+            profile={profile}
+            onProfileUpdate={(updatedProfile) => {
+              onChange?.(updatedProfile);
+            }}
+            intentSelected={intentSelected}
+            act={act}
+          />
+        </div>
+      )}
 
-          {activeEditor === 'extractor' && (
-            <ExtractorInlineEditor
-              onClose={closeEditor}
-              node={node}
-              profile={profile}
-              testCases={testCases}
-              setTestCases={setTestCases}
-              onProfileUpdate={(updatedProfile) => {
-                onChange?.(updatedProfile);
+      {activeEditor === 'post' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontWeight: 600 }}>Post Process Configuration</h3>
+            <button
+              onClick={closeEditor}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                background: '#fff',
+                cursor: 'pointer'
               }}
-            />
-          )}
-
-          {activeEditor === 'ner' && (
-            <NERInlineEditor
-              onClose={closeEditor}
-              node={node}
-              profile={profile}
-              testCases={testCases}
-              setTestCases={setTestCases}
-              onProfileUpdate={(updatedProfile) => {
-                onChange?.(updatedProfile);
-              }}
-            />
-          )}
-
-          {activeEditor === 'llm' && (
-            <LLMInlineEditor
-              onClose={closeEditor}
-              node={node}
-              profile={profile}
-              testCases={testCases}
-              setTestCases={setTestCases}
-              onProfileUpdate={(updatedProfile) => {
-                onChange?.(updatedProfile);
-              }}
-            />
-          )}
-
-          {activeEditor === 'embeddings' && (
-            <IntentEditorInlineEditor
-              onClose={closeEditor}
-              node={node}
-              profile={profile}
-              onProfileUpdate={(updatedProfile) => {
-                onChange?.(updatedProfile);
-              }}
-              intentSelected={intentSelected}
-              act={act}
-            />
-          )}
-
-          {activeEditor === 'post' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontWeight: 600 }}>Post Process Configuration</h3>
-                <button
-                  onClick={closeEditor}
-                  style={{
-                    padding: '6px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: 6,
-                    background: '#fff',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-              <PostProcessEditor value={postProcessText} onChange={setPostProcessText} />
-              {jsonError && (
-                <div style={{ color: '#b91c1c', padding: 8, background: '#fee2e2', borderRadius: 6 }}>
-                  JSON Error: {jsonError}
-                </div>
-              )}
+            >
+              Close
+            </button>
+          </div>
+          <PostProcessEditor value={postProcessText} onChange={setPostProcessText} />
+          {jsonError && (
+            <div style={{ color: '#b91c1c', padding: 8, background: '#fee2e2', borderRadius: 6 }}>
+              JSON Error: {jsonError}
             </div>
           )}
         </div>
@@ -812,27 +726,6 @@ export default function NLPExtractorProfileEditor({
 
       {/* Details panel rimosso */}
 
-      {/* Save to Global Button */}
-      <div style={{ marginTop: '20px', textAlign: 'center' }}>
-        <button
-          onClick={saveToGlobal}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '500'
-          }}
-        >
-          💾 Save to Global Database
-        </button>
-        <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>
-          Save this configuration to the global database for all projects
-        </p>
-      </div>
     </div>
   );
 }

@@ -184,19 +184,19 @@ export function useProfileState(
 
   // Sync form when node changes (use stable dependency to avoid loops)
   const prevSlotIdRef = useRef<string>('');
-  const prevExamplesRef = useRef<string>(''); // Track examples changes
+  // ✅ RIMOSSO: prevExamplesRef - non serve più sincronizzare examples quando cambia initial.examples
+  // examplesList è ora uno stato diretto, non derivato (come testCases)
+
   useEffect(() => {
     const currentSlotId = initial.slotId;
-    const currentExamplesKey = JSON.stringify(initial.examples || []); // Stringify to detect changes
 
-    // Sync if slotId changed OR examples changed for same node
-    const shouldSync = currentSlotId !== prevSlotIdRef.current ||
-      currentExamplesKey !== prevExamplesRef.current;
+    // ✅ SEMPLIFICATO: Sincronizza SOLO quando cambia il nodo (slotId)
+    // NON quando cambia initial.examples per lo stesso nodo (evita race condition)
+    const shouldSync = currentSlotId !== prevSlotIdRef.current;
 
     if (!shouldSync) return;
 
     prevSlotIdRef.current = currentSlotId;
-    prevExamplesRef.current = currentExamplesKey;
 
     // Mark that this is NOT a user-initiated kind change
     isUserKindChangeRef.current = false;
@@ -206,40 +206,25 @@ export function useProfileState(
     try {
       // Sync from node
     } catch { }
+
+    // ✅ PULITO: Una sola volta, senza duplicati
     setSynonymsText(toCommaList(initial.synonyms));
     setRegex(initial.regex || ''); // IMPORTANT: Load regex from initial profile (don't reset!)
-    // ✅ Sync testCases from initial profile
     setTestCases(initial.testCases || []);
     setFormatText(toCommaList(initial.formatHints));
-    setExamplesList(Array.isArray(initial.examples) ? initial.examples : []); // FIX: Always sync examples from node
+    setExamplesList(Array.isArray(initial.examples) ? initial.examples : []);
     setMinConf(initial.minConfidence || 0.6);
     setPostProcessText(initial.postProcess ? JSON.stringify(initial.postProcess, null, 2) : '');
     setWaitingEsc1(initial.waitingEsc1 || '');
     setWaitingEsc2(initial.waitingEsc2 || '');
-    // ✅ Sync testCases from initial profile (solo quando cambia nodo)
-    setTestCases(initial.testCases || []);
-    setFormatText(toCommaList(initial.formatHints));
-    setExamplesList(Array.isArray(initial.examples) ? initial.examples : []); // FIX: Always sync examples from node
-    setMinConf(initial.minConfidence || 0.6);
-    setPostProcessText(initial.postProcess ? JSON.stringify(initial.postProcess, null, 2) : '');
-    setWaitingEsc1(initial.waitingEsc1 || '');
-    setWaitingEsc2(initial.waitingEsc2 || '');
-    // ✅ Sync testCases from initial profile (solo quando cambia nodo - slotId)
-    setTestCases(initial.testCases || []);
-    setFormatText(toCommaList(initial.formatHints));
-    setExamplesList(Array.isArray(initial.examples) ? initial.examples : []); // FIX: Always sync examples from node
-    setMinConf(initial.minConfidence || 0.6);
-    setPostProcessText(initial.postProcess ? JSON.stringify(initial.postProcess, null, 2) : '');
-    setWaitingEsc1(initial.waitingEsc1 || '');
-    setWaitingEsc2(initial.waitingEsc2 || '');
-  }, [initial.slotId, initial.examples]); // FIX: Added initial.examples to detect changes
+  }, [initial.slotId]); // ✅ RIMOSSO initial.examples - sincronizza solo quando cambia nodo
 
   // ✅ Sync testCases quando riapri l'editor (initial.testCases cambia) MA solo se lo stato locale è vuoto
   // Questo gestisce il caso in cui il componente non viene smontato quando chiudi l'editor
-  const isFirstMountRef = useRef(true);
+  const isFirstMountTestCasesRef = useRef(true);
   useEffect(() => {
-    if (isFirstMountRef.current) {
-      isFirstMountRef.current = false;
+    if (isFirstMountTestCasesRef.current) {
+      isFirstMountTestCasesRef.current = false;
       return; // Prima volta: già inizializzato con useState
     }
 
@@ -248,6 +233,21 @@ export function useProfileState(
       setTestCases(initial.testCases || []);
     }
   }, [initial.testCases]);
+
+  // ✅ NUOVO: Sync examplesList quando riapri l'editor (come per testCases)
+  // Questo gestisce il caso in cui il componente non viene smontato quando chiudi l'editor
+  const isFirstMountExamplesRef = useRef(true);
+  useEffect(() => {
+    if (isFirstMountExamplesRef.current) {
+      isFirstMountExamplesRef.current = false;
+      return; // Prima volta: già inizializzato con useState
+    }
+
+    // Se lo stato locale è vuoto, sincronizza con initial (riaprimento editor)
+    if (examplesList.length === 0 && (initial.examples || []).length > 0) {
+      setExamplesList(initial.examples || []);
+    }
+  }, [initial.examples, examplesList.length]);
 
   // Keep kind synced with inferred when lockKind is enabled
   useEffect(() => {

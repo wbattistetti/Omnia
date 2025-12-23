@@ -1,6 +1,7 @@
 import React from 'react';
 import EditorHeader from './shared/EditorHeader';
-import TestValuesColumn, { type TestResult } from './shared/TestValuesColumn';
+// TestValuesColumn rimosso - ora è unico in NLPExtractorProfileEditor
+import { type TestResult } from './shared/TestValuesColumn';
 import { useEditorMode } from '../hooks/useEditorMode';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
 
@@ -127,7 +128,7 @@ export default function NERInlineEditor({
       }}
     >
       <EditorHeader
-        title="🪄 Configure NER"
+        title=""
         extractorType="ner"
         isCreateMode={isCreateMode}
         isGenerating={generating}
@@ -136,51 +137,26 @@ export default function NERInlineEditor({
         onClose={onClose}
       />
 
+      {/* NER Config Editor (placeholder - to be replaced with proper editor) */}
       <div
         style={{
+          padding: 16,
+          border: '1px solid #334155',
+          borderRadius: 8,
+          background: '#1e1e1e',
+          color: '#f1f5f9',
           display: 'flex',
-          flexDirection: 'row',
-          gap: 0,
-          width: '100%',
-          maxWidth: '100%',
-          overflow: 'hidden',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 500,
         }}
       >
-        {/* NER Config Editor (placeholder - to be replaced with proper editor) */}
-        <div
-          style={{
-            flex: 3,
-            minWidth: 0,
-            flexShrink: 1,
-            overflow: 'hidden',
-            padding: 16,
-            border: '1px solid #334155',
-            borderRadius: 8,
-            background: '#1e1e1e',
-            color: '#f1f5f9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 500,
-          }}
-        >
-          <div style={{ textAlign: 'center' }}>
-            <p>NER configuration editor coming soon...</p>
-            <p style={{ marginTop: 8, color: '#64748b' }}>
-              Enable/disable NER and set confidence threshold
-            </p>
-          </div>
+        <div style={{ textAlign: 'center' }}>
+          <p>NER configuration editor coming soon...</p>
+          <p style={{ marginTop: 8, color: '#64748b' }}>
+            Enable/disable NER and set confidence threshold
+          </p>
         </div>
-
-        {/* Test Values Column */}
-        <TestValuesColumn
-          testCases={testCases}
-          onTestCasesChange={setTestCases}
-          testFunction={testNER}
-          extractorType="ner"
-          node={node}
-          enabled={true}
-        />
       </div>
     </div>
   );

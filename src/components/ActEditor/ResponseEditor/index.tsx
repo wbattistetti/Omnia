@@ -1363,10 +1363,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                       </div>
                     </div>
                   ) : (
-                    <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-                      <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                         {showSynonyms ? (
-                          <div style={{ padding: 12, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ padding: 12, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                             <NLPExtractorProfileEditor
                               node={selectedNode}
                               actType={actType}

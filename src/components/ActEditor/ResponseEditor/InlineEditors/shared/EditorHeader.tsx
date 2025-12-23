@@ -51,7 +51,7 @@ export default function EditorHeader({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-        <h3 style={{ margin: 0, fontWeight: 600 }}>{title}</h3>
+        {title && <h3 style={{ margin: 0, fontWeight: 600 }}>{title}</h3>}
         {validationBadge && <div style={{ flexShrink: 0 }}>{validationBadge}</div>}
         {errorMessage && (
           <span
@@ -93,20 +93,7 @@ export default function EditorHeader({
             {getButtonLabel()}
           </button>
         )}
-        <button
-          onClick={onClose}
-          style={{
-            background: '#ef4444',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 4,
-            padding: '6px 12px',
-            cursor: 'pointer',
-            fontWeight: 500,
-          }}
-        >
-          ❌ Close
-        </button>
+        {/* Pulsante Close rimosso - la X è già nell'header dell'overlay */}
       </div>
     </div>
   );
