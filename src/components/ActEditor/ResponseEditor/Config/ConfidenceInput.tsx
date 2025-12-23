@@ -10,8 +10,8 @@ interface ConfidenceInputProps {
  */
 export default function ConfidenceInput({ value, onChange }: ConfidenceInputProps) {
   return (
-    <div>
-      <label style={{ fontSize: 12, opacity: 0.8, marginBottom: 4, display: 'block', height: '16px', lineHeight: '16px' }}>Confidence</label>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <label style={{ fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap' }}>Confidence</label>
       <input
         type="number"
         min={0}

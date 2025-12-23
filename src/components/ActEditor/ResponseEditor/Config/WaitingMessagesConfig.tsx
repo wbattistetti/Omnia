@@ -28,7 +28,7 @@ export default function WaitingMessagesConfig({
         borderRadius: 8,
       }}
     >
-      <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <label
           style={{
             fontSize: 12,
@@ -36,8 +36,7 @@ export default function WaitingMessagesConfig({
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            marginBottom: 4,
-            height: '16px', // ✅ Altezza fissa per allineamento
+            whiteSpace: 'nowrap',
           }}
         >
           <MessageCircle size={14} />
@@ -48,14 +47,14 @@ export default function WaitingMessagesConfig({
           onChange={(e) => setWaitingNER(e.target.value)}
           title="Testo mostrato all'utente mentre si attende il riconoscimento NER"
           style={{
-            width: '100%',
+            flex: 1,
             padding: '6px 8px',
             border: '2px solid #9ca3af',
             borderRadius: 6,
           }}
         />
       </div>
-      <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <label
           style={{
             fontSize: 12,
@@ -63,8 +62,7 @@ export default function WaitingMessagesConfig({
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            marginBottom: 4,
-            height: '16px', // ✅ Altezza fissa per allineamento
+            whiteSpace: 'nowrap',
           }}
         >
           <MessageCircle size={14} />
@@ -75,7 +73,7 @@ export default function WaitingMessagesConfig({
           onChange={(e) => setWaitingLLM(e.target.value)}
           title="Testo mostrato all'utente mentre si attende l'analisi LLM"
           style={{
-            width: '100%',
+            flex: 1,
             padding: '6px 8px',
             border: '2px solid #9ca3af',
             borderRadius: 6,

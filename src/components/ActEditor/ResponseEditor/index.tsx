@@ -1367,9 +1367,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                       <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                         {showSynonyms ? (
                           <div style={{ padding: 12, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 8 }}>
-                              <h4 style={{ margin: 0 }}>Data Extractor: {selectedNode?.label || ''}</h4>
-                            </div>
                             <NLPExtractorProfileEditor
                               node={selectedNode}
                               actType={actType}
