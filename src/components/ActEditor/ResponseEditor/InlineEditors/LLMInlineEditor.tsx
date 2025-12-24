@@ -145,9 +145,7 @@ export default function LLMInlineEditor({
   return (
     <div
       style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        padding: 16,
+        padding: 8,
         background: '#f9fafb',
         animation: 'fadeIn 0.2s ease-in',
         display: 'flex',
@@ -174,8 +172,6 @@ export default function LLMInlineEditor({
           <div
             style={{
               height: 500,
-              border: '1px solid #334155',
-              borderRadius: 8,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -199,7 +195,7 @@ export default function LLMInlineEditor({
             </span>
           </div>
         ) : (
-          <div style={{ height: 500, border: '1px solid #334155', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ height: 500, overflow: 'hidden' }}>
             <EditorPanel
               code={llmPrompt}
               onChange={(newPrompt) => {

@@ -7,7 +7,7 @@ import {
   Tag, Clock, ServerCog
 } from 'lucide-react';
 
-// Mappa delle icone per le azioni (aggiunta per ActionList)
+// Mappa delle icone per le azioni (aggiunta per TaskList)
 export const iconMap: Record<string, JSX.Element> = {
   MessageCircle: <MessageCircle size={24} />,
   HelpCircle: <HelpCircle size={24} />,
@@ -50,7 +50,7 @@ export function ordinalIt(n: number): string {
 
 export function buildDDTForUI(ddt: any, selectedNode: any) {
   if (!ddt) return ddt;
-  
+
   return {
     ...ddt,
     steps: Object.fromEntries(
@@ -66,13 +66,13 @@ export function buildDDTForUI(ddt: any, selectedNode: any) {
   };
 }
 
-export const stepMeta: Record<string, { 
-  icon: JSX.Element; 
-  label: string; 
-  border: string; 
-  bg: string; 
-  color: string; 
-  bgActive: string 
+export const stepMeta: Record<string, {
+  icon: JSX.Element;
+  label: string;
+  border: string;
+  bg: string;
+  color: string;
+  bgActive: string
 }> = {
   start:        { icon: <PlayCircle size={17} />,        label: 'Chiedo il dato',      border: '#3b82f6', bg: 'rgba(59,130,246,0.08)', color: '#3b82f6', bgActive: 'rgba(59,130,246,0.18)' },
   noMatch:      { icon: <HelpCircle size={17} />,        label: 'Non capisco',         border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
@@ -80,4 +80,4 @@ export const stepMeta: Record<string, {
   confirmation: { icon: <CheckCircle2 size={17} />,      label: 'Devo confermare',     border: '#eab308', bg: 'rgba(234,179,8,0.08)', color: '#eab308', bgActive: 'rgba(234,179,8,0.18)' },
   success:      { icon: <CheckSquare size={17} />,       label: 'Ho capito!',           border: '#22c55e', bg: 'rgba(34,197,94,0.08)', color: '#22c55e', bgActive: 'rgba(34,197,94,0.18)' },
   notAcquired:  { icon: <AlertCircle size={17} />,       label: 'Dato non acquisito',  border: '#f59e42', bg: 'rgba(245,158,66,0.08)', color: '#f59e42', bgActive: 'rgba(245,158,66,0.18)' },
-}; 
+};

@@ -41,7 +41,7 @@ const ALIASES: Record<string, string> = {
     waitAgent: 'waitForAgent',
 };
 
-// Build catalog dinamicamente ogni volta (come ActionList usa useActionsCatalog)
+// Build catalog dinamicamente ogni volta (come TaskList usa useActionsCatalog)
 // Legge da window.__actionsCatalog quando chiamato, non all'inizializzazione
 function getCatalog(): Record<string, ActionMeta> {
     try {
@@ -52,7 +52,7 @@ function getCatalog(): Record<string, ActionMeta> {
         return RAW.reduce((acc, a: any) => {
             const id = String(a?.id || '');
             if (!id) return acc;
-            // Stessa logica di ActionList: action.label[lang] || action.label.en || action.id
+            // Stessa logica di TaskList: action.label[lang] || action.label.en || action.id
             const label = a?.label?.it || a?.label?.en || id;
             const iconName = a?.icon || undefined;
             acc[id] = { id, label, iconName, color: a?.color };
@@ -66,7 +66,7 @@ function getCatalog(): Record<string, ActionMeta> {
 export function getActionMeta(actionId?: string): ActionMeta {
     if (!actionId) return { id: 'unknown', label: 'Azione', iconName: 'FileText' };
 
-    const catalog = getCatalog(); // Legge dinamicamente da window.__actionsCatalog (come ActionList legge dal context)
+    const catalog = getCatalog(); // Legge dinamicamente da window.__actionsCatalog (come TaskList legge dal context)
     const canonical = ALIASES[actionId] || actionId;
     return catalog[canonical] || { id: actionId, label: actionId, iconName: 'FileText' };
 }

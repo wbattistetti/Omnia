@@ -24,7 +24,7 @@ export default function WaitingMessagesConfig({
         gridTemplateColumns: '1fr 1fr',
         gap: 8,
         padding: 8,
-        background: '#f0fdf4',
+        background: 'rgba(239, 68, 68, 0.2)', // Rosso spento con trasparenza 80%
         borderRadius: 8,
       }}
     >

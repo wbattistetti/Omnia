@@ -1,5 +1,5 @@
 import React from 'react';
-import ActionList from '../ActionViewer/ActionList';
+import TaskList from '../ActionViewer/TaskList';
 import ResponseSimulator from '../../ChatSimulator/ResponseSimulator';
 import DDEBubbleChat from '../../ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
@@ -21,11 +21,13 @@ type Props = {
 };
 
 const localStorageKey = 'responseEditor.rightWidth';
+const localStorageKeyTest = 'responseEditor.testPanelWidth';
 
-export function useRightPanelWidth(initial: number = 360) {
+export function useRightPanelWidth(initial: number = 360, key?: string) {
+  const storageKey = key || localStorageKey;
   const [width, setWidth] = React.useState<number>(() => {
     try {
-      const v = localStorage.getItem(localStorageKey);
+      const v = localStorage.getItem(storageKey);
       if (!v) return initial;
       const n = Number(v);
       return Number.isFinite(n) && n >= 120 ? n : initial;
@@ -35,7 +37,7 @@ export function useRightPanelWidth(initial: number = 360) {
   });
   const update = (w: number) => {
     setWidth(w);
-    try { localStorage.setItem(localStorageKey, String(w)); } catch { }
+    try { localStorage.setItem(storageKey, String(w)); } catch { }
   };
   return { width, setWidth: update };
 }
@@ -160,7 +162,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
       <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
         {mode === 'actions' && (
           <div style={{ padding: 12 }}>
-            <ActionList />
+            <TaskList />
           </div>
         )}
         {(() => {

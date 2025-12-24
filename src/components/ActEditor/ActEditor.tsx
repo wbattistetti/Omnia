@@ -1,6 +1,6 @@
 // Executive summary: Main entry point for the Actions Editor component. Handles layout and orchestration of the actions grid.
 import React from 'react';
-import ActionList from './ActionViewer/ActionList';
+import TaskList from './ActionViewer/TaskList';
 import styles from './ActEditor.module.css';
 
 type ActEditorProps = {
@@ -16,7 +16,7 @@ const ActEditor: React.FC<ActEditorProps> = ({ ddt, translations, lang }) => {
         <h2 className={styles.headerTitle}>Actions</h2>
       </div>
       <div className={styles.body}>
-        <ActionList />
+        <TaskList />
       </div>
     </div>
   );

@@ -114,9 +114,7 @@ export default function NERInlineEditor({
   return (
     <div
       style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        padding: 16,
+        padding: 8,
         background: '#f9fafb',
         animation: 'fadeIn 0.2s ease-in',
         display: 'flex',
@@ -140,9 +138,7 @@ export default function NERInlineEditor({
       {/* NER Config Editor (placeholder - to be replaced with proper editor) */}
       <div
         style={{
-          padding: 16,
-          border: '1px solid #334155',
-          borderRadius: 8,
+          padding: 8,
           background: '#1e1e1e',
           color: '#f1f5f9',
           display: 'flex',

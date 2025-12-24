@@ -37,9 +37,10 @@ interface EditorPanelProps {
   language?: string;
   customLanguage?: CustomLanguage;
   useTemplate?: boolean; // Whether to inject template for empty code (default: true for conditions)
+  onEditorMount?: (editor: any) => void; // ✅ Callback quando l'editor è montato
 }
 
-const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>(({ code, onChange, fontSize: propFontSize, varKeys = [], language = 'javascript', customLanguage, useTemplate = true }, ref) => {
+const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>(({ code, onChange, fontSize: propFontSize, varKeys = [], language = 'javascript', customLanguage, useTemplate = true, onEditorMount }, ref) => {
   // Use font from Context if available, otherwise fallback to prop
   let fontSize: number;
   try {
@@ -232,7 +233,7 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
   }, [safeCode, customLanguage?.id]); // Re-run when content or language changes
 
   return (
-    <div className="w-full h-full border border-slate-700 rounded">
+    <div className="w-full h-full">
       <MonacoEditor
         language={editorLanguage}
         theme={editorTheme}
@@ -263,6 +264,11 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
           // Store refs for useEffect
           editorRef.current = editor;
           monacoRef.current = monaco;
+
+          // ✅ Chiama callback se fornita
+          if (onEditorMount) {
+            onEditorMount(editor);
+          }
 
           try {
             // z-index for Monaco widgets

@@ -12,6 +12,8 @@ interface EditorHeaderProps {
   onClose: () => void;
   validationBadge?: React.ReactNode; // Optional validation badge
   errorMessage?: string; // Optional error message
+  hideButton?: boolean; // Hide button (for overlay header)
+  onButtonRender?: (button: React.ReactNode) => void; // Callback to render button elsewhere
 }
 
 /**
@@ -28,6 +30,8 @@ export default function EditorHeader({
   onClose,
   validationBadge,
   errorMessage,
+  hideButton = false,
+  onButtonRender,
 }: EditorHeaderProps) {
   const getButtonLabel = () => {
     const typeLabels: Record<ExtractorType, string> = {
@@ -38,6 +42,62 @@ export default function EditorHeader({
     };
     return isCreateMode ? `Create ${typeLabels[extractorType]}` : `Refine ${typeLabels[extractorType]}`;
   };
+
+  const buttonElement = shouldShowButton && !hideButton ? (
+    <button
+      type="button"
+      onClick={onButtonClick}
+      disabled={isGenerating}
+      style={{
+        padding: '6px 12px',
+        background: isCreateMode ? '#3b82f6' : '#f59e0b',
+        color: '#fff',
+        border: 'none',
+        borderRadius: 4,
+        cursor: isGenerating ? 'not-allowed' : 'pointer',
+        fontWeight: 500,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        opacity: isGenerating ? 0.7 : 1,
+      }}
+    >
+      {isGenerating && <Loader2 size={14} className="animate-spin" />}
+      {getButtonLabel()}
+    </button>
+  ) : null;
+
+  // If onButtonRender callback is provided, call it with the button
+  React.useEffect(() => {
+    if (onButtonRender && shouldShowButton) {
+      const button = (
+        <button
+          type="button"
+          onClick={onButtonClick}
+          disabled={isGenerating}
+          style={{
+            padding: '6px 12px',
+            background: isCreateMode ? '#3b82f6' : '#f59e0b',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 4,
+            cursor: isGenerating ? 'not-allowed' : 'pointer',
+            fontWeight: 500,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            opacity: isGenerating ? 0.7 : 1,
+          }}
+        >
+          {isGenerating && <Loader2 size={14} className="animate-spin" />}
+          {getButtonLabel()}
+        </button>
+      );
+      onButtonRender(button);
+    } else if (onButtonRender) {
+      onButtonRender(null);
+    }
+  }, [shouldShowButton, isCreateMode, isGenerating, onButtonClick, getButtonLabel, onButtonRender]);
 
   return (
     <div
@@ -70,29 +130,7 @@ export default function EditorHeader({
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-        {shouldShowButton && (
-          <button
-            type="button"
-            onClick={onButtonClick}
-            disabled={isGenerating}
-            style={{
-              padding: '6px 12px',
-              background: isCreateMode ? '#3b82f6' : '#f59e0b',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 4,
-              cursor: isGenerating ? 'not-allowed' : 'pointer',
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              opacity: isGenerating ? 0.7 : 1,
-            }}
-          >
-            {isGenerating && <Loader2 size={14} className="animate-spin" />}
-            {getButtonLabel()}
-          </button>
-        )}
+        {buttonElement}
         {/* Pulsante Close rimosso - la X è già nell'header dell'overlay */}
       </div>
     </div>

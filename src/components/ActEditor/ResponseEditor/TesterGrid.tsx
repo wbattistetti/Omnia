@@ -14,7 +14,7 @@ import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
 
 // 🎨 Colori centralizzati per extractors
 const EXTRACTOR_COLORS = {
-  regex: '#d1fae5',        // Verde chiaro
+  regex: '#93c5fd',        // Azzurro cobalto chiaro
   deterministic: '#e5e7eb', // Grigio
   ner: '#fef3c7',          // Giallo pallido
   llm: '#fed7aa',          // Arancione pallido
@@ -386,6 +386,10 @@ export default function TesterGrid({
   const firstDataRowRef = React.useRef<HTMLTableRowElement>(null);
   const [editorOverlayStyle, setEditorOverlayStyle] = React.useState<React.CSSProperties>({});
 
+  // ✅ NUOVO: Stato per la larghezza della colonna delle frasi (dichiarato prima dell'useEffect)
+  const [phraseColumnWidth, setPhraseColumnWidth] = React.useState<number>(280);
+  const [isResizing, setIsResizing] = React.useState(false);
+
   // Calcola le posizioni dell'overlay quando l'editor è attivo
   React.useEffect(() => {
     if (!activeEditor || !['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) || !tableRef.current || !headerRowRef.current) {
@@ -438,11 +442,17 @@ export default function TesterGrid({
     }, 0);
 
     return () => clearTimeout(timeoutId);
-  }, [activeEditor, showDeterministic, showNER, examplesList.length]);
+  }, [activeEditor, showDeterministic, showNER, examplesList.length, phraseColumnWidth]);
 
-  // ✅ NUOVO: Stato per la larghezza della colonna delle frasi
-  const [phraseColumnWidth, setPhraseColumnWidth] = React.useState<number>(200);
-  const [isResizing, setIsResizing] = React.useState(false);
+  // ✅ Stato per il pulsante dell'editor da mostrare nell'header
+  const [editorButton, setEditorButton] = React.useState<React.ReactNode>(null);
+
+  // ✅ Reset del pulsante quando l'editor cambia o viene chiuso
+  React.useEffect(() => {
+    if (!activeEditor) {
+      setEditorButton(null);
+    }
+  }, [activeEditor]);
 
   // Handler per il resize
   const handleResizeStart = React.useCallback((e: React.MouseEvent) => {
@@ -486,6 +496,7 @@ export default function TesterGrid({
       testCases: editorProps.testCases,
       setTestCases: editorProps.setTestCases,
       onProfileUpdate: editorProps.onProfileUpdate,
+      onButtonRender: setEditorButton, // ✅ Espone il pulsante all'overlay
     };
 
     switch (activeEditor) {
@@ -611,7 +622,7 @@ export default function TesterGrid({
                     handleAddExample();
                   }
                 }}
-                placeholder="Aggiungi frase..."
+                placeholder="Aggiungi frase di test..."
                 style={{
                   width: '100%',
                   padding: '6px 8px',
@@ -670,7 +681,7 @@ export default function TesterGrid({
                   justifyContent: 'center',
                   width: '100%',
                 }}
-                title="Aggiungi frase"
+                title="Aggiungi frase di test"
               >
                 <Plus size={14} />
               </button>
@@ -1357,7 +1368,7 @@ export default function TesterGrid({
             ...editorOverlayStyle,
             background: '#fff',
             border: '1px solid #e5e7eb',
-            borderRadius: 8,
+            borderRadius: 0,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -1373,13 +1384,19 @@ export default function TesterGrid({
               alignItems: 'center',
               justifyContent: 'space-between',
               flexShrink: 0,
+              borderRadius: 0,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={true} readOnly style={{ cursor: 'default' }} />
               <span style={{ fontWeight: 600, color: getTextColor(getActiveEditorColor()) }}>{getActiveEditorTitle()}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              {editorButton && (
+                <div style={{ marginRight: 0 }}>
+                  {editorButton}
+                </div>
+              )}
               <button
                 onClick={() => toggleEditor(activeEditor)}
                 style={{
@@ -1416,7 +1433,7 @@ export default function TesterGrid({
           </div>
 
           {/* Corpo dell'editor */}
-          <div style={{ flex: 1, overflow: 'auto', padding: 12, minHeight: 0 }}>
+          <div style={{ flex: 1, overflow: 'auto', padding: 6, minHeight: 0 }}>
             {renderEditor()}
           </div>
         </div>

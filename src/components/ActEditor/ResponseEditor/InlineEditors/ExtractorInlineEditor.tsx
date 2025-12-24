@@ -205,9 +205,7 @@ export default function ExtractorInlineEditor({
   return (
     <div
       style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        padding: 16,
+        padding: 8,
         background: '#f9fafb',
         animation: 'fadeIn 0.2s ease-in',
         display: 'flex',
@@ -234,8 +232,6 @@ export default function ExtractorInlineEditor({
           <div
             style={{
               height: 500,
-              border: '1px solid #334155',
-              borderRadius: 8,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -259,7 +255,7 @@ export default function ExtractorInlineEditor({
             </span>
           </div>
         ) : (
-          <div style={{ height: 500, border: '1px solid #334155', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ height: 500, overflow: 'hidden' }}>
             <EditorPanel
               code={extractorCode}
               onChange={(newCode) => {

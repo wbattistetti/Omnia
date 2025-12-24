@@ -8,8 +8,7 @@ import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { getTemplateId } from '../../../utils/taskHelpers';
 import { extractModifiedDDTFields } from '../../../utils/ddtMergeUtils';
 import Sidebar from './Sidebar';
-import StepsStrip from './StepsStrip';
-import StepEditor from './StepEditor';
+import BehaviourEditor from './BehaviourEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
 import MessageReviewView from './MessageReview/MessageReviewView';
 // import SynonymsEditor from './SynonymsEditor';
@@ -19,8 +18,7 @@ import { getTaskVisualsByType } from '../../Flowchart/utils/taskVisuals';
 import ActionDragLayer from './ActionDragLayer';
 import {
   getMainDataList,
-  getSubDataList,
-  getNodeSteps
+  getSubDataList
 } from './ddtSelectors';
 import { hasIntentMessages } from './utils/hasMessages';
 import IntentMessagesBuilder from './components/IntentMessagesBuilder';
@@ -227,8 +225,22 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
   ), [mainList]);
-  const [rightMode, setRightMode] = useState<RightPanelMode>('actions'); // Always start with actions panel visible
+  // ✅ Stato separato per Behaviour/Personality/Recognition (mutualmente esclusivi)
+  const [leftPanelMode, setLeftPanelMode] = useState<RightPanelMode>('actions'); // Always start with actions panel visible
+  // ✅ Stato separato per Test (indipendente)
+  const [testPanelMode, setTestPanelMode] = useState<RightPanelMode>('none'); // Test inizia chiuso
+  // ✅ Stato separato per Tasks (indipendente)
+  const [tasksPanelMode, setTasksPanelMode] = useState<RightPanelMode>('none'); // Tasks inizia chiuso
+
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
+
+  // ✅ Larghezza separata per il pannello Test (indipendente)
+  const { width: testPanelWidth, setWidth: setTestPanelWidth } = useRightPanelWidth(360, 'responseEditor.testPanelWidth');
+  // ✅ Larghezza separata per il pannello Tasks (indipendente)
+  const { width: tasksPanelWidth, setWidth: setTasksPanelWidth } = useRightPanelWidth(360, 'responseEditor.tasksPanelWidth');
+
+  // ✅ Mantieni rightMode per compatibilità (combinazione di leftPanelMode e testPanelMode)
+  const rightMode: RightPanelMode = testPanelMode === 'chat' ? 'chat' : leftPanelMode;
   const [dragging, setDragging] = useState(false);
   const [showSynonyms, setShowSynonyms] = useState(false);
   const [showMessageReview, setShowMessageReview] = useState(false);
@@ -261,20 +273,59 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   const sourceAct = (localDDT as any)?._sourceAct;
   const headerTitle = sourceAct?.label || act?.label || (localDDT as any)?._userLabel || 'Response Editor';
 
+  // ✅ Handler per il pannello sinistro (Behaviour/Personality/Recognition)
+  const saveLeftPanelMode = (m: RightPanelMode) => {
+    setLeftPanelMode(m);
+    try { localStorage.setItem('responseEditor.leftPanelMode', m); } catch { }
+  };
+
+  // ✅ Handler per il pannello Test (indipendente)
+  const saveTestPanelMode = (m: RightPanelMode) => {
+    setTestPanelMode(m);
+    try { localStorage.setItem('responseEditor.testPanelMode', m); } catch { }
+  };
+
+  // ✅ Handler per il pannello Tasks (indipendente)
+  const saveTasksPanelMode = (m: RightPanelMode) => {
+    setTasksPanelMode(m);
+    try { localStorage.setItem('responseEditor.tasksPanelMode', m); } catch { }
+  };
+
+  // ✅ Mantieni saveRightMode per compatibilità (gestisce entrambi i pannelli)
   const saveRightMode = (m: RightPanelMode) => {
-    setRightMode(m);
-    try { localStorage.setItem('responseEditor.rightMode', m); } catch { }
+    if (m === 'chat') {
+      // Se è 'chat', gestisci solo Test
+      saveTestPanelMode(m);
+    } else if (m === 'none') {
+      // Se è 'none', chiudi solo il pannello sinistro (non Test)
+      saveLeftPanelMode(m);
+    } else {
+      // Altrimenti, gestisci solo il pannello sinistro
+      saveLeftPanelMode(m);
+    }
   };
 
   // Toolbar buttons (extracted to hook)
   const toolbarButtons = useResponseEditorToolbar({
     showWizard,
-    rightMode,
+    rightMode, // Per compatibilità (combinazione di leftPanelMode e testPanelMode)
+    leftPanelMode, // Nuovo stato separato
+    testPanelMode, // Nuovo stato separato
+    tasksPanelMode, // Nuovo stato separato
     showSynonyms,
     showMessageReview,
     onRightModeChange: saveRightMode,
+    onLeftPanelModeChange: saveLeftPanelMode, // Nuovo handler
+    onTestPanelModeChange: saveTestPanelMode, // Nuovo handler
+    onTasksPanelModeChange: saveTasksPanelMode, // Nuovo handler
     onToggleSynonyms: () => setShowSynonyms(v => !v),
     onToggleMessageReview: () => setShowMessageReview(v => !v),
+    rightWidth,
+    onRightWidthChange: setRightWidth,
+    testPanelWidth,
+    onTestPanelWidthChange: setTestPanelWidth,
+    tasksPanelWidth,
+    onTasksPanelWidthChange: setTasksPanelWidth,
   });
 
   // Ref per prevenire esecuzioni multiple dello stesso processo
@@ -718,14 +769,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           : { type: 'introduction', escalations: [] };
         const newNode = { ...localDDT, steps: [introStep] };
 
-        try {
-          if (localStorage.getItem('debug.responseEditor') === '1') {
-            console.log('[selectedNode] Updated (root)', {
-              hasTestCases: !!newNode.nlpProfile?.testCases,
-              testCasesCount: (newNode.nlpProfile?.testCases || []).length
-            });
-          }
-        } catch { }
+        // Debug log removed - too noisy
+        // try {
+        //   if (localStorage.getItem('debug.responseEditor') === '1') {
+        //     console.log('[selectedNode] Updated (root)', {
+        //       hasTestCases: !!newNode.nlpProfile?.testCases,
+        //       testCasesCount: (newNode.nlpProfile?.testCases || []).length
+        //     });
+        //   }
+        // } catch { }
 
         setSelectedNode(newNode);
         setSelectedNodePath(null);
@@ -736,17 +788,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           : getSubDataList(mainList[selectedMainIndex])?.[selectedSubIndex];
 
         if (node) {
-          try {
-            if (localStorage.getItem('debug.responseEditor') === '1') {
-              console.log('[selectedNode] Updated', {
-                nodeLabel: node.label,
-                hasNlpProfile: !!node.nlpProfile,
-                hasTestCases: !!node.nlpProfile?.testCases,
-                testCasesCount: (node.nlpProfile?.testCases || []).length,
-                testCases: node.nlpProfile?.testCases
-              });
-            }
-          } catch { }
+          // Debug log removed - too noisy
+          // try {
+          //   if (localStorage.getItem('debug.responseEditor') === '1') {
+          //     console.log('[selectedNode] Updated', {
+          //       nodeLabel: node.label,
+          //       hasNlpProfile: !!node.nlpProfile,
+          //       hasTestCases: !!node.nlpProfile?.testCases,
+          //       testCasesCount: (node.nlpProfile?.testCases || []).length,
+          //       testCases: node.nlpProfile?.testCases
+          //     });
+          //   }
+          // } catch { }
 
           setSelectedNode(node);
           setSelectedNodePath({
@@ -842,54 +895,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     });
   }, [selectedNodePath]);
 
-  // Step keys per il nodo selezionato: se root selezionato, sempre 'introduction' (anche se vuoto, per permettere creazione)
-  const stepKeys = useMemo(() => {
-    if (selectedRoot) {
-      // Root selected: always show 'introduction' (even if empty, to allow creation)
-      return ['introduction'];
-    }
-    const steps = selectedNode ? getNodeSteps(selectedNode) : [];
-
-    // Removed verbose log
-
-    return steps;
-  }, [selectedNode, selectedRoot, selectedSubIndex]);
-  // Append V2 notConfirmed for main node if present (not for root)
-  const uiStepKeys = useMemo(() => {
-    let result: string[];
-    if (selectedRoot) {
-      result = stepKeys; // Root doesn't have notConfirmed
-    } else if (selectedSubIndex != null) {
-      result = stepKeys; // Sub nodes don't have notConfirmed
-    } else if (!stepKeys.includes('notConfirmed')) {
-      result = [...stepKeys, 'notConfirmed'];
-    } else {
-      result = stepKeys;
-    }
-
-    // Removed verbose log
-
-    return result;
-  }, [stepKeys, selectedSubIndex, selectedRoot]);
-  const [selectedStepKey, setSelectedStepKey] = useState<string>('');
-
-  // Mantieni lo step selezionato quando cambia il dato. Se lo step non esiste per il nuovo dato, fallback al primo disponibile.
-  React.useEffect(() => {
-    if (!stepKeys.length) { setSelectedStepKey(''); return; }
-    if (selectedStepKey && stepKeys.includes(selectedStepKey)) return;
-    // Prefer default 'start' if present, otherwise first available
-    const preferred = stepKeys.includes('start') ? 'start' : stepKeys[0];
-    setSelectedStepKey(preferred);
-  }, [stepKeys, selectedStepKey]);
-
-  // Snapshot log su cambio selezione (abilita con localStorage.setItem('debug.reopen','1'))
-  React.useEffect(() => {
-    try {
-      if (localStorage.getItem('debug.reopen') === '1') {
-        // Selection changed, could track analytics here if needed
-      }
-    } catch { }
-  }, [mainList, selectedMainIndex, selectedSubIndex, selectedStepKey, stepKeys]);
+  // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
   // Node update logic (extracted to hook)
   const { updateSelectedNode } = useNodeUpdate(
@@ -901,11 +907,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     replaceSelectedDDT
   );
 
-  // Node persistence/normalization logic (extracted to hook)
-  const { normalizeAndPersistModel } = useNodePersistence(
-    selectedStepKey,
-    updateSelectedNode
-  );
+  // ✅ normalizeAndPersistModel è ora gestito internamente da BehaviourEditor
 
   // kept for future translation edits in StepEditor
 
@@ -937,26 +939,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     return tag === 'input' || tag === 'textarea' || tag === 'select' || (el as HTMLElement).isContentEditable;
   }
 
-  // Handler tastiera globale per step navigation
-  const handleGlobalKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (sidebarRef.current && document.activeElement === sidebarRef.current && !isEditingActive()) {
-      if (e.key === 'ArrowRight') {
-        const idx = stepKeys.indexOf(selectedStepKey);
-        if (idx >= 0 && idx < stepKeys.length - 1) {
-          setSelectedStepKey(stepKeys[idx + 1]);
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      } else if (e.key === 'ArrowLeft') {
-        const idx = stepKeys.indexOf(selectedStepKey);
-        if (idx > 0) {
-          setSelectedStepKey(stepKeys[idx - 1]);
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }
-    }
-  };
+  // ✅ Keyboard shortcuts per step navigation sono ora gestiti internamente da BehaviourEditor
 
 
   // Esponi toolbar tramite callback quando in docking mode
@@ -971,7 +954,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
   // Layout
   return (
-    <div ref={rootRef} className={combinedClass} style={{ height: '100%', maxHeight: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onKeyDown={handleGlobalKeyDown}>
+    <div ref={rootRef} className={combinedClass} style={{ height: '100%', maxHeight: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
       {/* Header sempre visibile (minimale durante wizard, completo dopo) - nascosto quando in docking mode */}
       {!hideHeader && (
@@ -1119,8 +1102,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     setShowWizard(false);
                     inferenceStartedRef.current = null; // Reset quando il wizard viene completato
 
-                    setRightMode('actions'); // Force show ActionList
-                    setSelectedStepKey('start'); // Start with first step
+                    setLeftPanelMode('actions'); // Force show TaskList (now in Tasks panel)
+                    // ✅ selectedStepKey è ora gestito internamente da BehaviourEditor
 
                     // If parent provided onWizardComplete, notify it after updating UI
                     // (but don't close the overlay - let user see the editor)
@@ -1342,20 +1325,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               />
             )}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              {/* Steps toolbar hidden during NLP editor or MessageReview */}
-              {!showSynonyms && !showMessageReview && (
-                <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
-                  <StepsStrip
-                    stepKeys={uiStepKeys}
-                    selectedStepKey={selectedStepKey}
-                    onSelectStep={setSelectedStepKey}
-                    node={selectedNode}
-                  />
-                </div>
-              )}
               {/* Content */}
               <div style={{ display: 'flex', minHeight: 0, flex: 1, maxHeight: '100%' }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, maxHeight: '100%', padding: showMessageReview ? '16px' : '16px 16px 0 16px' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, maxHeight: '100%', padding: showMessageReview ? '8px' : '8px 8px 0 8px' }}>
                   {showMessageReview ? (
                     <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
                       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -1363,10 +1335,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                       </div>
                     </div>
                   ) : (
-                    <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                         {showSynonyms ? (
-                          <div style={{ padding: 12, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ padding: 6, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                             <NLPExtractorProfileEditor
                               node={selectedNode}
                               actType={actType}
@@ -1397,37 +1369,25 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                             />
                           </div>
                         ) : (
-                          <StepEditor
+                          // ✅ Nuovo componente BehaviourEditor che contiene StepsStrip + StepEditor
+                          <BehaviourEditor
                             node={selectedNode}
-                            stepKey={selectedStepKey}
                             translations={localTranslations}
-                            onModelChange={normalizeAndPersistModel}
-                            onDeleteEscalation={(idx) => updateSelectedNode((node) => {
-                              const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                              const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                              st.escalations = (st.escalations || []).filter((_: any, i: number) => i !== idx);
-                              next.steps[selectedStepKey] = st;
-                              return next;
-                            })}
-                            onDeleteAction={(escIdx, actionIdx) => updateSelectedNode((node) => {
-                              const next = { ...(node || {}), steps: { ...(node?.steps || {}) } };
-                              const st = next.steps[selectedStepKey] || { type: selectedStepKey, escalations: [] };
-                              const esc = (st.escalations || [])[escIdx];
-                              if (!esc) return next;
-                              esc.actions = (esc.actions || []).filter((_: any, j: number) => j !== actionIdx);
-                              st.escalations[escIdx] = esc;
-                              next.steps[selectedStepKey] = st;
-                              return next;
-                            })}
+                            updateSelectedNode={updateSelectedNode}
+                            selectedRoot={selectedRoot}
+                            selectedSubIndex={selectedSubIndex}
                           />
                         )}
                       </div>
                     </div>
                   )}
                 </div>
-                {!showSynonyms && !showMessageReview && (
+                {/* ✅ Pannello sinistro: Behaviour/Personality/Recognition (mutualmente esclusivi) */}
+                {/* ✅ NON mostrare il pannello quando Behaviour è attivo (leftPanelMode === 'actions')
+                    perché TaskList è ora nel pannello Tasks separato */}
+                {!showSynonyms && !showMessageReview && leftPanelMode !== 'none' && leftPanelMode !== 'chat' && leftPanelMode !== 'actions' && rightWidth > 1 && (
                   <RightPanel
-                    mode={rightMode}
+                    mode={leftPanelMode}
                     width={rightWidth}
                     onWidthChange={setRightWidth}
                     onStartResize={() => setDragging(true)}
@@ -1439,9 +1399,48 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                       setLocalDDT((prev: any) => {
                         const updated = updater(prev);
                         try { replaceSelectedDDT(updated); } catch { }
-                        // Force re-render by returning a new object reference
-                        // The deep copy in updateActionTextInDDT should already ensure this,
-                        // but this makes it explicit
+                        return updated;
+                      });
+                    }}
+                  />
+                )}
+
+                {/* ✅ Pannello destro: Test (indipendente, può essere mostrato insieme agli altri) */}
+                {testPanelMode === 'chat' && testPanelWidth > 1 && (
+                  <RightPanel
+                    mode="chat"
+                    width={testPanelWidth}
+                    onWidthChange={setTestPanelWidth}
+                    onStartResize={() => setDragging(true)}
+                    dragging={dragging}
+                    ddt={localDDT}
+                    translations={localTranslations}
+                    selectedNode={selectedNode}
+                    onUpdateDDT={(updater) => {
+                      setLocalDDT((prev: any) => {
+                        const updated = updater(prev);
+                        try { replaceSelectedDDT(updated); } catch { }
+                        return updated;
+                      });
+                    }}
+                  />
+                )}
+
+                {/* ✅ Pannello Tasks: sempre presente a destra, collassato quando non attivo */}
+                {tasksPanelMode === 'actions' && tasksPanelWidth > 1 && (
+                  <RightPanel
+                    mode="actions"
+                    width={tasksPanelWidth}
+                    onWidthChange={setTasksPanelWidth}
+                    onStartResize={() => setDragging(true)}
+                    dragging={dragging}
+                    ddt={localDDT}
+                    translations={localTranslations}
+                    selectedNode={selectedNode}
+                    onUpdateDDT={(updater) => {
+                      setLocalDDT((prev: any) => {
+                        const updated = updater(prev);
+                        try { replaceSelectedDDT(updated); } catch { }
                         return updated;
                       });
                     }}

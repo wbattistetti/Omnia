@@ -84,7 +84,7 @@ export function useDDTTranslations(ddt: any | null | undefined): Record<string, 
           hasGlobalTranslations: Object.keys(globalTranslations).length > 0,
           sampleGuids: guids.slice(0, 5),
           sampleFound: foundGuids.slice(0, 5),
-          sampleMissing: missingGuids.slice(0, 5)
+        sampleMissing: missingGuids.slice(0, 5)
         }
       });
 

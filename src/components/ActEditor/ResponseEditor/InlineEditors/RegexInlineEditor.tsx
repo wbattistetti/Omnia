@@ -156,6 +156,7 @@ interface RegexInlineEditorProps {
   testCases?: string[]; // ✅ Test cases passed directly from useProfileState
   setTestCases?: (cases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void; // Callback to update profile
+  onButtonRender?: (button: React.ReactNode) => void; // ✅ Callback to render button in overlay header
 }
 
 /**
@@ -172,6 +173,7 @@ export default function RegexInlineEditor({
   testCases: testCasesProp,
   setTestCases: setTestCasesProp,
   onProfileUpdate,
+  onButtonRender,
 }: RegexInlineEditorProps) {
   const [regexAiMode, setRegexAiMode] = React.useState(false);
   const [regexAiPrompt, setRegexAiPrompt] = React.useState('');
@@ -180,6 +182,10 @@ export default function RegexInlineEditor({
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
   const [validationResult, setValidationResult] = React.useState<ValidationResult | null>(null);
   const [shouldShowValidation, setShouldShowValidation] = React.useState(false);
+
+  // ✅ Ref per tracciare se l'utente ha mai scritto qualcosa (per gestire il placeholder)
+  const hasEverWrittenRef = React.useRef<boolean>(false);
+  const editorRef = React.useRef<any>(null);
 
   // Debounce timer for profile updates to avoid too many calls
   const profileUpdateTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -217,9 +223,24 @@ export default function RegexInlineEditor({
     extractorType: 'regex',
   });
 
+  // ✅ Testo guida placeholder
+  const PLACEHOLDER_TEXT = "scrivi l'espressione regolare che ti serve";
+
+  // ✅ Verifica se c'è contenuto reale (non solo placeholder)
+  const hasRealContent = React.useMemo(() => {
+    if (!currentRegexValue || currentRegexValue.trim() === '') return false;
+    return currentRegexValue.trim() !== PLACEHOLDER_TEXT;
+  }, [currentRegexValue]);
+
+  // ✅ Verifica se ci sono test values definiti
+  const hasTestValues = React.useMemo(() => {
+    return testCases && testCases.length > 0;
+  }, [testCases]);
+
   // 🆕 Override button label logic: "Create Regex" only if regex is empty, otherwise "Refine Regex"
-  const isRegexEmpty = !currentRegexValue || currentRegexValue.trim().length === 0;
-  const overrideIsCreateMode = isRegexEmpty;
+  // Ma considera anche se l'utente ha modificato dopo aver creato
+  const isRegexEmpty = !currentRegexValue || currentRegexValue.trim().length === 0 || currentRegexValue.trim() === PLACEHOLDER_TEXT;
+  const overrideIsCreateMode = isRegexEmpty && !hasUserEdited;
 
   // 🆕 Validate regex ONLY when AI finishes generating (not on every textbox change)
   const prevGeneratingRegex = React.useRef(generatingRegex);
@@ -234,15 +255,123 @@ export default function RegexInlineEditor({
     prevGeneratingRegex.current = generatingRegex;
   }, [generatingRegex, currentRegexValue, node]);
 
+  // ✅ Funzione helper per selezionare il placeholder
+  const selectPlaceholderIfNeeded = React.useCallback(() => {
+    console.log('[RegexEditor] 🔍 selectPlaceholderIfNeeded chiamata');
+    console.log('[RegexEditor] editorRef.current:', !!editorRef.current);
+
+    if (!editorRef.current || !editorRef.current.getModel()) {
+      console.log('[RegexEditor] ⚠️ Editor non disponibile');
+      return;
+    }
+
+    const editor = editorRef.current;
+    const model = editor.getModel();
+    const value = model.getValue();
+
+    console.log('[RegexEditor] 📝 Valore corrente:', value);
+    console.log('[RegexEditor] 📝 PLACEHOLDER_TEXT:', PLACEHOLDER_TEXT);
+    console.log('[RegexEditor] 📝 hasEverWrittenRef.current:', hasEverWrittenRef.current);
+    console.log('[RegexEditor] 📝 Valore === PLACEHOLDER_TEXT:', value === PLACEHOLDER_TEXT);
+
+    // Verifica che il contenuto sia effettivamente il placeholder
+    if (value === PLACEHOLDER_TEXT && !hasEverWrittenRef.current) {
+      const lineCount = model.getLineCount();
+      const maxColumn = model.getLineMaxColumn(1);
+
+      console.log('[RegexEditor] ✅ Condizioni soddisfatte, seleziono placeholder');
+      console.log('[RegexEditor] 📏 LineCount:', lineCount, 'MaxColumn:', maxColumn);
+
+      // ✅ Seleziona tutto il testo con startIndex=0 (linea 1, colonna 1)
+      const selection = {
+        startLineNumber: 1,
+        startColumn: 1, // startIndex = 0 (colonna 1 = indice 0)
+        endLineNumber: lineCount,
+        endColumn: model.getLineMaxColumn(lineCount)
+      };
+
+      console.log('[RegexEditor] 🎯 Applico selezione:', selection);
+      editor.setSelection(selection);
+
+      // ✅ Focus e posiziona il cursore all'inizio (startIndex=0)
+      editor.focus();
+      editor.setPosition({ lineNumber: 1, column: 1 });
+
+      // ✅ Forza la selezione visiva
+      editor.revealLine(1);
+      editor.render(true);
+
+      // Verifica che la selezione sia stata applicata
+      setTimeout(() => {
+        const actualSelection = editor.getSelection();
+        console.log('[RegexEditor] ✅ Selezione applicata:', actualSelection);
+        console.log('[RegexEditor] ✅ Selezione corretta:',
+          actualSelection?.startColumn === 1 &&
+          actualSelection?.endColumn === maxColumn
+        );
+      }, 50);
+    } else {
+      console.log('[RegexEditor] ⚠️ Condizioni non soddisfatte per selezionare placeholder');
+    }
+  }, []);
+
   // Update current value when regex prop changes
   React.useEffect(() => {
-    setCurrentRegexValue(regex);
-  }, [regex]);
+    console.log('[RegexEditor] 🔄 useEffect [regex] - regex:', regex);
+    console.log('[RegexEditor] 🔄 hasEverWrittenRef.current:', hasEverWrittenRef.current);
+
+    // ✅ Se regex è vuoto E l'utente non ha mai scritto, usa placeholder
+    // Altrimenti usa regex (anche se vuoto, per non mostrare placeholder dopo cancellazione)
+    if (!regex || regex.trim() === '') {
+      if (!hasEverWrittenRef.current) {
+        // Prima volta: mostra placeholder
+        console.log('[RegexEditor] ✅ Imposto PLACEHOLDER_TEXT');
+        setCurrentRegexValue(PLACEHOLDER_TEXT);
+        // ✅ Seleziona il placeholder quando viene impostato (dopo che l'editor è montato)
+        requestAnimationFrame(() => {
+          console.log('[RegexEditor] ⏱️ requestAnimationFrame callback (regex change)');
+          setTimeout(() => {
+            console.log('[RegexEditor] ⏱️ setTimeout callback (regex change)');
+            selectPlaceholderIfNeeded();
+          }, 100);
+        });
+      } else {
+        // Dopo che ha scritto: mostra vuoto (non placeholder)
+        console.log('[RegexEditor] ⚠️ Utente ha già scritto, mostro vuoto');
+        setCurrentRegexValue('');
+      }
+    } else {
+      console.log('[RegexEditor] ✅ Regex non vuoto, imposto:', regex);
+      setCurrentRegexValue(regex);
+      hasEverWrittenRef.current = true; // L'utente ha scritto qualcosa
+    }
+  }, [regex, selectPlaceholderIfNeeded]);
+
+  // ✅ Seleziona il placeholder quando currentRegexValue cambia e diventa il placeholder
+  React.useEffect(() => {
+    console.log('[RegexEditor] 🔄 useEffect [currentRegexValue] - currentRegexValue:', currentRegexValue);
+    console.log('[RegexEditor] 🔄 PLACEHOLDER_TEXT:', PLACEHOLDER_TEXT);
+    console.log('[RegexEditor] 🔄 hasEverWrittenRef.current:', hasEverWrittenRef.current);
+
+    if (currentRegexValue === PLACEHOLDER_TEXT && !hasEverWrittenRef.current) {
+      console.log('[RegexEditor] ✅ Condizioni OK, avvio selezione placeholder');
+      requestAnimationFrame(() => {
+        console.log('[RegexEditor] ⏱️ requestAnimationFrame callback (currentRegexValue change)');
+        setTimeout(() => {
+          console.log('[RegexEditor] ⏱️ setTimeout callback (currentRegexValue change)');
+          selectPlaceholderIfNeeded();
+        }, 150);
+      });
+    } else {
+      console.log('[RegexEditor] ⚠️ Condizioni non OK per selezionare');
+    }
+  }, [currentRegexValue, selectPlaceholderIfNeeded]);
 
   // Show button if:
   // - NOT generating
-  // - AND (regex is empty OR user has edited OR there are validation errors to fix)
-  const shouldShowButton = !generatingRegex && (isRegexEmpty || hasUserEdited || (shouldShowValidation && validationResult && !validationResult.valid));
+  // - AND (c'è contenuto reale O ci sono test values)
+  // - AND (è vuoto O l'utente ha modificato dopo la creazione)
+  const shouldShowButton = !generatingRegex && (hasRealContent || hasTestValues) && (isRegexEmpty || hasUserEdited);
 
   // Custom language configuration for regex
   const regexCustomLanguage: CustomLanguage = React.useMemo(() => ({
@@ -474,9 +603,7 @@ export default function RegexInlineEditor({
   return (
     <div
       style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        padding: 16,
+        padding: 0,
         background: '#f9fafb',
         animation: 'fadeIn 0.2s ease-in',
         display: 'flex',
@@ -496,8 +623,10 @@ export default function RegexInlineEditor({
         shouldShowButton={!!shouldShowButton}
         onButtonClick={handleButtonClick}
         onClose={onClose}
+        hideButton={true}
+        onButtonRender={onButtonRender}
         validationBadge={
-          shouldShowValidation && validationResult && currentRegexValue && currentRegexValue.trim().length > 0 ? (
+          (hasRealContent || hasTestValues) && shouldShowValidation && validationResult ? (
             <div
               style={{
                 padding: '4px 12px',
@@ -539,7 +668,7 @@ export default function RegexInlineEditor({
       <div style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 8,
+        gap: 0,
         width: '100%',
         maxWidth: '100%',
         overflow: 'hidden',
@@ -565,8 +694,6 @@ export default function RegexInlineEditor({
               minHeight: 0,
               maxHeight: '100%',
               height: '100%',
-              border: regexAiMode ? '2px solid #3b82f6' : '1px solid #334155',
-              borderRadius: 8,
               overflow: 'hidden',
               position: 'relative',
             }}
@@ -606,16 +733,49 @@ export default function RegexInlineEditor({
               </div>
             )}
             <EditorPanel
-              code={regexAiMode ? regexAiPrompt : currentRegexValue}
+              code={regexAiMode ? regexAiPrompt : (currentRegexValue || (hasEverWrittenRef.current ? '' : PLACEHOLDER_TEXT))}
               onChange={(v: string) => {
                 if (regexAiMode && !generatingRegex) {
                   setRegexAiPrompt(v || '');
                 } else if (!generatingRegex) {
-                  const newValue = v || '';
+                  // ✅ Rimuovi placeholder se l'utente inizia a scrivere
+                  let newValue = v || '';
+
+                  // ✅ Se l'utente sta scrivendo e il valore contiene il placeholder, rimuovilo
+                  // Questo gestisce il caso in cui l'utente inizia a digitare con il placeholder selezionato
+                  if (newValue.includes(PLACEHOLDER_TEXT) && newValue !== PLACEHOLDER_TEXT) {
+                    // L'utente sta scrivendo sopra il placeholder (placeholder selezionato + digitazione)
+                    newValue = newValue.replace(PLACEHOLDER_TEXT, '');
+                    hasEverWrittenRef.current = true;
+                  } else if (newValue === PLACEHOLDER_TEXT) {
+                    // L'utente ha solo il placeholder - non fare nulla, mantieni placeholder
+                    return;
+                  } else if (newValue.trim() !== '' && newValue !== PLACEHOLDER_TEXT) {
+                    // L'utente ha scritto qualcosa di reale (non placeholder)
+                    // Se il valore precedente era il placeholder, significa che l'utente ha iniziato a scrivere
+                    if (currentRegexValue === PLACEHOLDER_TEXT) {
+                      hasEverWrittenRef.current = true;
+                    }
+                  } else if (newValue === '' && hasEverWrittenRef.current) {
+                    // L'utente ha cancellato tutto dopo aver scritto - non mostrare placeholder
+                    hasEverWrittenRef.current = true; // Mantieni il flag
+                  }
+
                   setCurrentRegexValue(newValue);
-                  setRegex(newValue);
-                  // Mark as edited if different from original value
-                  if (newValue !== regex) {
+
+                  // ✅ Salva solo se non è vuoto (non salvare il placeholder)
+                  if (newValue !== PLACEHOLDER_TEXT && newValue.trim() !== '') {
+                    setRegex(newValue);
+                  } else if (newValue === '') {
+                    // Se è vuoto, salva stringa vuota (non placeholder)
+                    setRegex('');
+                  }
+
+                  // Mark as edited if different from original value (e non è placeholder/vuoto)
+                  if (newValue !== regex && newValue !== PLACEHOLDER_TEXT && newValue.trim() !== '') {
+                    setHasUserEdited(true);
+                  } else if (newValue === '' && regex && regex.trim() !== '') {
+                    // Se l'utente ha cancellato tutto, considera come modifica
                     setHasUserEdited(true);
                   }
                   // ✅ Debounce profile update to avoid too many calls and prevent editor freezing
@@ -638,6 +798,102 @@ export default function RegexInlineEditor({
               customLanguage={regexAiMode ? undefined : regexCustomLanguage}
               useTemplate={false}
               fontSize={13}
+              onEditorMount={(editor: any) => {
+                console.log('[RegexEditor] 🎯 onEditorMount chiamato');
+                console.log('[RegexEditor] 📝 currentRegexValue:', currentRegexValue);
+                console.log('[RegexEditor] 📝 hasEverWrittenRef.current:', hasEverWrittenRef.current);
+
+                editorRef.current = editor;
+
+                // ✅ Funzione helper per selezionare tutto il placeholder
+                const selectPlaceholder = () => {
+                  console.log('[RegexEditor] 🔍 selectPlaceholder (locale) chiamata');
+
+                  if (!editor || !editor.getModel()) {
+                    console.log('[RegexEditor] ⚠️ Editor non disponibile in selectPlaceholder');
+                    return;
+                  }
+
+                  const model = editor.getModel();
+                  const value = model.getValue();
+
+                  console.log('[RegexEditor] 📝 Valore in selectPlaceholder:', value);
+                  console.log('[RegexEditor] 📝 PLACEHOLDER_TEXT:', PLACEHOLDER_TEXT);
+                  console.log('[RegexEditor] 📝 hasEverWrittenRef.current:', hasEverWrittenRef.current);
+
+                  // Verifica che il contenuto sia effettivamente il placeholder
+                  if (value === PLACEHOLDER_TEXT && !hasEverWrittenRef.current) {
+                    const lineCount = model.getLineCount();
+                    const maxColumn = model.getLineMaxColumn(lineCount);
+
+                    console.log('[RegexEditor] ✅ Condizioni OK in selectPlaceholder, seleziono');
+                    console.log('[RegexEditor] 📏 LineCount:', lineCount, 'MaxColumn:', maxColumn);
+
+                    // ✅ Seleziona tutto il testo con startIndex=0 (linea 1, colonna 1)
+                    const selection = {
+                      startLineNumber: 1,
+                      startColumn: 1, // startIndex = 0 (colonna 1 = indice 0)
+                      endLineNumber: lineCount,
+                      endColumn: maxColumn
+                    };
+
+                    console.log('[RegexEditor] 🎯 Applico selezione in selectPlaceholder:', selection);
+                    editor.setSelection(selection);
+
+                    // ✅ Focus e posiziona il cursore all'inizio (startIndex=0)
+                    editor.focus();
+                    editor.setPosition({ lineNumber: 1, column: 1 });
+
+                    // ✅ Forza la selezione visiva
+                    editor.revealLine(1);
+                    editor.render(true);
+
+                    // Verifica selezione
+                    setTimeout(() => {
+                      const actualSelection = editor.getSelection();
+                      console.log('[RegexEditor] ✅ Selezione applicata in selectPlaceholder:', actualSelection);
+                    }, 50);
+                  } else {
+                    console.log('[RegexEditor] ⚠️ Condizioni non OK in selectPlaceholder');
+                  }
+                };
+
+                // ✅ Se c'è il placeholder, selezionalo automaticamente con startIndex=0
+                if (currentRegexValue === PLACEHOLDER_TEXT && !hasEverWrittenRef.current) {
+                  console.log('[RegexEditor] ✅ Condizioni OK in onEditorMount, avvio selezione');
+                  // Usa requestAnimationFrame per assicurarsi che il DOM sia pronto
+                  requestAnimationFrame(() => {
+                    console.log('[RegexEditor] ⏱️ requestAnimationFrame callback (onEditorMount)');
+                    setTimeout(() => {
+                      console.log('[RegexEditor] ⏱️ setTimeout callback (onEditorMount, 50ms)');
+                      selectPlaceholder();
+
+                      // ✅ Doppio check dopo un breve delay
+                      setTimeout(() => {
+                        console.log('[RegexEditor] ⏱️ setTimeout callback (onEditorMount, doppio check)');
+                        if (editor && editor.getModel()) {
+                          const model = editor.getModel();
+                          const value = model.getValue();
+                          console.log('[RegexEditor] 🔍 Doppio check - valore:', value);
+                          if (value === PLACEHOLDER_TEXT && !hasEverWrittenRef.current) {
+                            const selection = editor.getSelection();
+                            console.log('[RegexEditor] 🔍 Doppio check - selezione attuale:', selection);
+                            // Se la selezione non è corretta, riapplica
+                            if (!selection || selection.startColumn !== 1) {
+                              console.log('[RegexEditor] ⚠️ Selezione non corretta, riapplico');
+                              selectPlaceholder();
+                            } else {
+                              console.log('[RegexEditor] ✅ Selezione corretta nel doppio check');
+                            }
+                          }
+                        }
+                      }, 100);
+                    }, 50);
+                  });
+                } else {
+                  console.log('[RegexEditor] ⚠️ Condizioni non OK in onEditorMount');
+                }
+              }}
             />
           </div>
         </div>

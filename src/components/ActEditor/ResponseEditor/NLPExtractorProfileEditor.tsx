@@ -304,7 +304,7 @@ export default function NLPExtractorProfileEditor({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
       {/* Header compatto + tab editor */}
-      <div style={{ padding: 12 }}>
+      <div style={{ padding: 6 }}>
         {/* ✅ Quando kind === "intent", mostra solo Waiting LLM con messaggio diverso */}
         {isIntentKind ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -329,7 +329,7 @@ export default function NLPExtractorProfileEditor({
                 padding: '6px 8px',
                 border: '2px solid #9ca3af',
                 borderRadius: 6,
-                background: '#f0fdf4',
+                background: 'rgba(239, 68, 68, 0.2)', // Rosso spento con trasparenza 80%
               }}
             />
           </div>
@@ -561,64 +561,79 @@ export default function NLPExtractorProfileEditor({
         </div>
       </div>
 
-      {/* Tester section - sempre visibile, l'editor si sovrappone alla griglia */}
-      <div style={{ border: '2px solid #9ca3af', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          {/* Header con Tester e toolbar per kind === 'intent' */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontWeight: 700 }}>Tester</div>
-            {/* Toolbar con 3 pulsanti mutualmente esclusivi (solo per kind === 'intent') */}
-            {isIntentKind && (
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button
-                  onClick={() => setTestPhraseMode('all-training')}
-                  style={{
-                    padding: '4px 8px',
-                    border: '1px solid #9ca3af',
-                    borderRadius: 4,
-                    background: testPhraseMode === 'all-training' ? '#dbeafe' : '#fff',
-                    cursor: 'pointer',
-                    fontWeight: testPhraseMode === 'all-training' ? 600 : 400
-                  }}
-                  title="Mostra tutte le frasi di training di tutti gli intenti"
-                >
-                  All training phrases
-                </button>
-                <button
-                  onClick={() => setTestPhraseMode('selected-training')}
-                  disabled={!intentSelected}
-                  style={{
-                    padding: '4px 8px',
-                    border: '1px solid #9ca3af',
-                    borderRadius: 4,
-                    background: testPhraseMode === 'selected-training' ? '#dbeafe' : '#fff',
-                    cursor: intentSelected ? 'pointer' : 'not-allowed',
-                    opacity: intentSelected ? 1 : 0.5,
-                    fontWeight: testPhraseMode === 'selected-training' ? 600 : 400
-                  }}
-                  title={intentSelected ? "Mostra solo le frasi di training dell'intento selezionato" : "Seleziona un intento per vedere le sue frasi"}
-                >
-                  Training phrases for selected Intent
-                </button>
-                <button
-                  onClick={() => setTestPhraseMode('test-phrases')}
-                  style={{
-                    padding: '4px 8px',
-                    border: '1px solid #9ca3af',
-                    borderRadius: 4,
-                    background: testPhraseMode === 'test-phrases' ? '#dbeafe' : '#fff',
-                    cursor: 'pointer',
-                    fontWeight: testPhraseMode === 'test-phrases' ? 600 : 400
-                  }}
-                  title="Mostra le frasi di test (non usate per il training)"
-                >
-                  Test Phrases
-                </button>
-              </div>
-            )}
-          </div>
-          {/* Controls toolbar - RIMOSSO: pulsanti spostati nella colonna verticale della griglia */}
-          {/* 🎨 Grid - sempre visibile, l'editor si sovrappone quando attivo */}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {/* Tester section - griglia direttamente, senza pannello esterno */}
+      {/* Toolbar per kind === 'intent' - spostata sopra la griglia */}
+      {isIntentKind && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+          <button
+            onClick={() => {
+              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
+              if (testPhraseMode === 'all-training') {
+                setTestPhraseMode('all-training'); // Mantieni selezionato (mutualmente esclusivo)
+              } else {
+                setTestPhraseMode('all-training');
+              }
+            }}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #9ca3af',
+              borderRadius: 4,
+              background: testPhraseMode === 'all-training' ? '#dbeafe' : '#fff',
+              cursor: 'pointer',
+              fontWeight: testPhraseMode === 'all-training' ? 600 : 400
+            }}
+            title="Mostra tutte le frasi di training di tutti gli intenti"
+          >
+            All training phrases
+          </button>
+          <button
+            onClick={() => {
+              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
+              if (testPhraseMode === 'selected-training') {
+                setTestPhraseMode('all-training'); // Deseleziona tornando al default
+              } else {
+                setTestPhraseMode('selected-training');
+              }
+            }}
+            disabled={!intentSelected}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #9ca3af',
+              borderRadius: 4,
+              background: testPhraseMode === 'selected-training' ? '#dbeafe' : '#fff',
+              cursor: intentSelected ? 'pointer' : 'not-allowed',
+              opacity: intentSelected ? 1 : 0.5,
+              fontWeight: testPhraseMode === 'selected-training' ? 600 : 400
+            }}
+            title={intentSelected ? "Mostra solo le frasi di training dell'intento selezionato" : "Seleziona un intento per vedere le sue frasi"}
+          >
+            Training phrases for selected Intent
+          </button>
+          <button
+            onClick={() => {
+              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
+              if (testPhraseMode === 'test-phrases') {
+                setTestPhraseMode('all-training'); // Deseleziona tornando al default
+              } else {
+                setTestPhraseMode('test-phrases');
+              }
+            }}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #9ca3af',
+              borderRadius: 4,
+              background: testPhraseMode === 'test-phrases' ? '#dbeafe' : '#fff',
+              cursor: 'pointer',
+              fontWeight: testPhraseMode === 'test-phrases' ? 600 : 400
+            }}
+            title="Mostra le frasi di test (non usate per il training)"
+          >
+            Test Phrases
+          </button>
+        </div>
+      )}
+      {/* 🎨 Grid - sempre visibile, l'editor si sovrappone quando attivo */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <TesterGrid
             examplesList={examplesList}
             rowResults={rowResults}
@@ -670,8 +685,7 @@ export default function NLPExtractorProfileEditor({
             baselineStats={baselineStats}
             lastStats={lastStats}
             />
-          </div>
-        </div>
+      </div>
 
       {/* Editor senza Test Values: embeddings, post */}
       {activeEditor === 'embeddings' && (

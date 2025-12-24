@@ -1,4 +1,4 @@
-// Executive summary: Renders a responsive grid of available actions for drag & drop.
+// Executive summary: Renders a responsive grid of available tasks for drag & drop.
 import React, { useState, useEffect, useRef } from 'react';
 import ActionItem from './ActionItem';
 import { MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Tag, Clock, ServerCog } from 'lucide-react';
@@ -14,7 +14,7 @@ const iconMap: Record<string, React.ReactNode> = {
 
 const DEFAULT_LANG = 'it';
 
-const ActionList: React.FC = () => {
+const TaskList: React.FC = () => {
   const { combinedClass } = useFontContext();
   const { actionsCatalog } = useActionsCatalog();
   const [columns, setColumns] = useState(4);
@@ -101,4 +101,5 @@ const ActionList: React.FC = () => {
   );
 };
 
-export default ActionList;
+export default TaskList;
+
