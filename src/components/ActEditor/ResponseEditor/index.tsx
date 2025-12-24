@@ -241,7 +241,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
   // ✅ Mantieni rightMode per compatibilità (combinazione di leftPanelMode e testPanelMode)
   const rightMode: RightPanelMode = testPanelMode === 'chat' ? 'chat' : leftPanelMode;
-  const [dragging, setDragging] = useState(false);
+  // ✅ Stati di dragging separati per ogni pannello
+  const [draggingPanel, setDraggingPanel] = useState<'left' | 'test' | 'tasks' | null>(null);
   const [showSynonyms, setShowSynonyms] = useState(false);
   const [showMessageReview, setShowMessageReview] = useState(false);
   const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
@@ -911,25 +912,68 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
   // kept for future translation edits in StepEditor
 
-  // Splitter drag handlers
+  // ✅ Splitter drag handlers - gestisce tutti i pannelli in base a draggingPanel
   useEffect(() => {
-    if (!dragging) return;
+    if (!draggingPanel) return;
+
     const onMove = (e: MouseEvent) => {
       const total = window.innerWidth;
+      const minWidth = 160;
       const leftMin = 320;
-      const minRight = 160;
-      const maxRight = Math.max(minRight, total - leftMin);
-      const newWidth = Math.max(minRight, Math.min(maxRight, total - e.clientX));
-      setRightWidth(newWidth);
+
+      if (draggingPanel === 'left') {
+        // Pannello sinistro: calcola dalla posizione del mouse (da sinistra)
+        const maxRight = Math.max(minWidth, total - leftMin);
+        const newWidth = Math.max(minWidth, Math.min(maxRight, total - e.clientX));
+        setRightWidth(newWidth);
+      } else if (draggingPanel === 'test') {
+        // Pannello Test: calcola dalla posizione del mouse
+        // Quando ridimensiono Test, Tasks viene spinto a destra (flexbox gestisce automaticamente)
+        const contentLeft = total - (rightWidth || 360);
+        if (tasksPanelMode === 'actions' && tasksPanelWidth > 1) {
+          // Test finisce dove inizia Tasks
+          // La larghezza di Test = posizione mouse - inizio contenuto
+          // Ma devo rispettare la larghezza minima di Tasks
+          const maxTestWidth = total - contentLeft - tasksPanelWidth; // Massima larghezza Test (rispetta Tasks)
+          const newTestWidth = Math.max(minWidth, Math.min(maxTestWidth, e.clientX - contentLeft));
+          setTestPanelWidth(newTestWidth);
+          // Tasks mantiene la sua larghezza, si sposta solo a destra (gestito da flexbox)
+        } else {
+          // Test è l'unico pannello a destra
+          const maxRight = Math.max(minWidth, total - leftMin);
+          const newWidth = Math.max(minWidth, Math.min(maxRight, total - e.clientX));
+          setTestPanelWidth(newWidth);
+        }
+      } else if (draggingPanel === 'tasks') {
+        // Pannello Tasks: calcola dalla posizione del mouse (da destra)
+        // Quando ridimensiono Tasks, Test viene spinto a sinistra (flexbox gestisce automaticamente)
+        if (testPanelMode === 'chat' && testPanelWidth > 1) {
+          // Tasks inizia dove finisce Test
+          // La larghezza di Tasks = totale - posizione mouse
+          // Ma devo rispettare la larghezza minima di Test
+          const contentLeft = total - (rightWidth || 360);
+          const maxTasksWidth = total - contentLeft - testPanelWidth; // Massima larghezza Tasks (rispetta Test)
+          const newTasksWidth = Math.max(minWidth, Math.min(maxTasksWidth, total - e.clientX));
+          setTasksPanelWidth(newTasksWidth);
+          // Test mantiene la sua larghezza, si sposta solo a sinistra (gestito da flexbox)
+        } else {
+          // Tasks è l'unico pannello a destra
+          const newWidth = Math.max(minWidth, total - e.clientX);
+          setTasksPanelWidth(newWidth);
+        }
+      }
     };
-    const onUp = () => setDragging(false);
+
+    const onUp = () => setDraggingPanel(null);
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [dragging, setRightWidth]);
+  }, [draggingPanel, setRightWidth, setTestPanelWidth, setTasksPanelWidth, rightWidth, tasksPanelWidth, tasksPanelMode, testPanelMode, testPanelWidth]);
 
   // Funzione per capire se c'├¿ editing attivo (input, textarea, select)
   function isEditingActive() {
@@ -1390,8 +1434,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     mode={leftPanelMode}
                     width={rightWidth}
                     onWidthChange={setRightWidth}
-                    onStartResize={() => setDragging(true)}
-                    dragging={dragging}
+                    onStartResize={() => setDraggingPanel('left')}
+                    dragging={draggingPanel === 'left'}
                     ddt={localDDT}
                     translations={localTranslations}
                     selectedNode={selectedNode}
@@ -1411,8 +1455,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     mode="chat"
                     width={testPanelWidth}
                     onWidthChange={setTestPanelWidth}
-                    onStartResize={() => setDragging(true)}
-                    dragging={dragging}
+                    onStartResize={() => setDraggingPanel('test')}
+                    dragging={draggingPanel === 'test'}
                     ddt={localDDT}
                     translations={localTranslations}
                     selectedNode={selectedNode}
@@ -1432,8 +1476,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     mode="actions"
                     width={tasksPanelWidth}
                     onWidthChange={setTasksPanelWidth}
-                    onStartResize={() => setDragging(true)}
-                    dragging={dragging}
+                    onStartResize={() => setDraggingPanel('tasks')}
+                    dragging={draggingPanel === 'tasks'}
                     ddt={localDDT}
                     translations={localTranslations}
                     selectedNode={selectedNode}

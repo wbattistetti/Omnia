@@ -1,6 +1,5 @@
 import React from 'react';
 import { Trash2 } from 'lucide-react';
-import { stepMeta } from './ddtUtils';
 import ActionRowDnDWrapper from './ActionRowDnDWrapper';
 import ActionRow from './ActionRow';
 import { getActionIconNode, getActionLabel } from './actionMeta';
@@ -8,143 +7,41 @@ import useActionCommands from './useActionCommands';
 import { ensureHexColor } from './utils/color';
 import CanvasDropWrapper from './CanvasDropWrapper';
 import PanelEmptyDropZone from './PanelEmptyDropZone';
+import { EscalationModel } from './utils/buildEscalationModel';
 
 type Props = {
-  node: any;
-  stepKey: string;
+  escalations: EscalationModel[]; // ✅ Riceve direttamente le escalations
   translations: Record<string, string>;
+  color?: string; // Colore per lo step (opzionale, default dal meta)
+  allowedActions?: string[]; // Azioni permesse per questo step (opzionale)
   onDeleteEscalation?: (idx: number) => void;
   onDeleteAction?: (escIdx: number, actionIdx: number) => void;
-  onModelChange?: (next: EscalationModel[]) => void;
+  onModelChange?: (next: EscalationModel[]) => void; // ✅ Chiamato quando cambiano le escalations
 };
 
-type EscalationModel = {
-  tasks?: Array<{ templateId?: string; taskId?: string; text?: string; textKey?: string; icon?: string; label?: string; color?: string; parameters?: Array<{ parameterId: string; value: string }> }>;
-};
+export default function StepEditor({
+  escalations,
+  translations,
+  color = '#fb923c',
+  allowedActions,
+  onDeleteEscalation,
+  onModelChange
+}: Props) {
+  // ✅ Lavora direttamente su escalations, senza derivazioni
+  const [localEscalations, setLocalEscalations] = React.useState(escalations);
 
-function buildModel(node: any, stepKey: string, translations: Record<string, string>): EscalationModel[] {
-  // Case A: steps as object { start: { escalations: [...] } }
-  if (node?.steps && !Array.isArray(node.steps) && node.steps[stepKey] && Array.isArray(node.steps[stepKey].escalations)) {
-    const escs = node.steps[stepKey].escalations as any[];
-    return escs.map((esc) => {
-      const taskRefs = esc.tasks || esc.actions || [];
-      return {
-        tasks: taskRefs.map((task: any) => {
-          const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
-          const textKey = p?.value || task.taskId;
-          const hasDirectText = typeof task.text === 'string' && task.text.length > 0;
-          const translationValue = typeof textKey === 'string' ? translations[textKey] : undefined;
-          const text = hasDirectText
-            ? task.text
-            : (typeof textKey === 'string' ? (translationValue || textKey) : undefined);
-
-          if (textKey && !translationValue && !hasDirectText) {
-            const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
-            console.warn('[StepEditor][buildModel] ❌ Translation NOT FOUND', {
-              stepKey,
-              nodeLabel: node?.label,
-              textKey,
-              isGuid,
-              taskId: task.taskId,
-              templateId: task.templateId,
-              hasTaskText: hasDirectText
-            });
-          }
-
-          return { templateId: task.templateId, taskId: task.taskId, text, textKey, color: task.color, label: task.label };
-        })
-      };
-    });
-  }
-
-  // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
-  if (Array.isArray(node?.steps)) {
-    const group = (node.steps as any[]).find((g: any) => (g?.type === stepKey));
-    if (group && Array.isArray(group.escalations)) {
-      return (group.escalations as any[]).map((esc: any) => ({
-        tasks: (esc.tasks || esc.actions || []).map((task: any) => {
-          const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
-          const textKey = p?.value;
-          const text = (typeof task.text === 'string' && task.text.length > 0)
-            ? task.text
-            : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
-          return { templateId: task.templateId, taskId: task.taskId, text, textKey, color: task.color, label: task.label };
-        })
-      }));
-    }
-  }
-
-  // Fallback synthetic step from messages
-  const msg = node?.messages?.[stepKey];
-  if (msg && typeof msg.textKey === 'string') {
-    const textKey = msg.textKey;
-    const translationValue = translations[textKey];
-    const text = translationValue || textKey;
-    return [
-      {
-        tasks: [{ templateId: 'sayMessage', taskId: `task-${Date.now()}`, parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [], text, textKey }]
-      }
-    ];
-  }
-
-  return [];
-}
-
-export default function StepEditor({ node, stepKey, translations, onDeleteEscalation, onModelChange }: Props) {
-  const meta = (stepMeta as any)[stepKey];
-  const color = meta?.color || '#fb923c';
-  const allowedActions = stepKey === 'introduction' ? ['playJingle', 'sayMessage'] : undefined;
-
-  const model = React.useMemo(() => {
-    return buildModel(node, stepKey, translations);
-  }, [node, stepKey, translations]);
-
-  // ✅ SOLUZIONE SEMPLICE: localModel è la fonte di verità per l'UI
-  const nodeStepKey = `${node?.id || ''}-${stepKey}`;
-  const [localModel, setLocalModel] = React.useState(model);
-  const prevNodeStepKeyRef = React.useRef(nodeStepKey);
-  const pendingCommitRef = React.useRef<EscalationModel[] | null>(null);
-
-  // Effect 1: Resetta localModel quando cambia nodeStepKey (nuovo nodo/step)
+  // ✅ Sincronizza solo quando escalations cambia (nuovo step/nodo)
   React.useEffect(() => {
-    if (prevNodeStepKeyRef.current !== nodeStepKey) {
-      prevNodeStepKeyRef.current = nodeStepKey;
-      setLocalModel(model);
-      pendingCommitRef.current = null;
-    }
-  }, [nodeStepKey, model]);
+    setLocalEscalations(escalations);
+  }, [escalations]);
 
-  // Effect 2: Sincronizza localModel con model quando model cambia DOPO una persistenza
-  // Se abbiamo un pendingCommit e model corrisponde, significa che la persistenza è completata
-  React.useEffect(() => {
-    if (!pendingCommitRef.current) return;
-
-    // Crea snapshot semplificato per confronto
-    const modelSnapshot = JSON.stringify(model.map(e => ({
-      tasks: (e.tasks || []).map(t => ({ templateId: t.templateId, taskId: t.taskId }))
-    })));
-    const pendingSnapshot = JSON.stringify(pendingCommitRef.current.map(e => ({
-      tasks: (e.tasks || []).map(t => ({ templateId: t.templateId, taskId: t.taskId }))
-    })));
-
-    // Se model corrisponde a quello che abbiamo committato, sincronizza
-    if (modelSnapshot === pendingSnapshot) {
-      setLocalModel(model);
-      pendingCommitRef.current = null;
-    }
-  }, [model]);
-
-
-  // ✅ commitUp: salva il model che stiamo committando e chiama onModelChange
-  // Filtra automaticamente escalation vuote per evitare "fantasmi"
+  // ✅ commitUp: filtra escalation vuote e chiama onModelChange
   const commitUp = React.useCallback((next: EscalationModel[]) => {
-    // Filter out empty escalations before committing
     const filtered = next.filter(esc => (esc.tasks || []).length > 0);
-    pendingCommitRef.current = filtered;
     onModelChange?.(filtered);
   }, [onModelChange]);
 
-  const { editTask, deleteTask, moveTask, dropTaskFromViewer, appendTask } = useActionCommands(setLocalModel as any, commitUp as any);
+  const { editTask, deleteTask, moveTask, dropTaskFromViewer, appendTask } = useActionCommands(setLocalEscalations as any, commitUp as any);
 
   // Effect 3: Elimina escalation vuote quando si perde il focus o si clicca fuori
   // Questo previene "fantasmi" (escalation vuote che rimangono)
@@ -152,7 +49,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   React.useEffect(() => {
     const cleanupEmptyRows = () => {
-      setLocalModel(prev => {
+      setLocalEscalations(prev => {
         // Remove empty tasks from each escalation
         const cleaned = prev.map(esc => {
           const tasks = (esc.tasks || []).filter((task: any) => {
@@ -223,7 +120,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
   // Effect 4: Elimina tutte le righe vuote quando si clicca sul canvas
   React.useEffect(() => {
     const handleCanvasClick = () => {
-      setLocalModel(prev => {
+      setLocalEscalations(prev => {
         // Remove empty tasks from each escalation
         const cleaned = prev.map((esc, escIdx) => {
           const tasks = (esc.tasks || []).filter((task: any, taskIdx: number) => {
@@ -290,7 +187,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
         return;
       }
     }
-    const currentLen = localModel?.[escIdx]?.tasks?.length || 0;
+    const currentLen = localEscalations?.[escIdx]?.tasks?.length || 0;
     const taskRef = {
       templateId: action.templateId || action.actionId || 'sayMessage',
       taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -300,7 +197,7 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
     };
     appendTask(escIdx, taskRef);
     setAutoEditTarget({ escIdx, actIdx: currentLen });
-  }, [appendTask, localModel, allowedActions]);
+  }, [appendTask, localEscalations, allowedActions]);
 
   const handleDropFromViewer = React.useCallback((incoming: any, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => {
     if (allowedActions && allowedActions.length > 0) {
@@ -321,12 +218,12 @@ export default function StepEditor({ node, stepKey, translations, onDeleteEscala
 
   return (
     <div ref={containerRef} className="step-editor" style={{ padding: '1rem' }}>
-      {localModel.length === 0 ? (
+      {localEscalations.length === 0 ? (
         <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
           No escalations
         </div>
       ) : (
-        localModel.map((esc, idx) => (
+        localEscalations.map((esc, idx) => (
           <div key={idx} style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <span style={{ fontSize: '0.875rem', color: '#666' }}>Escalation {idx + 1}</span>

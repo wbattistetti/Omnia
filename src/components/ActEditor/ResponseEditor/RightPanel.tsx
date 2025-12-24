@@ -18,6 +18,7 @@ type Props = {
   translations: Record<string, string>;
   selectedNode: any;
   onUpdateDDT?: (updater: (ddt: any) => any) => void;
+  hideSplitter?: boolean; // ✅ Nascondi lo splitter quando c'è un altro pannello a sinistra
 };
 
 const localStorageKey = 'responseEditor.rightWidth';
@@ -141,24 +142,37 @@ function StylesView() {
   );
 }
 
-export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode, onUpdateDDT }: Props) {
+export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode, onUpdateDDT, hideSplitter = false }: Props) {
   const { combinedClass } = useFontContext();
   const minWidth = 160;
+  const [isHovered, setIsHovered] = React.useState(false);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // ✅ Previene che altri splitter vengano attivati
     onStartResize();
   };
   const useNewEngine = true;
 
   return (
-    <div className={combinedClass} style={{ display: 'flex', flex: 'none', minWidth: minWidth, width, maxWidth: width, borderLeft: '1px solid #e5e7eb', background: '#fafaff' }}>
-      {/* Splitter handle */}
-      <div
-        onMouseDown={handleMouseDown}
-        style={{ width: 6, cursor: 'col-resize', background: dragging ? '#fb923c55' : 'transparent' }}
-        aria-label="Resize right panel"
-        role="separator"
-      />
+    <div className={combinedClass} style={{ display: 'flex', flex: 'none', minWidth: minWidth, width, maxWidth: width, borderLeft: hideSplitter ? 'none' : '1px solid #e5e7eb', background: '#fafaff', position: 'relative' }}>
+      {/* Splitter handle sinistro - evidenziato solo su hover o quando questo specifico pannello sta ridimensionando */}
+      {!hideSplitter && (
+        <div
+          onMouseDown={handleMouseDown}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          style={{
+            width: 6,
+            cursor: 'col-resize',
+            background: dragging || isHovered ? '#fb923c55' : 'transparent',
+            transition: 'background 0.1s ease',
+            zIndex: dragging ? 10 : 1, // ✅ Quando dragging, questo splitter è sopra gli altri
+          }}
+          aria-label="Resize right panel"
+          role="separator"
+        />
+      )}
       <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
         {mode === 'actions' && (
           <div style={{ padding: 12 }}>
