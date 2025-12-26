@@ -60,26 +60,65 @@ export default function BehaviourEditor({
 
   // ✅ Helper per estrarre escalations dal node
   const getEscalationsFromNode = (node: any, stepKey: string): any[] => {
+    console.log('[BehaviourEditor][getEscalationsFromNode] 🔍 Reading escalations', {
+      stepKey,
+      nodeLabel: node?.label,
+      hasSteps: !!node?.steps,
+      stepsType: Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none'),
+      stepsKeys: node?.steps && !Array.isArray(node?.steps) ? Object.keys(node.steps) : null,
+      stepExists: !Array.isArray(node?.steps) ? !!node?.steps?.[stepKey] : null,
+      escalationsCount: !Array.isArray(node?.steps)
+        ? node?.steps?.[stepKey]?.escalations?.length
+        : node?.steps?.find((s: any) => s?.type === stepKey)?.escalations?.length
+    });
+
     if (!node?.steps) return [{ tasks: [] }]; // Default: una escalation vuota
 
     if (!Array.isArray(node.steps) && node.steps[stepKey]) {
       const esc = node.steps[stepKey].escalations || [];
+      const tasksCount = esc.reduce((acc: number, e: any) => acc + (e?.tasks?.length || 0), 0);
+      console.log('[BehaviourEditor][getEscalationsFromNode] ✅ Found escalations (object format)', {
+        stepKey,
+        escalationsCount: esc.length,
+        tasksCount,
+        stepData: node.steps[stepKey],
+        escalations: esc.map((e: any, idx: number) => ({
+          idx,
+          tasksCount: e?.tasks?.length || 0,
+          tasks: e?.tasks?.map((t: any) => ({ id: t?.id, label: t?.label })) || []
+        }))
+      });
       return esc.length > 0 ? esc : [{ tasks: [] }];
     }
 
     if (Array.isArray(node.steps)) {
       const step = node.steps.find((s: any) => s?.type === stepKey);
       const esc = step?.escalations || [];
+      const tasksCount = esc.reduce((acc: number, e: any) => acc + (e?.tasks?.length || 0), 0);
+      console.log('[BehaviourEditor][getEscalationsFromNode] ✅ Found escalations (array format)', {
+        stepKey,
+        escalationsCount: esc.length,
+        tasksCount
+      });
       return esc.length > 0 ? esc : [{ tasks: [] }];
     }
 
+    console.log('[BehaviourEditor][getEscalationsFromNode] ⚠️ No escalations found, returning default');
     return [{ tasks: [] }];
   };
 
   // ✅ UNICA FONTE DI VERITÀ: leggi direttamente dal node
   // Usa useMemo per evitare ricalcoli inutili e garantire che si aggiorni quando node cambia
   const escalations = useMemo(() => {
-    return getEscalationsFromNode(node, selectedStepKey);
+    const result = getEscalationsFromNode(node, selectedStepKey);
+    const tasksCount = result.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0);
+    console.log('[BehaviourEditor][useMemo] 📊 Escalations calculated', {
+      selectedStepKey,
+      escalationsCount: result.length,
+      tasksCount,
+      nodeLabel: node?.label
+    });
+    return result;
   }, [node, selectedStepKey]);
 
   // ✅ Salva escalations nel node (commit atomico) - gestisce sia array che oggetto

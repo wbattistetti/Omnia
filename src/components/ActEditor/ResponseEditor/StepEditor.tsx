@@ -16,6 +16,20 @@ export default function StepEditor({
   allowedActions,
   onEscalationsChange
 }: Props) {
+  // Log per debug
+  React.useEffect(() => {
+    const tasksCount = escalations.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0);
+    console.log('[StepEditor] 📊 Received escalations', {
+      escalationsCount: escalations.length,
+      tasksCount,
+      escalations: escalations.map((esc: any, idx: number) => ({
+        idx,
+        tasksCount: esc?.tasks?.length || 0,
+        tasks: esc?.tasks?.map((t: any) => ({ id: t?.id, label: t?.label })) || []
+      }))
+    });
+  }, [escalations]);
+
   // ✅ Stato per gestire quale task editare automaticamente (condiviso tra escalations)
   const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; actIdx: number } | null>(null);
 

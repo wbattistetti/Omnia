@@ -102,6 +102,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     try { localStorage.setItem('debug.responseEditor', '1'); } catch { }
     try { localStorage.setItem('debug.reopen', '1'); } catch { }
     try { localStorage.setItem('debug.nodeSelection', '1'); } catch { }
+    try { localStorage.setItem('debug.nodeSync', '1'); } catch { }
   }, []);
   // Get project language from localStorage (set when project is created/loaded)
   const projectLocale = useMemo<'en' | 'it' | 'pt'>(() => {
@@ -743,35 +744,600 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     subIndex?: number;
   } | null>(null);
 
-  // ✅ Caricamento iniziale: calcola selectedNode da localDDT solo quando cambiano gli indici
-  // NON sincronizza durante l'editing - selectedNode è la fonte di verità
+  // Ref per tracciare se stiamo caricando un nuovo nodo (per evitare sincronizzazione durante il caricamento)
+  const isLoadingNodeRef = useRef(false);
+  // Ref per tracciare l'ultimo selectedNodePath sincronizzato
+  const lastSyncedPathRef = useRef<{ mainIndex: number; subIndex?: number } | null>(null);
+  // Ref per tracciare gli ultimi indici (per rilevare cambiamenti)
+  const lastIndicesRef = useRef<{ mainIndex: number; subIndex?: number; root: boolean } | null>(null);
+  // Ref per tracciare l'ultimo localDDT aggiornato (per leggere dati aggiornati durante il caricamento)
+  // IMPORTANTE: localDDTRef.current è la fonte di verità durante il salvataggio/caricamento.
+  // NON aggiorniamo mai questo ref da localDDT perché localDDT è asincrono e sovrascriverebbe
+  // le modifiche che facciamo direttamente su localDDTRef.current durante il salvataggio.
+  // Aggiorniamo localDDTRef.current SOLO direttamente quando salviamo.
+  const localDDTRef = useRef(localDDT);
+
+  // Helper per convertire steps (oggetto o array) in array
+  const getStepsAsArray = useCallback((steps: any): any[] => {
+    if (!steps) return [];
+    if (Array.isArray(steps)) return steps;
+    // Se è un oggetto, convertilo in array
+    return Object.entries(steps).map(([key, value]: [string, any]) => ({
+      type: key,
+      ...value
+    }));
+  }, []);
+
+  // ✅ Salva le modifiche del nodo corrente PRIMA di cambiare nodo
+  // Questo garantisce che le modifiche siano salvate in localDDT prima che il nuovo nodo venga caricato
   useEffect(() => {
-    if (mainList.length === 0) return;
+    const currentIndices = {
+      mainIndex: selectedMainIndex,
+      subIndex: selectedSubIndex,
+      root: selectedRoot || false
+    };
+    const lastIndices = lastIndicesRef.current;
 
-    if (selectedRoot) {
-      const introStep = introduction
-        ? { type: 'introduction', escalations: introduction.escalations }
-        : { type: 'introduction', escalations: [] };
-      const newNode = { ...localDDT, steps: [introStep] };
-      setSelectedNode(newNode);
-      setSelectedNodePath(null);
-    } else {
-      const node = selectedSubIndex == null
-        ? mainList[selectedMainIndex]
-        : getSubDataList(mainList[selectedMainIndex])?.[selectedSubIndex];
+    // Se gli indici sono cambiati e abbiamo un selectedNode valido, salva PRIMA di caricare il nuovo nodo
+    if (lastIndices && selectedNode && selectedNodePath &&
+        (lastIndices.mainIndex !== currentIndices.mainIndex ||
+         lastIndices.subIndex !== currentIndices.subIndex ||
+         lastIndices.root !== currentIndices.root)) {
 
-      if (node) {
-        setSelectedNode(node);
-        setSelectedNodePath({
-          mainIndex: selectedMainIndex,
-          subIndex: selectedSubIndex
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 💾 Saving current node before change', {
+            from: lastIndices,
+            to: currentIndices,
+            selectedNodePath
+          });
+        }
+      } catch {}
+
+      // Salva le modifiche del nodo corrente in localDDT
+      // Usa localDDTRef.current per avere sempre l'ultima versione
+      const currentDDT = localDDTRef.current;
+      if (!currentDDT) {
+        try {
+          if (localStorage.getItem('debug.nodeSync') === '1') {
+            console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ⏭️ Skipping - missing currentDDT');
+          }
+        } catch {}
+        return;
+      }
+
+      const mains = getMainDataList(currentDDT);
+      // ✅ USA lastIndices invece di selectedNodePath per salvare nel path corretto
+      const { mainIndex, subIndex } = lastIndices;
+      const isRoot = lastIndices.root;
+
+      // Log per vedere cosa contiene currentDDT quando salvi
+      if (subIndex !== undefined && !isRoot) {
+        const currentMain = currentDDT?.mainData?.[mainIndex];
+        const currentSubIdx = (currentMain?.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
+        const currentSub = currentMain?.subData?.[currentSubIdx];
+        const currentStartTasks = !Array.isArray(currentSub?.steps)
+          ? currentSub?.steps?.['start']?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0
+          : getStepsAsArray(currentSub?.steps).find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
+
+        // Controlla anche Day (subIndex 0) se stai salvando Month (subIndex 1)
+        if (subIndex === 1) {
+          const daySubIdx = (currentMain?.subData || []).findIndex((s: any, idx: number) => idx === 0);
+          const daySub = currentMain?.subData?.[daySubIdx];
+          const dayStartTasks = !Array.isArray(daySub?.steps)
+            ? daySub?.steps?.['start']?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0
+            : getStepsAsArray(daySub?.steps).find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
+
+          console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 currentDDT state when saving Month', {
+            monthStartTasks: currentStartTasks,
+            dayStartTasks: dayStartTasks,
+            dayShouldHave: 2
+          });
+        }
+      }
+
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 📍 Saving to path from lastIndices', {
+            mainIndex,
+            subIndex,
+            isRoot,
+            selectedNodeLabel: selectedNode?.label
+          });
+        }
+      } catch {}
+
+      if (mainIndex >= mains.length) {
+        try {
+          if (localStorage.getItem('debug.nodeSync') === '1') {
+            console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ⏭️ Skipping - mainIndex out of bounds');
+          }
+        } catch {}
+        return;
+      }
+
+      const main = mains[mainIndex];
+      let next: any;
+
+      if (isRoot) {
+        const newIntroStep = selectedNode?.steps?.find((s: any) => s.type === 'introduction');
+        const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
+          esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
+        );
+
+        next = { ...currentDDT };
+        if (hasTasks) {
+          next.introduction = {
+            type: 'introduction',
+            escalations: newIntroStep.escalations || []
+          };
+        } else {
+          delete next.introduction;
+        }
+      } else if (subIndex === undefined) {
+        const newMainData = [...mains];
+        newMainData[mainIndex] = selectedNode;
+        next = { ...currentDDT, mainData: newMainData };
+      } else {
+        const subList = getSubDataList(main);
+        if (subIndex >= subList.length) {
+          try {
+            if (localStorage.getItem('debug.nodeSync') === '1') {
+              console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ⏭️ Skipping - subIndex out of bounds');
+            }
+          } catch {}
+          return;
+        }
+        const subIdx = (main.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
+
+        const newSubData = [...(main.subData || [])];
+        newSubData[subIdx] = selectedNode;
+        const newMain = { ...main, subData: newSubData };
+        const newMainData = [...mains];
+        newMainData[mainIndex] = newMain;
+        next = { ...currentDDT, mainData: newMainData };
+      }
+
+      // Log PRIMA di aggiornare localDDTRef
+      if (subIndex !== undefined && !isRoot) {
+        const beforeMain = localDDTRef.current?.mainData?.[mainIndex];
+        const beforeSubIdx = (beforeMain?.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
+        const beforeSub = beforeMain?.subData?.[beforeSubIdx];
+        const beforeStartTasks = !Array.isArray(beforeSub?.steps)
+          ? beforeSub?.steps?.['start']?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0
+          : getStepsAsArray(beforeSub?.steps).find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
+
+        const afterSub = next.mainData?.[mainIndex]?.subData?.find((s: any, idx: number) => idx === subIndex);
+        const afterStartTasks = !Array.isArray(afterSub?.steps)
+          ? afterSub?.steps?.['start']?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0
+          : getStepsAsArray(afterSub?.steps).find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
+
+        console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 BEFORE/AFTER localDDTRef update', {
+          nodeLabel: selectedNode?.label,
+          beforeStartTasks,
+          afterStartTasks,
+          willOverwrite: beforeStartTasks !== afterStartTasks && beforeStartTasks > 0
         });
       }
+
+      // Aggiorna localDDT e il ref immediatamente
+      // localDDTRef.current è la fonte di verità - aggiorniamolo PRIMA di setLocalDDT
+      localDDTRef.current = next;
+      setLocalDDT(next);
+
+      // Log SEMPRE visibile per debug
+      console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 DEBUG - About to log details', {
+        hasSelectedNode: !!selectedNode,
+        hasNext: !!next,
+        isRoot,
+        mainIndex,
+        subIndex
+      });
+
+      // Log dettagliato per vedere cosa è stato salvato
+      if (subIndex !== undefined && !isRoot) {
+        const savedMain = next.mainData?.[mainIndex];
+        const subIdx = (savedMain?.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
+        const savedSub = savedMain?.subData?.[subIdx];
+        const savedSteps = getStepsAsArray(savedSub?.steps);
+
+        // Controlla tutti gli step comuni
+        const stepKeys = ['start', 'notConfirmed', 'confirmed'];
+        const stepDetails: any = {};
+
+        stepKeys.forEach(stepKey => {
+          const savedStep = !Array.isArray(savedSub?.steps)
+            ? savedSub?.steps?.[stepKey]
+            : savedSteps.find((s: any) => s?.type === stepKey);
+          const savedStepTasksCount = savedStep?.escalations?.reduce((acc: number, esc: any) =>
+            acc + (esc?.tasks?.length || 0), 0) || 0;
+
+          const selectedStep = !Array.isArray(selectedNode?.steps)
+            ? selectedNode?.steps?.[stepKey]
+            : getStepsAsArray(selectedNode?.steps).find((s: any) => s?.type === stepKey);
+          const selectedStepTasksCount = selectedStep?.escalations?.reduce((acc: number, esc: any) =>
+            acc + (esc?.tasks?.length || 0), 0) || 0;
+
+          stepDetails[stepKey] = {
+            saved: savedStepTasksCount,
+            selected: selectedStepTasksCount,
+            match: savedStepTasksCount === selectedStepTasksCount
+          };
+        });
+
+        // Log COMPLETO con tutti i dettagli espansi - multipli log per evitare {…}
+        console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 COMPLETE SAVE DETAILS - stepDetails', stepDetails);
+        console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 COMPLETE SAVE DETAILS - savedSub.steps', savedSub?.steps);
+        console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 COMPLETE SAVE DETAILS - selectedNode.steps', selectedNode?.steps);
+
+        // Log per ogni step individualmente
+        Object.keys(stepDetails).forEach(stepKey => {
+          const detail = stepDetails[stepKey];
+          console.log(`[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 STEP ${stepKey}`, {
+            saved: detail.saved,
+            selected: detail.selected,
+            match: detail.match
+          });
+        });
+      }
+
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          // Conta i task nel selectedNode che stiamo salvando
+          const steps = getStepsAsArray(selectedNode?.steps);
+          const tasksCount = steps.reduce((acc: number, step: any) =>
+            acc + (step?.escalations?.reduce((a: number, esc: any) =>
+              a + (esc?.tasks?.length || 0), 0) || 0), 0);
+
+          // Conta i task nel nodo salvato in localDDT
+          let savedTasksCount = 0;
+          if (isRoot) {
+            const savedIntro = next.introduction;
+            savedTasksCount = savedIntro?.escalations?.reduce((acc: number, esc: any) =>
+              acc + (esc?.tasks?.length || 0), 0) || 0;
+          } else if (subIndex === undefined) {
+            const savedMain = next.mainData?.[mainIndex];
+            const savedSteps = getStepsAsArray(savedMain?.steps);
+            savedTasksCount = savedSteps.reduce((acc: number, step: any) =>
+              acc + (step?.escalations?.reduce((a: number, esc: any) =>
+                a + (esc?.tasks?.length || 0), 0) || 0), 0);
+          } else {
+            const savedMain = next.mainData?.[mainIndex];
+            // Calcola subIdx come nel blocco di salvataggio sopra
+            const subIdx = (savedMain?.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
+            const savedSub = savedMain?.subData?.[subIdx];
+            const savedSteps = getStepsAsArray(savedSub?.steps);
+            savedTasksCount = savedSteps.reduce((acc: number, step: any) =>
+              acc + (step?.escalations?.reduce((a: number, esc: any) =>
+                a + (esc?.tasks?.length || 0), 0) || 0), 0);
+          }
+
+          console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ✅ Saved current node to localDDT (synchronous)', {
+            selectedNodeTasksCount: tasksCount,
+            savedTasksCount,
+            match: tasksCount === savedTasksCount
+          });
+        }
+      } catch (e) {
+        console.error('[NODE_SYNC][SAVE_BEFORE_CHANGE] ❌ Error logging details:', e);
+      }
+
+      // Log SEMPRE visibile per conferma
+      console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ✅ Saved current node to localDDT (synchronous) - COMPLETED');
     }
+
+    // Aggiorna il ref con gli indici correnti
+    lastIndicesRef.current = currentIndices;
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, selectedNode, selectedNodePath, getStepsAsArray]);
+
+    // ✅ Caricamento iniziale: calcola selectedNode da localDDT solo quando cambiano gli indici
+    // NON sincronizza durante l'editing - selectedNode è la fonte di verità
+    // Usa localDDTRef.current per leggere sempre l'ultima versione aggiornata
+    useEffect(() => {
+      // Usa localDDTRef.current invece di localDDT per avere sempre l'ultima versione
+      const currentDDT = localDDTRef.current;
+      const currentMainList = getMainDataList(currentDDT);
+
+      if (currentMainList.length === 0) return;
+
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          console.log('[NODE_SYNC][LOAD] 🔄 Loading node from localDDT', {
+            selectedMainIndex,
+            selectedSubIndex,
+            selectedRoot,
+            mainListLength: currentMainList.length,
+            isLoadingNode: isLoadingNodeRef.current,
+            lastSyncedPath: lastSyncedPathRef.current
+          });
+        }
+      } catch {}
+
+      // Marca che stiamo caricando un nuovo nodo
+      isLoadingNodeRef.current = true;
+
+      if (selectedRoot) {
+        const introStep = introduction
+          ? { type: 'introduction', escalations: introduction.escalations }
+          : { type: 'introduction', escalations: [] };
+        const newNode = { ...currentDDT, steps: [introStep] };
+
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          const tasksCount = introStep.escalations?.reduce((acc: number, esc: any) =>
+            acc + (esc?.tasks?.length || 0), 0) || 0;
+          console.log('[NODE_SYNC][LOAD] ✅ Root node loaded', {
+            escalationsCount: introStep.escalations?.length || 0,
+            tasksCount
+          });
+        }
+      } catch {}
+
+      setSelectedNode(newNode);
+        setSelectedNodePath(null);
+        lastSyncedPathRef.current = null;
+      } else {
+        // Usa currentMainList invece di mainList per leggere sempre l'ultima versione
+        const node = selectedSubIndex == null
+          ? currentMainList[selectedMainIndex]
+          : getSubDataList(currentMainList[selectedMainIndex])?.[selectedSubIndex];
+
+      if (node) {
+        // Log SEMPRE visibile per debug
+        console.log('[NODE_SYNC][LOAD] 🔍 DEBUG - About to log node details', {
+          mainIndex: selectedMainIndex,
+          subIndex: selectedSubIndex,
+          nodeLabel: node?.label,
+          hasNode: !!node
+        });
+
+        try {
+          if (localStorage.getItem('debug.nodeSync') === '1') {
+            const steps = getStepsAsArray(node?.steps);
+            const escalationsCount = steps.reduce((acc: number, step: any) =>
+              acc + (step?.escalations?.length || 0), 0);
+            const tasksCount = steps.reduce((acc: number, step: any) =>
+              acc + (step?.escalations?.reduce((a: number, esc: any) =>
+                a + (esc?.tasks?.length || 0), 0) || 0), 0);
+
+            // Log dettagliato per ogni step
+            const stepDetails = steps.map((step: any, idx: number) => {
+              const stepKey = step?.type || `step-${idx}`;
+              const escs = step?.escalations || [];
+              const stepTasksCount = escs.reduce((acc: number, esc: any) =>
+                acc + (esc?.tasks?.length || 0), 0);
+              return {
+                stepKey,
+                escalationsCount: escs.length,
+                tasksCount: stepTasksCount,
+                tasks: escs.flatMap((esc: any) => esc?.tasks || []).map((t: any) => ({
+                  id: t?.id,
+                  label: t?.label
+                }))
+              };
+            });
+
+            console.log('[NODE_SYNC][LOAD] ✅ Node loaded from localDDT', {
+              mainIndex: selectedMainIndex,
+              subIndex: selectedSubIndex,
+              nodeLabel: node?.label,
+              stepsCount: steps.length,
+              escalationsCount,
+              tasksCount,
+              stepDetails
+            });
+          }
+        } catch (e) {
+          console.error('[NODE_SYNC][LOAD] ❌ Error logging details:', e);
+        }
+
+        // Log COMPLETO con tutti i dettagli espansi
+        const steps = getStepsAsArray(node?.steps);
+        const tasksCount = steps.reduce((acc: number, step: any) =>
+          acc + (step?.escalations?.reduce((a: number, esc: any) =>
+            a + (esc?.tasks?.length || 0), 0) || 0), 0);
+
+        // Log dettagliato per TUTTI gli step
+        const allStepsDetails: any = {};
+        if (!Array.isArray(node?.steps)) {
+          Object.keys(node?.steps || {}).forEach(stepKey => {
+            const step = node?.steps?.[stepKey];
+            const stepTasksCount = step?.escalations?.reduce((acc: number, esc: any) =>
+              acc + (esc?.tasks?.length || 0), 0) || 0;
+            allStepsDetails[stepKey] = {
+              tasksCount: stepTasksCount,
+              escalationsCount: step?.escalations?.length || 0,
+              tasks: step?.escalations?.flatMap((esc: any) => esc?.tasks || []).map((t: any) => ({
+                id: t?.id,
+                label: t?.label
+              })) || [],
+              fullStep: JSON.parse(JSON.stringify(step))
+            };
+          });
+        } else {
+          steps.forEach((step: any) => {
+            const stepKey = step?.type;
+            const stepTasksCount = step?.escalations?.reduce((acc: number, esc: any) =>
+              acc + (esc?.tasks?.length || 0), 0) || 0;
+            allStepsDetails[stepKey] = {
+              tasksCount: stepTasksCount,
+              escalationsCount: step?.escalations?.length || 0,
+              tasks: step?.escalations?.flatMap((esc: any) => esc?.tasks || []).map((t: any) => ({
+                id: t?.id,
+                label: t?.label
+              })) || [],
+              fullStep: JSON.parse(JSON.stringify(step))
+            };
+          });
+        }
+
+        // Log COMPLETO con tutti i dettagli espansi - multipli log per evitare {…}
+        console.log('[NODE_SYNC][LOAD] ✅ COMPLETE LOAD DETAILS - node.steps', node?.steps);
+        console.log('[NODE_SYNC][LOAD] ✅ COMPLETE LOAD DETAILS - allStepsDetails', allStepsDetails);
+
+        // Log per ogni step individualmente
+        Object.keys(allStepsDetails).forEach(stepKey => {
+          const detail = allStepsDetails[stepKey];
+          console.log(`[NODE_SYNC][LOAD] ✅ STEP ${stepKey}`, {
+            tasksCount: detail.tasksCount,
+            escalationsCount: detail.escalationsCount,
+            tasks: detail.tasks
+          });
+        });
+
+        setSelectedNode(node);
+        const newPath = {
+          mainIndex: selectedMainIndex,
+          subIndex: selectedSubIndex
+        };
+        setSelectedNodePath(newPath);
+        lastSyncedPathRef.current = newPath;
+      }
+    }
+
+    // Reset il flag dopo un tick
+    setTimeout(() => {
+      isLoadingNodeRef.current = false;
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          console.log('[NODE_SYNC][LOAD] ✅ isLoadingNodeRef reset to false');
+        }
+      } catch {}
+    }, 0);
+
     // ✅ IMPORTANTE: NON includere localDDT nelle dipendenze
     // Questo useEffect deve essere eseguito SOLO quando cambiano gli indici di selezione
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction]);
+
+  // ✅ Sincronizza localDDT quando selectedNode cambia (solo se non è un caricamento iniziale)
+  // Questo garantisce che le modifiche siano sempre salvate in localDDT
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('debug.nodeSync') === '1') {
+        console.log('[NODE_SYNC][SYNC] 🔄 Sync effect triggered', {
+          isLoadingNode: isLoadingNodeRef.current,
+          hasSelectedNode: !!selectedNode,
+          hasSelectedNodePath: !!selectedNodePath,
+          selectedNodePath,
+          lastSyncedPath: lastSyncedPathRef.current
+        });
+      }
+    } catch {}
+
+    // Skip se stiamo caricando un nuovo nodo
+    if (isLoadingNodeRef.current) {
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          console.log('[NODE_SYNC][SYNC] ⏭️ Skipping - isLoadingNode is true');
+        }
+      } catch {}
+      return;
+    }
+
+    // Skip se non abbiamo un selectedNode o un selectedNodePath valido
+    if (!selectedNode || !selectedNodePath) {
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          console.log('[NODE_SYNC][SYNC] ⏭️ Skipping - missing selectedNode or selectedNodePath');
+        }
+      } catch {}
+      return;
+    }
+
+    // Skip se il path è cambiato (stiamo caricando un nuovo nodo)
+    const currentPath = selectedNodePath;
+    const lastSyncedPath = lastSyncedPathRef.current;
+    if (lastSyncedPath &&
+        (lastSyncedPath.mainIndex !== currentPath.mainIndex ||
+         lastSyncedPath.subIndex !== currentPath.subIndex)) {
+      // Il path è cambiato, aggiorna il ref e skip (il nuovo nodo verrà caricato dal useEffect sopra)
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          console.log('[NODE_SYNC][SYNC] ⏭️ Skipping - path changed', {
+            lastSyncedPath,
+            currentPath
+          });
+        }
+      } catch {}
+      lastSyncedPathRef.current = currentPath;
+      return;
+    }
+
+    try {
+      if (localStorage.getItem('debug.nodeSync') === '1') {
+        const steps = selectedNode?.steps || [];
+        const escalationsCount = steps.reduce((acc: number, step: any) =>
+          acc + (step?.escalations?.length || 0), 0);
+        const tasksCount = steps.reduce((acc: number, step: any) =>
+          acc + (step?.escalations?.reduce((a: number, esc: any) =>
+            a + (esc?.tasks?.length || 0), 0) || 0), 0);
+        console.log('[NODE_SYNC][SYNC] ✅ Syncing selectedNode to localDDT', {
+          mainIndex: currentPath.mainIndex,
+          subIndex: currentPath.subIndex,
+          stepsCount: steps.length,
+          escalationsCount,
+          tasksCount
+        });
+      }
+    } catch {}
+
+    // Sincronizza localDDT con selectedNode
+    setLocalDDT((currentDDT: any) => {
+      if (!currentDDT) return currentDDT;
+
+      const mains = getMainDataList(currentDDT);
+      const { mainIndex, subIndex } = selectedNodePath;
+
+      if (mainIndex >= mains.length) return currentDDT;
+
+      const main = mains[mainIndex];
+      let next: any;
+
+      if (selectedRoot) {
+        const newIntroStep = selectedNode?.steps?.find((s: any) => s.type === 'introduction');
+        const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
+          esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
+        );
+
+        next = { ...currentDDT };
+        if (hasTasks) {
+          next.introduction = {
+            type: 'introduction',
+            escalations: newIntroStep.escalations || []
+          };
+        } else {
+          delete next.introduction;
+        }
+      } else if (subIndex === undefined) {
+        const newMainData = [...mains];
+        newMainData[mainIndex] = selectedNode;
+        next = { ...currentDDT, mainData: newMainData };
+      } else {
+        const subList = getSubDataList(main);
+        if (subIndex >= subList.length) return currentDDT;
+        const subIdx = (main.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
+
+        const newSubData = [...(main.subData || [])];
+        newSubData[subIdx] = selectedNode;
+        const newMain = { ...main, subData: newSubData };
+        const newMainData = [...mains];
+        newMainData[mainIndex] = newMain;
+        next = { ...currentDDT, mainData: newMainData };
+      }
+
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          console.log('[NODE_SYNC][SYNC] ✅ localDDT updated');
+        }
+      } catch {}
+
+      return next;
+    });
+
+    // Aggiorna il ref con il path corrente
+    lastSyncedPathRef.current = currentPath;
+  }, [selectedNode, selectedNodePath, selectedRoot]);
 
 
   // ✅ handleProfileUpdate: aggiorna selectedNode (UI immediata) + localDDT (persistenza)
@@ -835,75 +1401,47 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
   // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
-  // ✅ updateSelectedNode: aggiorna selectedNode (UI immediata) + localDDT (persistenza)
+  // ✅ updateSelectedNode: aggiorna SOLO selectedNode (UI immediata)
+  // localDDT viene sincronizzato automaticamente dal useEffect quando selectedNode cambia
   // Approccio transazionale: selectedNode è la fonte di verità durante l'editing
   const updateSelectedNode = useCallback((updater: (node: any) => any, notifyProvider: boolean = true) => {
-    // 1. Aggiorna selectedNode PRIMA (UI immediata)
+    try {
+      if (localStorage.getItem('debug.nodeSync') === '1') {
+        console.log('[NODE_SYNC][UPDATE] 🎯 updateSelectedNode called', {
+          hasSelectedNode: !!selectedNode,
+          selectedNodePath
+        });
+      }
+    } catch {}
+
+    // Aggiorna selectedNode (UI immediata)
+    // localDDT verrà sincronizzato automaticamente dal useEffect
     setSelectedNode((prev: any) => {
       if (!prev) return prev;
+      const updated = updater(prev) || prev;
 
-      const updatedNode = updater(prev) || prev;
-
-      // 2. Aggiorna localDDT in background (persistenza, senza impatto sulla UI)
-      setLocalDDT((currentDDT: any) => {
-        if (!currentDDT || !selectedNodePath) return currentDDT;
-
-        const mains = getMainDataList(currentDDT);
-        const { mainIndex, subIndex } = selectedNodePath;
-
-        if (mainIndex >= mains.length) return currentDDT;
-
-        const main = mains[mainIndex];
-        let next: any;
-
-        if (selectedRoot) {
-          // Root: aggiorna introduction
-          const newIntroStep = updatedNode?.steps?.find((s: any) => s.type === 'introduction');
-          const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
-            esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
-          );
-
-          next = { ...currentDDT };
-          if (hasTasks) {
-            next.introduction = {
-              type: 'introduction',
-              escalations: newIntroStep.escalations || []
-            };
-          } else {
-            delete next.introduction;
-          }
-        } else if (subIndex === undefined) {
-          // Main node
-          const newMainData = [...mains];
-          newMainData[mainIndex] = updatedNode;
-          next = { ...currentDDT, mainData: newMainData };
-        } else {
-          // Sub node
-          const subList = getSubDataList(main);
-          if (subIndex >= subList.length) return currentDDT;
-          const subIdx = (main.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
-
-          const newSubData = [...(main.subData || [])];
-          newSubData[subIdx] = updatedNode;
-          const newMain = { ...main, subData: newSubData };
-          const newMainData = [...mains];
-          newMainData[mainIndex] = newMain;
-          next = { ...currentDDT, mainData: newMainData };
+      try {
+        if (localStorage.getItem('debug.nodeSync') === '1') {
+          const steps = updated?.steps || [];
+          const escalationsCount = steps.reduce((acc: number, step: any) =>
+            acc + (step?.escalations?.length || 0), 0);
+          const tasksCount = steps.reduce((acc: number, step: any) =>
+            acc + (step?.escalations?.reduce((a: number, esc: any) =>
+              a + (esc?.tasks?.length || 0), 0) || 0), 0);
+          console.log('[NODE_SYNC][UPDATE] ✅ selectedNode updated', {
+            stepsCount: steps.length,
+            escalationsCount,
+            tasksCount
+          });
         }
+      } catch {}
 
-        return next;
-      });
-
-      return updatedNode;
+      return updated;
     });
-  }, [selectedNodePath, selectedRoot]);
+  }, [selectedNode, selectedNodePath]);
 
   // ✅ Persistenza ASINCRONA: osserva localDDT e persiste quando cambia
-  const localDDTRef = useRef(localDDT);
-  useEffect(() => {
-    localDDTRef.current = localDDT;
-  }, [localDDT]);
-
+  // (localDDTRef è già dichiarato sopra, vicino agli altri ref)
   useEffect(() => {
     // Debounce: persisti solo dopo 100ms di inattività
     const timer = setTimeout(() => {
