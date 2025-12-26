@@ -6,7 +6,8 @@ type Props = {
   translations: Record<string, string>;
   color?: string;
   allowedActions?: string[];
-  onEscalationsChange: (newEscalations: any[]) => void; // ✅ Passa l'array completo aggiornato
+  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void; // ✅ Aggiorna direttamente selectedNode
+  stepKey: string; // ✅ Step key corrente
 };
 
 export default function StepEditor({
@@ -14,64 +15,11 @@ export default function StepEditor({
   translations,
   color = '#fb923c',
   allowedActions,
-  onEscalationsChange
+  updateSelectedNode,
+  stepKey
 }: Props) {
-  // Log per debug
-  React.useEffect(() => {
-    const tasksCount = escalations.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0);
-    console.log('[StepEditor] 📊 Received escalations', {
-      escalationsCount: escalations.length,
-      tasksCount,
-      escalations: escalations.map((esc: any, idx: number) => ({
-        idx,
-        tasksCount: esc?.tasks?.length || 0,
-        tasks: esc?.tasks?.map((t: any) => ({ id: t?.id, label: t?.label })) || []
-      }))
-    });
-  }, [escalations]);
-
   // ✅ Stato per gestire quale task editare automaticamente (condiviso tra escalations)
   const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; actIdx: number } | null>(null);
-
-  // ✅ Callback per aggiornare una singola escalation
-  const handleEscalationChange = React.useCallback((escalationIdx: number, newEscalation: any) => {
-    const updated = escalations.map((esc: any, i: number) =>
-      i === escalationIdx ? newEscalation : esc
-    );
-    onEscalationsChange(updated);
-  }, [escalations, onEscalationsChange]);
-
-  // ✅ Gestisce spostamenti di task tra escalations diverse
-  const handleMoveTask = React.useCallback((
-    fromEscIdx: number,
-    fromTaskIdx: number,
-    toEscIdx: number,
-    toTaskIdx: number,
-    position: 'before' | 'after'
-  ) => {
-    const next = [...escalations];
-    const fromEsc = next[fromEscIdx];
-    if (!fromEsc) return;
-
-    const tasks = [...(fromEsc.tasks || [])];
-    const task = tasks[fromTaskIdx];
-    if (!task) return;
-
-    // Rimuovi dalla posizione originale
-    tasks.splice(fromTaskIdx, 1);
-    next[fromEscIdx] = { ...fromEsc, tasks };
-
-    // Aggiungi alla nuova posizione
-    if (!next[toEscIdx]) {
-      next[toEscIdx] = { tasks: [] };
-    }
-    const toTasks = [...(next[toEscIdx].tasks || [])];
-    const insertIdx = position === 'after' ? toTaskIdx + 1 : toTaskIdx;
-    toTasks.splice(insertIdx, 0, task);
-    next[toEscIdx] = { ...next[toEscIdx], tasks: toTasks };
-
-    onEscalationsChange(next);
-  }, [escalations, onEscalationsChange]);
 
   return (
     <div className="step-editor" style={{ padding: '1rem' }}>
@@ -88,8 +36,8 @@ export default function StepEditor({
             translations={translations}
             color={color}
             allowedActions={allowedActions}
-            onEscalationChange={(newEscalation) => handleEscalationChange(idx, newEscalation)}
-            onMoveTask={handleMoveTask}
+            updateSelectedNode={updateSelectedNode}
+            stepKey={stepKey}
             autoEditTarget={autoEditTarget}
             onAutoEditTargetChange={setAutoEditTarget}
           />

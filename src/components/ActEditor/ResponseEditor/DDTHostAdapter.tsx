@@ -46,9 +46,25 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
         console.log('🔧 [DDTHostAdapter] Created new task:', task.id);
       }
 
-      // ✅ Se il task ha templateId, carica DDT dal template (reference)
-      if (task?.templateId) {
-        console.log('🔧 [DDTHostAdapter] Building DDT from template:', task.templateId);
+      // ✅ VB.NET style: se il task ha mainData salvato, usalo direttamente (non ricostruire dal template)
+      if (task?.mainData && task.mainData.length > 0) {
+        // ✅ Usa direttamente il DDT salvato nel task (come VB.NET: modifichi in memoria, salvi tutto)
+        console.log('🔧 [DDTHostAdapter] Using saved mainData directly (VB.NET style):', {
+          mainDataLength: task.mainData.length,
+          hasSteps: task.mainData.some((m: any) => m.steps)
+        });
+        setExistingDDT({
+          label: task.label,
+          mainData: task.mainData,
+          stepPrompts: task.stepPrompts,
+          constraints: task.constraints,
+          examples: task.examples,
+          nlpContract: task.nlpContract,
+          introduction: task.introduction
+        });
+      } else if (task?.templateId) {
+        // ✅ Solo se NON c'è mainData salvato, ricostruisci dal template
+        console.log('🔧 [DDTHostAdapter] No saved mainData, building DDT from template:', task.templateId);
         const merged = await buildDDTFromTemplate(task);
         console.log('🔧 [DDTHostAdapter] Merged DDT:', {
           hasDDT: !!merged,
@@ -56,16 +72,6 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
           mainDataLength: merged?.mainData?.length || 0
         });
         setExistingDDT(merged);
-      } else if (task?.mainData && task.mainData.length > 0) {
-        // Fallback: task senza templateId ma con mainData (vecchio formato o standalone)
-        console.log('🔧 [DDTHostAdapter] Using mainData directly (no templateId)');
-        setExistingDDT({
-          label: task.label,
-          mainData: task.mainData,
-          stepPrompts: task.stepPrompts,
-          constraints: task.constraints,
-          examples: task.examples
-        });
       } else {
         console.log('🔧 [DDTHostAdapter] No DDT found, setting null');
         setExistingDDT(null);
@@ -82,27 +88,29 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     return null;
   });
 
-  // ✅ Carica DDT iniziale con merge (async)
+  // ✅ Carica DDT iniziale (VB.NET style: usa mainData salvato se disponibile)
   React.useEffect(() => {
     const loadInitialDDT = async () => {
       const actType = act.type as any;
       const task = taskRepository.getTask(instanceKey, actType);
 
-      // ✅ Se il task ha templateId, carica DDT dal template (reference)
-      if (task?.templateId) {
-        const merged = await buildDDTFromTemplate(task);
-        if (merged) {
-          setCurrentDDT(merged);
-        }
-      } else if (task?.mainData && task.mainData.length > 0) {
-        // Fallback: task senza templateId ma con mainData (vecchio formato o standalone)
+      // ✅ VB.NET style: se il task ha mainData salvato, usalo direttamente
+      if (task?.mainData && task.mainData.length > 0) {
         setCurrentDDT({
           label: task.label,
           mainData: task.mainData,
           stepPrompts: task.stepPrompts,
           constraints: task.constraints,
-          examples: task.examples
+          examples: task.examples,
+          nlpContract: task.nlpContract,
+          introduction: task.introduction
         });
+      } else if (task?.templateId) {
+        // ✅ Solo se NON c'è mainData salvato, ricostruisci dal template
+        const merged = await buildDDTFromTemplate(task);
+        if (merged) {
+          setCurrentDDT(merged);
+        }
       }
     };
 

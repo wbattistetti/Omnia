@@ -6,7 +6,6 @@ import { useDDTManager } from '../../../context/DDTManagerContext';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { getTemplateId } from '../../../utils/taskHelpers';
-import { extractModifiedDDTFields } from '../../../utils/ddtMergeUtils';
 import Sidebar from './Sidebar';
 import BehaviourEditor from './BehaviourEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
@@ -26,7 +25,6 @@ import { saveIntentMessagesToDDT } from './utils/saveIntentMessages';
 import { useNodeSelection } from './hooks/useNodeSelection';
 import { useNodeUpdate } from './hooks/useNodeUpdate';
 import { useNodePersistence } from './hooks/useNodePersistence';
-import { useDDTInitialization } from './hooks/useDDTInitialization';
 import { useResponseEditorToolbar } from './ResponseEditorToolbar';
 import IntentListEditorWrapper from './components/IntentListEditorWrapper';
 import { FontProvider, useFontContext } from '../../../context/FontContext';
@@ -79,18 +77,13 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     handleSelectAggregator,
   } = useNodeSelection(0); // Initial main index
 
-  // DDT initialization (extracted to hook)
+  // ✅ DDT come ref mutabile (simula VB.NET: modifica diretta sulla struttura in memoria)
+  const ddtRef = useRef(ddt);
 
-  const { localDDT, setLocalDDT, coercePhoneKind } = useDDTInitialization(
-    ddt,
-    wizardOwnsDataRef,
-    mergedBase,
-    () => {
-      // Reset selection when DDT changes
-      setSelectedMainIndex(0);
-      setSelectedSubIndex(undefined);
-    }
-  );
+  // Aggiorna ref solo quando ddt prop cambia da fonti esterne (es. editor riapre)
+  useEffect(() => {
+    ddtRef.current = ddt;
+  }, [ddt]);
 
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
@@ -130,10 +123,21 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   };
 
   // ✅ Load translations from global table using shared hook
-  const localTranslations = useDDTTranslations(localDDT);
+  const localTranslations = useDDTTranslations(ddt);
 
   // ❌ REMOVED: Sync from ddt.translations - translations are now in global table only
   // Translations are updated via the effect above that watches globalTranslations
+
+  // ✅ selectedNode è uno stato separato (fonte di verità durante l'editing)
+  // NON è una derivazione da localDDT - questo elimina race conditions e dipendenze circolari
+  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [selectedNodePath, setSelectedNodePath] = useState<{
+    mainIndex: number;
+    subIndex?: number;
+  } | null>(null);
+
+  // ✅ Quando chiudi, usa direttamente ddtRef.current (già contiene tutte le modifiche)
+  // Non serve più buildDDTFromSelectedNode perché le modifiche sono già nel ref
 
   // FIX: Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
   React.useEffect(() => {
@@ -141,27 +145,41 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       if (act?.id || (act as any)?.instanceId) {
         const key = ((act as any)?.instanceId || act?.id) as string;
         const task = taskRepository.getTask(key);
-        const hasDDT = localDDT && Object.keys(localDDT).length > 0 && localDDT.mainData && localDDT.mainData.length > 0;
+        const currentDDT = buildDDTFromSelectedNode(selectedNode, selectedNodePath, ddt);
+        const hasDDT = currentDDT && Object.keys(currentDDT).length > 0 && currentDDT.mainData && currentDDT.mainData.length > 0;
 
         if (hasDDT && task) {
-          // ✅ Extract only modified fields (constraints/examples/nlpContract only if modified)
-          const modifiedFields = await extractModifiedDDTFields(task, localDDT);
-
+          // ✅ Salva DIRETTAMENTE tutto il DDT modificato (come VB.NET)
+          const currentDDT = { ...ddtRef.current };
           const currentTemplateId = getTemplateId(task);
+
           // ✅ CASE-INSENSITIVE
           if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
-            // ✅ Update task con solo campi modificati
+            // ✅ Salva tutto il DDT modificato
             taskRepository.updateTask(key, {
               templateId: 'GetData',
-              ...modifiedFields
+              label: currentDDT.label,
+              mainData: currentDDT.mainData,
+              constraints: currentDDT.constraints,
+              examples: currentDDT.examples,
+              nlpContract: currentDDT.nlpContract,
+              introduction: currentDDT.introduction
             }, currentProjectId || undefined);
           } else {
-            // ✅ Update task con solo campi modificati
-            taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
+            // ✅ Salva tutto il DDT modificato
+            taskRepository.updateTask(key, {
+              label: currentDDT.label,
+              mainData: currentDDT.mainData,
+              constraints: currentDDT.constraints,
+              examples: currentDDT.examples,
+              nlpContract: currentDDT.nlpContract,
+              introduction: currentDDT.introduction
+            }, currentProjectId || undefined);
           }
-        } else if (localDDT) {
+        } else {
           // No DDT structure, but save other fields
-          taskRepository.updateTask(key, localDDT, currentProjectId || undefined);
+          const currentDDT = { ...ddtRef.current };
+          taskRepository.updateTask(key, currentDDT, currentProjectId || undefined);
         }
       }
     };
@@ -170,58 +188,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     return () => {
       window.removeEventListener('project:save', handleProjectSave);
     };
-  }, [localDDT, act?.id, (act as any)?.instanceId, currentProjectId]);
+  }, [act?.id, (act as any)?.instanceId, currentProjectId]);
 
-  // Persist explicitly on close only (avoid side-effects/flicker on unmount)
-  const handleEditorClose = React.useCallback(async () => {
 
-    try {
-      // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
-      if (act?.id || (act as any)?.instanceId) {
-        const key = ((act as any)?.instanceId || act?.id) as string;
-        const task = taskRepository.getTask(key);
-        const hasDDT = localDDT && Object.keys(localDDT).length > 0 && localDDT.mainData && localDDT.mainData.length > 0;
-
-        if (hasDDT && task) {
-          // ✅ Extract only modified fields (constraints/examples/nlpContract only if modified)
-          const modifiedFields = await extractModifiedDDTFields(task, localDDT);
-
-          const currentTemplateId = getTemplateId(task);
-          // ✅ CASE-INSENSITIVE
-          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
-            // ✅ Update task con solo campi modificati
-            taskRepository.updateTask(key, {
-              templateId: 'GetData',
-              ...modifiedFields
-            }, currentProjectId || undefined);
-          } else {
-            // ✅ Update task con solo campi modificati
-            taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
-          }
-        } else if (localDDT) {
-          // No DDT structure, but save other fields
-          taskRepository.updateTask(key, localDDT, currentProjectId || undefined);
-        }
-
-      }
-
-      // NON chiamare replaceSelectedDDT se abbiamo act prop (siamo in ActEditorOverlay)
-      // Questo previene l'apertura di ResizableResponseEditor in AppContent mentre si chiude ActEditorOverlay
-      if (!act) {
-        // Modalità diretta (senza act): aggiorna selectedDDT per compatibilità legacy
-        replaceSelectedDDT(localDDT);
-      }
-    } catch (e) {
-      console.error('[ResponseEditor][handleEditorClose] Persist error', {
-        actId: act?.id,
-        error: e
-      });
-    }
-
-    try { onClose && onClose(); } catch { }
-  }, [localDDT, replaceSelectedDDT, onClose, act?.id, (act as any)?.instanceId, currentProjectId]);
-
-  const mainList = useMemo(() => getMainDataList(localDDT), [localDDT]);
+  // ✅ Usa ddtRef.current per mainList (contiene già le modifiche)
+  // Forza re-render quando ddtRef cambia usando uno stato trigger
+  const [ddtVersion, setDDTVersion] = useState(0);
+  const mainList = useMemo(() => {
+    return getMainDataList(ddtRef.current);
+  }, [ddt, ddtVersion]); // Include ddtVersion per forzare aggiornamento
   // Aggregated view: show a group header when there are multiple mains
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
@@ -254,9 +229,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   // ✅ Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
   const needsIntentMessages = useMemo(() => {
     const firstMain = mainList[0];
-    const hasMessages = hasIntentMessages(localDDT);
+    const hasMessages = hasIntentMessages(ddt);
     return firstMain?.kind === 'intent' && !hasMessages;
-  }, [mainList, localDDT, act?.id, act?.type]);
+  }, [mainList, ddt, act?.id, act?.type]);
 
   // Wizard/general layout flags
   // ✅ Se kind === "intent" non ha bisogno di wizard (nessuna struttura dati)
@@ -269,11 +244,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     // Il wizard verrà aperto dall'useEffect dopo il match locale o l'inferenza
     return false;
   });
-  const { Icon, color: iconColor } = getTaskVisualsByType(actType, !!localDDT);
+  const { Icon, color: iconColor } = getTaskVisualsByType(actType, !!ddt);
   // Priority: _sourceAct.label (preserved act info) > act.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
   // NOTE: Do NOT use localDDT.label here - that's the DDT root label (e.g. "Age") which belongs in the TreeView, not the header
-  const sourceAct = (localDDT as any)?._sourceAct;
-  const headerTitle = sourceAct?.label || act?.label || (localDDT as any)?._userLabel || 'Response Editor';
+  const sourceAct = (ddt as any)?._sourceAct;
+  const headerTitle = sourceAct?.label || act?.label || (ddt as any)?._userLabel || 'Response Editor';
 
   // ✅ Handler per il pannello sinistro (Behaviour/Personality/Recognition)
   const saveLeftPanelMode = (m: RightPanelMode) => {
@@ -335,7 +310,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
   useEffect(() => {
     // ✅ Se kind === "intent" non deve mostrare il wizard
-    const currentMainList = getMainDataList(localDDT);
+    const currentMainList = getMainDataList(ddt);
     const firstMain = currentMainList[0];
     if (firstMain?.kind === 'intent') {
       setShowWizard(false);
@@ -343,7 +318,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       return;
     }
 
-    const empty = isDDTEmpty(localDDT);
+    const empty = isDDTEmpty(ddt);
 
     // ✅ IMPORTANTE: Non aprire wizard se l'inferenza è in corso
     // ✅ IMPORTANTE: Non aprire wizard se è già aperto (showWizard === true)
@@ -731,32 +706,124 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       setShowWizard(false);
       inferenceStartedRef.current = null; // Reset quando il wizard viene chiuso
     }
-  }, [localDDT, act, isInferring, inferenceResult, selectedProvider, selectedModel, showWizard]); // ✅ Rimosso mainList dalle dipendenze
+  }, [ddt, act, isInferring, inferenceResult, selectedProvider, selectedModel, showWizard]); // ✅ Rimosso mainList dalle dipendenze
 
-  // Track introduction separately to avoid recalculating selectedNode when localDDT changes
-  const introduction = useMemo(() => localDDT?.introduction, [localDDT?.introduction]);
+  // Track introduction separately - usa ddtRef.current
+  const introduction = useMemo(() => ddtRef.current?.introduction, [ddtVersion, ddt?.introduction]);
 
-  // ✅ selectedNode è uno stato separato (fonte di verità durante l'editing)
-  // NON è una derivazione da localDDT - questo elimina race conditions e dipendenze circolari
-  const [selectedNode, setSelectedNode] = useState<any>(null);
-  const [selectedNodePath, setSelectedNodePath] = useState<{
-    mainIndex: number;
-    subIndex?: number;
-  } | null>(null);
+  // Persist explicitly on close only (avoid side-effects/flicker on unmount)
+  const handleEditorClose = React.useCallback(async () => {
+    // ✅ Salva selectedNode corrente nel ref prima di chiudere (se non già salvato)
+    if (selectedNode && selectedNodePath) {
+      const mains = getMainDataList(ddtRef.current);
+      const { mainIndex, subIndex } = selectedNodePath;
+      const isRoot = selectedRoot || false;
 
-  // Ref per tracciare se stiamo caricando un nuovo nodo (per evitare sincronizzazione durante il caricamento)
-  const isLoadingNodeRef = useRef(false);
-  // Ref per tracciare l'ultimo selectedNodePath sincronizzato
-  const lastSyncedPathRef = useRef<{ mainIndex: number; subIndex?: number } | null>(null);
-  // Ref per tracciare gli ultimi indici (per rilevare cambiamenti)
-  const lastIndicesRef = useRef<{ mainIndex: number; subIndex?: number; root: boolean } | null>(null);
-  // Ref per tracciare l'ultimo localDDT aggiornato (per leggere dati aggiornati durante il caricamento)
-  // IMPORTANTE: localDDTRef.current è la fonte di verità durante il salvataggio/caricamento.
-  // NON aggiorniamo mai questo ref da localDDT perché localDDT è asincrono e sovrascriverebbe
-  // le modifiche che facciamo direttamente su localDDTRef.current durante il salvataggio.
-  // Aggiorniamo localDDTRef.current SOLO direttamente quando salviamo.
-  const localDDTRef = useRef(localDDT);
+      if (mainIndex < mains.length) {
+        const main = mains[mainIndex];
 
+        if (isRoot) {
+          const newIntroStep = selectedNode?.steps?.find((s: any) => s.type === 'introduction');
+          const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
+            esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
+          );
+          if (hasTasks) {
+            ddtRef.current.introduction = {
+              type: 'introduction',
+              escalations: newIntroStep.escalations || []
+            };
+          } else {
+            delete ddtRef.current.introduction;
+          }
+        } else if (subIndex === undefined) {
+          mains[mainIndex] = selectedNode;
+          ddtRef.current.mainData = mains;
+        } else {
+          const subList = main.subData || [];
+          const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
+          if (subIdx >= 0) {
+            subList[subIdx] = selectedNode;
+            main.subData = subList;
+            mains[mainIndex] = main;
+            ddtRef.current.mainData = mains;
+          }
+        }
+      }
+    }
+
+    // ✅ Usa direttamente ddtRef.current (già contiene tutte le modifiche)
+    const finalDDT = { ...ddtRef.current };
+
+    try {
+      // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
+      if (act?.id || (act as any)?.instanceId) {
+        const key = ((act as any)?.instanceId || act?.id) as string;
+        const task = taskRepository.getTask(key);
+        const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.mainData && finalDDT.mainData.length > 0;
+
+        if (hasDDT && task) {
+          // ✅ Salva DIRETTAMENTE tutto il DDT modificato (come VB.NET: modifichi in memoria, salvi tutto)
+          const currentTemplateId = getTemplateId(task);
+
+          // Debug: verifica cosa stiamo salvando
+          const finalMainData = finalDDT?.mainData?.[0];
+          const finalSubData = finalMainData?.subData?.[0];
+          const finalStartTasks = finalSubData?.steps?.start?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
+
+          console.log('[handleEditorClose] 💾 Saving complete DDT (VB.NET style)', {
+            finalStartTasks,
+            hasMainData: !!finalMainData,
+            mainDataLength: finalDDT?.mainData?.length || 0,
+            willSaveCompleteDDT: true
+          });
+
+          // ✅ CASE-INSENSITIVE
+          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+            // ✅ Salva tutto il DDT modificato
+            taskRepository.updateTask(key, {
+              templateId: 'GetData',
+              label: finalDDT.label,
+              mainData: finalDDT.mainData,
+              constraints: finalDDT.constraints,
+              examples: finalDDT.examples,
+              nlpContract: finalDDT.nlpContract,
+              introduction: finalDDT.introduction
+            }, currentProjectId || undefined);
+          } else {
+            // ✅ Salva tutto il DDT modificato
+            taskRepository.updateTask(key, {
+              label: finalDDT.label,
+              mainData: finalDDT.mainData,
+              constraints: finalDDT.constraints,
+              examples: finalDDT.examples,
+              nlpContract: finalDDT.nlpContract,
+              introduction: finalDDT.introduction
+            }, currentProjectId || undefined);
+          }
+        } else if (finalDDT) {
+          // No DDT structure, but save other fields
+          taskRepository.updateTask(key, finalDDT, currentProjectId || undefined);
+        }
+
+      }
+
+      // NON chiamare replaceSelectedDDT se abbiamo act prop (siamo in ActEditorOverlay)
+      // Questo previene l'apertura di ResizableResponseEditor in AppContent mentre si chiude ActEditorOverlay
+      if (!act) {
+        // Modalità diretta (senza act): aggiorna selectedDDT per compatibilità legacy
+        replaceSelectedDDT(finalDDT);
+      }
+    } catch (e) {
+      console.error('[ResponseEditor][handleEditorClose] Persist error', {
+        actId: act?.id,
+        error: e
+      });
+    }
+
+    try { onClose && onClose(); } catch { }
+  }, [replaceSelectedDDT, onClose, act?.id, (act as any)?.instanceId, currentProjectId, selectedNode, selectedNodePath, selectedRoot]);
+
+  // ✅ NON serve più tracciare sincronizzazioni - selectedNode è l'unica fonte di verità
   // Helper per convertire steps (oggetto o array) in array
   const getStepsAsArray = useCallback((steps: any): any[] => {
     if (!steps) return [];
@@ -768,8 +835,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     }));
   }, []);
 
-  // ✅ Salva le modifiche del nodo corrente PRIMA di cambiare nodo
-  // Questo garantisce che le modifiche siano salvate in localDDT prima che il nuovo nodo venga caricato
+  // ✅ NON serve più salvare prima di cambiare nodo - selectedNode è sempre aggiornato
+  // Quando cambi nodo, carichi direttamente dal prop ddt
+  // useEffect rimosso - non serve più sincronizzazione
+  /*
   useEffect(() => {
     const currentIndices = {
       mainIndex: selectedMainIndex,
@@ -1029,38 +1098,30 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     // Aggiorna il ref con gli indici correnti
     lastIndicesRef.current = currentIndices;
   }, [selectedMainIndex, selectedSubIndex, selectedRoot, selectedNode, selectedNodePath, getStepsAsArray]);
+  */
 
-    // ✅ Caricamento iniziale: calcola selectedNode da localDDT solo quando cambiano gli indici
-    // NON sincronizza durante l'editing - selectedNode è la fonte di verità
-    // Usa localDDTRef.current per leggere sempre l'ultima versione aggiornata
-    useEffect(() => {
-      // Usa localDDTRef.current invece di localDDT per avere sempre l'ultima versione
-      const currentDDT = localDDTRef.current;
-      const currentMainList = getMainDataList(currentDDT);
+  // ✅ Caricamento: legge da ddtRef.current (che contiene già le modifiche, come VB.NET)
+  useEffect(() => {
+    const currentMainList = getMainDataList(ddtRef.current); // ✅ Leggi dal ref, non dal prop
 
       if (currentMainList.length === 0) return;
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][LOAD] 🔄 Loading node from localDDT', {
+          console.log('[NODE_SYNC][LOAD] 🔄 Loading node from ddt', {
             selectedMainIndex,
             selectedSubIndex,
             selectedRoot,
-            mainListLength: currentMainList.length,
-            isLoadingNode: isLoadingNodeRef.current,
-            lastSyncedPath: lastSyncedPathRef.current
+            mainListLength: currentMainList.length
           });
         }
       } catch {}
 
-      // Marca che stiamo caricando un nuovo nodo
-      isLoadingNodeRef.current = true;
-
       if (selectedRoot) {
-        const introStep = introduction
-          ? { type: 'introduction', escalations: introduction.escalations }
+        const introStep = ddtRef.current?.introduction
+          ? { type: 'introduction', escalations: ddtRef.current.introduction.escalations }
           : { type: 'introduction', escalations: [] };
-        const newNode = { ...currentDDT, steps: [introStep] };
+        const newNode = { ...ddtRef.current, steps: [introStep] };
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -1075,7 +1136,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
       setSelectedNode(newNode);
         setSelectedNodePath(null);
-        lastSyncedPathRef.current = null;
       } else {
         // Usa currentMainList invece di mainList per leggere sempre l'ultima versione
         const node = selectedSubIndex == null
@@ -1117,7 +1177,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               };
             });
 
-            console.log('[NODE_SYNC][LOAD] ✅ Node loaded from localDDT', {
+            console.log('[NODE_SYNC][LOAD] ✅ Node loaded from ddt', {
               mainIndex: selectedMainIndex,
               subIndex: selectedSubIndex,
               nodeLabel: node?.label,
@@ -1191,158 +1251,23 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           subIndex: selectedSubIndex
         };
         setSelectedNodePath(newPath);
-        lastSyncedPathRef.current = newPath;
       }
     }
 
-    // Reset il flag dopo un tick
-    setTimeout(() => {
-      isLoadingNodeRef.current = false;
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][LOAD] ✅ isLoadingNodeRef reset to false');
-        }
-      } catch {}
-    }, 0);
 
-    // ✅ IMPORTANTE: NON includere localDDT nelle dipendenze
+    // ✅ IMPORTANTE: NON includere ddt nelle dipendenze per evitare loop infiniti
     // Questo useEffect deve essere eseguito SOLO quando cambiano gli indici di selezione
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction]);
 
-  // ✅ Sincronizza localDDT quando selectedNode cambia (solo se non è un caricamento iniziale)
-  // Questo garantisce che le modifiche siano sempre salvate in localDDT
-  useEffect(() => {
-    try {
-      if (localStorage.getItem('debug.nodeSync') === '1') {
-        console.log('[NODE_SYNC][SYNC] 🔄 Sync effect triggered', {
-          isLoadingNode: isLoadingNodeRef.current,
-          hasSelectedNode: !!selectedNode,
-          hasSelectedNodePath: !!selectedNodePath,
-          selectedNodePath,
-          lastSyncedPath: lastSyncedPathRef.current
-        });
-      }
-    } catch {}
-
-    // Skip se stiamo caricando un nuovo nodo
-    if (isLoadingNodeRef.current) {
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][SYNC] ⏭️ Skipping - isLoadingNode is true');
-        }
-      } catch {}
-      return;
-    }
-
-    // Skip se non abbiamo un selectedNode o un selectedNodePath valido
-    if (!selectedNode || !selectedNodePath) {
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][SYNC] ⏭️ Skipping - missing selectedNode or selectedNodePath');
-        }
-      } catch {}
-      return;
-    }
-
-    // Skip se il path è cambiato (stiamo caricando un nuovo nodo)
-    const currentPath = selectedNodePath;
-    const lastSyncedPath = lastSyncedPathRef.current;
-    if (lastSyncedPath &&
-        (lastSyncedPath.mainIndex !== currentPath.mainIndex ||
-         lastSyncedPath.subIndex !== currentPath.subIndex)) {
-      // Il path è cambiato, aggiorna il ref e skip (il nuovo nodo verrà caricato dal useEffect sopra)
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][SYNC] ⏭️ Skipping - path changed', {
-            lastSyncedPath,
-            currentPath
-          });
-        }
-      } catch {}
-      lastSyncedPathRef.current = currentPath;
-      return;
-    }
-
-    try {
-      if (localStorage.getItem('debug.nodeSync') === '1') {
-        const steps = selectedNode?.steps || [];
-        const escalationsCount = steps.reduce((acc: number, step: any) =>
-          acc + (step?.escalations?.length || 0), 0);
-        const tasksCount = steps.reduce((acc: number, step: any) =>
-          acc + (step?.escalations?.reduce((a: number, esc: any) =>
-            a + (esc?.tasks?.length || 0), 0) || 0), 0);
-        console.log('[NODE_SYNC][SYNC] ✅ Syncing selectedNode to localDDT', {
-          mainIndex: currentPath.mainIndex,
-          subIndex: currentPath.subIndex,
-          stepsCount: steps.length,
-          escalationsCount,
-          tasksCount
-        });
-      }
-    } catch {}
-
-    // Sincronizza localDDT con selectedNode
-    setLocalDDT((currentDDT: any) => {
-      if (!currentDDT) return currentDDT;
-
-      const mains = getMainDataList(currentDDT);
-      const { mainIndex, subIndex } = selectedNodePath;
-
-      if (mainIndex >= mains.length) return currentDDT;
-
-      const main = mains[mainIndex];
-      let next: any;
-
-      if (selectedRoot) {
-        const newIntroStep = selectedNode?.steps?.find((s: any) => s.type === 'introduction');
-        const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
-          esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
-        );
-
-        next = { ...currentDDT };
-        if (hasTasks) {
-          next.introduction = {
-            type: 'introduction',
-            escalations: newIntroStep.escalations || []
-          };
-        } else {
-          delete next.introduction;
-        }
-      } else if (subIndex === undefined) {
-        const newMainData = [...mains];
-        newMainData[mainIndex] = selectedNode;
-        next = { ...currentDDT, mainData: newMainData };
-      } else {
-        const subList = getSubDataList(main);
-        if (subIndex >= subList.length) return currentDDT;
-        const subIdx = (main.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
-
-        const newSubData = [...(main.subData || [])];
-        newSubData[subIdx] = selectedNode;
-        const newMain = { ...main, subData: newSubData };
-        const newMainData = [...mains];
-        newMainData[mainIndex] = newMain;
-        next = { ...currentDDT, mainData: newMainData };
-      }
-
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][SYNC] ✅ localDDT updated');
-        }
-      } catch {}
-
-      return next;
-    });
-
-    // Aggiorna il ref con il path corrente
-    lastSyncedPathRef.current = currentPath;
-  }, [selectedNode, selectedNodePath, selectedRoot]);
+  // ✅ NON serve più sincronizzare selectedNode con localDDT
+  // selectedNode è l'unica fonte di verità durante l'editing
+  // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
 
 
-  // ✅ handleProfileUpdate: aggiorna selectedNode (UI immediata) + localDDT (persistenza)
+  // ✅ handleProfileUpdate: aggiorna selectedNode (UI immediata)
   const handleProfileUpdate = useCallback((partialProfile: any) => {
-    // 1. Aggiorna selectedNode PRIMA (UI immediata)
+    // Aggiorna selectedNode (unica fonte di verità)
     setSelectedNode((prev: any) => {
       if (!prev) return prev;
       return {
@@ -1353,57 +1278,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         }
       };
     });
-
-    // 2. Aggiorna localDDT in background (persistenza)
-    setLocalDDT((prev: any) => {
-      if (!prev || !selectedNodePath) return prev;
-
-      const mains = getMainDataList(prev);
-      const { mainIndex, subIndex } = selectedNodePath;
-
-      if (mainIndex >= mains.length) return prev;
-
-      const main = mains[mainIndex];
-
-      if (subIndex === undefined) {
-        const updatedMain = {
-          ...main,
-          nlpProfile: {
-            ...(main.nlpProfile || {}),
-            ...partialProfile
-          }
-        };
-        const newMainData = [...mains];
-        newMainData[mainIndex] = updatedMain;
-        return { ...prev, mainData: newMainData };
-      }
-
-      const subList = main.subData || [];
-      if (subIndex >= subList.length) return prev;
-
-      const updatedSub = {
-        ...subList[subIndex],
-        nlpProfile: {
-          ...(subList[subIndex].nlpProfile || {}),
-          ...partialProfile
-        }
-      };
-
-      const newSubData = [...subList];
-      newSubData[subIndex] = updatedSub;
-      const updatedMain = { ...main, subData: newSubData };
-      const newMainData = [...mains];
-      newMainData[mainIndex] = updatedMain;
-
-      return { ...prev, mainData: newMainData };
-    });
-  }, [selectedNodePath]);
+  }, []);
 
   // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
-  // ✅ updateSelectedNode: aggiorna SOLO selectedNode (UI immediata)
-  // localDDT viene sincronizzato automaticamente dal useEffect quando selectedNode cambia
-  // Approccio transazionale: selectedNode è la fonte di verità durante l'editing
+  // ✅ updateSelectedNode: modifica DIRETTAMENTE ddtRef.current (come VB.NET)
+  // Quando modifichi selectedNode, modifichi anche la struttura in memoria
   const updateSelectedNode = useCallback((updater: (node: any) => any, notifyProvider: boolean = true) => {
     try {
       if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -1414,11 +1294,54 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       }
     } catch {}
 
-    // Aggiorna selectedNode (UI immediata)
-    // localDDT verrà sincronizzato automaticamente dal useEffect
     setSelectedNode((prev: any) => {
-      if (!prev) return prev;
+      if (!prev || !selectedNodePath) return prev;
+
       const updated = updater(prev) || prev;
+
+      // ✅ MODIFICA DIRETTAMENTE il DDT in memoria (come VB.NET)
+      const mains = getMainDataList(ddtRef.current);
+      const { mainIndex, subIndex } = selectedNodePath;
+      const isRoot = selectedRoot || false;
+
+      if (mainIndex < mains.length) {
+        const main = mains[mainIndex];
+
+        if (isRoot) {
+          // Root node (introduction)
+          const newIntroStep = updated?.steps?.find((s: any) => s.type === 'introduction');
+          const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
+            esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
+          );
+          if (hasTasks) {
+            ddtRef.current.introduction = {
+              type: 'introduction',
+              escalations: newIntroStep.escalations || []
+            };
+          } else {
+            delete ddtRef.current.introduction;
+          }
+        } else if (subIndex === undefined) {
+          // Main node - modifica diretta
+          mains[mainIndex] = updated;
+          ddtRef.current.mainData = mains;
+        } else {
+          // Sub node - modifica diretta
+          const subList = main.subData || [];
+          const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
+          if (subIdx >= 0) {
+            subList[subIdx] = updated;
+            main.subData = subList;
+            mains[mainIndex] = main;
+            ddtRef.current.mainData = mains;
+          }
+        }
+
+        // Notifica React del cambiamento (solo per UI, non per persistenza)
+        replaceSelectedDDT({ ...ddtRef.current });
+        // Forza aggiornamento di mainList
+        setDDTVersion(v => v + 1);
+      }
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -1428,7 +1351,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           const tasksCount = steps.reduce((acc: number, step: any) =>
             acc + (step?.escalations?.reduce((a: number, esc: any) =>
               a + (esc?.tasks?.length || 0), 0) || 0), 0);
-          console.log('[NODE_SYNC][UPDATE] ✅ selectedNode updated', {
+          console.log('[NODE_SYNC][UPDATE] ✅ selectedNode updated + DDT modified directly', {
             stepsCount: steps.length,
             escalationsCount,
             tasksCount
@@ -1438,24 +1361,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
       return updated;
     });
-  }, [selectedNode, selectedNodePath]);
+  }, [selectedNode, selectedNodePath, selectedRoot, replaceSelectedDDT]);
 
-  // ✅ Persistenza ASINCRONA: osserva localDDT e persiste quando cambia
-  // (localDDTRef è già dichiarato sopra, vicino agli altri ref)
-  useEffect(() => {
-    // Debounce: persisti solo dopo 100ms di inattività
-    const timer = setTimeout(() => {
-      if (localDDTRef.current) {
-        try {
-          replaceSelectedDDT(localDDTRef.current);
-        } catch (e) {
-          console.error('[updateSelectedNode] Failed to persist DDT:', e);
-        }
-      }
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [localDDT, replaceSelectedDDT]);
+  // ✅ NON serve più persistenza asincrona
+  // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
 
   // ✅ normalizeAndPersistModel è ora gestito internamente da BehaviourEditor
 
@@ -1565,7 +1474,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         return null;
       })()}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, maxHeight: '100%' }}>
-        {act?.type === 'Summarizer' && isDDTEmpty(localDDT) ? (
+        {act?.type === 'Summarizer' && isDDTEmpty(ddt) ? (
           /* Placeholder for Summarizer when DDT is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
@@ -1589,7 +1498,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               </div>
             </div>
           </div>
-        ) : act?.type === 'Negotiation' && isDDTEmpty(localDDT) ? (
+        ) : act?.type === 'Negotiation' && isDDTEmpty(ddt) ? (
           /* Placeholder for Negotiation when DDT is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
@@ -1663,11 +1572,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                   taskType={act?.type} // ✅ Passa tipo task per filtrare template nello step 1
                   initialDDT={inferenceResult?.ai?.schema ? {
                     // ✅ Pre-compila con il risultato dell'inferenza
-                    id: localDDT?.id || `temp_ddt_${act?.id}`,
+                    id: ddt?.id || `temp_ddt_${act?.id}`,
                     label: inferenceResult.ai.schema.label || act?.label || 'Data',
                     mainData: inferenceResult.ai.schema.mainData || [],
                     _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
-                  } : localDDT}
+                  } : ddt}
                   onCancel={onClose || (() => { })}
                   onComplete={(finalDDT, messages) => {
                     if (!finalDDT) {
@@ -1680,9 +1589,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     // Set flag to prevent auto-reopen IMMEDIATELY (before any state updates)
                     wizardOwnsDataRef.current = true;
 
-                    // Update local DDT state first (ALWAYS do this)
-                    setLocalDDT(coerced);
-
+                    // Update DDT state
                     try {
                       replaceSelectedDDT(coerced);
                     } catch (err) {
@@ -1713,10 +1620,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           /* Build Messages UI for ProblemClassification without messages */
           <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
             <IntentMessagesBuilder
-              intentLabel={act?.label || localDDT?.label || 'chiedi il problema'}
+              intentLabel={act?.label || ddt?.label || 'chiedi il problema'}
               onComplete={(messages) => {
-                const updatedDDT = saveIntentMessagesToDDT(localDDT, messages);
-                setLocalDDT(updatedDDT);
+                const updatedDDT = saveIntentMessagesToDDT(ddt, messages);
 
                 // ✅ CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
                 // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
@@ -1786,133 +1692,101 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                 selectedSubIndex={selectedSubIndex}
                 onSelectSub={handleSelectSub}
                 aggregated={isAggregatedAtomic}
-                rootLabel={localDDT?.label || 'Data'}
+                rootLabel={ddt?.label || 'Data'}
                 onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
                   // Persist required flag on the exact sub (by indices), independent of current selection
-                  setLocalDDT((prev: any) => {
-                    if (!prev) return prev;
-                    const next = JSON.parse(JSON.stringify(prev));
-                    const mains = getMainDataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return prev;
-                    const subList = Array.isArray(main.subData) ? main.subData : [];
-                    if (sIdx < 0 || sIdx >= subList.length) return prev;
-                    subList[sIdx] = { ...subList[sIdx], required };
-                    main.subData = subList;
-                    mains[mIdx] = main;
-                    next.mainData = mains;
-                    try {
-                      const subs = getSubDataList(main) || [];
-                      const target = subs[sIdx];
-                      if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
-                    } catch { }
-                    try { replaceSelectedDDT(next); } catch { }
-                    return next;
-                  });
+                  const next = JSON.parse(JSON.stringify(ddt));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return;
+                  const subList = Array.isArray(main.subData) ? main.subData : [];
+                  if (sIdx < 0 || sIdx >= subList.length) return;
+                  subList[sIdx] = { ...subList[sIdx], required };
+                  main.subData = subList;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try {
+                    const subs = getSubDataList(main) || [];
+                    const target = subs[sIdx];
+                    if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
+                  } catch { }
+                  try { replaceSelectedDDT(next); } catch { }
                 }}
                 onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
-                  setLocalDDT((prev: any) => {
-                    if (!prev) return prev;
-                    const next = JSON.parse(JSON.stringify(prev));
-                    const mains = getMainDataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return prev;
-                    const subList = Array.isArray(main.subData) ? main.subData : [];
-                    if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return prev;
-                    const [moved] = subList.splice(fromIdx, 1);
-                    subList.splice(toIdx, 0, moved);
-                    main.subData = subList;
-                    mains[mIdx] = main;
-                    next.mainData = mains;
-                    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
-                    try { replaceSelectedDDT(next); } catch { }
-                    return next;
-                  });
+                  const next = JSON.parse(JSON.stringify(ddt));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return;
+                  const subList = Array.isArray(main.subData) ? main.subData : [];
+                  if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return;
+                  const [moved] = subList.splice(fromIdx, 1);
+                  subList.splice(toIdx, 0, moved);
+                  main.subData = subList;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
+                  try { replaceSelectedDDT(next); } catch { }
                 }}
                 onAddMain={(label: string) => {
-                  setLocalDDT((prev: any) => {
-                    if (!prev) return prev;
-                    const next = JSON.parse(JSON.stringify(prev));
-                    const mains = getMainDataList(next);
-                    mains.push({ label, subData: [] });
-                    next.mainData = mains;
-                    try { replaceSelectedDDT(next); } catch { }
-                    return next;
-                  });
+                  const next = JSON.parse(JSON.stringify(ddt));
+                  const mains = getMainDataList(next);
+                  mains.push({ label, subData: [] });
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
                 }}
                 onRenameMain={(mIdx: number, label: string) => {
-                  setLocalDDT((prev: any) => {
-                    if (!prev) return prev;
-                    const next = JSON.parse(JSON.stringify(prev));
-                    const mains = getMainDataList(next);
-                    if (!mains[mIdx]) return prev;
-                    mains[mIdx].label = label;
-                    next.mainData = mains;
-                    try { replaceSelectedDDT(next); } catch { }
-                    return next;
-                  });
+                  const next = JSON.parse(JSON.stringify(ddt));
+                  const mains = getMainDataList(next);
+                  if (!mains[mIdx]) return;
+                  mains[mIdx].label = label;
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
                 }}
                 onDeleteMain={(mIdx: number) => {
-                  setLocalDDT((prev: any) => {
-                    if (!prev) return prev;
-                    const next = JSON.parse(JSON.stringify(prev));
-                    const mains = getMainDataList(next);
-                    if (mIdx < 0 || mIdx >= mains.length) return prev;
-                    mains.splice(mIdx, 1);
-                    next.mainData = mains;
-                    try { replaceSelectedDDT(next); } catch { }
-                    return next;
-                  });
+                  const next = JSON.parse(JSON.stringify(ddt));
+                  const mains = getMainDataList(next);
+                  if (mIdx < 0 || mIdx >= mains.length) return;
+                  mains.splice(mIdx, 1);
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
                 }}
                 onAddSub={(mIdx: number, label: string) => {
-                  setLocalDDT((prev: any) => {
-                    if (!prev) return prev;
-                    const next = JSON.parse(JSON.stringify(prev));
-                    const mains = getMainDataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return prev;
-                    const list = Array.isArray(main.subData) ? main.subData : [];
-                    list.push({ label, required: true });
-                    main.subData = list;
-                    mains[mIdx] = main;
-                    next.mainData = mains;
-                    try { replaceSelectedDDT(next); } catch { }
-                    return next;
-                  });
+                  const next = JSON.parse(JSON.stringify(ddt));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return;
+                  const list = Array.isArray(main.subData) ? main.subData : [];
+                  list.push({ label, required: true });
+                  main.subData = list;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
                 }}
                 onRenameSub={(mIdx: number, sIdx: number, label: string) => {
-                  setLocalDDT((prev: any) => {
-                    if (!prev) return prev;
-                    const next = JSON.parse(JSON.stringify(prev));
-                    const mains = getMainDataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return prev;
-                    const list = Array.isArray(main.subData) ? main.subData : [];
-                    if (sIdx < 0 || sIdx >= list.length) return prev;
-                    list[sIdx] = { ...(list[sIdx] || {}), label };
-                    main.subData = list;
-                    mains[mIdx] = main;
-                    next.mainData = mains;
-                    try { replaceSelectedDDT(next); } catch { }
-                    return next;
-                  });
+                  const next = JSON.parse(JSON.stringify(ddt));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return;
+                  const list = Array.isArray(main.subData) ? main.subData : [];
+                  if (sIdx < 0 || sIdx >= list.length) return;
+                  list[sIdx] = { ...(list[sIdx] || {}), label };
+                  main.subData = list;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
                 }}
                 onDeleteSub={(mIdx: number, sIdx: number) => {
-                  setLocalDDT((prev: any) => {
-                    if (!prev) return prev;
-                    const next = JSON.parse(JSON.stringify(prev));
-                    const mains = getMainDataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return prev;
-                    const list = Array.isArray(main.subData) ? main.subData : [];
-                    if (sIdx < 0 || sIdx >= list.length) return prev;
-                    list.splice(sIdx, 1);
-                    main.subData = list;
-                    mains[mIdx] = main;
-                    next.mainData = mains;
-                    try { replaceSelectedDDT(next); } catch { }
-                    return next;
-                  });
+                  const next = JSON.parse(JSON.stringify(ddt));
+                  const mains = getMainDataList(next);
+                  const main = mains[mIdx];
+                  if (!main) return;
+                  const list = Array.isArray(main.subData) ? main.subData : [];
+                  if (sIdx < 0 || sIdx >= list.length) return;
+                  list.splice(sIdx, 1);
+                  main.subData = list;
+                  mains[mIdx] = main;
+                  next.mainData = mains;
+                  try { replaceSelectedDDT(next); } catch { }
                 }}
                 onSelectAggregator={handleSelectAggregator}
               />
@@ -1985,15 +1859,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     onWidthChange={setRightWidth}
                     onStartResize={() => setDraggingPanel('left')}
                     dragging={draggingPanel === 'left'}
-                    ddt={localDDT}
+                    ddt={ddt}
                     translations={localTranslations}
                     selectedNode={selectedNode}
                     onUpdateDDT={(updater) => {
-                      setLocalDDT((prev: any) => {
-                        const updated = updater(prev);
-                        try { replaceSelectedDDT(updated); } catch { }
-                        return updated;
-                      });
+                      const updated = updater(ddt);
+                      try { replaceSelectedDDT(updated); } catch { }
                     }}
                   />
                 )}
@@ -2008,7 +1879,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                       onStartResize={() => setDraggingPanel('test')}
                       dragging={draggingPanel === 'test'}
                       hideSplitter={tasksPanelMode === 'actions' && tasksPanelWidth > 1} // ✅ Nascondi splitter se Tasks è visibile (usiamo quello condiviso)
-                      ddt={localDDT}
+                      ddt={ddt}
                       translations={localTranslations}
                       selectedNode={selectedNode}
                       onUpdateDDT={(updater) => {
@@ -2059,15 +1930,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     onStartResize={() => setDraggingPanel('tasks')}
                     dragging={draggingPanel === 'tasks'}
                     hideSplitter={testPanelMode === 'chat' && testPanelWidth > 1} // ✅ Nascondi splitter se Test è visibile (usiamo quello condiviso)
-                    ddt={localDDT}
+                    ddt={ddt}
                     translations={localTranslations}
                     selectedNode={selectedNode}
                     onUpdateDDT={(updater) => {
-                      setLocalDDT((prev: any) => {
-                        const updated = updater(prev);
-                        try { replaceSelectedDDT(updated); } catch { }
-                        return updated;
-                      });
+                      const updated = updater(ddt);
+                      try { replaceSelectedDDT(updated); } catch { }
                     }}
                   />
                 )}

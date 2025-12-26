@@ -13,14 +13,8 @@ type EscalationEditorProps = {
   translations: Record<string, string>;
   color?: string;
   allowedActions?: string[];
-  onEscalationChange: (newEscalation: any) => void; // ✅ Passa solo la nuova escalation
-  onMoveTask: (
-    fromEscIdx: number,
-    fromTaskIdx: number,
-    toEscIdx: number,
-    toTaskIdx: number,
-    position: 'before' | 'after'
-  ) => void; // ✅ Per spostare task tra escalations
+  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void; // ✅ Aggiorna direttamente selectedNode
+  stepKey: string; // ✅ Step key corrente
   autoEditTarget: { escIdx: number; actIdx: number } | null;
   onAutoEditTargetChange: (target: { escIdx: number; actIdx: number } | null) => void;
 };
@@ -31,8 +25,8 @@ export default function EscalationEditor({
   translations,
   color = '#fb923c',
   allowedActions,
-  onEscalationChange,
-  onMoveTask,
+  updateSelectedNode,
+  stepKey,
   autoEditTarget,
   onAutoEditTargetChange
 }: EscalationEditorProps) {
@@ -87,26 +81,60 @@ export default function EscalationEditor({
     });
   }, []);
 
+  // ✅ Helper per aggiornare escalation direttamente in selectedNode
+  const updateEscalation = React.useCallback((updater: (escalation: any) => any) => {
+    updateSelectedNode((node) => {
+      const next = { ...node };
+
+      // Gestisce entrambi i formati: array o oggetto
+      if (Array.isArray(node.steps)) {
+        const stepIdx = node.steps.findIndex((s: any) => s?.type === stepKey);
+        if (stepIdx >= 0) {
+          next.steps = [...node.steps];
+          const step = next.steps[stepIdx];
+          const escalations = [...(step.escalations || [])];
+          escalations[escalationIdx] = updater(escalations[escalationIdx] || { tasks: [] });
+          next.steps[stepIdx] = { ...step, escalations };
+        }
+      } else {
+        next.steps = { ...(node.steps || {}) };
+        if (!next.steps[stepKey]) {
+          next.steps[stepKey] = { type: stepKey, escalations: [] };
+        }
+        const step = next.steps[stepKey];
+        const escalations = [...(step.escalations || [])];
+        escalations[escalationIdx] = updater(escalations[escalationIdx] || { tasks: [] });
+        next.steps[stepKey] = { ...step, escalations };
+      }
+
+      return next;
+    });
+  }, [updateSelectedNode, stepKey, escalationIdx]);
+
   // ✅ Modifica una task in questa escalation
   const handleEdit = React.useCallback((taskIdx: number, newText: string) => {
-    const tasks = [...(escalation.tasks || [])];
-    tasks[taskIdx] = { ...tasks[taskIdx], text: newText };
-    onEscalationChange({ ...escalation, tasks });
+    updateEscalation((esc) => {
+      const tasks = [...(esc.tasks || [])];
+      tasks[taskIdx] = { ...tasks[taskIdx], text: newText };
+      return { ...esc, tasks };
+    });
 
     if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === taskIdx) {
       onAutoEditTargetChange(null);
     }
-  }, [escalation, escalationIdx, onEscalationChange, autoEditTarget, onAutoEditTargetChange]);
+  }, [updateEscalation, escalationIdx, autoEditTarget, onAutoEditTargetChange]);
 
   // ✅ Elimina una task da questa escalation
   const handleDelete = React.useCallback((taskIdx: number) => {
-    const tasks = (escalation.tasks || []).filter((_: any, j: number) => j !== taskIdx);
-    onEscalationChange({ ...escalation, tasks });
+    updateEscalation((esc) => {
+      const tasks = (esc.tasks || []).filter((_: any, j: number) => j !== taskIdx);
+      return { ...esc, tasks };
+    });
 
     if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === taskIdx) {
       onAutoEditTargetChange(null);
     }
-  }, [escalation, escalationIdx, onEscalationChange, autoEditTarget, onAutoEditTargetChange]);
+  }, [updateEscalation, escalationIdx, autoEditTarget, onAutoEditTargetChange]);
 
   // ✅ Aggiungi una task a questa escalation (drop su zona vuota)
   const handleAppend = React.useCallback((task: any) => {
@@ -127,12 +155,16 @@ export default function EscalationEditor({
       color: task.color
     };
 
-    const tasks = [...(escalation.tasks || []), taskRef];
-    onEscalationChange({ ...escalation, tasks });
-
-    const newTaskIdx = tasks.length - 1;
-    onAutoEditTargetChange({ escIdx: escalationIdx, actIdx: newTaskIdx });
-  }, [escalation, escalationIdx, allowedActions, onEscalationChange, onAutoEditTargetChange, generateGuid]);
+    updateEscalation((esc) => {
+      const tasks = [...(esc.tasks || []), taskRef];
+      const newTaskIdx = tasks.length - 1;
+      // Usa setTimeout per evitare di chiamare onAutoEditTargetChange durante l'update
+      setTimeout(() => {
+        onAutoEditTargetChange({ escIdx: escalationIdx, actIdx: newTaskIdx });
+      }, 0);
+      return { ...esc, tasks };
+    });
+  }, [updateEscalation, updateSelectedNode, stepKey, escalationIdx, allowedActions, onAutoEditTargetChange, generateGuid]);
 
   // ✅ Drop di una task dal viewer in questa escalation
   const handleDropFromViewer = React.useCallback((
@@ -166,17 +198,76 @@ export default function EscalationEditor({
       iconName: incoming.icon || task?.iconName || task?.icon
     };
 
-    const tasks = [...(escalation.tasks || [])];
     const insertIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
-    tasks.splice(insertIdx, 0, normalized);
 
-    onEscalationChange({ ...escalation, tasks });
+    updateEscalation((esc) => {
+      const tasks = [...(esc.tasks || [])];
+      tasks.splice(insertIdx, 0, normalized);
+      return { ...esc, tasks };
+    });
 
     const targetIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
     if (templateId === 'sayMessage') {
       onAutoEditTargetChange({ escIdx: escalationIdx, actIdx: targetIdx });
     }
-  }, [escalation, escalationIdx, allowedActions, onEscalationChange, onAutoEditTargetChange, generateGuid]);
+  }, [updateEscalation, escalationIdx, allowedActions, onAutoEditTargetChange, generateGuid]);
+
+  // ✅ Gestisce spostamenti di task tra escalations diverse
+  const handleMoveTask = React.useCallback((
+    fromEscIdx: number,
+    fromTaskIdx: number,
+    toEscIdx: number,
+    toTaskIdx: number,
+    position: 'before' | 'after'
+  ) => {
+    updateSelectedNode((node) => {
+      const next = { ...node };
+
+      // Leggi escalations
+      let escalations: any[];
+      if (Array.isArray(node.steps)) {
+        const step = node.steps.find((s: any) => s?.type === stepKey);
+        escalations = [...(step?.escalations || [])];
+      } else {
+        escalations = [...(node.steps?.[stepKey]?.escalations || [])];
+      }
+
+      // Sposta task
+      const fromEsc = escalations[fromEscIdx];
+      if (!fromEsc) return node;
+
+      const tasks = [...(fromEsc.tasks || [])];
+      const task = tasks[fromTaskIdx];
+      if (!task) return node;
+
+      // Rimuovi dalla posizione originale
+      tasks.splice(fromTaskIdx, 1);
+      escalations[fromEscIdx] = { ...fromEsc, tasks };
+
+      // Aggiungi alla nuova posizione
+      if (!escalations[toEscIdx]) {
+        escalations[toEscIdx] = { tasks: [] };
+      }
+      const toTasks = [...(escalations[toEscIdx].tasks || [])];
+      const insertIdx = position === 'after' ? toTaskIdx + 1 : toTaskIdx;
+      toTasks.splice(insertIdx, 0, task);
+      escalations[toEscIdx] = { ...escalations[toEscIdx], tasks: toTasks };
+
+      // Aggiorna node
+      if (Array.isArray(node.steps)) {
+        const stepIdx = node.steps.findIndex((s: any) => s?.type === stepKey);
+        if (stepIdx >= 0) {
+          next.steps = [...node.steps];
+          next.steps[stepIdx] = { ...next.steps[stepIdx], escalations };
+        }
+      } else {
+        next.steps = { ...(node.steps || {}) };
+        next.steps[stepKey] = { ...next.steps[stepKey], escalations };
+      }
+
+      return next;
+    });
+  }, [updateSelectedNode, stepKey]);
 
   const tasks = escalation.tasks || [];
 
@@ -199,7 +290,7 @@ export default function EscalationEditor({
                   escalationIdx={escalationIdx}
                   taskIdx={j}
                   task={task}
-                  onMoveTask={onMoveTask}
+                  onMoveTask={handleMoveTask}
                   onDropNewTask={(task, to, pos) => handleDropFromViewer(task, to, pos)}
                   allowViewerDrop={true}
                   isEditing={isEditing}
